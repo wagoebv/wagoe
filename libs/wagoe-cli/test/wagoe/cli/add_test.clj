@@ -5,7 +5,8 @@
             [clojure.string :as str]
             [wagoe.cli.add :as add]
             [wagoe.cli.catalogue :as cat]
-            [wagoe.cli.new :as new]))
+            [wagoe.cli.new :as new]
+            [wagoe.cli.templates :as templates]))
 
 (defn- make-wagoe-project! [dir]
   (io/make-parents (io/file dir "resources/conf/dev/config.edn"))
@@ -140,6 +141,85 @@
                    (count (re-seq #":wagoe/payment-provider" after)))))))
       (finally
         (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))
+
+(deftest ^:integration added-keys-line-up-with-a-wagoe-new-config
+  ;; Snippets are written at column 2, a `wagoe new` config's entries sit at
+  ;; column 3, and the closing brace of :active ended up alone on a line
+  ;; (BOU-580).
+  (let [tmp  (str (System/getProperty "java.io.tmpdir") "/wagoe-add-indent-" (System/currentTimeMillis))
+        path "resources/conf/dev/config.edn"
+        f    (io/file tmp path)]
+    (try
+      (io/make-parents f)
+      (spit f (templates/render (templates/read-template "dev-config.edn.tmpl") {:project-name "shop"}))
+      (is (= :added (add/patch-config! tmp path (str "  :wagoe/metrics\n  {:provider :no-op}\n\n"
+                                                     "  :wagoe/error-reporting\n  {:provider :no-op}\n"))))
+      (let [once (slurp f)]
+        (is (= #{3} (set (map (comp count second) (re-seq #"(?m)^([ {]*):wagoe/" once))))
+            "every key, the template's own included, at column 3")
+        (is (str/includes? once (str "   {:provider :slf4j :level :debug}\n"
+                                     "\n"
+                                     "   :wagoe/metrics\n"
+                                     "   {:provider :no-op}\n"
+                                     "\n"
+                                     "   :wagoe/error-reporting\n"
+                                     "   {:provider :no-op}}\n"
+                                     "\n"
+                                     " :inactive"))
+            once)
+        (is (= :present (add/patch-config! tmp path "  :wagoe/metrics\n  {:provider :no-op}\n")))
+        (is (= once (slurp f)) "a second run changes no byte"))
+      (finally
+        (doseq [x (reverse (file-seq (io/file tmp)))] (.delete x))))))
+
+(defn- with-config
+  "Call `f` with [dir path file] for a project whose dev config is `text`."
+  [text f]
+  (let [tmp  (str (System/getProperty "java.io.tmpdir") "/wagoe-add-cfg-" (System/nanoTime))
+        path "resources/conf/dev/config.edn"
+        file (io/file tmp path)]
+    (try
+      (io/make-parents file)
+      (spit file text)
+      (f tmp path file)
+      (finally
+        (doseq [x (reverse (file-seq (io/file tmp)))] (.delete x))))))
+
+(defn- active-keys-of [text]
+  (set (keys (:active (clojure.edn/read-string {:default (fn [_ v] v)} text)))))
+
+(deftest ^:integration the-snippet-lands-under-the-root-active-key
+  ;; A search for ":active" found it in a comment and in `:active?`, wrote the
+  ;; key into another map, and wrote it again on the next run (BOU-580).
+  (doseq [text ["{;; the :active map {is below}\n :profile {:x 1}\n :active\n {:wagoe/a 1}\n\n :inactive\n {}}\n"
+                "{:features {:active? true :x 1}\n :active\n {:wagoe/a 1}\n\n :inactive\n {}}\n"
+                "{:note \":active {\"\n :active\n {:wagoe/a 1}\n\n :inactive\n {}}\n"]]
+    (with-config text
+      (fn [dir path f]
+        (is (= :added (add/patch-config! dir path "  :wagoe/jobs\n  {:workers 1}\n")) text)
+        (let [once (slurp f)]
+          (is (contains? (active-keys-of once) :wagoe/jobs) once)
+          (is (= :present (add/patch-config! dir path "  :wagoe/jobs\n  {:workers 1}\n")))
+          (is (= once (slurp f)) "a second run changes no byte"))))))
+
+(deftest ^:integration a-write-that-misses-active-is-refused
+  (with-config "{:active\n {:wagoe/a 1}\n\n :inactive\n {:wagoe/b 2}}\n"
+    (fn [dir path f]
+      ;; Point the insertion at :inactive: the result must be checked, not trusted.
+      (with-redefs-fn {#'add/active-section #(#'add/section-of % ":inactive")}
+        (fn []
+          (is (= :not-written (add/patch-config! dir path "  :wagoe/jobs\n  {:workers 1}\n")))
+          (is (not (str/includes? (slurp f) ":wagoe/jobs"))))))))
+
+(deftest ^:integration a-crlf-config-stays-crlf
+  (with-config (str/replace (templates/render (templates/read-template "dev-config.edn.tmpl")
+                                              {:project-name "shop"})
+                            "\n" "\r\n")
+    (fn [dir path f]
+      (is (= :added (add/patch-config! dir path "  :wagoe/metrics\n  {:provider :no-op}\n\n  :wagoe/x\n  {}\n")))
+      (let [out (slurp f)]
+        (is (contains? (active-keys-of out) :wagoe/metrics))
+        (is (not (re-find #"[^\r]\n" out)) "no bare LF")))))
 
 (deftest ^:integration email-writes-smtp-to-test-config-test
   (let [tmp (str (System/getProperty "java.io.tmpdir") "/wagoe-add-email-" (System/currentTimeMillis))]

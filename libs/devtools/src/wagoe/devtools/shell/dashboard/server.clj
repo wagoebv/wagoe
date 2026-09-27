@@ -498,7 +498,7 @@
         (log/infof "Dev dashboard started on http://%s:%d/dashboard" host (:port result))
         (when (not= port (:port result))
           (log/warnf "Dashboard port %d was busy, using %d instead" port (:port result)))
-        result)
+        (assoc result :host host))
       (do
         (log/warnf "Could not start dev dashboard — ports %d–%d all in use" port (+ port 10))
         nil))))

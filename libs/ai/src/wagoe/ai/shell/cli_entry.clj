@@ -21,6 +21,7 @@
             [wagoe.ai.shell.service :as svc]
             [wagoe.ai.shell.test-check :as test-check]
             [cheshire.core :as json]
+            [clojure.edn :as edn]
             [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.tools.cli :as cli]
@@ -62,6 +63,22 @@
       (println usage)
       (System/exit 1))
     parsed))
+
+(def provider-env
+  "The variables `make-service-from-env` tries, in order. The help and the
+   no-provider message list these, and `bb ai`'s help is pinned to them by a
+   test in wagoe-tools. AI_MODEL overrides the model of each."
+  [{:var "ANTHROPIC_API_KEY"   :provider :anthropic :label "Anthropic (Claude)"}
+   {:var "OPENAI_BASE_URL"     :provider :openai    :label "an OpenAI-compatible endpoint (oMLX, LM Studio)"}
+   {:var "OPENAI_API_KEY"      :provider :openai    :label "OpenAI (GPT)"}
+   {:var "REPLICATE_API_TOKEN" :provider :replicate :label "Replicate-hosted models"}
+   {:var "OLLAMA_URL"          :provider :ollama    :label "Ollama (default http://localhost:11434)"}])
+
+(defn- env-lines
+  "A line per variable in `rows`: indent, name, `sep`, label."
+  [rows indent sep]
+  (apply str (for [{:keys [var label]} rows]
+               (str indent (format "%-20s" var) sep label "\n"))))
 
 (defn explain-provider-error
   "Turn a provider's error result into something actionable.
@@ -113,11 +130,7 @@
        (str "No AI provider is configured, and the default (Ollama on "
             "localhost:11434) is not running.\n"
             "  Set one of:\n"
-            "    ANTHROPIC_API_KEY   Anthropic (Claude)\n"
-            "    OPENAI_API_KEY      OpenAI\n"
-            "    OPENAI_BASE_URL     an OpenAI-compatible endpoint\n"
-            "    REPLICATE_API_TOKEN Replicate-hosted models\n"
-            "    OLLAMA_URL          a running Ollama, if it is not on localhost\n"
+            (env-lines provider-env "    " "")
             "  or :wagoe/ai-service in resources/conf/<env>/config.edn")
 
        (and refused? (= :ollama provider))
@@ -177,51 +190,53 @@
          (apply str (map #(str "\n  " %) words)))))
 
 (defn- make-service-from-env
-  "Fall-back when no :wagoe/ai-service is present in active config.
-   Checks ANTHROPIC_API_KEY, OPENAI_BASE_URL, OPENAI_API_KEY, OLLAMA_URL in that order.
-   OPENAI_BASE_URL covers OpenAI-compatible endpoints (oMLX, LM Studio, etc.) that may
-   not require a real API key."
-  []
-  (cond
-    (System/getenv "ANTHROPIC_API_KEY")
-    {:provider    (anthropic/create-anthropic-provider
-                   {:api-key (System/getenv "ANTHROPIC_API_KEY")
-                    :model   (or (System/getenv "AI_MODEL") "claude-haiku-4-5-20251001")})
-     :configured? true}
+  "Fall-back when no :wagoe/ai-service is present in active config: the first
+   variable of `provider-env` that `env` sets picks the provider.
+   OPENAI_BASE_URL covers OpenAI-compatible endpoints (oMLX, LM Studio, etc.)
+   that may not require a real API key."
+  ([] (make-service-from-env (System/getenv)))
+  ([env]
+   (let [model  #(or (get env "AI_MODEL") %)
+         chosen (some #(when (get env (:var %)) (:var %)) provider-env)]
+     (case chosen
+       "ANTHROPIC_API_KEY"
+       {:provider    (anthropic/create-anthropic-provider
+                      {:api-key (get env "ANTHROPIC_API_KEY")
+                       :model   (model "claude-haiku-4-5-20251001")})
+        :configured? true}
 
-    (System/getenv "OPENAI_BASE_URL")
-    {:provider    (openai/create-openai-provider
-                   {:base-url (System/getenv "OPENAI_BASE_URL")
-                    :api-key  (or (System/getenv "OPENAI_API_KEY") "no-key")
-                    :model    (or (System/getenv "AI_MODEL") "gpt-4o-mini")})
-     :configured? true}
+       "OPENAI_BASE_URL"
+       {:provider    (openai/create-openai-provider
+                      {:base-url (get env "OPENAI_BASE_URL")
+                       :api-key  (or (get env "OPENAI_API_KEY") "no-key")
+                       :model    (model "gpt-4o-mini")})
+        :configured? true}
 
-    (System/getenv "OPENAI_API_KEY")
-    {:provider    (openai/create-openai-provider
-                   {:api-key (System/getenv "OPENAI_API_KEY")
-                    :model   (or (System/getenv "AI_MODEL") "gpt-4o-mini")})
-     :configured? true}
+       "OPENAI_API_KEY"
+       {:provider    (openai/create-openai-provider
+                      {:api-key (get env "OPENAI_API_KEY")
+                       :model   (model "gpt-4o-mini")})
+        :configured? true}
 
-    ;; Hosted models without a local GPU or an OpenAI account. REPLICATE_API_TOKEN
-    ;; is the name Replicate's own tooling uses, so it is likely already set.
-    (System/getenv "REPLICATE_API_TOKEN")
-    {:provider    (replicate-provider/create-replicate-provider
-                   {:api-key (System/getenv "REPLICATE_API_TOKEN")
-                    :model   (or (System/getenv "AI_MODEL")
-                                 replicate-provider/default-model)})
-     :configured? true}
+       ;; Hosted models without a local GPU or an OpenAI account. REPLICATE_API_TOKEN
+       ;; is the name Replicate's own tooling uses, so it is likely already set.
+       "REPLICATE_API_TOKEN"
+       {:provider    (replicate-provider/create-replicate-provider
+                      {:api-key (get env "REPLICATE_API_TOKEN")
+                       :model   (model replicate-provider/default-model)})
+        :configured? true}
 
-    :else
-    ;; `:configured?` records whether the user chose anything, at the only point
-    ;; that knows. Re-deriving it downstream got this wrong twice: first from
-    ;; env vars, which misreported a configured OPENAI_BASE_URL, then from the
-    ;; provider keyword, which misreported Ollama configured in config.edn
-    ;; (BOU-280). OLLAMA_URL alone means deliberate; no variable at all means
-    ;; this is the fallback nobody asked for.
-    {:provider    (ollama/create-ollama-provider
-                   {:base-url (or (System/getenv "OLLAMA_URL") "http://localhost:11434")
-                    :model    (or (System/getenv "AI_MODEL") "qwen2.5-coder:7b")})
-     :configured? (boolean (System/getenv "OLLAMA_URL"))}))
+       ;; OLLAMA_URL, or nothing. `:configured?` records whether the user chose
+       ;; anything, at the only point that knows. Re-deriving it downstream got
+       ;; this wrong twice: first from env vars, which misreported a configured
+       ;; OPENAI_BASE_URL, then from the provider keyword, which misreported
+       ;; Ollama configured in config.edn (BOU-280). OLLAMA_URL alone means
+       ;; deliberate; no variable at all means this is the fallback nobody
+       ;; asked for.
+       {:provider    (ollama/create-ollama-provider
+                      {:base-url (or (get env "OLLAMA_URL") "http://localhost:11434")
+                       :model    (model "qwen2.5-coder:7b")})
+        :configured? (boolean chosen)}))))
 
 (defn- config-provider
   "The :wagoe/ai-service entry from resources/conf/{env}/config.edn, when it
@@ -523,6 +538,40 @@
              :let [path (str root "/resources/conf/" profile "/admin/" entity-name ".edn")]]
          {:path path :text text :exists? (.exists (io/file path))})))
 
+(defn- admin-config
+  "The :wagoe/admin map of `profile`'s config, Aero tags kept as tagged
+   literals, or nil when it has none or does not read."
+  [root profile]
+  (try
+    (get-in (edn/read-string {:default tagged-literal}
+                             (slurp (io/file root "resources" "conf" profile "config.edn")))
+            [:active :wagoe/admin])
+    (catch Exception _ nil)))
+
+(defn- includes? [entities file]
+  (some #(and (instance? clojure.lang.TaggedLiteral %)
+              (= 'include (:tag %))
+              (= file (:form %)))
+        (tree-seq #(or (coll? %) (instance? clojure.lang.TaggedLiteral %))
+                  #(if (coll? %) (seq %) [(:form %)])
+                  entities)))
+
+(defn admin-entity-next-steps
+  "What each profile's config still needs for `entity-names` to show in the
+   admin, as lines. A profile that cannot be read gets both steps."
+  [root entity-names]
+  (vec (for [profile (profiles root)
+             :let    [admin (admin-config root profile)
+                      allowlist (set (get-in admin [:entity-discovery :allowlist]))]
+             entity  entity-names
+             :let    [file (str "admin/" entity ".edn")]
+             line    [(when-not (contains? allowlist (keyword entity))
+                        (str profile ": add :" entity " to :entity-discovery :allowlist"))
+                      (when-not (includes? (:entities admin) file)
+                        (str profile ": add #include \"" file "\" to :entities"))]
+             :when   line]
+         line)))
+
 (defn write-admin-entities!
   "Write `targets`, skipping a file that exists unless `force?`: it may be a
    hand-edited prod config. Returns the targets with :written?."
@@ -598,9 +647,8 @@
                   (println (green (str "\u2713 Written to " path))))
                 (println)
                 (println (dim "Next steps, in each profile's config.edn:"))
-                (doseq [{:keys [entity-name]} entities]
-                  (println (dim (str "  - Add :" entity-name " to :entity-discovery :allowlist, and #include \"admin/"
-                                     entity-name ".edn\" to :entities"))))
+                (doseq [line (admin-entity-next-steps (:root options) (map :entity-name entities))]
+                  (println (dim (str "  - " line))))
                 (println (dim "  - Review and customize the generated config")))
 
               :else
@@ -646,11 +694,9 @@
        "\n"
        "Experimental: the answer can be confidently wrong. Review it before you use it.\n"
        "\n"
-       "Provider selection (via environment variables):\n"
-       "  ANTHROPIC_API_KEY   \u2192 Anthropic (Claude)\n"
-       "  OPENAI_API_KEY      \u2192 OpenAI (GPT)\n"
-       "  OLLAMA_URL          \u2192 Ollama (local, default http://localhost:11434)\n"
-       "  AI_MODEL            \u2192 Override default model\n"
+       "Provider, when config.edn names none (the first variable set wins):\n"
+       (env-lines (conj provider-env {:var "AI_MODEL" :label "Override the default model"})
+                  "  " "\u2192 ")
        "\n"
        "For NL scaffolding:\n"
        "  bb scaffold ai <description> [--yes]"))

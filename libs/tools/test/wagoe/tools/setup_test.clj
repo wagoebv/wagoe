@@ -692,6 +692,21 @@
         (is (= before (snapshot dir))))
       (finally (fs/delete-tree dir)))))
 
+(deftest ^:unit keys-setup-and-integrate-add-line-up-with-the-rest
+  ;; They sat at column 2 in a `wagoe new` config whose entries are at column
+  ;; 3, with :active's closing brace alone on a line (BOU-580).
+  (let [dir (wagoe-new-project!)]
+    (try
+      (run-setup dir "" "--database" "sqlite" "--ai-provider" "ollama" "--cache" "redis")
+      (doseq [env ["dev" "test"]]
+        (let [text (slurp (fs/file dir "resources" "conf" env "config.edn"))
+              cols (->> (config-edn/entries text ":active")
+                        (map #(- (:start %) 1 (or (str/last-index-of text "\n" (:start %)) -1))))]
+          (is (contains? (set (map :key (config-edn/entries text ":active"))) ":wagoe/product") env)
+          (is (= #{3} (set cols)) text)
+          (is (not (re-find #"(?m)^\s*\}\s*$" text)) text)))
+      (finally (fs/delete-tree dir)))))
+
 (deftest ^:unit unmergeable-config-refuses-and-writes-nothing
   (let [dir (fs/create-temp-dir)]
     (try

@@ -183,7 +183,8 @@
       (is (str/includes? src "(assoc (ig/init-key :wagoe/ai-service ai-cfg) :configured? true)")))
 
     (testing "and the bare fallback is only chosen when OLLAMA_URL says so"
-      (is (str/includes? src ":configured? (boolean (System/getenv \"OLLAMA_URL\"))")))))
+      (is (false? (:configured? (#'sut/make-service-from-env {}))))
+      (is (true? (:configured? (#'sut/make-service-from-env {"OLLAMA_URL" "http://x:1"})))))))
 
 (deftest ^:unit a-provider-named-in-config-outranks-an-exported-key
   ;; The env chain used to be consulted first, so any exported provider key beat
@@ -353,3 +354,37 @@
     (is (= :print (sut/gen-tests-outcome failed nil true)))
     (is (= :write (sut/gen-tests-outcome passed "test/t_test.clj" false)))
     (is (= :print (sut/gen-tests-outcome passed nil false)))))
+
+(deftest ^:unit admin-entity-next-steps-name-only-what-a-config-lacks
+  ;; rc-4 advised adding the allowlist entry and the #include when both were
+  ;; already there (BOU-580).
+  (let [root (.toFile (java.nio.file.Files/createTempDirectory
+                       "admin-next" (make-array java.nio.file.attribute.FileAttribute 0)))
+        conf (fn [profile text]
+               (let [f (io/file root "resources" "conf" profile "config.edn")]
+                 (io/make-parents f)
+                 (spit f text)))]
+    (conf "dev" (str "{:active\n {:wagoe/http {:port #or [#env HTTP_PORT 3000]}\n"
+                     "  :wagoe/admin\n  {:entity-discovery {:mode :allowlist :allowlist #{:users :invoices}}\n"
+                     "   :entities #merge [#include \"admin/users.edn\" #include \"admin/invoices.edn\"]}}}\n"))
+    (conf "test" (str "{:active\n {:wagoe/admin\n  {:entity-discovery {:mode :allowlist :allowlist #{:users}}\n"
+                      "   :entities #merge [#include \"admin/users.edn\"]}}}\n"))
+    (conf "prod" (str "{:active\n {:wagoe/admin\n  {:entity-discovery {:mode :allowlist :allowlist #{:users :invoices}}\n"
+                      "   :entities #merge [#include \"admin/users.edn\" #include \"admin/invoices.edn\"]}}}\n"))
+    (is (= ["test: add :invoices to :entity-discovery :allowlist"
+            "test: add #include \"admin/invoices.edn\" to :entities"]
+           (sut/admin-entity-next-steps (.getPath root) ["invoices"])))
+    (is (= [] (sut/admin-entity-next-steps (.getPath root) ["users"]))
+        "every profile has users")))
+
+(deftest ^:unit the-help-lists-every-variable-the-env-chain-reads
+  ;; The help listed no Replicate variables (BOU-580). The chain and the help
+  ;; now read one table.
+  (doseq [{:keys [var provider]} sut/provider-env]
+    (let [service (#'sut/make-service-from-env {var "x"})]
+      (is (= provider (-> service :provider type .getSimpleName
+                          (str/replace "Provider" "") str/lower-case keyword))
+          var)
+      (is (str/includes? sut/help-text var) var)))
+  (is (str/includes? sut/help-text "REPLICATE_API_TOKEN"))
+  (is (str/includes? sut/help-text "AI_MODEL")))

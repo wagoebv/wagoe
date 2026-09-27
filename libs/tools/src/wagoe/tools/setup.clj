@@ -696,30 +696,15 @@
 ;; `bb scaffold integrate` added, the :migrate-on-start? `wagoe new` sets
 ;; (BOU-532). An existing file now gets only what was answered.
 
-(defn- line-ending
-  "The file's own line ending, so inserted lines match it."
-  [text]
-  (let [i (str/index-of text "\n")]
-    (if (and i (pos? i) (= \return (get text (dec i)))) "\r\n" "\n")))
+(def ^:private line-ending config-edn/line-ending)
+(def ^:private column config-edn/column)
+(def ^:private reindent config-edn/reindent)
 
 (defn- entry [text kw k]
   (some #(when (= k (:key %)) %) (config-edn/entries text kw)))
 
 (defn- entry-text [text e]
   (subs text (:start e) (:end e)))
-
-(defn- column [text i]
-  (- i (inc (or (str/last-index-of text "\n" (dec i)) -1))))
-
-(defn- reindent
-  "`snippet`, written at column 2, moved to column `col`, lines ending in `nl`."
-  [snippet col nl]
-  (let [[first-line & more] (str/split-lines snippet)
-        shift #(cond
-                 (> col 2) (str (apply str (repeat (- col 2) \space)) %)
-                 (< col 2) (str/replace-first % (re-pattern (str "^ {0," (- 2 col) "}")) "")
-                 :else     %)]
-    (str/join nl (cons first-line (map shift more)))))
 
 (defn- cut
   "`text` without entry `e`, the comments above it, and its line end."
@@ -728,13 +713,8 @@
         skip (cond (str/starts-with? rest "\r\n") 2 (str/starts-with? rest "\n") 1 :else 0)]
     (str (subs text 0 (:from e)) (subs rest skip))))
 
-(defn- add-entry [text snippet nl]
-  (let [last-key (some-> (config-edn/entries text ":active") last :start)
-        col      (if last-key (column text last-key) 2)
-        close    (second (config-edn/section text ":active"))]
-    (config-edn/insert-into text ":active"
-                            (str (if (= \newline (get text (dec close))) nl (str nl nl))
-                                 (apply str (repeat col \space)) (reindent snippet col nl)))))
+(defn- add-entry [text snippet]
+  (config-edn/append-entry text ":active" snippet))
 
 (defn- deactivate
   "`text` with entry `e` moved from :active to :inactive, comments and all. An
@@ -778,7 +758,7 @@
              active (->> (config-edn/entries text ":active") (map :key) (filter database-keys))
              answer (some->> (chosen-keys k) (get spec))
              add    #(-> %1
-                         (update :text add-entry new nl)
+                         (update :text add-entry new)
                          (update :changes conj (str "add " k)))]
          (cond
            (and cur (chosen-keys k))
@@ -856,7 +836,7 @@
 
                 (stand-ins (provider-of dev-text e nil))
                 (if-let [v (prod-value k spec)]
-                  (assoc acc :text (add-entry text v "\n"))
+                  (assoc acc :text (add-entry text v))
                   (update acc :left-out conj k))
 
                 :else
@@ -865,8 +845,7 @@
                                   ;; reindent moves a snippet from column 2 to
                                   ;; `col`; 4 - c brings one at column c to 2.
                                   (reindent (subs dev-text (:start e) (:end e))
-                                            (- 4 (column dev-text (:start e))) "\n")
-                                  "\n")))))
+                                            (- 4 (column dev-text (:start e))) "\n"))))))
           {:text prod-text :left-out []}
           (or (config-edn/entries dev-text ":active") [])))
 
