@@ -218,101 +218,101 @@
    (let [server (java.time.ZoneId/systemDefault)]
      (parse-form-params params entity-config {:input-zone server :server-zone server})))
   ([params entity-config {:keys [input-zone server-zone offsets]}]
-  (reduce-kv
-   (fn [acc field-name value]
-     (let [field-keyword (keyword field-name)
-           field-config (get-in entity-config [:fields field-keyword])
-           field-type (:type field-config :string)
+   (reduce-kv
+    (fn [acc field-name value]
+      (let [field-keyword (keyword field-name)
+            field-config (get-in entity-config [:fields field-keyword])
+            field-type (:type field-config :string)
 
             ; Handle array values (e.g., from checkbox + hidden field pattern)
             ; Take the last value when multiple values are submitted
-           normalized-value (if (vector? value)
-                              (last value)
-                              value)
+            normalized-value (if (vector? value)
+                               (last value)
+                               value)
 
              ; Convert string value to appropriate type
-           typed-value (cond
+            typed-value (cond
                            ; Empty strings become nil
-                         (str/blank? normalized-value) nil
+                          (str/blank? normalized-value) nil
 
                            ; Boolean checkbox values
                            ; Checked: sends "true" (from value attribute)
                            ; Unchecked: sends "false" (from hidden field)
-                         (= field-type :boolean)
-                         (= normalized-value "true")
+                          (= field-type :boolean)
+                          (= normalized-value "true")
 
                            ; Integer values. `parse-long` answers nil for unreadable
                            ; input rather than throwing, so the catch below never
                            ; fired and "forty" was written as NULL, silently clearing
                            ; the field (BOU-521). nil is the failure signal.
-                         (= field-type :int)
-                         (try
-                           (or (parse-long normalized-value)
-                               (throw (NumberFormatException. normalized-value)))
-                           (catch NumberFormatException _
-                             (throw (ex-info "Invalid integer value"
-                                             {:type :validation-error
-                                              :field field-keyword
-                                              :value normalized-value
-                                              :message (str "Field '" (name field-keyword) "' must be a valid integer")}))))
+                          (= field-type :int)
+                          (try
+                            (or (parse-long normalized-value)
+                                (throw (NumberFormatException. normalized-value)))
+                            (catch NumberFormatException _
+                              (throw (ex-info "Invalid integer value"
+                                              {:type :validation-error
+                                               :field field-keyword
+                                               :value normalized-value
+                                               :message (str "Field '" (name field-keyword) "' must be a valid integer")}))))
 
                            ; Decimal values - wrap in try/catch for invalid input
-                         (= field-type :decimal)
-                         (try
-                           (bigdec normalized-value)
-                           (catch NumberFormatException _
-                             (throw (ex-info "Invalid decimal value"
-                                             {:type :validation-error
-                                              :field field-keyword
-                                              :value normalized-value
-                                              :message (str "Field '" (name field-keyword) "' must be a valid decimal")}))))
+                          (= field-type :decimal)
+                          (try
+                            (bigdec normalized-value)
+                            (catch NumberFormatException _
+                              (throw (ex-info "Invalid decimal value"
+                                              {:type :validation-error
+                                               :field field-keyword
+                                               :value normalized-value
+                                               :message (str "Field '" (name field-keyword) "' must be a valid decimal")}))))
 
                            ; An instant is entered as wall time in the form's zone and
                            ; stored with the server's offset, so every database reads
                            ; back the moment that was meant (BOU-523).
-                         (= field-type :instant)
-                         (or (ui-base/parse-datetime-input normalized-value input-zone server-zone
-                                                           (get offsets field-keyword))
-                             (throw (ex-info "Invalid date-time value"
-                                             {:type :validation-error
-                                              :field field-keyword
-                                              :value normalized-value
-                                              :message (str "Field '" (name field-keyword)
-                                                            "' must be a date and time")})))
+                          (= field-type :instant)
+                          (or (ui-base/parse-datetime-input normalized-value input-zone server-zone
+                                                            (get offsets field-keyword))
+                              (throw (ex-info "Invalid date-time value"
+                                              {:type :validation-error
+                                               :field field-keyword
+                                               :value normalized-value
+                                               :message (str "Field '" (name field-keyword)
+                                                             "' must be a date and time")})))
 
                            ; A calendar date is exactly YYYY-MM-DD: no time part and no
                            ; zone (BOU-519 decision). The date widget only sends that
                            ; shape; anything else is a hand-crafted request and was
                            ; written straight to the table (BOU-521).
-                         (= field-type :date)
-                         (if (and (re-matches #"\d{4}-\d{2}-\d{2}" normalized-value)
+                          (= field-type :date)
+                          (if (and (re-matches #"\d{4}-\d{2}-\d{2}" normalized-value)
                                   ;; The shape alone let `2024-02-31` through, and the
                                   ;; DATE column rejected it at the write: a 500.
                                   ;; ISO_LOCAL_DATE resolves strictly, so an impossible
                                   ;; day is refused here instead.
-                                  (try (java.time.LocalDate/parse normalized-value) true
-                                       (catch java.time.format.DateTimeParseException _ false)))
-                           normalized-value
-                           (throw (ex-info "Invalid date value"
-                                           {:type :validation-error
-                                            :field field-keyword
-                                            :value normalized-value
-                                            :message (str "Field '" (name field-keyword)
-                                                          "' must be a date as YYYY-MM-DD")})))
+                                   (try (java.time.LocalDate/parse normalized-value) true
+                                        (catch java.time.format.DateTimeParseException _ false)))
+                            normalized-value
+                            (throw (ex-info "Invalid date value"
+                                            {:type :validation-error
+                                             :field field-keyword
+                                             :value normalized-value
+                                             :message (str "Field '" (name field-keyword)
+                                                           "' must be a date as YYYY-MM-DD")})))
 
                            ; UUID values - wrap in try/catch for invalid input
-                         (= field-type :uuid)
-                         (try
-                           (UUID/fromString normalized-value)
-                           (catch IllegalArgumentException _
-                             (throw (ex-info "Invalid UUID value"
-                                             {:type :validation-error
-                                              :field field-keyword
-                                              :value normalized-value
-                                              :message (str "Field '" (name field-keyword) "' must be a valid UUID")}))))
+                          (= field-type :uuid)
+                          (try
+                            (UUID/fromString normalized-value)
+                            (catch IllegalArgumentException _
+                              (throw (ex-info "Invalid UUID value"
+                                              {:type :validation-error
+                                               :field field-keyword
+                                               :value normalized-value
+                                               :message (str "Field '" (name field-keyword) "' must be a valid UUID")}))))
 
                            ; Default: keep as string
-                         :else normalized-value)]
+                          :else normalized-value)]
 
        ;; A submitted field is kept even when it is empty, as nil. Dropping it
        ;; made "cleared this field" indistinguishable from "did not submit
@@ -321,14 +321,13 @@
        ;; validation instead of being rejected (BOU-477). A field the form did
        ;; not submit is still absent, which is what makes a partial update
        ;; partial.
-       (assoc acc field-keyword typed-value)))
-   {}
-   params)))
+        (assoc acc field-keyword typed-value)))
+    {}
+    params)))
 
 ;; =============================================================================
 ;; Handler Helpers
 ;; =============================================================================
-
 
 (defn parse-form-params-checked
   "Like `parse-form-params`, but returns `[data field-errors]` instead of
@@ -342,21 +341,21 @@
    user typed in `data` so the re-rendered form shows it."
   ([params entity-config] (parse-form-params-checked params entity-config nil))
   ([params entity-config zones]
-  (reduce-kv
-   (fn [[data errors] field-name value]
-     (try
-       [(merge data (if zones
-                      (parse-form-params {field-name value} entity-config zones)
-                      (parse-form-params {field-name value} entity-config)))
-        errors]
-       (catch clojure.lang.ExceptionInfo e
-         (let [{:keys [type field message]} (ex-data e)]
-           (if (= :validation-error type)
-             [(assoc data field (if (vector? value) (last value) value))
-              (assoc errors field [message])]
-             (throw e))))))
-   [{} {}]
-   params)))
+   (reduce-kv
+    (fn [[data errors] field-name value]
+      (try
+        [(merge data (if zones
+                       (parse-form-params {field-name value} entity-config zones)
+                       (parse-form-params {field-name value} entity-config)))
+         errors]
+        (catch clojure.lang.ExceptionInfo e
+          (let [{:keys [type field message]} (ex-data e)]
+            (if (= :validation-error type)
+              [(assoc data field (if (vector? value) (last value) value))
+               (assoc errors field [message])]
+              (throw e))))))
+    [{} {}]
+    params)))
 
 (defn get-current-user
   "Extract authenticated user from request.
@@ -631,6 +630,68 @@
           fk-fields)))
 
 ;; =============================================================================
+;; Foreign-key pickers and workflow state (BOU-563)
+;; =============================================================================
+
+(defn- parent-entities
+  "{foreign-key-field parent-entity} for each has-many naming `entity-name`,
+   detected or configured."
+  [entity-name entity-configs]
+  (into {}
+        (for [[parent cfg] entity-configs
+              rel          (:has-many cfg)
+              :when        (= entity-name (:entity rel))]
+          [(keyword (str/replace (name (:foreign-key rel)) "_" "-")) parent])))
+
+(defn foreign-key-options
+  "The choices for each editable foreign key of `entity-name`: the parent's
+   rows as [id label], where the label is the parent's first search or list
+   field. Only when every parent fits in the maximum page size: a select
+   capped there would silently offer a subset, so past it the key stays a
+   text input. An optional key can be left empty."
+  [admin-service config entity-configs entity-name values]
+  (let [entity-config (get entity-configs entity-name)
+        page-size     (get-in config [:pagination :max-page-size] 200)]
+    (into {}
+          (for [[field parent] (parent-entities entity-name entity-configs)
+                :when (some #{field} (:editable-fields entity-config))
+                :let  [parent-cfg (get entity-configs parent)
+                       pk         (:primary-key parent-cfg :id)
+                       label      (or (first (:search-fields parent-cfg))
+                                      (first (:list-fields parent-cfg))
+                                      pk)
+                       page       (try (ports/list-entities admin-service parent
+                                                                {:limit page-size :sort label :sort-dir :asc})
+                                       (catch Exception e
+                                         (log/warn e "foreign key left as a text input: parent rows unreadable"
+                                                   {:entity entity-name :field field :parent parent})
+                                         ::unreadable))
+                       rows       (:records page)
+                       current    (some-> (get values field) str)]
+                :when (and (not= ::unreadable page)
+                           (<= (:total-count page 0) (count rows)))]
+            (let [options (mapv (fn [r] [(str (get r pk)) (str (or (get r label) (get r pk)))]) rows)]
+              [field (cond->> (cond-> options
+                                ;; A parent the list does not show (soft-deleted): kept,
+                                ;; so saving the form does not change it.
+                                (and current (not-any? #(= current (first %)) options))
+                                (conj [current current]))
+                       (not (get-in entity-config [:fields field :required])) (into [["" "—"]]))])))))
+
+(defn with-workflow-states
+  "`records`, each with `:admin/workflow` {:instance-id :state} when it has a
+   workflow instance. Only for an entity with a `:workflow` config, and only
+   when the workflow module is on."
+  [config entity-config records]
+  (let [workflows   (:workflows config)
+        entity-type (get-in entity-config [:workflow :entity-type])
+        pk          (:primary-key entity-config :id)]
+    (if (and workflows entity-type (seq records))
+      (let [states (ports/entity-workflows workflows entity-type (map #(get % pk) records))]
+        (mapv #(if-let [w (get states (get % pk))] (assoc % :admin/workflow w) %) records))
+      records)))
+
+;; =============================================================================
 ;; Entity Detail Options (shared by detail + crud handlers)
 ;; =============================================================================
 
@@ -643,7 +704,7 @@
      :entity-configs - map of entity-name -> entity-config
      :page-opts      - opts map for entity-detail-page
                        (related-records, return-to, parent-context, sibling-nav,
-                        display)"
+                        display, field-options, workflow)"
   [admin-service schema-provider config entity-name entity-config record request]
   (let [entities        (ports/list-available-entities schema-provider)
         entity-configs  (into {} (map (fn [e] [e (ports/get-entity-config schema-provider e)])) entities)
@@ -716,4 +777,6 @@
                       :return-to       return-to
                       :parent-context  parent-context
                       :sibling-nav     sibling-nav
-                      :display         (display-options config request)}}))
+                      :display         (display-options config request)
+                      :field-options   (foreign-key-options admin-service config entity-configs entity-name record)
+                      :workflow        (:admin/workflow (first (with-workflow-states config entity-config [record])))}}))

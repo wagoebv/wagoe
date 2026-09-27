@@ -10,5 +10,4 @@
    :member-count {:type :integer :label [:t :admin.audiences/field-member-count] :filterable true}
    :cached-at    {:type :instant :label [:t :admin.audiences/field-cached-at]    :filterable true}
    :created-at   {:type :instant :label [:t :admin.audiences/field-created-at]   :filterable true}}
-  :edit-redirect-url "/web/audiences/builder/:id"
   :create-redirect-url "/web/audiences/builder"}}

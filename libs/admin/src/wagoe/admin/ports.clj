@@ -427,3 +427,22 @@
 
      Example:
        (unregister-action executor :users :send-welcome-email)"))
+
+;; =============================================================================
+;; Workflow Port (BOU-563)
+;; =============================================================================
+
+(defprotocol IEntityWorkflows
+  "What the admin needs from a workflow engine. wagoe.workflow implements it,
+   so the admin shows workflow state without depending on that library."
+
+  (entity-workflows [this entity-type entity-ids]
+    "The latest workflow instance of each entity that has one, as
+     {entity-id {:instance-id uuid :workflow-id kw :state kw}}.")
+
+  (remove-entity-workflows! [this tx entity-type entity-id]
+    "Delete every workflow instance of the entity, with its audit log, inside
+     `tx`: the admin's transaction context, whose :datasource is the open
+     connection and :transaction-of the datasource it was opened on. A store
+     on another datasource cannot join it; it removes the instances on its
+     own, after the fact. `tx` may be nil. Returns the number removed."))

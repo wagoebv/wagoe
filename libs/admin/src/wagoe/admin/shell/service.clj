@@ -10,7 +10,7 @@
    - Apply pagination, filtering, sorting
    - Validate permissions and entity access
    - Transform data between DB and application formats
-   - Handle soft/hard deletes based on schema"
+   - Handle soft/hard deletes, children included, as the config says"
   (:require
    [wagoe.admin.ports :as ports]
    [wagoe.platform.database :as db]
@@ -319,10 +319,254 @@
                e))))
 
 ;; =============================================================================
+;; Children and deletes (BOU-563)
+;; =============================================================================
+
+(defn- child-config
+  "The child's admin config, or nil when the child is only a table."
+  [schema-provider relationship]
+  (when (ports/validate-entity-exists schema-provider (:entity relationship))
+    (ports/get-entity-config schema-provider (:entity relationship))))
+
+(defn- related-query
+  "The children of `parent-id` in `relationship`, read the way the child's own
+   list reads them: through its :query-overrides and, unless
+   `include-deleted?`, its soft delete. Returns the query without :select, and
+   the child's id column."
+  [schema-provider parent-id relationship & [include-deleted?]]
+  (let [child-cfg (child-config schema-provider relationship)
+        {:keys [from-clause select-clause join-clause field-aliases]}
+        (if child-cfg
+          (resolve-query-config child-cfg)
+          {:from-clause [(:table relationship)] :select-clause [:*] :field-aliases {}})
+        ;; Without an alias, qualify from :select: in a join a bare column
+        ;; that both tables carry is ambiguous.
+        qualify   (fn [field]
+                    (let [col (case-conversion/kebab-case->snake-case-keyword field)]
+                      (or (get field-aliases field)
+                          (some #(when (and (keyword? %)
+                                            (str/ends-with? (name %) (str "." (name col))))
+                                   %)
+                                select-clause)
+                          col)))
+        fk-where  [:= (qualify (:foreign-key relationship)) (str parent-id)]]
+    {:child-cfg     child-cfg
+     :select-clause select-clause
+     :qualify       qualify
+     :id-column     (qualify (:primary-key child-cfg :id))
+     :query         (cond-> {:from  from-clause
+                             :where (if (and (:soft-delete child-cfg false) (not include-deleted?))
+                                      [:and fk-where [:= (qualify :deleted-at) nil]]
+                                      fk-where)}
+                      join-clause (assoc :join join-clause))}))
+
+(defn- live-records
+  "The live records among `ids`, in one query, read the way `get-entity`
+   reads one."
+  [db-ctx schema-provider entity-name ids]
+  (let [entity-config (ports/get-entity-config schema-provider entity-name)
+        {:keys [from-clause select-clause join-clause field-aliases]} (resolve-query-config entity-config)
+        id-field      (get field-aliases :id (:primary-key entity-config :id))
+        in-ids        [:in id-field (mapv type-conversion/uuid->string ids)]]
+    (if (empty? ids)
+      []
+      (db/execute-query! db-ctx
+                         (cond-> {:select select-clause
+                                  :from   from-clause
+                                  :where  (if (:soft-delete entity-config false)
+                                            [:and in-ids [:= (get field-aliases :deleted-at :deleted_at) nil]]
+                                            in-ids)}
+                           join-clause (assoc :join join-clause))))))
+
+(defn- fk-field [relationship]
+  (keyword (str/replace (name (:foreign-key relationship)) "_" "-")))
+
+(defn- minimums
+  "The has-many entries with a :min whose children are `entity-name`, each
+   with its parent's config. An entity whose config cannot be read has no say."
+  [schema-provider entity-name]
+  (for [parent (ports/list-available-entities schema-provider)
+        :let   [parent-cfg (try (ports/get-entity-config schema-provider parent)
+                                (catch clojure.lang.ExceptionInfo _ nil))]
+        rel    (:has-many parent-cfg)
+        :when  (and (= entity-name (:entity rel)) (pos-int? (:min rel)))]
+    (assoc rel :parent-cfg parent-cfg)))
+
+(defn- check-minimums!
+  "Refuse to delete `records` of `entity-name` when that would leave a parent
+   with fewer children than its has-many :min. Read before the delete, not
+   in its transaction: two concurrent deletes can both pass."
+  [db-ctx schema-provider entity-name records]
+  (doseq [rel                       (minimums schema-provider entity-name)
+          [parent-id doomed]        (group-by #(get % (fk-field rel)) records)
+          :when                     (some? parent-id)
+          :let                      [{:keys [query]} (related-query schema-provider parent-id rel)
+                                     live (:total (db/execute-one! db-ctx (assoc query :select [[:%count.* :total]])) 0)
+                                     left (- live (count doomed))]]
+    (when (< left (:min rel))
+      (throw (ex-info (str (:label rel (name entity-name)) ": at least " (:min rel)
+                           " required per " (:label (:parent-cfg rel)) ", this would leave " (max left 0))
+                      {:type        :conflict
+                       :entity-name entity-name
+                       :parent-id   parent-id
+                       :min         (:min rel)})))))
+
+(defn- on-delete
+  "What a delete of the parent does to these children: refuse while they
+   exist, unless the has-many says `:on-delete :cascade`. A has-many written
+   only to show children, or detected from a foreign key (users of a tenant,
+   who may belong to others), must not start deleting them."
+  [relationship]
+  (:on-delete relationship :restrict))
+
+(defn- assert-unrestricted!
+  "Refuse to delete `ids` of `entity-name` while a restricting has-many has
+   live children, naming the child and how many."
+  [db-ctx schema-provider entity-name ids]
+  (let [cfg (ports/get-entity-config schema-provider entity-name)]
+    (doseq [rel   (:has-many cfg)
+            :when (= :restrict (on-delete rel))
+            :let  [n (reduce + (for [id ids
+                                     :let [{:keys [query]} (related-query schema-provider (str id) rel)]]
+                                 (:total (db/execute-one! db-ctx (assoc query :select [[:%count.* :total]])) 0)))]
+            :when (pos? n)]
+      (throw (ex-info (str "Cannot delete " (:label cfg (name entity-name)) ": "
+                           n " " (:label rel (name (:entity rel))) " still refer to it")
+                      {:type        :conflict
+                       :entity-name entity-name
+                       :child       (:entity rel)
+                       :count       n})))))
+
+(defn- soft-deletable? [entity-config]
+  (or (:soft-delete entity-config false) (contains? (:fields entity-config) :deleted-at)))
+
+(defn- delete-row!
+  "Delete one record, soft or hard. Returns true when a row changed."
+  [tx entity-config id-str soft? now-str]
+  (let [table-name  (:table-name entity-config)
+        primary-key (:primary-key entity-config :id)
+        {:keys [soft-delete-table]} (resolve-query-config entity-config)
+        split-cfg   (:split-table-update entity-config)
+        has-active? (contains? (:fields entity-config) :active)
+        secondary   (when split-cfg (:secondary-fields split-cfg #{}))
+        by-id       [:= primary-key id-str]
+        update!     (fn [table data]
+                      (db/execute-update! tx {:update table
+                                              :set    (case-conversion/kebab-case->snake-case-map data)
+                                              :where  by-id}))]
+    (cond
+      (not soft?)
+      (pos? (db/execute-update! tx {:delete-from table-name :where by-id}))
+
+      ;; Split-table: active lives on the secondary table, deleted_at on both.
+      (and split-cfg (contains? secondary :active) has-active?)
+      (do (update! (:secondary-table split-cfg) {:deleted-at now-str :active false})
+          (pos? (update! table-name {:deleted-at now-str})))
+
+      :else
+      (pos? (update! soft-delete-table (cond-> {:deleted-at now-str} has-active? (assoc :active false)))))))
+
+;; One delete as it runs: the transaction, whether it is soft, the time it
+;; stamps, whether to read each row before deleting it (for the events), and
+;; the rows already visited.
+(defrecord ^:private Deletion [tx soft? now-str priors? seen])
+
+(defn- delete-tree!
+  "Delete `id` of `entity-name` and, first, its cascading has-many children,
+   which follow the parent: removed with a hard delete, given a deleted_at with
+   a soft one. A restricting has-many with live children refuses it, and the
+   transaction rolls back what was already deleted. A soft delete leaves a
+   child with no deleted_at column as it is, since its parent row stays.
+   Returns {:entity :id :prior} per row removed; :prior only with priors?."
+  [{:keys [tx soft? now-str priors? seen] :as deletion} schema-provider entity-name id]
+  (let [cfg    (ports/get-entity-config schema-provider entity-name)
+        id-str (str id)]
+    (if (or (@seen [entity-name id-str]) (and soft? (not (soft-deletable? cfg))))
+      []
+      (do
+        (vswap! seen conj [entity-name id-str])
+        (assert-unrestricted! tx schema-provider entity-name [id-str])
+        (let [children (doall
+                        (mapcat (fn [rel]
+                                  (let [{:keys [child-cfg query id-column]}
+                                        (related-query schema-provider id-str rel (not soft?))]
+                                    (cond
+                                      child-cfg
+                                      (mapcat #(delete-tree! deletion schema-provider (:entity rel) (:child-id %))
+                                              (db/execute-query! tx (assoc query :select [[id-column :child-id]])))
+
+                                      (not soft?)
+                                      (do (db/execute-update! tx {:delete-from (:table rel) :where (:where query)})
+                                          [])
+
+                                      :else [])))
+                                (filter #(= :cascade (on-delete %)) (:has-many cfg))))
+              ;; Read in the transaction, just before the row goes: exactly
+              ;; the row that is deleted, which a read before it cannot promise.
+              prior    (when priors? (first (live-records tx schema-provider entity-name [id-str])))]
+          (if (delete-row! tx cfg id-str soft? now-str)
+            (conj (vec children) {:entity entity-name :id id-str :prior prior})
+            children))))))
+
+(defn- remove-workflows!
+  "Remove the workflow instances of the `removed` rows whose entity has a
+   workflow, in the delete's transaction: a failure rolls the delete back. A
+   store on another datasource removes them outside it (see the port)."
+  [workflows db-ctx tx schema-provider removed]
+  (doseq [{:keys [entity id]} removed
+          :let  [entity-type (get-in (ports/get-entity-config schema-provider entity) [:workflow :entity-type])]
+          :when entity-type]
+    (ports/remove-entity-workflows! workflows (assoc tx :transaction-of (:datasource db-ctx))
+                                    entity-type (parse-uuid id))))
+
+(defn- delete-records!
+  "Delete `ids` of `entity-name` with their children, in one transaction.
+   Returns {:entity :id :prior} per row removed, children included. Workflow
+   instances go only with a hard delete: a soft one can be undone, and their
+   history with it."
+  [db-ctx schema-provider workflows entity-name ids & [priors?]]
+  (let [soft? (:soft-delete (ports/get-entity-config schema-provider entity-name) false)]
+    (db/with-transaction* db-ctx
+      (fn [tx]
+        (let [deletion (->Deletion tx soft? (type-conversion/instant->string (Instant/now))
+                                   priors? (volatile! #{}))
+              removed  (vec (mapcat #(delete-tree! deletion schema-provider entity-name %) ids))]
+          (when (and workflows (not soft?))
+            (remove-workflows! workflows db-ctx tx schema-provider removed))
+          removed)))))
+
+(defn- roots-removed
+  "How many of `ids` are among the `removed` rows."
+  [entity-name ids removed]
+  (count (filter (set (map (juxt :entity :id) removed))
+                 (distinct (map #(vector entity-name (str %)) ids)))))
+
+;; =============================================================================
 ;; Admin Service Implementation
 ;; =============================================================================
 
-(defrecord AdminService [db-ctx schema-provider logger error-reporter config]
+(defprotocol ^:private IRemovingDelete
+  ;; Not a port: how PublishingAdminService learns every row a delete took,
+  ;; cascaded children included, to publish one event for each.
+  (delete-removing [this entity-name ids]
+    "Delete like bulk-delete-entities; return {:entity :id :prior} per row removed."))
+
+(defn- checked-delete!
+  "Refuse by :min or a restricting has-many, then delete. The refusals are
+   checked before the operation, like the split-table create check, so they
+   are not logged as failed database operations."
+  [{:keys [db-ctx schema-provider workflows]} entity-name ids priors?]
+  (check-minimums! db-ctx schema-provider entity-name
+                   (live-records db-ctx schema-provider entity-name ids))
+  (assert-unrestricted! db-ctx schema-provider entity-name ids)
+  (persist-interceptors/execute-persistence-operation
+   :admin-delete-entities
+   {:entity (name entity-name) :count (count ids)}
+   (fn [{:keys [_params]}]
+     (delete-records! db-ctx schema-provider workflows entity-name ids priors?))
+   db-ctx))
+
+(defrecord AdminService [db-ctx schema-provider logger error-reporter config workflows]
   ports/IAdminService
 
   (list-entities [_ entity-name options]
@@ -629,57 +873,8 @@
            db-result)))
      db-ctx))
 
-  (delete-entity [_ entity-name id]
-    (persist-interceptors/execute-persistence-operation
-     :admin-delete-entity
-     {:entity (name entity-name) :id id}
-     (fn [{:keys [_params]}]
-       (let [entity-config (ports/get-entity-config schema-provider entity-name)
-             table-name (:table-name entity-config)
-             primary-key (:primary-key entity-config :id)
-             soft-delete? (:soft-delete entity-config false)
-             ;; Convert UUID to string for PostgreSQL compatibility
-             id-str (type-conversion/uuid->string id)
-             {:keys [soft-delete-table]} (resolve-query-config entity-config)
-             split-cfg (:split-table-update entity-config)]
-
-         (if soft-delete?
-           ;; Soft delete: Set deleted-at timestamp and optionally active=false
-           (let [now-str (type-conversion/instant->string (Instant/now))
-                 has-active-field? (contains? (:fields entity-config) :active)
-                 secondary-fields (when split-cfg (:secondary-fields split-cfg #{}))]
-
-             (if (and split-cfg secondary-fields (contains? secondary-fields :active) has-active-field?)
-               ;; Split-table: active lives on secondary table, deleted_at may be on both
-               (db/with-transaction* db-ctx
-                 (fn [tx]
-                   (let [secondary-table (:secondary-table split-cfg)
-                         ;; Secondary table gets active=false + deleted_at
-                         secondary-data (case-conversion/kebab-case->snake-case-map
-                                         {:deleted-at now-str :active false})
-                         ;; Primary table gets deleted_at only
-                         primary-data (case-conversion/kebab-case->snake-case-map
-                                       {:deleted-at now-str})]
-                     (db/execute-update! tx {:update secondary-table
-                                             :set    secondary-data
-                                             :where  [:= primary-key id-str]})
-                     (pos? (db/execute-update! tx {:update table-name
-                                                   :set    primary-data
-                                                   :where  [:= primary-key id-str]})))))
-               ;; Non-split: update single table
-               (let [soft-delete-data-kebab (cond-> {:deleted-at now-str}
-                                              has-active-field? (assoc :active false))
-                     soft-delete-data (case-conversion/kebab-case->snake-case-map soft-delete-data-kebab)
-                     query {:update soft-delete-table
-                            :set soft-delete-data
-                            :where [:= primary-key id-str]}]
-                 (pos? (db/execute-update! db-ctx query)))))
-
-           ;; Hard delete: Permanent removal
-           (let [query {:delete-from table-name
-                        :where [:= primary-key id-str]}]
-             (pos? (db/execute-update! db-ctx query))))))
-     db-ctx))
+  (delete-entity [this entity-name id]
+    (pos? (roots-removed entity-name [id] (checked-delete! this entity-name [id] false))))
 
   (count-entities [_ entity-name filters]
     (persist-interceptors/execute-persistence-operation
@@ -724,96 +919,31 @@
         {:valid? true :data data}
         {:valid? false :errors errors})))
 
-  (bulk-delete-entities [_ entity-name ids]
-    (persist-interceptors/execute-persistence-operation
-     :admin-bulk-delete-entities
-     {:entity (name entity-name) :count (count ids)}
-     (fn [{:keys [_params]}]
-       (let [entity-config (ports/get-entity-config schema-provider entity-name)
-             table-name (:table-name entity-config)
-             primary-key (:primary-key entity-config :id)
-             soft-delete? (:soft-delete entity-config false)
-             {:keys [soft-delete-table]} (resolve-query-config entity-config)
-             split-cfg (:split-table-update entity-config)
-
-             ;; Convert UUIDs to strings at database boundary
-             id-strings (mapv type-conversion/uuid->string ids)
-             now-str (type-conversion/instant->string (Instant/now))
-
-             has-active-field? (contains? (:fields entity-config) :active)
-             secondary-fields (when split-cfg (:secondary-fields split-cfg #{}))
-
-             affected-count
-             (if (and soft-delete? split-cfg secondary-fields
-                      (contains? secondary-fields :active) has-active-field?)
-               ;; Split-table bulk soft-delete: update both tables
-               (db/with-transaction* db-ctx
-                 (fn [tx]
-                   (let [secondary-table (:secondary-table split-cfg)
-                         secondary-data (case-conversion/kebab-case->snake-case-map
-                                         {:deleted-at now-str :active false})
-                         primary-data (case-conversion/kebab-case->snake-case-map
-                                       {:deleted-at now-str})]
-                     (db/execute-update! tx {:update secondary-table
-                                             :set    secondary-data
-                                             :where  [:in primary-key id-strings]})
-                     (db/execute-update! tx {:update table-name
-                                             :set    primary-data
-                                             :where  [:in primary-key id-strings]}))))
-               ;; Non-split path
-               (if soft-delete?
-                 (let [soft-delete-data-kebab (cond-> {:deleted-at now-str}
-                                                has-active-field? (assoc :active false))
-                       soft-delete-data (case-conversion/kebab-case->snake-case-map soft-delete-data-kebab)]
-                   (db/execute-update! db-ctx {:update soft-delete-table
-                                               :set soft-delete-data
-                                               :where [:in primary-key id-strings]}))
-                 (db/execute-update! db-ctx {:delete-from table-name
-                                             :where [:in primary-key id-strings]})))]
-
-         {:success-count affected-count
-          :failed-count (- (count ids) affected-count)
-          :errors []}))
-     db-ctx))
+  (bulk-delete-entities [this entity-name ids]
+    (let [deleted (roots-removed entity-name ids (checked-delete! this entity-name ids false))]
+      {:success-count deleted
+       :failed-count  (- (count ids) deleted)
+       :errors        []}))
 
   (list-related-entities [_ _parent-entity-name parent-id relationship]
     (persist-interceptors/execute-persistence-operation
      :admin-list-related-entities
      {:parent-id parent-id :entity (name (:entity relationship))}
      (fn [{:keys [_params]}]
-       ;; Read the child the way its own list page does: through its
-       ;; :query-overrides and soft delete, so joined columns are not blank.
-       ;; A child that is not an admin entity falls back to its bare table.
-       (let [child      (:entity relationship)
-             child-cfg  (when (ports/validate-entity-exists schema-provider child)
-                          (ports/get-entity-config schema-provider child))
-             {:keys [from-clause select-clause join-clause field-aliases]}
-             (if child-cfg
-               (resolve-query-config child-cfg)
-               {:from-clause [(:table relationship)] :select-clause [:*] :field-aliases {}})
-             ;; Without an alias, qualify from :select: in a join a bare
-             ;; column that both tables carry is ambiguous.
-             qualify    (fn [field]
-                          (let [col (case-conversion/kebab-case->snake-case-keyword field)]
-                            (or (get field-aliases field)
-                                (some #(when (and (keyword? %)
-                                                  (str/ends-with? (name %) (str "." (name col))))
-                                         %)
-                                      select-clause)
-                                col)))
-             fk-where   [:= (qualify (:foreign-key relationship)) (str parent-id)]
-             query      (cond-> {:select   select-clause
-                                 :from     from-clause
-                                 :where    (if (:soft-delete child-cfg false)
-                                             [:and fk-where [:= (qualify :deleted-at) nil]]
-                                             fk-where)
-                                 ;; The child list's own order, so a limited
-                                 ;; panel is that list's first page.
-                                 :order-by [[(qualify (:default-sort child-cfg :id)) :asc]]}
-                          join-clause           (assoc :join join-clause)
-                          (:limit relationship) (assoc :limit (:limit relationship)))]
-         (db/execute-query! db-ctx query)))
+       (let [{:keys [child-cfg select-clause qualify query]} (related-query schema-provider parent-id relationship)]
+         (db/execute-query! db-ctx
+                            (cond-> (assoc query
+                                           :select   select-clause
+                                           ;; The child list's own order, so a limited
+                                           ;; panel is that list's first page.
+                                           :order-by [[(qualify (:default-sort child-cfg :id)) :asc]])
+                              (:limit relationship) (assoc :limit (:limit relationship))))))
      db-ctx)))
+
+(extend-type AdminService
+  IRemovingDelete
+  (delete-removing [this entity-name ids]
+    (checked-delete! this entity-name ids true)))
 
 ;; =============================================================================
 ;; Lifecycle events (BOU-492)
@@ -844,24 +974,6 @@
                 {:type type :entity entity-name :id id :error (:error result)})
       true)))
 
-(defn- get-entities
-  "The live records among `ids`, in one query, read the way `get-entity`
-   reads one."
-  [db-ctx schema-provider entity-name ids]
-  (let [entity-config (ports/get-entity-config schema-provider entity-name)
-        {:keys [from-clause select-clause join-clause field-aliases]} (resolve-query-config entity-config)
-        id-field      (get field-aliases :id (:primary-key entity-config :id))
-        in-ids        [:in id-field (mapv type-conversion/uuid->string ids)]]
-    (if (empty? ids)
-      []
-      (db/execute-query! db-ctx
-                         (cond-> {:select select-clause
-                                  :from   from-clause
-                                  :where  (if (:soft-delete entity-config false)
-                                            [:and in-ids [:= (get field-aliases :deleted-at :deleted_at) nil]]
-                                            in-ids)}
-                           join-clause (assoc :join join-clause))))))
-
 (defn- publish-deleted!
   "One deleted event per prior, stopping at the first failure: each can cost
    the broker's timeout on the request thread, so an outage during a bulk
@@ -875,6 +987,51 @@
         (when (seq more)
           (log/warn "admin lifecycle events skipped after a failed publish"
                     {:entity entity-name :skipped (count more)}))))))
+
+(defn- publish-removed!
+  "One deleted event per removed row, cascaded children included (BOU-563),
+   stopping at the first failure like publish-deleted!."
+  [publisher schema-provider removed]
+  (loop [[{:keys [entity id prior]} & more] (filter :prior removed)]
+    (when prior
+      (let [pk (:primary-key (ports/get-entity-config schema-provider entity) :id)]
+        (if (publish-lifecycle! publisher schema-provider :admin/entity-deleted
+                                entity (or (get prior pk) (parse-uuid id)) prior)
+          (recur more)
+          (when (seq more)
+            (log/warn "admin lifecycle events skipped after a failed publish"
+                      {:entity entity :skipped (count more)})))))))
+
+(defn- delete-entity-then-publish
+  "For an inner service that cannot say what it removed: the record read
+   before, published when the delete reports success."
+  [inner schema-provider publisher entity-name id]
+  (let [prior    (ports/get-entity inner entity-name id)
+        deleted? (ports/delete-entity inner entity-name id)]
+    (when (and deleted? prior)
+      (publish-lifecycle! publisher schema-provider :admin/entity-deleted
+                          entity-name id prior))
+    deleted?))
+
+(defn- bulk-delete-then-publish
+  [inner db-ctx schema-provider publisher entity-name ids]
+  ;; The adapter returns a count, not which rows it deleted. When that is
+  ;; not the number read, another request got to some of them first and
+  ;; publishes those itself, so nothing is published here rather than a
+  ;; duplicate.
+  (let [priors  (live-records db-ctx schema-provider entity-name ids)
+        result  (ports/bulk-delete-entities inner entity-name ids)
+        deleted (:success-count result 0)]
+    (cond
+      (and (pos? deleted) (= deleted (count priors)))
+      (publish-deleted! publisher schema-provider entity-name
+                        (:primary-key (ports/get-entity-config schema-provider entity-name) :id)
+                        priors)
+
+      (pos? deleted)
+      (log/warn "admin lifecycle events skipped: bulk delete count differs from the records read"
+                {:entity entity-name :deleted deleted :read (count priors)}))
+    result))
 
 (defrecord PublishingAdminService [inner db-ctx schema-provider publisher]
   ;; Wraps the service only when a bus is configured, so an application
@@ -912,31 +1069,19 @@
       record))
 
   (delete-entity [_ entity-name id]
-    (let [prior    (ports/get-entity inner entity-name id)
-          deleted? (ports/delete-entity inner entity-name id)]
-      (when (and deleted? prior)
-        (publish-lifecycle! publisher schema-provider :admin/entity-deleted
-                            entity-name id prior))
-      deleted?))
+    (if (satisfies? IRemovingDelete inner)
+      (let [removed (delete-removing inner entity-name [id])]
+        (publish-removed! publisher schema-provider removed)
+        (pos? (roots-removed entity-name [id] removed)))
+      (delete-entity-then-publish inner schema-provider publisher entity-name id)))
 
   (bulk-delete-entities [_ entity-name ids]
-    ;; The adapter returns a count, not which rows it deleted. When that is
-    ;; not the number read, another request got to some of them first and
-    ;; publishes those itself, so nothing is published here rather than a
-    ;; duplicate.
-    (let [priors  (get-entities db-ctx schema-provider entity-name ids)
-          result  (ports/bulk-delete-entities inner entity-name ids)
-          deleted (:success-count result 0)]
-      (cond
-        (and (pos? deleted) (= deleted (count priors)))
-        (publish-deleted! publisher schema-provider entity-name
-                          (:primary-key (ports/get-entity-config schema-provider entity-name) :id)
-                          priors)
-
-        (pos? deleted)
-        (log/warn "admin lifecycle events skipped: bulk delete count differs from the records read"
-                  {:entity entity-name :deleted deleted :read (count priors)}))
-      result)))
+    (if (satisfies? IRemovingDelete inner)
+      (let [removed (delete-removing inner entity-name ids)
+            deleted (roots-removed entity-name ids removed)]
+        (publish-removed! publisher schema-provider removed)
+        {:success-count deleted :failed-count (- (count ids) deleted) :errors []})
+      (bulk-delete-then-publish inner db-ctx schema-provider publisher entity-name ids))))
 
 ;; =============================================================================
 ;; Factory Function
@@ -952,11 +1097,14 @@
      error-reporter: Error reporter for exception tracking
      config: Admin configuration map with pagination settings
      event-publisher: optional wagoe.events IEventPublisher (BOU-492)
+     workflows: optional IEntityWorkflows; deletes remove workflow instances (BOU-563)
 
    Returns:
      AdminService instance implementing IAdminService"
   ([db-ctx schema-provider logger error-reporter config]
    (create-admin-service db-ctx schema-provider logger error-reporter config nil))
   ([db-ctx schema-provider logger error-reporter config event-publisher]
-   (cond-> (->AdminService db-ctx schema-provider logger error-reporter config)
+   (create-admin-service db-ctx schema-provider logger error-reporter config event-publisher nil))
+  ([db-ctx schema-provider logger error-reporter config event-publisher workflows]
+   (cond-> (->AdminService db-ctx schema-provider logger error-reporter config workflows)
      event-publisher (->PublishingAdminService db-ctx schema-provider event-publisher))))

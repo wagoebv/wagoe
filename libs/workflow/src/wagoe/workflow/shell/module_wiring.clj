@@ -29,6 +29,7 @@
             [wagoe.workflow.shell.persistence :as persistence]
             [wagoe.workflow.shell.service :as service]
             [wagoe.workflow.shell.http :as workflow-http]
+            [wagoe.workflow.shell.admin-adapter :as admin-adapter]
             [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.tools.logging :as log]))
@@ -110,6 +111,16 @@
   nil)
 
 ;; =============================================================================
+;; Admin port (BOU-563)
+;; =============================================================================
+
+(defmethod ig/init-key :wagoe/workflow-admin
+  [_ {:keys [workflow]}]
+  (admin-adapter/create-entity-workflows (:store workflow)))
+
+(defmethod ig/halt-key! :wagoe/workflow-admin [_ _] nil)
+
+;; =============================================================================
 ;; Module graph
 ;; =============================================================================
 
@@ -124,13 +135,18 @@
    above has documented it since this module shipped, and nothing supplied it
    (BOU-418)."
   [_settings {:keys [enabled]}]
-  {:components
-   {:wagoe/workflow-db-schema {:ctx (ig/ref :wagoe/db-context)}
-    :wagoe/workflow           (cond-> {:db-ctx         (ig/ref :wagoe/db-context)
-                                       :db-schema      (ig/ref :wagoe/workflow-db-schema)
-                                       :guard-registry {}}
-                                (contains? (or enabled #{}) :wagoe/jobs)
-                                (assoc :job-queue (ig/ref :wagoe/job-queue)))
-    :wagoe/workflow-routes    {:workflow-service (ig/ref :wagoe/workflow)
-                               :user-service     (ig/ref :wagoe/user-service)}}
-   :routes [(ig/ref :wagoe/workflow-routes)]})
+  (cond->
+   {:components
+    {:wagoe/workflow-db-schema {:ctx (ig/ref :wagoe/db-context)}
+     :wagoe/workflow           (cond-> {:db-ctx         (ig/ref :wagoe/db-context)
+                                        :db-schema      (ig/ref :wagoe/workflow-db-schema)
+                                        :guard-registry {}}
+                                 (contains? (or enabled #{}) :wagoe/jobs)
+                                 (assoc :job-queue (ig/ref :wagoe/job-queue)))
+     :wagoe/workflow-routes    {:workflow-service (ig/ref :wagoe/workflow)
+                                :user-service     (ig/ref :wagoe/user-service)}}
+    :routes [(ig/ref :wagoe/workflow-routes)]}
+    ;; What the admin reads an entity's workflow state through and removes its
+    ;; instances with (BOU-563); the admin's wiring refs it when workflow is on.
+    (contains? (or enabled #{}) :wagoe/admin)
+    (assoc-in [:components :wagoe/workflow-admin] {:workflow (ig/ref :wagoe/workflow)})))

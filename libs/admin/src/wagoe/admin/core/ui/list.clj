@@ -47,6 +47,11 @@
                                            :onclick (str "window.location.href='/web/admin/" (name entity-name) "';")}
             (icons/icon :x {:size 20})])]]])))
 
+(defn- workflow-column?
+  "An entity with a workflow gets a column for its state (BOU-563)."
+  [entity-config]
+  (some? (:workflow entity-config)))
+
 (defn entity-table-row
   "Generate entity table row.
 
@@ -96,6 +101,9 @@
            [:td {:class (str "field-" (name field))
                  :data-label field-label}
             (base/render-field-value field value field-config display)])))
+     (when (workflow-column? entity-config)
+       [:td.field-workflow {:data-label [:t :admin/column-workflow]}
+        (base/workflow-state-link (:admin/workflow record))])
      [:td.actions-cell
       (when can-open?
         [:a.row-nav-hint
@@ -178,7 +186,9 @@
               [:col {:class "col-select"}]  ; Checkbox
               ;; Proportional widths derived from field type + name heuristic
               ;; (overridable via :width in the field config).
-              (base/list-column-styles list-fields entity-config)
+              (base/list-column-styles (cond-> (vec list-fields)
+                                         (workflow-column? entity-config) (conj :workflow))
+                                       entity-config)
               [:col {:class "col-actions"}]]  ; Actions
              [:thead
               [:tr
@@ -201,6 +211,8 @@
                                             :hx-push-url? true
                                             :extra-params filters})
                      [:th (:label field-config (str/capitalize (name field)))])))
+               (when (workflow-column? entity-config)
+                 [:th [:t :admin/column-workflow]])
                [:th {:class "actions-header"} [:t :admin/column-actions]]]]
              [:tbody
               (for [record records]
