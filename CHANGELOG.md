@@ -66,10 +66,12 @@ for what is public API, what is internal, and how deprecations are announced.
 - **Scaffolded repository tests asserted nothing about the database** (BOU-562). New ones
   round-trip a row on H2; `check:placeholder-tests` now flags a `testing` with no assertion.
 - **`bb scaffold ai` named one description's module differently per run** (BOU-562). The module
-  is named after the first entity, and a dry run's parse is reused from `target/scaffold-ai/`.
-- **`bb scaffold integrate` left a `}` on its own line and wrote an unused `:base-path`** (BOU-562).
-  Delete `:base-path` from your `:wagoe/<module>` keys.
+  is named after the first entity, and a dry run's parse is reused; `--fresh` parses again.
+- **`bb scaffold integrate` and `bb quickstart` wrote an unused `:base-path`, integrate a lone `}`**
+  (BOU-562). Delete `:base-path` from your `:wagoe/<module>` keys.
 - **The scaffolder's next steps named a test namespace that does not exist** (BOU-562). No action needed.
+- **`bb scaffold field` told you to edit persistence transforms that do not exist** (BOU-562). It now
+  names the one edit an enum needs, `enum-fields`.
 - **`bb scaffold ai`'s summary ran a field's name into its type** (BOU-562). No action needed.
 - **The generated SKILL.md said `integrate` writes nothing** (BOU-562). Copy
   `.claude/skills/wagoe/SKILL.md` from a new project into yours.

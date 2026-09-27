@@ -418,7 +418,12 @@
           (is (= "invoice" (module-of dry)))
           (is (= "invoice" (module-of real)) "not the second answer's `bill`")
           (is (= 1 (count @answers)) "the real run did not ask again")
-          (is (str/includes? (plain (:out real)) "parse from") (:out real))))
+          (is (str/includes? (plain (:out real)) "parse from") (:out real))
+          (is (str/includes? (plain (:out real)) "--fresh") "it says how to parse again")
+          (testing "--fresh parses again and replaces the cached parse"
+            (is (= "bill" (module-of (run "--fresh"))))
+            (is (empty? @answers))
+            (is (= "bill" (module-of (run))) "the next run reuses the new parse"))))
       (finally (fs/delete-tree dir)))))
 
 (deftest ^:unit the-summary-separates-name-and-type

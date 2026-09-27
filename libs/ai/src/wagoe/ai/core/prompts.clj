@@ -63,7 +63,7 @@ Output ONLY valid JSON with this exact structure:
 }
 
 Example — \"invoices with a number and status, and line items with a description and quantity\":
-{\"module-name\": \"invoicing\",
+{\"module-name\": \"invoice\",
  \"entities\": [
    {\"name\": \"Invoice\", \"fields\": [
      {\"name\": \"number\", \"type\": \"string\", \"required\": true, \"unique\": true},
@@ -74,7 +74,7 @@ Example — \"invoices with a number and status, and line items with a descripti
  \"http\": true, \"web\": true}
 
 Rules:
-- module-name MUST be kebab-case (e.g. product, order-item, user-profile)
+- module-name is the first entity's name in kebab-case (Invoice -> invoice, OrderItem -> order-item)
 - every entity name MUST be PascalCase (e.g. Product, OrderItem, UserProfile)
 - one entry in entities per thing the description names; most modules have one
 - an entity that belongs to another (line items of an invoice, lines of an order) carries \"belongs-to\": the parent's name. The parent comes first. Do not add the parent's id as a field; belongs-to creates it

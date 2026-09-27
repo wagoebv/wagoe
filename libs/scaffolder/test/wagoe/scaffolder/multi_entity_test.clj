@@ -898,8 +898,13 @@
                                    :output-dir (.getPath dir) :dry-run true})]
     (is (some #(and (str/includes? % ":status") (str/includes? % "enum-fields")
                     (str/includes? % (.getPath p)))
-              (:warnings r))
-        (pr-str (:warnings r)))))
+              (:next-steps r))
+        (pr-str (:next-steps r)))
+    (testing "a field that is not an enum needs nothing in persistence"
+      (is (not-any? #(str/includes? % "persistence")
+                    (:next-steps (ports/add-field svc {:module-name "billing" :base-ns "bou562add"
+                                                       :entity "Invoice" :field {:name :sku :type :string}
+                                                       :output-dir (.getPath dir) :dry-run true})))))))
 
 ;; =============================================================================
 ;; The generated web page requires a signed-in user too (BOU-539 review)

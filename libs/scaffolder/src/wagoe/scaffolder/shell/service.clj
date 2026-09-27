@@ -539,11 +539,12 @@
                                 " early east of UTC. Regenerate that file, or copy date->iso and ->entity"
                                 " from a newly generated module."))
             ;; Written as a keyword, an enum value is a column name to HoneySQL.
-            enum-warning (when (and (= :enum (:type field)) (.isFile persistence))
-                           (str "Add :" (name (:name field)) " to enum-fields in " (.getPath persistence)
-                                (when-not (str/includes? (slurp persistence) "enum-fields")
-                                  (str ", copied with ->row and ->entity from a newly generated module"))
-                                ", or storing it fails."))
+            enum-step (when (= :enum (:type field))
+                        (str "Add :" (name (:name field)) " to enum-fields in " (.getPath persistence)
+                             (when-not (and (.isFile persistence)
+                                            (str/includes? (slurp persistence) "enum-fields"))
+                               (str ", copied with ->row and ->entity from a newly generated module"))
+                             ", or storing it fails"))
 
             ;; Before anything is written. The migration and the schema entry
             ;; are the two halves this command exists to keep in step, and the
@@ -694,38 +695,26 @@
          :module-name module-name
          :command :field
          :files all-files
-           ;; Named, not implied. Adding a field needs three changes in step —
-           ;; schema, column, persistence transforms — and the third cannot be
-           ;; generated, because those transforms are hand-written per module.
-           ;; Leaving it unsaid is how a field reads back nil with no error
-           ;; anywhere (AGENTS.md pitfall 6).
-         ;; Resolved like every other path in this report. The persistence
-         ;; file was named relative to the working directory while the
-         ;; migrations and the schema edit were written under --output-dir, so
-         ;; the one step the user cannot skip pointed at a different project.
-         :next-steps (cond-> [(format "Add the field to both transforms in %s (entity->db and db->entity)"
-                                      (.getPath (resolve-path
-                                                 output-dir
-                                                 (format "src/%s/%s/shell/persistence.clj"
-                                                         base-ns-path module-path))))
-                              ;; And the commands run against whatever project
-                              ;; the shell is in, which is not the generated one
-                              ;; when --output-dir points elsewhere.
-                              (str "Run the migration: clojure -M:migrate up" (in-project))
-                                ;; --focus, not --focus-meta: generated tests carry ^:unit, never a
-                                ;; per-module tag, so `--focus-meta :order` printed
-                                ;; "No tests found with metadata key :order" and ran
-                                ;; everything. Advice that does not work is the same
-                                ;; defect as a file report that is not true.
-                              (str (format "Run the tests: clojure -M:test --focus %s.%s.core.%s-test"
-                                           (or (:base-ns request) "wagoe") module-name
-                                           (template/pascal->kebab entity))
-                                   (in-project))]
+         ;; The generated persistence reads and writes every column as it is,
+         ;; so a field needs nothing there — except an enum, which has to be in
+         ;; `enum-fields` to be stored as a string (BOU-562). The path is
+         ;; resolved under --output-dir like every other in this report.
+         :next-steps (cond-> (filterv some?
+                                      [enum-step
+                                       ;; The commands run against whatever project
+                                       ;; the shell is in, which is not the generated
+                                       ;; one when --output-dir points elsewhere.
+                                       (str "Run the migration: clojure -M:migrate up" (in-project))
+                                       ;; --focus, not --focus-meta: generated tests carry
+                                       ;; ^:unit, never a per-module tag.
+                                       (str (format "Run the tests: clojure -M:test --focus %s.%s.core.%s-test"
+                                                    (or (:base-ns request) "wagoe") module-name
+                                                    (template/pascal->kebab entity))
+                                            (in-project))])
                        (:manual? schema-entry)
                        (into [(:manual-note schema-entry)]))
          :warnings (not-empty (cond-> []
                                 date-warning (conj date-warning)
-                                enum-warning (conj enum-warning)
                                 dry-run      (conj "Dry run - no files were written")))})
 
       (catch Exception e

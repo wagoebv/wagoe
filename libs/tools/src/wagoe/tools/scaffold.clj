@@ -195,6 +195,7 @@
    used to be joined into the description and sent to the model (BOU-490)."
   [["-y" "--yes" "Generate without asking"]
    [nil "--dry-run" "Show what would be generated without creating files"]
+   [nil "--fresh" "Parse the description again instead of reusing the last parse"]
    [nil "--force" "Overwrite existing files"]
    [nil "--output-dir DIR" "Output directory"]
    [nil "--base-ns NS" "Base namespace for the module"]
@@ -692,13 +693,13 @@
       (io/file dir (str (subs (apply str (map #(format "%02x" %) digest)) 0 16) ".json")))))
 
 (defn- cached-parse
-  "The parse of `description`: the cached one when there is one, else a new
-   one, which is cached when it holds a spec."
+  "The parse of `description`: the cached one when there is one and not
+   `:fresh`, else a new one, which replaces the cache when it holds a spec."
   [flags description]
   (let [f (parse-cache-file flags description)]
-    (if (and f (.isFile ^java.io.File f))
+    (if (and f (not (:fresh flags)) (.isFile ^java.io.File f))
       (do (println (dim (str "Using the parse from " (.getPath ^java.io.File f)
-                             " — delete it to parse the description again.")))
+                             " — pass --fresh to parse the description again.")))
           (println)
           {:exit 0 :out (slurp f)})
       (let [result (parse-description description)]
@@ -796,7 +797,7 @@
        "  bb scaffold endpoint            Interactive wizard for adding an endpoint\n"
        "  bb scaffold adapter             Interactive wizard for adding an adapter\n"
        "  bb scaffold ai <description> [--yes]    AI-powered module generation from NL description\n"
-       "      [--dry-run] [--output-dir DIR] [--base-ns NS] [--force] [--no-http] [--no-web] [--[no-]public-api]\n"
+       "      [--dry-run] [--fresh] [--output-dir DIR] [--base-ns NS] [--force] [--no-http] [--no-web] [--[no-]public-api]\n"
        "  bb scaffold integrate <module> [--base-ns NS]  Guide integration of a scaffolded module\n"
        "\n"
        "`bb scaffold` works inside an existing project. To create a new one:\n"
