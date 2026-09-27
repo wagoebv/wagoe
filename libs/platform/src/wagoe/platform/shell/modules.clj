@@ -426,6 +426,35 @@
              :profile profile
              :key     k}))))
 
+(def redis-host-paths
+  "Where each module that can run on Redis keeps its host.
+
+   Each adapter connects to localhost when the host is nil, which is what
+   `#env REDIS_HOST` yields when the variable is unset. Right on a laptop;
+   outside dev and test it is a node talking to a Redis nobody deployed, or to
+   nothing (BOU-579)."
+  {:wagoe/events   [:host]
+   :wagoe/cache    [:host]
+   :wagoe/realtime [:host]
+   :wagoe/jobs     [:redis :host]})
+
+(defn- assert-redis-host!
+  "Throw when module `k` runs on Redis with no host outside dev and test."
+  [k settings profile]
+  (when-let [path (get redis-host-paths k)]
+    (when (and (#{:redis :redis-streams} (:provider settings))
+               (not (#{:dev :test} profile))
+               (str/blank? (str (get-in settings path))))
+      (throw (ex-info
+              (str k " uses Redis under the " profile " profile but " path
+                   " is empty. Set REDIS_HOST, or whichever variable its #env reads."
+                   " Only dev and test fall back to localhost.")
+              {:type    :configuration-error
+               :key     k
+               :path    path
+               :env-var "REDIS_HOST"
+               :profile profile})))))
+
 (def optional-modules
   "Modules whose library may legitimately be absent at runtime.
 
@@ -492,6 +521,7 @@
          ;; Before the branches, so that `optional-modules` cannot skip a
          ;; dev-only module past it on a machine where its library is absent.
          (assert-profile-allows! k (:wagoe/profile (:config ctx)))
+         (assert-redis-host! k (get active k) (:wagoe/profile (:config ctx)))
          (cond
            (load-wiring! wiring)
            (let [{:keys [components http routes job-handlers]}

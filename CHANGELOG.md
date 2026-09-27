@@ -68,6 +68,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Redis with no host connected to localhost outside dev and test** (BOU-579). Events, cache, jobs and
+  realtime now fail the boot; set `REDIS_HOST`, even if Redis runs on the same machine.
 - **Scaffolded migrations lost their indexes on SQLite and failed on PostgreSQL and MySQL** (BOU-569).
   Add `--;;` to older ones; an existing SQLite database needs a new migration creating the missing indexes.
 - **`bb scaffold ai --help` answered "Unknown option"** (BOU-569). It prints the usage.

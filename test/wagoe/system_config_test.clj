@@ -241,6 +241,42 @@
         (str k " assembled under " profile " — it is not dev-only, so it does "
              "not belong in dev-only-modules"))))
 
+(def ^:private redis-without-host
+  "Each Redis-capable module as `#env REDIS_HOST` leaves it when unset."
+  {:wagoe/events   {:provider :redis :group "app"}
+   :wagoe/cache    {:provider :redis :host nil}
+   :wagoe/realtime {:provider :redis :host ""}
+   :wagoe/jobs     {:provider :redis :redis {:host nil :port 6379}}})
+
+(defn- with-module [profile k settings]
+  (-> (base-config)
+      (assoc :wagoe/profile profile)
+      (assoc-in [:active k] settings)))
+
+(deftest ^:unit ^:security redis-without-a-host-fails-the-boot-outside-dev-and-test
+  ;; Each adapter connects to localhost when the host is nil, so a prod node
+  ;; with REDIS_HOST unset talked to a Redis nobody deployed (BOU-579).
+  (is (= (set (keys modules/redis-host-paths)) (set (keys redis-without-host)))
+      "a module that can run on Redis and is not swept here")
+  (doseq [[k settings] redis-without-host]
+    (testing (str k)
+      (doseq [profile [:prod :acc]]
+        (let [e (try (sys-config/ig-config (with-module profile k settings))
+                     nil
+                     (catch clojure.lang.ExceptionInfo e e))]
+          (is (some? e) (str k " assembled under " profile " with no Redis host"))
+          (is (= {:type :configuration-error :key k :env-var "REDIS_HOST"}
+                 (select-keys (ex-data e) [:type :key :env-var])))
+          (is (str/includes? (str (ex-message e)) "REDIS_HOST"))))
+
+      (testing "dev and test keep their localhost default"
+        (doseq [profile [:dev :test]]
+          (is (map? (sys-config/ig-config (with-module profile k settings))))))
+
+      (testing "a host set is enough"
+        (let [with-host (assoc-in settings (modules/redis-host-paths k) "redis")]
+          (is (map? (sys-config/ig-config (with-module :prod k with-host)))))))))
+
 (deftest ^:integration every-emitted-key-has-an-init-key
   ;; The generated config used to enumerate 41 Integrant keys and separately
   ;; require the wiring that registered each one. Forgetting one half produced
