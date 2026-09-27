@@ -16,6 +16,7 @@
      (db-spec config)"
   (:require [aero.core :as aero]
             [clojure.java.io :as io]
+            [clojure.string :as str]
             [clojure.tools.logging :as log]))
 
 ;; =============================================================================
@@ -34,6 +35,40 @@
   [env]
   (let [s (some-> env str .trim .toLowerCase)]
     (get env-aliases s s)))
+
+(defn- url-exists? [^java.net.URL url]
+  (try (with-open [_ (.openStream url)] true)
+       (catch java.io.IOException _ false)))
+
+(defn- include-resolver
+  "Resolve an #include next to the file that includes it, inside a jar too.
+   Aero's own resolver reads a relative include from the file system only, so
+   from an uberjar every include came back as `:aero/missing-include` (BOU-563)."
+  [source include]
+  (or (when (and (instance? java.net.URL source) (not (.isAbsolute (io/file include))))
+        (let [url (java.net.URL. ^java.net.URL source ^String include)]
+          (when (url-exists? url) url)))
+      (aero/adaptive-resolver source include)))
+
+(defn- missing-includes
+  "Every include Aero could not find, as the path the config wrote."
+  [config]
+  (->> (tree-seq coll? seq config)
+       (keep #(when (map-entry? %) (when (= :aero/missing-include (key %)) (val %))))
+       distinct
+       vec))
+
+(defn read-config-resource
+  "Read the config at `resource` (a URL) for `profile`. A missing #include
+   fails here, naming the file: Aero puts a placeholder in its place and the
+   application would start without whatever it held."
+  [resource profile]
+  (let [config (aero/read-config resource {:profile profile :resolver include-resolver})]
+    (when-let [missing (seq (missing-includes config))]
+      (throw (ex-info (str "Config include not found: " (str/join ", " missing)
+                           " (included from " resource ")")
+                      {:type :configuration-error :missing-includes (vec missing) :config (str resource)})))
+    config))
 
 (defn load-config
   "Load configuration from resources/conf/dev/config.edn using Aero.
@@ -55,7 +90,7 @@
      (if config-resource
        (do
          (log/info "Loading configuration" {:profile profile :path config-path})
-         (assoc (aero/read-config config-resource {:profile profile})
+         (assoc (read-config-resource config-resource profile)
                 :wagoe/profile profile))
        (throw (ex-info "Configuration file not found"
                        {:profile profile

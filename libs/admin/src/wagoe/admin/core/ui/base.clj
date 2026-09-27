@@ -180,6 +180,14 @@
       (LocalDateTime/parse (str/replace-first value " " "T"))
       (catch DateTimeParseException _ nil))))
 
+(defn- epoch-millis->instant
+  "SQLite keeps a java.util.Date written through JDBC — a seed's #inst — as
+   epoch millis, next to the ISO text the admin writes (BOU-563)."
+  ^Instant [value]
+  (cond
+    (integer? value) (Instant/ofEpochMilli (long value))
+    (and (string? value) (re-matches #"-?\d{10,}" value)) (some-> (parse-long value) Instant/ofEpochMilli)))
+
 (defn- ->instant
   "Coerce any stored timestamp to the Instant it denotes. Values that carry a
    zone or offset (Instant, OffsetDateTime, `…Z`/`+02:00` strings) and
@@ -187,7 +195,8 @@
    a zone-less value is read in `server-zone`, the zone the database itself
    reads it in (BOU-523)."
   ^Instant [value ^ZoneId server-zone]
-  (or (when-not (instance? java.sql.Timestamp value)
+  (or (epoch-millis->instant value)
+      (when-not (instance? java.sql.Timestamp value)
         (when-let [ldt (when (or (instance? LocalDateTime value) (string? value))
                          (->naive value))]
           (.toInstant (.atZone ^LocalDateTime ldt server-zone))))
@@ -317,7 +326,7 @@
    offset and get the exact instant either way (BOU-523)."
   ([s input-zone server-zone] (parse-datetime-input s input-zone server-zone nil))
   ([s ^ZoneId input-zone ^ZoneId server-zone preferred-offset]
-  (when (string? s)
+   (when (string? s)
     ;; A value that already names its zone or offset — an API client sending
     ;; `…Z` — is taken as exactly that instant; only a zone-less value, which
     ;; is what the widget sends, is read in `input-zone`.
@@ -327,12 +336,12 @@
     ;; was saved as 00:30Z by a form nobody changed. `preferred-offset` is the
     ;; offset the value was rendered with, carried back by the form; ofLocal
     ;; uses it only to choose within such an overlap.
-    (when-let [^Instant inst (or (tc/string->instant s)
-                                 (some-> ^LocalDateTime (->naive s)
-                                         (ZonedDateTime/ofLocal input-zone (->offset preferred-offset))
-                                         (.toInstant)))]
-      (.format ^DateTimeFormatter storage-formatter
-               (.toOffsetDateTime (.atZone inst server-zone)))))))
+     (when-let [^Instant inst (or (tc/string->instant s)
+                                  (some-> ^LocalDateTime (->naive s)
+                                          (ZonedDateTime/ofLocal input-zone (->offset preferred-offset))
+                                          (.toInstant)))]
+       (.format ^DateTimeFormatter storage-formatter
+                (.toOffsetDateTime (.atZone inst server-zone)))))))
 
 (defn datetime-input-step
   "The `step` a datetime-local needs for `formatted`, the output of
@@ -398,6 +407,16 @@
 
        :else
        (str value)))))
+
+(defn workflow-state-link
+  "An entity's workflow state, linking to its instance page, or a dash when
+   it has no instance (BOU-563). `workflow` is {:instance-id :state}."
+  [workflow]
+  (if-let [{:keys [instance-id state]} workflow]
+    [:a.workflow-state {:href (str "/web/admin/workflows/" instance-id)}
+     [:span.enum-badge {:class "badge ui-badge ui-badge-outline enum-badge"}
+      (str/capitalize (name state))]]
+    [:span.null-value {:class "badge ui-badge ui-badge-neutral null-value"} "—"]))
 
 ;; =============================================================================
 ;; List Column Width Heuristics

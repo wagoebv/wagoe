@@ -1703,3 +1703,16 @@
                                                       {:type :instant :widget :datetime-input}
                                                       ["must be a date and time"])]
       (is (:target-found? (described-field cell "due-at"))))))
+
+(deftest ^:unit epoch-millis-render-like-iso-text-test
+  ;; SQLite keeps what a seed wrote through JDBC as epoch millis and what the
+  ;; admin wrote as ISO text; both have to read as the same timestamp (BOU-563).
+  (let [iso    "2026-09-01T09:00:00Z"
+        millis (.toEpochMilli (Instant/parse iso))
+        cfg    {:type :instant}]
+    (testing "in a list cell"
+      (is (= (ui/render-field-value :created-at iso cfg)
+             (ui/render-field-value :created-at millis cfg)
+             (ui/render-field-value :created-at (str millis) cfg))))
+    (testing "in a datetime input"
+      (is (= "2026-09-01T09:00" (ui/format-for-datetime-input millis utc utc))))))

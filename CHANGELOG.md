@@ -39,6 +39,8 @@ for what is public API, what is internal, and how deprecations are announced.
   Set `:level`/`:root-level` as wanted; copy `logback.xml`, `:provider :slf4j` and `:mcp` `:jvm-opts` from `wagoe new`.
 - **`register-user` throws `:validation-error` for a password-policy refusal** (BOU-552), not
   `:password-policy-violation`. Match on the new type; `:violations` is unchanged.
+- **The workflow API answers 401 without a session** (BOU-561); it was open. Send a session or
+  bearer token. The auth middleware's own 401 now has a JSON body; it had none.
 - **Scaffolded APIs and list pages require a signed-in user** (BOU-539). Pass `--public-api` to
   open them; for older modules, regenerate `shell/*http.clj` or add the guards by hand.
 - **Scaffolder `date` fields are a `DATE`, not a timestamp** (BOU-547). Use `datetime` for a timestamp;
@@ -49,6 +51,10 @@ for what is public API, what is internal, and how deprecations are announced.
   A script driving the wizard must pass flags: `bb setup --database sqlite`.
 - **`bb setup` in an existing project creates no missing config file** (BOU-404). Pass `--prod true`
   to have it write `resources/conf/prod/config.edn`.
+- **Admin hard-deletes by default, and a parent with has-many rows is refused unless `:on-delete :cascade`** (BOU-563).
+  Set `:soft-delete true` where you relied on `deleted_at`, and `:on-delete :cascade` where children should go.
+- **An unknown or misplaced admin entity-config key stops startup** (BOU-563). The error names
+  the path; move or remove the key.
 
 ### Fixed
 
@@ -137,6 +143,9 @@ for what is public API, what is internal, and how deprecations are announced.
   the module's test namespaces; a module with none reports `no-tests`.
 - **A refused inline edit lost the offset of a repeated local time** (BOU-523).
   Resubmitting it no longer moves the value by the DST hour.
+- **An uberjar dropped every `#include` in its config** (BOU-563). Includes now resolve inside the
+  jar, and a missing one stops startup naming the file.
+- **Admin showed epoch-millis timestamps as raw numbers** (BOU-563). They render like ISO text.
 - **Admin timestamps were shown and entered in UTC** (BOU-523). They now use the
   browser's zone, else `:time-zone` in `:wagoe/settings`, else Europe/Amsterdam.
 - **Admin forms answered 500 on an unreadable value and stored "forty" as NULL**
@@ -160,6 +169,9 @@ for what is public API, what is internal, and how deprecations are announced.
   entity's file (never over an existing one), allowlist entry and `#include`, with secret columns hidden.
 - **Admin writes publish lifecycle events** (BOU-492). With `:wagoe/events` on,
   subscribe to `:admin` for `:admin/entity-created`, `-updated` and `-deleted`.
+- **Admin shows workflow state and keeps a has-many `:min`** (BOU-563). Add `:workflow
+  {:entity-type :invoice}` to an entity, or `:min 1` to a has-many entry.
+- **Admin foreign keys are a select over the parent's rows** (BOU-563), while they fit one page.
 - **Modules with several entities** (BOU-497, BOU-514). `bb scaffold entity
   --belongs-to invoice` adds one; `scaffold ai` and MCP now generate them all.
 - **Scaffolder `default=<value>` field modifier** (BOU-494). Required enums now

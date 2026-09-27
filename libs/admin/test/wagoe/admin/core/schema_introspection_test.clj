@@ -254,8 +254,8 @@
           ;; updated-at is readonly but nullable
           (is (contains? readonly-fields :updated-at))))
 
-      (testing "Soft delete detected"
-        (is (true? (:soft-delete config))))
+      (testing "Soft delete is off until the config switches it on (BOU-563)"
+        (is (false? (:soft-delete config))))
 
       (testing "Default sort by primary key descending"
         (is (= :id (:default-sort config)))
@@ -297,7 +297,7 @@
       (testing "Auto-detected values preserved when not overridden"
         (is (= :users (:table-name merged)))
         (is (= :id (:primary-key merged)))
-        (is (true? (:soft-delete merged))))
+        (is (false? (:soft-delete merged))))
 
       (testing "Fields merged correctly"
         (is (= 9 (count (:fields merged)))))

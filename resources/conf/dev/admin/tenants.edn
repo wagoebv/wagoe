@@ -3,6 +3,7 @@
   :description "Multi-tenant organizations"
   :icon        :building-2
   :table-name  :tenants
+  :soft-delete true
   :list-fields [:slug :name :status :created-at]
   :search-fields [:slug :name]
   :hide-fields #{:deleted-at}

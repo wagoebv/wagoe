@@ -193,6 +193,54 @@ Example subscriber that starts a workflow: see "Lifecycle Events" in
 
 ---
 
+## Deletes, children, workflows (BOU-563)
+
+- **Hard delete is the default.** A `deleted_at` column no longer switches soft
+  delete on; set `:soft-delete true`. `parse-table-metadata` always answers
+  `:soft-delete false`.
+- **Every has-many restricts** unless its entry says `:on-delete :cascade`:
+  while it has live rows the delete is refused with `:conflict`, 409, naming
+  the child and the count. That covers detected has-many (users of a tenant,
+  who may belong to several) and display-only configs written before BOU-563,
+  which must not start deleting children on upgrade.
+- **`:on-delete :cascade` children follow the parent** (`delete-tree!` in
+  `shell/service.clj`), recursively, in one transaction; a restrict anywhere
+  in the tree rolls it all back. Hard: children are deleted first, so no
+  `ON DELETE CASCADE` is needed. Soft: children with a `deleted_at` column get
+  one; children without are left.
+- **Every removed row publishes `:admin/entity-deleted`**, cascaded children
+  included. The row is read in the transaction just before it is deleted, and
+  published after the commit. `PublishingAdminService` gets the removed rows
+  through the private `IRemovingDelete`; an inner service without it keeps the
+  old read-before, count-after path.
+- **`:min` on a has-many** refuses a delete or bulk delete that would leave a
+  parent with fewer children: `:type :conflict`, and the delete handlers answer
+  409 with an error toast. It is checked before the delete, outside its
+  transaction. Creating a parent without children is not refused: the admin
+  creates the parent first and the children from its page.
+- **Unknown entity-config keys fail at startup.** `schema/EntityOverrides` is a
+  closed schema, checked by `create-schema-repository`; the error names the
+  path. Add a key there when the admin starts reading one.
+- **Workflow state.** `:workflow {:entity-type :invoice}` on an entity shows a
+  Workflow column on the list and a state line on the detail page, linking to
+  `/web/admin/workflows/:id`. A hard delete removes the entity's instances and
+  audit log inside its own transaction (`remove-entity-workflows!` gets the
+  tx; a failure rolls the delete back). A soft delete keeps them, so a restore
+  keeps its history. A store on another datasource than the admin's cannot
+  join the transaction and removes them on its own, non-atomically. The
+  admin reaches workflow only through `ports/IEntityWorkflows`: wagoe.workflow
+  depends on the admin, so it implements the port (`:wagoe/workflow-admin`,
+  built when both modules are on) and `ig-config` refs it only when
+  `:wagoe/workflow` is enabled, as with events.
+- **Foreign keys are pickers.** A field some has-many names as its
+  `:foreign-key` renders as a select over the parent's rows, labelled by the
+  parent's first search or list field, unless its config picks a widget other
+  than a text input. Only while every parent fits in `:max-page-size`; past it
+  the field stays a text input rather than offer a subset.
+- **Epoch millis** in a timestamp column render like ISO text.
+
+---
+
 ## UI/Frontend Development
 
 ### Technology Stack

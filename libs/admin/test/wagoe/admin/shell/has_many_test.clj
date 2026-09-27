@@ -230,6 +230,40 @@
       (testing "no link when every child fits"
         (is (not (re-find #"href=\"/web/admin/hm-items\?filters" (detail other-id))))))))
 
+(deftest ^:contract a-foreign-key-is-a-picker-over-the-parent
+  ;; It was a free-text UUID input (BOU-563).
+  (let [order-id (create-order!)
+        body     (:body ((handler detail/new-entity-handler) (request :get "hm-items")))
+        select   (re-find #"(?s)<select[^>]*name=\"hm-order-id\".*?</select>" body)]
+    (is (some? select) "the FK renders as a select")
+    (is (str/includes? (str select) (str "value=\"" order-id "\"")) "listing the parent's rows")
+    (is (not (re-find #"<input[^>]*name=\"hm-order-id\"" body)))
+    (testing "the edit form selects the current parent"
+      (let [item-id (random-uuid)
+            _       (db/execute-update! (:db @sys) {:raw (str "INSERT INTO hm_items (id, hm_order_id, sku) VALUES ('"
+                                                              item-id "', '" order-id "', 'PICK')")})
+            body    (:body ((handler detail/entity-detail-handler) (request :get "hm-items" :id item-id)))]
+        (is (re-find (re-pattern (str "<option[^>]*(selected[^>]*value=\"" order-id "\"|value=\""
+                                      order-id "\"[^>]*selected)"))
+                     body))))))
+
+(deftest ^:contract the-picker-is-a-select-only-while-every-parent-fits
+  ;; A select capped at the page size silently dropped every parent past it
+  ;; (BOU-563 review): past the limit the field stays a text input.
+  (create-order!)
+  (create-order!)
+  (let [total  (:n (db/execute-one! (:db @sys) {:select [[:%count.* :n]] :from [:hm_orders]}))
+        page   (fn [max-size]
+                 (:body ((detail/new-entity-handler (:svc @sys) (:sp @sys)
+                                                    (assoc-in config [:pagination :max-page-size] max-size))
+                         (request :get "hm-items"))))]
+    (testing "every parent fits: a select"
+      (is (re-find #"<select[^>]*name=\"hm-order-id\"" (page total))))
+    (testing "one parent more than fits: a text input"
+      (let [body (page (dec total))]
+        (is (not (re-find #"<select[^>]*name=\"hm-order-id\"" body)))
+        (is (re-find #"<input[^>]*name=\"hm-order-id\"" body))))))
+
 (deftest ^:contract ^:security detail-page-ignores-an-off-site-return-to
   ;; return_to became the breadcrumb, "Back to list", create and delete links
   ;; unchecked, so `javascript:` rendered as an href (BOU-553).
