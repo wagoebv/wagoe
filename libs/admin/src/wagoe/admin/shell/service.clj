@@ -1021,7 +1021,14 @@
    would tell the user it was not. Hidden fields stay out of the payload,
    since an event can leave the process. Returns true when published."
   [publisher schema-provider type entity-name id attrs & [prior]]
-  (let [hidden  (:hide-fields (ports/get-entity-config schema-provider entity-name))
+  (let [config  (ports/get-entity-config schema-provider entity-name)
+        hidden  (:hide-fields config)
+        ;; SQLite hands a UUID column back as a string; PostgreSQL as a UUID.
+        ;; A subscriber gets one type for one entity whichever stored it (BOU-579).
+        id      (if (and (string? id)
+                         (= :uuid (get-in config [:fields (:primary-key config :id) :type])))
+                  (or (parse-uuid id) id)
+                  id)
         strip   #(apply dissoc % hidden)
         payload (cond-> {:entity entity-name :id id :attrs (strip attrs)}
                   prior (assoc :prior (strip prior)))
