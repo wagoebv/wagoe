@@ -23,9 +23,10 @@
    ;; scripts/example-smoke.sh reads it from there.
    :wagoe/logging
    {:provider :slf4j :level :info}
-  ;; Product module (bb scaffold integrate)
-  :wagoe/product
-  {:enabled? true}}
+
+   ;; Product module (bb scaffold integrate)
+   :wagoe/product
+   {:enabled? true}}
 
  :inactive
  {}}
