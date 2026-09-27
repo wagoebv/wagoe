@@ -57,3 +57,14 @@
                         (ig/init-key :wagoe/admin-schema-provider
                                      {:db-ctx nil
                                       :config (config {:fields {:has-many has-many}})}))))
+
+(deftest ^:unit a-missing-include-names-the-file
+  ;; The uberjar could not resolve #include, and the placeholder Aero leaves
+  ;; reached this schema as an entity called :aero/missing-include.
+  (let [e (try (schema-repo/create-schema-repository
+                nil {:entity-discovery {:mode :allowlist :allowlist #{}}
+                     :entities {:aero/missing-include "admin/users.edn"}})
+               nil
+               (catch clojure.lang.ExceptionInfo e e))]
+    (is (= :configuration-error (:type (ex-data e))))
+    (is (str/includes? (ex-message e) "include not found: admin/users.edn"))))

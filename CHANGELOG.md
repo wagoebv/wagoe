@@ -125,6 +125,8 @@ for what is public API, what is internal, and how deprecations are announced.
   the module's test namespaces; a module with none reports `no-tests`.
 - **A refused inline edit lost the offset of a repeated local time** (BOU-523).
   Resubmitting it no longer moves the value by the DST hour.
+- **An uberjar dropped every `#include` in its config** (BOU-563). Includes now resolve inside the
+  jar, and a missing one stops startup naming the file.
 - **Admin showed epoch-millis timestamps as raw numbers** (BOU-563). They render like ISO text.
 - **Admin timestamps were shown and entered in UTC** (BOU-523). They now use the
   browser's zone, else `:time-zone` in `:wagoe/settings`, else Europe/Amsterdam.

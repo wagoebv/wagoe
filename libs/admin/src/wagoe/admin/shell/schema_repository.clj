@@ -261,6 +261,11 @@
   ([db-ctx config malli-schemas]
    ;; An unknown key used to be ignored: a misplaced :has-many left the admin
    ;; showing a detected read-only panel instead, and nothing said why (BOU-563).
+   ;; An #include Aero could not find leaves this key in its place; say which
+   ;; file, rather than call it an invalid value.
+   (when-let [missing (get-in config [:entities :aero/missing-include])]
+     (throw (ex-info (str "Admin entity config: include not found: " missing)
+                     {:type :configuration-error :missing-include missing})))
    (when-let [errors (seq (admin-schema/entity-config-errors config))]
      (throw (ex-info (str "Admin entity config: "
                           (str/join "; " (map #(str (:problem %) " at " (pr-str (:path %))) errors)))
