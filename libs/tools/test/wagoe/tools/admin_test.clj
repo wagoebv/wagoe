@@ -54,9 +54,31 @@
     (is (= "Invoice2026!"
            (bounded "Invoice2026!\n" #(#'admin/read-admin-password nil)))))
 
-  (testing "a second piped line is ignored, so scripts that pipe it twice still work"
+  (testing "a matching second line confirms it, so scripts that pipe it twice still work"
     (is (= "correct-horse"
            (bounded "correct-horse\ncorrect-horse\n" #(#'admin/read-admin-password nil))))))
+
+(deftest ^:unit no-console-second-line-must-match
+  ;; System/console is nil in mintty and IDE consoles too, where a person is
+  ;; typing. A second line is their confirmation; a typo must not become the
+  ;; admin password.
+  (testing "a mismatched second line fails"
+    (let [r (bounded "Invoice2026!\nInvoice2062!\n" #(#'admin/read-admin-password nil))]
+      (is (= :validation-error (get-in r [:thrown :type])))
+      (is (str/includes? (str (get-in r [:thrown :message])) "do not match")))))
+
+(deftest ^:unit console-password-is-validated-as-stored
+  ;; The user CLI trims the password it stores, so the length check must see the
+  ;; trimmed value too.
+  (testing "padding does not count towards the minimum length"
+    (let [r (bounded "" #(#'admin/read-admin-password
+                          (apply scripted (repeat 6 "  1234567  "))))]
+      (is (= :validation-error (get-in r [:thrown :type])))))
+
+  (testing "the returned password is the trimmed one"
+    (is (= "correct-horse"
+           (bounded "" #(#'admin/read-admin-password
+                         (scripted " correct-horse " " correct-horse ")))))))
 
 (deftest ^:unit piped-eof-fails-instead-of-looping
   (testing "empty stdin is an error, not an endless re-prompt"

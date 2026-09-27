@@ -76,17 +76,21 @@
   "No password on stdin. Pipe one line: printf '%s\\n' \"$PW\" | bb create-admin ...")
 
 (defn- read-admin-password
-  "Piped stdin (`read-secret` nil): read one line and accept or reject it.
-   Interactive: `read-secret` is label -> string, or nil at EOF; ask twice and
-   re-prompt at most max-attempts times."
+  "No console (`read-secret` nil): read a line, then an optional second one.
+   EOF there is a script piping once; a second line is a confirmation, because
+   System/console is also nil in mintty and IDE consoles where someone types.
+   Console: `read-secret` is label -> string, or nil at EOF; ask twice and
+   re-prompt at most max-attempts times. Passwords are trimmed before checking,
+   as the user CLI trims the one it stores."
   [read-secret]
   (if-not read-secret
-    (let [p (read-password-once "Password" nil)]
-      (when (nil? p) (fail! eof-message))
-      (if-let [msg (password-problem p p)] (fail! msg) p))
+    (let [p       (read-password-once "Password" nil)
+          _       (when (nil? p) (fail! eof-message))
+          confirm (or (read-password-once "Confirm password" nil) p)]
+      (if-let [msg (password-problem p confirm)] (fail! msg) p))
     (loop [attempt 1]
-      (let [p       (read-secret "Password")
-            confirm (when p (read-secret "Confirm password"))]
+      (let [p       (some-> (read-secret "Password") str/trim)
+            confirm (when p (some-> (read-secret "Confirm password") str/trim))]
         (when (nil? confirm) (fail! "Password entry ended before it was confirmed."))
         (let [msg (password-problem p confirm)]
           (cond
@@ -134,7 +138,7 @@
   (println)
   (println (bold "Notes:"))
   (println "  The password is read from a secure prompt (not echoed) and confirmed.")
-  (println "  With stdin piped, it is read once, from the first line:")
+  (println "  Without a console it reads one line, plus an optional matching second:")
   (println "    printf '%s\\n' \"$PW\" | bb create-admin --email EMAIL --name NAME")
   (println "  Run database migrations first: clojure -M:migrate up"))
 
