@@ -21,6 +21,7 @@
             [wagoe.ai.shell.service :as svc]
             [wagoe.ai.shell.test-check :as test-check]
             [cheshire.core :as json]
+            [clojure.edn :as edn]
             [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.tools.cli :as cli]
@@ -523,6 +524,40 @@
              :let [path (str root "/resources/conf/" profile "/admin/" entity-name ".edn")]]
          {:path path :text text :exists? (.exists (io/file path))})))
 
+(defn- admin-config
+  "The :wagoe/admin map of `profile`'s config, Aero tags kept as tagged
+   literals, or nil when it has none or does not read."
+  [root profile]
+  (try
+    (get-in (edn/read-string {:default tagged-literal}
+                             (slurp (io/file root "resources" "conf" profile "config.edn")))
+            [:active :wagoe/admin])
+    (catch Exception _ nil)))
+
+(defn- includes? [entities file]
+  (some #(and (instance? clojure.lang.TaggedLiteral %)
+              (= 'include (:tag %))
+              (= file (:form %)))
+        (tree-seq #(or (coll? %) (instance? clojure.lang.TaggedLiteral %))
+                  #(if (coll? %) (seq %) [(:form %)])
+                  entities)))
+
+(defn admin-entity-next-steps
+  "What each profile's config still needs for `entity-names` to show in the
+   admin, as lines. A profile that cannot be read gets both steps."
+  [root entity-names]
+  (vec (for [profile (profiles root)
+             :let    [admin (admin-config root profile)
+                      allowlist (set (get-in admin [:entity-discovery :allowlist]))]
+             entity  entity-names
+             :let    [file (str "admin/" entity ".edn")]
+             line    [(when-not (contains? allowlist (keyword entity))
+                        (str profile ": add :" entity " to :entity-discovery :allowlist"))
+                      (when-not (includes? (:entities admin) file)
+                        (str profile ": add #include \"" file "\" to :entities"))]
+             :when   line]
+         line)))
+
 (defn write-admin-entities!
   "Write `targets`, skipping a file that exists unless `force?`: it may be a
    hand-edited prod config. Returns the targets with :written?."
@@ -598,9 +633,8 @@
                   (println (green (str "\u2713 Written to " path))))
                 (println)
                 (println (dim "Next steps, in each profile's config.edn:"))
-                (doseq [{:keys [entity-name]} entities]
-                  (println (dim (str "  - Add :" entity-name " to :entity-discovery :allowlist, and #include \"admin/"
-                                     entity-name ".edn\" to :entities"))))
+                (doseq [line (admin-entity-next-steps (:root options) (map :entity-name entities))]
+                  (println (dim (str "  - " line))))
                 (println (dim "  - Review and customize the generated config")))
 
               :else

@@ -353,3 +353,25 @@
     (is (= :print (sut/gen-tests-outcome failed nil true)))
     (is (= :write (sut/gen-tests-outcome passed "test/t_test.clj" false)))
     (is (= :print (sut/gen-tests-outcome passed nil false)))))
+
+(deftest ^:unit admin-entity-next-steps-name-only-what-a-config-lacks
+  ;; rc-4 advised adding the allowlist entry and the #include when both were
+  ;; already there (BOU-580).
+  (let [root (.toFile (java.nio.file.Files/createTempDirectory
+                       "admin-next" (make-array java.nio.file.attribute.FileAttribute 0)))
+        conf (fn [profile text]
+               (let [f (io/file root "resources" "conf" profile "config.edn")]
+                 (io/make-parents f)
+                 (spit f text)))]
+    (conf "dev" (str "{:active\n {:wagoe/http {:port #or [#env HTTP_PORT 3000]}\n"
+                     "  :wagoe/admin\n  {:entity-discovery {:mode :allowlist :allowlist #{:users :invoices}}\n"
+                     "   :entities #merge [#include \"admin/users.edn\" #include \"admin/invoices.edn\"]}}}\n"))
+    (conf "test" (str "{:active\n {:wagoe/admin\n  {:entity-discovery {:mode :allowlist :allowlist #{:users}}\n"
+                      "   :entities #merge [#include \"admin/users.edn\"]}}}\n"))
+    (conf "prod" (str "{:active\n {:wagoe/admin\n  {:entity-discovery {:mode :allowlist :allowlist #{:users :invoices}}\n"
+                      "   :entities #merge [#include \"admin/users.edn\" #include \"admin/invoices.edn\"]}}}\n"))
+    (is (= ["test: add :invoices to :entity-discovery :allowlist"
+            "test: add #include \"admin/invoices.edn\" to :entities"]
+           (sut/admin-entity-next-steps (.getPath root) ["invoices"])))
+    (is (= [] (sut/admin-entity-next-steps (.getPath root) ["users"]))
+        "every profile has users")))
