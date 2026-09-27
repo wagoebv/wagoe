@@ -490,7 +490,6 @@ In deps.edn but not switched on. `wagoe add <module>` writes its config key.
 | payments | PSP abstraction — Mollie, Stripe, Mock checkout and webhook verification | `wagoe add payments` |
 | storage | File storage — local filesystem and S3, image processing | `wagoe add storage` |
 | jobs | Background job processing with retry logic | `wagoe add jobs` |
-| email | SMTP email sending, async and queued modes | `wagoe add email` |
 | cache | Distributed caching — Redis or in-memory, TTL, atomic ops | `wagoe add cache` |
 | search | Full-text search | `wagoe add search` |
 | realtime | WebSocket pub/sub messaging | `wagoe add realtime` |
@@ -500,7 +499,6 @@ In deps.edn but not switched on. `wagoe add <module>` writes its config key.
 | reports | PDF/CSV export and scheduled report generation | `wagoe add reports` |
 | calendar | iCal, RRULE recurrence, conflict detection, Hiccup UI | `wagoe add calendar` |
 | geo | Multi-provider geocoding (OSM/Google/Mapbox), Haversine distance | `wagoe add geo` |
-| i18n | Marker-based i18n, translation catalogues, locale chains | `wagoe add i18n` |
 | push | Multi-platform push notifications — FCM (Firebase) + APNs (Apple) | `wagoe add push` |
 | events | Event bus for cross-process, asynchronous module communication — in-memory and Redis Streams | `wagoe add events` |
 | audience | Rule-based audience segmentation with SQL + predicate pipeline | `wagoe add audience` |
@@ -517,6 +515,8 @@ In deps.edn but not switched on. `wagoe add <module>` writes its config key.
 - observability (`com.wagoe/wagoe-observability`) — [docs](https://github.com/wagoebv/wagoe/blob/main/libs/observability/AGENTS.md)
 - platform (`com.wagoe/wagoe-platform`) — [docs](https://github.com/wagoebv/wagoe/blob/main/libs/platform/AGENTS.md)
 - user (`com.wagoe/wagoe-user`) — [docs](https://github.com/wagoebv/wagoe/blob/main/libs/user/AGENTS.md)
+- email (`com.wagoe/wagoe-email`) — [docs](https://github.com/wagoebv/wagoe/blob/main/libs/email/AGENTS.md)
 - external (`com.wagoe/wagoe-external`) — [docs](https://github.com/wagoebv/wagoe/blob/main/libs/external/AGENTS.md)
+- i18n (`com.wagoe/wagoe-i18n`) — [docs](https://github.com/wagoebv/wagoe/blob/main/libs/i18n/AGENTS.md)
 - ui-style (`com.wagoe/wagoe-ui-style`) — [docs](https://github.com/wagoebv/wagoe/blob/main/libs/ui-style/AGENTS.md)
 <!-- /wagoe:installed-modules -->

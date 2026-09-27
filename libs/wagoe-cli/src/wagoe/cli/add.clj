@@ -277,8 +277,9 @@
 (defn module-states
   "Each catalogue module with where the project has it: :enabled, :configurable
    (in deps.edn, not switched on) or :absent. A module with a :module-key is on
-   when that key is in config or :extra-modules; the other core modules are
-   wired whatever config says; the rest need their config key in every profile."
+   when that key is in config or :extra-modules; the other core modules and the
+   :always-on ones are wired whatever config says; the rest need their config
+   key in every profile."
   [dir]
   (let [deps (slurp (io/file dir "deps.edn"))]
     (for [m (:modules (cat/load-catalogue))
@@ -287,6 +288,7 @@
            (or (nil? dep) (= :unreadable dep)) :absent
            (:module-key m)                     (if (switched-on? dir (:module-key m)) :enabled :configurable)
            (or (= :core (:category m))
+               (:always-on m)
                (installed? dir m true))        :enabled
            :else                               :configurable)])))
 

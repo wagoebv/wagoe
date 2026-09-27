@@ -576,6 +576,8 @@
             [in-deps not-in-deps] (str/split (block "wagoe:available-modules") #"Not in deps\.edn")]
         (is (str/includes? installed "- core ("))
         (is (str/includes? installed "- user (") "on in system_config.clj's :extra-modules")
+        (is (str/includes? installed "- email (") "the platform always runs it")
+        (is (str/includes? installed "- i18n (") "the platform always runs it")
         (is (str/includes? installed "- external (") "in deps.edn with nothing to configure")
         (is (str/includes? in-deps "wagoe add ai") "in deps.edn, its config key missing")
         (is (re-find #"(?s)In deps\.edn but not switched on.*wagoe add admin" in-deps)

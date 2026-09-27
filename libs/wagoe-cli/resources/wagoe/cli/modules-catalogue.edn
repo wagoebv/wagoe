@@ -114,6 +114,8 @@
    :config-snippet      "  :wagoe.external/smtp\n  {:host     #env SMTP_HOST\n   :port     #or [#long #or [#env SMTP_PORT 587] 587]\n   :username #env SMTP_USERNAME\n   :password #env SMTP_PASSWORD\n   :tls?     true\n   :from     #env SMTP_FROM}\n"
    :prod-env-vars       ["SMTP_HOST" "SMTP_PORT" "SMTP_USERNAME" "SMTP_PASSWORD" "SMTP_FROM"]
    :test-config-snippet "  :wagoe.external/smtp\n  {:host \"localhost\" :port 1025 :tls? false :from \"test@localhost\"}\n"
+   ;; Runs whatever config says: the platform's always-on-modules (BOU-573).
+   :always-on           :wagoe/email
    :add-command         "wagoe add email"
    :docs-url            "https://github.com/wagoebv/wagoe/blob/main/libs/email/AGENTS.md"}
 
@@ -245,6 +247,8 @@
    :tier                :stable
    :config-snippet      "  :wagoe/i18n\n  {:default-locale :en}\n"
    :test-config-snippet "  :wagoe/i18n\n  {:default-locale :en}\n"
+   ;; Runs whatever config says: the platform's always-on-modules (BOU-573).
+   :always-on           :wagoe/i18n
    :add-command         "wagoe add i18n"
    :docs-url            "https://github.com/wagoebv/wagoe/blob/main/libs/i18n/AGENTS.md"}
 
