@@ -17,7 +17,9 @@
    ["libs/tenant/src/wagoe/tenant/shell/membership_http.clj" 'update-membership-handler]
    "typed :validation-error only"
    ["libs/tenant/src/wagoe/tenant/shell/membership_http.clj" 'accept-invitation-handler]
-   "typed :validation-error only"})
+   "typed :validation-error only"
+   ["libs/tenant/src/wagoe/tenant/shell/http.clj" 'create-tenant-handler]
+   "typed :validation-error/:not-supported only"})
 
 (defn- json-handler-file? [path]
   (let [p   (str/replace (str path) "\\" "/")
