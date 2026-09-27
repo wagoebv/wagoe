@@ -222,6 +222,10 @@ bb scaffold field \
 `--references-table` and `--on-delete` are available here too, with the same
 rules as the `--field` spec below.
 
+A `--required` field is a NOT NULL column, so `field` also gives the row in the
+entity's generated repository and workflow tests a value for it. An enum needs
+none: its column defaults to the first value.
+
 ### `endpoint` — Add an Endpoint to an Existing Module
 
 ```bash

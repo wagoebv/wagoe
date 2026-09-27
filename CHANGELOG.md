@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Breaking
 
+- **One workflow instance per workflow and entity** (BOU-581); a second start returns the first. `migrate up`
+  refuses a table that already has duplicates, naming them: keep one of each, then migrate.
 - **Routes now require login unless `:public true`** (BOU-568). Mark any route that
   must answer anonymous callers — a webhook, a public page — with `:public true`.
 - **`sortable-th` and `pagination` swap `outerHTML` by default** (BOU-386), so table refreshes stop nesting a
@@ -84,6 +86,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **`bb scaffold field --required` failed the repository and workflow tests `generate` wrote** (BOU-581).
+  It now gives their rows a value; regenerate those tests, or add the field to them by hand.
 - **A scaffolded GET left out the children POST created, and the workflow instance** (BOU-581). New
   modules return both, and the list takes `?include=`; regenerate a module to get it.
 - **An admin event's `:id` was a string on SQLite and a UUID on PostgreSQL** (BOU-579). It is a UUID

@@ -2637,6 +2637,122 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s%s%s;%s"
                       created)})))
     {:status :none}))
 
+(defn- test-value
+  "What a generated test writes for a required field, as [where value]: `:compared`
+   for a value that reads back as written, `:written` for one that does not. nil
+   for an optional field, and for an enum, which defaults to its first value and
+   needs the persistence's enum-fields to be written as one."
+  [field-ctx]
+  (when (and (:field-required field-ctx) (not= :enum (:field-type field-ctx)))
+    (if-let [v (sample-value field-ctx)]
+      [:compared v]
+      [:written (if (= :inst (:field-type field-ctx)) "(Instant/now)" "\"{}\"")])))
+
+(defn- first-loc
+  "The first location in `source` that `pred` accepts, or nil."
+  [source pred]
+  (->> (iterate z/next (z/of-string source {:track-position? true}))
+       (take-while #(and % (not (z/end? %))))
+       (filter pred)
+       first))
+
+(defn- child-sexprs [loc]
+  (try (map z/sexpr (take-while some? (iterate z/right (z/down loc))))
+       (catch Exception _ nil)))
+
+(defn- fields-map? [loc]
+  (and (= :map (z/tag loc))
+       (= 'fields (some-> loc z/left z/sexpr))
+       (= :vector (some-> loc z/up z/tag))))
+
+(defn- assoc-fields? [loc]
+  (and (= :list (z/tag loc)) (= '[assoc fields] (vec (take 2 (child-sexprs loc))))))
+
+(defn- create-map? [loc]
+  (and (= :map (z/tag loc))
+       (let [call (z/up loc)]
+         (and (= :list (some-> call z/tag))
+              (str/starts-with? (str (some-> call z/down z/sexpr)) "ports/create-")))))
+
+(defn- with-pair
+  "`source` with `k v` appended to the form at the first location `pred`
+   accepts, unless it has `k` already; nil when there is no such form."
+  [source pred k v]
+  (when-let [loc (first-loc source pred)]
+    (if (some #{k} (child-sexprs loc))
+      source
+      (-> loc
+          (z/append-child* (n/spaces 1))
+          (z/append-child* (n/keyword-node k))
+          (z/append-child* (n/spaces 1))
+          (z/append-child* (z/node (z/of-string v)))
+          z/root-string))))
+
+(defn- round-trip? [loc]
+  (and (= :list (z/tag loc))
+       (let [[op a] (child-sexprs loc)]
+         (and (= '= op) (or (= 'created a) (and (seq? a) (= '[dissoc created] (vec (take 2 a)))))))))
+
+(defn- left-out-of-round-trip
+  "`source` with `k` left out of the repository test's read-back comparison: a
+   JSON column reads back as the driver's own type, which `=` compares by
+   identity."
+  [source k]
+  (if-let [loc (first-loc source round-trip?)]
+    (let [[_ a b] (child-sexprs loc)
+          drop-k  #(if (and (seq? %) (= 'dissoc (first %))) (concat % [k]) (list 'dissoc % k))]
+      (z/root-string (z/replace loc (z/node (z/of-string (pr-str (list '= (drop-k a) (drop-k b))))))))
+    source))
+
+(defn- line-before
+  "`source` with `line` inserted before the line starting with `anchor`, or nil."
+  [source anchor line]
+  (when-let [i (str/index-of source (str "\n" anchor))]
+    (str (subs source 0 (inc i)) line (subs source (inc i)))))
+
+(defn add-field-to-generated-test
+  "`source`, a repository or workflow test `generate` wrote, with a value for
+   the required `field` in the row it creates. The NOT NULL column `field
+   --required` adds otherwise fails the test on its first run (BOU-581).
+
+   {:content s}, or nil when the field needs nothing there or the test is not
+   the shape generate wrote.
+
+   Pure: true"
+  [source field]
+  (let [f (template/build-field-context field)
+        k (keyword (:field-name-kebab f))]
+    (when-let [[where v] (test-value f)]
+      (let [workflow? (some? (first-loc source create-map?))
+            placed    (if workflow?
+                        (with-pair source create-map? k v)
+                        (with-pair source (if (= :compared where) fields-map? assoc-fields?) k v))
+            relation? (= :relation (:field-type f))
+            integrity "SET REFERENTIAL_INTEGRITY FALSE"
+            placed    (cond
+                        (or (nil? placed) (not relation?) (str/includes? placed integrity))
+                        placed
+
+                        :else
+                        (some-> (if workflow?
+                                  (line-before placed "      (ig/init-key :wagoe/workflow-db-schema"
+                                               (str "      ;; The rows it refers to are not what this tests.\n"
+                                                    "      (db/execute-ddl! ctx \"" integrity "\")\n"))
+                                  (line-before placed "        (let [repo    (persistence/create-repository ctx)"
+                                               (str "        ;; The rows it refers to are not what this tests.\n"
+                                                    "        (db/execute-ddl! ctx \"" integrity "\")\n")))
+                                (add-requires [['db 'wagoe.platform.database]])
+                                :content))
+            placed    (if (and placed (not workflow?) (= :json (:field-type f)))
+                        (left-out-of-round-trip placed k)
+                        placed)
+            placed    (if (and placed (str/includes? v "Instant/") (not (str/includes? placed "java.time Instant")))
+                        (str/replace placed "  (:import [java.util UUID]))"
+                                     "  (:import [java.time Instant]\n           [java.util UUID]))")
+                        placed)]
+        (when (and placed (not= placed source))
+          {:content placed})))))
+
 (defn add-field-to-schema
   "Add `field` to the entity and request schemas in `source`.
 
