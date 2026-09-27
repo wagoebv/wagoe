@@ -48,7 +48,7 @@ short spellings — `production` and `prod` name the same directory.
 | The active database. Exactly one of `:wagoe/sqlite`, `:wagoe/h2`,
   `:wagoe/postgresql` or `:wagoe/mysql` must be present; none is an error rather
   than a default, because defaulting would boot against a database nobody chose.
-  `:wagoe/mysql` is read but not supported yet (BOU-574).
+  `:wagoe/mysql` is read but not supported yet; it is planned after 1.0.
 
 | `http-config`
 | Port, host and server settings.

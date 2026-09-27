@@ -41,7 +41,7 @@ will promise.
 
 | Databases
 | PostgreSQL and SQLite, and H2 for tests. MySQL is not supported yet; it is
-  planned after 1.0 (BOU-574). Multi-tenancy needs PostgreSQL.
+  planned after 1.0. Multi-tenancy needs PostgreSQL.
 |===
 
 Lockstep versioning means you never have to work out which `wagoe-user` goes

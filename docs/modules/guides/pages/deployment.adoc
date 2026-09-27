@@ -91,7 +91,7 @@ The production config uses environment variables for all secrets:
 == Database recommendations
 
 Wagoe 1.0 supports PostgreSQL and SQLite, and H2 for tests. MySQL is not
-supported yet: it is planned after 1.0 (BOU-574).
+supported yet: it is planned after 1.0.
 
 [cols="1,1",options="header"]
 |===
