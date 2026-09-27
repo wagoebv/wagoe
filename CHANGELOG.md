@@ -69,7 +69,7 @@ for what is public API, what is internal, and how deprecations are announced.
 ### Fixed
 
 - **Scaffolded migrations lost their indexes on SQLite and failed on PostgreSQL and MySQL** (BOU-569).
-  Add `--;;` between the statements of older generated migrations; MySQL gets its own types.
+  Add `--;;` to older ones; an existing SQLite database needs a new migration creating the missing indexes.
 - **`bb scaffold ai --help` answered "Unknown option"** (BOU-569). It prints the usage.
 - **`bb setup` told you to copy `.env.example` over an existing `.env`** (BOU-573), replacing `JWT_SECRET`.
   It now names only the variables `.env` lacks.

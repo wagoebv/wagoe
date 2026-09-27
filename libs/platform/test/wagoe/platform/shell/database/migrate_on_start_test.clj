@@ -24,7 +24,8 @@
   "Init the component with migratus stubbed, returning what it was asked to do."
   [config]
   (let [calls (atom [])
-        ctx   (with-redefs [db-factory/db-context (fn [_] {:adapter ::adapter
+        ctx   (with-redefs [migrations/mysql? (constantly false)
+                            db-factory/db-context (fn [_] {:adapter ::adapter
                                                            :datasource ::the-pool})
                             db-factory/close-db-context! (fn [_] nil)
                             migrations/refuse-shadowed-migration-dirs! (fn [] nil)
@@ -56,7 +57,8 @@
   (let [closed (atom [])]
     (is (thrown-with-msg?
          clojure.lang.ExceptionInfo #"Migration failed"
-         (with-redefs [db-factory/db-context (fn [_] {:datasource ::pool})
+         (with-redefs [migrations/mysql? (constantly false)
+                            db-factory/db-context (fn [_] {:datasource ::pool})
                        db-factory/close-db-context! (fn [ctx] (swap! closed conj ctx))
                        migrations/refuse-shadowed-migration-dirs! (fn [] nil)
                        migrations/discover-migration-dirs (fn [] ["migrations"])
@@ -75,7 +77,8 @@
   ;; pool on the way out must not replace it.
   (is (thrown-with-msg?
        clojure.lang.ExceptionInfo #"Migration failed"
-       (with-redefs [db-factory/db-context (fn [_] {:datasource ::pool})
+       (with-redefs [migrations/mysql? (constantly false)
+                            db-factory/db-context (fn [_] {:datasource ::pool})
                      db-factory/close-db-context! (fn [_] (throw (Exception. "pool stuck")))
                      migrations/refuse-shadowed-migration-dirs! (fn [] nil)
                      migrations/discover-migration-dirs (fn [] ["migrations"])
@@ -86,7 +89,8 @@
   ;; The counterpart, so the cleanup above cannot be satisfied by closing the
   ;; pool on every path.
   (let [closed (atom [])]
-    (with-redefs [db-factory/db-context (fn [_] {:datasource ::pool})
+    (with-redefs [migrations/mysql? (constantly false)
+                            db-factory/db-context (fn [_] {:datasource ::pool})
                   db-factory/close-db-context! (fn [ctx] (swap! closed conj ctx))
                   migrations/refuse-shadowed-migration-dirs! (fn [] nil)
                   migrations/discover-migration-dirs (fn [] ["migrations"])
@@ -100,7 +104,8 @@
   ;; migrations findable and their absence loud; taking a datasource must not
   ;; quietly opt out of either.
   (let [calls (atom [])]
-    (with-redefs [migrations/discover-migration-dirs (fn [] ["migrations" "wagoe/geo/migrations/"])
+    (with-redefs [migrations/mysql? (constantly false)
+                  migrations/discover-migration-dirs (fn [] ["migrations" "wagoe/geo/migrations/"])
                   migrations/refuse-shadowed-migration-dirs! (fn [] nil)
                   migratus/migrate (fn [cfg] (swap! calls conj cfg))]
       (migrations/migrate-datasource! ::ds))

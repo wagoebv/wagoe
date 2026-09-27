@@ -29,6 +29,28 @@
   (testing "a DROP INDEX naming no table is dropped: MySQL drops a column's index with the column"
     (is (= [] (sql/for-mysql "DROP INDEX IF EXISTS idx_t_a")))))
 
+(deftest ^:unit a-string-literal-is-not-rewritten
+  (is (= ["CREATE TABLE t (\n  id CHAR(36),\n  label VARCHAR(255) DEFAULT 'uuid UUID JSONB'\n)"]
+         (sql/for-mysql "CREATE TABLE t (\n  id UUID,\n  label VARCHAR(255) DEFAULT 'uuid UUID JSONB'\n)"))))
+
+(deftest ^:unit defaults-mysql-refuses-are-rewritten
+  (testing "a TEXT or JSON default is an expression on MySQL"
+    (is (= ["CREATE TABLE t (\n  notes TEXT DEFAULT ('it''s') NOT NULL\n)"]
+           (sql/for-mysql "CREATE TABLE t (\n  notes TEXT DEFAULT 'it''s' NOT NULL\n)")))
+    (is (= ["ALTER TABLE t ADD COLUMN notes TEXT DEFAULT ('x')"]
+           (sql/for-mysql "ALTER TABLE t ADD COLUMN notes TEXT DEFAULT 'x'"))))
+  (testing "a timestamp ending in Z gets an offset MySQL reads"
+    (is (= ["CREATE TABLE t (\n  at DATETIME(6) DEFAULT '2026-01-01T00:00:00+00:00'\n)"]
+           (sql/for-mysql "CREATE TABLE t (\n  at TIMESTAMP WITH TIME ZONE DEFAULT '2026-01-01T00:00:00Z'\n)")))))
+
+(deftest ^:unit a-batch-is-rewritten-statement-by-statement
+  ;; migratus hands its own ALTERs of schema_migrations over as a vector.
+  (is (= ["ALTER TABLE schema_migrations ADD COLUMN description varchar(1024)"
+          "ALTER TABLE schema_migrations ADD COLUMN applied timestamp"]
+         (sql/for-mysql ["ALTER TABLE schema_migrations ADD COLUMN description varchar(1024)"
+                         "ALTER TABLE schema_migrations ADD COLUMN applied timestamp"])))
+  (is (= [] (sql/for-mysql ["DROP INDEX IF EXISTS idx_t_a"]))))
+
 (deftest ^:unit sql-mysql-takes-is-left-alone
   (doseq [s ["INSERT INTO t (id) VALUES (UUID())"
              "UPDATE t SET uuid = 'x'"

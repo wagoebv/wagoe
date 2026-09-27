@@ -96,7 +96,8 @@
 
 (deftest ^:unit create-migratus-config-includes-discovered-dirs-and-datasource
   (testing "migratus config keeps datasource and merged migration directories"
-    (with-redefs [migrations/discover-migration-dirs (fn [] ["migrations/" "wagoe/geo/migrations/"])]
+    (with-redefs [migrations/mysql? (constantly false)
+                  migrations/discover-migration-dirs (fn [] ["migrations/" "wagoe/geo/migrations/"])]
       (is (= {:store :database
               :migration-dir ["migrations/" "wagoe/geo/migrations/"]
               :init-script nil
@@ -710,3 +711,10 @@
         (with-redefs [migrations/warn-no-manifests! #(swap! warned inc)]
           (is (= #{"migrations/"} (discover-with [(io/as-url dir)]))))
         (is (= 1 @warned))))))
+
+(deftest ^:unit a-database-that-cannot-be-asked-its-dialect-is-an-error
+  ;; Read as "not MySQL", it ran MySQL migrations unrewritten (BOU-569).
+  (let [ds (reify javax.sql.DataSource
+             (getConnection [_] (throw (java.sql.SQLException. "down"))))]
+    (is (thrown-with-msg? java.sql.SQLException #"down"
+                          (migrations/migratus-config ds ["migrations/"])))))

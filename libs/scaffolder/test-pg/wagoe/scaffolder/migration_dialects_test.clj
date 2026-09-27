@@ -14,6 +14,7 @@
             [clojure.test :refer [deftest is testing]]
             [migratus.core :as migratus]
             [next.jdbc :as jdbc]
+            [wagoe.platform.shell.adapters.database.factory :as db-factory]
             [wagoe.platform.shell.database.migrations :as migrations]
             [wagoe.scaffolder.ports :as ports]
             [wagoe.scaffolder.shell.service :as service])
@@ -36,8 +37,10 @@
   "[label make], where `make` returns [datasource stop!]."
   []
   (cond->
-   [["h2" (fn [] [(jdbc/get-datasource {:jdbcUrl (str "jdbc:h2:mem:dialects" (System/nanoTime) ";DB_CLOSE_DELAY=-1")})
-                  (fn [])])]
+   ;; In the mode the platform opens H2 in, as a project does.
+   [["h2" (fn [] (let [ctx (db-factory/db-context {:adapter :h2 :database-path (str "mem:dialects" (System/nanoTime))
+                                                   :pool {:minimum-idle 1 :maximum-pool-size 2}})]
+                   [(:datasource ctx) #(db-factory/close-db-context! ctx)]))]
     ["sqlite" (fn [] (let [f (java.io.File/createTempFile "dialects" ".db")]
                        [(jdbc/get-datasource {:jdbcUrl (str "jdbc:sqlite:" (.getPath f))})
                         #(.delete f)]))]
@@ -62,7 +65,9 @@
                                     :entities [{:name "Invoice"
                                                 :fields [{:name :number :type :string :required true :unique true}
                                                          {:name :reference :type :string :indexed true}
-                                                         {:name :issued-at :type :inst}
+                                                         {:name :issued-at :type :inst :default "2026-01-01T00:00:00Z"}
+                                                         {:name :notes :type :text :default "it's"}
+                                                         {:name :data :type :json :required false}
                                                          {:name :status :type :enum :enum-values [:open :paid]}]}]
                                     :output-dir (.getPath dir)}))
     ;; The seconds tick between ids; entity and field would otherwise wait.
@@ -72,6 +77,9 @@
     (ok (ports/add-field svc {:module-name "billing" :base-ns "dialects" :entity "Invoice"
                               :output-dir (.getPath dir)
                               :field {:name :code :type :string :required false :indexed true}}))
+    (ok (ports/add-field svc {:module-name "billing" :base-ns "dialects" :entity "Invoice"
+                              :output-dir (.getPath dir)
+                              :field {:name :remark :type :text :required false :default "none"}}))
     ;; Copied under target/: migratus takes only a relative path.
     (let [copy (str "target/dialects-" (System/nanoTime))]
       (doseq [^java.io.File m (.listFiles (io/file dir "migrations"))]
@@ -102,6 +110,13 @@
     (let [md (.getMetaData c)]
       (with-open [rs (.getTables md (.getCatalog c) nil "%" (into-array String ["TABLE"]))]
         (set (map (comp str/lower-case :table_name) (resultset-seq rs)))))))
+
+(deftest ^:unit mysql-cannot-index-text-or-json-so-neither-is-offered
+  (doseq [type [:text :json] flag [:unique :indexed]]
+    (let [r (ports/generate-module svc {:module-name "billing" :base-ns "dialects" :dry-run true
+                                        :entities [{:name "Invoice" :fields [{:name :x :type type flag true}]}]})]
+      (is (false? (:success r)) (str type flag))
+      (is (re-find #"string" (str (:errors r))) (pr-str (:errors r))))))
 
 (deftest ^:integration the-sweep-covers-every-database
   (is (= 4 (count (backends)))

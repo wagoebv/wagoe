@@ -323,13 +323,11 @@
                      " to a separate classpath resource.")))
     migration-dirs))
 
-(defn- mysql?
+(defn mysql?
   "Whether `datasource` is MySQL or MariaDB, from the driver's own answer."
   [datasource]
-  (try
-    (with-open [c (.getConnection ^javax.sql.DataSource datasource)]
-      (boolean (re-find #"(?i)mysql|mariadb" (.getDatabaseProductName (.getMetaData c)))))
-    (catch Exception _ false)))
+  (with-open [c (.getConnection ^javax.sql.DataSource datasource)]
+    (boolean (re-find #"(?i)mysql|mariadb" (.getDatabaseProductName (.getMetaData c))))))
 
 (defn migratus-config
   "The migratus config for running the migrations in `migration-dir` (one

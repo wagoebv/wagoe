@@ -292,6 +292,10 @@
       {:error (str "Enum field " name-str " needs its values: "
                    name-str ":enum:values=first,second,third")}
 
+      (and (#{:text :json} type-kw) (some #{"unique" "indexed"} flags))
+      {:error (str "Field " name-str " is " type-str " and cannot be unique or indexed: "
+                   "MySQL cannot index " type-str ". Use a string field")}
+
       (and (seq enum-values) (not= :enum type-kw))
       {:error (str "values= is only meaningful on an enum field, and " name-str
                    " is a " type-str)}
@@ -569,6 +573,10 @@
                  (and (= "enum" (:type opts))
                       (empty? (parse-enum-values (:enum-values opts))))
                  (conj "Missing required option: --enum-values (e.g. --enum-values draft,sent,paid)")
+
+                 (and (#{"text" "json"} (:type opts)) (or (:unique opts) (:indexed opts)))
+                 (conj (str (:name opts) " is " (:type opts) " and cannot be --unique or --indexed: "
+                            "MySQL cannot index " (:type opts) ". Use --type string"))
 
                  ;; The relation rules, the same ones `parse-field-spec`
                  ;; applies to `--field x:relation:...` (BOU-480 review).

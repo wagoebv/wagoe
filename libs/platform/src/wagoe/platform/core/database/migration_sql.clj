@@ -26,8 +26,32 @@
 
 (defn- matches? [re s] (boolean (re-find re s)))
 
+(def ^:private literal #"'(?:[^']|'')*'")
+
+(defn- outside-literals
+  "`s` with `f` applied to every part outside a '…' string literal."
+  [s f]
+  (let [m (re-matcher literal s)]
+    (loop [from 0 out (StringBuilder.)]
+      (if (.find m)
+        (recur (.end m) (doto out (.append (f (subs s from (.start m)))) (.append (.group m))))
+        (str (.append out (f (subs s from))))))))
+
 (defn- retype [s]
-  (reduce (fn [s [re to]] (str/replace s re to)) s types))
+  (outside-literals s #(reduce (fn [s [re to]] (str/replace s re to)) % types)))
+
+(def ^:private expression-default
+  "A literal DEFAULT on a TEXT or JSON column: MySQL takes only an expression."
+  (re-pattern (str "(?i)\\b(TEXT|JSON)\\b([^,\\n']*?\\bDEFAULT\\s+)(" literal ")")))
+
+(def ^:private zulu-default
+  "A timestamp DEFAULT ending in Z, which MySQL refuses; +00:00 it reads."
+  #"(?i)(\bDEFAULT\s+'\d{4}-\d{2}-\d{2}[T ][\d:.]+)Z'")
+
+(defn- redefault [s]
+  (-> s
+      (str/replace expression-default "$1$2($3)")
+      (str/replace zulu-default "$1+00:00'")))
 
 (defn- table-foreign-keys
   "A CREATE TABLE with each column REFERENCES moved to a table constraint."
@@ -43,20 +67,25 @@
              (str/join ",\n  " fks) "\n" (subs s close))))))
 
 (defn for-mysql
-  "`statement` as MySQL takes it: a vector of none or more statements.
+  "`statement` as MySQL takes it: a vector of none or more statements. A
+   vector of statements, as migratus passes its own batch, is rewritten one by
+   one.
 
    Pure: true"
   [statement]
   (cond
+    (sequential? statement)
+    (into [] (mapcat for-mysql) statement)
+
     ;; MySQL drops a column's index with the column, and wants the table here.
     (matches? #"(?is)^\s*DROP\s+INDEX\s+IF\s+EXISTS\s+\w+\s*;?\s*$" statement)
     []
 
     (matches? #"(?i)^\s*CREATE\s+TABLE\b" statement)
-    [(-> statement retype table-foreign-keys)]
+    [(-> statement retype redefault table-foreign-keys)]
 
     (matches? #"(?i)^\s*ALTER\s+TABLE\b" statement)
-    [(-> statement retype
+    [(-> statement retype redefault
          (str/replace added-column-reference "$1, ADD FOREIGN KEY ($2) REFERENCES $3($4)$5"))]
 
     :else

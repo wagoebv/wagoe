@@ -70,6 +70,11 @@
    [:fn {:error/message ":on-delete :set-null needs a nullable column, so the field cannot be :required"}
     (fn [{:keys [type on-delete required]}]
       (not (and (= :relation type) (= :set-null on-delete) required)))]
+   ;; MySQL indexes neither without a prefix length, and a unique prefix is
+   ;; not uniqueness (BOU-569).
+   [:fn {:error/message "a text or json field cannot be unique or indexed: MySQL cannot index either; use a string field"}
+    (fn [{:keys [type unique indexed]}]
+      (not (and (#{:text :json} type) (or unique indexed))))]
    ;; :default goes into DDL (BOU-494).
    [:fn {:error/message ":default must suit the field's type: a number for int/decimal, true/false for boolean, one of the values for enum, an offset timestamp for inst, YYYY-MM-DD for date, none for relation"}
     template/valid-default?]])
