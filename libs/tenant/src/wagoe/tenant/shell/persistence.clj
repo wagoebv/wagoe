@@ -7,6 +7,7 @@
             [wagoe.tenant.schema :as tenant-schema]
             [cheshire.core]
             [clojure.set]
+            [clojure.string :as str]
             [clojure.tools.logging :as log]))
 
 ;; =============================================================================
@@ -26,9 +27,9 @@
   [ctx]
   (log/info "Initializing tenant schema from Malli definitions")
   (db/initialize-tables-from-schemas! ctx
-                                             {"tenants" tenant-schema/Tenant
-                                              "tenant_memberships" tenant-schema/TenantMembership
-                                              "tenant_member_invites" tenant-schema/TenantInvite}))
+                                      {"tenants" tenant-schema/Tenant
+                                       "tenant_memberships" tenant-schema/TenantMembership
+                                       "tenant_member_invites" tenant-schema/TenantInvite}))
 
 ;; =============================================================================
 ;; Entity Transformations
@@ -103,18 +104,25 @@
          (db->tenant-entity ctx result)))
      ctx))
 
-  (find-all-tenants [_this {:keys [limit offset include-deleted?] :or {limit 50 offset 0 include-deleted? false}}]
+  (find-all-tenants [_this {:keys [limit offset include-deleted? status search]}]
     (persistence-interceptors/execute-persistence-operation
      :find-all-tenants
-     {:limit limit :offset offset :include-deleted? include-deleted?}
+     {:limit (or limit 50) :offset (or offset 0) :include-deleted? include-deleted?
+      :status status :search search}
      (fn [{:keys [params]}]
-       (let [{:keys [limit offset include-deleted?]} params
+       (let [{:keys [limit offset include-deleted? status search]} params
+             pattern (some->> search str/lower-case (format "%%%s%%"))
+             where   (cond-> [:and]
+                       (not include-deleted?) (conj [:is :deleted_at nil])
+                       status  (conj [:= :status (name status)])
+                       pattern (conj [:or [:like [:lower :name] pattern]
+                                      [:like [:lower :slug] pattern]]))
              query (cond-> {:select [:*]
                             :from [:tenants]
                             :order-by [[:created_at :desc]]
                             :limit limit
                             :offset offset}
-                     (not include-deleted?) (assoc :where [:is :deleted_at nil]))
+                     (next where) (assoc :where where))
              records (db/execute-query! ctx query)]
          (mapv #(db->tenant-entity ctx %) records)))
      ctx))

@@ -18,8 +18,8 @@
    "typed :validation-error only"
    ["libs/tenant/src/wagoe/tenant/shell/membership_http.clj" 'accept-invitation-handler]
    "typed :validation-error only"
-   ["libs/tenant/src/wagoe/tenant/shell/http.clj" 'create-tenant-handler]
-   "typed :validation-error/:not-supported only"})
+   ["libs/tenant/src/wagoe/tenant/shell/http.clj" 'typed-error-response]
+   "typed 4xx and :not-supported only; anything else gets the generic 500"})
 
 (defn- json-handler-file? [path]
   (let [p   (str/replace (str path) "\\" "/")

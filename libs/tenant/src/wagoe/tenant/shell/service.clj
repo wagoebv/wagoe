@@ -74,7 +74,7 @@
 
            (when-not (:valid? decision)
              (throw (ex-info (:error decision)
-                             {:type :validation-error
+                             {:type (or (:type decision) :validation-error)
                               :message (:error decision)})))
 
            (let [tenant-id (generate-tenant-id)

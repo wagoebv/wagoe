@@ -53,6 +53,7 @@
 
     (contains? existing-slugs slug)
     {:valid? false
+     :type :conflict
      :error "Tenant slug already exists"}
 
     :else

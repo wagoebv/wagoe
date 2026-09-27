@@ -64,214 +64,158 @@
 
 ;; =============================================================================
 ;; Handlers
+;;
+;; The service returns the tenant or throws a typed ex-info; it never returns a
+;; {:success? ...} map. Each handler lets `with-typed-errors` answer the throw.
 ;; =============================================================================
 
+(defn- typed-error-response
+  "The response for a thrown service error: its message and a status from its
+   :type. Anything untyped is logged and answered with a generic 500."
+  [e action]
+  (if-let [status (get {:validation-error 400
+                        :not-found        404
+                        :conflict         409
+                        :not-supported    501}
+                       (:type (ex-data e)))]
+    (error-response status (ex-message e))
+    (do (log/error e (str "Failed to " action))
+        (error-response 500 "Internal server error"))))
+
+(defn- with-typed-errors [action f]
+  (try
+    (f)
+    (catch Exception e
+      (typed-error-response e action))))
+
+(defn- with-tenant-id
+  "Call `f` with the path's tenant id, or answer 400 when it is not a UUID."
+  [request f]
+  (if-let [tenant-id (some-> (get-in request [:path-params :id]) parse-tenant-uuid)]
+    (f tenant-id)
+    (error-response 400 "Invalid tenant ID format")))
+
+(defn- request-body [request]
+  (or (:body-params request)
+      (some-> (:body request) slurp (json/parse-string true))))
+
 (defn list-tenants-handler
-  "List all tenants with optional filtering and pagination.
-   
+  "List tenants, newest first, as a JSON array like the membership list.
+
    Query params:
    - limit: Number of results (default 20, max 100)
    - offset: Pagination offset (default 0)
-   - status: Filter by status (:active, :suspended)
-   - search: Search by name or slug"
+   - status: Filter by status (active, suspended)
+   - search: Match against name or slug"
   [tenant-service]
   (fn [request]
-    (try
-      (let [params (:params request)
-            limit (min (or (some-> (:limit params) parse-long) 20) 100)
-            offset (or (some-> (:offset params) parse-long) 0)
-            status (some-> (:status params) keyword)
-            search (:search params)
-            options (cond-> {:limit limit :offset offset}
-                      status (assoc :status status)
-                      search (assoc :search search))
-            result (tenant-ports/list-tenants tenant-service options)]
-        (json-response 200 result))
-      (catch Exception e
-        (log/error e "Failed to list tenants")
-        (error-response 500 "Internal server error")))))
+    (with-typed-errors "list tenants"
+      #(let [params  (:params request)
+             limit   (min (or (some-> (:limit params) parse-long) 20) 100)
+             offset  (or (some-> (:offset params) parse-long) 0)
+             options (cond-> {:limit limit :offset offset}
+                       (:status params) (assoc :status (keyword (:status params)))
+                       (:search params) (assoc :search (:search params)))]
+         (json-response 200 (tenant-ports/list-tenants tenant-service options))))))
 
 (defn get-tenant-handler
   "Get tenant by ID."
   [tenant-service]
   (fn [request]
-    (try
-      (let [tenant-id-str (get-in request [:path-params :id])
-            tenant-id (parse-tenant-uuid tenant-id-str)]
-        (if-not tenant-id
-          (error-response 400 "Invalid tenant ID format")
-          (if-let [tenant (tenant-ports/get-tenant tenant-service tenant-id)]
-            (json-response 200 tenant)
-            (error-response 404 "Tenant not found"))))
-      (catch Exception e
-        (log/error e "Failed to get tenant")
-        (error-response 500 "Internal server error")))))
+    (with-tenant-id request
+      (fn [tenant-id]
+        (with-typed-errors "get tenant"
+          #(json-response 200 (tenant-ports/get-tenant tenant-service tenant-id)))))))
 
 (defn create-tenant-handler
   "Create new tenant.
-   
+
    Request body:
    - name: Tenant display name (required)
    - slug: Tenant slug for URLs (required, unique)
    - status: Initial status (:active or :suspended, default :active)"
   [tenant-service]
   (fn [request]
-    (try
-      (let [body (or (:body-params request)
-                     (json/parse-string (slurp (:body request)) true))
-            tenant-input {:name (:name body)
-                          :slug (:slug body)
-                          :status (or (some-> (:status body) keyword) :active)}]
-        ;; Validate input
-        (if-let [errors (tenant-input-explainer tenant-input)]
-          (validation-error-response errors)
-          ;; The service returns the tenant or throws a typed error.
-          (json-response 201 (tenant-ports/create-new-tenant tenant-service tenant-input))))
-      (catch clojure.lang.ExceptionInfo e
-        (case (:type (ex-data e))
-          :validation-error (error-response 400 (ex-message e))
-          :not-supported    (error-response 501 (ex-message e))
-          (do (log/error e "Failed to create tenant")
-              (error-response 500 "Internal server error"))))
-      (catch Exception e
-        (log/error e "Failed to create tenant")
-        (error-response 500 "Internal server error")))))
+    (with-typed-errors "create tenant"
+      #(let [body         (request-body request)
+             tenant-input {:name   (:name body)
+                           :slug   (:slug body)
+                           :status (or (some-> (:status body) keyword) :active)}]
+         (if-let [errors (tenant-input-explainer tenant-input)]
+           (validation-error-response errors)
+           (json-response 201 (tenant-ports/create-new-tenant tenant-service tenant-input)))))))
 
 (defn update-tenant-handler
-  "Update existing tenant.
-   
-   Request body:
-   - name: New display name (optional)
-   - slug: New slug (optional, must be unique)
-   - status: New status (optional)"
+  "Update a tenant's name or status.
+
+   The slug names the tenant's schema, so it cannot change; sending the
+   current one is accepted."
   [tenant-service]
   (fn [request]
-    (try
-      (let [tenant-id-str (get-in request [:path-params :id])
-            tenant-id (parse-tenant-uuid tenant-id-str)]
-        (if-not tenant-id
-          (error-response 400 "Invalid tenant ID format")
-          (let [body (or (:body-params request)
-                         (json/parse-string (slurp (:body request)) true))
-                update-data (cond-> {}
-                              (:name body) (assoc :name (:name body))
-                              (:slug body) (assoc :slug (:slug body))
-                              (:status body) (assoc :status (keyword (:status body))))]
-            ;; Validate update data
-            (if-let [errors (tenant-update-explainer update-data)]
-              (validation-error-response errors)
-              ;; Update tenant
-              (let [result (tenant-ports/update-existing-tenant tenant-service tenant-id update-data)]
-                (if (:success? result)
-                  (json-response 200 (:tenant result))
-                  (error-response 400 (:error result))))))))
-      (catch Exception e
-        (log/error e "Failed to update tenant")
-        (error-response 500 "Internal server error")))))
+    (with-tenant-id request
+      (fn [tenant-id]
+        (with-typed-errors "update tenant"
+          #(let [body        (request-body request)
+                 update-data (cond-> {}
+                               (:name body)   (assoc :name (:name body))
+                               (:status body) (assoc :status (keyword (:status body))))]
+             (cond
+               (tenant-update-explainer update-data)
+               (validation-error-response (tenant-update-explainer update-data))
+
+               (and (:slug body)
+                    (not= (:slug body) (:slug (tenant-ports/get-tenant tenant-service tenant-id))))
+               (error-response 400 "The slug cannot change: it names the tenant's schema")
+
+               :else
+               (json-response 200 (tenant-ports/update-existing-tenant
+                                   tenant-service tenant-id update-data)))))))))
 
 (defn delete-tenant-handler
   "Delete tenant (soft delete).
-   
+
    This marks the tenant as deleted but preserves data for audit purposes."
   [tenant-service]
   (fn [request]
-    (try
-      (let [tenant-id-str (get-in request [:path-params :id])
-            tenant-id (parse-tenant-uuid tenant-id-str)]
-        (if-not tenant-id
-          (error-response 400 "Invalid tenant ID format")
-          (let [result (tenant-ports/delete-existing-tenant tenant-service tenant-id)]
-            (if (:success? result)
-              (json-response 200 {:message "Tenant deleted successfully"})
-              (error-response 400 (:error result))))))
-      (catch Exception e
-        (log/error e "Failed to delete tenant")
-        (error-response 500 "Internal server error")))))
+    (with-tenant-id request
+      (fn [tenant-id]
+        (with-typed-errors "delete tenant"
+          #(do (tenant-ports/delete-existing-tenant tenant-service tenant-id)
+               (json-response 200 {:message "Tenant deleted successfully"})))))))
 
 (defn suspend-tenant-handler
   "Suspend tenant (prevents login and access)."
   [tenant-service]
   (fn [request]
-    (try
-      (let [tenant-id-str (get-in request [:path-params :id])
-            tenant-id (parse-tenant-uuid tenant-id-str)]
-        (if-not tenant-id
-          (error-response 400 "Invalid tenant ID format")
-          (let [result (tenant-ports/suspend-tenant tenant-service tenant-id)]
-            (if (:success? result)
-              (json-response 200 {:message "Tenant suspended successfully"})
-              (error-response 400 (:error result))))))
-      (catch Exception e
-        (log/error e "Failed to suspend tenant")
-        (error-response 500 "Internal server error")))))
+    (with-tenant-id request
+      (fn [tenant-id]
+        (with-typed-errors "suspend tenant"
+          #(json-response 200 (tenant-ports/suspend-tenant tenant-service tenant-id)))))))
 
 (defn activate-tenant-handler
   "Activate suspended tenant."
   [tenant-service]
   (fn [request]
-    (try
-      (let [tenant-id-str (get-in request [:path-params :id])
-            tenant-id (parse-tenant-uuid tenant-id-str)]
-        (if-not tenant-id
-          (error-response 400 "Invalid tenant ID format")
-          (let [result (tenant-ports/activate-tenant tenant-service tenant-id)]
-            (if (:success? result)
-              (json-response 200 {:message "Tenant activated successfully"})
-              (error-response 400 (:error result))))))
-      (catch Exception e
-        (log/error e "Failed to activate tenant")
-        (error-response 500 "Internal server error")))))
+    (with-tenant-id request
+      (fn [tenant-id]
+        (with-typed-errors "activate tenant"
+          #(json-response 200 (tenant-ports/activate-tenant tenant-service tenant-id)))))))
 
 (defn provision-tenant-handler
-  "Provision tenant database schema and initial data.
-   
-   This creates:
-   - PostgreSQL schema for tenant
-   - Initial database tables (copies structure from public schema)
-   
-   Note: Only works with PostgreSQL multi-tenant setup.
-   Provisioning is idempotent - safe to call multiple times."
+  "Provision tenant database schema.
+
+   Creates the tenant's PostgreSQL schema and its tables. Idempotent. Any other
+   database answers 501."
   [tenant-service db-context]
   (fn [request]
-    (try
-      (let [tenant-id-str (get-in request [:path-params :id])
-            tenant-id (parse-tenant-uuid tenant-id-str)]
-        (cond
-          (not tenant-id)
-          (error-response 400 "Invalid tenant ID format")
-
-          (not db-context)
+    (with-tenant-id request
+      (fn [tenant-id]
+        (if-not db-context
           (error-response 500 "Database context not available")
-
-          :else
-          (let [tenant (tenant-ports/get-tenant tenant-service tenant-id)]
-            (if-not tenant
-              (error-response 404 "Tenant not found")
-              (let [result (provisioning/provision-tenant! db-context tenant)]
-                (json-response 200 result))))))
-
-      (catch clojure.lang.ExceptionInfo e
-        (let [ex-data (ex-data e)]
-          (case (:type ex-data)
-            :not-supported
-            (error-response 501 (:message ex-data) ex-data)
-
-            :not-found
-            (error-response 404 "Tenant not found" ex-data)
-
-            :provisioning-error
-            (do
-              (log/error e "Tenant provisioning failed")
-              (error-response 500 "Tenant provisioning failed" ex-data))
-
-            ;; Default case
-            (do
-              (log/error e "Unexpected error during provisioning")
-              (error-response 500 "Internal server error")))))
-
-      (catch Exception e
-        (log/error e "Failed to provision tenant")
-        (error-response 500 "Internal server error")))))
+          (with-typed-errors "provision tenant"
+            #(json-response 200 (provisioning/provision-tenant!
+                                 db-context
+                                 (tenant-ports/get-tenant tenant-service tenant-id)))))))))
 
 ;; =============================================================================
 ;; Routes

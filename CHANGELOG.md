@@ -72,8 +72,9 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **`migrate up` failed on a database that had never booted** (BOU-576). Nothing to do; an
   applied database runs nothing new.
-- **`POST /api/v1/tenants` answered `400 {"error":null}` after creating the tenant** (BOU-576).
-  It answers 201 with the tenant, and a refusal names its reason.
+- **The tenant API answered `400 {"error":null}` on success and 500 on not-found** (BOU-576).
+  Each route answers with the tenant or a typed 400/404/409; a taken slug is now 409, not 400.
+- **Membership reads and updates answered 500** (BOU-576); their timestamps could not be encoded.
 - **Scaffolded migrations lost their indexes on SQLite and failed on PostgreSQL and MySQL** (BOU-569).
   Add `--;;` to older ones; an existing SQLite database needs a new migration creating the missing indexes.
 - **`bb scaffold ai --help` answered "Unknown option"** (BOU-569). It prints the usage.
