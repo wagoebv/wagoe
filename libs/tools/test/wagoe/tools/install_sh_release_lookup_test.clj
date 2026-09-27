@@ -18,7 +18,8 @@
         (throw (ex-info "release lookup not found in scripts/install.sh" {})))))
 
 (def ^:private fake-curl
-  ;; FAKE_PAGE: redirect | down — the github.com/…/releases/latest page.
+  ;; FAKE_PAGE: redirect | down | weird | notag — the github.com/…/releases/latest
+  ;; page; curl follows it and prints the URL it ended on.
   ;; FAKE_API: limited | limited-briefly | ok — the REST API. limited-briefly
   ;; resets in five seconds and answers 200 once asked again.
   "#!/usr/bin/env bash
@@ -42,11 +43,13 @@ case \"$url\" in
       printf 403
     fi ;;
   https://github.com/wagoebv/wagoe/releases/latest)
-    if [ \"$FAKE_PAGE\" = redirect ]; then
-      printf 'https://github.com/wagoebv/wagoe/releases/tag/1.0.0-rc-3'
-    else
-      echo 'curl: (7) Failed to connect' >&2; exit 7
-    fi ;;
+    echo x >> \"$HOME/page-calls\"
+    case \"$FAKE_PAGE\" in
+      redirect) printf 'https://github.com/wagoebv/wagoe/releases/tag/1.0.0-rc-3' ;;
+      weird)    printf 'https://github.com/wagoebv/wagoe/releases/tag/1.0;touch%%20x' ;;
+      notag)    printf 'https://github.com/wagoebv/wagoe/releases' ;;
+      *)        echo 'curl: (7) Failed to connect' >&2; exit 7 ;;
+    esac ;;
   *) echo \"unexpected url: $url\" >&2; exit 99 ;;
 esac
 ")
@@ -70,10 +73,12 @@ esac
                                   "sleep() { echo \"slept $1\" >> \"$HOME/sleeps\"; }\n"
                                   (lookup-section)
                                   "echo \"TAG=$WAGOE_TAG\"\n"))
-            log (fs/path home "curl.log")]
+            read (fn [f] (let [p (fs/path home f)] (if (fs/exists? p) (slurp (str p)) "")))]
         (assoc r
                :out (str (:out r) (:err r))
-               :curl-log (if (fs/exists? log) (slurp (str log)) "")))
+               :curl-log (read "curl.log")
+               :sleeps (str/split-lines (read "sleeps"))
+               :page-calls (count (str/split-lines (read "page-calls")))))
       (finally (fs/delete-tree home)))))
 
 (deftest ^:unit the-tag-resolves-while-the-api-is-rate-limited
@@ -86,7 +91,9 @@ esac
 (deftest ^:unit a-rate-limit-that-resets-shortly-is-waited-out
   (let [r (run-lookup {"FAKE_PAGE" "down" "FAKE_API" "limited-briefly"})]
     (is (zero? (:exit r)) (:out r))
-    (is (str/includes? (:out r) "TAG=1.0.0-from-api"))))
+    (is (str/includes? (:out r) "TAG=1.0.0-from-api"))
+    (is (some #{"slept 4" "slept 5"} (:sleeps r))
+        "waits until the reset, give or take the clock")))
 
 (deftest ^:unit an-exhausted-rate-limit-says-what-to-do
   (let [r (run-lookup {"FAKE_PAGE" "down" "FAKE_API" "limited"})]
@@ -95,10 +102,28 @@ esac
     (is (str/includes? (:out r) "GITHUB_TOKEN"))
     (is (re-find #"Retry in \d+ min" (:out r)))
     (is (not (str/includes? (:out r) "internet connection"))
-        "a throttled answer is not blamed on the connection")))
+        "a throttled answer is not blamed on the connection")
+    (is (every? #(<= (parse-long (re-find #"\d+" %)) 60) (remove str/blank? (:sleeps r)))
+        "a limit that resets in half an hour is not waited out")))
 
 (deftest ^:unit the-api-fallback-sends-github-token
   (let [r (run-lookup {"FAKE_PAGE" "down" "FAKE_API" "ok" "GITHUB_TOKEN" "t0ken"})]
     (is (zero? (:exit r)) (:out r))
     (is (str/includes? (:out r) "TAG=1.0.0-from-api"))
     (is (str/includes? (:curl-log r) "Authorization: Bearer t0ken"))))
+
+(deftest ^:unit an-answer-without-a-tag-is-not-retried
+  (let [r (run-lookup {"FAKE_PAGE" "notag" "FAKE_API" "ok"})]
+    (is (zero? (:exit r)) (:out r))
+    (is (= 1 (:page-calls r)) "the same answer would come back")
+    (is (str/includes? (:out r) "TAG=1.0.0-from-api"))))
+
+(deftest ^:unit an-unreachable-page-is-retried
+  (let [r (run-lookup {"FAKE_PAGE" "down" "FAKE_API" "ok"})]
+    (is (= 3 (:page-calls r)))
+    (is (str/includes? (:out r) "TAG=1.0.0-from-api"))))
+
+(deftest ^:unit a-tag-with-unexpected-characters-falls-back-to-the-api
+  (let [r (run-lookup {"FAKE_PAGE" "weird" "FAKE_API" "ok"})]
+    (is (zero? (:exit r)) (:out r))
+    (is (str/includes? (:out r) "TAG=1.0.0-from-api"))))

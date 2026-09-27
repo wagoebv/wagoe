@@ -408,15 +408,21 @@ info "Fetching latest Wagoe release tag..."
 # API, so it does not draw on the 60-per-hour budget a shared runner IP used up
 # on 24 and 26 Sep (BOU-559). The API below is the fallback.
 RELEASES_PAGE="https://github.com/wagoebv/wagoe/releases/latest"
+# Retried only when curl itself failed: any answer it got will not change.
 WAGOE_TAG=""
+LOCATION=""
 for attempt in 1 2 3; do
-  LOCATION="$(curl -sS -o /dev/null -w '%{redirect_url}' "$RELEASES_PAGE" 2>/dev/null || true)"
-  if [[ "$LOCATION" == */releases/tag/* ]]; then
-    WAGOE_TAG="${LOCATION##*/releases/tag/}"
+  if LOCATION="$(curl -sSL -o /dev/null -w '%{url_effective}' "$RELEASES_PAGE" 2>/dev/null)"; then
     break
   fi
+  LOCATION=""
   if [[ $attempt -lt 3 ]]; then sleep $((attempt * 3)); fi
 done
+# The tag goes into a path and a git ref below, so anything unexpected in the
+# URL sends the lookup to the API instead.
+if [[ "$LOCATION" == */releases/tag/* && "${LOCATION##*/releases/tag/}" =~ ^[0-9A-Za-z._-]+$ ]]; then
+  WAGOE_TAG="${LOCATION##*/releases/tag/}"
+fi
 
 # The REST API: slower to get right, and rate-limited, but it names the tag
 # even when the releases page does not redirect as expected.
