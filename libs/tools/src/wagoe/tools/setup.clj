@@ -615,6 +615,11 @@
   (println)
 
   (let [existing? (existing-project?)
+        ;; First, because it decides whose the answers are (BOU-577).
+        prod?     (when (and existing? (not (.exists (io/file (root-dir) (conf-rel "prod")))))
+                    (confirm "Create resources/conf/prod/config.edn from these answers, leaving dev and test alone?" false))
+        _         (when prod?
+                    (println (dim "The answers below are for prod. Keep means what dev has.")))
         current   (current-choices (current-active))
         ;; In an existing project Enter keeps what it has: a menu default is
         ;; not an answer, and must not replace a working provider (BOU-404).
@@ -644,18 +649,22 @@
                         [:h2         "H2 file-based (in-memory for the test profile)"]
                         [:mysql      "MySQL/MariaDB"]])
 
-        ai-provider (pick "AI provider" :ai-provider
-                          [[:ollama    "Local AI via Ollama (no API key, but needs Ollama installed + a pulled model)"]
-                           [:anthropic "Anthropic Claude (requires ANTHROPIC_API_KEY)"]
-                           [:openai    "OpenAI GPT (requires OPENAI_API_KEY)"]
-                           [:replicate "Hosted models via Replicate (requires REPLICATE_API_TOKEN)"]
-                           [:none      "Disable AI tooling"]])
+        ;; Prod never gets AI or the mock (`ai-template`, `payment-template`),
+        ;; so neither is offered for it.
+        ai-provider (when-not prod?
+                      (pick "AI provider" :ai-provider
+                            [[:ollama    "Local AI via Ollama (no API key, but needs Ollama installed + a pulled model)"]
+                             [:anthropic "Anthropic Claude (requires ANTHROPIC_API_KEY)"]
+                             [:openai    "OpenAI GPT (requires OPENAI_API_KEY)"]
+                             [:replicate "Hosted models via Replicate (requires REPLICATE_API_TOKEN)"]
+                             [:none      "Disable AI tooling"]]))
 
         payment (pick "Payment provider" :payment
-                      [[:none   "No payments"]
-                       [:mock   "Mock adapter (development/testing)"]
-                       [:stripe "Stripe (requires STRIPE_SECRET_KEY)"]
-                       [:mollie "Mollie (requires MOLLIE_API_KEY)"]])
+                      (remove #(and prod? (= :mock (first %)))
+                              [[:none   "No payments"]
+                               [:mock   "Mock adapter (development/testing)"]
+                               [:stripe "Stripe (requires STRIPE_SECRET_KEY)"]
+                               [:mollie "Mollie (requires MOLLIE_API_KEY)"]]))
 
         cache (pick "Cache" :cache
                     [[:none      "No caching"]
@@ -669,10 +678,7 @@
         ;; No never removes an existing admin, it only does not add one.
         admin-ui (if existing?
                    (= :yes (pick "Admin UI" :admin-ui [[:yes "Add the admin UI"] [:no "No admin UI"]]))
-                   (confirm "Enable admin UI?" true))
-
-        prod? (when (and existing? (not (.exists (io/file (root-dir) (conf-rel "prod")))))
-                (confirm "Write these answers to a new resources/conf/prod/config.edn instead of dev and test?" false))]
+                   (confirm "Enable admin UI?" true))]
 
     {:project-name project-name
      :database     database
@@ -1307,9 +1313,19 @@
    :admin-ui     (some-> (:admin-ui opts) (not= "false"))
    :prod?        (= "true" (:prod opts))})
 
+(defn- prod-errors
+  "Answers `--prod` would drop without a word: prod never gets the mock
+   payment provider or the AI service (BOU-577)."
+  [spec]
+  (when (and (:prod? spec) (existing-project?))
+    (for [[k v] [[:payment :mock] [:ai-provider (:ai-provider spec)]]
+          :when (and (some? v) (not= :none v) (= v (get spec k)))]
+      (str "--" (name k) " " (name v) " is never written to prod."
+           " Run without --prod to set it for dev."))))
+
 (defn from-flags [opts]
   (let [spec   (from-flags-spec opts)
-        errors (spec-errors spec)]
+        errors (concat (spec-errors spec) (prod-errors spec))]
     (if (seq errors)
       ;; Before the templates, not inside them: a `case` fall-through reported
       ;; "No matching clause: :bogus" and named neither the flag nor the

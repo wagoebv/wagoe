@@ -644,7 +644,7 @@
     (try
       (let [before     (snapshot dir)
             ;; Enter through every question, then decline.
-            [exit out] (run-setup dir "\n\n\n\n\n\n\nn\n")
+            [exit out] (run-setup dir "\n\n\n\n\n\n\n\nn\n")
             summary    (-> out (str/split #"Config Summary") second
                            (str/split #"Generate these") first)]
         (is (nil? exit))
@@ -1026,15 +1026,43 @@
       (spit (conf-file dir "dev")
             (config-edn/insert-into (slurp (conf-file dir "dev")) ":active"
                                     "\n   :wagoe/events {:provider :memory}"))
-      (let [[exit out] (run-setup dir "" "--prod" "true" "--payment" "mock" "--cache" "redis")
+      (let [[exit out] (run-setup dir "" "--prod" "true" "--cache" "redis")
             text       (slurp (conf-file dir "prod"))
             env-ex     (slurp (fs/file dir ".env.example"))]
         (is (nil? exit) out)
         (is (not (str/includes? text ":mock")))
-        (is (not (contains? (:active (conf dir "dev")) :wagoe/payment-provider))
-            "--prod answers are prod's, not dev's")
         (is (= 1 (count (re-seq #"(?m)^REDIS_HOST=" env-ex)))
             "cache and event bus share the Redis variables")))))
+
+(deftest ^:unit prod-refuses-what-prod-never-gets
+  ;; Setup said "Payments: mock", exited 0 and wrote it nowhere (BOU-577).
+  (doseq [args [["--payment" "mock"] ["--ai-provider" "anthropic"]]]
+    (testing (str/join " " args)
+      (with-project
+        (fn [dir]
+          (let [before     (tree dir)
+                [exit out] (apply run-setup dir "" "--prod" "true" args)]
+            (is (= 1 exit) out)
+            (is (str/includes? out (str "--" (subs (first args) 2) " " (second args))) out)
+            (is (str/includes? out "never written to prod") out)
+            (is (str/includes? out "without --prod") out)
+            (is (= before (tree dir)))))))))
+
+(deftest ^:unit the-wizard-asks-about-prod-first
+  (with-project
+    (fn [dir]
+      (let [dev-before (slurp (conf-file dir "dev"))
+            ;; prod? yes, then Enter through the rest, then write.
+            [exit out] (run-setup dir (str "y\n" (apply str (repeat 12 "\n"))))
+            prod-q     (str/index-of out "resources/conf/prod/config.edn")
+            db-q       (str/index-of out "Database")]
+        (is (nil? exit) out)
+        (is (and prod-q db-q (< prod-q db-q)) "asked before the questions it decides")
+        (is (str/includes? out "for prod") "and the questions say whose they are")
+        (is (not (str/includes? out "AI provider")) "prod never gets AI, so it is not asked")
+        (is (not (str/includes? out "Mock adapter")) "nor the mock payment provider")
+        (is (fs/exists? (conf-file dir "prod")) out)
+        (is (= dev-before (slurp (conf-file dir "dev"))))))))
 
 (deftest ^:unit a-fresh-prod-has-no-mock-payments
   (is (not (str/includes? (setup/build-config (assoc full-spec :payment :mock) "prod") ":mock"))))
