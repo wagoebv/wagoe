@@ -370,13 +370,14 @@ Output ONLY the markdown content.")))
      existing-entities - seq of EDN strings for existing entity configs
 
    Returns a string."
-  [existing-entities]
-  (str framework-system-context "
+  ([existing-entities] (build-admin-entity-system-prompt existing-entities nil))
+  ([existing-entities tables]
+   (str framework-system-context "
 
 Your task: generate a Wagoe admin entity configuration in EDN format.
 
 Admin entity configs define how entities appear in the admin UI. They are EDN maps stored
-in resources/conf/{dev,test}/admin/<entity>.edn.
+in resources/conf/<profile>/admin/<entity>.edn.
 
 Output ONLY valid EDN with this structure:
 
@@ -404,17 +405,31 @@ Output ONLY valid EDN with this structure:
     :label       \"Order Items\"
     :fields      [:product-name :quantity]}]}}
 
+A child entity that is only reached from its parent carries two more keys:
+
+{:order-items
+ {:label          \"Order Items\"
+  :table-name     :order-items
+  :sidebar-hidden true
+  :parent-context {:label \"Order\" :fields [:order-number :status]}
+  ...}}
+
 Rules:
 - All keywords MUST be kebab-case
 - Always include :id, :created-at, :updated-at in :readonly-fields
 - Always include :deleted-at in :hide-fields
 - Always include :created-at with {:type :instant :label \"Created\" :filterable true}
 - For enum fields, provide :options as vectors of [keyword label] pairs
-- Field types: :string, :text, :int, :decimal, :boolean, :enum, :instant, :email, :uuid, :json
+- Field types: :string, :text, :int, :decimal, :boolean, :enum, :date, :instant, :uuid, :json
+- A date without a time of day (issue date, due date, birthday) is :date; :instant is a timestamp
+- Quantities, counts and amounts in cents are :int; :decimal is for fractional amounts
 - Group related fields logically into :field-groups
 - Child records go in a top-level :has-many vector of {:entity :table :foreign-key :label :fields};
   :table is the snake_case table name, :foreign-key the kebab-case column on the child pointing
   here. Omit :has-many when the description names no child records
+- :sidebar-hidden and :parent-context go on the child, never the parent
+- When the description covers a parent and its children, output one map with an entry for each
+- Keep every key the description asks for, including :has-many, :sidebar-hidden and :parent-context
 - Output ONLY the EDN map, no explanation, no markdown fences
 
 Column width — :width is an optional positive integer weight for list-view columns.
@@ -433,9 +448,13 @@ Only add :width when field semantics differ from these defaults:
   - Short identifiers (sku, code, ref, barcode, pin, zip, iso, ticker) → :width 1 or 2
   - Long free-text :string fields not caught by name heuristic         → :width 6
   - :width must be a positive integer (minimum 1); omit when the default is already correct"
-       (when (seq existing-entities)
-         (str "\n\nExisting entity configurations for reference:\n"
-              (str/join "\n---\n" existing-entities)))))
+        (when (seq tables)
+          (str "\n\nTables in this project's migrations. Where one exists, its column types decide field types:\n"
+               (str/join "\n" (for [[table cols] (sort tables)]
+                                (str table ": " (str/join ", " (for [[c t] cols] (str c " " t))))))))
+        (when (seq existing-entities)
+          (str "\n\nExisting entity configurations for reference:\n"
+               (str/join "\n---\n" existing-entities))))))
 
 (defn build-admin-entity-user-prompt
   "Build the user message for admin entity generation.
@@ -456,9 +475,11 @@ Only add :width when field semantics differ from these defaults:
 
    Returns:
      [{:role :system :content str} {:role :user :content str}]"
-  [description existing-entities]
-  [{:role :system :content (build-admin-entity-system-prompt existing-entities)}
-   {:role :user   :content (build-admin-entity-user-prompt description)}])
+  ([description existing-entities]
+   (admin-entity-messages description existing-entities nil))
+  ([description existing-entities tables]
+   [{:role :system :content (build-admin-entity-system-prompt existing-entities tables)}
+    {:role :user   :content (build-admin-entity-user-prompt description)}]))
 
 ;; =============================================================================
 ;; Feature 7: Setup Parse (NL to setup spec)

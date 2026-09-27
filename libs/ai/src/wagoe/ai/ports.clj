@@ -25,8 +25,9 @@
        opts     - map with optional :model :temperature :max-tokens
 
      Returns:
-       {:text str :tokens int :provider kw :model str}
-       or {:error str :provider kw :model str} on failure.")
+       {:text str :tokens int :provider kw :model str :truncated? bool}
+       or {:error str :provider kw :model str} on failure. :truncated? is
+       true when the output limit, not the model, ended the answer.")
 
   (complete-json [this messages schema opts]
     "Structured JSON completion.

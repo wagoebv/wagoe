@@ -1,6 +1,7 @@
 (ns wagoe.ai.shell.service-test
   (:require [wagoe.ai.ports :as ports]
             [wagoe.ai.shell.service :as svc]
+            [clojure.edn :as edn]
             [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]))
@@ -195,8 +196,131 @@
 (deftest ^:integration generate-admin-entity-test
   (testing "BOU-493: an ```edn-fenced answer is accepted and written unfenced"
     (let [result (svc/generate-admin-entity
-                  (ok-service "```edn\n{:products {:label \"Products\"}}\n```")
+                  (ok-service "```edn\n{:products {:label \"Products\" :table-name :products}}\n```")
                   "products with name" "/nonexistent")]
       (is (nil? (:error result)))
       (is (= "products" (:entity-name result)))
-      (is (= "{:products {:label \"Products\"}}" (:text result))))))
+      (is (= "{:products {:label \"Products\" :table-name :products}}" (:text result))))))
+
+;; BOU-567 -------------------------------------------------------------------
+
+(defn- recording-service
+  "A service whose provider answers `text` (merged with `extra`) and records
+   the messages and opts it was called with."
+  [text & [extra]]
+  (let [seen (atom nil)]
+    [{:provider (mock-provider
+                 (fn [msgs opts]
+                   (reset! seen {:msgs msgs :opts opts})
+                   (merge {:text text :tokens 1 :provider :mock :model "mock"} extra))
+                 (fn [_ _ _] nil))}
+     seen]))
+
+(defn- temp-project
+  "A project root holding `migrations`, a map of file name to SQL."
+  [migrations]
+  (let [root (.toFile (java.nio.file.Files/createTempDirectory
+                       "admin-entity" (make-array java.nio.file.attribute.FileAttribute 0)))]
+    (doseq [[fname sql] migrations]
+      (let [f (io/file root "migrations" fname)]
+        (io/make-parents f)
+        (spit f sql)))
+    (.getPath root)))
+
+(def ^:private invoices-sql
+  "CREATE TABLE IF NOT EXISTS invoices (
+  id UUID PRIMARY KEY,
+  issue_date DATE NOT NULL,
+  total_in_cents INTEGER NOT NULL,
+  status VARCHAR(50) NOT NULL
+);")
+
+(def ^:private invoices-edn
+  "{:invoices {:label \"Invoices\" :table-name :invoices
+              :fields {:issue-date {:type :instant :label \"Issue Date\"}
+                       :total-in-cents {:type :decimal :label \"Total\"}
+                       :status {:type :enum :label \"Status\" :options [[:open \"Open\"]]}}}}")
+
+(deftest ^:integration admin-entity-truncation-is-reported-as-such
+  (testing "the provider says the limit stopped it"
+    (let [[svc] (recording-service "{:invoices {:label \"Invoices\"" {:truncated? true})
+          r     (svc/generate-admin-entity svc "invoices" "/nonexistent")]
+      (is (str/includes? (:error r) "cut off"))
+      (is (= :mock (:provider r)))
+      (is (nil? (:text r)))))
+
+  (testing "no stop reason, but the braces never close"
+    (let [[svc] (recording-service "{:invoices {:label \"Invoices\" :table-name :invoices")
+          r     (svc/generate-admin-entity svc "invoices" "/nonexistent")]
+      (is (str/includes? (:error r) "cut off"))))
+
+  (testing "the budget asked for fits a parent-and-child config"
+    (let [[svc seen] (recording-service invoices-edn)]
+      (svc/generate-admin-entity svc "invoices" "/nonexistent")
+      (is (<= 8192 (get-in @seen [:opts :max-tokens]))))))
+
+(deftest ^:integration admin-entity-types-follow-the-table
+  (testing "with a migration for the table, its column types win"
+    (let [root       (temp-project {"20260101000000-create-invoices.up.sql" invoices-sql
+                                    "20260101000000-create-invoices.down.sql" "DROP TABLE invoices;"})
+          [svc seen] (recording-service invoices-edn)
+          r          (svc/generate-admin-entity svc "invoices" root)
+          fields     (get-in (edn/read-string (:text r)) [:invoices :fields])]
+      (is (nil? (:error r)))
+      (is (= :date (get-in fields [:issue-date :type])))
+      (is (= :int (get-in fields [:total-in-cents :type])))
+      (is (= :enum (get-in fields [:status :type])))
+      (is (= {:source :migrations :table "invoices"}
+             (:type-source (first (:entities r)))))
+      (testing "and the model was shown the columns"
+        (is (str/includes? (:content (first (:msgs @seen))) "issue_date DATE")))))
+
+  (testing "without one, dates and counts are named by the field"
+    (let [[svc] (recording-service invoices-edn)
+          r     (svc/generate-admin-entity svc "invoices" "/nonexistent")
+          fields (get-in (edn/read-string (:text r)) [:invoices :fields])]
+      (is (= :date (get-in fields [:issue-date :type])))
+      (is (= :int (get-in fields [:total-in-cents :type])))
+      (is (= {:source :description} (:type-source (first (:entities r))))))))
+
+(def ^:private parent-and-child
+  "{:invoices {:label \"Invoices\" :table-name :invoices
+              :has-many [{:entity :invoice-line-items :table :invoice_line_items
+                          :foreign-key :invoice-id :label \"Lines\" :fields [:description]}]}
+    :invoice-line-items {:label \"Lines\" :table-name :invoice-line-items
+                         :sidebar-hidden true
+                         :parent-context {:label \"Invoice\" :fields [:number]}}}")
+
+(deftest ^:integration admin-entity-keeps-requested-relations
+  (let [description "invoices; an invoice has many line items, which are sidebar-hidden with a parent-context"]
+    (testing "a parent and its child come back as one file each"
+      (let [[svc] (recording-service parent-and-child)
+            r     (svc/generate-admin-entity svc description "/nonexistent")
+            by-name (into {} (map (juxt :entity-name :text)) (:entities r))]
+        (is (nil? (:error r)))
+        (is (= #{"invoices" "invoice-line-items"} (set (keys by-name))))
+        (is (contains? (get-in (edn/read-string (by-name "invoices")) [:invoices]) :has-many))
+        (is (= #{:sidebar-hidden :parent-context}
+               (-> (edn/read-string (by-name "invoice-line-items"))
+                   :invoice-line-items
+                   (select-keys [:sidebar-hidden :parent-context])
+                   keys
+                   set)))))
+
+    (testing "an answer that drops one is refused, naming it"
+      (let [[svc] (recording-service invoices-edn)
+            r     (svc/generate-admin-entity svc description "/nonexistent")]
+        (is (str/includes? (:error r) ":has-many"))
+        (is (str/includes? (:error r) ":parent-context"))))
+
+    (testing "the prompt teaches the keys"
+      (let [[svc seen] (recording-service parent-and-child)]
+        (svc/generate-admin-entity svc description "/nonexistent")
+        (is (str/includes? (:content (first (:msgs @seen))) ":sidebar-hidden"))
+        (is (str/includes? (:content (first (:msgs @seen))) ":parent-context"))))))
+
+(deftest ^:integration admin-entity-is-validated-before-it-is-returned
+  (let [[svc] (recording-service "{:x {:label \"X\" :table-name :x :fields {:mail {:type :email}}}}")
+        r     (svc/generate-admin-entity svc "x" "/nonexistent")]
+    (is (str/includes? (:error r) "entity config"))
+    (is (str/includes? (:error r) ":mail"))))

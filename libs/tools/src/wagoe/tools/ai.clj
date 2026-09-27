@@ -105,6 +105,15 @@
        (filter #(and (str/starts-with? % "{") (str/ends-with? % "}")))
        last))
 
+(defn failure-message
+  "What to print when the AI CLI fails. The process's stderr is the terminal,
+   so the exception's message is empty (BOU-567): a non-zero exit has already
+   printed its cause, and one that never ran has only the exception's."
+  [e]
+  (if-let [exit (:exit (ex-data e))]
+    (str "AI CLI exited with status " exit "; the cause is printed above.")
+    (str "AI CLI could not run: " (or (not-empty (ex-message e)) (.getName (class e))))))
+
 (defn- run-clojure!
   "Shell out to the Clojure AI CLI with given args. Streams output to terminal.
    `opts` goes to babashka.process, e.g. {:in text} to feed stdin."
@@ -112,7 +121,7 @@
   (try
     (apply shell (or opts {}) (ai-command args))
     (catch Exception e
-      (println (red (str "AI CLI exited with error: " (.getMessage e))))
+      (println (red (failure-message e)))
       (System/exit 1))))
 
 ;; =============================================================================
