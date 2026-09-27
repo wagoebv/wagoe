@@ -860,7 +860,7 @@
 (def root-help
   "Wagoe CLI - Module Scaffolding
 
-Usage: wagoe scaffolder <command> [options]
+Usage: bb scaffold <command> [options]
 
 Commands:
   generate    Generate a new module with full FC/IS structure
@@ -879,32 +879,32 @@ Global Options:
   -h, --help           Show help
 
 Examples:
-  wagoe scaffolder generate --module-name product --entity Product \\
+  bb scaffold generate --module-name product --entity Product \\
     --field name:string:required \\
     --field sku:string:required:unique \\
     --field price:decimal:required
 
-  wagoe scaffolder entity --module-name billing --entity InvoiceLineItem \\
+  bb scaffold entity --module-name billing --entity InvoiceLineItem \\
     --belongs-to invoice --field description:string:required
 
-  wagoe scaffolder field --module-name product --entity Product \\
+  bb scaffold field --module-name product --entity Product \\
     --name description --type text
 
-  wagoe scaffolder endpoint --module-name product \\
+  bb scaffold endpoint --module-name product \\
     --path /products/export --method GET --handler-name export-products
 
-  wagoe scaffolder adapter --module-name notifications \\
+  bb scaffold adapter --module-name notifications \\
     --port INotificationSender --adapter-name slack
 
 For command-specific help:
-  wagoe scaffolder <command> --help")
+  bb scaffold <command> --help")
 
 ;; BOU-259: `scaffolder new` had its own project generator, separate from the
 ;; `wagoe new` templates. It drifted until it produced a project with no
 ;; com.wagoe deps and no entry point. The verb is kept only to say where to go —
 ;; an "unknown command" would strand anyone following the old docs.
 (def new-removed-help
-  "`wagoe scaffolder new` has been removed.
+  "`bb scaffold new` has been removed.
 
 Projects are created with the Wagoe CLI:
 
@@ -919,7 +919,7 @@ existing project.")
 (def generate-help
   "Generate Module Command
 
-Usage: wagoe scaffolder generate [options]
+Usage: bb scaffold generate [options]
 
 Generates a complete Wagoe module with Functional Core / Imperative Shell
 architecture including:
@@ -995,7 +995,7 @@ Other Options:
 
 Examples:
   # Generate a product module
-  wagoe scaffolder generate \\
+  bb scaffold generate \\
     --module-name product \\
     --entity Product \\
     --field name:string:required \\
@@ -1005,7 +1005,7 @@ Examples:
     --field status:enum:values=draft,live,archived:required
 
   # Generate a customer module with email
-  wagoe scaffolder generate \\
+  bb scaffold generate \\
     --module-name customer \\
     --entity Customer \\
     --field name:string:required \\
@@ -1013,7 +1013,7 @@ Examples:
     --field phone:string
 
   # Dry run to preview files
-  wagoe scaffolder generate \\
+  bb scaffold generate \\
     --module-name billing \\
     --entity Invoice \\
     --field amount:decimal:required \\
@@ -1022,7 +1022,7 @@ Examples:
 (def entity-help
   "Add Entity Command
 
-Usage: wagoe scaffolder entity [options]
+Usage: bb scaffold entity [options]
 
 Adds an entity to an existing module: its own core, service and persistence
 namespaces, a create migration and tests, plus its defs appended to the
@@ -1050,7 +1050,7 @@ The entity is wired into shell/module_wiring.clj and served at
 /api/v1/<entities>. It gets no web page.
 
 Example:
-  wagoe scaffolder entity \\
+  bb scaffold entity \\
     --module-name billing \\
     --entity InvoiceLineItem \\
     --belongs-to invoice \\
@@ -1060,7 +1060,7 @@ Example:
 (def field-help
   "Add Field Command
 
-Usage: wagoe scaffolder field [options]
+Usage: bb scaffold field [options]
 
 Adds a new field to an existing entity by generating:
   - An ALTER TABLE migration to add the column
@@ -1088,14 +1088,14 @@ Optional Flags:
 
 Examples:
   # Add a description field
-  wagoe scaffolder field \\
+  bb scaffold field \\
     --module-name product \\
     --entity Product \\
     --name description \\
     --type text
 
   # Add a required unique field
-  wagoe scaffolder field \\
+  bb scaffold field \\
     --module-name customer \\
     --entity Customer \\
     --name tax-id \\
@@ -1106,7 +1106,7 @@ Examples:
 (def endpoint-help
   "Add Endpoint Command
 
-Usage: wagoe scaffolder endpoint [options]
+Usage: bb scaffold endpoint [options]
 
 Generates instructions for adding a new endpoint to an existing module.
 You will need to manually add the code to the http.clj file.
@@ -1122,14 +1122,14 @@ Optional:
 
 Examples:
   # Add a custom export endpoint
-  wagoe scaffolder endpoint \\
+  bb scaffold endpoint \\
     --module-name product \\
     --path /products/export \\
     --method GET \\
     --handler-name export-products
 
   # Add a bulk delete endpoint
-  wagoe scaffolder endpoint \\
+  bb scaffold endpoint \\
     --module-name customer \\
     --path /customers/bulk-delete \\
     --method POST \\
@@ -1138,7 +1138,7 @@ Examples:
 (def adapter-help
   "Add Adapter Command
 
-Usage: wagoe scaffolder adapter [options]
+Usage: bb scaffold adapter [options]
 
 Generates a new adapter implementation for a port/protocol.
 Useful for adding alternative implementations (e.g., different storage backends,
@@ -1155,7 +1155,7 @@ Optional:
 
 Examples:
   # Generate a Slack notification adapter
-  wagoe scaffolder adapter \\
+  bb scaffold adapter \\
     --module-name notifications \\
     --port INotificationSender \\
     --adapter-name slack \\
@@ -1163,7 +1163,7 @@ Examples:
     --method send-bulk:user-ids,message
 
   # Generate an S3 storage adapter
-  wagoe scaffolder adapter \\
+  bb scaffold adapter \\
     --module-name storage \\
     --port IFileStorage \\
     --adapter-name s3 \\
@@ -1224,8 +1224,10 @@ Examples:
           (println new-removed-help)
           1)
 
-        ;; Global --help or no command
-        (or has-help-flag? (nil? verb))
+        ;; --help before any command, or no command. A --help after one is
+        ;; that command's: this branch took them all, so `entity --help`
+        ;; printed the root help (BOU-578).
+        (or (:help (:options parsed-for-verb)) (nil? verb))
         (do
           (println root-help)
           0)

@@ -151,3 +151,27 @@
                               :name "status" :type "enum"
                               :enum-values "draft, sent ,paid"})
       (is (= [:draft :sent :paid] (get-in @seen [:field :enum-values]))))))
+
+;; =============================================================================
+;; BOU-578: each command's --help is its own, and names a command that exists
+;; =============================================================================
+
+(deftest ^:unit each-command-prints-its-own-help
+  ;; `entity --help` printed the root help: the global branch matched any
+  ;; --help before the per-command ones.
+  (doseq [[verb help] {"generate" cli/generate-help
+                       "entity"   cli/entity-help
+                       "field"    cli/field-help
+                       "endpoint" cli/endpoint-help
+                       "adapter"  cli/adapter-help}]
+    (let [{:keys [out status]} (run verb "--help")]
+      (is (= 0 status) verb)
+      (is (= (str help "\n") out) verb))))
+
+(deftest ^:unit help-shows-the-command-a-project-has
+  ;; A generated project runs the scaffolder as `bb scaffold`; there is no
+  ;; `wagoe scaffolder`.
+  (doseq [help [cli/root-help cli/generate-help cli/entity-help cli/field-help
+                cli/endpoint-help cli/adapter-help cli/new-removed-help]]
+    (is (not (str/includes? help "wagoe scaffolder")) help))
+  (is (str/includes? cli/root-help "bb scaffold <command> --help")))
