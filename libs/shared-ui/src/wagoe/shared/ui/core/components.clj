@@ -142,6 +142,46 @@
      [:input (-> (merge base-attrs checked-attrs opts)
                  (merge-class "form-checkbox"))])))
 
+(defn field-error-id
+  "Id of a field's error container. Derived from the input id, so it is as
+   unique on the page as the input the label already points at."
+  [field-key]
+  (str (name field-key) "-error"))
+
+(defn- control? [node]
+  (and (vector? node)
+       (keyword? (first node))
+       (re-find #"^(input|select|textarea)(?:[.#]|$)" (name (first node)))))
+
+(defn describe-input
+  "Mark the visible control(s) named `field-key` in `input-html` invalid and
+   point them at `error-id`, so a screen reader reads the error with the field.
+   A control that carries no attribute map is left alone."
+  [input-html field-key error-id]
+  (let [field-name (name field-key)
+        target?    (fn [node]
+                     (let [attrs (second node)]
+                       (and (map? attrs)
+                            (= field-name (some-> (:name attrs) name))
+                            (not= "hidden" (:type attrs)))))]
+    (letfn [(walk [node]
+              (cond
+                (and (control? node) (target? node))
+                (update node 1 assoc :aria-invalid "true" :aria-describedby error-id)
+
+                (vector? node)    (mapv walk node)
+                (seq? node)       (doall (map walk node))
+                :else             node))]
+      (walk input-html))))
+
+(defn field-errors
+  "A field's error messages, in the container `describe-input` points at."
+  [error-id errors]
+  (when (seq errors)
+    [:div.field-errors {:id error-id}
+     (for [error errors]
+       [:span.error error])]))
+
 (defn form-field
   "Form field wrapper with label and error display.
    
@@ -154,13 +194,11 @@
    Returns:
      Hiccup form field structure"
   [field-key label input-html errors]
-  [:div {:class "form-field"}
-   [:label {:for (name field-key)} label]
-   input-html
-   (when (seq errors)
-     [:div.field-errors
-      (for [error errors]
-        [:span.error error])])])
+  (let [error-id (field-error-id field-key)]
+    [:div {:class "form-field"}
+     [:label {:for (name field-key)} label]
+     (if (seq errors) (describe-input input-html field-key error-id) input-html)
+     (field-errors error-id errors)]))
 
 ;; =============================================================================
 ;; Button Components
@@ -351,7 +389,7 @@
      Hiccup validation errors structure"
   [errors]
   (when (seq errors)
-    [:div.validation-errors
+    [:div.validation-errors {:role "alert"}
      [:h4 "Please correct the following errors:"]
      (cond
        (map? errors)

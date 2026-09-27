@@ -5,6 +5,7 @@
    success messages, and complete page compositions based on User schema."
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest testing is]]
+            [wagoe.user.core.profile-ui :as profile-ui]
             [wagoe.user.core.ui :as ui]))
 
 ;; =============================================================================
@@ -343,6 +344,52 @@
       (is (re-find #"validation-errors" form))
       (is (re-find #"Registration is closed" form))
       (is (re-find #"Role not allowed" form)))))
+
+(defn- elements
+  "Every hiccup element in `h`, as [tag attrs] with a tag-borne id folded in."
+  [h]
+  (for [n (tree-seq #(or (vector? %) (seq? %)) seq h)
+        :when (and (vector? n) (keyword? (first n)))
+        :let [attrs  (if (map? (second n)) (second n) {})
+              tag-id (second (re-find #"#([^.#]+)" (name (first n))))]]
+    [(first n) (cond-> attrs tag-id (assoc :id tag-id))]))
+
+(defn- described-field
+  "The control named `field-name` in `h`, and whether the element its
+   aria-describedby names exists."
+  [h field-name]
+  (let [attrs   (map second (elements h))
+        control (first (filter #(and (= field-name (:name %)) (not= "hidden" (:type %))) attrs))
+        ids     (set (keep :id attrs))]
+    {:aria-invalid  (:aria-invalid control)
+     :described-by  (:aria-describedby control)
+     :target-found? (contains? ids (:aria-describedby control))}))
+
+(deftest ^:unit field-errors-tied-to-their-field-test
+  ;; A screen reader announced "Password, edit text" and never the error
+  ;; beneath it (BOU-398).
+  (doseq [[label render] [["create-user" #(ui/create-user-form {} %)]
+                           ["register"    #(ui/register-form {} %)]]]
+    (testing (str label " password field")
+      (is (= {:aria-invalid "true" :described-by "password-error" :target-found? true}
+             (described-field (render {:password ["Password must be at least 8 characters"]})
+                              "password"))))
+    (testing (str label " password field without errors")
+      (is (= {:aria-invalid nil :described-by nil :target-found? false}
+             (described-field (render {}) "password")))))
+
+  (testing "preferences selects"
+    (let [form (profile-ui/preferences-edit-form {:date-format :iso}
+                                                 {:language ["Unsupported language"]})]
+      (is (= {:aria-invalid "true" :described-by "language-error" :target-found? true}
+             (described-field form "language")))
+      (is (nil? (:aria-invalid (described-field form "date-format")))))))
+
+(deftest ^:unit form-level-errors-announced-test
+  (doseq [form [(ui/create-user-form {} {:form ["Something went wrong"]})
+                (ui/register-form {} {:form ["Registration is closed"]})]]
+    (is (some #(and (= :div.validation-errors (first %)) (= "alert" (:role (second %))))
+              (elements form)))))
 
 ;; =============================================================================
 ;; Success Message Component Tests

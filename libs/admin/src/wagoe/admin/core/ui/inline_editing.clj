@@ -4,6 +4,7 @@
    Pure Hiccup generators for the editable-cell display mode, the inline
    edit form, and the inline edit form with a validation error."
   (:require [wagoe.admin.core.ui.base :as base]
+            [wagoe.shared.ui.core.components :as ui]
             [wagoe.shared.ui.core.icons :as icons]
             [clojure.string :as str]))
 
@@ -160,20 +161,13 @@
         :hx-swap "outerHTML"}
        (icons/icon :x {:size 14})]]]))
 
-(defn render-inline-edit-form-with-error
-  "Render inline edit form with validation error.
+(defn- inline-error-id
+  "Unique per cell: a table renders the same field once per row."
+  [entity-name record-id field]
+  (str "inline-" (name entity-name) "-" record-id "-" (name field) "-error"))
 
-   Args:
-     entity-name: Keyword entity name
-     record-id: Record ID
-     field: Keyword field name
-     value: Current (invalid) field value
-     field-config: Field configuration map
-     errors: Collection of error messages
-
-   Returns:
-     Hiccup form structure with error display"
-  [entity-name record-id field value field-config errors & [display]]
+(defn- inline-edit-form-with-error
+  [entity-name record-id field value field-config errors display]
   (let [widget-type (:widget field-config :text-input)
         _field-type (:type field-config :string)
         required? (:required field-config false)]
@@ -234,5 +228,24 @@
         (icons/icon :x {:size 14})]]]
 
      ; Error message
-     [:div.inline-error-message
+     [:div.inline-error-message {:id (inline-error-id entity-name record-id field)}
       (str/join ", " errors)]]))
+
+(defn render-inline-edit-form-with-error
+  "Render inline edit form with validation error.
+
+   Args:
+     entity-name: Keyword entity name
+     record-id: Record ID
+     field: Keyword field name
+     value: Current (invalid) field value
+     field-config: Field configuration map
+     errors: Collection of error messages
+
+   Returns:
+     Hiccup form structure with error display"
+  [entity-name record-id field value field-config errors & [display]]
+  (ui/describe-input
+   (inline-edit-form-with-error entity-name record-id field value field-config errors display)
+   field
+   (inline-error-id entity-name record-id field)))

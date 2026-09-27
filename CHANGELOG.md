@@ -46,6 +46,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Field errors were not tied to their input for screen readers** (BOU-398). Inputs with errors now
+  carry `aria-invalid` and `aria-describedby`; hand-built fields can use `ui/describe-input` and `ui/field-errors`.
 - **`/health/ready` showed database and cache exception messages** (BOU-558). The body now says
   `unreachable`; the reason is logged at WARN. Upgrade platform if readiness is public.
 - **MFA and storage upload APIs returned the raw exception message** (BOU-557). They now answer the
