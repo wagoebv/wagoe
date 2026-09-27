@@ -1,8 +1,11 @@
 (ns wagoe.cli.agents-update-test
   (:require [clojure.test :refer [deftest is testing]]
+            [clojure.java.io :as io]
+            [clojure.java.shell :as sh]
             [clojure.string :as str]
             [wagoe.cli.agents-update :as agents-update]
-            [wagoe.cli.catalogue :as cat]))
+            [wagoe.cli.catalogue :as cat]
+            [wagoe.cli.new :as new]))
 
 (def ^:private template
   (str "# {{project-name}} — Developer Reference\n"
@@ -109,3 +112,31 @@
     (is (str/includes? content "OLD fc-is rules"))
     (is (str/includes? content "wagoe add geo"))
     (is (= ["wagoe:available-modules" "wagoe:installed-modules"] updated))))
+
+(deftest ^:integration bb-agents-update-ignores-the-wagoe-on-path
+  ;; The task shelled out to the `wagoe` on PATH, which can be another release
+  ;; that re-renders AGENTS.md from its own template (BOU-577).
+  (let [tmp   (.toFile (java.nio.file.Files/createTempDirectory
+                        "agents-task" (make-array java.nio.file.attribute.FileAttribute 0)))
+        dir   (io/file tmp "shop")
+        bin   (io/file tmp "bin")
+        stale (io/file bin "wagoe")
+        tools (.getCanonicalPath (io/file "../tools"))]
+    (try
+      (new/generate! (str dir) "shop" {})
+      (let [bb-edn (io/file dir "bb.edn")]
+        (spit bb-edn (str/replace (slurp bb-edn)
+                                  #"com\.wagoe/wagoe-tools \{:mvn/version \"[^\"]+\"\}"
+                                  (str "com.wagoe/wagoe-tools {:local/root \"" tools "\"}"))))
+      (.mkdirs bin)
+      (spit stale "#!/bin/sh\necho STALE > AGENTS.md\n")
+      (.setExecutable stale true)
+      (let [before (slurp (io/file dir "AGENTS.md"))
+            env    (assoc (into {} (System/getenv))
+                          "PATH" (str bin java.io.File/pathSeparator (System/getenv "PATH")))
+            {:keys [exit out err]} (sh/sh "bb" "agents:update" :dir (str dir) :env env)]
+        (is (zero? exit) (str out err))
+        (is (str/includes? out "AGENTS.md is up to date") (str out err))
+        (is (= before (slurp (io/file dir "AGENTS.md"))) "the stale CLI did not run"))
+      (finally
+        (doseq [f (reverse (file-seq tmp))] (.delete f))))))

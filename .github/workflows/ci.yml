@@ -246,14 +246,16 @@ jobs:
       # its runtime is Babashka, so `clojure -M` cannot load it. Babashka can,
       # and against its own src/ alone this is the same property every other
       # library gets from the matrix. Without it, tools' isolation rested
-      # entirely on the static gate above.
-      - name: Load libs/tools against only its own source (Babashka runtime)
+      # entirely on the static gate above. The classpath is its own :paths plus
+      # those of the libraries its deps.edn declares by :local/root (BOU-577).
+      - name: Load libs/tools against only its declared source (Babashka runtime)
         if: ${{ !cancelled() }}
         run: |
           set -euo pipefail
           form="$(bb -e "(require '[wagoe.tools.check-isolation :as ci]) (print (ci/require-form \"tools\"))")"
+          cp="$(bb -e "(require '[wagoe.tools.check-isolation :as ci]) (print (ci/source-classpath \"tools\"))")"
           cd libs/tools
-          bb --classpath src -e "$form"
+          bb --classpath "$cp" -e "$form"
 
       - name: Check every hard-coded suite version agrees
         if: ${{ !cancelled() }}
@@ -1095,6 +1097,12 @@ jobs:
         with:
           aliases: -M:test
           working-directory: libs/wagoe-cli
+
+      # agents_update_test runs a generated project's `bb agents:update`.
+      - name: Setup Babashka
+        uses: DeLaGuardo/setup-clojure@13.6.1
+        with:
+          bb: latest
 
       - name: Run tests
         working-directory: libs/wagoe-cli
