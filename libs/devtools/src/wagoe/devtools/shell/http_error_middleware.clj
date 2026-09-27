@@ -14,7 +14,8 @@
   (:require [wagoe.devtools.core.error-classifier :as classifier]
             [wagoe.devtools.core.error-enricher :as enricher]
             [wagoe.devtools.core.error-formatter :as formatter]
-            [wagoe.devtools.shell.dashboard.pages.errors :as dashboard-errors]))
+            [wagoe.devtools.shell.dashboard.pages.errors :as dashboard-errors]
+            [wagoe.devtools.shell.repl-error-handler :as repl-errors]))
 
 (defn- build-dev-info
   "Build the :dev-info map from an enriched error."
@@ -39,7 +40,8 @@
       (handler request)
       (catch Exception ex
         (let [classified (classifier/classify ex)
-              enriched   (enricher/enrich classified)
+              enriched   (enricher/enrich classified
+                                          {:dashboard-port (repl-errors/dashboard-port)})
               dev-info   (build-dev-info enriched)
               original-data (or (ex-data ex) {})
               enhanced-data (assoc original-data :dev-info dev-info)]

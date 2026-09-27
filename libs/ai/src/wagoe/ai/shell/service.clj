@@ -6,7 +6,8 @@
    and delegates to the configured IAIProvider.
 
    FC/IS: this namespace is in the shell layer — file reads happen here."
-  (:require [wagoe.ai.core.context :as ctx]
+  (:require [wagoe.ai.core.admin-entity :as admin-entity]
+            [wagoe.ai.core.context :as ctx]
             [wagoe.ai.core.parsing :as parsing]
             [wagoe.ai.core.prompts :as prompts]
             [wagoe.ai.ports :as ports]
@@ -284,29 +285,61 @@
            (mapv slurp))
       [])))
 
+(defn- migration-sqls
+  "The project's up migrations, in the order they run."
+  [project-root]
+  (->> ["migrations" "resources/migrations"]
+       (map #(io/file project-root %))
+       (filter #(.isDirectory %))
+       (mapcat file-seq)
+       (filter #(and (.isFile %) (str/ends-with? (.getName %) ".up.sql")))
+       (sort-by #(.getName %))
+       (map slurp)))
+
+(def admin-entity-max-tokens
+  "Output budget for a generated config. A parent with its children runs to a
+   few thousand tokens; the providers' own defaults cut that off (BOU-567)."
+  8192)
+
 (defn generate-admin-entity
-  "Generate an admin entity EDN configuration from a NL description.
+  "Generate admin entity EDN configurations from a NL description.
 
    Args:
      service      - AIService map
      description  - NL entity description string
-     project-root - project root path string (for discovering existing entities)
+     project-root - project root path string (existing entities, migrations)
      opts         - optional completion opts
 
    Returns:
-     {:text str :entity-name str}
-     where :text is the generated EDN string,
-     or {:error str} on failure."
+     {:text str :entity-name str :entities [{:entity-name :text :type-source
+      :corrections}] :provider :model}, where :text is all of the EDN and each
+     entity's :text is its own file, or {:error str} on failure."
   ([service description project-root]
    (generate-admin-entity service description project-root {}))
   ([service description project-root opts]
    (log/info "ai generate-admin-entity" {:description description})
-   (let [existing (discover-admin-entities project-root)
-         messages (prompts/admin-entity-messages description existing)
-         result   (resolve-provider service messages opts)]
+   (let [existing   (discover-admin-entities project-root)
+         tables     (admin-entity/migration-columns (migration-sqls project-root))
+         messages   (prompts/admin-entity-messages description existing tables)
+         max-tokens (or (:max-tokens opts) admin-entity-max-tokens)
+         result     (resolve-provider service messages (assoc opts :max-tokens max-tokens))
+         origin     (select-keys result [:provider :model :status])]
      (if (:error result)
        result
-       (parsing/parse-admin-entity (:text result))))))
+       (let [parsed (if (:truncated? result)
+                      {:error    (str "The model's answer was cut off at the output limit of "
+                                      max-tokens " tokens. Raise :max-tokens, or describe fewer entities.")
+                       :raw-text (:text result)}
+                      (parsing/parse-admin-entity (:text result)))
+             checked (if (:error parsed)
+                       parsed
+                       (admin-entity/prepare (:value parsed) (:text parsed) tables description))]
+         (merge origin
+                (if (:error checked)
+                  (merge {:raw-text (:text result)} checked)
+                  (assoc checked
+                         :entity-name (:entity-name (first (:entities checked)))
+                         :text (str/join "\n\n" (map :text (:entities checked)))))))))))
 
 ;; =============================================================================
 ;; Feature 7: Setup Parse (NL to setup spec)

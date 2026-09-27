@@ -54,6 +54,15 @@
                             #"Invalid workflow definition"
                             (registry/register-workflow! bad-def))))))
 
+(deftest ^:unit an-invalid-definition-names-the-failing-key
+  ;; BOU-561: the message said "Invalid workflow definition" and nothing else.
+  (let [bad (assoc order-def :hooks {:on-enter-paid (fn [_instance])})
+        ex  (try (registry/register-workflow! bad) nil
+                 (catch clojure.lang.ExceptionInfo e e))]
+    (is (re-find #":hooks" (ex-message ex)))
+    (is (re-find #":on-enter-paid" (ex-message ex)))
+    (is (= {:hooks {:on-enter-paid ["invalid type"]}} (:errors (ex-data ex))))))
+
 (deftest ^:unit unregister-workflow-test
   (testing "removes a registered workflow"
     (registry/register-workflow! order-def)

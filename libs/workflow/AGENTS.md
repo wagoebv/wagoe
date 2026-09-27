@@ -36,8 +36,10 @@ Declarative state machine workflows for domain entities. Provides permission-bas
                     :shipped   {:label "In Transit"}
                     :delivered {:label "Delivered"}
                     :cancelled {:label "Cancelled"}}
-   :hooks          {:on-enter-paid     (fn [instance] (notify-finance! instance))
-                    :on-any-transition  (fn [instance] (sync-external! instance))}
+   :hooks          {:on-enter-paid     [(fn [instance _audit-entry _context]
+                                          (notify-finance! instance))]
+                    :on-any-transition [(fn [instance _audit-entry _context]
+                                          (sync-external! instance))]}
    :transitions    [{:from :pending :to :paid
                      :label                "Mark as Paid"
                      :required-permissions [:finance :admin]}
@@ -160,9 +162,12 @@ saved). Exceptions are caught and logged — they never abort the transition.
 Register hooks under the `:hooks` key in your `defworkflow` definition:
 
 ```clojure
-:hooks {:on-enter-paid      (fn [instance] ...)  ; entering :paid
-        :on-exit-pending    (fn [instance] ...)  ; leaving :pending
-        :on-any-transition  (fn [instance] ...)} ; every transition
+:hooks {:on-enter-paid     [(fn [instance _audit-entry _context]      ; entering :paid
+                              (notify-finance! instance))]
+        :on-exit-pending   [(fn [instance _audit-entry _context]      ; leaving :pending
+                              (release-reservation! instance))]
+        :on-any-transition [(fn [_instance audit-entry context]       ; every transition
+                              (sync-external! audit-entry context))]}
 ```
 
 Supported hook keys:
@@ -170,7 +175,9 @@ Supported hook keys:
 - `:on-exit-<state>` — fires when transitioning OUT OF the named state
 - `:on-any-transition` — fires on every successful transition
 
-Each hook receives the updated `WorkflowInstance` map.
+Each value is a vector of functions, and each function takes three arguments:
+the updated `WorkflowInstance`, the `AuditEntry` and the transition context.
+A test evaluates the example above, so keep it runnable.
 
 ---
 

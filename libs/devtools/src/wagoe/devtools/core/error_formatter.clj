@@ -103,7 +103,7 @@
      :guidance-level — :full (default), :minimal, or :off
      At :off, auto-fix hints and dashboard/docs links are suppressed."
   ([enriched] (format-enriched-error enriched {}))
-  ([{:keys [code stacktrace suggestions fix dashboard-url docs-url]}
+  ([{:keys [code message stacktrace suggestions fix dashboard-url docs-url]}
     {:keys [guidance-level] :or {guidance-level :full}}]
    (let [error-def    (codes/lookup code)
          title        (or (:title error-def) "Error")
@@ -111,6 +111,9 @@
          lines        (cond-> [(separator code title)]
                         (:description error-def)
                         (conj (:description error-def))
+
+                        message
+                        (conj (str "\n" message))
 
                         true (conj "")
 

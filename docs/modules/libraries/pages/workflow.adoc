@@ -39,7 +39,7 @@ Provides permission-based transitions, automatic audit trails, and optional side
 
 [source,clojure]
 ----
-(require '[wagoe.workflow.core.machine :refer [defworkflow]])
+(require '[wagoe.workflow.shell.registry :refer [defworkflow]])
 
 (defworkflow order-workflow
   {:id             :order-workflow
@@ -51,8 +51,11 @@ Provides permission-based transitions, automatic audit trails, and optional side
                     :shipped   {:label "In Transit"}
                     :delivered {:label "Delivered"}
                     :cancelled {:label "Cancelled"}}
-   :hooks          {:on-enter-paid    (fn [instance] (notify-finance! instance))
-                    :on-any-transition (fn [instance] (sync-external! instance))}
+   ;; Each hook is a vector of fns of [instance audit-entry context].
+   :hooks          {:on-enter-paid     [(fn [instance _audit-entry _context]
+                                          (notify-finance! instance))]
+                    :on-any-transition [(fn [instance _audit-entry _context]
+                                          (sync-external! instance))]}
    :transitions    [{:from :pending :to :paid
                      :label "Mark as Paid"
                      :required-permissions [:finance :admin]}
@@ -69,11 +72,13 @@ Provides permission-based transitions, automatic audit trails, and optional side
 
 [source,bash]
 ----
-POST /api/workflows/:type/start    # Start a workflow instance
-POST /api/workflows/:id/transition # Perform a state transition
-GET  /api/workflows/:id/state      # Get current state
-GET  /api/workflows/:id/audit      # Get audit trail
+POST /api/v1/workflow/instances                # Start a workflow instance
+POST /api/v1/workflow/instances/:id/transition # Perform a state transition
+GET  /api/v1/workflow/instances/:id            # Get current state
+GET  /api/v1/workflow/instances/:id/audit      # Get audit trail
 ----
+
+Every route requires authentication (session or bearer token) and answers 401 without it.
 
 == Available transitions
 
