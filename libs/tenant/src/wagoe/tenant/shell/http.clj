@@ -253,7 +253,7 @@
                          404 {:description "Tenant not found"}}}
        :put {:handler (update-tenant-handler tenant-service)
              :summary "Update tenant"
-             :description "Update tenant name, slug, or status"
+             :description "Update tenant name or status. The slug cannot change: it names the schema"
              :tags ["tenants"]
              :responses {200 {:description "Tenant updated successfully"}
                          400 {:description "Validation error"}}}

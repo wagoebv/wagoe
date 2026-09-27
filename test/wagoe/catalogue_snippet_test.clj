@@ -42,7 +42,9 @@
   {"external" (str "its three adapters assert a host or an account-sid, and the "
                    "catalogue documents SMTP through the email entry rather than "
                    "here \u2014 :wagoe.external/imap and /twilio have no documented "
-                   "settings at all (BOU-427)")})
+                   "settings at all (BOU-427)")
+   "tenant"   (str "tenancy needs PostgreSQL, and this boots the H2 test profile "
+                   "with the dev snippet, which rightly does not set :allow-h2? (BOU-576)")})
 
 (defn- dev-snippet
   "What `wagoe add` writes into dev: the dev snippet where the entry has one,

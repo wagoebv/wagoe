@@ -326,13 +326,15 @@ The four tenant-aware HTTP interceptors live in `wagoe.user.shell.http-intercept
 None of the three tables has a migration. `:wagoe/tenant-db-schema` creates
 them at boot from the Malli schemas in `wagoe.tenant.schema`, which are their
 one source; change a table there. The two ADR-016 migrations that also created
-the membership tables run no statement since BOU-576. The admin cannot create tenants (`schema_name` is derived at
+the membership tables run no statement since BOU-576. The uniqueness below is
+created at boot as `CREATE UNIQUE INDEX IF NOT EXISTS`, so it reaches existing
+tables too; boot stops, naming the table, when rows already duplicate a value. The admin cannot create tenants (`schema_name` is derived at
 provisioning), so the shipped admin config sets `:permissions {:create false}`;
 use `POST /api/v1/tenants` (BOU-534).
 
 ```sql
 -- Created at boot from wagoe.tenant.schema
-tenants (id, slug, name, schema_name, status, settings JSONB,
+tenants (id, slug UNIQUE, name, schema_name UNIQUE, status, settings JSONB,
          created_at, updated_at, deleted_at)
 
 tenant_memberships (id, tenant_id, user_id, role, status,
@@ -349,8 +351,9 @@ tenant_member_invites (id, tenant_id, email, role, status,
 
 ## Gotchas
 
-1. **PostgreSQL only** — `:wagoe/tenant-db-schema` refuses to boot on SQLite (and MySQL) with `:type :not-supported` (BOU-576)
-2. **H2 (tests)** boots, and skips provisioning with a warning — schema isolation can't be tested in H2
+1. **PostgreSQL only** — `:wagoe/tenant-db-schema` refuses to boot on SQLite, MySQL and H2 with `:type :not-supported` (BOU-576)
+2. **H2 (tests)** boots only with `:allow-h2? true` under `:wagoe/tenant`, which the test profile sets, and skips provisioning with a warning — schema isolation can't be tested in H2
+3. **A slug is never reused**, not even a deleted tenant's: its schema is kept, and the schema name derives from the slug
 3. **Soft deletes** — `:deleted-at` set on tenant; schema NOT auto-dropped; call `deprovision-tenant!` separately
 4. **Settings are JSONB** — nested map stored as JSON, parsed via Cheshire
 5. **Case conversion** — kebab↔snake at persistence boundary, kebab↔camelCase at HTTP boundary

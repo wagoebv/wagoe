@@ -27,7 +27,7 @@
         membership-service ::membership-service
         db-context {:datasource ::db}
         config {:active {:wagoe/settings {:name "Wagoe"}}}]
-    (with-redefs [wagoe.tenant.shell.provisioning/refuse-unsupported-database! (fn [_] nil)
+    (with-redefs [wagoe.tenant.shell.provisioning/refuse-unsupported-database! (fn [& _] nil)
                   wagoe.tenant.shell.persistence/initialize-tenant-schema! (fn [arg]
                                                                              (is (= ctx arg))
                                                                              :initialized)
@@ -149,11 +149,30 @@
         (factory/close-db-context! ctx)
         (.delete (java.io.File. path))))))
 
-(deftest ^:integration tenancy-boots-on-h2-the-test-engine
-  ;; H2 runs the test profile, with tenants but no per-tenant schemas.
-  (let [ctx (factory/db-context
-             (factory/h2-config (str "mem:tenant_boot_" (System/nanoTime) ";DB_CLOSE_DELAY=-1")))]
-    (try
-      (is (= {:status :initialized} (ig/init-key :wagoe/tenant-db-schema {:ctx ctx})))
-      (is (db/table-exists? ctx :tenants))
-      (finally (factory/close-db-context! ctx)))))
+(deftest ^:integration tenancy-on-h2-needs-the-test-profiles-say-so
+  ;; H2 runs the test profile, with tenants but no per-tenant schemas. Anywhere
+  ;; else it would be the same trap as SQLite, so it takes an explicit flag.
+  (let [open #(factory/db-context
+               (factory/h2-config (str "mem:tenant_boot_" (System/nanoTime) ";DB_CLOSE_DELAY=-1")))]
+    (testing "without :allow-h2? it is refused like SQLite"
+      (let [ctx (open)]
+        (try
+          (let [e (is (thrown? clojure.lang.ExceptionInfo
+                               (ig/init-key :wagoe/tenant-db-schema {:ctx ctx})))]
+            (is (= :not-supported (:type (ex-data e))))
+            (is (str/includes? (ex-message e) "H2"))
+            (is (str/includes? (ex-message e) ":allow-h2?")))
+          (is (not (db/table-exists? ctx :tenants)))
+          (finally (factory/close-db-context! ctx)))))
+    (testing "with it, it boots"
+      (let [ctx (open)]
+        (try
+          (is (= {:status :initialized}
+                 (ig/init-key :wagoe/tenant-db-schema {:ctx ctx :allow-h2? true})))
+          (is (db/table-exists? ctx :tenants))
+          (finally (factory/close-db-context! ctx)))))
+    (testing "the flag comes from the module's settings"
+      (is (= true (get-in (wagoe.tenant.shell.module-wiring/ig-config {:allow-h2? true} {})
+                          [:components :wagoe/tenant-db-schema :allow-h2?])))
+      (is (not (get-in (wagoe.tenant.shell.module-wiring/ig-config {:enabled? true} {})
+                       [:components :wagoe/tenant-db-schema :allow-h2?]))))))

@@ -165,6 +165,16 @@
     (testing "an id that is not a UUID is a 400"
       (is (= 400 (:status (delete "invalid-uuid")))))))
 
+(deftest ^:contract ^:security a-deleted-tenants-slug-cannot-be-taken
+  ;; The schema name derives from the slug and a deleted tenant's schema is not
+  ;; dropped, so a new tenant with the same slug would inherit its data.
+  (let [tenant   (create! "acme-corp")
+        _        (tenant-ports/delete-existing-tenant *service* (:id tenant))
+        response ((tenant-http/create-tenant-handler *service*)
+                  {:body-params {:name "Someone else" :slug "acme-corp"}})]
+    (is (= 409 (:status response)))
+    (is (= "Tenant slug already exists" (:error (body response))))))
+
 (deftest ^:contract suspend-and-activate-tenant-handler-test
   (let [tenant (create! "acme-corp")]
     (testing "suspend answers with the suspended tenant"

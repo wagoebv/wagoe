@@ -163,7 +163,7 @@
    :category            :optional
    :tier                :stable
    :config-snippet      "  :wagoe/tenant\n  {:strategy :schema-per-tenant}\n"
-   :test-config-snippet "  :wagoe/tenant\n  {:strategy :schema-per-tenant}\n"
+   :test-config-snippet "  :wagoe/tenant\n  {:strategy :schema-per-tenant :allow-h2? true}\n"
    :add-command         "wagoe add tenant"
    :docs-url            "https://github.com/wagoebv/wagoe/blob/main/libs/tenant/AGENTS.md"}
 
