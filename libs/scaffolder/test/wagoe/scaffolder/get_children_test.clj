@@ -90,6 +90,27 @@
             (is (some? row))
             (is (= {:instance-id (str (:id row)) :state "draft"} (:workflow body))))))
 
+      (testing "GET writes nothing: without an instance, workflow is null and none is started"
+        ;; A row the admin wrote while the event bus was down has no instance.
+        (let [id        (:id (post! "A-0" [{:description "Zero" :quantity 1}]))
+              instances #(:n (jdbc/execute-one! (:datasource ctx)
+                                                ["SELECT COUNT(*) AS n FROM workflow_instances WHERE entity_id = ?" id]
+                                                {:builder-fn rs/as-unqualified-lower-maps}))]
+          (jdbc/execute! (:datasource ctx) ["DELETE FROM workflow_instances WHERE entity_id = ?" id])
+          (let [resp (call :get (str "/invoices/" id) nil)]
+            (is (= 200 (:status resp)) (pr-str resp))
+            (is (contains? (:body resp) :workflow))
+            (is (nil? (:workflow (:body resp)))))
+          (is (= 0 (instances)) "the GET started no workflow")
+          (call :delete (str "/invoices/" id) nil))
+        (testing "and a seeded row whose status the workflow does not have still reads"
+          (let [id (java.util.UUID/randomUUID)]
+            (jdbc/execute! (:datasource ctx) ["INSERT INTO invoices (id, number, status, created_at) VALUES (?, 'S-1', 'void', CURRENT_TIMESTAMP)" id])
+            (let [resp (call :get (str "/invoices/" id) nil)]
+              (is (= 200 (:status resp)) (pr-str resp))
+              (is (nil? (:workflow (:body resp)))))
+            (jdbc/execute! (:datasource ctx) ["DELETE FROM invoices WHERE id = ?" id]))))
+
       (post! "A-2" [{:description "One" :quantity 1}])
 
       (testing "the list leaves the children out"

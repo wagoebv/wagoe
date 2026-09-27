@@ -108,8 +108,9 @@
                   "   [:updated-at {:optional true} [:maybe inst?]]\n"
                   "   [:deleted-at {:optional true} [:maybe inst?]]"
                   (when (:workflow entity)
-                    (str "\n   ;; On GET: the workflow instance, which the workflow API takes, and its state.\n"
-                         "   [:workflow {:optional true} [:map [:instance-id :uuid] [:state :keyword]]]"))
+                    (str "\n   ;; On GET: the workflow instance, which the workflow API takes, and its state;\n"
+                         "   ;; null before its first transition when a row has none yet.\n"
+                         "   [:workflow {:optional true} [:maybe [:map [:instance-id :uuid] [:state :keyword]]]]"))
                   "])\n")
      :requests (str "(def Create" entity-name "Request\n"
                     "  \"Schema for create " e " API requests.\"\n"
@@ -246,6 +247,9 @@
                  "\n"
                  "  (" e "-workflow-state [this id]\n"
                  "    \"The state of the " e "'s workflow, started if it has none.\")\n"
+                 "\n"
+                 "  (" e "-workflow-instance [this id]\n"
+                 "    \"The " e "'s workflow instance, or nil. Starts nothing: a GET reads it.\")\n"
                  "\n"
                  "  (remove-" e "-workflow! [this id]\n"
                  "    \"Remove the workflow of a deleted " e ".\")\n"
@@ -623,10 +627,10 @@ DROP TABLE IF EXISTS %s;
   [entity-lower]
   (str "(defn- workflow-of\n"
        "  \"The " entity-lower "'s workflow as its GET shows it: the instance, which the\n"
-       "   workflow API takes, and its state. Started if it has none, as a transition\n"
-       "   would.\"\n"
+       "   workflow API takes, and its state. nil when it has none: a read starts\n"
+       "   nothing, and a transition starts it.\"\n"
        "  [workflow id]\n"
-       "  (let [instance (ports/start-" entity-lower "-workflow! workflow id)]\n"
+       "  (when-let [instance (ports/" entity-lower "-workflow-instance workflow id)]\n"
        "    {:instance-id (:id instance) :state (:current-state instance)}))\n"
        "\n"))
 
@@ -1106,6 +1110,7 @@ DROP TABLE IF EXISTS %s;
                  "          workflow (reify ports/I" entity-name "Workflow\n"
                  "                     (start-" entity-lower "-workflow! [_ id] (swap! started conj id))\n"
                  "                     (" entity-lower "-workflow-state [_ _id] nil)\n"
+                 "                     (" entity-lower "-workflow-instance [_ _id] nil)\n"
                  "                     (remove-" entity-lower "-workflow! [_ _id] nil)\n"
                  "                     (transition-" entity-lower "-workflow! [_ _id _transition _actor] nil))\n"
                  "          svc (service/create-service mock-repo workflow)\n"
@@ -1288,6 +1293,8 @@ DROP TABLE IF EXISTS %s;
          "      (workflow/delete-instance! store (:id instance))))\n"
          "  (" e "-workflow-state [this id]\n"
          "    (:current-state (ports/start-" e "-workflow! this id)))\n"
+         "  (" e "-workflow-instance [_ id]\n"
+         "    (instance-of store id))\n"
          "  (transition-" e "-workflow! [this id transition actor]\n"
          "    ;; Started here too: a row the admin wrote while the event bus was down\n"
          "    ;; has none yet.\n"

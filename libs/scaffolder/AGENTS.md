@@ -165,8 +165,10 @@ request, `"workflow"` in the `bb scaffold ai` spec):
   `POST /api/v1/<entities>/:id/transition {"transition": "delivered"}` answers
   200 with the entity or 422 for a move the workflow does not make.
 - `GET /api/v1/<entities>/:id` includes `"workflow": {"instance-id": …, "state": …}`,
-  the id the workflow API takes. `GET /api/v1/workflow/instances?entity-type=invoice&entity-id=<id>`
-  finds it from the other side.
+  the id the workflow API takes, or `null` for a row that has none yet (an admin
+  row written while the event bus was down): a GET starts nothing, a transition
+  does. `GET /api/v1/workflow/instances?entity-type=invoice&entity-id=<id>` finds
+  it from the other side.
 - The admin writes rows without the service, so `install!` also subscribes to
   `:admin/entity-created` when the admin and events modules are on. The admin
   config gets `:workflow {:entity-type ...}` and the status in
