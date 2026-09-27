@@ -15,6 +15,10 @@
 ;; HTTP helper
 ;; =============================================================================
 
+(def ^:private capped-at-4096
+  "Claude 3 models whose output limit is 4096; the API rejects more."
+  #"^claude-3-(haiku|opus|sonnet)")
+
 (defn- messages-request!
   "POST to Anthropic /v1/messages and return parsed JSON response.
 
@@ -28,7 +32,8 @@
      Parsed JSON map or throws."
   [api-key model messages opts]
   (let [timeout     (or (:timeout opts) 60000)
-        max-tokens  (or (:max-tokens opts) 8192)
+        max-tokens  (cond-> (or (:max-tokens opts) 4096)
+                      (re-find capped-at-4096 (str model)) (min 4096))
         ;; Anthropic requires system messages separate from the messages array
         sys-msg     (first (filter #(= :system (:role %)) messages))
         user-msgs   (remove #(= :system (:role %)) messages)

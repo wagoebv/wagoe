@@ -465,6 +465,7 @@
 (def admin-entity-opts
   [["-r" "--root ROOT" "Project root" :default "."]
    ["-y" "--yes" "Skip confirmation and write immediately"]
+   ["-f" "--force" "Overwrite admin files that already exist"]
    ["-h" "--help"]])
 
 (defn profiles
@@ -477,6 +478,26 @@
        sort
        seq
        (#(vec (or % ["dev" "test"])))))
+
+(defn admin-entity-targets
+  "One {:path :text :exists?} per profile and entity."
+  [root entities]
+  (vec (for [profile (profiles root)
+             {:keys [entity-name text]} entities
+             :let [path (str root "/resources/conf/" profile "/admin/" entity-name ".edn")]]
+         {:path path :text text :exists? (.exists (io/file path))})))
+
+(defn write-admin-entities!
+  "Write `targets`, skipping a file that exists unless `force?`: it may be a
+   hand-edited prod config. Returns the targets with :written?."
+  [targets force?]
+  (mapv (fn [{:keys [path text exists?] :as t}]
+          (if (and exists? (not force?))
+            (assoc t :written? false)
+            (do (io/make-parents path)
+                (spit path text)
+                (assoc t :written? true))))
+        targets))
 
 (defn- type-source-line [{:keys [entity-name type-source corrections]}]
   (str "Types for " entity-name ": "
@@ -518,23 +539,35 @@
           (doseq [e (:entities result)]
             (println (dim (type-source-line e))))
           (println)
-          (let [root     (:root options)
-                entities (:entities result)]
-            (if (or (:yes options) (confirm? "Write this entity config?"))
+          (let [entities (:entities result)
+                force?   (:force options)
+                targets  (admin-entity-targets (:root options) entities)
+                writes?  (some #(or force? (not (:exists? %))) targets)]
+            (println "Files:")
+            (doseq [{:keys [path exists?]} targets]
+              (println (str "  " path
+                            (cond (not exists?) ""
+                                  force?        (yellow "  (exists, will be overwritten: --force)")
+                                  :else         (dim "  (exists, kept; --force overwrites)")))))
+            (println)
+            (cond
+              (not writes?)
+              (println (yellow "Nothing written: every file already exists. Re-run with --force to overwrite."))
+
+              (or (:yes options) (confirm? "Write these files?"))
               (do
                 (println)
-                (doseq [profile (profiles root)
-                        {:keys [entity-name text]} entities]
-                  (let [path (str root "/resources/conf/" profile "/admin/" entity-name ".edn")]
-                    (io/make-parents path)
-                    (spit path text)
-                    (println (green (str "\u2713 Written to " path)))))
+                (doseq [{:keys [path written?]} (write-admin-entities! targets force?)
+                        :when written?]
+                  (println (green (str "\u2713 Written to " path))))
                 (println)
                 (println (dim "Next steps, in each profile's config.edn:"))
                 (doseq [{:keys [entity-name]} entities]
                   (println (dim (str "  - Add :" entity-name " to :entity-discovery :allowlist, and #include \"admin/"
                                      entity-name ".edn\" to :entities"))))
                 (println (dim "  - Review and customize the generated config")))
+
+              :else
               (println (yellow "Cancelled. No files were written.")))))))))
 
 ;; =============================================================================

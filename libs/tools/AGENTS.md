@@ -311,7 +311,7 @@ bb ai admin-entity "invoices with number, customer, total, status, due-date" --y
 
 **What it generates:**
 
-Writes `resources/conf/<profile>/admin/<entity>.edn` into every profile that has a `config.edn` (dev and test when there are none yet), one file per entity: a description with a parent and its children gets one for each. Field types come from the table's columns in `migrations/` when it exists, and from the field names otherwise; the output says which. The answer is checked against the admin entity schema, and against any `:has-many`, `:sidebar-hidden` or `:parent-context` the description asked for, before anything is written.
+Writes `resources/conf/<profile>/admin/<entity>.edn` into every profile that has a `config.edn` (dev and test when there are none yet), one file per entity: a description with a parent and its children gets one for each. Every target is listed first; a file that already exists is kept unless you pass `--force`. Field types come from the table's columns in `migrations/` when it exists, and from the field names otherwise; the output says which. The answer is checked against the admin entity schema, and against any `:has-many`, `:sidebar-hidden` or `:parent-context` the description asked for, before anything is written.
 
 **Example generated EDN** (for `bb ai admin-entity "products with name, price, status"`):
 

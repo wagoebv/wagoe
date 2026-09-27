@@ -31,19 +31,74 @@
       #"^(BYTEA|BLOB|BINARY|VARBINARY)"                       :binary
       nil)))
 
-(defn- split-top-level
-  "`s` split at commas outside parentheses."
-  [s]
-  (loop [[c & more :as cs] (seq s) depth 0 cur [] out []]
-    (cond
-      (empty? cs)                 (conj out (apply str cur))
-      (= c \()                    (recur more (inc depth) (conj cur c) out)
-      (= c \))                    (recur more (dec depth) (conj cur c) out)
-      (and (= c \,) (zero? depth)) (recur more depth [] (conj out (apply str cur)))
-      :else                       (recur more depth (conj cur c) out))))
+(defn- index-after
+  "Index just past the next `needle` at or after `from`, or the end of `s`."
+  [^String s ^String needle from]
+  (let [j (.indexOf s needle (int from))]
+    (if (neg? j) (count s) (+ j (count needle)))))
 
-(defn- ident [s]
-  (-> (str s) (str/replace #"[\"`\[\]]" "") (str/split #"\.") last str/lower-case))
+(defn- quoted-end
+  "End of the string literal, quoted identifier or $tag$ body that opens at
+   `i`, or nil when none does. Their contents are never SQL structure."
+  [^String s i]
+  (case (.charAt s i)
+    \' (loop [j (inc i)]
+         (let [k (.indexOf s "'" (int j))]
+           (cond
+             (neg? k)                                   (count s)
+             (and (< (inc k) (count s))
+                  (= \' (.charAt s (inc k))))           (recur (+ k 2))
+             :else                                      (inc k))))
+    \" (index-after s "\"" (inc i))
+    \` (index-after s "`" (inc i))
+    \$ (when-let [tag (re-find #"^\$\w*\$" (subs s i (min (count s) (+ i 64))))]
+         (index-after s tag (+ i (count tag))))
+    nil))
+
+(defn- sql-statements
+  "`sql` split at top-level `;`, comments dropped."
+  [sql]
+  (let [^String s (str sql)
+        n         (count s)]
+    (loop [i 0 start 0 chunks [] out []]
+      (if (>= i n)
+        (conj out (apply str (conj chunks (subs s start n))))
+        (cond
+          (.startsWith s "--" (int i))
+          (let [j (index-after s "\n" i)] (recur j j (conj chunks (subs s start i) " ") out))
+
+          (.startsWith s "/*" (int i))
+          (let [j (index-after s "*/" (+ i 2))] (recur j j (conj chunks (subs s start i) " ") out))
+
+          (= \; (.charAt s i))
+          (recur (inc i) (inc i) [] (conj out (apply str (conj chunks (subs s start i)))))
+
+          :else (recur (or (quoted-end s i) (inc i)) start chunks out))))))
+
+(defn- split-top-level
+  "`s` split at commas outside parentheses and quotes."
+  [^String s]
+  (let [n (count s)]
+    (loop [i 0 depth 0 start 0 out []]
+      (if (>= i n)
+        (conj out (subs s start))
+        (let [c (.charAt s i)]
+          (cond
+            (= c \()                     (recur (inc i) (inc depth) start out)
+            (= c \))                     (recur (inc i) (dec depth) start out)
+            (and (= c \,) (zero? depth)) (recur (inc i) depth (inc i) (conj out (subs s start i)))
+            :else                        (recur (or (quoted-end s i) (inc i)) depth start out)))))))
+
+(def ^:private id "(?:\"[^\"]+\"|`[^`]+`|\\[[^\\]]+\\]|[\\w$]+)")
+(def ^:private qname (str "(" id "(?:\\s*\\.\\s*" id ")*)"))
+(def ^:private ident-re (re-pattern id))
+
+(defn- ident
+  "The last name in a possibly qualified, possibly quoted identifier."
+  [s]
+  (-> (last (re-seq ident-re (str s)))
+      (str/replace #"^[\"`\[]|[\"`\]]$" "")
+      str/lower-case))
 
 (def ^:private constraint-item
   #"(?i)^(constraint|primary\s+key|foreign\s+key|unique|check|index|key)\b")
@@ -53,39 +108,63 @@
   [item]
   (let [item (str/trim item)]
     (when-let [[_ col type] (and (not (re-find constraint-item item))
-                                 (re-matches #"(?s)([\w\"`]+)\s+(.+)" item))]
+                                 (re-matches (re-pattern (str "(?s)(" id ")\\s+(.+)")) item))]
       [(ident col) (str/trim type)])))
+
+(def ^:private create-re
+  (re-pattern (str "(?is)create\\s+(?:temporary\\s+)?table\\s+(?:if\\s+not\\s+exists\\s+)?"
+                   qname "\\s*\\((.*)\\)[^)]*")))
+(def ^:private alter-re
+  (re-pattern (str "(?is)alter\\s+table\\s+(?:if\\s+exists\\s+)?(?:only\\s+)?" qname "\\s+(.*)")))
+(def ^:private drop-table-re
+  (re-pattern (str "(?is)drop\\s+table\\s+(?:if\\s+exists\\s+)?" qname ".*")))
+
+(def ^:private column-actions
+  "ALTER TABLE actions as [regex f], where f takes the table's columns and the
+   regex groups."
+  [[(re-pattern (str "(?is)add\\s+(?:column\\s+)?(?:if\\s+not\\s+exists\\s+)?(" id ")\\s+(.+)"))
+    (fn [cols col type]
+      (if (re-find constraint-item (str col " " type)) cols (assoc cols (ident col) (str/trim type))))]
+   [(re-pattern (str "(?is)drop\\s+column\\s+(?:if\\s+exists\\s+)?(" id ").*"))
+    (fn [cols col] (dissoc cols (ident col)))]
+   ;; PostgreSQL: ALTER [COLUMN] x [SET DATA] TYPE t [USING …]
+   [(re-pattern (str "(?is)alter\\s+(?:column\\s+)?(" id ")\\s+(?:set\\s+data\\s+)?type\\s+(.+?)(?:\\s+using\\s+.*)?"))
+    (fn [cols col type] (assoc cols (ident col) (str/trim type)))]
+   ;; MySQL: MODIFY [COLUMN] x t
+   [(re-pattern (str "(?is)modify\\s+(?:column\\s+)?(" id ")\\s+(.+)"))
+    (fn [cols col type] (assoc cols (ident col) (str/trim type)))]
+   [(re-pattern (str "(?is)rename\\s+(?:column\\s+)?(" id ")\\s+to\\s+(" id ")"))
+    (fn [cols from to]
+      (if-let [t (get cols (ident from))]
+        (-> cols (dissoc (ident from)) (assoc (ident to) t))
+        cols))]])
+
+(defn- apply-action [cols action]
+  (let [action (str/trim action)]
+    (or (some (fn [[re f]]
+                (when-let [m (re-matches re action)]
+                  (apply f cols (rest m))))
+              column-actions)
+        cols)))
 
 (defn- apply-statement [tables stmt]
   (let [stmt (str/trim stmt)]
-    (if-let [[_ table body] (re-matches #"(?is)create\s+(?:temporary\s+)?table\s+(?:if\s+not\s+exists\s+)?([\w.\"`\[\]]+)\s*\((.*)\)[^)]*" stmt)]
+    (if-let [[_ table body] (re-matches create-re stmt)]
       (assoc tables (ident table) (into {} (keep column-def) (split-top-level body)))
-      (if-let [[_ table actions] (re-matches #"(?is)alter\s+table\s+(?:if\s+exists\s+)?([\w.\"`\[\]]+)\s+(.*)" stmt)]
-        (reduce (fn [ts action]
-                  (let [action (str/trim action)]
-                    (if-let [[_ col type] (re-matches #"(?is)add\s+(?:column\s+)?(?:if\s+not\s+exists\s+)?([\w\"`]+)\s+(.+)" action)]
-                      (if (re-find constraint-item col)
-                        ts
-                        (assoc-in ts [(ident table) (ident col)] (str/trim type)))
-                      (if-let [[_ col] (re-matches #"(?is)drop\s+column\s+(?:if\s+exists\s+)?([\w\"`]+).*" action)]
-                        (update ts (ident table) dissoc (ident col))
-                        ts))))
-                tables
-                (split-top-level actions))
-        (if-let [[_ table] (re-matches #"(?is)drop\s+table\s+(?:if\s+exists\s+)?([\w.\"`\[\]]+).*" stmt)]
+      (if-let [[_ table actions] (re-matches alter-re stmt)]
+        (let [t (ident table)]
+          (if (contains? tables t)
+            (update tables t #(reduce apply-action % (split-top-level actions)))
+            tables))
+        (if-let [[_ table] (re-matches drop-table-re stmt)]
           (dissoc tables (ident table))
           tables)))))
 
 (defn migration-columns
   "{table-name {column-name sql-type}} after applying `sqls`, the up migrations
-   in the order they run. Names are lower-case snake_case, as in the SQL."
+   in the order they run. Names are lower-case and unquoted, as in the SQL."
   [sqls]
-  (reduce (fn [tables sql]
-            (reduce apply-statement tables
-                    (-> (str sql)
-                        (str/replace #"--[^\n]*" "")
-                        (str/replace #"(?s)/\*.*?\*/" "")
-                        (str/split #";"))))
+  (reduce (fn [tables sql] (reduce apply-statement tables (sql-statements sql)))
           {}
           sqls))
 
@@ -95,7 +174,7 @@
   (into {}
         (keep (fn [[col sql-type]]
                 (when-let [t (sql-type->field-type sql-type)]
-                  [(keyword (str/replace col "_" "-")) t])))
+                  [(keyword (str/replace col #"[_\s]+" "-")) t])))
         columns))
 
 ;; =============================================================================
@@ -104,9 +183,10 @@
 
 (def ^:private carries
   "Model types a column's storage type legitimately holds: an enum lives in a
-   VARCHAR, a boolean in SQLite's INTEGER. Anything else is a wrong guess."
+   VARCHAR, a boolean in SQLite's INTEGER, ids and timestamps in SQLite and
+   H2 TEXT. Anything else is a wrong guess."
   {:string #{:text :enum :uuid :json :date :instant}
-   :text   #{:string :enum :json}
+   :text   #{:string :enum :uuid :json :date :instant}
    :int    #{:boolean}})
 
 (defn- correct-types [config type-for]

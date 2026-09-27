@@ -14,6 +14,19 @@
 ;; HTTP helper
 ;; =============================================================================
 
+(def ^:private output-caps
+  "Chat models that reject an output limit above 4096."
+  #"^(gpt-3\.5|gpt-4-|gpt-4$)")
+
+(defn- token-limit
+  "[field limit] for `model`. o-series and gpt-5 models reject max_tokens and
+   read max_completion_tokens; OpenAI-compatible servers only know max_tokens."
+  [model limit]
+  (let [m (str model)]
+    (if (re-find #"^(o\d|gpt-5)" m)
+      [:max_completion_tokens limit]
+      [:max_tokens (cond-> limit (re-find output-caps m) (min 4096))])))
+
 (defn- chat-completion-request!
   "POST to /v1/chat/completions and return parsed JSON response.
 
@@ -46,7 +59,7 @@
                                             messages)}
                      (:temperature opts) (assoc :temperature (:temperature opts))
                      (:response-format opts) (assoc :response_format (:response-format opts))
-                     (:max-tokens opts)  (assoc :max_tokens (:max-tokens opts)))
+                     (:max-tokens opts)  (conj (token-limit model (:max-tokens opts))))
         response   (http/post url
                               {:body               (json/generate-string body)
                                :content-type       :json

@@ -36,6 +36,65 @@ CREATE INDEX IF NOT EXISTS idx_invoices_created_at ON invoices(created_at);")
     (is (nil? (get (sut/migration-columns [invoices-sql "DROP TABLE invoices;"])
                    "invoices")))))
 
+(deftest ^:unit later-migrations-change-and-rename-columns
+  ;; BOU-567 review: only ADD and DROP COLUMN were read, so a column whose
+  ;; type a later migration changed kept its first type.
+  (let [cols #(sut/column-types (get (sut/migration-columns [invoices-sql %]) "invoices"))]
+    (testing "PostgreSQL ALTER COLUMN … TYPE, with and without SET DATA and USING"
+      (is (= :int (:amount (cols "ALTER TABLE invoices ALTER COLUMN amount TYPE INTEGER USING amount::integer;"))))
+      (is (= :int (:amount (cols "ALTER TABLE invoices ALTER COLUMN amount SET DATA TYPE BIGINT;")))))
+    (testing "MySQL MODIFY, with and without COLUMN"
+      (is (= :int (:amount (cols "ALTER TABLE invoices MODIFY COLUMN amount INT NOT NULL;"))))
+      (is (= :text (:number (cols "ALTER TABLE invoices MODIFY number TEXT;")))))
+    (testing "RENAME COLUMN moves the type to the new name"
+      (let [c (cols "ALTER TABLE invoices RENAME COLUMN issue_date TO issued_on;")]
+        (is (= :date (:issued-on c)))
+        (is (not (contains? c :issue-date)))))))
+
+(deftest ^:unit literals-and-quoted-names-do-not-split-statements
+  (let [tables (sut/migration-columns
+                ["CREATE TABLE notes (
+                    id UUID PRIMARY KEY,
+                    body TEXT DEFAULT 'a; b -- not a comment',
+                    tag VARCHAR(20) DEFAULT 'x,y'
+                  );
+                  CREATE FUNCTION f() RETURNS trigger AS $$
+                  BEGIN
+                    EXECUTE 'CREATE TABLE ghosts (x DATE)'; -- inside the body
+                  END;
+                  $$ LANGUAGE plpgsql;
+                  CREATE TABLE \"line items\" (\"unit price\" INTEGER, \"Issue Date\" DATE);"])]
+    (testing "a ; or -- inside a string literal is not a statement end or comment"
+      (is (= {:id :uuid :body :text :tag :string}
+             (sut/column-types (get tables "notes")))))
+    (testing "a $$ body is not parsed as DDL"
+      (is (nil? (get tables "ghosts"))))
+    (testing "quoted identifiers may hold spaces"
+      (is (= {:unit-price :int :issue-date :date}
+             (sut/column-types (get tables "line items")))))))
+
+(deftest ^:unit text-columns-carry-what-sqlite-stores-in-them
+  ;; SQLite and H2 migrations keep ids and timestamps in TEXT — see
+  ;; resources/migrations/20260311100000-search-tables.up.sql. The model's
+  ;; :uuid and :instant are right there; "correcting" them to :text is not.
+  (let [cols   (sut/column-types
+                (get (sut/migration-columns
+                      ["CREATE TABLE IF NOT EXISTS search_documents (
+                          id          TEXT NOT NULL PRIMARY KEY,
+                          entity_id   TEXT NOT NULL,
+                          metadata    TEXT,
+                          updated_at  TEXT NOT NULL,
+                          published   TEXT,
+                          UNIQUE (index_id, entity_id)
+                        );"])
+                     "search_documents"))
+        config {:fields {:entity-id  {:type :uuid}
+                         :metadata   {:type :json}
+                         :updated-at {:type :instant}
+                         :published  {:type :date}}}]
+    (is (= :text (:entity-id cols)) "the column really is TEXT")
+    (is (empty? (:corrections (sut/apply-column-types config cols))))))
+
 (deftest ^:unit sql-types-map-to-admin-types
   (is (= :date    (sut/sql-type->field-type "DATE")))
   (is (= :instant (sut/sql-type->field-type "timestamp with time zone")))

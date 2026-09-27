@@ -124,7 +124,10 @@
    [:permissions     {:optional true} [:map
                                        [:create {:optional true} :boolean]
                                        [:create-hint {:optional true} :string]]]
-   [:ui              {:optional true} :map]
+   [:ui              {:optional true} [:map {:closed true}
+                                       [:field-grouping {:optional true}
+                                        [:map {:closed true}
+                                         [:other-label {:optional true} :string]]]]]
    [:has-many        {:optional true} [:vector AdminHasMany]]
    [:sidebar-hidden  {:optional true} :boolean]
    [:parent-context  {:optional true} [:map

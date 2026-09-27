@@ -311,3 +311,34 @@
     (io/make-parents (io/file root "resources" "conf" "notes" "x"))
     (testing "every profile with a config.edn, and nothing else"
       (is (= ["dev" "prod" "test"] (sut/profiles (.getPath root)))))))
+
+(deftest ^:unit an-existing-admin-file-is-never-overwritten-unasked
+  ;; BOU-567 review: writing every profile also overwrote a hand-edited prod
+  ;; config, and --yes skipped the only prompt.
+  (let [root (.toFile (java.nio.file.Files/createTempDirectory
+                       "keep" (make-array java.nio.file.attribute.FileAttribute 0)))
+        prod (io/file root "resources" "conf" "prod" "admin" "invoices.edn")
+        hand "{:invoices {:label \"Hand edited\"}} ; keep me\n"]
+    (doseq [p ["dev" "test" "prod"]]
+      (let [f (io/file root "resources" "conf" p "config.edn")]
+        (io/make-parents f)
+        (spit f "{}")))
+    (io/make-parents prod)
+    (spit prod hand)
+    (let [targets (sut/admin-entity-targets (.getPath root)
+                                            [{:entity-name "invoices" :text "{:invoices {}}"}])]
+      (testing "every target is listed, and the existing one is marked"
+        (is (= 3 (count targets)))
+        (is (= [(.getPath prod)]
+               (map :path (filter :exists? targets)))))
+
+      (testing "without --force the existing file stays byte-identical"
+        (let [written (sut/write-admin-entities! targets false)]
+          (is (= hand (slurp prod)))
+          (is (= 2 (count (filter :written? written))))
+          (is (= "{:invoices {}}"
+                 (slurp (io/file root "resources" "conf" "dev" "admin" "invoices.edn"))))))
+
+      (testing "--force overwrites it"
+        (sut/write-admin-entities! targets true)
+        (is (= "{:invoices {}}" (slurp prod)))))))
