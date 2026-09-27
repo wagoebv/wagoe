@@ -225,6 +225,11 @@ Example subscriber that starts a workflow: see "Lifecycle Events" in
   validates each filled row, and `create-entity-with-children` inserts parent
   and rows in one transaction, refusing fewer than `:min` (`:too-few`) and
   naming a refused row (`:child {:entity :index}`). Blank rows are skipped.
+  An index is at most nine digits; a `__child.` parameter with another is
+  dropped. Added rows get a random index, so replicas do not collide, and
+  two rows under one index (a field sent twice) are refused on that row.
+  More than `forms/max-child-rows` (500) rows is refused before any is
+  parsed, in the handler and in the service (`:too-many`).
 - **Unknown entity-config keys fail at startup.** `schema/EntityOverrides` is a
   closed schema, checked by `create-schema-repository`; the error names the
   path. Add a key there when the admin starts reading one.

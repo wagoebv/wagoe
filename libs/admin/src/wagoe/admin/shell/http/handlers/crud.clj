@@ -83,36 +83,58 @@
   "`rows`, with blank ones added up to `n`, so a form refused for too few
    rows still has them to fill in."
   [rows n]
-  (let [next-index (inc (reduce max -1 (map (comp parse-long first) rows)))]
-    (into (vec rows) (for [i (range (- n (count rows)))] [(str (+ next-index i)) {}]))))
+  (let [used (set (map first rows))
+        free (remove used (map str (range)))]
+    (into (vec rows) (map (fn [i] [i {}]) (take (- n (count rows)) free)))))
+
+(defn- parse-section
+  "One has-many's submitted rows, parsed. Two rows under one index are
+   refused on that row: merged, they would save a row nobody typed."
+  [admin-service rel child-params zones]
+  (let [filled (set (map first (forms/filled-rows rel child-params)))
+        parsed (vec (for [[index raw] (get child-params (:entity rel))]
+                      (cond
+                        (forms/duplicate-row? rel raw)
+                        {:index index :data {} :filled? true
+                         :errors {(first (:fields rel)) [[:t :admin/child-row-duplicate]]}}
+
+                        (filled index)
+                        (let [[data errors] (parse-child-row admin-service rel zones index raw)]
+                          {:index index :data data :errors errors :filled? true})
+
+                        :else {:index index :data {}})))]
+    {:rows           (map (juxt :index :data) parsed)
+     :row-errors     (into {} (keep #(when (seq (:errors %)) [(:index %) (:errors %)])) parsed)
+     :filled-indexes (mapv :index (filter :filled? parsed))
+     :children       (mapv :data (filter :filled? parsed))}))
 
 (defn- parse-nested
   "The child rows submitted for `rels`: {:sections (for the form) :children
-   (for the service) :valid? bool}. A blank row is left out, not refused."
+   (for the service) :valid? bool}. A blank row is left out, not refused.
+   Past `forms/max-child-rows` nothing is parsed, and none is shown again."
   [admin-service rels child-params zones]
   (let [too-few  (forms/too-few rels child-params)
+        too-many (forms/too-many rels child-params)
         sections (vec (for [rel rels
-                            :let [filled (set (map first (forms/filled-rows rel child-params)))
-                                  parsed (vec (for [[index raw] (get child-params (:entity rel))]
-                                                (if (filled index)
-                                                  (let [[data errors] (parse-child-row admin-service rel zones index raw)]
-                                                    {:index index :data data :errors errors :filled? true})
-                                                  {:index index :data {}})))]]
-                        {:rel            rel
-                         :rows           (pad-rows (map (juxt :index :data) parsed) (:min rel))
-                         :row-errors     (into {} (keep #(when (seq (:errors %)) [(:index %) (:errors %)])) parsed)
-                         :filled-indexes (mapv :index (filter :filled? parsed))
-                         :too-few        (get too-few (:entity rel))
-                         :children       (mapv :data (filter :filled? parsed))}))]
+                            :let [many    (get too-many (:entity rel))
+                                  section (if many
+                                            {:rows [] :row-errors {} :filled-indexes [] :children []}
+                                            (parse-section admin-service rel child-params zones))]]
+                        (-> section
+                            (update :rows pad-rows (:min rel))
+                            (assoc :rel rel
+                                   :too-few (when-not many (get too-few (:entity rel)))
+                                   :too-many many))))]
     {:sections sections
      :children (into {} (map (juxt (comp :entity :rel) :children)) sections)
-     :valid?   (every? #(and (empty? (:row-errors %)) (nil? (:too-few %))) sections)}))
+     :valid?   (every? #(and (empty? (:row-errors %)) (nil? (:too-few %)) (nil? (:too-many %)))
+                       sections)}))
 
 (defn- nested-refusal
   "`nested` with a refusal from the service put where the form shows it: a
    row the database refused, or a has-many given too few rows."
   [nested e]
-  (let [{:keys [child errors too-few]} (ex-data e)]
+  (let [{:keys [child errors too-few too-many]} (ex-data e)]
     (update nested :sections
             (fn [sections]
               (mapv (fn [{:keys [rel filled-indexes] :as section}]
@@ -121,7 +143,10 @@
                         (assoc-in [:row-errors (get filled-indexes (:index child))] errors)
 
                         (get too-few (:entity rel))
-                        (assoc :too-few (get too-few (:entity rel)))))
+                        (assoc :too-few (get too-few (:entity rel)))
+
+                        (get too-many (:entity rel))
+                        (assoc :too-many (get too-many (:entity rel)))))
                     sections)))))
 
 (defn create-entity-handler

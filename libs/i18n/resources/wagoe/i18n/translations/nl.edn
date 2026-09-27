@@ -360,6 +360,8 @@
  :admin/form-error-not-on-form     "(niet op dit formulier)"
  :admin/children-minimum           "Minstens {n} verplicht"
  :admin/children-too-few           "{label}: minstens {n} verplicht, {count} opgegeven"
+ :admin/children-too-many          "{label}: hoogstens {n} toegestaan, {count} opgegeven"
+ :admin/child-row-duplicate        "Twee regels kwamen binnen onder één index. Verwijder er één en voeg hem opnieuw toe."
  :admin/button-add-row             "{entity} toevoegen"
  :admin/button-remove-row          "Verwijderen"
  :admin/button-update              "Bijwerken"

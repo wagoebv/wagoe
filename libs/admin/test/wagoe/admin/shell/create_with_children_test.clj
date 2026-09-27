@@ -187,3 +187,74 @@
     (is (str/includes? body "value=\"forty\"") "as typed")
     (is (zero? (count-rows :nc_invoices)))
     (is (zero? (count-rows :nc_lines)))))
+
+(defn- post! [form]
+  (let [{:keys [sp svc]} (system)]
+    ((crud/create-entity-handler svc sp config) (request :post :nc-invoices form))))
+
+(deftest ^:integration a-row-index-too-large-to-read-is-not-a-500
+  (let [response (post! {"number" "INV-8"
+                         (line 0 :description) "Hours"
+                         "__child.nc-lines.99999999999999999999.description" "x"})]
+    (is (< (:status response 200) 400) (str "status was " (:status response)))
+    (is (= 1 (count-rows :nc_lines)) "the unreadable row is dropped")))
+
+(deftest ^:integration added-rows-get-random-indexes
+  ;; A per-process counter gives two replicas the same indexes, and two rows
+  ;; with one index merge into one.
+  (let [{:keys [sp svc]} (system)
+        handler (detail/new-child-row-handler svc sp config)
+        index   #(parse-long (second (re-find #"__child\.nc-lines\.(\d+)\.description"
+                                              (str (:body (handler (request :get :nc-invoices nil {:child "nc-lines"})))))))
+        indexes (repeatedly 20 index)]
+    (is (every? #(< 0 % 1000000000) indexes) "a positive index the parser reads")
+    (is (< 1 (count (set indexes))))))
+
+(deftest ^:integration two-rows-under-one-index-are-refused
+  (let [response (post! {"number" "INV-9"
+                         (line 5 :description) ["Hours" "Travel"]})
+        body     (str (:body response))]
+    (is (= 422 (:status response)))
+    (is (str/includes? body "Two rows were sent under one index"))
+    (is (zero? (count-rows :nc_invoices)))))
+
+(deftest ^:integration more-rows-than-the-cap-are-refused
+  (let [n        (inc forms/max-child-rows)
+        response (post! (into {"number" "INV-10"}
+                              (for [i (range n)] [(line i :description) (str "line " i)])))
+        body     (str (:body response))]
+    (is (= 422 (:status response)))
+    (is (str/includes? body (str "at most " forms/max-child-rows " allowed, " n " given")))
+    (is (zero? (count-rows :nc_invoices))))
+  (testing "the service refuses them too"
+    (let [{:keys [svc]} (system)
+          e (try (ports/create-entity-with-children
+                  svc :nc-invoices {:number "INV-11"}
+                  {:nc-lines (vec (repeat (inc forms/max-child-rows) {:description "x"}))})
+                 nil
+                 (catch clojure.lang.ExceptionInfo e e))]
+      (is (= :validation-error (:type (ex-data e))))
+      (is (contains? (:too-many (ex-data e)) :nc-lines))
+      (is (zero? (count-rows :nc_invoices))))))
+
+(deftest ^:integration crafted-row-fields-are-ignored
+  (let [{:keys [sp svc]} (system)
+        other   (:record (ports/create-entity-with-children svc :nc-invoices {:number "OTHER"}
+                                                            {:nc-lines [{:description "theirs"}]}))
+        crafted (random-uuid)
+        response ((crud/create-entity-handler svc sp config)
+                  (request :post :nc-invoices {"number" "INV-12"
+                                               (line 0 :description) "Hours"
+                                               (line 0 :nc-invoice-id) (str (:id other))
+                                               (line 0 :id) (str crafted)
+                                               "__child.nc-drafts.0.number" "SMUGGLED"}))
+        mine    (db/execute-one! *db* {:select [:*] :from [:nc_invoices] :where [:= :number "INV-12"]})
+        lines   (db/execute-query! *db* {:select [:*] :from [:nc_lines] :where [:= :description "Hours"]})]
+    (is (< (:status response 200) 400) (str "status was " (:status response)))
+    (testing "the foreign key is the new parent's, not the one sent"
+      (is (= [(:id mine)] (map :nc-invoice-id lines))))
+    (testing "a read-only field is not written"
+      (is (not= crafted (:id (first lines)))))
+    (testing "rows for an entity the parent is not created with are not written"
+      (is (= 2 (count-rows :nc_invoices)))
+      (is (nil? (db/execute-one! *db* {:select [:*] :from [:nc_invoices] :where [:= :number "SMUGGLED"]}))))))

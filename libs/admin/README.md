@@ -359,7 +359,7 @@ The foreign key on the child's form is a select over the parent's rows, labelled
 
 `:min` refuses a delete, or a bulk delete, that would leave a parent with fewer children: the admin answers 409 and shows why.
 
-With `:min` on an `:editable true` has-many, the parent's create form also holds its first children: `:min` rows of the child's editable fields (without the foreign key), which "Add" and "Remove" change in place. Parent and children are written in one transaction; fewer than `:min` filled rows, or a row the child refuses, rejects the whole form with the error on the page. A child with a `:create-redirect-url`, a split table or `:permissions {:create false}` is left out, and its parent is created alone. `ports/create-entity-with-children` does the same outside the UI.
+With `:min` on an `:editable true` has-many, the parent's create form also holds its first children: `:min` rows of the child's editable fields (without the foreign key), which "Add" and "Remove" change in place. Parent and children are written in one transaction; fewer than `:min` filled rows, more than 500, or a row the child refuses, rejects the whole form with the error on the page. A child with a `:create-redirect-url`, a split table or `:permissions {:create false}` is left out, and its parent is created alone. `ports/create-entity-with-children` does the same outside the UI.
 
 On the child entity, use `:parent-context` to show parent info at the top of the child's detail page:
 

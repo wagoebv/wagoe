@@ -360,6 +360,8 @@
  :admin/form-error-not-on-form     "(not on this form)"
  :admin/children-minimum           "At least {n} required"
  :admin/children-too-few           "{label}: at least {n} required, {count} given"
+ :admin/children-too-many          "{label}: at most {n} allowed, {count} given"
+ :admin/child-row-duplicate        "Two rows were sent under one index. Remove one and add it again."
  :admin/button-add-row             "Add {entity}"
  :admin/button-remove-row          "Remove"
  :admin/button-update              "Update"

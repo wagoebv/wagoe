@@ -56,3 +56,32 @@
              (forms/too-few rels {:lines [["0" (row "")]]}))))
     (is (= {:lines {:min 1 :count 0 :label "Lines"}} (forms/too-few rels {})))
     (is (= {} (forms/too-few rels {:lines [["0" (row "Hours")]]})))))
+
+(deftest ^:unit a-row-index-that-is-not-a-small-number-is-dropped
+  ;; parse-long answered nil for it, and padding the rows threw: a 500.
+  (let [[parent rows] (forms/split-child-params
+                       {"number"                                          "INV-1"
+                        "__child.lines.99999999999999999999.description" "x"
+                        "__child.lines.-1.description"                    "x"
+                        "__child.lines.1234567890.description"            "x"
+                        (forms/child-param :lines 999999999 :description) "kept"})]
+    (is (= {"number" "INV-1"} parent) "not a parent field either")
+    (is (= [["999999999" {"description" "kept"}]] (:lines rows)))))
+
+(deftest ^:unit duplicate-row-test
+  (let [[rel] (forms/nested-relationships invoice configs)]
+    (testing "one row"
+      (is (not (forms/duplicate-row? rel {"description" "a" "billable" "false"})))
+      (is (not (forms/duplicate-row? rel {"description" "a" "billable" ["false" "true"]}))
+          "a checked checkbox sends its hidden field too"))
+    (testing "two rows under one index send a field twice"
+      (is (forms/duplicate-row? rel {"description" ["a" "b"]}))
+      (is (forms/duplicate-row? rel {"billable" ["false" "false"]}))
+      (is (forms/duplicate-row? rel {"billable" ["false" "true" "false"]})))))
+
+(deftest ^:unit too-many-test
+  (let [rels (forms/nested-relationships invoice configs)
+        rows (fn [n] {:lines (vec (for [i (range n)] [(str i) {"description" "x"}]))})]
+    (is (= {} (forms/too-many rels (rows forms/max-child-rows))))
+    (is (= {:lines {:max forms/max-child-rows :count (inc forms/max-child-rows) :label "Lines"}}
+           (forms/too-many rels (rows (inc forms/max-child-rows)))))))

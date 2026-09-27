@@ -126,10 +126,12 @@
                                     :entity-configs entity-configs
                                     :logo-url (:logo-url config)}))))))))
 
-(def ^:private row-index
-  "Indexes for added child rows: unique per process, and after the 0..n
-   of the rows the form starts with."
-  (java.util.concurrent.atomic.AtomicLong. (System/currentTimeMillis)))
+(defn- row-index
+  "An index for an added child row: random, so replicas do not hand out the
+   same one, and at most nine digits, which the parser reads. A collision is
+   refused as a duplicate row."
+  []
+  (.nextLong (java.util.concurrent.ThreadLocalRandom/current) 1 1000000000))
 
 (defn new-child-row-handler
   "GET /:entity/new/rows/:child — one blank child row for the create form of
@@ -150,5 +152,5 @@
         (throw (ex-info "Not a has-many created with this entity"
                         {:type :not-found :entity-name entity-name :child child})))
       (support/html-response request
-                             (admin-ui/child-row rel (.incrementAndGet ^java.util.concurrent.atomic.AtomicLong row-index)
+                             (admin-ui/child-row rel (row-index)
                                                  {} nil (support/display-options config request))))))

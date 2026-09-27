@@ -305,7 +305,7 @@
 (defn- child-rows-section
   "The rows of one has-many a parent is created with, and a button that adds
    one through HTMX."
-  [entity-name {:keys [rel rows row-errors too-few]} display]
+  [entity-name {:keys [rel rows row-errors too-few too-many]} display]
   (let [child   (name (:entity rel))
         list-id (str "child-rows-" child)]
     [:fieldset.child-rows {:class "child-rows form-section" :data-child child}
@@ -314,6 +314,9 @@
      (when too-few
        [:div {:class "alert alert-error" :role "alert"}
         [:t :admin/children-too-few {:label (:label too-few) :n (:min too-few) :count (:count too-few)}]])
+     (when too-many
+       [:div {:class "alert alert-error" :role "alert"}
+        [:t :admin/children-too-many {:label (:label too-many) :n (:max too-many) :count (:count too-many)}]])
      [:div.child-rows-list {:id list-id}
       (for [[index values] rows]
         (child-row rel index values (get row-errors index) display))]

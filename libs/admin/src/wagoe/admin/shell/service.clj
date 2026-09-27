@@ -626,6 +626,10 @@
       (throw (ex-info (str/join "; " (for [[_ {:keys [label min count]}] short]
                                        (str label ": at least " min " required, " count " given")))
                       {:type :validation-error :errors {} :too-few short})))
+    (when-let [many (not-empty (forms/too-many rels children))]
+      (throw (ex-info (str/join "; " (for [[_ {:keys [label max count]}] many]
+                                       (str label ": at most " max " allowed, " count " given")))
+                      {:type :validation-error :errors {} :too-many many})))
     by-entity))
 
 (defn- insert-children!

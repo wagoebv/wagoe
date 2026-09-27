@@ -43,7 +43,8 @@
                 :fk fk
                 :fields (vec (remove #{fk} (:editable-fields child)))))))
 
-(def ^:private child-param-pattern #"__child\.([^.]+)\.(\d+)\.(.+)")
+;; Nine digits at most, so every index reads as a long.
+(def ^:private child-param-pattern #"__child\.([^.]+)\.(\d{1,9})\.(.+)")
 
 (defn child-param
   "The form parameter of `field` in child row `index` of `entity`."
@@ -53,13 +54,16 @@
 (defn split-child-params
   "`params` as [parent-params rows]: the parent's own fields, and
    {child-entity [[index {field value}] ...]} in index order, with field
-   names as strings, as a form submits them."
+   names as strings, as a form submits them. A `__child.` parameter whose
+   index is not a small number is dropped."
   [params]
   (let [[parent rows] (reduce-kv
                        (fn [[parent rows] k v]
                          (if-let [[_ entity index field] (re-matches child-param-pattern (name k))]
                            [parent (update-in rows [(keyword entity) index] assoc field v)]
-                           [(assoc parent k v) rows]))
+                           [(cond-> parent
+                              (not (str/starts-with? (name k) "__child.")) (assoc k v))
+                            rows]))
                        [{} {}]
                        params)]
     [parent
@@ -88,3 +92,29 @@
               :let  [n (count (filled-rows rel rows))]
               :when (< n (:min rel))]
           [(:entity rel) {:min (:min rel) :count n :label (:label rel)}])))
+
+(def max-child-rows
+  "The most rows of one has-many a create takes."
+  500)
+
+(defn too-many
+  "{child-entity {:max :count :label}} for each of `rels` given more rows
+   than `max-child-rows`, blank ones included: each is parsed."
+  [rels rows]
+  (into {}
+        (for [rel   rels
+              :let  [n (count (get rows (:entity rel)))]
+              :when (> n max-child-rows)]
+          [(:entity rel) {:max max-child-rows :count n :label (:label rel)}])))
+
+(defn duplicate-row?
+  "Whether `values` hold two rows sent under one index: a field sent twice.
+   A checkbox sends its hidden \"false\" and, when checked, \"true\"."
+  [rel values]
+  (boolean
+   (some (fn [[field v]]
+           (and (vector? v)
+                (not (and (= :boolean (get-in rel [:entity-config :fields (keyword field) :type]))
+                          (= 2 (count v))
+                          (= #{"false" "true"} (set v))))))
+         values)))
