@@ -4,7 +4,8 @@
             [clojure.java.io :as io]
             [clojure.string :as str]
             [wagoe.cli.add :as add]
-            [wagoe.cli.catalogue :as cat]))
+            [wagoe.cli.catalogue :as cat]
+            [wagoe.cli.new :as new]))
 
 (defn- make-wagoe-project! [dir]
   (io/make-parents (io/file dir "resources/conf/dev/config.edn"))
@@ -160,18 +161,29 @@
       (finally
         (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))
 
-(deftest ^:integration patch-agents-md-test
+(defn- agents-block [dir block]
+  (second (re-find (re-pattern (str "(?s)<!-- " block " -->(.*?)<!-- /" block " -->"))
+                   (slurp (io/file dir "AGENTS.md")))))
+
+(deftest ^:integration adding-a-module-moves-it-to-installed-in-agents-md
   (let [tmp (str (System/getProperty "java.io.tmpdir") "/wagoe-add-agents-" (System/currentTimeMillis))]
     (try
-      (make-wagoe-project! tmp)
-      (testing "removes module from available block"
-        (add/patch-agents-md! tmp {:name "payments" :docs-url "http://example.com"})
-        (let [content (slurp (io/file tmp "AGENTS.md"))]
-          (is (not (str/includes? content "wagoe add payments")))))
-
-      (testing "adds module to installed block"
-        (let [content (slurp (io/file tmp "AGENTS.md"))]
-          (is (str/includes? content "payments"))))
+      (new/generate! tmp "shop" {})
+      (let [admin (cat/find-module "admin")]
+        (is (str/includes? (agents-block tmp "wagoe:available-modules") "wagoe add admin"))
+        (add/patch-configs! tmp admin)
+        (add/sync-agents-md! tmp)
+        (is (not (str/includes? (agents-block tmp "wagoe:available-modules") "wagoe add admin")))
+        (is (str/includes? (agents-block tmp "wagoe:installed-modules") "- admin ("))
+        (testing "a module not in deps.edn gets its dependency named"
+          (spit (io/file tmp "deps.edn")
+                (str/replace (slurp (io/file tmp "deps.edn")) #"(?m)^.*com\.wagoe/wagoe-geo .*$" ""))
+          (add/sync-agents-md! tmp)
+          (is (re-find #"(?s)Not in deps\.edn.*wagoe add geo" (agents-block tmp "wagoe:available-modules"))))
+        (testing "syncing twice changes nothing"
+          (let [before (slurp (io/file tmp "AGENTS.md"))]
+            (add/sync-agents-md! tmp)
+            (is (= before (slurp (io/file tmp "AGENTS.md")))))))
       (finally
         (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))
 
@@ -284,5 +296,39 @@
       (add/patch-configs! tmp (cat/find-module "payments"))
       (is (= :mock (get-in (active-of tmp "dev") [:wagoe/payment-provider :provider])))
       (is (not (contains? (active-of tmp "prod") :wagoe/payment-provider)))
+      (finally
+        (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))
+
+(deftest ^:integration add-user-under-no-user-says-how-to-switch-it-on
+  ;; --no-user keeps the library and drops :wagoe/user from :extra-modules;
+  ;; "already installed" would be false (BOU-573).
+  (let [tmp  (str (System/getProperty "java.io.tmpdir") "/wagoe-add-nouser-" (System/currentTimeMillis))
+        home (System/getProperty "user.dir")]
+    (try
+      (new/generate! tmp "shop" {:with-user? false})
+      (System/setProperty "user.dir" tmp)
+      (let [out (with-out-str (add/-main ["user"]))]
+        (is (str/includes? out "switched off"))
+        (is (str/includes? out ":extra-modules"))
+        (is (not (str/includes? out "already installed"))))
+      (finally
+        (System/setProperty "user.dir" home)
+        (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))
+
+(deftest ^:integration a-key-under-inactive-is-not-installed
+  ;; The text search counted a key parked under :inactive as installed, and
+  ;; patch-config! then wrote nothing into :active (BOU-573).
+  (let [tmp    (with-profiles! "inactive")
+        module (cat/find-module "jobs")]
+    (try
+      (doseq [env ["dev" "test"]]
+        (add/patch-config! tmp (str "resources/conf/" env "/config.edn") (:config-snippet module)))
+      (spit (io/file tmp "resources/conf/prod/config.edn")
+            "{:active {}\n :inactive {:wagoe/jobs {:provider :db}}}\n")
+      (is (not (add/installed? tmp module true)))
+      (is (= [["dev" :present] ["prod" :added] ["test" :present]]
+             (add/patch-configs! tmp module)))
+      (is (contains? (active-of tmp "prod") :wagoe/jobs))
+      (is (add/installed? tmp module true))
       (finally
         (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))

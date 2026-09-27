@@ -1,8 +1,6 @@
 (ns wagoe.cli.templates
   "Shared template helpers for the wagoe CLI: template loading, {{var}}
-   rendering, and the module-row pattern used to keep AGENTS.md's available-
-   modules table in sync (`wagoe add` removes a row at install time;
-   `wagoe agents update` keeps it removed on refresh)."
+   rendering, and AGENTS.md's marker-delimited blocks."
   (:require [clojure.java.io :as io]
             [clojure.string :as str]))
 
@@ -61,14 +59,3 @@
   (if-let [body (block-content content block)]
     (replace-block content block (f body))
     content))
-
-(defn module-row-pattern
-  "Regex matching a module's row in the available-modules table:
-   a line naming the module that ends in its `wagoe add <name>` command.
-   Kebab-aware lookarounds on both sides of the name (plain \\b treats `-`
-   as a boundary) so `search` never matches a `search-advanced` row."
-  [module-name]
-  (let [q     (java.util.regex.Pattern/quote module-name)
-        left  "(?<![a-z0-9-])"
-        right "(?![a-z0-9-])"]
-    (re-pattern (str "(?m)^.*" left q right ".*wagoe add " q right ".*\\n?"))))
