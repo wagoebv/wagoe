@@ -182,6 +182,51 @@ CREATE INDEX IF NOT EXISTS idx_invoices_created_at ON invoices(created_at);")
     (is (some? (sut/validation-errors
                 {:x {:label "X" :table-name :x :parent-context true}})))))
 
+;; BOU-572 -------------------------------------------------------------------
+
+(deftest ^:unit an-invented-key-is-refused-at-its-path
+  (testing "the rc-4 answer: a field-level :widget :workflow"
+    (let [errors (sut/validation-errors
+                  {:invoices {:label "Invoices" :table-name :invoices
+                              :fields {:status {:type :enum :widget :workflow}}}})]
+      (is (some #(str/starts-with? % "[:invoices :fields :status :widget]") errors)
+          (pr-str errors))))
+
+  (testing "a key the admin does not read, at any level"
+    (is (some #(str/starts-with? % "[:invoices :state-machine]")
+              (sut/validation-errors
+               {:invoices {:label "I" :table-name :invoices :state-machine {}}})))
+    (is (some #(str/starts-with? % "[:invoices :fields :status :colour]")
+              (sut/validation-errors
+               {:invoices {:label "I" :table-name :invoices
+                           :fields {:status {:type :enum :colour "red"}}}})))
+    (is (some #(str/starts-with? % "[:invoices :workflow :initial-state]")
+              (sut/validation-errors
+               {:invoices {:label "I" :table-name :invoices
+                           :workflow {:entity-type :invoice :initial-state :draft}}}))))
+
+  (testing "prepare names the path in its refusal"
+    (is (str/includes? (:error (sut/prepare {:invoices {:label "I" :table-name :invoices
+                                                        :fields {:status {:widget :workflow}}}}
+                                            "" {} "invoices"))
+                       "[:invoices :fields :status :widget]"))))
+
+(deftest ^:unit the-admins-real-keys-are-accepted
+  (is (nil? (sut/validation-errors
+             {:invoices {:label "Invoices" :table-name :invoices
+                         :workflow {:entity-type :invoice}
+                         :fields {:notes  {:type :text :widget :textarea :required false}
+                                  :status {:type :enum :widget :select
+                                           :options [[:draft "Draft"]]}}}})))
+  (testing "the workflow names its entity type with a keyword"
+    (is (some? (sut/validation-errors
+                {:invoices {:label "I" :table-name :invoices :workflow {:entity-type "invoice"}}})))))
+
+(deftest ^:unit a-requested-workflow-must-be-kept
+  (is (= #{:workflow} (sut/requested-keys "invoices whose status is driven by a workflow")))
+  (is (= #{:workflow} (sut/missing-keys {:invoices {:label "I" :table-name :invoices}}
+                                        #{:workflow}))))
+
 (deftest ^:unit rendering-round-trips
   (let [entity (:invoices generated)
         text   (sut/render {:invoices entity})]

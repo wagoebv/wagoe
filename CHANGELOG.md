@@ -65,6 +65,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **An admin create required hidden and defaulted fields, and a 422 marked no field** (BOU-570).
   Drop `:required false` workarounds; required textareas and selects now carry `required`.
+- **`bb ai gen-tests` wrote tests that did not compile, and `bb ai admin-entity` invented keys** (BOU-572).
+  Both check before writing. Copy the new `.githooks/pre-commit`: it blocks on lint as `bb check` does.
 - **`bb setup` told you to copy `.env.example` over an existing `.env`** (BOU-573), replacing `JWT_SECRET`.
   It now names only the variables `.env` lacks.
 - **A generated AGENTS.md listed modules already in deps.edn as ones to add** (BOU-573). `wagoe add` and
