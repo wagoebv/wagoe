@@ -238,6 +238,15 @@
            :note (if dry-run? (str "dry run — would have " note) note)})
         edits))
 
+(defn- workflow-steps
+  "What an entity with a workflow needs from the project."
+  [entities]
+  (when-let [wf (seq (filter :workflow entities))]
+    [(str "Switch the workflow module on: wagoe add workflow. "
+          (str/join ", " (map :entity-name wf)) " will not boot without it")
+     (str "For the admin's " (str/join ", " (map :entity-plural wf))
+          " to get a workflow too, switch on the event bus: wagoe add events")]))
+
 (def ^:private module-generation-request-validator (m/validator schema/ModuleGenerationRequest))
 (def ^:private module-generation-request-explainer (m/explainer schema/ModuleGenerationRequest))
 
@@ -379,6 +388,15 @@
                     :content service-test-content
                     :action :create}]
 
+            files (cond-> files
+                    (:workflow entity)
+                    (conj {:path (format "src/%s/%s/shell/%s_workflow.clj" base-ns-path module-path entity-path)
+                           :content (generators/generate-workflow-file ctx entity)
+                           :action :create}
+                          {:path (format "test/%s/%s/shell/%s_workflow_test.clj" base-ns-path module-path entity-path)
+                           :content (generators/generate-workflow-test-file ctx entity)
+                           :action :create}))
+
             files (into files (mapcat #(generators/entity-files ctx %1 %2) more (rest ids)))
 
             files (cond-> files
@@ -455,11 +473,12 @@
          ;; here. Nothing reads that path, and it contradicted `integrate`, which
          ;; writes the :wagoe/<module> key the generated module_wiring.clj
          ;; defines (BOU-309).
-         :next-steps ["Review the generated files"
-                      (format "Write its config key: bb scaffold integrate %s" module-name)
-                      ;; The first entity's, not <module>-test (BOU-562).
-                      (format "Run tests: clojure -M:test --focus %s.%s.core.%s-test"
-                              (:base-ns ctx) module-name (:entity-kebab entity))]
+         :next-steps (into ["Review the generated files"
+                            (format "Write its config key: bb scaffold integrate %s" module-name)
+                            ;; The first entity's, not <module>-test (BOU-562).
+                            (format "Run tests: clojure -M:test --focus %s.%s.core.%s-test"
+                                    (:base-ns ctx) module-name (:entity-kebab entity))]
+                           (workflow-steps (:entities ctx)))
          :warnings (cond-> (vec (:warnings admin-edits))
                      dry-run? (conj "Dry run - no files were written"))})
 
@@ -855,10 +874,11 @@
          :command     :entity
          :entity      (:entity-name entity)
          :files       files
-         :next-steps  (filterv some?
-                               ["Run the migration: clojure -M:migrate up"
-                                (when http? (str "Restart the system; the API is at " uri " and " uri "/:id"))
-                                (str "Run the tests: clojure -M:test --focus " service-ns "-test")])
+         :next-steps  (into (filterv some?
+                                     ["Run the migration: clojure -M:migrate up"
+                                      (when http? (str "Restart the system; the API is at " uri " and " uri "/:id"))
+                                      (str "Run the tests: clojure -M:test --focus " service-ns "-test")])
+                            (workflow-steps [entity]))
          :warnings    (not-empty (cond-> (vec warnings)
                                    dry-run (conj "Dry run - no files were written")))})
       (catch clojure.lang.ExceptionInfo e

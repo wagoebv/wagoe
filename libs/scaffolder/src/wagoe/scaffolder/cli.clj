@@ -38,6 +38,7 @@
     :multi true
     :default []
     :update-fn conj]
+   [nil "--workflow SPEC" "The entity's status as a workflow: field:first>second>third, forward only"]
    [nil "--base-ns NS" "Base namespace + path for the module (default: the project's own)"]
    ;; `--[no-]x`, not `--x`: a bare boolean flag with `:default true` has no
    ;; way to say no — `--web false` set it to true and left "false" as a stray
@@ -74,6 +75,7 @@
     :update-fn conj]
    [nil "--belongs-to ENTITY" "The module's entity this one belongs to: a required <entity>_id foreign key"
     :validate [template/valid-entity-name? "Must be an entity name"]]
+   [nil "--workflow SPEC" "The entity's status as a workflow: field:first>second>third, forward only"]
    [nil "--[no-]http" "Generate the entity's HTTP (REST API) routes (default: true)"
     :default true]
    [nil "--public-api" "API routes open to anyone (default: they require a signed-in user)"
@@ -378,6 +380,32 @@
         (= :relation type-kw) (assoc :references references :on-delete on-delete)
         references-table      (assoc :references-table references-table)))))
 
+(defn parse-workflow-spec
+  "Parse `status:entered>delivered>paid` into {:field :status :states [...]},
+   or an error map. The states are in order; each moves only to the next."
+  [spec]
+  (let [[field states & more] (str/split (str spec) #":" -1)
+        states (when states (str/split states #">" -1))
+        kebab? #(boolean (re-matches #"^[a-z][a-z0-9-]*$" (str %)))]
+    (cond
+      (or more (nil? states))
+      {:error (str "Invalid workflow " (pr-str spec) " (expected field:first>second, e.g. status:entered>delivered>paid)")}
+
+      (not (kebab? field))
+      {:error (str "Invalid workflow field " (pr-str field) " (must be lowercase kebab-case)")}
+
+      (< (count states) 2)
+      {:error (str "A workflow needs at least two states: " field ":first>second")}
+
+      (not-every? kebab? states)
+      {:error (str "Invalid workflow states in " (pr-str spec) " (each lowercase kebab-case, separated by >)")}
+
+      (not (apply distinct? states))
+      {:error (str "A workflow names each state once: " (pr-str spec))}
+
+      :else
+      {:field (keyword field) :states (mapv keyword states)})))
+
 (defn parse-all-fields
   "Parse all field specifications.
   
@@ -640,13 +668,21 @@
     (if-not valid?
       {:status 1
        :errors errors}
-      (let [[fields-valid? fields-or-errors] (parse-all-fields (:field opts))]
-        (if-not fields-valid?
+      (let [[fields-valid? fields-or-errors] (parse-all-fields (:field opts))
+            workflow (some-> (:workflow opts) parse-workflow-spec)]
+        (cond
+          (not fields-valid?)
           {:status 1
            :errors fields-or-errors}
+
+          (:error workflow)
+          {:status 1 :errors [(:error workflow)]}
+
+          :else
           (let [request (cond-> {:module-name (:module-name opts)
-                                 :entities [{:name (:entity opts)
-                                             :fields fields-or-errors}]
+                                 :entities [(cond-> {:name (:entity opts)
+                                                     :fields fields-or-errors}
+                                              workflow (assoc :workflow workflow))]
                                  :interfaces {:http (:http opts)
                                               :web (:web opts)
                                               :public-api (boolean (:public-api opts))}
@@ -674,14 +710,22 @@
                  (conj "At least one --field (or --belongs-to) is required"))]
     (if (seq errors)
       {:status 1 :errors errors}
-      (let [[fields-valid? fields-or-errors] (parse-all-fields (:field opts))]
-        (if-not fields-valid?
+      (let [[fields-valid? fields-or-errors] (parse-all-fields (:field opts))
+            workflow (some-> (:workflow opts) parse-workflow-spec)]
+        (cond
+          (not fields-valid?)
           {:status 1 :errors fields-or-errors}
+
+          (:error workflow)
+          {:status 1 :errors [(:error workflow)]}
+
+          :else
           (let [result (ports/add-entity
                         service
                         {:module-name (:module-name opts)
                          :entity      (cond-> {:name (:entity opts) :fields fields-or-errors}
-                                        (:belongs-to opts) (assoc :belongs-to (:belongs-to opts)))
+                                        (:belongs-to opts) (assoc :belongs-to (:belongs-to opts))
+                                        workflow           (assoc :workflow workflow))
                          :interfaces  {:http (:http opts true)
                                        :public-api (boolean (:public-api opts))}
                          :output-dir  (:output-dir opts)
@@ -921,6 +965,14 @@ Field Flags:
   Example — a status an admin form may leave out:
     --field status:enum:values=entered,paid:required:default=entered
 
+Workflow:
+  --workflow SPEC      The entity's status as a workflow, e.g.
+                       status:entered>delivered>paid. Each state moves only to
+                       the next. The status column mirrors the workflow's state:
+                       no request sets it, POST /<entities>/:id/transition
+                       moves it, and every new row starts at the first state.
+                       Needs the workflow module (wagoe add workflow)
+
 Interface Options (default: all enabled):
   --no-http            Skip the HTTP (REST API) routes
   --no-web             Skip the Web UI: core/ui.clj, shell/web_handlers.clj
@@ -978,6 +1030,7 @@ Options:
   --belongs-to ENTITY  The module's entity this one belongs to. Adds a
                        required <entity>_id column with a foreign key
                        (ON DELETE CASCADE) and an index
+  --workflow SPEC      The entity's status as a workflow, as for generate
   --no-http            No API routes for the entity: for a module generated
                        with --no-http
   --public-api         API routes open to anyone; by default they answer

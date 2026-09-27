@@ -61,10 +61,16 @@ for what is public API, what is internal, and how deprecations are announced.
 - **`:wagoe/payment-provider` has no default provider, and `:mock` boots only in dev and test** (BOU-564).
   Set `:provider` explicitly; use `:stripe` or `:mollie` in every other profile.
 
+### Added
+
+- **`bb scaffold generate|entity --workflow status:entered>delivered>paid`** (BOU-569). The status
+  becomes a workflow that API and admin rows both start, moved by `POST /<entities>/:id/transition`.
+
 ### Fixed
 
 - **Scaffolded migrations lost their indexes on SQLite and failed on PostgreSQL and MySQL** (BOU-569).
   Add `--;;` between the statements of older generated migrations; MySQL gets its own types.
+- **`bb scaffold ai --help` answered "Unknown option"** (BOU-569). It prints the usage.
 - **`wagoe add` and `bb setup --prod true` left prod behind** (BOU-564). Both now bring every
   profile the project's modules; re-run `wagoe add <module>` for one prod lacks.
 - **`wagoe add payments` wrote the mock provider, which accepts any webhook as paid, into prod** (BOU-564).

@@ -353,6 +353,9 @@
              :field-indexed (get field-def :indexed false)
              :malli-type (field-type->malli field-def)
              :sql-type (field-type->sql field-def)}
+      (:workflow-state? field-def)
+      (assoc :workflow-state? true)
+
       (column-default field-def)
       (assoc :sql-default (column-default field-def))
 
@@ -381,16 +384,28 @@
     (let [parent (pascal->kebab belongs-to)]
       (some #(when (#{parent (str parent "-id")} (name (:name %))) (:name %)) fields))))
 
-(defn entity-fields
-  "An entity's fields, with its `:belongs-to` parent as the first one. A field
-   of the same name already declared wins.
+(defn workflow-field
+  "The status field a `:workflow` stands for: a required enum of its states,
+   starting at the first. Only a transition sets it.
 
    Pure: true"
-  [{:keys [fields belongs-to]}]
-  (let [field (when (valid-entity-name? belongs-to) (belongs-to-field belongs-to))]
-    (if (and field (not-any? #(= (:name field) (keyword (name (:name %)))) fields))
-      (into [field] fields)
-      (vec fields))))
+  [{:keys [field states]}]
+  {:name field :type :enum :enum-values (vec states) :required true
+   :default (name (first states)) :workflow-state? true})
+
+(defn entity-fields
+  "An entity's fields, with its `:belongs-to` parent as the first one and its
+   workflow's status as the last. A field of the same name already declared
+   wins.
+
+   Pure: true"
+  [{:keys [fields belongs-to workflow]}]
+  (let [declared? (fn [f] (some #(= (:name f) (keyword (name (:name %)))) fields))
+        parent    (when (valid-entity-name? belongs-to) (belongs-to-field belongs-to))
+        status    (when (:field workflow) (workflow-field workflow))]
+    (cond-> (vec fields)
+      (and parent (not (declared? parent))) (->> (into [parent]))
+      (and status (not (declared? status))) (conj status))))
 
 (defn repository-fns
   "Method names of an entity's repository port.
@@ -456,7 +471,13 @@
               :service-test-ns (shell-ns "service-test")}
        ;; The parent, kebab: its admin config lists this entity (BOU-562).
        (valid-entity-name? (:belongs-to entity-def))
-       (assoc :belongs-to (pascal->kebab (:belongs-to entity-def)))))))
+       (assoc :belongs-to (pascal->kebab (:belongs-to entity-def)))
+
+       ;; Its status as a workflow (BOU-569).
+       (:workflow entity-def)
+       (assoc :workflow {:field  (name (get-in entity-def [:workflow :field]))
+                         :states (mapv name (get-in entity-def [:workflow :states]))
+                         :ns     (str "shell." entity-kebab "-workflow")})))))
 
 (defn build-module-context
   "Build complete template context for module generation.
