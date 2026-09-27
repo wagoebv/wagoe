@@ -239,13 +239,21 @@
         edits))
 
 (defn- workflow-steps
-  "What an entity with a workflow needs from the project."
-  [entities]
+  "What an entity with a workflow still needs from the project: the modules no
+   profile under `output-dir` switches on."
+  [output-dir entities]
   (when-let [wf (seq (filter :workflow entities))]
-    [(str "Switch the workflow module on: wagoe add workflow. "
-          (str/join ", " (map :entity-name wf)) " will not boot without it")
-     (str "For the admin's " (str/join ", " (map :entity-plural wf))
-          " to get a workflow too, switch on the event bus: wagoe add events")]))
+    (let [configs (keep #(let [f (profile-config %)] (when (.isFile f) (slurp f)))
+                        (profile-dirs output-dir))
+          off?    (fn [k] (not-any? #(generators/module-active? % k) configs))]
+      (cond-> []
+        (off? :wagoe/workflow)
+        (conj (str "Switch the workflow module on: wagoe add workflow. "
+                   (str/join ", " (map :entity-name wf)) " will not boot without it"))
+
+        (and (admin-on? output-dir) (off? :wagoe/events))
+        (conj (str "For the admin's " (str/join ", " (map :entity-plural wf))
+                   " to get a workflow too, switch on the event bus: wagoe add events"))))))
 
 (def ^:private module-generation-request-validator (m/validator schema/ModuleGenerationRequest))
 (def ^:private module-generation-request-explainer (m/explainer schema/ModuleGenerationRequest))
@@ -478,7 +486,7 @@
                             ;; The first entity's, not <module>-test (BOU-562).
                             (format "Run tests: clojure -M:test --focus %s.%s.core.%s-test"
                                     (:base-ns ctx) module-name (:entity-kebab entity))]
-                           (workflow-steps (:entities ctx)))
+                           (workflow-steps output-dir (:entities ctx)))
          :warnings (cond-> (vec (:warnings admin-edits))
                      dry-run? (conj "Dry run - no files were written"))})
 
@@ -878,7 +886,7 @@
                                      ["Run the migration: clojure -M:migrate up"
                                       (when http? (str "Restart the system; the API is at " uri " and " uri "/:id"))
                                       (str "Run the tests: clojure -M:test --focus " service-ns "-test")])
-                            (workflow-steps [entity]))
+                            (workflow-steps output-dir [entity]))
          :warnings    (not-empty (cond-> (vec warnings)
                                    dry-run (conj "Dry run - no files were written")))})
       (catch clojure.lang.ExceptionInfo e

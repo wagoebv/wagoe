@@ -256,6 +256,14 @@
         (ig/halt! system)
         (db-factory/close-db-context! ctx)))))
 
+(deftest ^:unit the-next-steps-name-only-the-modules-that-are-off
+  (let [dir (project!)
+        cfg (io/file dir "resources/conf/dev/config.edn")]
+    (spit cfg (str/replace admin-config " {:wagoe/settings" " {:wagoe/workflow {}\n  :wagoe/events {:provider :memory}\n  :wagoe/settings"))
+    (let [out (generate! dir "bou569n")]
+      (is (not (str/includes? out "wagoe add workflow")) out)
+      (is (not (str/includes? out "wagoe add events")) out))))
+
 (deftest ^:unit a-field-of-the-same-name-is-refused
   (let [dir (project!)
         err (with-out-str

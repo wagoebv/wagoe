@@ -2393,6 +2393,14 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s%s%s;%s"
          (boolean (and admin (or (not= :map (z/tag admin)) (admin-loc source)))))
        (catch Exception _ false)))
 
+(defn module-active?
+  "Whether the config.edn `source` names module `k` under :active.
+
+   Pure: true"
+  [source k]
+  (try (some? (-> (z/of-string source) (map-val :active) (map-val k)))
+       (catch Exception _ false)))
+
 (defn add-admin-entity
   "config.edn `source` with the entity `plural` in the admin's :allowlist and
    its file in :entities.
