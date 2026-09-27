@@ -138,9 +138,8 @@
        {:status  302
         :headers {"Location" login-url}
         :body    ""})
-     ;; API request - return JSON error
+     ;; API request - return JSON error. No Content-Type, as in the 401 above.
      {:status  403
-      :headers {"Content-Type" "application/json"}
       :body    {:type   "access-forbidden"
                 :title  "Access Forbidden"
                 :status 403

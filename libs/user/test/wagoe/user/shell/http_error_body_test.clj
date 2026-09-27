@@ -57,3 +57,15 @@
     (is (= 401 (:status resp)))
     (is (= "Authentication required"
            (:detail (json/parse-string (if (string? body) body (slurp body)) true))))))
+
+(deftest ^:unit the-role-middleware-403-is-json
+  (let [handler (reitit/compile-routes
+                 [["/thing" {:middleware [(partial user-mw/require-role-middleware #{:admin})]
+                             :get        {:handler (constantly {:status 200 :body {}})}}]]
+                 {:swagger-enabled false})
+        resp    (handler {:request-method :get :uri "/thing" :headers {}
+                          :user {:id (random-uuid) :role :user}})
+        body    (:body resp)]
+    (is (= 403 (:status resp)))
+    (is (= "access-forbidden"
+           (:type (json/parse-string (if (string? body) body (slurp body)) true))))))
