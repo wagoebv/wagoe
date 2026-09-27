@@ -236,28 +236,57 @@
                        (str/join "\n" (map #(str % "=") missing)) "\n"))
           (vec missing))))))
 
-;; ─── AGENTS.md patching ──────────────────────────────────────────────────────
+;; ─── AGENTS.md module blocks ──────────────────────────────────────────────
 
-(defn patch-agents-md!
-  "Remove module row from available block; append to installed block."
-  [dir {:keys [name docs-url]}]
+(defn module-states
+  "Each catalogue module with where the project has it: :enabled (in deps.edn
+   and configured, or nothing to configure), :configurable (in deps.edn, config
+   key missing) or :absent. Core modules count as enabled once present."
+  [dir]
+  (let [deps (slurp (io/file dir "deps.edn"))]
+    (for [m (:modules (cat/load-catalogue))
+          :let [dep (dep-coords deps (:clojars m) (:scope m))]]
+      [m (cond
+           (or (nil? dep) (= :unreadable dep))            :absent
+           (or (= :core (:category m)) (installed? dir m true)) :enabled
+           :else                                          :configurable)])))
+
+(defn- module-table [modules]
+  (str "| Module | Description | Command |\n"
+       "|--------|-------------|---------|\n"
+       (apply str (for [{:keys [name description]} modules]
+                    (str "| " name " | " description " | `wagoe add " name "` |\n")))))
+
+(defn render-module-blocks
+  "`content` with the available- and installed-modules blocks rendered from
+   `states`, as `module-states` returns them."
+  [content states]
+  (let [of        (fn [s] (map first (filter #(= s (second %)) states)))
+        available (str "\n"
+                       (when-let [ms (seq (of :configurable))]
+                         (str "In deps.edn but not switched on. `wagoe add <module>` writes its config key.\n\n"
+                              (module-table ms) "\n"))
+                       (when-let [ms (seq (of :absent))]
+                         (str "Not in deps.edn. `wagoe add <module>` adds the dependency and its config.\n\n"
+                              (module-table ms))))
+        installed (str "\n## Installed Modules\n\n"
+                       (apply str (for [{:keys [name clojars docs-url]} (of :enabled)]
+                                    (str "- " name " (`" clojars "`) — [docs](" docs-url ")\n"))))]
+    (-> content
+        (templates/replace-block "wagoe:available-modules" available)
+        (templates/replace-block "wagoe:installed-modules" installed))))
+
+(defn sync-agents-md!
+  "Rewrite AGENTS.md's module blocks to match deps.edn and config.edn."
+  [dir]
   (let [f (io/file dir "AGENTS.md")]
     (when (.exists f)
       (let [content (slurp f)]
-        (if-not (str/includes? content "<!-- wagoe:available-modules -->")
+        (if-not (templates/block-content content "wagoe:available-modules")
           (println "  Warning: AGENTS.md sentinel comments not found — skipping AGENTS.md update")
-          (let [without-row  (templates/update-block
-                              content "wagoe:available-modules"
-                              #(str/replace % (templates/module-row-pattern name) ""))
-                install-line (str "- " name " — [docs](" docs-url ")\n")
-                ;; Re-running add to reach a profile it missed must not list
-                ;; the module twice.
-                with-install (if (str/includes? without-row install-line)
-                               without-row
-                               (str/replace without-row
-                                            "<!-- /wagoe:installed-modules -->"
-                                            (str install-line "<!-- /wagoe:installed-modules -->")))]
-            (spit f with-install)))))))
+          (let [synced (render-module-blocks content (module-states dir))]
+            (when (not= synced content)
+              (spit f synced))))))))
 
 ;; ─── Main ────────────────────────────────────────────────────────────────────
 
@@ -291,19 +320,7 @@
               ;; in every profile it belongs in. Requiring dep-present? prevents false
               ;; positives when two modules share a config key (e.g. email and external
               ;; both use :wagoe.external/smtp).
-              wired?       (if (seq (target-profiles dir module))
-                             (installed? dir module dep-present?)
-                             ;; No config snippet — check AGENTS.md installed section to avoid
-                             ;; false positives from pre-installed deps (e.g. wagoe-external).
-                             (let [agents-f (io/file dir "AGENTS.md")]
-                               (if (.exists agents-f)
-                                 (let [content          (slurp agents-f)
-                                       installed-start  (str/index-of content "<!-- wagoe:installed-modules -->")
-                                       installed-end    (str/index-of content "<!-- /wagoe:installed-modules -->")]
-                                   (if (and installed-start installed-end)
-                                     (str/includes? (subs content installed-start installed-end) module-name)
-                                     dep-present?))
-                                 dep-present?)))]
+              wired?       (installed? dir module dep-present?)]
           (cond
             (and dep-present? existing-ver (not= existing-ver (:version module)))
             (do (println (str "Warning: " module-name " is already in deps.edn at version " existing-ver
@@ -338,7 +355,7 @@
                                                  :no-active "no :active map in config.edn, nothing written"))))
                 (when-let [vs (patch-env-example! dir module results)]
                   (println (str "  .env.example: added " (str/join ", " vs)))))
-              (patch-agents-md! dir module)
+              (sync-agents-md! dir)
               (println (str "\n" module-name " added"))
               ;; Said at install time, not left on a page the user reads later:
               ;; an incubating library is published and usable but outside the

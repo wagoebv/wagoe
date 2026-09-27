@@ -479,36 +479,10 @@ with your application.
 
 ## Wagoe Modules
 
-Core modules are pre-installed. Add optional modules with `wagoe add <module>`.
+`wagoe new` and `wagoe add` keep this section in line with deps.edn and config.edn.
 
 <!-- wagoe:available-modules -->
-| Module     | Description                                   | Command                     |
-|------------|-----------------------------------------------|-----------------------------|
-| payments   | PSP abstraction — Mollie, Stripe, Mock        | wagoe add payments       |
-| storage    | File storage, local/S3, image processing      | wagoe add storage        |
-| jobs       | Background job processing, retry logic        | wagoe add jobs           |
-| email      | SMTP sending, async/queued                    | wagoe add email          |
-| cache      | Redis or in-memory caching                    | wagoe add cache          |
-| search     | Full-text search                              | wagoe add search         |
-| realtime   | WebSocket pub/sub                             | wagoe add realtime       |
-| tenant     | Multi-tenancy, schema-per-tenant              | wagoe add tenant         |
-| ai         | Multi-provider AI (Ollama/Claude/OpenAI)      | wagoe add ai             |
-| external   | Twilio, SMTP, IMAP adapters                   | wagoe add external       |
-| workflow   | Workflow orchestration                        | wagoe add workflow       |
-| reports    | PDF/CSV export, scheduling                    | wagoe add reports        |
-| calendar   | iCal, RRULE, conflict detection               | wagoe add calendar       |
-| geo        | Geocoding (OSM/Google/Mapbox), Haversine      | wagoe add geo            |
-| i18n       | Marker-based i18n, translation catalogues     | wagoe add i18n           |
-| admin      | Admin UI, entity config, HTMX forms           | wagoe add admin          |
-| ui-style   | Shared CSS/JS style bundles                   | wagoe add ui-style       |
-| devtools   | Dev-only: BND error codes, REPL helpers       | wagoe add devtools       |
 <!-- /wagoe:available-modules -->
 
 <!-- wagoe:installed-modules -->
-## Installed Modules
-
-- core (`com.wagoe/wagoe-core`) — [docs](https://github.com/wagoebv/wagoe/blob/main/libs/core/AGENTS.md)
-- observability (`com.wagoe/wagoe-observability`) — [docs](https://github.com/wagoebv/wagoe/blob/main/libs/observability/AGENTS.md)
-- platform (`com.wagoe/wagoe-platform`) — [docs](https://github.com/wagoebv/wagoe/blob/main/libs/platform/AGENTS.md)
-- user (`com.wagoe/wagoe-user`) — [docs](https://github.com/wagoebv/wagoe/blob/main/libs/user/AGENTS.md)
 <!-- /wagoe:installed-modules -->

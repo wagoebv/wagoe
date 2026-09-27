@@ -1096,6 +1096,22 @@
           (when (and (.isDirectory d) (empty? (.list d)))
             (.delete d)))))))
 
+(defn- env-vars
+  "The variable names `text` assigns, in order."
+  [text]
+  (distinct (map second (re-seq #"(?m)^\s*(?:export\s+)?([A-Z][A-Z0-9_]*)=" (or text "")))))
+
+(defn- env-step
+  "The first next step. Copying .env.example over an existing .env would
+   replace its real secrets, so an existing one is told only what it lacks."
+  []
+  (if-let [env (read-target ".env")]
+    (let [missing (remove (set (env-vars env)) (env-vars (read-target ".env.example")))]
+      (if (seq missing)
+        (str "Add to .env (see .env.example): " (str/join ", " missing))
+        ".env has every variable in .env.example"))
+    "Copy .env.example to .env and fill in your values"))
+
 (defn- write-plan! [spec plan]
   (println)
   (let [items (filter (comp #{:new :changed} :status) plan)]
@@ -1118,7 +1134,7 @@
                      (cyan "#include \"admin/users.edn\"") "will not resolve."))
           (println)
           (println (dim "Next steps:"))
-          (println (dim "  1. Copy .env.example to .env and fill in your values"))
+          (println (dim (str "  1. " (env-step))))
           (println (dim "  2. Run: bb migrate up"))
           (println (dim "  3. Run: bb doctor  (to verify your config)"))
           (when-let [steps (ai-provider-prerequisites (:ai-provider spec))]

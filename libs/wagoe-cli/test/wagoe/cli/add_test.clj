@@ -4,7 +4,8 @@
             [clojure.java.io :as io]
             [clojure.string :as str]
             [wagoe.cli.add :as add]
-            [wagoe.cli.catalogue :as cat]))
+            [wagoe.cli.catalogue :as cat]
+            [wagoe.cli.new :as new]))
 
 (defn- make-wagoe-project! [dir]
   (io/make-parents (io/file dir "resources/conf/dev/config.edn"))
@@ -160,18 +161,29 @@
       (finally
         (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))
 
-(deftest ^:integration patch-agents-md-test
+(defn- agents-block [dir block]
+  (second (re-find (re-pattern (str "(?s)<!-- " block " -->(.*?)<!-- /" block " -->"))
+                   (slurp (io/file dir "AGENTS.md")))))
+
+(deftest ^:integration adding-a-module-moves-it-to-installed-in-agents-md
   (let [tmp (str (System/getProperty "java.io.tmpdir") "/wagoe-add-agents-" (System/currentTimeMillis))]
     (try
-      (make-wagoe-project! tmp)
-      (testing "removes module from available block"
-        (add/patch-agents-md! tmp {:name "payments" :docs-url "http://example.com"})
-        (let [content (slurp (io/file tmp "AGENTS.md"))]
-          (is (not (str/includes? content "wagoe add payments")))))
-
-      (testing "adds module to installed block"
-        (let [content (slurp (io/file tmp "AGENTS.md"))]
-          (is (str/includes? content "payments"))))
+      (new/generate! tmp "shop" {})
+      (let [admin (cat/find-module "admin")]
+        (is (str/includes? (agents-block tmp "wagoe:available-modules") "wagoe add admin"))
+        (add/patch-configs! tmp admin)
+        (add/sync-agents-md! tmp)
+        (is (not (str/includes? (agents-block tmp "wagoe:available-modules") "wagoe add admin")))
+        (is (str/includes? (agents-block tmp "wagoe:installed-modules") "- admin ("))
+        (testing "a module not in deps.edn gets its dependency named"
+          (spit (io/file tmp "deps.edn")
+                (str/replace (slurp (io/file tmp "deps.edn")) #"(?m)^.*com\.wagoe/wagoe-geo .*$" ""))
+          (add/sync-agents-md! tmp)
+          (is (re-find #"(?s)Not in deps\.edn.*wagoe add geo" (agents-block tmp "wagoe:available-modules"))))
+        (testing "syncing twice changes nothing"
+          (let [before (slurp (io/file tmp "AGENTS.md"))]
+            (add/sync-agents-md! tmp)
+            (is (= before (slurp (io/file tmp "AGENTS.md")))))))
       (finally
         (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))
 

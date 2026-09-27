@@ -479,36 +479,43 @@ with your application.
 
 ## Wagoe Modules
 
-Core modules are pre-installed. Add optional modules with `wagoe add <module>`.
+`wagoe new` and `wagoe add` keep this section in line with deps.edn and config.edn.
 
 <!-- wagoe:available-modules -->
-| Module     | Description                                   | Command                     |
-|------------|-----------------------------------------------|-----------------------------|
-| payments   | PSP abstraction — Mollie, Stripe, Mock        | wagoe add payments       |
-| storage    | File storage, local/S3, image processing      | wagoe add storage        |
-| jobs       | Background job processing, retry logic        | wagoe add jobs           |
-| email      | SMTP sending, async/queued                    | wagoe add email          |
-| cache      | Redis or in-memory caching                    | wagoe add cache          |
-| search     | Full-text search                              | wagoe add search         |
-| realtime   | WebSocket pub/sub                             | wagoe add realtime       |
-| tenant     | Multi-tenancy, schema-per-tenant              | wagoe add tenant         |
-| ai         | Multi-provider AI (Ollama/Claude/OpenAI)      | wagoe add ai             |
-| external   | Twilio, SMTP, IMAP adapters                   | wagoe add external       |
-| workflow   | Workflow orchestration                        | wagoe add workflow       |
-| reports    | PDF/CSV export, scheduling                    | wagoe add reports        |
-| calendar   | iCal, RRULE, conflict detection               | wagoe add calendar       |
-| geo        | Geocoding (OSM/Google/Mapbox), Haversine      | wagoe add geo            |
-| i18n       | Marker-based i18n, translation catalogues     | wagoe add i18n           |
-| admin      | Admin UI, entity config, HTMX forms           | wagoe add admin          |
-| ui-style   | Shared CSS/JS style bundles                   | wagoe add ui-style       |
-| devtools   | Dev-only: BND error codes, REPL helpers       | wagoe add devtools       |
+In deps.edn but not switched on. `wagoe add <module>` writes its config key.
+
+| Module | Description | Command |
+|--------|-------------|---------|
+| payments | PSP abstraction — Mollie, Stripe, Mock checkout and webhook verification | `wagoe add payments` |
+| storage | File storage — local filesystem and S3, image processing | `wagoe add storage` |
+| jobs | Background job processing with retry logic | `wagoe add jobs` |
+| email | SMTP email sending, async and queued modes | `wagoe add email` |
+| cache | Distributed caching — Redis or in-memory, TTL, atomic ops | `wagoe add cache` |
+| search | Full-text search | `wagoe add search` |
+| realtime | WebSocket pub/sub messaging | `wagoe add realtime` |
+| tenant | Multi-tenancy with schema-per-tenant isolation | `wagoe add tenant` |
+| ai | Multi-provider AI — Ollama, Anthropic Claude, OpenAI | `wagoe add ai` |
+| workflow | Workflow orchestration with state machines | `wagoe add workflow` |
+| reports | PDF/CSV export and scheduled report generation | `wagoe add reports` |
+| calendar | iCal, RRULE recurrence, conflict detection, Hiccup UI | `wagoe add calendar` |
+| geo | Multi-provider geocoding (OSM/Google/Mapbox), Haversine distance | `wagoe add geo` |
+| i18n | Marker-based i18n, translation catalogues, locale chains | `wagoe add i18n` |
+| push | Multi-platform push notifications — FCM (Firebase) + APNs (Apple) | `wagoe add push` |
+| events | Event bus for cross-process, asynchronous module communication — in-memory and Redis Streams | `wagoe add events` |
+| audience | Rule-based audience segmentation with SQL + predicate pipeline | `wagoe add audience` |
+| admin | Admin UI with entity config, HTMX forms | `wagoe add admin` |
+| devtools | Dev-only: error pipeline with BND codes, REPL helpers, dashboard component | `wagoe add devtools` |
+
 <!-- /wagoe:available-modules -->
 
 <!-- wagoe:installed-modules -->
 ## Installed Modules
 
+- config (`com.wagoe/wagoe-config`) — [docs](https://github.com/wagoebv/wagoe/blob/main/libs/config/AGENTS.md)
 - core (`com.wagoe/wagoe-core`) — [docs](https://github.com/wagoebv/wagoe/blob/main/libs/core/AGENTS.md)
 - observability (`com.wagoe/wagoe-observability`) — [docs](https://github.com/wagoebv/wagoe/blob/main/libs/observability/AGENTS.md)
 - platform (`com.wagoe/wagoe-platform`) — [docs](https://github.com/wagoebv/wagoe/blob/main/libs/platform/AGENTS.md)
 - user (`com.wagoe/wagoe-user`) — [docs](https://github.com/wagoebv/wagoe/blob/main/libs/user/AGENTS.md)
+- external (`com.wagoe/wagoe-external`) — [docs](https://github.com/wagoebv/wagoe/blob/main/libs/external/AGENTS.md)
+- ui-style (`com.wagoe/wagoe-ui-style`) — [docs](https://github.com/wagoebv/wagoe/blob/main/libs/ui-style/AGENTS.md)
 <!-- /wagoe:installed-modules -->

@@ -1030,3 +1030,41 @@
           (is (nil? exit) out)
           (is (str/includes? (slurp (conf-file dir "prod")) "admin/invoices.edn"))
           (is (= entity (slurp (fs/file dir "resources" "conf" "prod" "admin" "invoices.edn")))))))))
+
+;; -----------------------------------------------------------------------------
+;; Next steps never tell an existing .env to be overwritten (BOU-573)
+;; -----------------------------------------------------------------------------
+
+(defn- next-steps [out]
+  (second (str/split out #"Next steps:")))
+
+(deftest ^:unit an-existing-env-is-told-only-what-it-lacks
+  (with-project
+    (fn [dir]
+      (spit (fs/file dir ".env") "HTTP_PORT=3000\nexport JWT_SECRET=my-real-secret-of-32-characters!!\n")
+      (let [[exit out] (run-setup dir "" "--ai-provider" "ollama")
+            steps      (next-steps out)]
+        (is (nil? exit) out)
+        (is (not (str/includes? steps "Copy .env.example")) "copying would overwrite JWT_SECRET")
+        (is (str/includes? steps "OLLAMA_URL"))
+        (is (str/includes? steps "HTTP_HOST"))
+        (is (not (str/includes? steps "JWT_SECRET")) "present, so not named")
+        (is (= "HTTP_PORT=3000\nexport JWT_SECRET=my-real-secret-of-32-characters!!\n"
+               (slurp (fs/file dir ".env"))))))))
+
+(deftest ^:unit a-complete-env-is-told-nothing-to-add
+  (with-project
+    (fn [dir]
+      (spit (fs/file dir ".env") (str (slurp (fs/file dir ".env.example")) "SQLITE_PATH=my.db\n"))
+      (let [[exit out] (run-setup dir "" "--database" "sqlite")
+            steps      (next-steps out)]
+        (is (nil? exit) out)
+        (is (not (str/includes? steps "Copy .env.example")))
+        (is (str/includes? steps ".env has every variable in .env.example"))))))
+
+(deftest ^:unit a-missing-env-is-told-to-copy-the-example
+  (with-project
+    (fn [dir]
+      (let [[exit out] (run-setup dir "" "--database" "sqlite")]
+        (is (nil? exit) out)
+        (is (str/includes? (next-steps out) "Copy .env.example to .env"))))))
