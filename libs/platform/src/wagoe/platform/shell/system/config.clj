@@ -37,7 +37,9 @@
    holds no list of which modules may serve HTTP (BOU-330)."
   [config http-extras module-routes]
   (let [active   (:active config)
-        http-cfg (config/http-config config)]
+        ;; The port strategy decides by profile: prod binds exactly (BOU-566).
+        http-cfg (cond-> (config/http-config config)
+                   (:wagoe/profile config) (assoc :profile (:wagoe/profile config)))]
     {:wagoe/settings        (:wagoe/settings active)
      :wagoe/db-context      (config/db-spec config)
      :wagoe/logging         (config/logging-config config)

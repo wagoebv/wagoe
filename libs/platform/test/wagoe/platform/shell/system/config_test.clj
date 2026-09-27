@@ -118,6 +118,12 @@
     (is (= 4100 (get-in c [:wagoe/http-server :config :port])))
     (is (= (ig/ref :wagoe/http-handler) (:handler (:wagoe/http-server c))))))
 
+(deftest ^:unit the-server-knows-the-boot-profile
+  ;; The port strategy decides by profile; without it a :prod boot searched
+  ;; ports like dev (BOU-566).
+  (let [c (sut/system-config (assoc (config) :wagoe/profile :prod))]
+    (is (= :prod (get-in c [:wagoe/http-server :config :profile])))))
+
 (deftest ^:unit request-capture-is-supplied-and-dev-only
   ;; The handler has always read :request-capture?; nothing supplied it, so the
   ;; dashboard's Request Inspector could not capture in any app (BOU-506).
