@@ -19,18 +19,33 @@ open_issue() {
 
 failed_jobs() {
   gh run view "$RUN_ID" --repo "$REPO" --json jobs \
-    --jq '.jobs[] | select(.conclusion == "failure") | "- " + .name'
+    --jq '.jobs[] | select(.conclusion == "failure" or .conclusion == "cancelled") | "- " + .name'
+}
+
+# The failed-job set each report recorded, newest last. The released-tag cells
+# stay red until a release, so a night with the same set is not news.
+last_reported_set() {
+  gh issue view "$1" --repo "$REPO" --json body,comments \
+    --jq '[.body] + [.comments[].body] | map(capture("<!-- failed-jobs: (?<j>.*) -->").j) | last // ""'
 }
 
 case "${1:-}" in
   fail)
     number="$(open_issue)"
+    jobs="$(failed_jobs || echo "- (could not list jobs; see the run)")"
+    set_key="$(printf '%s\n' "$jobs" | sort | paste -sd ';' -)"
     report="Run: $RUN_URL
 
 Failed jobs:
-$(failed_jobs)"
+$jobs
+
+<!-- failed-jobs: $set_key -->"
     if [[ -n "$number" ]]; then
-      gh issue comment "$number" --repo "$REPO" --body "Still failing. $report"
+      if [[ "$(last_reported_set "$number")" == "$set_key" ]]; then
+        echo "Same failed jobs as last reported on #$number; not commenting"
+        exit 0
+      fi
+      gh issue comment "$number" --repo "$REPO" --body "Failing differently now. $report"
       echo "Commented on #$number"
     else
       gh label create "$LABEL" --repo "$REPO" --color d73a4a --force \
