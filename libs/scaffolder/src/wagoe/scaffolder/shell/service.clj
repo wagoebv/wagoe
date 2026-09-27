@@ -531,7 +531,8 @@
                     ;; The index first: SQLite refuses to drop an indexed column.
                     :content (str (format "-- Rollback: drop %s from %s\n\n" field-name-snake table-name)
                                   (when (or (= :relation (:type field)) (:indexed field))
-                                    (format "DROP INDEX IF EXISTS idx_%s_%s;\n" table-name field-name-snake))
+                                    (str (format "DROP INDEX IF EXISTS idx_%s_%s;" table-name field-name-snake)
+                                         generators/statement-separator))
                                   (format "ALTER TABLE %s DROP COLUMN %s;\n" table-name field-name-snake))
                     :action :create}]
             schema-path (format "src/%s/%s/schema.clj" base-ns-path module-path)

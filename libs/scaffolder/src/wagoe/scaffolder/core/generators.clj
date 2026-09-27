@@ -360,16 +360,25 @@
                             "")]
     (format "  %s %s%s%s%s%s" field-name sql-type default-clause null-clause unique-clause references-clause)))
 
+(def statement-separator
+  "What migratus splits a migration on. Without it the file is one statement:
+   SQLite runs the first and drops the rest, and PostgreSQL's driver refuses
+   it (BOU-569)."
+  "\n--;;\n")
+
+(defn- index-sql [table column]
+  (format "CREATE INDEX IF NOT EXISTS idx_%s_%s ON %s(%s);" table column table column))
+
 (defn generate-migration-file
   "Generate migration SQL file content.
-   
+
    Args:
      ctx - Template context map
      migration-number - Migration sequence number (e.g., \"005\")
-   
+
    Returns:
      String content for migration SQL
-   
+
    Pure: true"
   ([ctx migration-number] (generate-migration-file ctx (first (:entities ctx)) migration-number))
   ([_ctx entity migration-number]
@@ -379,14 +388,10 @@
         ;; Every foreign key gets one: it is what a join reads, and what the
         ;; database scans on each cascading delete of the parent. An `indexed`
         ;; field gets one too (BOU-535).
-         relation-indexes (->> fields
-                               (filter #(or (:relation-table %) (:field-indexed %)))
-                               (map (fn [f]
-                                      (format "CREATE INDEX IF NOT EXISTS idx_%s_%s ON %s(%s);"
-                                              table-name (:field-name-snake f)
-                                              table-name (:field-name-snake f))))
-                               (str/join "\n"))]
-     (format "-- Migration %s: Create %s table
+         indexes (cons (index-sql table-name "created_at")
+                       (for [f fields :when (or (:relation-table f) (:field-indexed f))]
+                         (index-sql table-name (:field-name-snake f))))]
+     (str (format "-- Migration %s: Create %s table
 
 CREATE TABLE IF NOT EXISTS %s (
   id UUID PRIMARY KEY,
@@ -394,18 +399,14 @@ CREATE TABLE IF NOT EXISTS %s (
   created_at TIMESTAMP WITH TIME ZONE NOT NULL,
   updated_at TIMESTAMP WITH TIME ZONE,
   deleted_at TIMESTAMP WITH TIME ZONE
-);
-
--- Indexes
-CREATE INDEX IF NOT EXISTS idx_%s_created_at ON %s(created_at);
-%s"
-             migration-number
-             table-name
-             table-name
-             field-sqls
-             table-name
-             table-name
-             (if (str/blank? relation-indexes) "" (str relation-indexes "\n"))))))
+);"
+                  migration-number
+                  table-name
+                  table-name
+                  field-sqls)
+          statement-separator
+          (str/join statement-separator indexes)
+          "\n"))))
 
 (defn generate-migration-down-file
   "Generate the rollback SQL matching `generate-migration-file`.
@@ -1482,14 +1483,12 @@ DROP TABLE IF EXISTS %s;
                                          (:on-delete field-ctx)
                                          "CASCADE"))
                             "")
-        index-sql (if (or relation-table (:field-indexed field-ctx))
-                    (format "\nCREATE INDEX IF NOT EXISTS idx_%s_%s ON %s(%s);\n"
-                            table-name field-name table-name field-name)
-                    "")]
+        index (if (or relation-table (:field-indexed field-ctx))
+                (str statement-separator (index-sql table-name field-name) "\n")
+                "\n")]
     (format "-- Migration %s: Add %s to %s table
 
-ALTER TABLE %s ADD COLUMN %s %s%s%s%s%s;
-%s"
+ALTER TABLE %s ADD COLUMN %s %s%s%s%s%s;%s"
             migration-number
             field-name
             table-name
@@ -1500,7 +1499,7 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s%s%s;
             not-null
             unique-clause
             references-clause
-            index-sql)))
+            index)))
 
 (defn schema-field-entry
   "The Malli entry line for `field`, without indentation.

@@ -51,7 +51,8 @@
     ;; it just started as down.
     :port-env  "WAGOE_TEST_MYSQL_PORT"
     :port      (env-port "WAGOE_TEST_MYSQL_PORT" 3306)
-    :needed-by ["wagoe.audience-dialect-test"]}])
+    :needed-by ["wagoe.audience-dialect-test"
+                "wagoe.scaffolder.migration-dialects-test"]}])
 
 (defn reachable?
   "True when something accepts a TCP connection at `host`:`port`.

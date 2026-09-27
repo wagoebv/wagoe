@@ -63,6 +63,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Scaffolded migrations lost their indexes on SQLite and failed on PostgreSQL and MySQL** (BOU-569).
+  Add `--;;` between the statements of older generated migrations; MySQL gets its own types.
 - **`wagoe add` and `bb setup --prod true` left prod behind** (BOU-564). Both now bring every
   profile the project's modules; re-run `wagoe add <module>` for one prod lacks.
 - **`wagoe add payments` wrote the mock provider, which accepts any webhook as paid, into prod** (BOU-564).
