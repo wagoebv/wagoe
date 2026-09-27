@@ -102,3 +102,10 @@
 (deftest ^:unit project-name-parsing-test
   (is (= "shop" (agents-update/project-name-from-agents project-agents)))
   (is (nil? (agents-update/project-name-from-agents "no title here"))))
+
+(deftest ^:unit modules-only-leaves-the-gen-blocks-alone
+  ;; What `wagoe agents update --modules` does, for `bb setup` (BOU-573).
+  (let [{:keys [content updated]} (agents-update/update-agents-content project-agents project-agents {} states)]
+    (is (str/includes? content "OLD fc-is rules"))
+    (is (str/includes? content "wagoe add geo"))
+    (is (= ["wagoe:available-modules" "wagoe:installed-modules"] updated))))

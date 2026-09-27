@@ -32,7 +32,7 @@
       "agents"  (if (= (first rest-args) "update")
                   (do (require 'wagoe.cli.agents-update)
                       ((resolve 'wagoe.cli.agents-update/-main) (rest rest-args)))
-                  (do (println "Usage: wagoe agents update [--check]")
+                  (do (println "Usage: wagoe agents update [--check] [--modules]")
                       (System/exit 1)))
       "version" (println (str "wagoe CLI version "
                               (:cli-version (catalogue/load-catalogue))))

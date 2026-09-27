@@ -16,6 +16,7 @@
             [clojure.java.io :as io]
             [wagoe.tools.config-edn :as config-edn]
             [clojure.string :as str]
+            [babashka.fs :as fs]
             [babashka.process :refer [shell]]))
 
 ;; =============================================================================
@@ -1096,6 +1097,22 @@
           (when (and (.isDirectory d) (empty? (.list d)))
             (.delete d)))))))
 
+(def ^:dynamic *wagoe-cli*
+  "The command that runs the wagoe CLI, or nil when it is not installed. The
+   CLI owns the module catalogue AGENTS.md is rendered from, so setup asks it."
+  (when-let [w (fs/which "wagoe")] [(str w)]))
+
+(defn- sync-agents-md!
+  "Re-render AGENTS.md's module blocks after setup changed config. Returns
+   :synced, :no-cli, or nil when there is no AGENTS.md."
+  []
+  (when (.exists (io/file (root-dir) "AGENTS.md"))
+    (if-let [cli *wagoe-cli*]
+      (let [{:keys [exit]} (apply shell {:dir (root-dir) :continue true :out :string :err :string}
+                                  (concat cli ["agents" "update" "--modules"]))]
+        (if (zero? exit) :synced :no-cli))
+      :no-cli)))
+
 (defn- env-vars
   "The variable names `text` assigns, in order."
   [text]
@@ -1132,11 +1149,16 @@
           (when (and (:admin-ui spec) (nil? @admin-users-entity))
             (println (yellow "!") " Admin entity config missing from wagoe-tools;"
                      (cyan "#include \"admin/users.edn\"") "will not resolve."))
-          (println)
-          (println (dim "Next steps:"))
-          (println (dim (str "  1. " (env-step))))
-          (println (dim "  2. Run: bb migrate up"))
-          (println (dim "  3. Run: bb doctor  (to verify your config)"))
+          (let [agents (sync-agents-md!)]
+            (when (= :synced agents)
+              (println (green "✓") " Updated" (cyan "AGENTS.md") (dim "(module list)")))
+            (println)
+            (println (dim "Next steps:"))
+            (println (dim (str "  1. " (env-step))))
+            (println (dim "  2. Run: bb migrate up"))
+            (println (dim "  3. Run: bb doctor  (to verify your config)"))
+            (when (= :no-cli agents)
+              (println (dim "  4. Run: wagoe agents update  (AGENTS.md's module list predates this change)"))))
           (when-let [steps (ai-provider-prerequisites (:ai-provider spec))]
             (println)
             (println (yellow (str "Before " (name (:ai-provider spec)) " answers:")))

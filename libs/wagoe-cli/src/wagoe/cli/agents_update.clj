@@ -73,8 +73,11 @@
                                       module-blocks)))))))
 
 (defn -main [args]
-  (let [check? (some #{"--check"} args)
-        f      (io/file "AGENTS.md")]
+  (let [check?        (some #{"--check"} args)
+        ;; `bb setup` writes module keys and asks for this alone: the module
+        ;; blocks follow the project, the rest stays as the user has it.
+        modules-only? (some #{"--modules"} args)
+        f             (io/file "AGENTS.md")]
     (if-not (.exists f)
       (do (println "No AGENTS.md found in the current directory.")
           (println "Run this from a Wagoe project root (created with `wagoe new`).")
@@ -83,13 +86,17 @@
             project-name (or (project-name-from-agents current)
                              (.getName (.getCanonicalFile (io/file "."))))
             project-ns   (str/replace project-name "-" "_")
+            dir          (System/getProperty "user.dir")
+            states       (when (.exists (io/file dir "deps.edn"))
+                           (add/module-states dir))
             {:keys [content updated missing]}
-            (update-agents-content current (templates/read-template "AGENTS.md.tmpl")
-                                   {:project-name project-name
-                                    :project-ns   project-ns}
-                                   (let [dir (System/getProperty "user.dir")]
-                                     (when (.exists (io/file dir "deps.edn"))
-                                       (add/module-states dir))))]
+            (if modules-only?
+              ;; A template whose gen blocks are the project's own is a no-op for them.
+              (update-agents-content current current {} states)
+              (update-agents-content current (templates/read-template "AGENTS.md.tmpl")
+                                     {:project-name project-name
+                                      :project-ns   project-ns}
+                                     states))]
         (doseq [block missing]
           (println (str "  Warning: markers for '" block "' not found — block skipped")))
         (cond

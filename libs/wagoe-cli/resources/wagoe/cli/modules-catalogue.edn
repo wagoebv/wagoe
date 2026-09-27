@@ -54,6 +54,9 @@
    :tier                :stable
    :config-snippet      ""
    :test-config-snippet ""
+   ;; No config key: the app switches it on in code, through system_config.clj's
+   ;; :extra-modules, which `wagoe new --no-user` leaves empty (BOU-573).
+   :module-key          :wagoe/user
    :add-command         "wagoe add user"
    :docs-url            "https://github.com/wagoebv/wagoe/blob/main/libs/user/AGENTS.md"}
 

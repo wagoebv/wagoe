@@ -4,6 +4,7 @@
             [wagoe.tools.integrate :as integrate]
             [wagoe.tools.setup :as setup]
             [babashka.fs :as fs]
+            [babashka.process :as process]
             [clojure.edn :as edn]
             [clojure.java.io :as io]
             [clojure.set :as set]
@@ -1068,3 +1069,50 @@
       (let [[exit out] (run-setup dir "" "--database" "sqlite")]
         (is (nil? exit) out)
         (is (str/includes? (next-steps out) "Copy .env.example to .env"))))))
+
+;; -----------------------------------------------------------------------------
+;; AGENTS.md follows what setup switched on (BOU-573)
+;; -----------------------------------------------------------------------------
+
+(defn- cli-command
+  "The wagoe CLI from this checkout, run the way bbin runs it."
+  []
+  (let [root (some #(when (fs/exists? (fs/file % "libs/wagoe-cli/src")) (fs/canonicalize %))
+                   ["." ".."])]
+    ["bb" "-cp" (str (fs/file root "libs/wagoe-cli/src") ":" (fs/file root "libs/wagoe-cli/resources"))
+     "-m" "wagoe.cli.main"]))
+
+(defn- installed-block [dir]
+  (second (re-find #"(?s)<!-- wagoe:installed-modules -->(.*?)<!-- /wagoe:installed-modules -->"
+                   (slurp (fs/file dir "AGENTS.md")))))
+
+(defn- with-new-project
+  "Run `f` on a project `wagoe new` made, deleting it afterwards."
+  [f]
+  (let [parent (fs/create-temp-dir)]
+    (try
+      (apply process/shell {:dir (str parent) :out :string :err :string}
+             (concat (cli-command) ["new" "shop" "--skip-git"]))
+      (f (fs/file parent "shop"))
+      (finally (fs/delete-tree parent)))))
+
+(deftest ^:integration setup-keeps-agents-md-modules-in-line
+  (with-new-project
+    (fn [dir]
+      (is (not (str/includes? (installed-block dir) "- payments (")))
+      (let [[exit out] (binding [setup/*wagoe-cli* (cli-command)]
+                         (run-setup dir "" "--payment" "mock"))]
+        (is (nil? exit) out)
+        (is (str/includes? (installed-block dir) "- payments (") out)
+        (is (str/includes? (slurp (fs/file dir "AGENTS.md")) "<!-- gen:pitfalls -->")
+            "the rest of AGENTS.md is left as it was")))))
+
+(deftest ^:integration setup-without-the-cli-says-to-refresh-agents-md
+  (with-new-project
+    (fn [dir]
+      (let [before     (slurp (fs/file dir "AGENTS.md"))
+            [exit out] (binding [setup/*wagoe-cli* nil]
+                         (run-setup dir "" "--payment" "mock"))]
+        (is (nil? exit) out)
+        (is (= before (slurp (fs/file dir "AGENTS.md"))))
+        (is (str/includes? (next-steps out) "wagoe agents update"))))))

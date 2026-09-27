@@ -137,6 +137,24 @@
 (defn- config-key-of [snippet]
   (second (re-find #":(\S+)" snippet)))
 
+(defn- active-keys
+  "The keys of the :active map in config `text`, or nil when it does not read.
+   Aero's tags are read as their values."
+  [text]
+  (try
+    (let [active (:active (edn/read-string {:default (fn [_ v] v)} text))]
+      (when (map? active) (set (keys active))))
+    (catch Exception _ nil)))
+
+(defn- in-active?
+  "Whether `config-key` (\"wagoe/jobs\") is a key of :active in `text`. A key
+   parked under :inactive does not count. Text that does not read falls back
+   to a search, so a key is never written twice into a file we cannot parse."
+  [text config-key]
+  (if-let [ks (active-keys text)]
+    (contains? ks (keyword config-key))
+    (str/includes? text (str ":" config-key))))
+
 (defn patch-config!
   "Inject snippet into the :active map of a config file unless its key is there.
    Returns :added, :present, or :no-active when there is no :active map to
@@ -145,7 +163,7 @@
   (let [f          (io/file dir relative-path)
         content    (slurp f)
         config-key (config-key-of snippet)]
-    (if (str/includes? content (str ":" config-key))
+    (if (in-active? content config-key)
       :present
       (let [active-idx (str/index-of content ":active")
             open-idx   (when active-idx (str/index-of content "{" (+ active-idx 7)))
@@ -213,8 +231,8 @@
   [dir module dep-present?]
   (and dep-present?
        (every? (fn [[env snippet]]
-                 (str/includes? (slurp (io/file dir "resources/conf" env "config.edn"))
-                                (str ":" (config-key-of snippet))))
+                 (in-active? (slurp (io/file dir "resources/conf" env "config.edn"))
+                             (config-key-of snippet)))
                (target-profiles dir module))))
 
 (defn patch-env-example!
@@ -238,24 +256,49 @@
 
 ;; ─── AGENTS.md module blocks ──────────────────────────────────────────────
 
+(defn- extra-modules
+  "The keys in :extra-modules of the project's system_config.clj files."
+  [dir]
+  (let [src (io/file dir "src")]
+    (set (for [f     (when (.isDirectory src) (file-seq src))
+               :when (= "system_config.clj" (.getName ^java.io.File f))
+               [_ ks] (re-seq #":extra-modules\s+#\{([^}]*)\}" (slurp f))
+               k     (re-seq #":[\w.-]+/[\w.-]+" ks)]
+           k))))
+
+(defn- switched-on?
+  "Whether `module-key` is in dev's :active or in the code's :extra-modules."
+  [dir module-key]
+  (let [dev (io/file dir "resources/conf/dev/config.edn")
+        k   (str module-key)]
+    (or (contains? (extra-modules dir) k)
+        (and (.exists dev) (in-active? (slurp dev) (subs k 1))))))
+
 (defn module-states
-  "Each catalogue module with where the project has it: :enabled (in deps.edn
-   and configured, or nothing to configure), :configurable (in deps.edn, config
-   key missing) or :absent. Core modules count as enabled once present."
+  "Each catalogue module with where the project has it: :enabled, :configurable
+   (in deps.edn, not switched on) or :absent. A module with a :module-key is on
+   when that key is in config or :extra-modules; the other core modules are
+   wired whatever config says; the rest need their config key in every profile."
   [dir]
   (let [deps (slurp (io/file dir "deps.edn"))]
     (for [m (:modules (cat/load-catalogue))
           :let [dep (dep-coords deps (:clojars m) (:scope m))]]
       [m (cond
-           (or (nil? dep) (= :unreadable dep))            :absent
-           (or (= :core (:category m)) (installed? dir m true)) :enabled
-           :else                                          :configurable)])))
+           (or (nil? dep) (= :unreadable dep)) :absent
+           (:module-key m)                     (if (switched-on? dir (:module-key m)) :enabled :configurable)
+           (or (= :core (:category m))
+               (installed? dir m true))        :enabled
+           :else                               :configurable)])))
 
 (defn- module-table [modules]
   (str "| Module | Description | Command |\n"
        "|--------|-------------|---------|\n"
-       (apply str (for [{:keys [name description]} modules]
-                    (str "| " name " | " description " | `wagoe add " name "` |\n")))))
+       (apply str (for [{:keys [name description module-key]} modules]
+                    (str "| " name " | " description " | "
+                         (if module-key
+                           (str "add `" module-key "` to `:extra-modules` in system_config.clj")
+                           (str "`wagoe add " name "`"))
+                         " |\n")))))
 
 (defn render-module-blocks
   "`content` with the available- and installed-modules blocks rendered from
@@ -326,6 +369,10 @@
             (do (println (str "Warning: " module-name " is already in deps.edn at version " existing-ver
                               " (catalogue version: " (:version module) ")."))
                 (println "Resolve the version conflict manually — no changes made."))
+
+            (and dep-present? (:module-key module) (not (switched-on? dir (:module-key module))))
+            (println (str "Module '" module-name "' is in deps.edn but switched off. Add "
+                          (:module-key module) " to :extra-modules in src/<project>/system_config.clj."))
 
             wired?
             (println (str "Module '" module-name "' is already installed."))

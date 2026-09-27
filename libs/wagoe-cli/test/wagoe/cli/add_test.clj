@@ -298,3 +298,37 @@
       (is (not (contains? (active-of tmp "prod") :wagoe/payment-provider)))
       (finally
         (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))
+
+(deftest ^:integration add-user-under-no-user-says-how-to-switch-it-on
+  ;; --no-user keeps the library and drops :wagoe/user from :extra-modules;
+  ;; "already installed" would be false (BOU-573).
+  (let [tmp  (str (System/getProperty "java.io.tmpdir") "/wagoe-add-nouser-" (System/currentTimeMillis))
+        home (System/getProperty "user.dir")]
+    (try
+      (new/generate! tmp "shop" {:with-user? false})
+      (System/setProperty "user.dir" tmp)
+      (let [out (with-out-str (add/-main ["user"]))]
+        (is (str/includes? out "switched off"))
+        (is (str/includes? out ":extra-modules"))
+        (is (not (str/includes? out "already installed"))))
+      (finally
+        (System/setProperty "user.dir" home)
+        (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))
+
+(deftest ^:integration a-key-under-inactive-is-not-installed
+  ;; The text search counted a key parked under :inactive as installed, and
+  ;; patch-config! then wrote nothing into :active (BOU-573).
+  (let [tmp    (with-profiles! "inactive")
+        module (cat/find-module "jobs")]
+    (try
+      (doseq [env ["dev" "test"]]
+        (add/patch-config! tmp (str "resources/conf/" env "/config.edn") (:config-snippet module)))
+      (spit (io/file tmp "resources/conf/prod/config.edn")
+            "{:active {}\n :inactive {:wagoe/jobs {:provider :db}}}\n")
+      (is (not (add/installed? tmp module true)))
+      (is (= [["dev" :present] ["prod" :added] ["test" :present]]
+             (add/patch-configs! tmp module)))
+      (is (contains? (active-of tmp "prod") :wagoe/jobs))
+      (is (add/installed? tmp module true))
+      (finally
+        (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))
