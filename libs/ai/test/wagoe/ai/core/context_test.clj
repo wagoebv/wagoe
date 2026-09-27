@@ -117,3 +117,41 @@
           result (ctx/truncate-source src 10)]
       (is (str/includes? result "truncated"))
       (is (= 11 (count (str/split-lines result)))))))
+
+;; BOU-572 -------------------------------------------------------------------
+
+(deftest ^:unit ns-form-requires-test
+  (let [form '(ns wagoe.demo.shell.service
+               "doc"
+               (:require [wagoe.workflow.ports :as wf]
+                         [clojure.string :as str]
+                         wagoe.events.ports
+                         [wagoe.demo [schema :as schema] core]
+                         [clojure.test :refer [deftest]])
+               (:import (java.util UUID)))]
+    (is (= '[wagoe.workflow.ports clojure.string wagoe.events.ports
+             wagoe.demo.schema wagoe.demo.core clojure.test]
+           (ctx/ns-form-requires form)))
+    (is (= '{wagoe.workflow.ports wf clojure.string str wagoe.demo.schema schema}
+           (ctx/ns-form-aliases form)))))
+
+(deftest ^:unit render-namespace-apis-test
+  (let [text (ctx/render-namespace-apis
+              '{wagoe.workflow.ports wf}
+              '[{:ns wagoe.workflow.ports
+                 :protocols [{:name IWorkflowStore
+                              :methods [{:name save-instance! :arglists ([this instance])}
+                                        {:name find-instance :arglists ([this id])}]}]
+                 :vars [{:name workflow-id :arglists ([instance])}]}
+                {:ns wagoe.events.ports
+                 :protocols [{:name IEventBus :methods [{:name publish! :arglists ([this event])}]}]}
+                {:ns wagoe.gone :error "Could not locate wagoe/gone.clj"}])]
+    (testing "protocols and vars are named the way the source refers to them"
+      (is (str/includes? text "protocol wf/IWorkflowStore"))
+      (is (str/includes? text "(save-instance! [this instance])"))
+      (is (str/includes? text "(wf/workflow-id [instance])")))
+    (testing "without an alias the name is fully qualified"
+      (is (str/includes? text "protocol wagoe.events.ports/IEventBus")))
+    (testing "a namespace that would not load is named as such"
+      (is (str/includes? text "wagoe.gone"))
+      (is (str/includes? text "Could not locate")))))

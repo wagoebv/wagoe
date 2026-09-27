@@ -231,44 +231,66 @@
   (testing "returns nil for nil input"
     (is (nil? (parsing/parse-generated-tests nil)))))
 
-(deftest ^:unit ensure-test-metadata-test
-  (testing "an untagged deftest gets the test type"
-    (is (= "(deftest ^:unit foo-test\n  (is (= 1 1)))"
-           (parsing/ensure-test-metadata "(deftest foo-test\n  (is (= 1 1)))" :unit))))
+(def ^:private mocked-ns
+  "(ns wagoe.demo.shell.service-test
+  (:require [clojure.test :refer [deftest is]]
+            [next.jdbc :as jdbc]
+            [wagoe.workflow.ports :as wf]))
+")
 
-  (testing "every deftest in the namespace is tagged, not only the first"
-    ;; The measured failure was a whole namespace with no metadata, so tagging
-    ;; one form would leave the rest invisible to Kaocha just the same.
-    (let [src    "(deftest a-test\n  (is true))\n\n(deftest b-test\n  (is true))\n"
-          result (parsing/ensure-test-metadata src :integration)]
-      (is (= 2 (count (re-seq #"\^:integration" result))))))
+(deftest ^:unit tag-tests-test
+  (testing "BOU-572: a test that only calls a reify mock is a unit test"
+    ;; rc-4 tagged exactly this ^:integration because it sat under shell/.
+    (let [src    (str mocked-ns "(deftest ^:integration start-test\n"
+                      "  (let [store (reify wf/IStore (save! [_ x] x))]\n"
+                      "    (is (= 1 (wf/save! store 1)))))\n")
+          result (parsing/tag-tests src :integration)]
+      (is (str/includes? result "(deftest ^:unit start-test"))
+      (is (not (str/includes? result "^:integration")))))
 
-  (testing "a deftest the model already tagged is left alone"
-    (let [src "(deftest ^:contract already-test\n  (is true))"]
-      (is (= src (parsing/ensure-test-metadata src :unit)))))
+  (testing "starting a component on mocks is still a unit test"
+    ;; The first real run tagged these ^:integration: Integrant is not I/O.
+    (let [src (str "(ns x-test (:require [integrant.core :as ig]))\n"
+                   "(deftest init-test\n  (is (map? (ig/init-key :x {:bus (reify P (f [_] nil))}))))\n")]
+      (is (str/includes? (parsing/tag-tests src :integration) "(deftest ^:unit init-test"))))
 
-  (testing "a mixed namespace gains tags only where they are missing"
-    (let [src    "(deftest ^:contract tagged-test\n  (is true))\n(deftest untagged-test\n  (is true))"
-          result (parsing/ensure-test-metadata src :unit)]
-      (is (str/includes? result "(deftest ^:contract tagged-test"))
-      (is (str/includes? result "(deftest ^:unit untagged-test"))
-      (is (= 1 (count (re-seq #"\^:unit" result))))))
+  (testing "a test that reaches a database is an integration test"
+    (let [src (str mocked-ns "(deftest query-test\n  (is (seq (jdbc/execute! ds [\"SELECT 1\"]))))\n")]
+      (is (str/includes? (parsing/tag-tests src :unit) "(deftest ^:integration query-test"))))
 
-  (testing "an indented deftest keeps its indentation"
-    (is (= "  (deftest ^:unit foo-test)"
-           (parsing/ensure-test-metadata "  (deftest foo-test)" :unit))))
+  (testing "so is one that touches the filesystem"
+    (let [src (str mocked-ns "(deftest file-test\n  (is (string? (slurp \"x.txt\"))))\n")]
+      (is (str/includes? (parsing/tag-tests src :unit) "(deftest ^:integration file-test"))))
+
+  (testing "or calls a helper in the file that does"
+    (let [src (str mocked-ns "(defn- rows [] (jdbc/execute! ds [\"SELECT 1\"]))\n\n"
+                   "(deftest helper-test\n  (is (seq (rows))))\n"
+                   "(deftest pure-test\n  (is (= 1 1)))\n")
+          result (parsing/tag-tests src :unit)]
+      (is (str/includes? result "(deftest ^:integration helper-test"))
+      (is (str/includes? result "(deftest ^:unit pure-test"))))
+
+  (testing "I/O named only in a string does not count"
+    (let [src (str mocked-ns "(deftest doc-test\n  (is (= \"jdbc/execute! and slurp\" (str \"jdbc/execute! and slurp\"))))\n")]
+      (is (str/includes? (parsing/tag-tests src :unit) "(deftest ^:unit doc-test"))))
+
+  (testing "an adapter test with I/O stays a contract test"
+    (let [src (str mocked-ns "(deftest contract-test\n  (is (seq (jdbc/execute! ds [\"SELECT 1\"]))))\n")]
+      (is (str/includes? (parsing/tag-tests src :contract) "(deftest ^:contract contract-test"))))
+
+  (testing "other metadata is kept and exactly one pyramid tag remains"
+    (let [result (parsing/tag-tests "(deftest ^:security ^:unit ^:integration a-test\n  (is (= 1 1)))" :unit)]
+      (is (= "(deftest ^:unit ^:security a-test\n  (is (= 1 1)))" result))))
 
   (testing "the word deftest inside a string or comment is not rewritten"
-    ;; Anchoring to a line start is what protects these; a bare \\bdeftest\\b
-    ;; would corrupt both.
     (let [src "(def doc \"call deftest here\")\n;; deftest goes at the top\n"]
-      (is (= src (parsing/ensure-test-metadata src :unit)))))
+      (is (= src (parsing/tag-tests src :unit)))))
 
-  (testing "source with no deftest at all is unchanged"
-    (is (= "(ns foo-test)" (parsing/ensure-test-metadata "(ns foo-test)" :unit))))
+  (testing "an indented deftest keeps its indentation"
+    (is (= "  (deftest ^:unit foo-test)" (parsing/tag-tests "  (deftest foo-test)" :unit))))
 
   (testing "returns nil for nil input"
-    (is (nil? (parsing/ensure-test-metadata nil :unit)))))
+    (is (nil? (parsing/tag-tests nil :unit)))))
 
 (deftest ^:unit strip-noncode-test
   (testing "code is returned unchanged"

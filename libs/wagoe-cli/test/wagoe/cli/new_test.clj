@@ -236,6 +236,15 @@
 
       (testing "pre-commit hook is executable"
         (is (.canExecute (io/file tmp ".githooks/pre-commit"))))
+
+      (testing "the hook lints the way `bb check` does, and blocks on what it blocks on"
+        ;; BOU-572: the hook ran clj-kondo with `|| true`, so a partial reify
+        ;; committed cleanly and failed `bb check --ci`.
+        (let [hook  (slurp (io/file tmp ".githooks/pre-commit"))
+              tasks (:tasks (edn/read-string (slurp (io/file tmp "bb.edn"))))]
+          (is (re-find #"(?m)^bb check:lint$" hook))
+          (is (not (str/includes? hook "|| true")))
+          (is (= '(check/lint) (get-in tasks ['check:lint :task])))))
       (finally
         ;; cleanup
         (doseq [f (reverse (file-seq (io/file tmp)))]

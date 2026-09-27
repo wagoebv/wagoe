@@ -321,36 +321,6 @@
       :else
       {:text edn-text :entity-name (name (ffirst value)) :value value})))
 
-(defn ensure-test-metadata
-  "Tag every unmetadata'd `deftest` in `test-source` with `^:<test-type>`.
-
-   Kaocha selects suites on this metadata, so a test namespace without it runs
-   in no suite — present in the file, absent from every run. The system prompt
-   asks the model for it; measured against two of the framework's own core
-   namespaces, it produced 15 deftests and tagged none of them. The test type
-   is already derived in Clojure by `context/determine-test-type`, so this is a
-   fact the code knows and does not need to ask for.
-
-   A deftest that already carries metadata is left alone — the model may have
-   tagged it more precisely than the path-based default, and a second tag would
-   be noise at best.
-
-   Args:
-     test-source - generated Clojure source string
-     test-type   - :unit, :integration or :contract
-
-   Returns:
-     The source with metadata applied, or nil for nil input."
-  [test-source test-type]
-  (when test-source
-    (str/replace test-source
-                 ;; `deftest` must be followed by a name, not by `^` (already
-                 ;; tagged) — hence the negative lookahead. Anchored to a line
-                 ;; start so `deftest` inside a docstring or a comment about
-                 ;; deftest is untouched.
-                 #"(?m)^(\s*\(deftest\s+)(?!\^)"
-                 (str "$1^" test-type " "))))
-
 (defn strip-noncode
   "`source` with string, regex, character-literal and comment content blanked.
 
@@ -585,3 +555,107 @@
           (str/replace-first test-source
                              #"\(:require\s+"
                              (str "(:require " entries "\n            ")))))))
+
+;; =============================================================================
+;; Test tags — from what each deftest touches (BOU-572)
+;; =============================================================================
+
+(def io-namespaces
+  "Namespace prefixes whose calls reach a database, a file, a process or the
+   network. A test calling one does real I/O."
+  ["next.jdbc" "clojure.java.jdbc" "clojure.java.io" "clojure.java.shell"
+   "babashka.process" "babashka.fs" "babashka.http-client" "clj-http" "hato"
+   "org.httpkit" "ring.adapter"])
+
+(def ^:private io-symbols
+  "I/O reached without a namespace alias."
+  #"(?<![\w.\-/])(?:slurp|spit|with-open|Thread/sleep|System/getenv|java\.io\.|java\.nio\.|java\.net\.|File/|Files/|File\.)")
+
+(defn- io-ns? [ns-name]
+  (some #(or (= % ns-name) (str/starts-with? ns-name (str % "."))) io-namespaces))
+
+(defn- io-prefixes
+  "The alias and full name of each I/O namespace the ns form requires."
+  [source]
+  (let [required (or (require-clause source) "")]
+    (into (set (filter io-ns? (map second (re-seq #"\[([\w.\-]+)" required))))
+          (keep (fn [[_ ns-name alias]] (when (io-ns? ns-name) alias)))
+          (re-seq #"\[([\w.\-]+)[^\]]*?:as\s+([\w.\-]+)" required))))
+
+(defn- form-end
+  "Index just past the form that opens at `start` in `code`."
+  [^String code start]
+  (loop [i start depth 0]
+    (if (>= i (count code))
+      i
+      (let [c (.charAt code i)]
+        (cond
+          (#{\( \[ \{} c) (recur (inc i) (inc depth))
+          (#{\) \] \}} c) (if (= 1 depth) (inc i) (recur (inc i) (dec depth)))
+          :else          (recur (inc i) depth))))))
+
+(defn- top-level-forms
+  "[{:start :end :code}] for each form at column zero or indented at depth 0."
+  [code]
+  (loop [i 0 out []]
+    (let [j (str/index-of code "(" i)]
+      (if (nil? j)
+        out
+        (let [end (form-end code j)]
+          (recur end (conj out {:start j :end end :code (subs code j end)})))))))
+
+(defn- touches-io? [form-code prefixes io-names]
+  (boolean
+   (or (re-find io-symbols form-code)
+       (some #(re-find (re-pattern (str "(?<![\\w.\\-])" (java.util.regex.Pattern/quote %) "/"))
+                       form-code)
+             prefixes)
+       (some #(re-find (re-pattern (str "(?<![\\w.\\-/])" (java.util.regex.Pattern/quote %)
+                                        "(?![\\w.\\-?!*<>=])"))
+                       form-code)
+             io-names))))
+
+(def ^:private pyramid-tag #"\^:(?:unit|integration|contract)\s+")
+
+(defn tag-tests
+  "Give every deftest in `test-source` exactly one pyramid tag, from what it
+   touches: ^:integration (^:contract for an adapter's `test-type`) when it
+   does real I/O, directly or through a helper or fixture in the file, and
+   ^:unit otherwise. Kaocha selects suites on the tag. The model's own tag is
+   replaced: rc-4 tagged reify-only tests ^:integration because the source sat
+   under shell/ (BOU-572). Other metadata is kept.
+
+   Returns the source, or nil for nil input."
+  [test-source test-type]
+  (when test-source
+    (let [code     (strip-noncode test-source)
+          prefixes (io-prefixes test-source)
+          forms    (top-level-forms code)
+          def-name #"^\((?:defn-?|def|defmacro)\s+(?:\^\S+\s+)*([^\s()\[\]{}]+)"
+          io-names (loop [names #{}]
+                     (let [more (into names
+                                      (keep (fn [{fc :code}]
+                                              (when-let [[_ n] (re-find def-name fc)]
+                                                (when (touches-io? fc prefixes names) n))))
+                                      forms)]
+                       (if (= more names) names (recur more))))
+          fixture-io? (some (fn [{fc :code}]
+                              (and (str/starts-with? fc "(use-fixtures")
+                                   (touches-io? fc prefixes io-names)))
+                            forms)
+          io-tag   (if (= :contract test-type) :contract :integration)]
+      (reduce
+       (fn [src {:keys [start end]}]
+         (let [form (subs src start end)]
+           (if-let [[head deftest meta-str] (re-find #"^(\(deftest\s+)((?:\^\S+\s+)*)" form)]
+             (let [tag (if (or fixture-io? (touches-io? (subs code start end) prefixes io-names))
+                         io-tag
+                         :unit)]
+               (str (subs src 0 start)
+                    deftest "^" tag " " (str/replace meta-str pyramid-tag "")
+                    (subs form (count head))
+                    (subs src end)))
+             src)))
+       test-source
+       ;; Right to left, so an edit does not move the forms still to come.
+       (reverse forms)))))

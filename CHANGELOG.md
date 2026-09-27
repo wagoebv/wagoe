@@ -63,6 +63,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **`bb ai gen-tests` wrote tests that did not compile, and `bb ai admin-entity` invented keys** (BOU-572).
+  Both check before writing. Copy the new `.githooks/pre-commit`: it blocks on lint as `bb check` does.
 - **`wagoe add` and `bb setup --prod true` left prod behind** (BOU-564). Both now bring every
   profile the project's modules; re-run `wagoe add <module>` for one prod lacks.
 - **`wagoe add payments` wrote the mock provider, which accepts any webhook as paid, into prod** (BOU-564).
