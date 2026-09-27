@@ -1,7 +1,8 @@
 (ns wagoe.platform.shell.utils.port-manager-test
   "Tests for port allocation and conflict resolution"
   (:require [wagoe.platform.shell.utils.port-manager :as pm]
-            [clojure.test :refer [deftest testing is]])
+            [clojure.test :refer [deftest testing is]]
+            [clojure.tools.logging.test :as log-test])
   (:import [java.net ServerSocket]))
 
 ;; =============================================================================
@@ -266,6 +267,43 @@
       (is (nil? (pm/log-port-allocation 5000 5001 {:port-range {:start 5000 :end 5099}} "Service 1")))
       (is (nil? (pm/log-port-allocation 6000 6000 nil "Service 2")))
       (is (nil? (pm/log-port-allocation 7000 7001 {} "Service 3"))))))
+
+;; BOU-566: a :prod boot logged `:development true` and searched ports, because
+;; the detector read ENVIRONMENT/ENV and defaulted to development — never the
+;; profile the app booted with.
+(deftest ^:unit the-boot-profile-decides-whether-ports-are-searched
+  (with-redefs [pm/docker-environment? (constantly false)]
+    (testing "prod binds the configured port or fails"
+      (is (not (pm/development-environment? :prod)))
+      (let [config {:profile :prod :port-range {:start 3000 :end 3099}}]
+        (with-redefs [pm/port-available? (constantly true)]
+          (let [{:keys [port message]} (pm/allocate-port 3056 config)]
+            (is (= 3056 port))
+            (is (re-find #"Production" message))))
+        (with-redefs [pm/port-available? (constantly false)
+                      pm/find-available-port (constantly 3001)]
+          (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                                #"Requested port not available"
+                                (pm/allocate-port 3056 config))))))
+
+    (testing "dev and test still search their range"
+      (doseq [profile [:dev :test]]
+        (is (pm/development-environment? profile) (str profile))
+        (with-redefs [pm/port-available? (fn [p] (not= p 3000))
+                      pm/find-available-port (constantly 3001)]
+          (is (= 3001 (:port (pm/allocate-port 3000 {:profile profile
+                                                     :port-range {:start 3000 :end 3099}})))))))))
+
+(deftest ^:unit the-conflict-warning-needs-a-conflict
+  ;; `#or [#env HTTP_PORT 3000]` without #long hands a String down. "3056" is
+  ;; not= 3056, so an unchanged port logged "port conflict resolved" (BOU-566).
+  (log-test/with-log
+    (pm/log-port-allocation "3056" 3056 {:profile :dev} "HTTP Server")
+    (is (not (log-test/logged? 'wagoe.platform.shell.utils.port-manager :warn #"conflict")))
+    (is (log-test/logged? 'wagoe.platform.shell.utils.port-manager :info #"requested port")))
+  (log-test/with-log
+    (pm/log-port-allocation 3000 3001 {:profile :dev} "HTTP Server")
+    (is (log-test/logged? 'wagoe.platform.shell.utils.port-manager :warn #"conflict"))))
 
 ;; =============================================================================
 ;; Integration Tests

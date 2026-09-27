@@ -35,9 +35,9 @@
                                     {:role (name role) :content content})
                                   messages)
                   :stream   false
-                  :options  (cond-> {}
-                              (:temperature opts) (assoc :temperature (:temperature opts))
-                              (:max-tokens opts)  (assoc :num_predict (:max-tokens opts)))}
+                  ;; Older Ollama releases default num_predict to 128 tokens.
+                  :options  (cond-> {:num_predict (or (:max-tokens opts) 8192)}
+                              (:temperature opts) (assoc :temperature (:temperature opts)))}
         response (http/post (str base-url "/api/chat")
                             {:body             (json/generate-string body)
                              :content-type     :json
@@ -59,18 +59,19 @@
       (try
         (log/debug "ollama complete" {:model effective-model :messages (count messages)})
         (let [resp  (chat-request! base-url effective-model messages
-                             (update opts :timeout #(or % timeout)))
+                                   (update opts :timeout #(or % timeout)))
               text  (get-in resp [:message :content])
               tokens (get-in resp [:usage :total_tokens] 0)]
-          {:text     text
-           :tokens   tokens
-           :base-url base-url
-           :provider :ollama
-           :model    effective-model})
+          {:text       text
+           :tokens     tokens
+           :truncated? (= "length" (:done_reason resp))
+           :base-url   base-url
+           :provider   :ollama
+           :model      effective-model})
         (catch Exception e
           (log/warn (str "ollama complete failed: " (.getMessage e))
                     {:model effective-model})
-          {:error    (.getMessage e)
+          {:error    (or (not-empty (ex-message e)) (.getName (class e)))
            ;; Status and body come from ex-data, not the message: a 429 for
            ;; rate-limiting and a 429 for an exhausted balance need opposite
            ;; advice, and (.getMessage e) is "clj-http: status 429" for both.

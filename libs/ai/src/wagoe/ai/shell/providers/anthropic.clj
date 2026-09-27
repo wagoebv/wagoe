@@ -15,6 +15,10 @@
 ;; HTTP helper
 ;; =============================================================================
 
+(def ^:private capped-at-4096
+  "Claude 3 models whose output limit is 4096; the API rejects more."
+  #"^claude-3-(haiku|opus|sonnet)")
+
 (defn- messages-request!
   "POST to Anthropic /v1/messages and return parsed JSON response.
 
@@ -28,7 +32,8 @@
      Parsed JSON map or throws."
   [api-key model messages opts]
   (let [timeout     (or (:timeout opts) 60000)
-        max-tokens  (or (:max-tokens opts) 4096)
+        max-tokens  (cond-> (or (:max-tokens opts) 4096)
+                      (re-find capped-at-4096 (str model)) (min 4096))
         ;; Anthropic requires system messages separate from the messages array
         sys-msg     (first (filter #(= :system (:role %)) messages))
         user-msgs   (remove #(= :system (:role %)) messages)
@@ -62,17 +67,18 @@
       (try
         (log/debug "anthropic complete" {:model effective-model :messages (count messages)})
         (let [resp   (messages-request! api-key effective-model messages
-                                 (update opts :timeout #(or % timeout)))
+                                        (update opts :timeout #(or % timeout)))
               text   (get-in resp [:content 0 :text])
               tokens (get-in resp [:usage :output_tokens] 0)]
-          {:text     text
-           :tokens   tokens
-           :provider :anthropic
-           :model    effective-model})
+          {:text       text
+           :tokens     tokens
+           :truncated? (= "max_tokens" (:stop_reason resp))
+           :provider   :anthropic
+           :model      effective-model})
         (catch Exception e
           (log/warn (str "anthropic complete failed: " (.getMessage e))
                     {:model effective-model})
-          {:error    (.getMessage e)
+          {:error    (or (not-empty (ex-message e)) (.getName (class e)))
            ;; Status and body come from ex-data, not the message: a 429 for
            ;; rate-limiting and a 429 for an exhausted balance need opposite
            ;; advice, and (.getMessage e) is "clj-http: status 429" for both.

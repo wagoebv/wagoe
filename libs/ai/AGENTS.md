@@ -195,10 +195,10 @@ The CLI entrypoint (`-main`) constructs the provider from env vars at startup. I
 The Anthropic API requires system messages to be passed as a top-level `:system` field, not inside the messages array. The `AnthropicProvider` handles this automatically by filtering `:system` role messages out of the `messages` vector.
 
 ### 9. `generate-admin-entity` returns EDN text, not parsed data
-The return value is `{:text "<edn-string>" :entity-name "products"}`. The EDN is returned as a string so it can be written directly to a file. Parse it with `read-string` if you need the data structure.
+The return value is `{:text "<edn-string>" :entity-name "products" :entities [{:entity-name :text :type-source :corrections}]}`. Each entry of `:entities` is one file's EDN, as a string so it can be written directly; `:text` is all of them. Parse with `read-string` if you need the data structure.
 
 ### 10. `generate-admin-entity` discovers existing entities from disk
-It reads all `.edn` files from `resources/conf/dev/admin/` and includes them in the prompt as examples, so AI-generated entities follow the same style as existing ones. The `project-root` argument controls where it looks.
+It reads all `.edn` files from `resources/conf/dev/admin/` and includes them in the prompt as examples, so AI-generated entities follow the same style as existing ones. It also reads the `*.up.sql` files under `migrations/` and `resources/migrations/`: a table found there decides its fields' types. The `project-root` argument controls where it looks.
 
 ### 11. `setup-parse` returns JSON-like data, not EDN keywords
 The setup parser returns a map with string keys (e.g., `{"database" "postgresql"}`) because it uses `complete-json`. The Babashka setup wizard handles keyword conversion.

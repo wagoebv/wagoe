@@ -71,17 +71,29 @@
    (some #(System/getenv %)
          ["CONTAINER" "DOCKER_CONTAINER" "KUBERNETES_SERVICE_HOST"])))
 
+(def ^:private searchable-envs #{"dev" "development" "test" "local"})
+
 (defn development-environment?
-  "Detect if the application is running in development mode.
-   
-   Returns:
-     true if in development environment, false otherwise"
-  []
-  (let [env (or (System/getenv "ENVIRONMENT")
-                (System/getenv "ENV")
-                (System/getProperty "env")
-                "development")]
-    (contains? #{"development" "dev" "local"} (str/lower-case env))))
+  "True when the app may search a port range instead of binding the exact port.
+
+   `profile` is the config profile the app booted with, and wins. Without one,
+   -Denv > WAG_ENV > ENV > ENVIRONMENT, defaulting to development (a bare REPL).
+   Reading only ENVIRONMENT/ENV made every `WAG_ENV=prod` boot look like
+   development (BOU-566)."
+  ([] (development-environment? nil))
+  ([profile]
+   (let [env (or (some-> profile name)
+                 (System/getProperty "env")
+                 (System/getenv "WAG_ENV")
+                 (System/getenv "ENV")
+                 (System/getenv "ENVIRONMENT")
+                 "development")]
+     (contains? searchable-envs (str/lower-case env)))))
+
+(defn- coerce-port
+  "aero's #env yields a String, so a config without #long hands one down (BOU-251)."
+  [port]
+  (if (string? port) (parse-long port) port))
 
 (defn suggest-port-strategy
   "Suggest port allocation strategy based on environment.
@@ -94,7 +106,7 @@
      Map with :strategy, :port-range, and :message"
   [requested-port config]
   (let [docker? (docker-environment?)
-        dev? (development-environment?)
+        dev? (development-environment? (:profile config))
         port-range (or (:port-range config) {:start requested-port :end (+ requested-port 99)})]
 
     (cond
@@ -132,9 +144,7 @@
   ;; requested port was never actually used — the moment it was, it surfaced as
   ;; a bare ClassCastException from port-available? (BOU-251). The configs are
   ;; fixed too; this keeps any other caller from reintroducing it silently.
-  (let [requested-port (if (string? requested-port)
-                         (parse-long requested-port)
-                         requested-port)
+  (let [requested-port (coerce-port requested-port)
         strategy-info (suggest-port-strategy requested-port config)
         {:keys [strategy port-range message]} strategy-info]
 
@@ -175,8 +185,9 @@
      config: Configuration map
      service-name: Name of the service (e.g., 'HTTP Server')"
   [requested-port allocated-port config service-name]
-  (let [docker? (docker-environment?)
-        dev? (development-environment?)]
+  (let [requested-port (coerce-port requested-port)
+        docker? (docker-environment?)
+        dev? (development-environment? (:profile config))]
 
     (if (= requested-port allocated-port)
       (log/info (format "%s started on requested port" service-name)

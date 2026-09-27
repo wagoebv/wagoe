@@ -56,6 +56,12 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **`bb ai admin-entity` cut EDN off, printed empty errors, guessed types and dropped relations** (BOU-567).
+  It types from your migrations and writes new files to every profile (`--force` overwrites); Replicate defaults to `anthropic/claude-opus-4.6`.
+- **`bb create-admin` looped forever on one piped password** (BOU-565). Pipe the password once;
+  closed stdin and repeated bad input now exit 1, and schema logging no longer reaches stdout.
+- **A `WAG_ENV=prod` boot searched for a free port as if in development** (BOU-566). Prod now binds
+  the configured port or fails; the conflict warning only fires when the port changed.
 - **`bb setup` overwrote dev and test config and `.env.example`** (BOU-404, BOU-532). It now changes
   only what you answer, lists each change first, and refuses rather than write a lossy merge.
 - **`bb scaffold generate --audit` and `--pagination` are removed** (BOU-483). No generator read
