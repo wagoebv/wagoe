@@ -4,6 +4,7 @@
             [clojure.java.io :as io]
             [clojure.string :as str]
             [integrant.repl.state :as state]
+            [wagoe.platform.database :as db]
             [hiccup2.core :as h])
   (:import (java.io File)))
 
@@ -27,40 +28,29 @@
               acc))))
       (catch Exception _ nil))))
 
+(defn- up-files
+  "Names of the .up.sql files directly in `dir` (a File), or nil."
+  [^File dir]
+  (when (and dir (.isDirectory dir))
+    (for [f     (.listFiles dir)
+          :when (str/ends-with? (.getName f) ".up.sql")]
+      (.getName f))))
+
 (defn- discover-migration-files
-  "Discover .up.sql migration files from all migration directories.
-   Uses platform's discover-migration-dirs when available, falls back to
-   migrations/. Scans both filesystem and classpath resources."
-  ([] (discover-migration-files "."))
-  ([root]
-   (let [dirs (try
-                (let [discover-fn (requiring-resolve
-                                   'wagoe.platform.shell.database.migrations/discover-migration-dirs)]
-                  (discover-fn))
-                (catch Exception _
-                  ["migrations/"]))
-         ;; Collect files from each directory (filesystem + classpath)
-         files (mapcat (fn [dir]
-                         (let [;; Try filesystem first
-                               ;; migrations/ itself is off the classpath in a
-                               ;; generated project (BOU-489).
-                               fs-files (for [d     [(File. (str root) dir)
-                                                     (File. (str root) (str "resources/" dir))]
-                                              :when (.isDirectory d)
-                                              f     (.listFiles d)
-                                              :when (str/ends-with? (.getName f) ".up.sql")]
-                                          (.getName f))
-                               ;; Also scan classpath resources
-                               cp-url (io/resource dir)
-                               cp-files (when (and cp-url (= "file" (.getProtocol cp-url)))
-                                          (let [cp-dir (File. (.toURI cp-url))]
-                                            (when (.isDirectory cp-dir)
-                                              (->> (.listFiles cp-dir)
-                                                   (filter #(str/ends-with? (.getName %) ".up.sql"))
-                                                   (map #(.getName %))))))]
-                           (distinct (concat fs-files cp-files))))
-                       dirs)]
-     (->> files distinct sort))))
+  "Up-migration file names the migrator reads: the project's from the directory
+   migratus resolves `migrations/` to, and each library's from the classpath.
+
+   Only that one project directory. Listing `migrations/` and
+   `resources/migrations` together showed the shadowed half as pending forever
+   (BOU-489); `shadowed-warning` names it instead."
+  []
+  (let [project  (up-files (io/file (db/create-destination)))
+        library  (mapcat (fn [dir]
+                           (when-let [url (io/resource dir)]
+                             (when (= "file" (.getProtocol url))
+                               (up-files (File. (.toURI url))))))
+                         (remove #{db/project-migration-dir} (db/discover-migration-dirs)))]
+    (->> (concat project library) distinct sort)))
 
 (defn merge-migration-status
   "Combine the migration files on disk with the ids the database says are applied.
@@ -141,6 +131,17 @@
 ;; =============================================================================
 ;; Rendering helpers
 ;; =============================================================================
+
+(defn- shadowed-warning
+  "A warning naming the project migrations no command reads, or nil."
+  [{:keys [root read-from]}]
+  (when (seq root)
+    [:div.detail-panel.detail-panel-error
+     [:p.error-title "Migrations that are never read"]
+     [:p (str "migrations/ is captured by " read-from
+              ", so these are skipped and `migrate up` refuses to run:")]
+     (into [:ul] (for [f root] [:li [:code f]]))
+     [:p "Keep every migration in one directory."]]))
 
 (defn- render-pool-stats
   "Render the pool stats grid hiccup. Accepts stats map or nil."
@@ -288,6 +289,7 @@
                   [:span.migration-pending (str pending " pending")])
                 (when (zero? pending)
                   [:span.migration-ok "all applied"])]}
+       (shadowed-warning (db/shadowed-migration-dirs))
        (c/data-table
         {:columns      ["" "Migration" "Status"]
          :col-template "32px 1fr 80px"

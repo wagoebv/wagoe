@@ -39,7 +39,21 @@
     (let [root (temp-project {"migrations/20260101000000-a.up.sql"           "SELECT 1;"
                               "resources/migrations/20260102000000-b.up.sql" "SELECT 1;"})
           out  (with-out-str (db/db-status root))]
-      (is (str/includes? out "20260101000000-a.up.sql") out))))
+      (is (str/includes? out "Never read") out)
+      (is (str/includes? out "20260101000000-a.up.sql") out)
+      (is (not (str/includes? out "Migrations:")) out)))
+
+  (testing "what counts is what migratus reads: nested and .edn, not notes"
+    ;; The platform guard walks subdirectories and uses migratus's parse-name;
+    ;; counting only top-level .sql passed a split that `migrate up` refuses.
+    (doseq [file ["migrations/tenant/20260101000000-a.up.sql"
+                  "migrations/20260101000000-a.edn"]]
+      (let [root (temp-project {file                                           "{}"
+                                "resources/migrations/20260102000000-b.up.sql" "SELECT 1;"})]
+        (is (seq (:shadowed (db/migration-layout root))) file)))
+    (let [root (temp-project {"migrations/notes.sql"                          "-- x"
+                              "resources/migrations/20260102000000-b.up.sql" "SELECT 1;"})]
+      (is (nil? (:shadowed (db/migration-layout root))) "notes.sql is not a migration"))))
 
 (deftest ^:unit project-migration-dir-matches-the-platform
   ;; Babashka cannot load the platform namespace, so the value is copied. This

@@ -69,22 +69,33 @@
     {:type   (or db-type "unknown")
      :config db-config}))
 
+(def ^:private migration-name
+  "What migratus's parse-name accepts; anything else in the directory is ignored."
+  #"^\d+-.+\.(up|down)\.sql$|^\d+-.+\.edn$")
+
 (defn- list-migration-files
-  "List .sql migration files from the migrations directory, sorted by name."
+  "Migration files under `dir` at any depth, as paths relative to it, sorted by
+   file name — or nil when `dir` does not exist. Recursive because migratus
+   reads with file-seq."
   [dir]
   (let [d (io/file dir)]
-    (when (.exists d)
-      (->> (.listFiles d)
-           (filter #(str/ends-with? (.getName %) ".sql"))
-           (sort-by #(.getName %))
-           vec))))
+    (when (.isDirectory d)
+      (let [base (.toPath d)]
+        (->> (file-seq d)
+             (filter #(and (.isFile %) (re-matches migration-name (.getName %))))
+             (sort-by #(.getName %))
+             (mapv #(str (.relativize base (.toPath %)))))))))
 
 (defn migration-layout
   "Where `root`'s migrations are read from.
 
    migratus resolves the name `migrations/` to `resources/migrations` when that
    exists, so files in the project directory are then never read, and the
-   platform refuses to migrate (BOU-274). Those are returned as `:shadowed`."
+   platform refuses to migrate (BOU-274). Those are returned as `:shadowed`.
+
+   Babashka cannot see the JVM classpath, so a `migrations/` on it (another
+   resource directory, a jar) is not modelled; `bb migrate status` is
+   authoritative."
   [root]
   (let [resource (io/file root "resources" "migrations")
         project  (io/file root project-migration-dir)]
@@ -142,7 +153,7 @@
              (do
                (println (red (str "  Never read — " dir " captures the name " project-migration-dir ":")))
                (doseq [f shadowed]
-                 (println (red (str "    " project-migration-dir (.getName f)))))
+                 (println (red (str "    " project-migration-dir f))))
                (println (dim "  Keep every migration in one directory; `bb migrate up` refuses this split.")))
 
              (nil? files)
@@ -154,7 +165,9 @@
                              (dim (str " file" (when (not= count-files 1) "s")
                                        " in " dir))))
                (when (pos? count-files)
-                 (println (dim (str "  Latest:        " (.getName (last files)))))))))
+                 (println (dim (str "  Latest:        " (last files))))))))
+
+         (println (dim "  From the files on disk; `bb migrate status` is authoritative."))
 
          (println))))))
 
