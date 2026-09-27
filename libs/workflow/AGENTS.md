@@ -51,7 +51,9 @@ Declarative state machine workflows for domain entities. Provides permission-bas
                     {:from :pending :to :cancelled
                      :auto?         true
                      :side-effects  [:notify-cancellation]}
-                    {:from :paid    :to :cancelled}]})
+                    {:from :paid    :to :cancelled}]
+   :guards         {:payment-confirmed (fn [{:keys [payment-status]}]
+                                         (= :confirmed payment-status))}})
 ```
 
 `defworkflow` binds the var and registers the definition in the in-process registry.
@@ -144,9 +146,10 @@ you would rather not commit the imports, keep the rule local:
 ;; Read current state
 (ports/current-state engine (:id instance)) ;; => :paid
 
-;; Available transitions (with enabled/disabled status and labels)
-(ports/available-transitions engine (:id instance) {:actor-roles [:admin]})
-;; => [{:id :paid :to :paid :label "Mark as Paid" :enabled? true}
+;; Transitions out of the current state; args are actor roles and the guard context.
+;; A disabled one carries a :reason, e.g. :guard-rejected.
+(ports/available-transitions engine (:id instance) [:admin] {:payment-status :confirmed})
+;; => [{:id :shipped :to :shipped :enabled? true}
 ;;     {:id :cancelled :to :cancelled :enabled? true}]
 
 ;; Audit log
@@ -192,8 +195,10 @@ Put it under `:guards` in the workflow definition. The map holds:
   Deref it to call `(entity-loader entity-type entity-id)`; it is loaded only when
   a guard derefs it, and at most once per check.
 
-The workflow keys overwrite a caller's keys of the same name. This guard refuses
-to deliver an invoice with no lines:
+A caller's own `:workflow/*` context keys are dropped, so a request cannot forge
+either. A loader that throws fails `transition!` with an `:internal-error`, and
+`available-transitions` shows that guard's transitions as unavailable and logs it.
+This guard refuses to deliver an invoice with no lines:
 
 ```clojure
 (def invoice-workflow
@@ -224,10 +229,13 @@ Guards can also be passed to the service for every workflow; a workflow's own
 Transitions declared with `:auto? true` are candidate for system-initiated firing:
 
 ```clojure
-;; Process all eligible auto-transitions for a given workflow
-(ports/process-auto-transitions! engine {:workflow-id :order-workflow
-                                         :limit        100})
-;; => {:attempted 5 :processed 3 :failed 0}
+(ports/start-workflow! engine {:workflow-id :order-workflow
+                              :entity-type :order
+                              :entity-id   (random-uuid)})
+
+;; Fire every :auto? transition out of a state an instance is in, up to 100 per transition
+(ports/process-auto-transitions! engine :order-workflow)
+;; => {:processed 1 :attempted 1 :failed 0}
 ```
 
 Auto-transitions use `[:system]` as the actor-roles vector, bypassing

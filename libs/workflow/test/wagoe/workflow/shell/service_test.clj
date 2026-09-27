@@ -4,6 +4,7 @@
    Uses in-memory doubles for IWorkflowStore and IWorkflowRegistry
    to exercise the full transition orchestration without a real DB."
   (:require [clojure.java.io :as io]
+            [clojure.string :as str]
             [clojure.test :refer [deftest testing is use-fixtures]]
             [wagoe.workflow.ports :as ports]
             [wagoe.workflow.shell.registry :as registry]
@@ -514,6 +515,48 @@
     (reset! lines 2)
     (is (:success? (ports/transition! svc {:instance-id (:id instance) :transition :deliver})))))
 
+(deftest ^:unit a-caller-cannot-hand-a-guard-an-entity
+  ;; Context arrives as JSON on the transition route, and instance metadata is
+  ;; merged into it for auto-transitions; neither may supply :workflow/* keys.
+  (let [seen           (atom nil)
+        [svc instance] (start-deliver! deliver-def {:ok? (fn [in] (reset! seen in) true)})]
+    (is (:success? (ports/transition! svc {:instance-id (:id instance)
+                                           :transition  :deliver
+                                           :context     {:by              "test"
+                                                         :workflow/entity {:line-count 5}
+                                                         :workflow/other  1}})))
+    (is (= "test" (:by @seen)))
+    (is (= #{:workflow/instance}
+           (set (filter #(= "workflow" (namespace %)) (keys @seen)))))))
+
+(def ^:private failing-loader-def
+  (assoc deliver-def
+         :transitions   [{:from :draft :to :delivered :name :deliver :guard :ok?}
+                         {:from :draft :to :cancelled}]
+         :states        #{:draft :delivered :cancelled}
+         :entity-loader (fn [_ _] (throw (RuntimeException. "db down")))
+         :guards        {:ok? (fn [{:workflow/keys [entity]}] (some? @entity))}))
+
+(deftest ^:unit a-failing-loader-is-a-typed-error-on-transition
+  (let [[svc instance] (start-deliver! failing-loader-def {})
+        e              (try (ports/transition! svc {:instance-id (:id instance) :transition :deliver})
+                            nil
+                            (catch clojure.lang.ExceptionInfo e e))]
+    (is (= {:type        :internal-error
+            :workflow-id :deliver-workflow
+            :entity-type :invoice
+            :entity-id   (:entity-id instance)}
+           (select-keys (ex-data e) [:type :workflow-id :entity-type :entity-id])))
+    (is (= "db down" (ex-message (ex-cause e))))))
+
+(deftest ^:unit a-failing-loader-disables-only-the-guarded-transitions
+  ;; The instance page reads available-transitions; one bad loader must not 500 it.
+  (let [[svc instance] (start-deliver! failing-loader-def {})
+        by-id          (into {} (map (juxt :id identity))
+                             (ports/available-transitions svc (:id instance) [] nil))]
+    (is (false? (:enabled? (by-id :deliver))))
+    (is (true? (:enabled? (by-id :cancelled))))))
+
 (deftest ^:unit the-entity-is-loaded-only-when-a-guard-asks
   (let [calls          (atom 0)
         definition     (assoc deliver-def :entity-loader (fn [_ _] (swap! calls inc) {}))
@@ -559,6 +602,90 @@
         (swap! lines assoc invoice-id [{:qty 1}])
         (testing "one line is enough"
           (is (:success? (deliver!))))))))
+
+;; =============================================================================
+;; The documented calls run, and return what their `;; =>` says (BOU-571)
+;; =============================================================================
+
+(defn- shown-result
+  "What the `;; =>` comment after a form shows: the rest of the line the form
+   ends on, plus the comment lines directly under it. ::none without an `=>`,
+   and ::partial for a result elided with `...`."
+  [lines end-line end-col]
+  (let [tail  (subs (nth lines (dec end-line)) (min (dec end-col) (count (nth lines (dec end-line)))))
+        below (take-while #(str/starts-with? (str/triml %) ";") (drop end-line lines))
+        text  (str/join "\n" (cons tail below))
+        i     (str/index-of text "=>")]
+    (if-not i
+      ::none
+      (let [shown (->> (str/split-lines (subs text (+ 2 i)))
+                       (map #(str/replace-first (str/triml %) #"^;+" ""))
+                       (str/join "\n"))]
+        (if (str/includes? shown "...")
+          ::partial
+          (read-string shown))))))
+
+(defn- block-results
+  "Evaluate `block` form by form, returning {:form :shown :actual :error} for
+   each. Stops after a form that throws: the rest of the block depends on it."
+  [block]
+  (let [lines (str/split-lines block)
+        rdr   (clojure.lang.LineNumberingPushbackReader. (java.io.StringReader. block))]
+    (loop [out []]
+      (let [form (read {:eof ::eof} rdr)]
+        (if (= ::eof form)
+          out
+          (let [[actual error] (try [(eval form) nil]
+                                    (catch Exception e [nil e]))
+                result         {:form   form
+                                :shown  (shown-result lines (.getLineNumber rdr) (.getColumnNumber rdr))
+                                :actual actual
+                                :error  error}]
+            (if error (conj out result) (recur (conj out result)))))))))
+
+(defn- documented-results
+  "Evaluate the first code block under each heading, in order, in one fresh
+   namespace with `engine` and `order-uuid` bound. Returns every form's result,
+   tagged with its heading."
+  [path headings re]
+  (let [scratch (create-ns (gensym "wagoe.workflow.doc-example-"))
+        engine  (service/create-workflow-service (create-memory-store) *registry* nil {})]
+    (try
+      (binding [*ns* scratch]
+        (refer-clojure)
+        (doseq [[sym v] {'engine               engine
+                         'order-uuid           (UUID/randomUUID)
+                         'notify-finance!      (fn [& _])
+                         'release-reservation! (fn [& _])
+                         'sync-external!       (fn [& _])}]
+          (intern scratch sym v))
+        (vec (for [heading headings
+                   :let    [block (first-block-under path heading re)]
+                   :when   block
+                   result  (block-results block)]
+               (assoc result :heading heading))))
+      (finally
+        (remove-ns (ns-name scratch))))))
+
+(deftest ^:unit the-documented-calls-run
+  ;; A call whose arguments drifted from the port's throws here; one whose
+  ;; result drifted fails the comparison with its `;; =>` comment.
+  (doseq [[path headings re]
+          [["AGENTS.md" ["## Defining a Workflow" "## Usage Patterns" "## Auto-Transitions"] md-block]
+           ["README.md" ["### 1. Define a Workflow" "### 2. Start an Instance"
+                         "### 3. Execute a Transition" "### 4. Query State and History"] md-block]
+           ["../../docs/modules/libraries/pages/workflow.adoc"
+            ["== Defining a workflow" "== Available transitions"] adoc-block]]]
+    (testing path
+      (registry/clear-registry!)
+      (let [results (documented-results path headings re)
+            checked (remove #(#{::none ::partial} (:shown %)) results)]
+        (is (seq checked) "no documented result was compared")
+        (doseq [{:keys [heading form shown actual error]} results
+                :let [where (str heading ": " (pr-str form))]]
+          (is (nil? error) (str where " threw " (some-> error (#(or (ex-cause %) %)) ex-message)))
+          (when (and (nil? error) (not (#{::none ::partial} shown)))
+            (is (= shown actual) where)))))))
 
 ;; =============================================================================
 ;; The documented config is what `wagoe add workflow` writes (BOU-571)

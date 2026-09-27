@@ -43,15 +43,48 @@
   [guard-registry definition]
   (merge guard-registry (:guards definition)))
 
+(defn- load-entity
+  "Call the workflow's loader, so that its failure reaches the HTTP boundary as
+   a typed error rather than an untyped 500."
+  [loader instance]
+  (let [{:keys [workflow-id entity-type entity-id]} instance]
+    (try
+      (loader entity-type entity-id)
+      (catch Exception e
+        (throw (ex-info "Workflow entity loader failed"
+                        {:type        :internal-error
+                         :workflow-id workflow-id
+                         :entity-type entity-type
+                         :entity-id   entity-id
+                         :message     "Could not load the entity for a workflow guard"}
+                        e))))))
+
 (defn- guard-input
   "The caller's context plus `:workflow/instance` and, when the workflow has an
-   `:entity-loader`, `:workflow/entity` as a delay. Ours replace a caller's keys
-   of the same name, so a request cannot hand a guard a forged instance."
+   `:entity-loader`, `:workflow/entity` as a delay. A caller's `:workflow/*`
+   keys are dropped first: the context arrives as request JSON, and a guard
+   must not trust a forged instance or entity."
   [definition instance context]
-  (let [loader (:entity-loader definition)]
-    (cond-> (assoc (or context {}) :workflow/instance instance)
-      loader (assoc :workflow/entity
-                    (delay (loader (:entity-type instance) (:entity-id instance)))))))
+  (let [loader (:entity-loader definition)
+        own    (into {} (remove (fn [[k _]] (and (keyword? k) (= "workflow" (namespace k)))))
+                     context)]
+    (cond-> (assoc own :workflow/instance instance)
+      loader (assoc :workflow/entity (delay (load-entity loader instance))))))
+
+(defn- failing-closed
+  "Guards that answer false, and log, instead of throwing. For listing
+   transitions: one failing guard should disable its transition, not fail the
+   whole read."
+  [guards instance-id]
+  (update-vals guards
+               (fn [guard]
+                 (fn [input]
+                   (try
+                     (guard input)
+                     (catch Exception e
+                       (log/warn e "Workflow guard failed; transition shown as unavailable"
+                                 {:instance-id instance-id})
+                       false))))))
 
 ;; =============================================================================
 ;; Lifecycle hook execution
@@ -246,7 +279,7 @@
         (transitions/available-transitions-with-status
          definition (:current-state instance)
          actor-roles
-         (guards-for guard-registry definition)
+         (failing-closed (guards-for guard-registry definition) instance-id)
          (guard-input definition instance context)))))
 
   (process-auto-transitions! [this workflow-id]
