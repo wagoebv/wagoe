@@ -241,6 +241,7 @@
                    (update-instance-state! [_ _ _] nil)
                    (save-audit-entry! [_ _] nil)
                    (find-audit-log [_ _] nil)
+                   (delete-instance! [_ _] nil)
                    (list-instances [_ _]
                      (throw (RuntimeException. "jdbc:postgresql://db password=hunter2"))))
         response (sut/handle-list-instances-web store {})]

@@ -506,6 +506,17 @@
        [:a.button.secondary {:href (view-all-url entity fk-param (:parent-id relationship))}
         [:t :admin/relationship-view-all {:label label}]])]))
 
+(defn- with-field-options
+  "`entity-config` with each field in `field-options` rendered as a select
+   over them, unless the config chose a widget other than a text input."
+  [entity-config field-options]
+  (reduce-kv (fn [cfg field options]
+               (cond-> cfg
+                 (#{nil :text-input} (get-in cfg [:fields field :widget]))
+                 (update-in [:fields field] assoc :widget :select :options options)))
+             entity-config
+             (or field-options {})))
+
 (defn entity-detail-page
   "Entity detail/edit page.
 
@@ -515,12 +526,15 @@
      record: Entity record (nil for create)
      errors: Optional validation errors
      permissions: Permission flags
-     opts: Optional map with :flash, :related-records and :display
+     opts: Optional map with :flash, :related-records, :display, :workflow,
+           and :field-options {field [[value label] ...]}, which turns a
+           text input into a select (a foreign key's parent rows, BOU-563)
 
    Returns:
      Hiccup page structure"
   [entity-name entity-config record errors permissions & [opts]]
   (let [{:keys [flash return-to sibling-nav]} opts
+        entity-config (with-field-options entity-config (:field-options opts))
         label      (:label entity-config)
         is-edit?   (some? record)
         page-title (if is-edit? [:t :admin/page-edit-title {:label label}] [:t :admin/page-create-title {:label label}])
@@ -591,7 +605,11 @@
               :data-confirm-label [:t :admin/modal-button-delete]}
              (icons/icon :trash {:size 16})
              [:t :common/button-delete]]))]]
-      [:h1.page-title page-title]]
+      [:h1.page-title page-title]
+      (when-let [workflow (:workflow opts)]
+        [:div.workflow-state-row
+         [:span.workflow-state-label [:t :admin/column-workflow]] " "
+         (base/workflow-state-link workflow)])]
      (when-let [ctx (:parent-context opts)]
        (parent-context-banner ctx))
      (when (seq errors)

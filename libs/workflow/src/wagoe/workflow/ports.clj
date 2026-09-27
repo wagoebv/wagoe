@@ -82,7 +82,13 @@
                :offset        - pagination offset (default 0)
 
      Returns:
-       Vector of WorkflowInstance maps, newest first"))
+       Vector of WorkflowInstance maps, newest first")
+
+  (delete-instance! [this instance-id]
+    "Delete an instance and its audit log, for an entity that is gone.
+
+     Returns:
+       true when the instance existed"))
 
 ;; =============================================================================
 ;; IWorkflowEngine  — orchestration

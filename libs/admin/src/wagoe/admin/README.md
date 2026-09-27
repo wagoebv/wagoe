@@ -189,24 +189,11 @@ Week 2+ will add:
 
 ## Advanced Features
 
-### Soft Delete Detection
+### Soft Delete
 
-Admin automatically detects soft delete from database schema:
-
-```sql
--- Table with deleted_at column = Soft Delete
-CREATE TABLE users (
-  id UUID PRIMARY KEY,
-  email VARCHAR NOT NULL,
-  deleted_at TIMESTAMP  -- Admin will soft-delete
-);
-
--- Table without deleted_at = Hard Delete
-CREATE TABLE logs (
-  id UUID PRIMARY KEY,
-  message TEXT
-);  -- Admin will hard-delete (permanent)
-```
+Delete is permanent unless the entity config sets `:soft-delete true`; then it
+sets `deleted_at`. A `deleted_at` column alone does not switch it on. See the
+library README.
 
 ### Hidden Fields
 

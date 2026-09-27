@@ -57,9 +57,9 @@
 ;; =============================================================================
 
 (defmethod ig/init-key :wagoe/admin-service
-  [_ {:keys [db-ctx schema-provider logger error-reporter config event-publisher]}]
+  [_ {:keys [db-ctx schema-provider logger error-reporter config event-publisher workflows]}]
   (service/create-admin-service db-ctx schema-provider logger error-reporter config
-                                event-publisher))
+                                event-publisher workflows))
 
 (defmethod ig/halt-key! :wagoe/admin-service
   [_ _admin-service]
@@ -71,9 +71,11 @@
 ;; =============================================================================
 
 (defmethod ig/init-key :wagoe/admin-routes
-  [_ {:keys [admin-service schema-provider user-service config]}]
+  [_ {:keys [admin-service schema-provider user-service config workflows]}]
   ;; The module's contribution: web routes, mounted under :web-prefix
-  (http/admin-routes admin-service schema-provider config user-service))
+  (http/admin-routes admin-service schema-provider
+                     (cond-> config workflows (assoc :workflows workflows))
+                     user-service))
 
 (defmethod ig/halt-key! :wagoe/admin-routes
   [_ _routes]
@@ -124,7 +126,10 @@
   ;; rendered raw database timestamps (BOU-382). Copied in rather than handing
   ;; the whole application config to the routes, which would let any handler
   ;; reach anything.
-  (let [app-settings  (get-in ctx [:config :active :wagoe/settings])
+  (let [;; Optional and one-way: wagoe.workflow depends on the admin, and
+        ;; builds the port only when both are on (BOU-563).
+        workflows?    (contains? (:enabled ctx) :wagoe/workflow)
+        app-settings  (get-in ctx [:config :active :wagoe/settings])
         routes-config (-> (merge (select-keys app-settings [:date-format :date-time-format :time-zone])
                                  settings)
                           (check-date-patterns)
@@ -140,11 +145,13 @@
                                      ;; Only when configured: a ref to an absent
                                      ;; component fails the boot (BOU-492).
                                      (contains? (:enabled ctx) :wagoe/events)
-                                     (assoc :event-publisher (ig/ref :wagoe/events)))
-      :wagoe/admin-routes          {:admin-service   (ig/ref :wagoe/admin-service)
-                                    :schema-provider (ig/ref :wagoe/admin-schema-provider)
-                                    :user-service    (ig/ref :wagoe/user-service)
-                                    :config          routes-config}}
+                                     (assoc :event-publisher (ig/ref :wagoe/events))
+                                     workflows? (assoc :workflows (ig/ref :wagoe/workflow-admin)))
+      :wagoe/admin-routes          (cond-> {:admin-service   (ig/ref :wagoe/admin-service)
+                                            :schema-provider (ig/ref :wagoe/admin-schema-provider)
+                                            :user-service    (ig/ref :wagoe/user-service)
+                                            :config          routes-config}
+                                     workflows? (assoc :workflows (ig/ref :wagoe/workflow-admin)))}
      ;; A ref in a collection, not a named slot on the handler: platform holds
      ;; no list of which modules may contribute routes (BOU-330).
      :routes [(ig/ref :wagoe/admin-routes)]}))

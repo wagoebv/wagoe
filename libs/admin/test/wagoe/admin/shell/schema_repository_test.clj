@@ -239,9 +239,8 @@
           (is (contains? readonly-fields :created-at))
           (is (contains? readonly-fields :updated-at))))
 
-      (testing "Soft delete detection"
-        ;; complex_table has deleted_at column
-        (is (true? (:soft-delete entity-config)))))))
+      (testing "A deleted_at column does not switch soft delete on (BOU-563)"
+        (is (false? (:soft-delete entity-config)))))))
 
 (deftest ^:integration get-entity-config-manual-overrides-test
   (testing "Manual configuration overrides auto-detected values"
@@ -290,19 +289,24 @@
       (is (map? (:fields entity-config))))))
 
 (deftest ^:integration get-entity-config-soft-vs-hard-delete-test
-  (testing "Soft delete detection based on deleted_at column"
+  (testing "Soft delete comes from the config, not from a deleted_at column"
     (let [config {:entity-discovery {:mode :allowlist
                                      :allowlist #{:complex-table :hard-delete-table}}
                   :entities {}}
           repo (schema-repo/create-schema-repository *db-ctx* config)]
 
-      (testing "Table with deleted_at has soft delete"
+      (testing "Table with deleted_at is still hard-deleted: soft delete is opt-in (BOU-563)"
         (let [complex-config (ports/get-entity-config repo :complex-table)]
-          (is (true? (:soft-delete complex-config)))))
+          (is (false? (:soft-delete complex-config)))))
 
       (testing "Table without deleted_at has hard delete only"
         (let [hard-delete-config (ports/get-entity-config repo :hard-delete-table)]
-          (is (false? (:soft-delete hard-delete-config))))))))
+          (is (false? (:soft-delete hard-delete-config)))))
+
+      (testing ":soft-delete true switches it on"
+        (let [repo (schema-repo/create-schema-repository
+                    *db-ctx* (assoc config :entities {:complex-table {:soft-delete true}}))]
+          (is (true? (:soft-delete (ports/get-entity-config repo :complex-table)))))))))
 
 (deftest ^:integration get-entity-config-nullable-fields-test
   (testing "Nullable vs required field detection"
@@ -458,13 +462,12 @@
     (testing "Entity partial :ui merges with global :ui"
       (let [config {:entity-discovery {:mode :allowlist
                                        :allowlist #{:simple-table}}
-                    :ui {:field-grouping {:other-label "Global Other"}
-                         :theme "dark"}
-                    :entities {:simple-table {:ui {:theme "light"}}}}
+                    :ui {:field-grouping {:other-label "Global Other"}}
+                    ;; :ui accepts only :field-grouping; an unknown key fails at
+                    ;; startup (BOU-563), so the partial override is an empty one.
+                    :entities {:simple-table {:ui {:field-grouping {}}}}}
             repo (schema-repo/create-schema-repository *db-ctx* config)
             entity-config (ports/get-entity-config repo :simple-table)]
-        ;; Entity overrides theme
-        (is (= "light" (get-in entity-config [:ui :theme])))
         ;; Global :field-grouping is preserved
         (is (= "Global Other" (get-in entity-config [:ui :field-grouping :other-label])))))
 

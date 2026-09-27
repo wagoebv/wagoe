@@ -45,6 +45,7 @@
    :entity-discovery {:mode :allowlist
                       :allowlist #{:test-users :test-items}}
    :entities {:test-users {:label "Test Users"
+                           :soft-delete true
                            :list-fields [:email :name :active]
                            :search-fields [:email :name]
                            :hide-fields #{:password-hash}
@@ -206,7 +207,7 @@
         (is (contains? (:readonly-fields config) :id))
         (is (contains? (:readonly-fields config) :created-at))
 
-        ;; Check soft delete detected
+        ;; Soft delete, as the config says
         (is (true? (:soft-delete config)))))
 
     (testing "Get entity config for test-items (no soft delete)"
@@ -458,7 +459,7 @@
 ;; =============================================================================
 
 (deftest ^:integration delete-entity-soft-delete-test
-  (testing "Soft delete entity (test-users has deleted-at column)"
+  (testing "Soft delete entity (test-users sets :soft-delete true)"
     (let [user (create-test-user! "todelete@example.com" "To Delete" true)
           user-id (:id user)
           deleted? (ports/delete-entity *admin-service* :test-users user-id)]

@@ -22,6 +22,21 @@
       (str/replace "\t" "\\t")
       (str/replace "</" "<\\/")))
 
+(defn- refused
+  "A delete the service refused (a has-many :min, BOU-563): 409, and a toast
+   saying why, with nothing swapped into the page."
+  [e]
+  (-> (ring-response/response "")
+      (ring-response/status 409)
+      (ring-response/header "HX-Reswap" "none")
+      (ring-response/header "HX-Trigger"
+                            (str "{\"showToast\":{\"type\":\"error\",\"message\":\""
+                                 (escape-json-string (ex-message e)) "\"}}"))))
+
+(defn- refusal?
+  [e]
+  (= :conflict (:type (ex-data e))))
+
 (defn delete-entity-handler
   "Handler for deleting entity.
 
@@ -44,11 +59,17 @@
           ; Check permissions
           _ (shell-permissions/assert-can-delete-entity! user entity-name entity-config)
 
-          ; Delete entity (soft or hard based on schema)
-          deleted? (ports/delete-entity admin-service entity-name id)
+          ; Delete entity (soft or hard, as configured), with its children
+          deleted? (try (ports/delete-entity admin-service entity-name id)
+                        (catch clojure.lang.ExceptionInfo e
+                          (if (refusal? e) e (throw e))))
           safe-return-to (support/safe-return-to request)]
 
-      (if deleted?
+      (cond
+        (instance? clojure.lang.ExceptionInfo deleted?)
+        (refused deleted?)
+
+        deleted?
         ; Success - redirect back to return_to (parent context) or entity list
         (let [redirect-url (or safe-return-to
                                (str "/web/admin/" (name entity-name)))
@@ -60,8 +81,38 @@
               (ring-response/header "HX-Redirect" redirect-url)))
 
         ; Failed to delete
+        :else
         (-> (ring-response/response "")
             (ring-response/status 500))))))
+
+(defn- bulk-delete-response
+  "The refreshed table after a bulk delete, with a toast counting it."
+  [request admin-service entity-name entity-config config user result]
+  (let [success-count (or (:success-count result) 0)
+        failed-count (or (:failed-count result) 0)
+
+        ; Fetch updated list
+        list-result (ports/list-entities admin-service entity-name {})
+        records (support/with-workflow-states config entity-config (:records list-result))
+        total-count (:total-count list-result)
+        table-query {:page-size (:page-size list-result)
+                     :page (:page-number list-result)}
+        permissions (permissions/get-entity-permissions user entity-name entity-config)
+
+        ; Create toast message
+        label (or (:label entity-config) (name entity-name))
+        toast-msg (if (zero? failed-count)
+                    (str success-count " " label " deleted")
+                    (str success-count " " label " deleted, " failed-count " failed"))
+        toast-json (str "{\"type\":\""
+                        (if (zero? failed-count) "success" "warning")
+                        "\",\"message\":\"" (escape-json-string toast-msg) "\"}")]
+
+    ; Return table HTML fragment with toast via showToast event
+    (-> (support/htmx-fragment-response request
+                                        (admin-ui/entity-table entity-name records entity-config table-query total-count permissions {}
+                                                               (support/display-options config request)))
+        (ring-response/header "HX-Trigger" (str "{\"showToast\":" toast-json ",\"entityListUpdated\":{}}")))))
 
 (defn bulk-delete-handler
   "Handler for bulk deleting multiple entities.
@@ -90,30 +141,10 @@
                 (mapv #(UUID/fromString %) (if (string? id-strings) [id-strings] id-strings)))
 
           ; Bulk delete
-          result (when (and ids (seq ids))
-                   (ports/bulk-delete-entities admin-service entity-name ids))
-          success-count (or (:success-count result) 0)
-          failed-count (or (:failed-count result) 0)
-
-          ; Fetch updated list
-          list-result (ports/list-entities admin-service entity-name {})
-          records (:records list-result)
-          total-count (:total-count list-result)
-          table-query {:page-size (:page-size list-result)
-                       :page (:page-number list-result)}
-          permissions (permissions/get-entity-permissions user entity-name entity-config)
-
-          ; Create toast message
-          label (or (:label entity-config) (name entity-name))
-          toast-msg (if (zero? failed-count)
-                      (str success-count " " label " deleted")
-                      (str success-count " " label " deleted, " failed-count " failed"))
-          toast-json (str "{\"type\":\""
-                          (if (zero? failed-count) "success" "warning")
-                          "\",\"message\":\"" (escape-json-string toast-msg) "\"}")]
-
-      ; Return table HTML fragment with toast via showToast event
-      (-> (support/htmx-fragment-response request
-                                          (admin-ui/entity-table entity-name records entity-config table-query total-count permissions {}
-                                                                 (support/display-options config request)))
-          (ring-response/header "HX-Trigger" (str "{\"showToast\":" toast-json ",\"entityListUpdated\":{}}"))))))
+          result (try (when (and ids (seq ids))
+                        (ports/bulk-delete-entities admin-service entity-name ids))
+                      (catch clojure.lang.ExceptionInfo e
+                        (if (refusal? e) e (throw e))))]
+      (if (instance? clojure.lang.ExceptionInfo result)
+        (refused result)
+        (bulk-delete-response request admin-service entity-name entity-config config user result)))))

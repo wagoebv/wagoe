@@ -58,7 +58,7 @@
    Shows empty form for creating new entity. If the entity declares a
    `:create-redirect-url`, redirects there instead (used for split-table
    entities that need a dedicated create flow)."
-  [_admin-service schema-provider config]
+  [admin-service schema-provider config]
   (fn [request]
     (let [user (support/require-admin-user! request)
           entity-name (support/get-entity-name request)
@@ -104,16 +104,18 @@
                entity-configs (into {} (map (fn [e] [e (ports/get-entity-config schema-provider e)])) entities)
 
               ; Get permissions
-               permissions (permissions/get-entity-permissions user entity-name entity-config)]
+               permissions (permissions/get-entity-permissions user entity-name entity-config)
+               prefill     (support/foreign-key-prefill entity-name entity-configs (:query-params request))]
            (support/html-response request
                                   (admin-ui/admin-layout
                                    (admin-ui/entity-detail-page entity-name entity-config nil {} permissions
                                                                 {:display   (support/display-options config request)
                                                                 ;; A parent's "New" link (BOU-491).
                                                                  :return-to (support/safe-return-to request)
-                                                                 :prefill   (support/foreign-key-prefill
-                                                                             entity-name entity-configs
-                                                                             (:query-params request))})
+                                                                 :prefill   prefill
+                                                                 :field-options (support/foreign-key-options
+                                                                                 admin-service config entity-configs
+                                                                                 entity-name prefill)})
                                    {:user user
                                     :current-entity entity-name
                                     :entities entities

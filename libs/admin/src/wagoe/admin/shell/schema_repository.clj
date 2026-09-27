@@ -22,6 +22,7 @@
    [wagoe.admin.core.schema-introspection :as introspection]
    [wagoe.platform.ports.database :as db-protocols]
    [wagoe.core.utils.case-conversion :as case-conv]
+   [clojure.string :as str]
    [clojure.tools.logging :as log]))
 
 ;; =============================================================================
@@ -258,6 +259,17 @@
   ([db-ctx config]
    (create-schema-repository db-ctx config {}))
   ([db-ctx config malli-schemas]
+   ;; An unknown key used to be ignored: a misplaced :has-many left the admin
+   ;; showing a detected read-only panel instead, and nothing said why (BOU-563).
+   ;; An #include Aero could not find leaves this key in its place; say which
+   ;; file, rather than call it an invalid value.
+   (when-let [missing (get-in config [:entities :aero/missing-include])]
+     (throw (ex-info (str "Admin entity config: include not found: " missing)
+                     {:type :configuration-error :missing-include missing})))
+   (when-let [errors (seq (admin-schema/entity-config-errors config))]
+     (throw (ex-info (str "Admin entity config: "
+                          (str/join "; " (map #(str (:problem %) " at " (pr-str (:path %))) errors)))
+                     {:type :configuration-error :errors (vec errors)})))
    (->SchemaRepository db-ctx config (or malli-schemas {}) (atom {}))))
 
 (defn reset-cache!

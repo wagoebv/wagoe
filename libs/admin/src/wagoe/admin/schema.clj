@@ -279,6 +279,59 @@
      [:custom-actions {:optional true} :boolean]]]])
 
 ;; =============================================================================
+;; Entity Config Keys (BOU-563)
+;; =============================================================================
+
+;; What an application may write under :entities. Closed at every level, so a
+;; misplaced key fails at startup rather than being ignored; the values are
+;; left loose, because the admin reads each with its own default.
+
+(defn- closed-map
+  "A closed map of optional keys. An entry is a key (any value) or [key schema]."
+  [& entries]
+  (into [:map {:closed true}]
+        (map (fn [e] (if (vector? e)
+                       [(first e) {:optional true} (second e)]
+                       [e {:optional true} :any])))
+        entries))
+
+(def FieldOverride
+  (closed-map :name :label :type :widget :required :readonly :hidden :searchable
+              :sortable :filterable :primary-key :default-value :options :min :max
+              :pattern :help-text :placeholder :width :rows))
+
+(def HasManyEntry
+  (closed-map :entity :table :foreign-key :label :fields :editable
+              [:min [:int {:min 0}]]
+              [:on-delete [:enum :cascade :restrict]]))
+
+(def EntityOverrides
+  (closed-map :label :description :icon :sidebar-hidden :table-name :primary-key
+              :list-fields :detail-fields :search-fields :editable-fields
+              :hide-fields :readonly-fields :field-order :default-sort
+              :default-sort-dir :soft-delete :create-redirect-url
+              [:fields [:map-of :keyword FieldOverride]]
+              [:field-groups [:sequential (closed-map :id :label :fields)]]
+              [:has-many [:sequential HasManyEntry]]
+              [:parent-context (closed-map :label :fields)]
+              [:permissions (closed-map :create :create-hint)]
+              [:query-overrides (closed-map :from :join :select :field-aliases :soft-delete-table)]
+              [:split-table-update (closed-map :secondary-table :secondary-fields)]
+              [:workflow [:map {:closed true} [:entity-type :keyword]]]
+              [:ui UIConfig]))
+
+(def ^:private entities-explainer
+  (m/explainer [:map [:entities {:optional true} [:map-of :keyword EntityOverrides]]]))
+
+(defn entity-config-errors
+  "Each unknown key or malformed value under `:entities` in the admin
+   `settings`, as {:path [...] :problem string}. Empty when there are none."
+  [settings]
+  (vec (for [{:keys [in type]} (:errors (entities-explainer (select-keys settings [:entities])))]
+         {:path    in
+          :problem (if (= type :malli.core/extra-key) "unknown key" "invalid value")})))
+
+;; =============================================================================
 ;; Query Parameter Schemas
 ;; =============================================================================
 
