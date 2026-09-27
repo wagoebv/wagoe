@@ -562,3 +562,42 @@
        ;; SQLite in WAL mode, and the file nREPL writes its port to.
        (doseq [p ["*.db" "*.db-shm" "*.db-wal" ".nrepl-port"]]
          (is (contains? lines p) (str p " is not ignored")))))))
+
+;; A fresh project ships admin, workflow and most optional libraries in
+;; deps.edn. AGENTS.md told agents to `wagoe add` them as if absent (BOU-573).
+(deftest ^:integration agents-md-modules-reflect-the-generated-project
+  (let [tmp (str (System/getProperty "java.io.tmpdir") "/wagoe-agents-mods-" (System/currentTimeMillis))]
+    (try
+      (new/generate! tmp "shop" {})
+      (let [content   (slurp (io/file tmp "AGENTS.md"))
+            deps      (edn/read-string (slurp (io/file tmp "deps.edn")))
+            block     (fn [b] (second (re-find (re-pattern (str "(?s)<!-- " b " -->(.*?)<!-- /" b " -->")) content)))
+            installed (block "wagoe:installed-modules")
+            [in-deps not-in-deps] (str/split (block "wagoe:available-modules") #"Not in deps\.edn")]
+        (is (str/includes? installed "- core ("))
+        (is (str/includes? installed "- user (") "on in system_config.clj's :extra-modules")
+        (is (str/includes? installed "- email (") "the platform always runs it")
+        (is (str/includes? installed "- i18n (") "the platform always runs it")
+        (is (str/includes? installed "- external (") "in deps.edn with nothing to configure")
+        (is (str/includes? in-deps "wagoe add ai") "in deps.edn, its config key missing")
+        (is (re-find #"(?s)In deps\.edn but not switched on.*wagoe add admin" in-deps)
+            "in deps.edn, not yet in config, and said so")
+        (is (str/includes? in-deps "wagoe add workflow"))
+        (doseq [[_ m] (re-seq #"wagoe add ([a-z0-9-]+)" (or not-in-deps ""))]
+          (is (not (contains? (:deps deps) (symbol "com.wagoe" (str "wagoe-" m))))
+              (str m " is in deps.edn but listed as not installed"))))
+      (finally
+        (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))
+
+;; --no-user keeps wagoe-user in deps.edn and leaves :wagoe/user out of
+;; system_config.clj's :extra-modules, so the module is not running (BOU-573).
+(deftest ^:integration agents-md-does-not-list-user-as-installed-under-no-user
+  (let [tmp (str (System/getProperty "java.io.tmpdir") "/wagoe-agents-nouser-" (System/currentTimeMillis))]
+    (try
+      (new/generate! tmp "shop" {:with-user? false})
+      (let [content (slurp (io/file tmp "AGENTS.md"))
+            block   (fn [b] (second (re-find (re-pattern (str "(?s)<!-- " b " -->(.*?)<!-- /" b " -->")) content)))]
+        (is (not (str/includes? (block "wagoe:installed-modules") "- user (")))
+        (is (re-find #"(?s)In deps\.edn but not switched on.*\| user \|.*`:wagoe/user` to `:extra-modules`" (block "wagoe:available-modules"))))
+      (finally
+        (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))

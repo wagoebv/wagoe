@@ -24,7 +24,7 @@ Requires [Babashka](https://babashka.org) and [bbin](https://github.com/babashka
 | `wagoe new <project-name>` | Create a new Wagoe project (full FC/IS template: `src/wagoe/system_config.clj`, `src/<project>/system.clj`, `deps.edn`, `bb.edn`, `.env`, tests, git hooks) |
 | `wagoe add <module>` | Add a framework module (payments, tenant, admin, …) to the current project — patches `deps.edn`, config, and the AGENTS.md module table |
 | `wagoe list` | List the available modules from the module catalogue |
-| `wagoe agents update [--check]` | Re-sync the project's `AGENTS.md` installed-modules table with what is actually installed (`--check` verifies without writing) |
+| `wagoe agents update [--check] [--modules]` | Re-sync the project's `AGENTS.md` installed-modules table with what is actually installed (`--check` verifies without writing; `--modules` touches only the module blocks, as `bb setup` runs it) |
 
 ## Quick Start
 

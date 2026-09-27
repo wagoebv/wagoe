@@ -65,6 +65,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **An admin create required hidden and defaulted fields, and a 422 marked no field** (BOU-570).
   Drop `:required false` workarounds; required textareas and selects now carry `required`.
+- **`bb setup` told you to copy `.env.example` over an existing `.env`** (BOU-573), replacing `JWT_SECRET`.
+  It now names only the variables `.env` lacks.
+- **A generated AGENTS.md listed modules already in deps.edn as ones to add** (BOU-573). `wagoe add` and
+  `bb setup` now keep its module section in line; run `wagoe agents update` in an existing project.
 - **`wagoe add` and `bb setup --prod true` left prod behind** (BOU-564). Both now bring every
   profile the project's modules; re-run `wagoe add <module>` for one prod lacks.
 - **`wagoe add payments` wrote the mock provider, which accepts any webhook as paid, into prod** (BOU-564).
