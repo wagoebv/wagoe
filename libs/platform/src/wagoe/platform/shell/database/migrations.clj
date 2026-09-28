@@ -79,13 +79,20 @@
   (log/warn (str "No migration manifest found; library migrations will not run. "
                  "A jar built without directory entries hides them.")))
 
+(defn classpath-manifests
+  "The `.edn` files directly inside classpath directory `dir`, in every jar and
+   directory that has one."
+  [dir]
+  (let [cl (context-classloader)]
+    (for [dir-url (enumeration-seq (.getResources cl dir))
+          file    (sort (manifest-names dir-url))
+          :when   (str/ends-with? file ".edn")]
+      (java.net.URL. ^java.net.URL dir-url ^String file))))
+
 (defn manifest-urls
   []
   (let [cl (context-classloader)]
-    (->> (concat (for [dir-url (enumeration-seq (.getResources cl migration-manifest-dir))
-                       file    (sort (manifest-names dir-url))
-                       :when   (str/ends-with? file ".edn")]
-                   (java.net.URL. ^java.net.URL dir-url ^String file))
+    (->> (concat (classpath-manifests migration-manifest-dir)
                  (enumeration-seq (.getResources cl legacy-manifest-resource)))
          (distinct)
          (seq)
@@ -481,7 +488,7 @@
                         :error (.getMessage e)}
                        e))))))
 
-(defn- rollback-config
+(defn rollback-config
   "The config for going down: every module's migrations, not only those that
    are on. migratus rolls back the last applied id among the migrations it can
    see, so a filtered view turned a rollback past a switched-off module into a
@@ -714,30 +721,6 @@
                       {:type :migration-failed
                        :error (.getMessage e)
                        :name name}
-                      e)))))
-
-(defn reset
-  "Resets the database by rolling back all migrations and re-applying them.
-
-   WARNING: This is destructive! Use only in development.
-
-   Returns:
-     nil"
-  []
-  (log/warn "Resetting database - rolling back all migrations and re-applying")
-  (try
-    ;; Down with every module's migrations, up with the enabled ones: a plain
-    ;; migratus/reset goes both ways with one set.
-    (let [config (rollback-config)]
-      (migratus/rollback-until-just-after config 0)
-      (migratus/migrate (get-migration-config))
-      (log/info "Database reset completed"))
-    (catch Exception e
-      (rethrow-config-conflict! e)
-      (log/error e "Database reset failed")
-      (throw (ex-info "Database reset failed"
-                      {:type :migration-failed
-                       :error (.getMessage e)}
                       e)))))
 
 (defn init

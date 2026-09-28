@@ -5,14 +5,17 @@
            "libs/observability/src" "libs/observability/test" ;; Phase 2: Observability
            "libs/platform/src" "libs/platform/test"         ;; Phase 3: Platform
            "libs/user/src" "libs/user/test"                 ;; Phase 4: User
+           "libs/user/resources"                            ;; boot-table manifest
            "libs/admin/src" "libs/admin/test"               ;; Phase 5: Admin
            "libs/storage/src" "libs/storage/test"           ;; Phase 6: Storage
            "libs/scaffolder/src" "libs/scaffolder/test"     ;; Phase 8: Scaffolder
            "libs/cache/src" "libs/cache/test"               ;; Phase 9: Cache
            "libs/events/src" "libs/events/test"             ;; Event bus (BOU-93)
            "libs/jobs/src" "libs/jobs/test"                 ;; Phase 10: Jobs
+           "libs/jobs/resources"                            ;; boot-table manifest
            "libs/email/src" "libs/email/test"               ;; Phase 11: Email
            "libs/tenant/src" "libs/tenant/test"             ;; Phase 7: Tenant
+           "libs/tenant/resources"                            ;; boot-table manifest
            "libs/realtime/src" "libs/realtime/test"         ;; Phase 12: Realtime
            "libs/payments/src" "libs/payments/test"         ;; Payments: PSP abstraction
            "libs/external/src" "libs/external/test"         ;; Phase 13: External

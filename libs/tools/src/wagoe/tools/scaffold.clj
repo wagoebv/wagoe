@@ -73,6 +73,15 @@
        default
        input))))
 
+(defn tty?
+  "Whether a person can answer a prompt. A console is not enough: newer JDKs
+   return one with stdin redirected."
+  []
+  (if-let [c (System/console)]
+    (try (boolean (.isTerminal c))
+         (catch Exception _ true))
+    false))
+
 (defn confirm
   "Y/n or y/N prompt. Returns boolean.
 
@@ -84,10 +93,12 @@
    (let [hint (if default-yes? "Y/n" "y/N")]
      (print (str label " [" hint "]: "))
      (flush)
-     (let [input (str/trim (str/lower-case (or (read-line) "")))]
-       (if (empty? input)
-         default-yes?
-         (contains? #{"y" "yes"} input))))))
+     ;; A closed stdin is a no, whatever the default (BOU-585).
+     (when-let [line (read-line)]
+       (let [input (str/trim (str/lower-case line))]
+         (if (empty? input)
+           default-yes?
+           (contains? #{"y" "yes"} input)))))))
 
 ;; =============================================================================
 ;; Menu selection
@@ -436,10 +447,22 @@
 ;; Interactive wizards
 ;; =============================================================================
 
+(defn- shell-quote
+  "`s` as one shell word. Unquoted, a workflow's `>` is a redirect (BOU-585)."
+  [s]
+  (if (re-matches #"[A-Za-z0-9_./:=,@%+-]+" s)
+    s
+    (str "'" (str/replace s "'" "'\\''") "'")))
+
+(defn command-line
+  "`args` as a `bb scaffold` command line that pastes back as the same args."
+  [args]
+  (str "bb scaffold " (str/join " " (map shell-quote args))))
+
 (defn- print-command
   "The command a wizard is about to run, as the user would type it."
   [args]
-  (println (dim (str "Command: bb scaffold " (str/join " " args)))))
+  (println (dim (str "Command: " (command-line args)))))
 
 (defn wizard-generate []
   (println)
@@ -812,8 +835,14 @@
          (doseq [args commands]
            (print-command args))
          (println)
-         ;; A dry run writes nothing, so there is nothing to confirm.
-         (if (or yes? (:dry-run flags) (confirm "Generate this module?" true))
+         ;; A dry run writes nothing, so there is nothing to confirm. With
+         ;; nobody to ask, the prompt took its default (BOU-585).
+         (cond
+           (not (or yes? (:force flags) (:dry-run flags) (tty?)))
+           (do (println (red "No terminal to confirm on. Nothing generated; pass --yes to generate."))
+               (*exit!* 1))
+
+           (or yes? (:force flags) (:dry-run flags) (confirm "Generate this module?" true))
            ;; In order, and no further once one fails: an entity cannot be added
            ;; to a module that was not generated.
            (let [result (reduce (fn [_ args] (or (run-clojure! args) (reduced nil))) nil to-run)]
@@ -821,6 +850,8 @@
                (println (yellow (str "Dry run: the " (dec (count commands))
                                      " entity command(s) above add to a module that does not exist yet, so they were not run."))))
              result)
+
+           :else
            (println (yellow "Cancelled. No files were generated."))))))))
 
 ;; =============================================================================
@@ -857,7 +888,7 @@
        "  default= is the column DEFAULT; a required enum without one takes its first value\n"
        "\n"
        "A status that only moves forward, as a workflow (generate and entity):\n"
-       "  --workflow status:entered>delivered>paid\n"
+       "  --workflow 'status:entered>delivered>paid'   (quoted: > is a shell redirect)\n"
        "\n"
        "For AI scaffolding, set one of:\n"
        "  ANTHROPIC_API_KEY, OPENAI_API_KEY, REPLICATE_API_TOKEN,\n"

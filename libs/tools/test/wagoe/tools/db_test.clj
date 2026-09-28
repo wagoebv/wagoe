@@ -2,6 +2,7 @@
   (:require [babashka.fs :as fs]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
+            [babashka.process]
             [wagoe.tools.db :as db]))
 
 (defn- repo-root []
@@ -77,3 +78,53 @@
       (is (= ["--system" "my_app.system-config"] (db/seed-args root [])))))
   (testing "a project without a system-config seeds as before"
     (is (= [] (db/seed-args (temp-project {}) [])))))
+
+(defn- run-reset
+  "Run `bb db:reset args` with `env` as the environment variables. Returns
+   {:exit :out :cmds}."
+  [args env]
+  (let [exit (atom nil)
+        cmds (atom [])
+        f    db/reset-profile
+        out  (with-redefs [babashka.process/shell (fn [_opts & cmd] (swap! cmds conj (vec cmd)) {:exit 0})
+                           db/reset-profile       (fn [a _] (f a #(get env %)))]
+               (binding [db/*exit!* #(reset! exit %)]
+                 (with-out-str (with-in-str "yes\nyes\n" (apply db/db-reset args)))))]
+    {:exit @exit :out out :cmds @cmds}))
+
+(deftest ^:unit reset-runs-in-dev-test-and-acc-only
+  ;; A reset drops what no migration brings back; prod changes through
+  ;; migrations, and piping yes does not change that (BOU-585).
+  (doseq [[args env] [[["--env" "prod"] {}]
+                      [[] {"WAG_ENV" "prod"}]
+                      [[] {"ENV" "staging"}]
+                      [[] {"WAG_ENV" "local"}]
+                      [[] {"WAG_ENV" "production"}]
+                      [["--env" ""] {}]
+                      [[] {}]
+                      [["--env" "dev"] {"WAG_ENV" "prod"}]
+                      [["--env" "test"] {"WAG_ENV" "prod"}]]]
+    (testing (pr-str args env)
+      (let [{:keys [exit out cmds]} (run-reset args env)]
+        (is (= 1 exit) out)
+        (is (empty? cmds) "no JVM is started")
+        (is (str/includes? out "bb migrate up") out))))
+  (doseq [[args env profile] [[[] {"WAG_ENV" "dev"} "dev"]
+                              [[] {"WAG_ENV" "development"} "dev"]
+                              [["--env" "Development"] {} "dev"]
+                              [[] {"WAG_ENV" "acceptance"} "acc"]
+                              [["--env" "test"] {"WAG_ENV" "dev"} "test"]
+                              [[] {"WAG_ENV" "acc"} "acc"]]]
+    (testing profile
+      (let [{:keys [exit cmds]} (run-reset args env)]
+        (is (nil? exit))
+        (is (= [["clojure" (str "-J-Denv=" profile) "-M:migrate" "reset"]] cmds)
+            "the platform resolves the same profile"))))
+  (testing "--allow-remote reaches the platform"
+    (is (= [["clojure" "-J-Denv=dev" "-M:migrate" "reset" "--allow-remote"]]
+           (:cmds (run-reset ["--allow-remote"] {"WAG_ENV" "dev"}))))))
+
+(deftest ^:unit env-aliases-match-the-config-loader
+  (let [src (slurp (str (fs/path (repo-root) "libs" "config" "src" "wagoe" "config.clj")))
+        m   (second (re-find #"(?s)\(def \^:private env-aliases.*?(\{[^}]*\})" src))]
+    (is (= (read-string m) db/env-aliases))))

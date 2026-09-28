@@ -1,0 +1,3 @@
+;; The tables this library creates at boot, outside any migration.
+;; `bb db:reset` drops these; a test fails when a boot table is missing here.
+{:tables ["auth_users" "users" "user_sessions" "user_audit_log"]}

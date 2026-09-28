@@ -144,7 +144,7 @@ GET stays as it was.
 
 ```bash
 bb scaffold generate --module-name invoice --entity Invoice \
-  --field number:string:required --workflow status:entered>delivered>paid
+  --field number:string:required --workflow 'status:entered>delivered>paid'
 ```
 
 On `generate` and `entity` (`:workflow {:field :status :states [...]}` in the
@@ -484,7 +484,7 @@ Configure the provider via environment variables: `ANTHROPIC_API_KEY`, `OPENAI_A
 | `--module-name` | — | Module name in lowercase kebab-case (required) |
 | `--entity` | — | Entity name in PascalCase (required) |
 | `--field` | — | Repeatable: `name:type[:values=a,b,c][:references=entity][:on-delete=x][:required|:optional][:unique][:indexed][:default=v]` |
-| `--workflow` | — | `field:first>second>...`: the status as a forward-only workflow |
+| `--workflow` | — | `'field:first>second>...'`, quoted: the status as a forward-only workflow |
 | `--[no-]http` | true | Generate the HTTP (REST API) routes |
 | `--[no-]web` | true | Generate the Web UI: `core/ui.clj`, `shell/web_handlers.clj`, and the module's `:web` route contribution |
 | `--public-api` | false | API routes and web page open to anyone; by default they require a signed-in user |

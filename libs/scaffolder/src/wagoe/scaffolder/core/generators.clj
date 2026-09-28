@@ -1215,7 +1215,7 @@ DROP TABLE IF EXISTS %s;
 ;; Workflow (BOU-569)
 ;; =============================================================================
 ;;
-;; `--workflow status:entered>delivered>paid` makes the status a workflow: a
+;; `--workflow 'status:entered>delivered>paid'` makes the status a workflow: a
 ;; definition that moves one state forward at a time, registered through the
 ;; workflow module's registry port by the module's wiring. The service starts an
 ;; instance on every create; the admin creates rows without the service, so its

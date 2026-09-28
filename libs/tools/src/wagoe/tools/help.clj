@@ -224,7 +224,7 @@
   (println)
   (println (cyan "Database:"))
   (println "  bb db:status                          Show config and migration status")
-  (println "  bb db:reset                           Drop + recreate + migrate (with confirmation)")
+  (println "  bb db:reset                           Drop the app's tables + migrate (dev, test, acc)")
   (println "  bb db:seed                            Seed database from dev.edn")
   (println)
   ;; Publishing is a maintainer's job in the Wagoe repository. A generated

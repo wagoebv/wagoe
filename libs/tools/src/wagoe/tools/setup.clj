@@ -1114,7 +1114,30 @@
         ".env has every variable in .env.example"))
     "Copy .env.example to .env and fill in your values"))
 
-(defn- write-plan! [spec plan]
+(defn- env-reads
+  "The variables `form` reads through #env, following #include into `dir`."
+  [form dir]
+  (cond
+    (tagged-literal? form)
+    (case (:tag form)
+      env     [(str (cond-> (:form form) (vector? (:form form)) first))]
+      include (let [[m] (some-> (read-target (str dir "/" (:form form))) read-edn)]
+                (env-reads m dir))
+      (env-reads (:form form) dir))
+    (coll? form) (mapcat #(env-reads % dir) form)
+    :else        nil))
+
+(defn- prod-env-step
+  "The first next step for a prod-only run: what the written prod config reads
+   from the environment, from its :active alone, so neither dev's AI nor the
+   database prod moved away from is named. JWT_SECRET is read by the auth
+   module itself, not through config."
+  []
+  (let [[m]  (some-> (read-target (conf-rel "prod")) read-edn)
+        vars (distinct (cons "JWT_SECRET" (env-reads (:active m) "resources/conf/prod")))]
+    (str "Set in prod's environment: " (str/join ", " vars))))
+
+(defn- write-plan! [spec plan prod-only?]
   (println)
   (let [items (filter (comp #{:new :changed} :status) plan)]
     (if-let [changed (seq (stale items))]
@@ -1138,7 +1161,7 @@
             (println (green "✓") " Updated" (cyan "AGENTS.md") (dim "(module list)")))
           (println)
           (println (dim "Next steps:"))
-          (println (dim (str "  1. " (env-step))))
+          (println (dim (str "  1. " (if prod-only? (prod-env-step) (env-step)))))
           (println (dim "  2. Run: bb migrate up"))
           (println (dim "  3. Run: bb doctor  (to verify your config)"))
           (when-let [steps (ai-provider-prerequisites (:ai-provider spec))]
@@ -1179,7 +1202,8 @@
 (defn- run-setup!
   "Show what `spec` would change, ask first when `ask?`, then write it."
   [spec ask?]
-  (let [plan    (plan spec)
+  (let [prod-only? (and (:prod? spec) (existing-project?))
+        plan    (plan spec)
         refused (filter #(= :refused (:status %)) plan)]
     (display-summary spec plan)
     (println)
@@ -1196,7 +1220,7 @@
       (and ask? (not (confirm "Generate these config files?" true)))
       (println (yellow "Cancelled."))
 
-      :else (write-plan! spec plan))))
+      :else (write-plan! spec plan prod-only?))))
 
 ;; =============================================================================
 ;; AI mode

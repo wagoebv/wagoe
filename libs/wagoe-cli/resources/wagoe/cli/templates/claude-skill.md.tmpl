@@ -25,7 +25,7 @@ consistent.
 | Explain an error or stacktrace (experimental) | `bb ai explain --file stacktrace.txt` |
 | Generate tests for a namespace (experimental) | `bb ai gen-tests <path/to/file.clj> --write` |
 | SQL (HoneySQL) from a description (experimental) | `bb ai sql "find active users with orders in last 7 days"` |
-| Admin entity config | `bb ai admin-entity "products with name, price, status"` |
+| Admin entity config | `bb ai admin-entity "products with name, price, status" --yes` |
 | Generate module docs (AGENTS.md) | `bb ai docs --module <path> --type agents` |
 | Configure the project (DB, payments, …) | `bb setup ai "PostgreSQL with Stripe payments"` |
 | Validate config + environment | `bb doctor --all` |
