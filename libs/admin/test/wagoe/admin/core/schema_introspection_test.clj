@@ -801,3 +801,18 @@
       (is (false? (get-in create [:fields :owner :required]))))
     (testing "a column the create must supply still is"
       (is (true? (get-in create [:fields :number :required]))))))
+
+(deftest ^:unit one-record-is-named-in-the-singular
+  ;; The toasts said "Invoices created successfully" for one (BOU-589).
+  (testing ":label-singular wins"
+    (is (= "Person" (introspection/singular-label {:label "People" :label-singular "Person"} :people))))
+  (testing "else :label, made singular"
+    (doseq [[plural one] [["Invoices" "Invoice"] ["Categories" "Category"] ["Addresses" "Address"]
+                          ["Invoice Line Items" "Invoice Line Item"] ["Boxes" "Box"] ["Status" "Status"]
+                          ["Facturen" "Facturen"]]]
+      (is (= one (introspection/singular-label {:label plural} :x)) plural)))
+  (testing "else the entity name"
+    (is (= "Invoice" (introspection/singular-label {} :invoices))))
+  (testing "the plural is :label, else the entity name"
+    (is (= "Invoices" (introspection/plural-label {:label "Invoices"} :x)))
+    (is (= "Line items" (introspection/plural-label {} :line-items)))))

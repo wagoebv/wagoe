@@ -306,7 +306,7 @@
               [:on-delete [:enum :cascade :restrict]]))
 
 (def EntityOverrides
-  (closed-map :label :description :icon :sidebar-hidden :table-name :primary-key
+  (closed-map :label :label-singular :description :icon :sidebar-hidden :table-name :primary-key
               :list-fields :detail-fields :search-fields :editable-fields
               :hide-fields :readonly-fields :field-order :default-sort
               :default-sort-dir :soft-delete :create-redirect-url

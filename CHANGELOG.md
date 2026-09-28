@@ -43,6 +43,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Admin toasts named one record in the plural**, "Invoices created successfully" (BOU-589). One record is singular now,
+  and translated; set `:label-singular` where `:label` made singular is wrong.
 - **A workflow transition answered `"available-transitions": null`** (BOU-589), in the workflow API and a scaffolded
   `/:id/transition`. Both now list what the caller may do from the new state.
 - **`GET /web/admin/workflows/<id>` answered 500 for an id that is not a UUID** (BOU-586); it is a 404 now.
