@@ -74,10 +74,13 @@ This is a frequent source of bugs. Wagoe uses three different naming conventions
 | `snake_case`
 | `password_hash`, `created_at`
 
-| API/JSON (at boundary only)
-| `camelCase`
-| `passwordHash`, `createdAt`
+| API/JSON
+| `kebab-case`
+| `password-hash`, `created-at`
 |===
+
+JSON keys are the Clojure keys — nothing converts them at the HTTP layer. The
+framework's own user API is the exception and answers in `camelCase`.
 
 Always use `wagoe.core.utils.case-conversion` for conversions. Never convert manually.
 
@@ -90,9 +93,6 @@ Always use `wagoe.core.utils.case-conversion` for conversions. Never convert man
 
 ;; Clojure entity → DB record
 (cc/kebab-case->snake-case-map entity)
-
-;; Clojure entity → API response
-(cc/kebab-case->camel-case-map entity)
 ----
 
 See xref:architecture:conventions.adoc[Conventions] for the full guide.

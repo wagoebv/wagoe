@@ -29,6 +29,11 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The AI scaffolder's system prompt said the API is camelCase and named a namespace that does not exist**,
+  `wagoe.shared.core.utils.case-conversion`. It says kebab-case and `wagoe.core.utils.case-conversion`, as `bb guide` does.
+
 ## [1.0.0] — 2026-09-28
 
 ### Breaking

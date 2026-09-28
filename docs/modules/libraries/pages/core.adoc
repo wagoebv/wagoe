@@ -59,10 +59,8 @@ The most commonly used utilities across the entire monorepo:
 ;; Persistence boundary — Clojure entity → DB insert/update
 (cc/kebab-case->snake-case-map entity)
 
-;; HTTP boundary — Clojure entity → JSON response
+;; Only when a client needs camelCase JSON — Wagoe's APIs answer kebab-case
 (cc/kebab-case->camel-case-map entity)
-
-;; HTTP boundary — JSON request → Clojure map
 (cc/camel-case->kebab-case-map api-input)
 ----
 

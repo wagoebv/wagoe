@@ -85,9 +85,9 @@ The generator infers types from your `--field` flags and stops there. Bounds and
 formats are yours to add — `[:string {:min 1 :max 200}]` for a name, a regex for
 a SKU. See xref:guides:validation.adoc[Validation].
 
-Keys are `kebab-case` everywhere inside the application. The conversion to
-`snake_case` for the database and `camelCase` for JSON happens at the boundary,
-in `persistence.clj` and the HTTP layer. See
+Keys are `kebab-case` everywhere inside the application, and in the module's
+JSON too. The one conversion, to `snake_case` for the database, happens at the
+boundary in `persistence.clj`. See
 xref:architecture:conventions.adoc[Conventions].
 
 == core/product.clj

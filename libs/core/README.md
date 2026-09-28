@@ -51,7 +51,7 @@ Foundation library providing validation, utilities, and interceptor framework fo
 (case/snake-case->kebab-case-map {:user_id 123 :first_name "John"})
 ;; => {:user-id 123 :first-name "John"}
 
-;; kebab-case to camelCase (for JSON API)
+;; kebab-case to camelCase (only for a client that needs it; Wagoe's APIs answer kebab-case)
 (case/kebab-case->camel-case-map {:user-id 123 :first-name "John"})
 ;; => {:userId 123 :firstName "John"}
 ```

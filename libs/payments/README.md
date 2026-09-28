@@ -1,6 +1,6 @@
 # wagoe/payments
 
-[![Status](https://img.shields.io/badge/status-stable-brightgreen)]()
+[![Status](https://img.shields.io/badge/status-incubating-yellow)]()
 [![Clojure](https://img.shields.io/badge/clojure-1.12+-blue)]()
 [![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
 [![Clojars Project](https://img.shields.io/clojars/v/com.wagoe/wagoe-payments.svg)](https://clojars.org/com.wagoe/wagoe-payments)

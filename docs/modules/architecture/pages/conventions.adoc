@@ -18,12 +18,17 @@ Three naming styles are used at three different system boundaries:
 | `snake_case`
 | `password_hash`, `created_at`, `user_id`
 
-| API / JSON (at HTTP boundary only)
-| `camelCase`
-| `passwordHash`, `createdAt`, `userId`
+| API / JSON
+| `kebab-case`
+| `password-hash`, `created-at`, `user-id`
 |===
 
 *Never mix these inside application code.* Convert only at the exact boundary.
+
+JSON keys are the Clojure keys: the HTTP layer converts nothing, so a scaffolded
+API, the workflow API and the tenant API all answer in `kebab-case`. The one
+exception is the framework's own user API (`wagoe-user`), which answers — and,
+for MFA, reads — `camelCase` (`createdAt`, `verificationCode`).
 
 === Using the conversion utilities
 
@@ -37,10 +42,8 @@ Three naming styles are used at three different system boundaries:
 ;; Persistence boundary: Clojure entity → DB insert/update
 (cc/kebab-case->snake-case-map entity)
 
-;; HTTP boundary: Clojure entity → JSON response
+;; Only when a client needs camelCase JSON — Wagoe's APIs do not convert
 (cc/kebab-case->camel-case-map entity)
-
-;; HTTP boundary: JSON request body → Clojure map
 (cc/camel-case->kebab-case-map api-input)
 ----
 

@@ -1,6 +1,6 @@
 # wagoe/ai
 
-[![Status](https://img.shields.io/badge/status-stable-brightgreen)]()
+[![Status](https://img.shields.io/badge/status-incubating-yellow)]()
 [![Clojure](https://img.shields.io/badge/clojure-1.12+-blue)]()
 [![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
 [![Clojars Project](https://img.shields.io/clojars/v/com.wagoe/wagoe-ai.svg)](https://clojars.org/com.wagoe/wagoe-ai)
@@ -83,6 +83,9 @@ bb ai sql "find active users with orders in the last 7 days"     # SQL copilot
 bb ai docs --module libs/user --type agents                # Docs wizard (agents/openapi/readme)
 bb ai admin-entity "products with name, price, status"     # Admin entity EDN config
 ```
+
+`bb scaffold ai` and `bb ai admin-entity` ask before writing; without a terminal
+they refuse unless you pass `--yes` or `--force`.
 
 ## Documentation
 
