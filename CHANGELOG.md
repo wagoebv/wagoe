@@ -34,6 +34,11 @@ for what is public API, what is internal, and how deprecations are announced.
 - **Every JSON error body is `{"error": {"type": …, "message": …}}`** (BOU-586); refused input is `validation-error`.
   Read `error.type` and `error.message`; `details` and `correlation-id` moved inside `error`.
 
+### Added
+
+- **The seeder fills in `id`, `created-at` and `updated-at`** (BOU-588), and a child names its parent
+  by a symbolic id: `:id :invoice/acme` on the parent, `:invoice-id :invoice/acme` on the child.
+
 ### Fixed
 
 - **`GET /web/admin/workflows/<id>` answered 500 for an id that is not a UUID** (BOU-586); it is a 404 now.

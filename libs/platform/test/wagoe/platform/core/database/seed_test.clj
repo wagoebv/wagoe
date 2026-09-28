@@ -82,6 +82,67 @@
         (is (nil? (:error (seed/validate-seed data))))
         (is (= 9 (count (seed/seed-plan data))))))))
 
+;; =============================================================================
+;; Defaults and symbolic ids (BOU-588)
+;; =============================================================================
+
+(def ^:private tables
+  {"invoices"   {:columns #{"id" "number" "created_at" "updated_at"} :uuid-id? true}
+   "line_items" {:columns #{"id" "invoice_id" "description" "created_at"} :uuid-id? true}
+   "tags"       {:columns #{"id" "name"} :uuid-id? false}})
+
+(defn- resolve-with [data]
+  (let [n (volatile! 0)]
+    (seed/resolve-seed data {:tables tables
+                             :now    "2026-09-28T10:00:00Z"
+                             :new-id #(str "id-" (vswap! n inc))})))
+
+(deftest ^:unit rows-without-ids-or-timestamps-get-them
+  (let [{:keys [ok error]} (resolve-with [[:invoices [{:number "A"} {:number "B"}]]])]
+    (is (nil? error))
+    (is (= [[:invoices [{:number "A" :id "id-1" :created-at "2026-09-28T10:00:00Z" :updated-at "2026-09-28T10:00:00Z"}
+                        {:number "B" :id "id-2" :created-at "2026-09-28T10:00:00Z" :updated-at "2026-09-28T10:00:00Z"}]]]
+           ok)))
+  (testing "only the columns the table has"
+    (is (= [[:line-items [{:description "x" :id "id-1" :created-at "2026-09-28T10:00:00Z"}]]]
+           (:ok (resolve-with [[:line-items [{:description "x"}]]])))))
+  (testing "an integer id is left to the database"
+    (is (= [[:tags [{:name "t"}]]] (:ok (resolve-with [[:tags [{:name "t"}]]])))))
+  (testing "what the row gives wins"
+    (is (= [[:invoices [{:id "given" :number "A" :created-at "then" :updated-at "2026-09-28T10:00:00Z"}]]]
+           (:ok (resolve-with [[:invoices [{:id "given" :number "A" :created-at "then"}]]]))))))
+
+(deftest ^:unit a-child-refers-to-its-parent-by-a-symbolic-id
+  (let [{:keys [ok error]} (resolve-with [[:invoices [{:id :invoice/acme :number "A"}
+                                                      {:id :invoice/globex :number "B"}]]
+                                          [:line-items [{:invoice-id :invoice/globex :description "x"}
+                                                        {:invoice-id :invoice/acme :description "y"}]]])
+        [[_ invoices] [_ items]] ok]
+    (is (nil? error))
+    (is (= ["id-1" "id-2"] (map :id invoices)))
+    (is (= ["id-2" "id-1"] (map :invoice-id items)))
+    (is (= ["id-3" "id-4"] (map :id items))))
+  (testing "a workflow state and other keywords are left alone"
+    (is (= :paid (-> (resolve-with [[:invoices [{:id :invoice/a :number :paid}]]]) :ok first second first :number))))
+  (testing "a qualified keyword nobody declared is left alone"
+    (is (= :a/b (-> (resolve-with [[:invoices [{:number :a/b}]]]) :ok first second first :number))))
+  (testing "a mistyped reference is refused"
+    (is (re-find #":invoice/acmee"
+                 (get-in (resolve-with [[:invoices [{:id :invoice/acme :number "A"}]]
+                                        [:line-items [{:invoice-id :invoice/acmee :description "x"}]]])
+                         [:error :message])))))
+
+(deftest ^:unit a-symbolic-id-is-refused-where-it-cannot-work
+  (doseq [[why data] [["unqualified"         [[:invoices [{:id :acme :number "A"}]]]]
+                      ["declared twice"      [[:invoices [{:id :invoice/a :number "A"} {:id :invoice/a :number "B"}]]]]
+                      ["not a uuid id"       [[:tags [{:id :tag/a :name "t"}]]]]
+                      ["some rows, not all"  [[:tags [{:id 1 :name "t"} {:name "u"}]]]]]]
+    (testing why
+      (is (= :validation-error (get-in (resolve-with data) [:error :type]))))))
+
+(deftest ^:unit rows-may-leave-out-what-is-defaulted
+  (is (nil? (:error (seed/validate-seed {:invoices [{:id :invoice/a :number "A"} {:number "B" :created-at "x"}]})))))
+
 (deftest ^:unit seed-plan-preserves-file-order
   (testing "parents can be listed before children, and that order is kept"
     (let [plan (seed/seed-plan (array-map :users [{:email "a@b.c"}]

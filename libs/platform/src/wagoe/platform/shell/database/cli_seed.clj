@@ -31,8 +31,10 @@
     (println "   Past 8 tables an EDN map stops preserving that order — use the")
     (println "   ordered form for anything larger:")
     (println)
-    (println "     [[:users [{:email \"admin@example.com\"}]]")
-    (println "      [:tasks [{:title \"Owned by that user\" :user-id 1}]]]"))
+    (println "     [[:projects [{:id :project/demo :name \"Demo\"}]]")
+    (println "      [:tasks [{:title \"In that project\" :project-id :project/demo}]]]")
+    (println)
+    (println "   id, created-at and updated-at are filled in. `bb guide seed` has more."))
   (println))
 
 (def ^:private seedable-envs
@@ -80,11 +82,14 @@
     (if-let [err (:error result)]
       (do (print-error err)
           (System/exit 1))
-      (let [{:keys [tables rows detail inserted]} (:ok result)]
+      (let [{:keys [tables rows detail inserted admin-missing?]} (:ok result)]
         (println)
         (println "✅ Seeded" rows "row(s) across" tables "table(s)")
         (doseq [{:keys [table rows]} detail]
           (println (str "   " table ": " rows)))
+        (when admin-missing?
+          (println)
+          (println "   No admin account yet. Next: bb create-admin"))
         ;; After the commit, through the application: a seeded row with a
         ;; workflow gets its instance, in the state the row holds.
         (when system-ns

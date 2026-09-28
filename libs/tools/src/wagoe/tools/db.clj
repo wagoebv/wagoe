@@ -295,10 +295,10 @@
         (println (dim (str "    " (seed-path))))
         (println)
         (println (dim "  Example content:"))
-        (println (dim "    {:users [{:email \"admin@example.com\" :name \"Admin\"}]}"))
+        (println (dim "    [[:projects [{:id :project/demo :name \"Demo\"}]]"))
+        (println (dim "     [:tasks [{:title \"First\" :project-id :project/demo}]]]"))
         (println)
-        (println (dim "  Tables insert in the order written — list parents first."))
-        (println (dim "  Past 8 tables, use the ordered form: [[:users [...]] [:tasks [...]]]"))
+        (println (dim "  `bb scaffold` writes one example per entity there; `bb guide seed` explains the file."))
         (println))
       ;; Pass through to the JVM side. libs/tools is pure Babashka with no
       ;; Maven deps at runtime, so it cannot open a JDBC connection itself —
