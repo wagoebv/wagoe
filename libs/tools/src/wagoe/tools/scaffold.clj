@@ -73,6 +73,15 @@
        default
        input))))
 
+(defn tty?
+  "Whether a person can answer a prompt. A console is not enough on JDK 22+,
+   which returns one with stdin redirected."
+  []
+  (if-let [c (System/console)]
+    (try (boolean (.isTerminal c))
+         (catch Exception _ true))
+    false))
+
 (defn confirm
   "Y/n or y/N prompt. Returns boolean.
 
@@ -84,10 +93,12 @@
    (let [hint (if default-yes? "Y/n" "y/N")]
      (print (str label " [" hint "]: "))
      (flush)
-     (let [input (str/trim (str/lower-case (or (read-line) "")))]
-       (if (empty? input)
-         default-yes?
-         (contains? #{"y" "yes"} input))))))
+     ;; A closed stdin is a no, whatever the default (BOU-585).
+     (when-let [line (read-line)]
+       (let [input (str/trim (str/lower-case line))]
+         (if (empty? input)
+           default-yes?
+           (contains? #{"y" "yes"} input)))))))
 
 ;; =============================================================================
 ;; Menu selection
@@ -812,8 +823,14 @@
          (doseq [args commands]
            (print-command args))
          (println)
-         ;; A dry run writes nothing, so there is nothing to confirm.
-         (if (or yes? (:dry-run flags) (confirm "Generate this module?" true))
+         ;; A dry run writes nothing, so there is nothing to confirm. With
+         ;; nobody to ask, the prompt took its default (BOU-585).
+         (cond
+           (not (or yes? (:force flags) (:dry-run flags) (tty?)))
+           (do (println (red "No terminal to confirm on. Nothing generated; pass --yes to generate."))
+               (*exit!* 1))
+
+           (or yes? (:force flags) (:dry-run flags) (confirm "Generate this module?" true))
            ;; In order, and no further once one fails: an entity cannot be added
            ;; to a module that was not generated.
            (let [result (reduce (fn [_ args] (or (run-clojure! args) (reduced nil))) nil to-run)]
@@ -821,6 +838,8 @@
                (println (yellow (str "Dry run: the " (dec (count commands))
                                      " entity command(s) above add to a module that does not exist yet, so they were not run."))))
              result)
+
+           :else
            (println (yellow "Cancelled. No files were generated."))))))))
 
 ;; =============================================================================

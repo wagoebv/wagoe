@@ -17,7 +17,8 @@
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [clojure.tools.cli :as cli]
-            [wagoe.ai.shell.cli-entry :as sut]))
+            [wagoe.ai.shell.cli-entry :as sut]
+            [wagoe.ai.shell.service :as svc]))
 
 (defn- cli-entry-source
   "The CLI source, from the repo root or from libs/ai.
@@ -388,3 +389,47 @@
       (is (str/includes? sut/help-text var) var)))
   (is (str/includes? sut/help-text "REPLICATE_API_TOKEN"))
   (is (str/includes? sut/help-text "AI_MODEL")))
+
+(defn- run-admin-entity
+  "Run `bb ai admin-entity` in a fresh project with the AI stubbed, on `stdin`
+   and with or without a terminal. Returns {:out :exit :written?}."
+  [args stdin tty?]
+  (let [root (.toFile (java.nio.file.Files/createTempDirectory
+                       "admin-entity" (make-array java.nio.file.attribute.FileAttribute 0)))
+        dev  (io/file root "resources" "conf" "dev" "config.edn")
+        exit (atom nil)]
+    (io/make-parents dev)
+    (spit dev "{}")
+    (let [out (with-redefs [sut/make-service-from-config (constantly nil)
+                            sut/tty?                     (constantly tty?)
+                            svc/generate-admin-entity    (fn [& _]
+                                                           {:text     "{:invoices {}}"
+                                                            :entities [{:entity-name "invoices"
+                                                                        :text        "{:invoices {}}"}]})]
+                (binding [sut/*exit!* #(reset! exit %)]
+                  (with-out-str
+                    (with-in-str stdin
+                      (sut/cmd-admin-entity (into ["--root" (.getPath root)] args))))))]
+      {:out      out
+       :exit     @exit
+       :written? (.exists (io/file root "resources" "conf" "dev" "admin" "invoices.edn"))})))
+
+(deftest ^:unit admin-entity-never-assumes-consent
+  ;; --force still asked "Write these files? [Y/n]", and without a terminal an
+  ;; unread answer was taken as yes (BOU-585).
+  (doseq [flag ["--force" "--yes"]]
+    (testing (str flag " writes without asking")
+      (let [{:keys [out exit written?]} (run-admin-entity [flag "invoices"] "" false)]
+        (is (not (str/includes? out "[Y/n]")) out)
+        (is (nil? exit) out)
+        (is written? out))))
+  (testing "no terminal and no flag refuses"
+    (let [{:keys [out exit written?]} (run-admin-entity ["invoices"] "y\n" false)]
+      (is (= 1 exit) out)
+      (is (not written?) out)
+      (is (str/includes? out "--yes") out)))
+  (testing "a terminal is asked, and a closed stdin is not a yes"
+    (let [{:keys [out written?]} (run-admin-entity ["invoices"] "" true)]
+      (is (str/includes? out "[Y/n]") out)
+      (is (not written?) out))
+    (is (:written? (run-admin-entity ["invoices"] "y\n" true)))))
