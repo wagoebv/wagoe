@@ -12,6 +12,7 @@
             [migratus.migrations :as migratus-migrations]
             [migratus.utils :as migratus-utils]
             [wagoe.config :as config]
+            [aero.core :as aero]
             [clojure.edn :as edn]
             [clojure.java.io :as io]
             [clojure.string :as str]
@@ -167,30 +168,57 @@
 
       :else (db-config/detect-environment))))
 
-(defn prod-profile-exists? []
-  (some? (io/resource "conf/prod/config.edn")))
+(defn prod-config-resource []
+  (io/resource "conf/prod/config.edn"))
 
-(defn- db-identity
-  "Where `profile`'s active database is: adapter, host, port and name."
-  [profile]
-  (when-let [c (some-> (db-config/get-active-db-configs profile) first val)]
-    (let [a (:adapter c)]
+(defn- identity-of
+  "Where the database of db-config `c` is: adapter, host, port and name. Every
+   loopback name is one host, so localhost and 127.0.0.1 compare equal."
+  [c]
+  (when c
+    (let [a (:adapter c)
+          h (some-> (:host c) str lc)]
       {:adapter a
-       :host    (lc (some-> (:host c) str))
+       :host    (if (and h (loopback? h)) :loopback h)
        :port    (str (or (:port c) (case a :postgresql 5432 :mysql 3306 nil)))
        :db      (or (:name c)
                     (some-> (:database-path c) str io/file .getCanonicalPath))})))
 
+(defn- active-db-config
+  "The db-config of the first database in `config`'s :active."
+  [config]
+  (when-let [[k v] (first (filter (fn [[k _]] (and (keyword? k) (= "wagoe" (namespace k))
+                                                   (#{"postgresql" "sqlite" "mysql" "h2"} (name k))))
+                                  (:active config)))]
+    (db-config/config->db-config k v)))
+
+(defn- read-leniently
+  "`url` read with each #env unset — a developer's machine has no prod
+   secrets — and #long of nothing nothing, for when Aero cannot."
+  [url]
+  (edn/read-string {:readers {'env  (constantly nil)
+                              'or   #(first (remove nil? %))
+                              'long #(cond (number? %) (long %) (string? %) (parse-long %) :else nil)}
+                    :default (fn [_ v] v)}
+                   (slurp url)))
+
+(defn- prod-identity [url]
+  (identity-of
+   (active-db-config
+    (try (aero/read-config url)
+         (catch Exception _
+           (try (read-leniently url)
+                (catch Exception e
+                  (refuse! :forbidden (str "Cannot read conf/prod/config.edn, so cannot tell prod's database from"
+                                           " this one: " (ex-message e) ". Fix the file, or move it aside to reset.")
+                           {}))))))))
+
 (defn- check-not-prod!
   "Refuse when `env` resolves to the database prod's config does."
   [env]
-  (when (and (not= "prod" env) (prod-profile-exists?))
-    (let [prod (try (db-identity "prod")
-                    (catch Exception e
-                      (refuse! :forbidden (str "Cannot read the prod config to tell its database from this one: "
-                                               (ex-message e))
-                               {})))]
-      (when (and prod (= prod (db-identity env)))
+  (when-let [url (and (not= "prod" env) (prod-config-resource))]
+    (let [prod (prod-identity url)]
+      (when (and prod (= prod (identity-of (some-> (db-config/get-active-db-configs env) first val))))
         (refuse! :forbidden (str "Refusing to reset: the " env " profile resolves to prod's database. "
                                  db-config/reset-refusal)
                  {:same-as "prod"})))))

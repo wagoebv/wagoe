@@ -103,20 +103,70 @@
               (is (contains? (tables ctx) "auth_users") "nothing is dropped")))
           (finally (db-factory/close-db-context! ctx)))))))
 
+(defn- prod-config!
+  "A conf/prod/config.edn holding `text`, as a URL."
+  [text]
+  (let [f (java.io.File/createTempFile "prod-config" ".edn")]
+    (.deleteOnExit f)
+    (spit f text)
+    (io/as-url f)))
+
+(defn- postgres-config [host]
+  {:active {:wagoe/postgresql {:host host :port 5432 :dbname "shop" :user "u" :password "p"}}})
+
+(defn- reset-with-prod
+  "Reset an H2 app in dev whose config resolves to `dev-config`, beside a prod
+   config holding `prod-text`. Returns what run-reset returned, and whether
+   auth_users survived."
+  [dev-config prod-text]
+  (let [ctx (h2)]
+    (try
+      (with-app ctx {"WAG_ENV" "dev" :load-config (fn [_] dev-config)}
+        (fn [run-reset _]
+          (with-redefs [sut/prod-config-resource (constantly (prod-config! prod-text))]
+            [(run-reset) (contains? (tables ctx) "auth_users")])))
+      (finally (db-factory/close-db-context! ctx)))))
+
 (deftest ^:integration a-dev-profile-on-prods-database-refuses
   ;; The dev and prod configs can read the same POSTGRES_* variables.
-  (let [ctx  (h2)
-        same {:active {:wagoe/postgresql {:host "db.internal" :port 5432 :dbname "shop"
-                                          :user "u" :password "p"}}}]
-    (try
-      (with-app ctx {"WAG_ENV" "dev" :load-config (fn [_] same)}
-        (fn [run-reset _]
-          (with-redefs [sut/prod-profile-exists? (constantly true)]
-            (let [refusal (run-reset)]
-              (is (= :forbidden (:type refusal)))
-              (is (= "prod" (:same-as refusal)))))
-          (is (contains? (tables ctx) "auth_users") "nothing is dropped")))
-      (finally (db-factory/close-db-context! ctx)))))
+  (testing "the same host, port and database"
+    (let [[refusal kept?] (reset-with-prod (postgres-config "db.internal") (pr-str (postgres-config "db.internal")))]
+      (is (= :forbidden (:type refusal)))
+      (is (= "prod" (:same-as refusal)))
+      (is kept? "nothing is dropped")))
+  (testing "localhost, 127.0.0.1 and ::1 are one host"
+    (doseq [[dev prod] [["localhost" "127.0.0.1"] ["127.0.0.1" "::1"] ["LOCALHOST" "localhost"]]]
+      (let [[refusal kept?] (reset-with-prod (postgres-config dev) (pr-str (postgres-config prod)))]
+        (is (= "prod" (:same-as refusal)) [dev prod])
+        (is kept?))))
+  (testing "another database on the same host is not prod's"
+    (let [[result] (reset-with-prod (postgres-config "localhost")
+                                    (pr-str (assoc-in (postgres-config "localhost") [:active :wagoe/postgresql :dbname] "shop_prod")))]
+      (is (nil? result)))))
+
+(def ^:private setup-prod-config
+  "The database part of what `bb setup --prod true --database postgresql`
+   writes: everything from variables a developer's machine does not set."
+  "{:active {:wagoe/settings {:name \"shop-prod\"}
+             :wagoe/postgresql {:host     #env WAGOE_TEST_UNSET_HOST
+                                :port     #or [#long #or [#env WAGOE_TEST_UNSET_PORT 5432] 5432]
+                                :dbname   #env WAGOE_TEST_UNSET_DB
+                                :user     #env WAGOE_TEST_UNSET_USER
+                                :password #env WAGOE_TEST_UNSET_PASSWORD}
+             :wagoe/events {:provider :redis :host #env WAGOE_TEST_UNSET_REDIS
+                            :port #long #env WAGOE_TEST_UNSET_REDIS_PORT}}}")
+
+(deftest ^:integration a-prod-config-without-its-variables-does-not-block-a-dev-reset
+  ;; A developer has prod's config file and none of prod's secrets. Refusing
+  ;; whenever it could not be read would refuse every dev reset (BOU-585).
+  (let [[result kept?] (reset-with-prod {:active {}} setup-prod-config)]
+    (is (nil? result) (pr-str result))
+    (is (not kept?) "the reset ran"))
+  (testing "a file that is not EDN refuses, and says which"
+    (let [[refusal kept?] (reset-with-prod {:active {}} "{:active {:wagoe/postgresql")]
+      (is (= :forbidden (:type refusal)))
+      (is (str/includes? (str (:message refusal) (pr-str refusal)) "conf/prod/config.edn"))
+      (is kept?))))
 
 (deftest ^:integration only-an-applied-migration-owns-a-table
   ;; A migration not yet applied that creates `stray` made a foreign `stray`

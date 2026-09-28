@@ -53,7 +53,7 @@
                       db-config/load-config              (or load-config (fn [_] {:active {}}))]
           (f (fn [& [opts]]
                (try (reset/reset-database! (or opts {})) nil
-                    (catch clojure.lang.ExceptionInfo e (ex-data e))))
+                    (catch clojure.lang.ExceptionInfo e (assoc (ex-data e) :message (ex-message e)))))
              app)))
       (finally
         (System/clearProperty "env")
