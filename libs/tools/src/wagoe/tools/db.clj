@@ -185,18 +185,8 @@
 
          (println))))))
 
-(def ^:private disposable-envs
-  "Environments whose database may be seeded. Allowlist, not denylist: a
-   denylist lets an unrecognised environment such as \"staging\" through.
-   Seeding writes rows into whatever database the active config resolves to,
-   so refuse anything not known to be disposable.
-
-   Mirrors wagoe.platform.shell.adapters.database.config/disposable-envs — that
-   one is authoritative; this copy exists because Babashka cannot load it."
-  #{"dev" "development" "test" "local"})
-
 (def resettable-envs
-  "The profiles db:reset runs in. Mirrors
+  "The profiles db:reset and db:seed run in, aliases resolved. Mirrors
    wagoe.platform.shell.adapters.database.config/resettable-envs, which is
    authoritative; Babashka cannot load it."
   #{"dev" "test" "acc"})
@@ -256,13 +246,32 @@
           (println (red "  Reset refused, cancelled or failed."))
           (*exit!* exit))))))
 
-(defn db-seed
-  "Seed the database from the dev seed file.
+(defn getenv
+  "An environment variable. A var so tests can supply the environment."
+  [k]
+  (System/getenv k))
 
-   Refuses outside a development-like environment: the seed path defaults to
-   resources/seeds/dev.edn while the *database* comes from the active config,
-   so without this a WAG_ENV=prod shell would insert demo rows into
-   production. Pass --force to override deliberately."
+(defn- path-arg
+  "The first argument that is not a flag or the value of --system."
+  [args]
+  (loop [[a & more] args]
+    (cond (nil? a)                 nil
+          (= "--system" a)         (recur (rest more))
+          (str/starts-with? a "-") (recur more)
+          :else                    a)))
+
+(defn- resolve-path [given]
+  (let [f (io/file given)]
+    (str (if (.isAbsolute f) f (io/file (root-dir) given)))))
+
+(defn db-seed
+  "Seed the database from `bb db:seed [path]`, resources/seeds/dev.edn by
+   default.
+
+   Runs where db:reset does, dev, test and acc: the path is demo data while
+   the *database* comes from the active config, so without this a
+   WAG_ENV=prod shell would insert demo rows into production. Pass --force to
+   override deliberately."
   [& args]
   (println)
   (println (bold "Wagoe Database Seed"))
@@ -273,41 +282,49 @@
   ;; in wagoe.platform.shell.database.cli-seed, which runs in the same JVM as
   ;; the database connection and uses detect-environment directly. This check
   ;; exists to fail fast with a friendly message in the common case.
-  (let [force? (boolean (some #{"--force"} args))
-        env    (or (System/getenv "WAG_ENV")
-                   (System/getenv "ENV")
-                   (System/getenv "ENVIRONMENT")
-                   "dev")]
-    (when-not (or force? (contains? disposable-envs env))
-      (println (red (str "  REFUSED: bb db:seed cannot run in the " env " environment.")))
-      (println (dim "  Seeding inserts rows into the database the active config resolves to."))
-      (println)
-      (println (dim "  If this is genuinely intended:"))
-      (println (dim (str "    clojure -M:seed " (seed-path) " --force")))
-      (println)
-      (System/exit 1)))
-  (let [seed-file (io/file (seed-path))]
-    (if-not (.exists seed-file)
+  (let [force?    (boolean (some #{"--force"} args))
+        env       (or (getenv "WAG_ENV") (getenv "ENV") (getenv "ENVIRONMENT") "dev")
+        given     (path-arg args)
+        path      (if given (resolve-path given) (seed-path))
+        rest-args (let [[before after] (split-with #(not= given %) args)]
+                    (concat before (rest after)))]
+    (cond
+      (not (or force? (contains? resettable-envs (normalize-profile env))))
+      (do (println (red (str "  REFUSED: bb db:seed cannot run in the " env " environment.")))
+          (println (dim "  It runs where bb db:reset does: dev, test and acc."))
+          (println)
+          (println (dim "  If this is genuinely intended:"))
+          (println (dim (str "    bb db:seed " (when given (str given " ")) "--force")))
+          (println)
+          (*exit!* 1))
+
+      (and given (not (.isFile (io/file path))))
+      (do (println (red (str "  Seed file not found: " given)))
+          (*exit!* 1))
+
+      (not (.isFile (io/file path)))
       (do
         (println (yellow "  Seed file not found."))
         (println)
         (println (dim "  To get started, create a seed file at:"))
-        (println (dim (str "    " (seed-path))))
+        (println (dim (str "    " path)))
         (println)
         (println (dim "  Example content:"))
-        (println (dim "    {:users [{:email \"admin@example.com\" :name \"Admin\"}]}"))
+        (println (dim "    [[:projects [{:id :project/demo :name \"Demo\"}]]"))
+        (println (dim "     [:tasks [{:title \"First\" :project-id :project/demo}]]]"))
         (println)
-        (println (dim "  Tables insert in the order written — list parents first."))
-        (println (dim "  Past 8 tables, use the ordered form: [[:users [...]] [:tasks [...]]]"))
+        (println (dim "  `bb scaffold` writes one example per entity there; `bb guide seed` explains the file."))
         (println))
+
+      :else
       ;; Pass through to the JVM side. libs/tools is pure Babashka with no
       ;; Maven deps at runtime, so it cannot open a JDBC connection itself —
       ;; the same reason `bb migrate` shells out to `clojure -M:migrate`.
       (let [{:keys [exit]} (apply process/shell
                                   {:out :inherit :err :inherit :continue true}
-                                  "clojure" "-M:seed" (seed-path) (seed-args (root-dir) args))]
+                                  "clojure" "-M:seed" path (seed-args (root-dir) rest-args))]
         (when-not (zero? exit)
-          (System/exit exit))))))
+          (*exit!* exit))))))
 
 ;; =============================================================================
 ;; Help
@@ -320,7 +337,31 @@
   (println "  bb db:status     Show database type, connection info, and migration count")
   (println "  bb db:reset      Drop the app's tables and migrate; dev, test, acc only [--env E] [--allow-remote]")
   (println "  bb db:seed       Seed database from resources/seeds/dev.edn")
-  (println))
+  (println)
+  (println (dim "  bb db:<command> --help for one command.")))
+
+(def ^:private usage
+  {"status" ["Usage: bb db:status"
+             ""
+             "Show the database type, connection info and migration files, read"
+             "from resources/conf/dev/config.edn. Connects to nothing."]
+   "reset"  ["Usage: bb db:reset [--env dev|test|acc] [--allow-remote]"
+             ""
+             "Roll back every migration, drop the tables the framework creates at"
+             "boot, and migrate again. Runs in dev, test and acc only, and asks for"
+             "the database name on a terminal first."
+             ""
+             "  --env E           The profile to reset; else WAG_ENV. One must be named."
+             "  --allow-remote    Allow a database on another machine."
+             ""
+             "It drops the user tables: run `bb create-admin` afterwards."]
+   "seed"   ["Usage: bb db:seed [path] [--force]"
+             ""
+             "Insert resources/seeds/dev.edn (or path) in one transaction. Runs where"
+             "db:reset does, dev, test and acc; --force overrides that. `bb guide seed` explains"
+             "the file."]})
+
+(defn- help? [args] (boolean (some #{"--help" "-h"} args)))
 
 ;; =============================================================================
 ;; Main entry point
@@ -328,11 +369,14 @@
 
 (defn -main [& args]
   (let [[subcmd & rest-args] args]
-    (case subcmd
-      "status" (db-status)
-      "reset"  (apply db-reset rest-args)
-      "seed"   (apply db-seed rest-args)
-      (print-help))))
+    ;; Before any command runs: `bb db:reset --help` used to reset (BOU-588).
+    (if (and (contains? usage subcmd) (help? rest-args))
+      (run! println (usage subcmd))
+      (case subcmd
+        "status" (db-status)
+        "reset"  (apply db-reset rest-args)
+        "seed"   (apply db-seed rest-args)
+        (print-help)))))
 
 ;; Run when executed directly (not via bb.edn task)
 (when (= *file* (System/getProperty "babashka.file"))

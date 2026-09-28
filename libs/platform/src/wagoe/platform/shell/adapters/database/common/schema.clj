@@ -60,15 +60,17 @@
      (execute-ddl! ctx \"CREATE TABLE users (id TEXT PRIMARY KEY)\")"
   [ctx ddl-statement]
   (execution/validate-context ctx)
-  (let [statement-preview (str/join " " (take 5 (str/split ddl-statement #"\\s+")))]
+  ;; #"\s+", not #"\\s+", which matched a backslash: the "preview" was the
+  ;; whole statement, logged at INFO on every boot (BOU-588).
+  (let [statement-preview (str/join " " (take 5 (str/split (str/trim ddl-statement) #"\s+")))]
     (log/debug "Executing DDL statement"
                {:adapter (protocols/dialect (:adapter ctx))
                 :statement-preview statement-preview})
     (try
       (let [result (jdbc/execute! (execution/current-datasource ctx) [ddl-statement])]
-        (log/info "DDL statement executed successfully"
-                  {:adapter (protocols/dialect (:adapter ctx))
-                   :statement-preview statement-preview})
+        (log/debug "DDL statement executed successfully"
+                   {:adapter (protocols/dialect (:adapter ctx))
+                    :statement-preview statement-preview})
         result)
       (catch Exception e
         (log/error "DDL execution failed"

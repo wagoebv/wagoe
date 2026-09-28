@@ -238,6 +238,23 @@
            :note (if dry-run? (str "dry run — would have " note) note)})
         edits))
 
+(defn- seed-edits
+  "Report entries for resources/seeds/dev.edn given a commented example for
+   each of `entities` it lacks, written unless `dry-run?`. What the file holds
+   is kept (BOU-588)."
+  [output-dir entities dry-run?]
+  (let [f       (resolve-path output-dir "resources/seeds/dev.edn")
+        existed (.isFile f)]
+    (when-let [{:keys [content added]} (generators/add-seed-examples (when existed (slurp f)) entities)]
+      (when-not dry-run?
+        (io/make-parents f)
+        (spit f content))
+      [{:path    (.getPath f)
+        :content content
+        :action  (cond dry-run? :skip existed :update :else :create)
+        :note    (str (if dry-run? "dry run — would add" "added") " a commented seed example for "
+                      (str/join ", " added))}])))
+
 (defn- workflow-steps
   "What an entity with a workflow still needs from the project: the modules no
    profile under `output-dir` switches on."
@@ -497,7 +514,8 @@
                           files))
             files (-> files
                       (into (:kept admin-out))
-                      (into (write-edits! (:edits admin-edits) dry-run?)))]
+                      (into (write-edits! (:edits admin-edits) dry-run?))
+                      (into (seed-edits output-dir (:entities ctx) dry-run?)))]
         {:success true
          :module-name module-name
          :files files
@@ -965,9 +983,11 @@
                                        {:path (.getPath ^java.io.File file) :content content
                                         :action :update :note "appended the entity"}))
                                 edits))
-            files       (into (into files (:kept admin-out))
-                              (write-edits! (concat (:edits admin-edits) (filter :file parent-edits))
-                                            dry-run))
+            files       (-> files
+                            (into (:kept admin-out))
+                            (into (write-edits! (concat (:edits admin-edits) (filter :file parent-edits))
+                                                dry-run))
+                            (into (seed-edits output-dir [entity] dry-run)))
             warnings    (cond-> (vec (concat (:warnings admin-edits) (keep :warning parent-edits)))
                           (and parent-first? (not nested?))
                           (conj (str parent "'s create does not take " (:entity-plural entity)

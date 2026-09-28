@@ -3317,3 +3317,104 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s%s%s;%s"
         {:status :updated :content (z/root-string (append-item hm (z/node (z/of-string (edn-str entry))) true))}))
     (catch Exception e
       {:status :unrecognised :reason (str "it could not be read: " (.getMessage e))})))
+
+;; =============================================================================
+;; Seed examples (BOU-588)
+;; =============================================================================
+
+(defn- seed-ref [entity-kebab] (keyword entity-kebab "example"))
+
+(defn- seed-value
+  "An example value for a field, as EDN text, and a trailing comment or nil."
+  [{:keys [field-name-kebab field-type malli-type references workflow-state?]}]
+  (case field-type
+    (:string :text) [(pr-str (str "Example " (str/replace field-name-kebab "-" " ")))]
+    :email          [(pr-str "someone@example.com")]
+    :int            ["1"]
+    :decimal        ["10.00M"]
+    :boolean        ["false"]
+    :uuid           [(pr-str "00000000-0000-4000-8000-000000000000")]
+    :enum           (let [vs (map name (rest malli-type))]
+                      [(str (keyword (first vs)))
+                       (str (if workflow-state? "workflow state: " "one of: ") (str/join ", " vs))])
+    :inst           [(pr-str "2026-01-01T09:00:00Z")]
+    :date           [(pr-str "2026-01-01")]
+    :json           [(pr-str "{}")]
+    :relation       [(str (seed-ref (template/pascal->kebab references)))
+                     (str "the " (template/pascal->kebab references) " example's :id")]
+    ["nil"]))
+
+(defn- seed-example
+  "Lines of a commented example for `entity`: `[:plural [...]]` for a vector
+   seed file, `:plural [...]` for a map one."
+  [{:keys [entity-name entity-kebab entity-plural fields]} form]
+  (let [entries (cons [":id" (str (seed-ref entity-kebab))]
+                      (for [f fields :let [[v c] (seed-value f)]]
+                        [(str ":" (:field-name-kebab f)) v c]))
+        width   (apply max (map (comp count first) entries))
+        lines   (map-indexed (fn [i [k v c]]
+                               (str (if (zero? i) "{" " ") (format (str "%-" width "s") k) " " v
+                                    (when (= i (dec (count entries))) "}")
+                                    (when c (str "   ; " c))))
+                             entries)
+        [open indent close] (if (= :map form)
+                              [(str ":" entity-plural) "  [" "]"]
+                              [(str "[:" entity-plural) "  [" "]]"])
+        body    (map-indexed (fn [i l] (str (if (zero? i) indent "   ") l)) lines)
+        body    (concat (butlast body)
+                        [(let [l (last body)]
+                           ;; The closing brackets go before a trailing comment.
+                           (if-let [[_ code comment] (re-matches #"(.*?\})(   ; .*)" l)]
+                             (str code close comment)
+                             (str l close)))])]
+    (concat [(str ";;; " entity-name " — uncomment to seed one.")
+             (str ";; " open)]
+            (map #(str ";; " %) body))))
+
+(def ^:private seed-file-header
+  [";;; Seed data for `bb db:seed`. Tables insert in the order listed: parents first."
+   ";;; id, created-at and updated-at are filled in. A child names its parent by the"
+   ";;; parent's :id, as the examples do. `bb guide seed` explains the file."])
+
+(defn- seeded? [source entity]
+  (re-find (re-pattern (str ":" (java.util.regex.Pattern/quote (:entity-plural entity)) "(?![\\w-])")) source))
+
+(defn add-seed-examples
+  "resources/seeds/dev.edn with a commented example for each of `entities`
+   it does not mention yet, as {:content s :added [plural]}, or nil when there
+   is nothing to add. `source` is the file, or nil for a new one. What is in
+   the file stays as it is: the examples go inside its top-level vector or
+   map, or after it when its end cannot be found.
+
+   Pure: true"
+  [source entities]
+  (let [todo (remove #(and source (seeded? source %)) entities)]
+    (when (seq todo)
+      (let [added (mapv :entity-plural todo)]
+        (if (nil? source)
+          {:added   added
+           :content (str (str/join "\n" (concat seed-file-header
+                                                ["["]
+                                                (map #(str " " %) (mapcat #(seed-example % :vector) todo))
+                                                ["]"]))
+                         "\n")}
+          (let [lines     (vec (str/split-lines source))
+                last-code (last (keep-indexed (fn [i l] (when-not (or (str/blank? l) (str/starts-with? (str/triml l) ";")) i))
+                                              lines))
+                code      (some-> last-code lines str/trimr)
+                form      (cond (nil? code) nil
+                                (str/ends-with? code "]") :vector
+                                (str/ends-with? code "}") :map)
+                block     (mapcat #(seed-example % (or form :vector)) todo)
+                before    (some-> code (subs 0 (dec (count code))))]
+            {:added   added
+             :content (if form
+                        (str (str/join "\n" (concat (subvec lines 0 last-code)
+                                                    (when-not (str/blank? before) [before])
+                                                    (map #(str " " %) block)
+                                                    [(subs code (dec (count code)))]
+                                                    (subvec lines (inc last-code))))
+                             "\n")
+                        (str (str/trimr source) "\n\n"
+                             ";;; Move these into the seed data above.\n"
+                             (str/join "\n" block) "\n"))}))))))

@@ -109,7 +109,7 @@
       ;; Check result structure
       (is (true? (:success result)))
       (is (= "customer" (:module-name result)))
-      (is (= 14 (count (:files result))))
+      (is (= 15 (count (:files result))) "and the seed examples, BOU-588")
 
       ;; Named, not just counted: a count that goes up tells you nothing about
       ;; which file appeared, and the one that was missing for so long —
@@ -177,7 +177,7 @@
 
       ;; Check result
       (is (true? (:success result)))
-      (is (= 14 (count (:files result))))
+      (is (= 15 (count (:files result))) "and the seed examples, BOU-588")
       (is (some #(str/ends-with? (:path %) "shell/module_wiring.clj") (:files result)))
       (is (some #(str/includes? % "Dry run") (:warnings result))))))
 

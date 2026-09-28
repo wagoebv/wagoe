@@ -41,6 +41,15 @@ for what is public API, what is internal, and how deprecations are announced.
 - **`workflow_instances.entity_uuid`** (BOU-589): the entity id as a UUID, NULL when it is not one, indexed.
   Join on it instead of casting `entity_id`; `migrate up` adds it, rewriting the table once on PostgreSQL.
 
+### Added
+
+- **The seeder fills in `id`, `created-at` and `updated-at`** (BOU-588), and a child names its parent
+  by a symbolic id: `:id :invoice/acme` on the parent, `:invoice-id :invoice/acme` on the child.
+- **`bb db:seed` runs where `bb db:reset` does: dev, test and acc** (BOU-588); `local` is refused, `acc` allowed.
+  `bb db:seed path/to/file.edn` now seeds that file; it ignored the path.
+- **`bb scaffold generate` and `entity` add a commented example per entity to `resources/seeds/dev.edn`**
+  (BOU-588). Existing seeds are kept; uncomment an example to seed it.
+
 ### Fixed
 
 - **The workflow boot put the BOU-581 unique index on `workflow_instances` in production** (BOU-589). It changes
@@ -60,6 +69,12 @@ for what is public API, what is internal, and how deprecations are announced.
 - **The audit log page answered 500 on H2** (BOU-586).
 - **`bb db:reset` kept users, sessions and tenants** (BOU-585); it now drops what the app owns, then migrates.
   Only in an explicitly named `dev`, `test` or `acc`, confirmed by the database name; prod changes through migrations.
+- **`bb db:reset --help` ran the reset** (BOU-588). Every `bb db:*` task now prints usage for `--help`;
+  a reset that drops the users says to run `bb create-admin`.
+- **`bb guide database` said the API is camelCase and named a namespace that does not exist** (BOU-588).
+  Every `bb guide` topic now matches the code, and `bb guide seed` explains the seed file.
+- **Every boot logged each full CREATE TABLE at INFO** (BOU-588); DDL is DEBUG now, and outside dev one line
+  says the dashboard is off. Copy the `migratus.database` logger from `wagoe new`'s `logback.xml`.
 - **`bb setup --prod true` named variables prod does not read** (BOU-585). Its next steps now list what the prod config reads.
 - **`bb ai admin-entity` and `bb scaffold ai` took yes with no terminal** (BOU-585); they now refuse.
   `--force` no longer prompts; in scripts pass `--yes` or `--force`.

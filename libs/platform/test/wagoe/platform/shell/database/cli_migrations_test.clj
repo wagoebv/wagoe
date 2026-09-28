@@ -124,6 +124,33 @@
               (is (= "exit" (ex-message ex))))))
         (is (= [0 1 1 7 9 1] @exits))))))
 
+(deftest ^:unit help-after-reset-prints-help-and-resets-nothing
+  ;; `bb db:reset --help` reached the reset (BOU-588).
+  (doseq [flag ["--help" "-h"]]
+    (let [calls (atom [])
+          exits (atom [])
+          out   (with-redefs [reset/plan     (fn [_] (swap! calls conj :plan) {:database "app"})
+                              reset/execute! (fn [_] (swap! calls conj :reset))
+                              sut/tty?       (constantly true)
+                              read-line      (constantly "app")
+                              sut/exit!      (fn [code] (swap! exits conj code))]
+                  (with-out-str (sut/-main "reset" flag)))]
+      (is (= [] @calls) flag)
+      (is (= [0] @exits))
+      (is (re-find #"reset" out)))))
+
+(deftest ^:unit a-reset-that-dropped-the-users-names-create-admin
+  (let [run (fn [tables]
+              (with-redefs [reset/plan (fn [_] {:env "dev" :host "localhost" :database "app" :tables tables})
+                            reset/execute! (fn [_])
+                            migrations/print-status (fn [])
+                            sut/tty? (constantly true)
+                            read-line (constantly "app")]
+                (with-out-str (sut/cmd-reset {}))))]
+    (is (re-find #"bb create-admin" (run ["user_sessions" "users" "auth_users" "schema_migrations"])))
+    (is (not (re-find #"bb create-admin" (run ["schema_migrations"])))
+        "no user tables, no admin to recreate")))
+
 (deftest ^:unit create-tells-the-user-one-directory
   ;; BOU-274: the summary line printed (:directory result) while the next-steps
   ;; line hardcoded "migrations/". In a resources-backed layout those two lines

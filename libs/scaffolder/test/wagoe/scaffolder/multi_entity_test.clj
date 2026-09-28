@@ -133,7 +133,7 @@
 
     (testing "the module's other files are not touched"
       (doseq [[path content] before
-              :when (not (re-find #"/(schema|ports|module_wiring)\.clj$" path))]
+              :when (not (re-find #"/(schema|ports|module_wiring)\.clj$|^resources/seeds/dev\.edn$" path))]
         (is (= content (get after path)) path)))
 
     (testing "schema.clj and ports.clj keep what they had and gain a section"
@@ -167,7 +167,7 @@
 
     (testing "the report names what was written and what was edited"
       (is (= #{:create :update} (set (map :action (:files r)))))
-      (is (= 3 (count (filter #(= :update (:action %)) (:files r))))))
+      (is (= 4 (count (filter #(= :update (:action %)) (:files r)))) "and the seed examples, BOU-588"))
 
     (testing "the child migrates after its parent, with a foreign key and an index"
       (let [up (some (fn [[p c]] (when (re-find #"create-invoice-line-items\.up\.sql$" p) c)) after)]
