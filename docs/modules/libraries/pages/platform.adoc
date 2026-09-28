@@ -117,6 +117,18 @@ The types the framework answers with:
 |503 |`unavailable` |The server has no handler yet.
 |===
 
+A write that a unique or foreign key refuses is a 409 `conflict`, on H2,
+SQLite and PostgreSQL alike: `wagoe.platform.database` throws it, so every
+generated repository gets it. `details` names the constraint and, when the
+driver names one column, the field; nothing else of the driver's text is sent.
+
+[source,json]
+----
+{"error": {"type":    "conflict",
+           "message": "Another record already has this number",
+           "details": {"constraint": "unique", "field": "number"}}}
+----
+
 A handler that knows only its status gets its type from `errors/status->type`:
 `validation-error` for a 4xx with no type of its own, `internal-error` for a 5xx.
 

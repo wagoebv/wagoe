@@ -231,12 +231,14 @@ rather than a commit message.
    database, so a boot stops on existing duplicates.
 ** An entity has one instance of each workflow, so `migrate up` stops on existing
    duplicates.
-* *Two in `1.0.0-rc-5`:* under `### Breaking` in `CHANGELOG.md` as well.
+* *Three in `1.0.0-rc-5`:* under `### Breaking` in `CHANGELOG.md` as well.
 ** Every JSON error body is `{"error": {"type": …, "message": …}}`.
 ** A scaffolded API refuses a delete that would leave fewer children than `--min`
    with 409 `conflict`, as the admin does, not 400.
+** A write a unique or foreign key refuses is 409 `conflict`; a scaffolded API
+   answered a missing reference with 400.
 +
-Twenty-four additions to the three frozen at `rc-1`, so the list is twenty-seven.
+Twenty-five additions to the three frozen at `rc-1`, so the list is twenty-eight.
 `bb check:changelog` holds the rc-5 count to the `[Unreleased]` `### Breaking`
 entries, and the totals to the counts above.
 * Breaking changes that already shipped are in `CHANGELOG.md` under a

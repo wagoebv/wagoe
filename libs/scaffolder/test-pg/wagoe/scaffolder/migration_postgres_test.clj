@@ -83,7 +83,7 @@
 (deftest ^:integration a-date-field-round-trips-on-postgresql
   ;; `due:date` made a TIMESTAMP WITH TIME ZONE column (BOU-547). West of UTC,
   ;; so a date read through a zoned type would land on the day before. The
-  ;; relation is for BOU-540: a missing parent is a :validation-error.
+  ;; relation is for BOU-540: a missing parent is a :conflict on its field (BOU-590).
   (in-jvm-zone
    "America/Los_Angeles"
    (fn []
@@ -117,8 +117,8 @@
                                       (:datasource db)
                                       ["SELECT data_type FROM information_schema.columns WHERE table_name = 'invoices' AND column_name = 'due'"]
                                       {:builder-fn rs/as-unqualified-lower-maps}))))
-           (is (= :validation-error
-                  (:type (ex-data (try (call :post "/invoices" {:number "A-2" :due "2026-01-01"
-                                                                :customer-id (str (random-uuid))})
-                                       nil
-                                       (catch clojure.lang.ExceptionInfo e e))))))))))))
+           (is (= {:type :conflict :constraint :foreign-key :field :customer-id}
+                  (ex-data (try (call :post "/invoices" {:number "A-2" :due "2026-01-01"
+                                                         :customer-id (str (random-uuid))})
+                                nil
+                                (catch clojure.lang.ExceptionInfo e e)))))))))))

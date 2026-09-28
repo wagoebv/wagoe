@@ -2,8 +2,7 @@
   "Persistence layer for product module."
   (:require [shop.product.ports :as ports]
             [wagoe.platform.database :as db])
-  (:import [java.sql SQLException]
-           [java.time Instant LocalDate]))
+  (:import [java.time Instant LocalDate]))
 
 (defn- date->iso
   "A DATE column as the schema's YYYY-MM-DD. Drivers return java.sql.Date,
@@ -25,32 +24,13 @@
           (update-vals date->iso)
           (as-> r (reduce (fn [m k] (cond-> m (string? (get m k)) (update k keyword))) r enum-fields))))
 
-(defn- missing-reference?
-  "Whether the database refused a reference to a row that does not exist:
-   SQLState 23503 (PostgreSQL) or 23506 (H2), error 1452 (MySQL), and SQLite's
-   result code, which it reports only in the message."
-  [e]
-  (some #(and (instance? SQLException %)
-              (or (#{"23503" "23506"} (.getSQLState ^SQLException %))
-                  (= 1452 (.getErrorCode ^SQLException %))
-                  (re-find #"SQLITE_CONSTRAINT_FOREIGNKEY" (str (ex-message %)))))
-        (take-while some? (iterate ex-cause e))))
-
-(defn- write! [db-ctx query]
-  (try
-    (db/execute-update! db-ctx query)
-    (catch clojure.lang.ExceptionInfo e
-      (throw (if (missing-reference? e)
-               (ex-info "A referenced record does not exist" {:type :validation-error} e)
-               e)))))
-
 (defn- select-by-id [db-ctx id]
   (->entity (db/execute-one! db-ctx {:select [:*] :from [:products] :where [:= :id id]})))
 
 (defrecord DatabaseProductRepository [db-ctx]
   ports/IProductRepository
   (create [_this entity]
-    (write! db-ctx {:insert-into :products :values [(->row entity)]})
+    (db/execute-update! db-ctx {:insert-into :products :values [(->row entity)]})
     (select-by-id db-ctx (:id entity)))
   (find-by-id [_this id]
     (select-by-id db-ctx id))
@@ -64,9 +44,9 @@
     (let [changes (dissoc entity :id :created-at :updated-at)]
       (when (empty? changes)
         (throw (ex-info "Nothing to update" {:type :validation-error :id (:id entity)})))
-      (write! db-ctx {:update :products
-                      :set (->row (assoc changes :updated-at (Instant/now)))
-                      :where [:= :id (:id entity)]})
+      (db/execute-update! db-ctx {:update :products
+                                  :set (->row (assoc changes :updated-at (Instant/now)))
+                                  :where [:= :id (:id entity)]})
       (select-by-id db-ctx (:id entity))))
   (delete [_this id]
     (db/execute-update! db-ctx {:delete-from :products :where [:= :id id]}))

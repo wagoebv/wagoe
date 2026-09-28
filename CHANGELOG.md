@@ -35,6 +35,8 @@ for what is public API, what is internal, and how deprecations are announced.
   Read `error.type` and `error.message`; `details` and `correlation-id` moved inside `error`.
 - **A scaffolded API refuses a delete or move below `--min` with 409 `conflict`** (BOU-589), as the admin does; it was 400.
   Read 409 where you read 400 for it. Regenerated service files only; an existing module keeps its 400.
+- **A write a unique or foreign key refuses is 409 `conflict` naming the field** (BOU-590), on H2, SQLite and PostgreSQL;
+  it was a 500. A scaffolded API's missing reference was 400: read 409. `wagoe.platform.database` throws `:conflict`.
 
 ### Added
 
