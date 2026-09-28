@@ -186,6 +186,9 @@
   [:map {:title "Entity Configuration"}
    [:label {:description "Display label for entity (e.g., 'Users', 'Products')"}
     :string]
+   [:label-singular {:optional true
+                     :description "One record (e.g., 'User'); defaults to :label made singular"}
+    :string]
    [:table-name {:description "Database table name"}
     :keyword]
    [:primary-key {:optional true
