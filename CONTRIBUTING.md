@@ -9,15 +9,34 @@ Thank you for your interest in contributing to Wagoe! This guide will help you u
 ## Development Setup
 
 ```zsh
-# Prerequisites: JDK and Clojure CLI
-brew install openjdk clojure/tools/clojure  # macOS
+# Prerequisites: JDK 21+, Clojure CLI, Babashka, Docker
+brew install openjdk clojure/tools/clojure borkdude/brew/babashka  # macOS
 
-# Clone and setup
-git clone <repo-url> wagoe
+git clone https://github.com/wagoebv/wagoe.git
 cd wagoe
-clojure -M:test:test/all                      # Verify setup (includes H2 database)
-clojure -M:repl-clj                        # Start development REPL
+bb install-hooks            # pre-commit runs the FC/IS and ports gates
+
+bb test:services up         # Redis + MySQL for the adapter sweeps (docker compose)
+bb test:all                 # every test surface; PostgreSQL runs embedded
+bb check                    # the quality gates CI runs
+clojure -M:repl-clj         # development REPL (nREPL on 7888)
 ```
+
+`clojure -M:test` alone does not cover the standalone libraries (`wagoe-cli`,
+`wagoe-mcp`, `tools`); `bb test:all` does. Run one suite with
+`clojure -M:test:test/all :admin`.
+
+### The FC/IS rules, in short
+
+- `core/` is pure: no I/O, no logging, no exceptions, no mutable state. It
+  returns typed error values (`{:error {:type … :message …}}`).
+- `shell/` does the I/O, validation and side effects, and calls `core/` with
+  clean data.
+- Every module defines its protocols in `ports.clj`; shells depend on ports,
+  never on another module's shell.
+- `bb check:fcis` and `bb check:ports` enforce this, locally and in CI. See
+  [ADR-021](dev-docs/adr/ADR-021-fcis-boundary-rules.adoc) and
+  [the FC/IS guide](docs/modules/architecture/pages/fc-is.adoc).
 
 ## How to Contribute
 
