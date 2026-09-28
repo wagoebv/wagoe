@@ -42,7 +42,7 @@ JWT_SECRET="dev-secret-at-least-32-characters-long" WAG_ENV=test clojure -M:test
 # run. Bare `clojure -M:test` runs the lean set: fine for a suite that needs
 # nothing extra, and it fails on ClassNotFoundException for one that does.
 #
-#   :test/pg      admin, scaffolder, tenant, workflow (embedded PostgreSQL, Linux binary)
+#   :test/pg      admin, platform, scaffolder, tenant, workflow (embedded PostgreSQL, Linux binary)
 #   :test/pg-mac  add to :test/pg on Apple Silicon — CI is ubuntu-only
 #   :test/otel    observability             (OpenTelemetry in-memory exporters)
 #   :test/http    devtools                  (clj-http-lite)
@@ -51,7 +51,7 @@ clojure -M:test:test/pg:test/pg-mac :admin         # one suite, only what it nee
 # Testing - Per-library test suites
 clojure -M:test :core                              # Core library tests
 clojure -M:test:test/otel :observability           # Observability library tests
-clojure -M:test :platform                          # Platform library tests
+clojure -M:test:test/pg :platform                  # Platform library tests
 clojure -M:test :user                              # User library tests
 clojure -M:test:test/pg :admin                     # Admin library tests
 clojure -M:test :storage                           # Storage library tests

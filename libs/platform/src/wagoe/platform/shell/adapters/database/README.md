@@ -257,10 +257,10 @@ The system includes comprehensive tests for all databases:
 
 ```bash
 # The adapter tests run in the platform suite
-clojure -M:test :platform --focus-meta :unit
+clojure -M:test:test/pg :platform --focus-meta :unit
 
 # Integration tests (require PostgreSQL and MySQL servers)
-clojure -M:test :platform --focus-meta :integration
+clojure -M:test:test/pg :platform --focus-meta :integration
 ```
 
 ## Troubleshooting
@@ -316,8 +316,8 @@ docker run -d --name test-mysql -e MYSQL_ROOT_PASSWORD=test -p 3306:3306 mysql:8
 clojure -M:test:test/all
 
 # Run specific database tests
-clojure -M:test :platform --focus-meta :integration  # PostgreSQL/MySQL tests
-clojure -M:test :platform --skip-meta :integration   # SQLite/H2 tests only
+clojure -M:test:test/pg :platform --focus-meta :integration  # PostgreSQL/MySQL tests
+clojure -M:test:test/pg :platform --skip-meta :integration   # SQLite/H2 tests only
 ```
 
 ## License

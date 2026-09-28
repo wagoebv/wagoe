@@ -199,5 +199,5 @@ and the unauthenticated (login) pre-session token.
 
 [source,bash]
 ----
-clojure -M:test :platform
+clojure -M:test:test/pg :platform
 ----
