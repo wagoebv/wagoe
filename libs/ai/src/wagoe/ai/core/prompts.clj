@@ -21,8 +21,8 @@ Wagoe follows the Functional Core / Imperative Shell (FC/IS) pattern strictly:
 Key naming conventions:
 - Clojure code: kebab-case (:password-hash, :created-at, my-function)
 - Database boundary: snake_case (password_hash, created_at)
-- API boundary: camelCase (passwordHash, createdAt)
-- Always use wagoe.shared.core.utils.case-conversion for conversions
+- API/JSON: kebab-case (password-hash, created-at); the HTTP layer converts nothing
+- Use wagoe.core.utils.case-conversion for the database conversion
 
 Key technologies:
 - Clojure 1.12.4, Integrant (DI/lifecycle), Aero (config)
