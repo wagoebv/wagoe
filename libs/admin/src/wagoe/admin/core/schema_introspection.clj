@@ -362,11 +362,13 @@
 
 (defn- singularize
   "English plural -> singular on the last word: Categories -> Category,
-   Addresses -> Address, Invoices -> Invoice. Anything else is left as it is."
+   Addresses -> Address, Statuses -> Status, Houses -> House, Invoices ->
+   Invoice. Irregular plurals (People) need :label-singular."
   [s]
   (cond
     (re-find #"(?i)[^aeiou]ies$" s)      (str (subs s 0 (- (count s) 3)) "y")
-    (re-find #"(?i)(ss|x|ch|sh)es$" s)   (subs s 0 (- (count s) 2))
+    ;; Statuses, Bonuses; not Houses or Causes, whose -u- follows a vowel.
+    (re-find #"(?i)(ss|x|ch|sh|[^aeiou]us)es$" s) (subs s 0 (- (count s) 2))
     (re-find #"(?i)(ss|us|is)$" s)       s
     (re-find #"(?i)s$" s)                (subs s 0 (dec (count s)))
     :else                                s))

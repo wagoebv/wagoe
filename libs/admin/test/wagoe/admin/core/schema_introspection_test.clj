@@ -809,6 +809,7 @@
   (testing "else :label, made singular"
     (doseq [[plural one] [["Invoices" "Invoice"] ["Categories" "Category"] ["Addresses" "Address"]
                           ["Invoice Line Items" "Invoice Line Item"] ["Boxes" "Box"] ["Status" "Status"]
+                          ["Statuses" "Status"] ["Bonuses" "Bonus"] ["Houses" "House"] ["Causes" "Cause"]
                           ["Facturen" "Facturen"]]]
       (is (= one (introspection/singular-label {:label plural} :x)) plural)))
   (testing "else the entity name"

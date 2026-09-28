@@ -117,7 +117,8 @@ This is the full schema for a single entity config file. All keys are optional u
   ;; ─────────────────────────────────────────────────────────────────────
 
   :label           "My Entities"      ; Plural display name in UI (default: humanized table name)
-  :label-singular  "My Entity"        ; One record, in toasts (default: :label made singular)
+  :label-singular  "My Entity"        ; One record, in toasts (default: :label made singular by
+                                      ; English suffix rules; set it for People, Facturen, ...)
   :sidebar-hidden  false              ; true = hide from sidebar nav (still accessible via URL)
 
   ;; ─────────────────────────────────────────────────────────────────────

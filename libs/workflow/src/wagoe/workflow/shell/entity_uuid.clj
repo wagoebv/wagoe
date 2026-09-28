@@ -54,6 +54,16 @@
         (jdbc/execute! connectable ["SELECT name FROM pragma_table_xinfo('workflow_instances')"]
                        {:builder-fn rs/as-unqualified-lower-maps})))
 
+(defn present?
+  "Whether workflow_instances has entity_uuid."
+  [datasource]
+  (with-open [^Connection c (jdbc/get-connection datasource)]
+    (let [md (.getMetaData c)]
+      (boolean
+       (some (fn [[t col]]
+               (with-open [rs (.getColumns md nil nil t col)] (.next rs)))
+             [["workflow_instances" "entity_uuid"] ["WORKFLOW_INSTANCES" "ENTITY_UUID"]])))))
+
 (defn ensure-entity-uuid!
   "Add workflow_instances.entity_uuid and its index, unless they are there."
   [connectable]

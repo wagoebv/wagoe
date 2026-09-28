@@ -307,7 +307,8 @@ supports PostgreSQL, H2 and SQLite, not MySQL.
 `entity_uuid` is a generated column holding it as a UUID, or NULL when it is not
 one, with an index (BOU-589): join a UUID-keyed table on
 `w.entity_uuid = i.id`, never on `entity_id`, which needs a cast on PostgreSQL.
-The migration and the boot both add it; on PostgreSQL that rewrites the table once.
+`migrate up` adds it, rewriting the table once on PostgreSQL. The boot adds it, and the
+BOU-581 unique index, only in dev, test and acc; elsewhere it warns and changes nothing.
 
 ## Gotchas
 

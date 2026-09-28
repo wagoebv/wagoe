@@ -4,7 +4,7 @@
    Config keys:
 
    :wagoe/workflow-db-schema
-     {:ctx (ig/ref :wagoe/db-context)}
+     {:ctx (ig/ref :wagoe/db-context) :profile :prod}   ; alters tables in :dev :test :acc only
 
    :wagoe/workflow
      Minimal config (no side-effects):
@@ -51,23 +51,43 @@
        (map str/trim)
        (remove str/blank?)))
 
+(def ^:private altering-profiles
+  "Where the boot may change an existing table: the profiles `db:reset` may
+   reset. Anywhere else it changes only through `migrate up`."
+  #{:dev :test :acc})
+
+(def ^:private boot-changes
+  "What the boot adds to workflow_instances when the profile allows, and how
+   it tells the change is there."
+  [{:what     "the unique index on (workflow_id, entity_type, entity_id) (BOU-581)"
+    :present? unique-instances/present?
+    :ensure!  unique-instances/ensure-unique!}
+   {:what     "the entity_uuid column (BOU-589)"
+    :present? entity-uuid/present?
+    :ensure!  entity-uuid/ensure-entity-uuid!}])
+
 (defn- initialize-workflow-schema!
   "Create workflow's tables at boot, for installations that never ran
-   `migrate up`. Converting a pre-BOU-502 TEXT table is left to `migrate up`:
-   it locks the table and breaks replicas still running the old version."
-  [ctx]
+   `migrate up`. Changing a table that exists is left to `migrate up` outside
+   dev, test and acc: it locks the table, and a production schema changes only
+   through a migration. There the boot warns about what is missing and goes on."
+  [ctx profile]
   (log/info "Initializing workflow schema")
   (doseq [statement (migration-statements)]
     (db/execute-ddl! ctx statement))
-  ;; Without it two lazy starts can both insert (BOU-581).
-  (unique-instances/ensure-unique! (:datasource ctx))
-  ;; What an entity table joins on without a cast (BOU-589).
-  (entity-uuid/ensure-entity-uuid! (:datasource ctx)))
+  (let [ds (:datasource ctx)]
+    (doseq [{:keys [what present? ensure!]} boot-changes]
+      (cond
+        (contains? altering-profiles profile) (ensure! ds)
+        (present? ds)                         nil
+        :else (log/warn (str "workflow_instances lacks " what ", and the " (pr-str profile)
+                             " profile does not change tables at boot. Run `bb migrate up`.")
+                        {:profile profile})))))
 
 (defmethod ig/init-key :wagoe/workflow-db-schema
-  [_ {:keys [ctx]}]
+  [_ {:keys [ctx profile]}]
   (log/info "Initializing workflow database schema")
-  (initialize-workflow-schema! ctx)
+  (initialize-workflow-schema! ctx profile)
   {:status :initialized})
 
 (defmethod ig/halt-key! :wagoe/workflow-db-schema
@@ -140,10 +160,11 @@
    `:job-queue` is passed only when the jobs module is enabled — the docstring
    above has documented it since this module shipped, and nothing supplied it
    (BOU-418)."
-  [_settings {:keys [enabled]}]
+  [_settings {:keys [enabled config]}]
   (cond->
    {:components
-    {:wagoe/workflow-db-schema {:ctx (ig/ref :wagoe/db-context)}
+    {:wagoe/workflow-db-schema {:ctx     (ig/ref :wagoe/db-context)
+                                :profile (:wagoe/profile config)}
      :wagoe/workflow           (cond-> {:db-ctx         (ig/ref :wagoe/db-context)
                                         :db-schema      (ig/ref :wagoe/workflow-db-schema)
                                         :guard-registry {}}

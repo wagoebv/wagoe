@@ -227,7 +227,8 @@ JOIN workflow_instances w ON w.entity_type = 'invoice' AND w.entity_uuid = i.id
 ----
 
 An entity keyed by anything else joins on `entity_id`.
-`migrate up` adds the column, and so does the boot; on PostgreSQL that rewrites `workflow_instances` once.
+`migrate up` adds the column, rewriting `workflow_instances` once on PostgreSQL.
+The boot adds it only in the dev, test and acc profiles; in any other it changes no table and logs a warning naming `bb migrate up`.
 
 == Testing
 
