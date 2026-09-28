@@ -31,7 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
-- **`bb db:reset` kept users, sessions and tenants** (BOU-585); it now drops every table, then migrates.
+- **`bb db:reset` kept users, sessions and tenants** (BOU-585); it now drops them too, then migrates.
+  It refuses outside `dev`, `test` and `acc`: change prod with migrations, never a reset.
 - **`bb setup --prod true` named variables prod does not read** (BOU-585). Its next steps now list what the prod config reads.
 - **`bb ai admin-entity` and `bb scaffold ai` took yes with no terminal** (BOU-585); they now refuse.
   `--force` no longer prompts; in scripts pass `--yes` or `--force`.

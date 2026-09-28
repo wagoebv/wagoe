@@ -770,6 +770,12 @@
    Returns:
      nil"
   []
+  ;; Before the config is read or a connection opened (BOU-585).
+  (let [env (db-config/detect-environment)]
+    (when-not (db-config/resettable-environment? env)
+      (throw (ex-info (str "Refusing to reset the " (pr-str env) " profile. "
+                           db-config/reset-refusal)
+                      {:type :forbidden :env env}))))
   (log/warn "Resetting database - dropping every table and re-applying migrations")
   (try
     ;; Down with every module's migrations, up with the enabled ones: a plain

@@ -69,8 +69,8 @@
                  :task (apply lint-imports/-main *command-line-args*)}
   db:status     {:doc "Show database configuration, connection info, and migration status"
                  :task (db/-main "status")}
-  db:reset      {:doc "Drop and recreate the database with all migrations (interactive confirmation)"
-                 :task (db/-main "reset")}
+  db:reset      {:doc "Drop the app's tables and migrate; dev, test and acc only (bb db:reset [--env E] [--allow-remote])"
+                 :task (apply db/-main "reset" *command-line-args*)}
   db:seed       {:doc "Seed database from resources/seeds/dev.edn (dev-like envs only; --force to override)"
                  :task (apply db/-main "seed" *command-line-args*)}
   quickstart    {:doc "Zero-to-running-app setup: check env, configure, scaffold, migrate, start"

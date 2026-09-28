@@ -72,6 +72,12 @@ Both read `:active` only. A module enabled in code through `:extra-modules` is n
 `rollback` and `reset` go down through every module's migrations, so a rollback past a module that is off still undoes its last migration.
 A last applied migration that no library on the classpath ships stops `rollback` with its id.
 
+== Resetting a database
+
+`bb db:reset` drops the application's tables and migrates again. It runs only in the `dev`, `test` and `acc` profiles, resolved the way the connection resolves them (`--env`, then `-Denv`, `WAG_ENV`, `ENV`, `ENVIRONMENT`), and refuses every other one, prod included, with no override.
+
+Production changes go through migrations: `bb migrate up`, with a down migration or a conversion migration for what must change or go. Never a reset.
+
 == Statement Separator
 
 Migratus uses `--;;` to separate SQL statements within a single migration file. Always use this between statements:

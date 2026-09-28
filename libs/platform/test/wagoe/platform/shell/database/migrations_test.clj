@@ -195,29 +195,55 @@
 
 (defn- reset-leaves
   "Reset a database holding one migrated table and the tables a system's boot
-   creates, and return the tables left afterwards."
-  [db-spec]
-  (let [root (io/file "target" (str "bou585-" (System/nanoTime)))
-        ctx  (db-factory/db-context db-spec)]
-    (try
-      (let [app (migration-dir! root 20260101000000 "app_table")]
-        (migratus/migrate (migrations/migratus-config (:datasource ctx) [app]))
+   creates, in profile `env`, and return the tables left afterwards, or
+   {:refused ex-data} when the reset refused."
+  ([db-spec] (reset-leaves db-spec "dev"))
+  ([db-spec env]
+   (let [root (io/file "target" (str "bou585-" (System/nanoTime)))
+         ctx  (db-factory/db-context db-spec)]
+     (try
+       (let [app (migration-dir! root 20260101000000 "app_table")]
+         (migratus/migrate (migrations/migratus-config (:datasource ctx) [app]))
         ;; What initialize-user-schema! makes at boot, outside any migration.
-        (db/execute-ddl! ctx "CREATE TABLE auth_users (id INT PRIMARY KEY)")
-        (db/execute-ddl! ctx (str "CREATE TABLE user_sessions (id INT, user_id INT"
-                                  " REFERENCES auth_users (id))"))
-        (db/execute-ddl! ctx "INSERT INTO auth_users (id) VALUES (1)")
-        (db/execute-ddl! ctx "INSERT INTO user_sessions (id, user_id) VALUES (1, 1)")
-        (with-redefs [migrations/shadowed-migration-dirs (fn ([] nil) ([_ _] nil))
-                      migrations/manifest-urls           (fn [] [])
-                      migrations/discover-migration-dirs (fn [] [app])
-                      db-config/get-active-db-config     (fn [] {:datasource (:datasource ctx)})
-                      db-config/load-config              (fn [_] {:active {}})]
-          (migrations/reset))
-        (set (map str/lower-case (db/list-tables ctx))))
-      (finally
-        (db-factory/close-db-context! ctx)
-        (doseq [file (reverse (file-seq root))] (.delete ^java.io.File file))))))
+         (db/execute-ddl! ctx "CREATE TABLE auth_users (id INT PRIMARY KEY)")
+         (db/execute-ddl! ctx (str "CREATE TABLE user_sessions (id INT, user_id INT"
+                                   " REFERENCES auth_users (id))"))
+         (db/execute-ddl! ctx "INSERT INTO auth_users (id) VALUES (1)")
+         (db/execute-ddl! ctx "INSERT INTO user_sessions (id, user_id) VALUES (1, 1)")
+         (let [refused (with-redefs [migrations/shadowed-migration-dirs (fn ([] nil) ([_ _] nil))
+                                     migrations/manifest-urls           (fn [] [])
+                                     migrations/discover-migration-dirs (fn [] [app])
+                                     db-config/detect-environment       (constantly env)
+                                     db-config/get-active-db-config     (fn [] {:datasource (:datasource ctx)})
+                                     db-config/load-config              (fn [_] {:active {}})]
+                         (try (migrations/reset) nil
+                              (catch clojure.lang.ExceptionInfo e (ex-data e))))
+               tables  (set (map str/lower-case (db/list-tables ctx)))]
+           (if refused {:refused refused :tables tables} tables)))
+       (finally
+         (db-factory/close-db-context! ctx)
+         (doseq [file (reverse (file-seq root))] (.delete ^java.io.File file)))))))
+
+(defn- h2-spec []
+  {:adapter :h2 :database-path (str "mem:reset_" (System/nanoTime) ";DB_CLOSE_DELAY=-1")})
+
+(deftest ^:integration reset-runs-in-dev-test-and-acc-only
+  ;; A reset destroys what no migration brings back; prod changes its schema
+  ;; through migrations (BOU-585).
+  (doseq [env ["dev" "test" "acc"]]
+    (testing env
+      (is (= #{"app_table" "schema_migrations"} (reset-leaves (h2-spec) env)))))
+  (doseq [env ["prod" "production" "staging" "local" "development" ""]]
+    (testing (pr-str env)
+      (let [{:keys [refused tables]} (reset-leaves (h2-spec) env)]
+        (is (= {:type :forbidden :env env} refused))
+        (is (contains? tables "auth_users") "nothing is dropped")
+        (is (contains? tables "app_table")))))
+  (testing "refused before the database is looked up"
+    (with-redefs [db-config/detect-environment   (constantly "prod")
+                  db-config/get-active-db-config (fn [] (throw (ex-info "connected" {})))]
+      (let [e (is (thrown? clojure.lang.ExceptionInfo (migrations/reset)))]
+        (is (re-find #"bb migrate up" (ex-message e)))))))
 
 (deftest ^:integration reset-drops-the-tables-no-migration-owns
   ;; `bb db:reset` says all data will be lost. It rolled back the migrations

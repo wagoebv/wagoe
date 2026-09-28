@@ -38,10 +38,8 @@
 (def ^:private seedable-envs
   "Environments where inserting seed data is safe by default.
 
-   Delegates to the shared allowlist beside `detect-environment`, so seeding
-   and `bb db:reset` cannot drift apart on which environments are disposable
-   (BOU-258 — reset used a denylist that let \"staging\" through while seeding
-   used an allowlist)."
+   Delegates to the shared allowlist beside `detect-environment` (BOU-258).
+   `db:reset` uses the narrower `resettable-envs` there."
   db-config/disposable-envs)
 
 (defn seedable?

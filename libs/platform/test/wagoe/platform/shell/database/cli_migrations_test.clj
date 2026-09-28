@@ -12,9 +12,9 @@
                     migrations/rollback (fn [] (swap! calls conj :rollback))
                     migrations/print-status (fn [] (swap! calls conj :status))
                     migrations/create-migration (fn [name]
-                                                   (swap! calls conj [:create name])
-                                                   {:message (str "Created " name)
-                                                    :directory "migrations/"})
+                                                  (swap! calls conj [:create name])
+                                                  {:message (str "Created " name)
+                                                   :directory "migrations/"})
                     migrations/reset (fn [] (swap! calls conj :reset))
                     migrations/init (fn [] (swap! calls conj :init))
                     read-line (fn [] (db-config/detect-environment))]
@@ -57,17 +57,29 @@
       (is (= 1 (sut/cmd-reset {})))
       (is (= 1 (sut/cmd-init {}))))))
 
+(deftest ^:unit reset-refuses-outside-dev-test-and-acc
+  ;; Before the prompt: `yes | bb db:reset` must not answer it (BOU-585).
+  (doseq [env ["prod" "staging" ""]]
+    (testing (pr-str env)
+      (let [calls (atom [])
+            out   (with-redefs [db-config/detect-environment (constantly env)
+                                migrations/reset (fn [] (swap! calls conj :reset))
+                                read-line (fn [] (swap! calls conj :read-line) env)]
+                    (with-out-str (is (= 1 (sut/cmd-reset {})))))]
+        (is (= [] @calls) "neither asked nor reset")
+        (is (re-find #"bb migrate up" out) out)))))
+
 (deftest ^:unit main-dispatches-and-exits-with-command-status
   (testing "help, missing command, parse errors, dispatch, and unknown commands set exit status"
     (let [exits (atom [])]
-    (with-redefs [cli/parse-opts (fn [args _opts & _]
-                                                   (case (first args)
-                                                     "--help" {:options {:help true} :arguments [] :errors nil}
-                                                     "missing" {:options {} :arguments [] :errors nil}
-                                                     "bad" {:options {} :arguments ["migrate"] :errors ["bad flag"]}
-                                                     "migrate" {:options {:verbose true} :arguments ["migrate"] :errors nil}
-                                                     "create" {:options {} :arguments ["create" "add-users"] :errors nil}
-                                                     "unknown" {:options {} :arguments ["wat"] :errors nil}))
+      (with-redefs [cli/parse-opts (fn [args _opts & _]
+                                     (case (first args)
+                                       "--help" {:options {:help true} :arguments [] :errors nil}
+                                       "missing" {:options {} :arguments [] :errors nil}
+                                       "bad" {:options {} :arguments ["migrate"] :errors ["bad flag"]}
+                                       "migrate" {:options {:verbose true} :arguments ["migrate"] :errors nil}
+                                       "create" {:options {} :arguments ["create" "add-users"] :errors nil}
+                                       "unknown" {:options {} :arguments ["wat"] :errors nil}))
                     sut/print-help (fn [] nil)
                     sut/cmd-migrate (fn [opts] (is (= {:verbose true} opts)) 7)
                     sut/cmd-create (fn [name opts] (is (= "add-users" name)) (is (= {} opts)) 9)

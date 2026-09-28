@@ -9,7 +9,7 @@
      rollback        - Roll back the last migration
      status          - Show migration status
      create <name>   - Create a new migration file
-     reset           - Reset database (rollback all and reapply)
+     reset           - Drop every table and reapply (dev, test, acc only)
      init            - Initialize migration system"
   (:require [wagoe.platform.shell.database.migrations :as migrations]
             [wagoe.platform.shell.adapters.database.config :as db-config]
@@ -102,7 +102,7 @@
 (defn cmd-reset
   "Resets the database (WARNING: destructive operation).
 
-   Refuses outside a disposable environment. This is the authoritative guard:
+   Refuses outside dev, test and acc (BOU-585). This is the authoritative guard:
    it runs in the same JVM as the connection and resolves the environment with
    `detect-environment`, the same function the connection uses. `bb db:reset`
    shells out to here, so a check only in libs/tools could be bypassed by
@@ -110,42 +110,42 @@
    environment check of any kind (BOU-258)."
   [opts]
   (let [env (db-config/detect-environment)]
-    (when-not (db-config/disposable-environment? env)
-      (println (str "\n❌ Refusing to reset the " env " environment"))
-      (println "\n   This drops every table and reapplies migrations. In"
-               env "that is")
-      (println "   not a disposable database.")
-      (println "\n   Disposable environments:"
-               (str/join ", " (sort db-config/disposable-envs)))
-      (println)
-      (System/exit 1))
-    (println "\n⚠️  WARNING: This will drop every table and reapply the migrations!")
-    (println (str "Environment: " env "   (resolved from -Denv / WAG_ENV / ENV / ENVIRONMENT)"))
-    (println "This is a DESTRUCTIVE operation and will delete all data.")
-    ;; Type the environment name, not "yes". The operator has to have read the
-    ;; line above — the previous prompt hardcoded "dev" in its wording while
-    ;; potentially pointing at another database.
-    (print (str "\nType '" env "' to continue: "))
-    (flush)
-    (let [confirmation (read-line)]
-      (if (= env confirmation)
-        (try
-          (println "\n🔄 Resetting database...")
-          (migrations/reset)
-          (println "✅ Database reset completed\n")
-          (migrations/print-status)
-          0
-          (catch Exception e
-            (println "❌ Reset failed:" (.getMessage e))
-            (when (:verbose opts)
-              (.printStackTrace e))
-            1))
-        (do
-          ;; Non-zero: a cancelled destructive operation is not success for
-          ;; whoever shelled out to us. Returning 0 let `bb db:reset` announce
-          ;; "Reset complete." over a reset that never ran (BOU-500).
-          (println "\n❌ Reset cancelled")
-          1)))))
+    (if-not (db-config/resettable-environment? env)
+      ;; Before the prompt, so piping `yes` cannot answer it (BOU-585).
+      (do
+        (println (str "\n❌ Refusing to reset the " (pr-str env) " profile."))
+        (println (str "\n   " db-config/reset-refusal))
+        (println "\n   Reset runs only in:" (str/join ", " (sort db-config/resettable-envs)))
+        (println)
+        1)
+      (do
+        (println "\n⚠️  WARNING: This will drop every table and reapply the migrations!")
+        (println (str "Environment: " env "   (resolved from -Denv / WAG_ENV / ENV / ENVIRONMENT)"))
+        (println "This is a DESTRUCTIVE operation and will delete all data.")
+        ;; Type the environment name, not "yes". The operator has to have read the
+        ;; line above — the previous prompt hardcoded "dev" in its wording while
+        ;; potentially pointing at another database.
+        (print (str "\nType '" env "' to continue: "))
+        (flush)
+        (let [confirmation (read-line)]
+          (if (= env confirmation)
+            (try
+              (println "\n🔄 Resetting database...")
+              (migrations/reset)
+              (println "✅ Database reset completed\n")
+              (migrations/print-status)
+              0
+              (catch Exception e
+                (println "❌ Reset failed:" (.getMessage e))
+                (when (:verbose opts)
+                  (.printStackTrace e))
+                1))
+            (do
+              ;; Non-zero: a cancelled destructive operation is not success for
+              ;; whoever shelled out to us. Returning 0 let `bb db:reset` announce
+              ;; "Reset complete." over a reset that never ran (BOU-500).
+              (println "\n❌ Reset cancelled")
+              1)))))))
 
 (defn cmd-init
   "Initializes the migration system."
@@ -181,7 +181,7 @@
   (println "  status               Show current migration status")
   (println "  create <name>        Create a new migration file")
   (println "  init                 Initialize migration system (first time setup)")
-  (println "  reset                Reset database (rollback all and reapply) [DESTRUCTIVE]\n")
+  (println "  reset                Drop every table and reapply migrations; dev, test and acc only [DESTRUCTIVE]\n")
   (println "Options:")
   (println "  -h, --help           Show this help message")
   (println "  -v, --verbose        Verbose output\n")
