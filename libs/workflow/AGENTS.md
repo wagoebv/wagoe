@@ -303,6 +303,12 @@ them at boot for installations that do not migrate. Timestamps are
 are converted by the second migration, which only `migrate up` runs. Workflow
 supports PostgreSQL, H2 and SQLite, not MySQL.
 
+`entity_id` is text, because an entity need not be keyed by a UUID.
+`entity_uuid` is a generated column holding it as a UUID, or NULL when it is not
+one, with an index (BOU-589): join a UUID-keyed table on
+`w.entity_uuid = i.id`, never on `entity_id`, which needs a cast on PostgreSQL.
+The migration and the boot both add it; on PostgreSQL that rewrites the table once.
+
 ## Gotchas
 
 1. **`defonce` has no docstring** — do not add a docstring to `defonce` in Clojure (only takes 2 args).

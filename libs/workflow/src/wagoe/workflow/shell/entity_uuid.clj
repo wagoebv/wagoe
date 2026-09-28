@@ -1,0 +1,85 @@
+(ns wagoe.workflow.shell.entity-uuid
+  "workflow_instances.entity_uuid: entity_id as a UUID, NULL when it is not one
+   (BOU-589). entity_id stays text, since not every entity is keyed by a UUID;
+   this generated column is what an entity table keyed by one joins on:
+
+     JOIN workflow_instances w ON w.entity_type = 'invoice' AND w.entity_uuid = i.id
+
+   Idempotent. On PostgreSQL the column is stored, so adding it rewrites the
+   table once; on SQLite, which has no uuid type, it is virtual text."
+  (:require [clojure.string :as str]
+            [clojure.tools.logging :as log]
+            [next.jdbc :as jdbc]
+            [next.jdbc.result-set :as rs])
+  (:import [java.sql Connection]))
+
+(def ^:private index-name "idx_workflow_instances_entity_uuid")
+
+(def ^:private uuid-regex
+  "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+
+(def ^:private uuid-glob
+  (let [hex "[0-9a-fA-F]"]
+    (str/join "-" (for [n [8 4 4 4 12]] (apply str (repeat n hex))))))
+
+(def ^:private add-column
+  {:postgresql (str "ALTER TABLE workflow_instances ADD COLUMN IF NOT EXISTS entity_uuid UUID"
+                    " GENERATED ALWAYS AS (CASE WHEN entity_id ~ '" uuid-regex "'"
+                    " THEN entity_id::uuid END) STORED")
+   :h2         (str "ALTER TABLE workflow_instances ADD COLUMN IF NOT EXISTS entity_uuid UUID"
+                    " GENERATED ALWAYS AS (CASE WHEN REGEXP_LIKE(entity_id, '" uuid-regex "')"
+                    " THEN CAST(entity_id AS UUID) END)")
+   ;; No IF NOT EXISTS for a column, and only a virtual one may be added.
+   :sqlite     (str "ALTER TABLE workflow_instances ADD COLUMN entity_uuid TEXT"
+                    " GENERATED ALWAYS AS (CASE WHEN entity_id GLOB '" uuid-glob "'"
+                    " THEN entity_id END) VIRTUAL")})
+
+(defn- product-name [connectable]
+  (if (instance? Connection connectable)
+    ;; Migratus's connection: read, not closed.
+    (.getDatabaseProductName (.getMetaData ^Connection connectable))
+    (with-open [^Connection c (jdbc/get-connection connectable)]
+      (.getDatabaseProductName (.getMetaData c)))))
+
+(defn- engine [connectable]
+  (let [product (str/lower-case (str (product-name connectable)))]
+    (cond
+      (str/includes? product "postgres") :postgresql
+      (str/includes? product "h2")       :h2
+      (str/includes? product "sqlite")   :sqlite
+      :else                              :unknown)))
+
+(defn- sqlite-has-column? [connectable]
+  (some #(= "entity_uuid" (:name %))
+        (jdbc/execute! connectable ["SELECT name FROM pragma_table_xinfo('workflow_instances')"]
+                       {:builder-fn rs/as-unqualified-lower-maps})))
+
+(defn ensure-entity-uuid!
+  "Add workflow_instances.entity_uuid and its index, unless they are there."
+  [connectable]
+  (let [e (engine connectable)]
+    (if-let [ddl (add-column e)]
+      (do (when-not (and (= :sqlite e) (sqlite-has-column? connectable))
+            (jdbc/execute! connectable [ddl]))
+          (jdbc/execute! connectable [(str "CREATE INDEX IF NOT EXISTS " index-name
+                                           " ON workflow_instances (entity_uuid)")]))
+      (log/warn "workflow_instances.entity_uuid is not supported on this database; join on entity_id"
+                {:engine e}))))
+
+(defn- connectable
+  "Migratus's open connection, which SQLite needs used rather than a second one."
+  [config]
+  (let [conn (:conn config)]
+    (if (instance? Connection conn) conn (:datasource (:db config)))))
+
+(defn up
+  "Migratus entry point."
+  [config]
+  (ensure-entity-uuid! (connectable config)))
+
+(defn down
+  "Migratus entry point."
+  [config]
+  (let [db (connectable config)]
+    (jdbc/execute! db [(str "DROP INDEX IF EXISTS " index-name)])
+    (jdbc/execute! db ["ALTER TABLE workflow_instances DROP COLUMN entity_uuid"])))

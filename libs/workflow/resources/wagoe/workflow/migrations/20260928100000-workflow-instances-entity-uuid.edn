@@ -1,0 +1,5 @@
+;; entity_id as a UUID, or NULL, for an entity table to join on without a cast
+;; (BOU-589). entity_id and the BOU-581 unique index stay as they are.
+{:ns      wagoe.workflow.shell.entity-uuid
+ :up-fn   "up"
+ :down-fn "down"}

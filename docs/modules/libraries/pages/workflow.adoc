@@ -213,6 +213,22 @@ Each transition out of the current state comes back with `:enabled?`, and a `:re
 ;;     {:id :cancelled :to :cancelled :enabled? true}]
 ----
 
+== Joining an entity to its instance
+
+`workflow_instances.entity_id` is text, because an entity need not be keyed by a UUID.
+Its generated, indexed `entity_uuid` column holds the same id as a UUID, or NULL when it is not one,
+so a UUID-keyed table joins it without a cast on PostgreSQL, H2 and SQLite alike:
+
+[source,sql]
+----
+SELECT i.number, w.current_state
+FROM invoices i
+JOIN workflow_instances w ON w.entity_type = 'invoice' AND w.entity_uuid = i.id
+----
+
+An entity keyed by anything else joins on `entity_id`.
+`migrate up` adds the column, and so does the boot; on PostgreSQL that rewrites `workflow_instances` once.
+
 == Testing
 
 [source,bash]

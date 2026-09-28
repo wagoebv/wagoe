@@ -36,6 +36,11 @@ for what is public API, what is internal, and how deprecations are announced.
 - **A scaffolded API refuses a delete or move below `--min` with 409 `conflict`** (BOU-589), as the admin does; it was 400.
   Read 409 where you read 400 for it. Regenerated service files only; an existing module keeps its 400.
 
+### Added
+
+- **`workflow_instances.entity_uuid`** (BOU-589): the entity id as a UUID, NULL when it is not one, indexed.
+  Join on it instead of casting `entity_id`; `migrate up` adds it, rewriting the table once on PostgreSQL.
+
 ### Fixed
 
 - **A workflow transition answered `"available-transitions": null`** (BOU-589), in the workflow API and a scaffolded

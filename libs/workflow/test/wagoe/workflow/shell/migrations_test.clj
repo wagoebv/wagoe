@@ -10,11 +10,13 @@
             [clojure.test :refer [deftest is testing use-fixtures]]
             [migratus.core :as migratus]
             [next.jdbc :as jdbc]
+            [next.jdbc.result-set :as rs]
             [support.embedded-pg :as epg]
             [wagoe.platform.shell.adapters.database.factory :as factory]
             [wagoe.platform.shell.database.migrations :as mig]
             [wagoe.platform.shell.database.timestamp-tz :as timestamp-tz]
             [wagoe.workflow.ports :as ports]
+            [wagoe.workflow.shell.entity-uuid :as entity-uuid]
             [wagoe.workflow.shell.module-wiring]
             [wagoe.workflow.shell.persistence :as persistence]
             [wagoe.workflow.shell.registry :as registry]
@@ -317,4 +319,66 @@
       (let [entity (UUID/randomUUID)]
         (insert-instance! ds entity)
         (is (thrown? Exception (insert-instance! ds entity))))
+      (finally (factory/close-db-context! ctx)))))
+
+;; =============================================================================
+;; Joining an entity to its instance without a cast (BOU-589)
+;; =============================================================================
+
+(defn- entity-table!
+  "An `orders` table keyed as a scaffolded module keys it on `engine`."
+  [engine ds]
+  (jdbc/execute! ds [(str "CREATE TABLE orders (id " (if (= :sqlite engine) "TEXT" "UUID")
+                          " PRIMARY KEY, number TEXT)")]))
+
+(defn- joined
+  "The orders joined to their instances by entity_uuid, as the docs show it."
+  [ds]
+  (jdbc/execute! ds ["SELECT o.number, w.current_state
+                      FROM orders o
+                      JOIN workflow_instances w ON w.entity_type = 'order' AND w.entity_uuid = o.id
+                      ORDER BY o.number"]
+                 {:builder-fn rs/as-unqualified-lower-maps}))
+
+(deftest ^:integration an-entity-joins-its-instance-without-a-cast
+  (doseq [[engine ds] (engines)]
+    (testing (name engine)
+      (tables-only! ds)
+      (entity-table! engine ds)
+      (let [before (UUID/randomUUID)
+            after  (UUID/randomUUID)]
+        ;; A row from before the column, and one whose entity id is no UUID.
+        (insert-instance! ds before)
+        (insert-instance! ds "order-42")
+        (migrate! ds)
+        (insert-instance! ds after)
+        (doseq [[id n] [[before "A-1"] [after "A-2"]]]
+          (jdbc/execute! ds ["INSERT INTO orders (id, number) VALUES (?, ?)"
+                             (if (= :sqlite engine) (str id) id) n]))
+        (is (= [{:number "A-1" :current_state "pending"} {:number "A-2" :current_state "pending"}]
+               (joined ds)))
+        (testing "an id that is not a UUID has none, and is still found by entity_id"
+          (is (= [{:entity_uuid nil}]
+                 (jdbc/execute! ds ["SELECT entity_uuid FROM workflow_instances WHERE entity_id = 'order-42'"]
+                                {:builder-fn rs/as-unqualified-lower-maps}))))
+        (testing "running it again changes nothing, and the unique index holds"
+          (entity-uuid/ensure-entity-uuid! ds)
+          (is (= 2 (count (joined ds))))
+          (is (thrown? Exception (insert-instance! ds after))))
+        (testing "down drops it, and up adds it back"
+          (entity-uuid/down {:db {:datasource ds}})
+          (is (nil? (column-type ds "workflow_instances" "entity_uuid")))
+          (entity-uuid/up {:db {:datasource ds}})
+          (is (= 2 (count (joined ds)))))))))
+
+(deftest ^:integration boot-adds-entity-uuid-too
+  (let [ctx (h2-ctx)
+        ds  (:datasource ctx)]
+    (try
+      (ig/init-key :wagoe/workflow-db-schema {:ctx ctx})
+      (entity-table! :h2 ds)
+      (let [id (UUID/randomUUID)]
+        (insert-instance! ds id)
+        (jdbc/execute! ds ["INSERT INTO orders (id, number) VALUES (?, 'A-1')" id])
+        (is (= [{:number "A-1" :current_state "pending"}] (joined ds))))
       (finally (factory/close-db-context! ctx)))))

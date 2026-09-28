@@ -29,6 +29,7 @@
             [wagoe.workflow.shell.persistence :as persistence]
             [wagoe.workflow.shell.service :as service]
             [wagoe.workflow.shell.unique-instances :as unique-instances]
+            [wagoe.workflow.shell.entity-uuid :as entity-uuid]
             [wagoe.workflow.shell.http :as workflow-http]
             [wagoe.workflow.shell.admin-adapter :as admin-adapter]
             [clojure.java.io :as io]
@@ -59,7 +60,9 @@
   (doseq [statement (migration-statements)]
     (db/execute-ddl! ctx statement))
   ;; Without it two lazy starts can both insert (BOU-581).
-  (unique-instances/ensure-unique! (:datasource ctx)))
+  (unique-instances/ensure-unique! (:datasource ctx))
+  ;; What an entity table joins on without a cast (BOU-589).
+  (entity-uuid/ensure-entity-uuid! (:datasource ctx)))
 
 (defmethod ig/init-key :wagoe/workflow-db-schema
   [_ {:keys [ctx]}]
