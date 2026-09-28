@@ -110,36 +110,60 @@
                   (recur (subs text (inc open-idx))
                          (into refs (map second (re-seq #"#env\s+\"?([A-Z_][A-Z0-9_]*)\"?" block)))))))))))))
 
+(defn optional-env-refs
+  "The #env variables in `active-config` that set a setting its adapter
+   accepts unset: the `:password` of a Redis connection — a map with
+   `:provider :redis`, or the map under a `:redis` key. Redis runs without a
+   password, and the adapters read a blank one as none (BOU-591)."
+  [active-config]
+  (letfn [(env-var [v] (when (and (string? v) (str/starts-with? v "ENV:")) (subs v 4)))
+          (walk [redis? m]
+            (when (map? m)
+              (let [redis? (or redis? (= :redis (:provider m)))]
+                (concat (when redis? (some-> (env-var (:password m)) vector))
+                        (mapcat (fn [[k v]] (walk (= :redis k) v)) m)))))]
+    (set (mapcat (fn [[_ v]] (walk false v)) active-config))))
+
 (defn check-env-refs
   "Check that #env references without #or defaults are set in the environment.
-   Env vars inside :fallback blocks are treated as warnings (optional), not errors.
+
+   The rule: an unset variable is an error, unless it has an `#or` default
+   (then it is fine), sits in a :fallback block, or is in `optional-settings`
+   (see `optional-env-refs`) — those two are warnings.
    Returns a seq of check result maps."
-  [config-text env-map]
-  (let [all-refs      (extract-env-refs config-text)
-        with-default  (extract-or-defaults config-text)
-        fallback-refs (extract-fallback-env-refs config-text)
-        unprotected   (set/difference all-refs with-default)
-        missing       (remove #(get env-map %) unprotected)
-        ;; Split into required (error) and optional/fallback (warn)
-        required      (remove fallback-refs missing)
-        optional      (filter fallback-refs missing)]
-    (concat
-     (when (seq required)
-       [{:id    :env-refs
-         :level :error
-         :msg   (str "#env references without defaults are unset: " (str/join ", " (sort required)))
-         :fix   (str "Export the missing variables:\n"
-                     (str/join "\n" (map #(str "  export " % "=\"...\"") (sort required))))}])
-     (when (seq optional)
-       [{:id    :env-refs
-         :level :warn
-         :msg   (str "Optional fallback env vars not set: " (str/join ", " (sort optional)))
-         :fix   (str "These are in :fallback blocks and only needed if the primary provider fails.\n"
-                     "  To enable: " (str/join ", " (map #(str "export " % "=\"...\"") (sort optional))))}])
-     (when (and (empty? required) (empty? optional))
-       [{:id    :env-refs
-         :level :pass
-         :msg   "All #env references resolved or have defaults"}]))))
+  ([config-text env-map] (check-env-refs config-text env-map #{}))
+  ([config-text env-map optional-settings]
+   (let [all-refs      (extract-env-refs config-text)
+         with-default  (extract-or-defaults config-text)
+         fallback-refs (extract-fallback-env-refs config-text)
+         unprotected   (set/difference all-refs with-default)
+         missing       (remove #(get env-map %) unprotected)
+         ;; Split into required (error) and optional/fallback (warn)
+         required      (remove (some-fn fallback-refs optional-settings) missing)
+         optional      (filter fallback-refs missing)
+         settings      (filter (every-pred optional-settings (complement fallback-refs)) missing)]
+     (concat
+      (when (seq required)
+        [{:id    :env-refs
+          :level :error
+          :msg   (str "#env references without defaults are unset: " (str/join ", " (sort required)))
+          :fix   (str "Export the missing variables:\n"
+                      (str/join "\n" (map #(str "  export " % "=\"...\"") (sort required))))}])
+      (when (seq optional)
+        [{:id    :env-refs
+          :level :warn
+          :msg   (str "Optional fallback env vars not set: " (str/join ", " (sort optional)))
+          :fix   (str "These are in :fallback blocks and only needed if the primary provider fails.\n"
+                      "  To enable: " (str/join ", " (map #(str "export " % "=\"...\"") (sort optional))))}])
+      (when (seq settings)
+        [{:id    :env-refs
+          :level :warn
+          :msg   (str "Optional env vars not set: " (str/join ", " (sort settings)))
+          :fix   "Fine for a Redis without a password; export them if yours has one."}])
+      (when (and (empty? required) (empty? optional) (empty? settings))
+        [{:id    :env-refs
+          :level :pass
+          :msg   "All #env references resolved or have defaults"}])))))
 
 (defn check-providers
   "Check that :provider values in the config are known/valid.
@@ -184,34 +208,38 @@
    Length matters: the runtime refuses to boot on a secret under
    `jwt-secret-min-length`, so a presence-only check passes configurations that
    fail at startup — a shorter secret got a green `bb doctor` and then died
-   with `JWT_SECRET must be at least 32 characters` (BOU-250)."
-  [active-config env-map]
-  (let [user-active? (some (fn [k]
-                             (and (keyword? k)
-                                  (str/starts-with? (name k) "user")
-                                  (= (namespace k) "wagoe")))
-                           (keys active-config))
-        secret       (get env-map "JWT_SECRET")]
-    (cond
-      (not user-active?)
-      [{:id :jwt-secret :level :pass :msg "User module not active, JWT_SECRET not required"}]
+   with `JWT_SECRET must be at least 32 characters` (BOU-250).
 
-      (str/blank? secret)
-      [{:id    :jwt-secret
-        :level :error
-        :msg   "JWT_SECRET not set (required by user module)"
-        :fix   jwt-secret-fix}]
+   `code-modules` are the modules the app enables in code, through
+   :extra-modules — where a generated project enables user (BOU-591)."
+  ([active-config env-map] (check-jwt-secret active-config env-map #{}))
+  ([active-config env-map code-modules]
+   (let [user-active? (some (fn [k]
+                              (and (keyword? k)
+                                   (str/starts-with? (name k) "user")
+                                   (= (namespace k) "wagoe")))
+                            (concat (keys active-config) code-modules))
+         secret       (get env-map "JWT_SECRET")]
+     (cond
+       (not user-active?)
+       [{:id :jwt-secret :level :pass :msg "User module not active, JWT_SECRET not required"}]
 
-      (< (count secret) jwt-secret-min-length)
-      [{:id    :jwt-secret
-        :level :error
-        :msg   (str "JWT_SECRET is " (count secret) " characters; the user module "
-                    "requires at least " jwt-secret-min-length
-                    " and will refuse to start")
-        :fix   jwt-secret-fix}]
+       (str/blank? secret)
+       [{:id    :jwt-secret
+         :level :error
+         :msg   "JWT_SECRET not set (required by user module)"
+         :fix   jwt-secret-fix}]
 
-      :else
-      [{:id :jwt-secret :level :pass :msg "JWT_SECRET is set"}])))
+       (< (count secret) jwt-secret-min-length)
+       [{:id    :jwt-secret
+         :level :error
+         :msg   (str "JWT_SECRET is " (count secret) " characters; the user module "
+                     "requires at least " jwt-secret-min-length
+                     " and will refuse to start")
+         :fix   jwt-secret-fix}]
+
+       :else
+       [{:id :jwt-secret :level :pass :msg "JWT_SECRET is set"}]))))
 
 (defn check-admin-parity
   "Check that admin entity config files exist in both dev and test."
@@ -397,6 +425,17 @@
            (filter #(str/ends-with? (.getName %) ".edn"))
            vec))))
 
+(defn code-enabled-modules
+  "The modules the app under `dir` enables in code: the :extra-modules of its
+   src/**/system_config.clj, read the way `wagoe add` reads them (BOU-573)."
+  [dir]
+  (let [src (io/file dir "src")]
+    (set (for [f      (when (.isDirectory src) (file-seq src))
+               :when  (= "system_config.clj" (.getName ^java.io.File f))
+               [_ ks] (re-seq #":extra-modules\s+#\{([^}]*)\}" (slurp f))
+               k      (re-seq #":[\w.-]+/[\w.-]+" ks)]
+           (keyword (subs k 1))))))
+
 (defn- load-app-source-text
   "Concatenated .clj source of the app's src/ and dev/ trees, plus platform's
    system wiring.clj when present (monorepo). Post BOU-171/192/198 the app owns
@@ -498,9 +537,9 @@
             test-admin   (or (list-admin-files "test") [])]
         (concat
          (check-config-loadable parsed)
-         (check-env-refs active-text env-map)
+         (check-env-refs active-text env-map (optional-env-refs active))
          (check-providers active)
-         (check-jwt-secret active env-map)
+         (check-jwt-secret active env-map (code-enabled-modules (root-dir)))
          (check-admin-parity dev-admin test-admin)
          (check-prod-placeholders config-text env)
          (check-reset-endpoint-flag (or parsed {}) env)
@@ -539,8 +578,9 @@
   (println "Checks:")
   (println "  config-loadable     config.edn parses and has an :active section")
   (println "  env-refs            #env vars without #or defaults are set")
+  (println "                      (an optional one, a Redis :password, only warns)")
   (println "  providers           Provider values are recognized")
-  (println "  jwt-secret          JWT_SECRET set when user module active")
+  (println "  jwt-secret          JWT_SECRET set when user module active (config or :extra-modules)")
   (println "  admin-parity        Admin entity files exist in both dev and test")
   (println "  prod-placeholders   No placeholder values in prod config")
   (println "  reset-endpoint-flag :test/reset-endpoint-enabled? only true in test/dev")

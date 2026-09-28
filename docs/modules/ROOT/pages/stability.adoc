@@ -221,7 +221,7 @@ rather than a commit message.
 ** The scaffolder refuses unknown field modifiers.
 ** `bb setup` exits 1 on a closed stdin.
 ** `bb setup` in an existing project creates no missing config file.
-** `bb setup --prod true` changes prod only, and refuses mock payments and AI.
+** `bb setup --prod true` changes prod only, refuses mock payments, and leaves an AI flag out.
 ** The admin hard-deletes by default and refuses a parent with has-many rows
    unless `:on-delete :cascade`.
 ** An unknown admin entity-config key stops startup.

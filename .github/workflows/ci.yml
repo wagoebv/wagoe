@@ -169,10 +169,14 @@ jobs:
 
       - name: Validate dev config
         if: ${{ !cancelled() }}
+        env:
+          JWT_SECRET: "ci-test-secret-minimum-32-characters"
         run: bb doctor --env dev --ci
 
       - name: Validate test config
         if: ${{ !cancelled() }}
+        env:
+          JWT_SECRET: "ci-test-secret-minimum-32-characters"
         run: bb doctor --env test --ci
 
       - name: Check AGENTS links
