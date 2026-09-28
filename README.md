@@ -191,7 +191,7 @@ This keeps business logic fast to test (no mocks needed), easy to reason about, 
 |----------|------------|
 | Clojure code | `kebab-case` (`:password-hash`, `:created-at`) |
 | Database | `snake_case` |
-| API (JSON) | `camelCase` |
+| API (JSON) | `kebab-case` — except `wagoe-user`'s own API, which is `camelCase` |
 
 Use `wagoe.core.utils.case-conversion` for conversions. Never convert manually.
 

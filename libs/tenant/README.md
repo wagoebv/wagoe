@@ -361,7 +361,7 @@ See [Cache Module README](../cache/README.md#tenant-scoping) for details.
 ## Tenant Management REST API
 
 When the tenant module is wired, it exposes a REST API for tenant administration
-under `/api/v1/tenants` (JSON responses; standard 400/404/500 error handling):
+under `/api/v1/tenants` (kebab-case JSON; errors are typed 400/404/409 — a taken slug is 409 `conflict`):
 
 | Method | Path | Purpose |
 |--------|------|---------|
