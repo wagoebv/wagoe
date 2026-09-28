@@ -298,28 +298,32 @@
                      [:div [:h2 "Error"] [:p [:t :common/error-generic]]]
                      500))))
 
+(defn- instance-not-found [request id-str]
+  (html-response request
+                 [:div [:h2 "Not Found"] [:p (str "Workflow instance " id-str " not found.")]]
+                 404))
+
 (defn handle-get-instance-web
-  "GET /workflows/:id — render the workflow instance detail page."
+  "GET /workflows/:id — render the workflow instance detail page. An id that
+   is not a UUID names no instance: 404, like an unknown one."
   [store registry request]
-  (try
-    (let [id-str   (get-in request [:path-params :id])
-          id       (parse-uuid-param id-str "id")
-          instance (ports/find-instance store id)]
-      (if (nil? instance)
-        (html-response request
-                       [:div [:h2 "Not Found"] [:p (str "Workflow instance " id-str " not found.")]]
-                       404)
-        (let [definition  (ports/get-workflow registry (:workflow-id instance))
-              audit-log   (ports/find-audit-log store id)
-              page-opts   {:user  (:user request)
-                           :flash (:flash request)}]
+  (let [id-str (get-in request [:path-params :id])]
+    (if-let [id (parse-uuid (str id-str))]
+      (try
+        (if-let [instance (ports/find-instance store id)]
+          (let [definition  (ports/get-workflow registry (:workflow-id instance))
+                audit-log   (ports/find-audit-log store id)
+                page-opts   {:user  (:user request)
+                             :flash (:flash request)}]
+            (html-response request
+                           (workflow-ui/instance-detail-page instance definition audit-log page-opts)))
+          (instance-not-found request id-str))
+        (catch Exception e
+          (log/error e "Error in handle-get-instance-web")
           (html-response request
-                         (workflow-ui/instance-detail-page instance definition audit-log page-opts)))))
-    (catch Exception e
-      (log/error e "Error in handle-get-instance-web")
-      (html-response request
-                     [:div [:h2 "Error"] [:p [:t :common/error-generic]]]
-                     500))))
+                         [:div [:h2 "Error"] [:p [:t :common/error-generic]]]
+                         500)))
+      (instance-not-found request id-str))))
 
 ;; =============================================================================
 ;; Web route definitions

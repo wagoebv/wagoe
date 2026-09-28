@@ -375,3 +375,13 @@
     (is (= 500 (:status response)))
     (is (not (re-find #"hunter2" (:body response))))
     (is (re-find #"error-generic" (:body response)))))
+
+(deftest ^:unit the-admin-detail-page-answers-a-bad-or-unknown-id-with-404
+  ;; A non-UUID id threw a :validation-error inside the handler's catch-all,
+  ;; which answered 500 (BOU-586).
+  (let [store    (service-test/create-memory-store)
+        registry (registry/create-workflow-registry)]
+    (doseq [id ["not-a-uuid" (str (UUID/randomUUID))]]
+      (let [response (sut/handle-get-instance-web store registry {:path-params {:id id}})]
+        (is (= 404 (:status response)) id)
+        (is (re-find #"not found" (:body response)) id)))))
