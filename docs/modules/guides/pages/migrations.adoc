@@ -74,9 +74,13 @@ A last applied migration that no library on the classpath ships stops `rollback`
 
 == Resetting a database
 
-`bb db:reset` drops what the application owns and migrates again. It runs only in the `dev`, `test` and `acc` profiles, resolved the way the connection resolves them (`--env`, then `-Denv`, `WAG_ENV`, `ENV`, `ENVIRONMENT`), and refuses every other one, prod included, with no override.
+`bb db:reset` drops what the application owns and migrates again. It runs only in the `dev`, `test` and `acc` profiles, and there is no override:
 
-What the application owns: each migration's objects, removed by its down migration; the tables libraries create at boot, which each declares in `wagoe/boot-tables/<lib>.edn`; `schema_migrations`; and the schema of every tenant in `tenants`. Other tables, schemas and extensions stay. When a view, key or table the application does not own depends on something the reset would drop, it drops nothing and names it.
+* the profile must be named, by `--env`, `-Denv`, `WAG_ENV`, `ENV` or `ENVIRONMENT`; the built-in default does not count;
+* every one of those that is set must name `dev`, `test` or `acc`, so `WAG_ENV=prod` refuses whatever `--env` says;
+* the profile's database must not be the one `conf/prod/config.edn` resolves to.
+
+What the application owns: the objects of each applied migration, removed by its down migration; the tables libraries create at boot, which each declares in `wagoe/boot-tables/<lib>.edn`; `schema_migrations`; and the schema of every tenant in `tenants`. Other tables, schemas and extensions stay. When anything the application does not own depends on something the reset would drop — on PostgreSQL any dependency `pg_depend` records, such as a view, key, column type, default, function, trigger or policy — it drops nothing and names it. On PostgreSQL the drops run in one transaction; a failure says which steps finished and how to recover.
 
 Before it asks, the reset shows the host, database, schema, tables and tenant schemas. It confirms by the database's name, typed on a terminal, so piping `yes` does not answer it. A database on another machine needs `--allow-remote`.
 

@@ -57,7 +57,7 @@
       (let [ctx (mk)]
         (try
           (with-app ctx "dev"
-            (fn [run-reset]
+            (fn [run-reset _]
               (db/execute-ddl! ctx "CREATE TABLE someone_elses (id INT)")
               (is (nil? (run-reset)))
               (is (= #{"app_table" "schema_migrations" "someone_elses"} (tables ctx))
@@ -69,7 +69,7 @@
     (testing env
       (let [ctx (h2)]
         (try
-          (with-app ctx env (fn [run-reset] (is (nil? (run-reset)))))
+          (with-app ctx env (fn [run-reset _] (is (nil? (run-reset)))))
           (is (not (contains? (tables ctx) "auth_users")))
           (finally (db-factory/close-db-context! ctx))))))
   (doseq [env ["prod" "production" "staging" "local" ""]]
@@ -77,16 +77,60 @@
       (let [ctx (h2)]
         (try
           (with-app ctx env
-            (fn [run-reset]
+            (fn [run-reset _]
               (is (= :forbidden (:type (run-reset))))
               (is (contains? (tables ctx) "auth_users") "nothing is dropped")
               (is (contains? (tables ctx) "app_table"))))
           (finally (db-factory/close-db-context! ctx))))))
   (testing "refused before the database is looked up"
-    (with-redefs [db-config/detect-environment (constantly "prod")
-                  migrations/rollback-config   (fn [] (throw (ex-info "connected" {})))]
+    (with-redefs [db-config/getenv           {"WAG_ENV" "prod"}
+                  migrations/rollback-config (fn [] (throw (ex-info "connected" {})))]
       (let [e (is (thrown? clojure.lang.ExceptionInfo (sut/plan {})))]
         (is (re-find #"bb migrate up" (ex-message e)))))))
+
+(deftest ^:integration every-named-profile-must-be-resettable
+  ;; A name decided, and the name could lie: --env dev beat WAG_ENV=prod, and
+  ;; nothing set at all fell back to dev (BOU-585 review).
+  (doseq [[label sources] [["WAG_ENV=prod with --env dev" {"-Denv" "dev" "WAG_ENV" "prod"}]
+                           ["ENV=staging beside WAG_ENV=dev" {"WAG_ENV" "dev" "ENV" "staging"}]
+                           ["nothing named, only the default" {}]]]
+    (testing label
+      (let [ctx (h2)]
+        (try
+          (with-app ctx sources
+            (fn [run-reset _]
+              (is (= :forbidden (:type (run-reset))))
+              (is (contains? (tables ctx) "auth_users") "nothing is dropped")))
+          (finally (db-factory/close-db-context! ctx)))))))
+
+(deftest ^:integration a-dev-profile-on-prods-database-refuses
+  ;; The dev and prod configs can read the same POSTGRES_* variables.
+  (let [ctx  (h2)
+        same {:active {:wagoe/postgresql {:host "db.internal" :port 5432 :dbname "shop"
+                                          :user "u" :password "p"}}}]
+    (try
+      (with-app ctx {"WAG_ENV" "dev" :load-config (fn [_] same)}
+        (fn [run-reset _]
+          (with-redefs [sut/prod-profile-exists? (constantly true)]
+            (let [refusal (run-reset)]
+              (is (= :forbidden (:type refusal)))
+              (is (= "prod" (:same-as refusal)))))
+          (is (contains? (tables ctx) "auth_users") "nothing is dropped")))
+      (finally (db-factory/close-db-context! ctx)))))
+
+(deftest ^:integration only-an-applied-migration-owns-a-table
+  ;; A migration not yet applied that creates `stray` made a foreign `stray`
+  ;; look like the app's, so its key on auth_users stopped the drop halfway.
+  (let [ctx (h2)]
+    (try
+      (with-app ctx "dev"
+        (fn [run-reset app]
+          (spit (io/file app "20260102000000-stray.up.sql") "CREATE TABLE stray (id INT)")
+          (spit (io/file app "20260102000000-stray.down.sql") "DROP TABLE stray")
+          (db/execute-ddl! ctx "CREATE TABLE stray (user_id INT REFERENCES auth_users (id))")
+          (is (= :conflict (:type (run-reset))))
+          (is (contains? (tables ctx) "auth_users") "nothing is dropped")))
+      (finally (db-factory/close-db-context! ctx)))))
 
 (deftest ^:unit another-machine-needs-allow-remote
   (is (sut/loopback? nil))

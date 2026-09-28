@@ -149,7 +149,7 @@
             (do (println "\n❌ Reset cancelled")
                 1)))))
     (catch clojure.lang.ExceptionInfo e
-      (if (#{:forbidden :conflict} (:type (ex-data e)))
+      (if (#{:forbidden :conflict :reset-failed} (:type (ex-data e)))
         (do (println (str "\n❌ " (ex-message e) "\n"))
             1)
         (do (println "❌ Reset failed:" (or (:error (ex-data e)) (ex-message e)))

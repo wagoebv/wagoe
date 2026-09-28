@@ -211,17 +211,29 @@
 (defn- flag-value [args flag]
   (second (drop-while #(not= flag %) args)))
 
-(defn reset-profile
-  "The profile `bb db:reset args` resets: --env, else the variables the
-   platform reads, else dev, with the config loader's aliases resolved."
-  [args getenv]
-  (let [s (some-> (or (flag-value args "--env")
-                      (getenv "WAG_ENV")
-                      (getenv "ENV")
-                      (getenv "ENVIRONMENT")
-                      "dev")
-                  str/trim str/lower-case)]
+(defn- normalize-profile [s]
+  (let [s (some-> s str/trim str/lower-case)]
     (get env-aliases s s)))
+
+(defn reset-profile
+  "{:profile p} for `bb db:reset args`, or {:refused why}. Every place that
+   names a profile must name dev, test or acc — one prod anywhere refuses —
+   and one must: the default is not a choice anybody made."
+  [args getenv]
+  (let [sources (filter second [["--env" (flag-value args "--env")]
+                                ["WAG_ENV" (getenv "WAG_ENV")]
+                                ["ENV" (getenv "ENV")]
+                                ["ENVIRONMENT" (getenv "ENVIRONMENT")]])
+        bad     (remove #(contains? resettable-envs (normalize-profile (second %))) sources)]
+    (cond
+      (empty? sources)
+      {:refused "No profile is named. Set WAG_ENV to dev, test or acc, or pass --env dev."}
+
+      (seq bad)
+      {:refused (str (str/join ", " (map (fn [[k v]] (str k "=" (pr-str v))) bad))
+                     " is not dev, test or acc.")}
+
+      :else {:profile (normalize-profile (second (first sources)))})))
 
 (defn db-reset
   "Drop the application's tables and migrate, in dev, test or acc only.
@@ -230,9 +242,9 @@
    the platform resolves the same one. It checks again there, shows what it
    will drop, and asks; this refusal only saves starting a JVM."
   [& args]
-  (let [env (reset-profile args #(System/getenv %))]
-    (if-not (contains? resettable-envs env)
-      (do (println (red (str "  REFUSED: bb db:reset does not run in the " (pr-str env) " profile.")))
+  (let [{env :profile why :refused} (reset-profile args #(System/getenv %))]
+    (if why
+      (do (println (red (str "  REFUSED: " why)))
           (println (dim "  Production changes go through migrations: `bb migrate up`, with a down"))
           (println (dim "  migration or a conversion migration for what must change or go. Never a reset."))
           (println (dim "  Reset runs only in: acc, dev, test."))

@@ -70,7 +70,7 @@
   (doseq [env ["prod" "staging" ""]]
     (testing (pr-str env)
       (let [calls (atom [])
-            out   (with-redefs [db-config/detect-environment (constantly env)
+            out   (with-redefs [db-config/getenv {"WAG_ENV" env}
                                 migrations/rollback-config (fn [] (swap! calls conj :connect) {})
                                 reset/execute! (fn [_] (swap! calls conj :reset))
                                 sut/tty? (constantly true)

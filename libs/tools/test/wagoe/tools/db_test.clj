@@ -100,17 +100,20 @@
                       [[] {"ENV" "staging"}]
                       [[] {"WAG_ENV" "local"}]
                       [[] {"WAG_ENV" "production"}]
-                      [["--env" ""] {}]]]
+                      [["--env" ""] {}]
+                      [[] {}]
+                      [["--env" "dev"] {"WAG_ENV" "prod"}]
+                      [["--env" "test"] {"WAG_ENV" "prod"}]]]
     (testing (pr-str args env)
       (let [{:keys [exit out cmds]} (run-reset args env)]
         (is (= 1 exit) out)
         (is (empty? cmds) "no JVM is started")
         (is (str/includes? out "bb migrate up") out))))
-  (doseq [[args env profile] [[[] {} "dev"]
+  (doseq [[args env profile] [[[] {"WAG_ENV" "dev"} "dev"]
                               [[] {"WAG_ENV" "development"} "dev"]
                               [["--env" "Development"] {} "dev"]
                               [[] {"WAG_ENV" "acceptance"} "acc"]
-                              [["--env" "test"] {"WAG_ENV" "prod"} "test"]
+                              [["--env" "test"] {"WAG_ENV" "dev"} "test"]
                               [[] {"WAG_ENV" "acc"} "acc"]]]
     (testing profile
       (let [{:keys [exit cmds]} (run-reset args env)]
@@ -119,7 +122,7 @@
             "the platform resolves the same profile"))))
   (testing "--allow-remote reaches the platform"
     (is (= [["clojure" "-J-Denv=dev" "-M:migrate" "reset" "--allow-remote"]]
-           (:cmds (run-reset ["--allow-remote"] {}))))))
+           (:cmds (run-reset ["--allow-remote"] {"WAG_ENV" "dev"}))))))
 
 (deftest ^:unit env-aliases-match-the-config-loader
   (let [src (slurp (str (fs/path (repo-root) "libs" "config" "src" "wagoe" "config.clj")))
