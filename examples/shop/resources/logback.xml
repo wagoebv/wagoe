@@ -16,6 +16,9 @@
     </encoder>
   </appender>
 
+  <!-- Its "Connection is … Config is …" line, once per migration. Set DEBUG to see it. -->
+  <logger name="migratus.database" level="WARN" />
+
   <root level="INFO">
     <appender-ref ref="CONSOLE" />
   </root>

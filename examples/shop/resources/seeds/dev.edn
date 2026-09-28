@@ -1,0 +1,11 @@
+;;; Seed data for `bb db:seed`. Tables insert in the order listed: parents first.
+;;; id, created-at and updated-at are filled in. A child names its parent by the
+;;; parent's :id, as the examples do. `bb guide seed` explains the file.
+[
+ ;;; Product — uncomment to seed one.
+ ;; [:products
+ ;;   [{:id    :product/example
+ ;;     :name  "Example name"
+ ;;     :sku   "Example sku"
+ ;;     :price 10.00M}]]
+]
