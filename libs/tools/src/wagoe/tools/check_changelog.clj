@@ -206,47 +206,72 @@
 
 (defn- number [word] (get number-words (some-> word str/lower-case)))
 
-(defn- unreleased-breaks
-  "The entries under `### Breaking` in `[Unreleased]`."
-  [changelog]
-  (let [unreleased (second (re-find #"(?s)## \[Unreleased\](.*?)(?=\n## \[|\z)" changelog))
-        breaking   (second (re-find #"(?s)### Breaking\s*\n(.*?)(?=\n### |\z)" (str unreleased)))]
+(defn- section-breaks
+  "The entries under `### Breaking` in the changelog section headed `heading`."
+  [changelog heading]
+  (let [section  (second (re-find (re-pattern (str "(?s)## \\[" (java.util.regex.Pattern/quote heading)
+                                                   "\\][^\n]*(.*?)(?=\n## \\[|\\z)"))
+                                  changelog))
+        breaking (second (re-find #"(?s)### Breaking\s*\n(.*?)(?=\n### |\z)" (str section)))]
     (count (re-seq #"(?m)^- " (str breaking)))))
 
+(defn- unreleased-breaks [changelog] (section-breaks changelog "Unreleased"))
+
+(defn- listed-items
+  "How many `**` items the paragraph for `version` lists."
+  [stability version]
+  (some->> (re-find (re-pattern (str "(?s)in `" (java.util.regex.Pattern/quote version)
+                                     "`:\\*.*?\n(.*?)(?=\n\\* |\n\\+\n|\\z)"))
+                    stability)
+           second (re-seq #"(?m)^\*\* ") count))
+
 (defn stability-findings
-  "What the stability page's release-candidate list gets wrong about the
-   changelog: the next candidate's count and its listed items against the
-   `[Unreleased]` `### Breaking` entries, and the running totals against the
-   per-candidate counts. The page names no tickets, so counts are what can be
+  "What the stability page's breaking-change list gets wrong about the
+   changelog. Before 1.0.0: the next candidate's count and listed items against
+   the `[Unreleased]` `### Breaking` entries. At 1.0.0: the `1.0.0` paragraph
+   against the `[1.0.0]` section, and no breaking entry in `[Unreleased]`, since
+   one now needs a major version. Always: the running totals against the
+   per-release counts. The page names no tickets, so counts are what can be
    held; which item is which is a reviewer's job (BOU-579)."
   [changelog stability]
-  (let [current (some-> (re-find #"Current version\s*\n\|\s*`1\.0\.0-rc-(\d+)`" stability)
-                        second parse-long)
-        rcs     (into {} (for [[_ word rc] (re-seq #"(?m)^\* \*(\S+)[^*\n]*? in `1\.0\.0-rc-(\d+)`:\*" stability)]
-                           [(parse-long rc) (number word)]))
+  (let [version (second (re-find #"Current version\s*\n\|\s*`(1\.0\.0(?:-rc-\d+)?)`" stability))
+        final?  (= "1.0.0" version)
+        current (some-> (re-find #"-rc-(\d+)$" (str version)) second parse-long)
+        counted (for [[_ word v] (re-seq #"(?m)^\* \*(\S+)[^*\n]*? in `(1\.0\.0(?:-rc-\d+)?)`:\*" stability)]
+                  [v (number word)])
+        rcs     (into {} counted)
         breaks  (unreleased-breaks changelog)
         nxt     (some-> current inc)
-        items   (when nxt
-                  (some->> (re-find (re-pattern (str "(?s)in `1\\.0\\.0-rc-" nxt "`:\\*.*?\n(.*?)(?=\n\\* |\n\\+\n|\\z)"))
-                                    stability)
-                           second (re-seq #"(?m)^\*\* ") count))
+        nxt-v   (some->> nxt (str "1.0.0-rc-"))
+        items   (when nxt-v (listed-items stability nxt-v))
+        shipped (when final? (section-breaks changelog "1.0.0"))
         [_ additions total] (re-find #"(\S+)\s+additions\s+to\s+the\s+three\s+frozen\s+at\s+`rc-1`,\s+so\s+the\s+list\s+is\s+(\S+?)\." stability)
-        sum     (reduce + (keep val rcs))]
+        sum     (reduce + (keep second counted))]
     (cond-> []
-      (nil? current)
-      (conj "no `1.0.0-rc-N` current version")
+      (nil? version)
+      (conj "no `1.0.0-rc-N` or `1.0.0` current version")
 
-      (and current (not= breaks (get rcs nxt 0)))
+      (and current (not= breaks (get rcs nxt-v 0)))
       (conj (str "`[Unreleased]` has " breaks " breaking entries; the rc-" nxt " paragraph counts "
-                 (get rcs nxt 0)))
+                 (get rcs nxt-v 0)))
 
       (and current (pos? breaks) (not= breaks items))
       (conj (str "the rc-" nxt " paragraph lists " (or items 0) " items for " breaks " breaking entries"))
 
-      (and (seq rcs) (not= sum (number additions)))
+      (and final? (pos? breaks))
+      (conj (str "`[Unreleased]` has " breaks " breaking entries after 1.0.0; a breaking change needs a major version"))
+
+      (and final? (not= shipped (get rcs "1.0.0" 0)))
+      (conj (str "`[1.0.0]` has " shipped " breaking entries; the 1.0.0 paragraph counts " (get rcs "1.0.0" 0)))
+
+      (and final? (pos? shipped) (not= shipped (listed-items stability "1.0.0")))
+      (conj (str "the 1.0.0 paragraph lists " (or (listed-items stability "1.0.0") 0)
+                 " items for " shipped " breaking entries"))
+
+      (and (seq counted) (not= sum (number additions)))
       (conj (str "the additions say " additions "; the candidates add up to " sum))
 
-      (and (seq rcs) (not= (+ 3 sum) (number total)))
+      (and (seq counted) (not= (+ 3 sum) (number total)))
       (conj (str "the list is said to be " total "; three frozen plus " sum " is " (+ 3 sum))))))
 
 (defn- report-stability

@@ -815,7 +815,8 @@
           (is (= 409 (:status dup)) (pr-str dup))
           (is (= "conflict" (get-in dup [:body :error :type])))
           (is (= "number" (get-in dup [:body :error :details :field])) (pr-str (:body dup)))
-          (is (not (re-find #"(?i)insert|sqlite|invoices|A-1" (pr-str (:body dup)))) (pr-str (:body dup)))
+          (is (not (re-find #"(?i)insert|sqlite|invoices|A-1" (pr-str (update (:body dup) :error dissoc :correlation-id))))
+              (pr-str (:body dup)))
           (testing "and on update"
             (is (= 409 (:status (call :put (str "/invoices/" id) {:number "A-1"}))))))))))
 

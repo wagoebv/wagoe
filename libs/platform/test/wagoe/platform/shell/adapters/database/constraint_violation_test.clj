@@ -67,9 +67,10 @@
           (is (= "conflict" (get-in resp [:json :error :type])))
           (is (= "number" (get-in resp [:json :error :details :field])) (:text resp))
           (testing "and says nothing of the SQL, the driver or the value"
-            (is (not (re-find #"(?i)insert|invoices|sqlite|23505|violat|index" (:text resp)))
-                (:text resp))
-            (is (not (str/includes? (:text resp) number)) (:text resp))))
+            ;; The correlation id is a random uuid and could contain any of these.
+            (let [text (str/replace (:text resp) #"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}" "")]
+              (is (not (re-find #"(?i)insert|invoices|sqlite|23505|violat|index" text)) (:text resp))
+              (is (not (str/includes? text number)) (:text resp)))))
         (testing "an update, and a read-back through execute-one!, too"
           (let [other (str "B-" (name backend))
                 id    (str (random-uuid))]

@@ -12,7 +12,7 @@ Code generation tool for creating new Wagoe modules following the Functional Cor
 **deps.edn** (as dev dependency):
 ```clojure
 {:aliases
- {:dev {:extra-deps {com.wagoe/wagoe-scaffolder {:mvn/version "1.0.0-rc-4"}}}}}
+ {:dev {:extra-deps {com.wagoe/wagoe-scaffolder {:mvn/version "1.0.0"}}}}}
 ```
 
 ## Features
@@ -380,7 +380,7 @@ resources/scaffolder/templates/
 
 | Dependency | Version | Purpose |
 |------------|---------|---------|
-| `wagoe/core` | 1.0.0-rc-4 | Utilities |
+| `wagoe/core` | 1.0.0 | Utilities |
 | `org.clojure/tools.cli` | 1.3.250 | CLI parsing |
 
 ## Relationship to Other Libraries

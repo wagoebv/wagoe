@@ -114,6 +114,35 @@
   (testing "no paragraph at all for breaks that are unreleased"
     (is (seq (sut/stability-findings changelog "| Current version\n| `1.0.0-rc-3`\n")))))
 
+(def ^:private released-changelog
+  (str "## [Unreleased]\n\n### Fixed\n\n- **D** (X-4).\n\n"
+       "## [1.0.0] — 2026-09-28\n\n### Breaking\n\n- **A** (X-1). Do a.\n- **B** (X-2). Do b.\n\n"
+       "## [1.0.0-rc-3]\n\n### Breaking\n\n- **Old** (X-0).\n"))
+
+(defn- released-stability [word items additions total]
+  (str "| Current version\n| `1.0.0`\n\n"
+       "* *One has, in `1.0.0-rc-2`:* a thing.\n"
+       "* *One more, in `1.0.0-rc-3`:* another.\n"
+       "* *" word " in `1.0.0`:* each is under `### Breaking`.\n"
+       (apply str (map #(str "** " % "\n") items))
+       "+\n" additions " additions to the three frozen at `rc-1`, so the list is " total ".\n"))
+
+(deftest ^:unit at-1-0-0-the-page-counts-what-1-0-0-shipped
+  (is (empty? (sut/stability-findings released-changelog
+                                      (released-stability "Two" ["a" "b"] "Four" "seven"))))
+  (testing "the 1.0.0 count"
+    (is (seq (sut/stability-findings released-changelog
+                                     (released-stability "One" ["a" "b"] "Three" "six")))))
+  (testing "the listed items"
+    (is (seq (sut/stability-findings released-changelog
+                                     (released-stability "Two" ["a"] "Four" "seven"))))))
+
+(deftest ^:unit after-1-0-0-an-unreleased-break-needs-a-major-version
+  (is (seq (sut/stability-findings
+            (str/replace released-changelog "### Fixed\n\n- **D** (X-4)."
+                         "### Breaking\n\n- **E** (X-5). Do e.")
+            (released-stability "Two" ["a" "b"] "Four" "seven")))))
+
 (deftest ^:unit the-shipped-stability-page-agrees-with-the-changelog
   (is (empty? (sut/stability-findings (slurp "CHANGELOG.md")
                                       (slurp "docs/modules/ROOT/pages/stability.adoc")))))
