@@ -407,7 +407,7 @@ export EMAIL_FROM_ADDRESS="no-reply@myapp.com"
 
 (if (:success? result)
   {:status 200 :body {:message "Email sent"}}
-  {:status 500 :body {:error "Failed to send email"}})
+  {:status 500 :body {:error {:type "internal-error" :message "Failed to send email"}}})
 ```
 
 ### Asynchronous Sending (Future)

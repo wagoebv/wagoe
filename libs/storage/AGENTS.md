@@ -223,8 +223,8 @@ stays behind login:
 | DELETE | `/delete/:file-key` | 204 on success, 404 otherwise |
 | GET | `/url/:file-key` | query `expiration` (default 3600) → JSON `{:url :expiration-seconds}` |
 
-Errors are emitted as RFC-7807 problem details via
-`wagoe.platform.core.http.problem-details`.
+Errors are the framework's one JSON error body, `{"error": {"type" "message" "details"}}`,
+built by `wagoe.platform.core.http.problem-details`.
 
 ## Gotchas
 

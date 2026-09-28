@@ -29,6 +29,15 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ## [Unreleased]
 
+### Breaking
+
+- **Every JSON error body is `{"error": {"type": …, "message": …}}`** (BOU-586), 401/403 and 404/405 included.
+  Read `error.type` and `error.message`; `details` and `correlation-id` moved inside `error`.
+
+### Fixed
+
+- **`GET /web/admin/workflows/<id>` answered 500 for an id that is not a UUID** (BOU-586); it is a 404 now.
+
 ## [1.0.0-rc-4] — 2026-09-28
 
 ### Breaking

@@ -26,6 +26,7 @@ Declarative cross-cutting concerns (auth, rate limiting, audit):
 
 [source,clojure]
 ----
+;; errors = wagoe.platform.core.http.errors
 ;; Define an interceptor
 (def require-admin
   {:name  :require-admin
@@ -36,10 +37,10 @@ Declarative cross-cutting concerns (auth, rate limiting, audit):
               ;; alone does not stop the pipeline, so the downstream handler
               ;; would run and overwrite this response. See "Interceptor phases".
               (assoc ctx :halt? true
-                         :response {:status 403 :body {:error "Forbidden"}})))
+                         :response (errors/response 403 :forbidden "Admin role required"))))
    :leave (fn [ctx] ctx)   ; optional response processing
    :error (fn [ctx err]    ; optional error handling
-            (assoc ctx :response {:status 500 :body {:error "Internal error"}}))})
+            (assoc ctx :response (errors/response 500 :internal-error "Internal Server Error")))})
 
 ;; Attach interceptors to routes
 [["/admin"
@@ -68,6 +69,32 @@ is applied to every route unless the route opts out with `:skip-interceptors? tr
 NOTE: `:skip-interceptors?` is independent of `:no-doc`. `:no-doc` only excludes a
 route from the Swagger spec; it does **not** affect interceptors. All `/web` routes are
 `:no-doc` yet still run the full stack so that security interceptors apply to the UI.
+
+[#error-responses]
+== Error responses
+
+Every JSON error the framework sends has one shape, whatever produced it —
+the exception mapping, the default-deny 401/403, CSRF, the rate limiter, a
+malformed body, an unknown route or method:
+
+[source,json]
+----
+{"error": {"type":           "validation-error",
+           "message":        "Request validation failed",
+           "details":        {"email": ["invalid"]},
+           "correlation-id": "5b1c9a52-6f0e-4d7a-9a57-2d9e3c1b8f40"}}
+----
+
+`type` and `message` are always there. `details` and `correlation-id` are
+there when the error has them, and `dev` (the BND code, dev only) sits beside
+them. Everything is inside `error`, so a client reads one key. The correlation
+id is also the `X-Correlation-ID` response header.
+
+`type` is the `:type` of the thrown `ex-info`: `validation-error` (400),
+`unauthorized` (401), `forbidden` (403), `not-found` (404), `conflict` (409),
+and anything unmapped is a 500 whose `type` is `internal-error` and whose
+message says nothing more. Build a body of your own with
+`wagoe.platform.core.http.errors/body` or `response`.
 
 == Interceptor phases
 

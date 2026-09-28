@@ -1,6 +1,6 @@
 # HTTP Interface Module
 
-Shared HTTP utilities: RFC 7807 error responses and health check handlers.
+Shared HTTP utilities: error responses and health check handlers.
 
 > **This is not how you build an application's route table.** Routes reach the
 > router by module contribution — see [Contributing routes](#contributing-routes)
@@ -10,7 +10,7 @@ Shared HTTP utilities: RFC 7807 error responses and health check handlers.
 
 ```
 wagoe.platform.shell.interfaces.http/
-└── common.clj      # RFC 7807 problem details, health check handlers
+└── common.clj      # error responses, health check handlers
 ```
 
 ## Contributing routes
@@ -42,7 +42,7 @@ does not add them. `bb scaffold endpoint` writes the shape above.
 
 ## Common utilities (`common.clj`)
 
-### RFC 7807 problem details
+### Error responses
 
 ```clojure
 (require '[wagoe.platform.shell.interfaces.http.common :as http-common])
@@ -51,13 +51,9 @@ does not add them. `bb scaffold endpoint` writes the shape above.
   (ex-info "User not found" {:type :user-not-found})
   correlation-id
   request-uri)
-;; => {:status 404
-;;     :body {:type "https://wagoe.example.com/problems/user-not-found"
-;;            :title "User Not Found"
-;;            :status 404
-;;            :detail "User not found"
-;;            :instance "/api/users/123"
-;;            :correlation-id "abc-123"}}
+;; => {:status  404
+;;     :headers {"Content-Type" "application/json"}
+;;     :body    "{\"error\":{\"type\":\"user-not-found\",\"message\":\"User not found\",\"correlation-id\":\"abc-123\"}}"}
 ```
 
 ### Health check handlers

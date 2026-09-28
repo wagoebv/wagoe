@@ -231,8 +231,10 @@ rather than a commit message.
    database, so a boot stops on existing duplicates.
 ** An entity has one instance of each workflow, so `migrate up` stops on existing
    duplicates.
+* *One in `1.0.0-rc-5`:* under `### Breaking` in `CHANGELOG.md` as well.
+** Every JSON error body is `{"error": {"type": …, "message": …}}`.
 +
-Twenty-two additions to the three frozen at `rc-1`, so the list is twenty-five.
+Twenty-three additions to the three frozen at `rc-1`, so the list is twenty-six.
 `bb check:changelog` holds the rc-4 count to the `[Unreleased]` `### Breaking`
 entries, and the totals to the counts above.
 * Breaking changes that already shipped are in `CHANGELOG.md` under a

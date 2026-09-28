@@ -118,9 +118,9 @@ hand-written handler below shows what it does.
         {:status 101}  ; WebSocket upgrade
         
         (catch Exception e
-          {:status 401 :body {:error "Unauthorized"}})))
+          {:status 401 :body {:error {:type "unauthorized" :message "Invalid token"}}})))
     
-    {:status 400 :body {:error "Not a WebSocket request"}}))
+    {:status 400 :body {:error {:type "validation-error" :message "Not a WebSocket request"}}}))
 
 ;; Add to routes
 (def routes

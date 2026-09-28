@@ -174,7 +174,30 @@ Applying that line to the sites that exist is not a formality:
 `{:success …}` without the question mark (34 sites) is not a variant to bless.
 It becomes `:success?` or §1, by the same line.
 
-=== 4. `cognitect.anomalies` is rejected
+=== 4. On the wire, one JSON error body (BOU-586)
+
+Whatever produced it, a JSON error response has one body:
+
+[source,json]
+----
+{"error": {"type":           "not-found",
+           "message":        "User not found",
+           "details":        {"user-id": "…"},
+           "correlation-id": "…"}}
+----
+
+`type` and `message` are always present; `details`, `correlation-id` and the
+dev-only `dev` block are there when the error has them. They go *inside*
+`error` rather than beside it: the workflow 422 and the scaffolded APIs
+already answered `{"error": {…}}` with nothing beside it, so inside is the
+placement that needs no second key, and a client reads one object. `type` is
+§1's `:type` keyword as a string. `wagoe.platform.core.http.errors` builds it;
+the RFC 7807 bodies of `problem-details` and the string `"error"` of the
+401/403 are gone. `bb check:error-shape` fails a literal 4xx/5xx response map
+in another shape, and `wagoe.error-shape-test` sweeps the route table for
+what the static rule cannot see.
+
+=== 5. `cognitect.anomalies` is rejected
 
 Zero usages today. It adds a dependency and a third vocabulary to map onto the
 two the HTTP layer already reads. The neutrality it buys is worth less than the
@@ -250,9 +273,9 @@ proposed:
 * An exception carries no signature. Nothing tells a caller which `:type`
   values a function throws; the `ports.clj` docstring must — and 7 of 27 ports
   files do today. BOU-323 does not fix that; it deserves its own ticket.
-* `:type` means something else in RFC 7807: `problem-details` uses it for the
-  URI string of a problem type. A gate asserting "`:type` is a keyword" must
-  not run against those maps.
+* `:type` meant something else in RFC 7807, where `problem-details` used it
+  for the URI string of a problem type. Since BOU-586 it answers §4's body,
+  and `type` on the wire is the keyword's name.
 
 === Known-wrong documentation this ADR does not fix
 

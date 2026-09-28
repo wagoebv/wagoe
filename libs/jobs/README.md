@@ -734,7 +734,7 @@ clojure -M:test :jobs --focus wagoe.jobs.shell.tenant-context-test
          :body {:message "Job queued for retry"
                 :job job}}
         {:status 404
-         :body {:error "Job not found"}}))))
+         :body {:error {:type "not-found" :message "Job not found"}}}))))
 ```
 
 ### 3. Docker Deployment
