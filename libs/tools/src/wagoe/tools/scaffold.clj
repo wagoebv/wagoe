@@ -237,7 +237,7 @@
 ;; The wagoe-scaffolder a generated project runs. `bb bump` rewrites it and
 ;; `check:versions` gates it as an "injected pin"; it is no longer a pin anyone
 ;; has to remember, which is how it shipped a release behind.
-(def ^:private scaffolder-version "1.0.0-rc-3")
+(def ^:private scaffolder-version "1.0.0-rc-4")
 
 ;; Match libs/scaffolder/deps.edn and the monorepo's own pin.
 (def ^:private rewrite-clj-version "1.2.57")

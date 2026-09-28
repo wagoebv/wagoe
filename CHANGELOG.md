@@ -29,6 +29,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ## [Unreleased]
 
+## [1.0.0-rc-4] — 2026-09-28
+
 ### Breaking
 
 - **One workflow instance per workflow and entity** (BOU-581); a second start returns the first. `migrate up`

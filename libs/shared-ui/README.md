@@ -15,7 +15,7 @@ Pure functions from data to Hiccup. No I/O, no state, no HTTP.
 
 **deps.edn**:
 ```clojure
-{:deps {com.wagoe/wagoe-shared-ui {:mvn/version "1.0.0-rc-3"}}}
+{:deps {com.wagoe/wagoe-shared-ui {:mvn/version "1.0.0-rc-4"}}}
 ```
 
 ## Features
