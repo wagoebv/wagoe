@@ -1,12 +1,18 @@
 (ns wagoe.tenant.shell.tenant-middleware-test
   "Tests for multi-tenant HTTP middleware."
-  (:require [clojure.test :refer [deftest testing is]]
+  (:require [cheshire.core :as json]
+            [clojure.test :refer [deftest testing is]]
             [wagoe.platform.database :as db]
             [wagoe.tenant.shell.tenant-middleware :as tenant-mw]
             [wagoe.platform.ports.database]
             [wagoe.tenant.ports :as tenant-ports]
             [next.jdbc])
   (:import (java.util UUID)))
+
+(defn- error-of
+  "The :error of a refusal, whose body goes out encoded."
+  [response]
+  (:error (json/parse-string (:body response) true)))
 
 ;; =============================================================================
 ;; Test Data
@@ -259,7 +265,8 @@
           response (handler request)]
 
       (is (= 404 (:status response)))
-      (is (= "Tenant not found" (get-in response [:body :error])))))
+      (is (= "not-found" (:type (error-of response))))
+      (is (re-find #"does not exist" (:message (error-of response))))))
 
   (testing "continues without tenant when not required"
     (let [tenant-service (create-mock-tenant-service)
@@ -287,7 +294,7 @@
           response (handler request)]
 
       (is (= 404 (:status response)))
-      (is (= "No tenant identifier in request" (get-in response [:body :message]))))))
+      (is (= "No tenant identifier in request" (:message (error-of response)))))))
 
 (deftest ^:unit wrap-tenant-resolution-caching-test
   (testing "caches tenant lookup"
@@ -367,7 +374,7 @@
               response (handler request)]
 
           (is (= 500 (:status response)))  ; Should return 500 on error
-          (is (= "Internal server error" (get-in response [:body :error]))))))))
+          (is (= "internal-error" (:type (error-of response)))))))))
 
 ;; =============================================================================
 ;; Combined Middleware Tests
@@ -413,7 +420,7 @@
               response (handler request)]
 
           (is (= 404 (:status response)))
-          (is (= "Tenant not found" (get-in response [:body :error])))))))
+          (is (= "not-found" (:type (error-of response))))))))
 
   (testing "combined middleware without tenant (optional)"
     (let [tenant-service (create-mock-tenant-service)

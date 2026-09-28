@@ -232,11 +232,7 @@
                     signing-secret file-key
                     {:expires   (get query-params "expires")
                      :signature (get query-params "signature")})))
-         (problem-details/problem-details->response
-          {:type   "https://api.example.com/problems/forbidden"
-           :title  "Forbidden"
-           :status 403
-           :detail "Missing, invalid or expired signature"})
+         (problem-details/forbidden "Missing, invalid or expired signature")
 
          :else
 

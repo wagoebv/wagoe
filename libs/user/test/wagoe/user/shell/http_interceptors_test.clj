@@ -55,9 +55,9 @@
           "Should set response")
       (is (= 401 (get-in result [:response :status]))
           "Should return 401 Unauthorized")
-      (is (= "unauthorized" (get-in result [:response :body :error]))
+      (is (= "unauthorized" (get-in result [:response :body :error :type]))
           "Should have error type")
-      (is (= "Authentication required" (get-in result [:response :body :message]))
+      (is (= "Authentication required" (get-in result [:response :body :error :message]))
           "Should have error message"))))
 
 (deftest ^:contract require-web-authenticated-test
@@ -144,9 +144,9 @@
           "Should set response")
       (is (= 403 (get-in result [:response :status]))
           "Should return 403 Forbidden")
-      (is (= "forbidden" (get-in result [:response :body :error]))
+      (is (= "forbidden" (get-in result [:response :body :error :type]))
           "Should have error type")
-      (is (= "Admin role required" (get-in result [:response :body :message]))
+      (is (= "Admin role required" (get-in result [:response :body :error :message]))
           "Should have error message")))
 
   (testing "rejects missing user with 403"
@@ -171,14 +171,14 @@
           ctx (create-test-context request)
           result ((:enter http-int/require-platform-admin) ctx)]
       (is (= 403 (get-in result [:response :status])))
-      (is (= "Platform admin required" (get-in result [:response :body :message])))))
+      (is (= "Platform admin required" (get-in result [:response :body :error :message])))))
 
   (testing "rejects regular users"
     (let [request {:session {:user {:id "user-123" :role :user}}}
           ctx (create-test-context request)
           result ((:enter http-int/require-platform-admin) ctx)]
       (is (= 403 (get-in result [:response :status])))
-      (is (= "Platform admin required" (get-in result [:response :body :message]))))))
+      (is (= "Platform admin required" (get-in result [:response :body :error :message]))))))
 
 (deftest ^:contract require-unauthenticated-test
   (testing "allows anonymous requests"
@@ -190,7 +190,7 @@
     (let [ctx (create-test-context {:session {:user {:id "user-123" :role :user}}})
           result ((:enter http-int/require-unauthenticated) ctx)]
       (is (= 403 (get-in result [:response :status])))
-      (is (= "Already authenticated" (get-in result [:response :body :message]))))))
+      (is (= "Already authenticated" (get-in result [:response :body :error :message]))))))
 
 (deftest ^:contract require-role-test
   (testing "supports keyword and string role normalization"
@@ -206,7 +206,7 @@
           result ((:enter manager-check)
                   (create-test-context {:session {:user {:id "user-123" :role :user}}}))]
       (is (= 403 (get-in result [:response :status])))
-      (is (= "Role required: manager" (get-in result [:response :body :message]))))))
+      (is (= "Role required: manager" (get-in result [:response :body :error :message]))))))
 
 (deftest ^:contract require-self-or-admin-test
   (testing "allows users to access their own resource"
@@ -227,7 +227,7 @@
                      :path-params {:id "user-456"})
           result ((:enter http-int/require-self-or-admin) ctx)]
       (is (= 403 (get-in result [:response :status])))
-      (is (= "Access denied" (get-in result [:response :body :message]))))))
+      (is (= "Access denied" (get-in result [:response :body :error :message]))))))
 
 ;; =============================================================================
 ;; Audit Logging Interceptor Tests
@@ -385,11 +385,11 @@
       (let [ctx (create-test-context {:uri "/api/tenants/t1/settings"})
             result ((:enter http-int/require-web-tenant-admin) ctx)]
         (is (= 403 (get-in result [:response :status])))
-        (is (= "forbidden" (get-in result [:response :body :error])))))
+        (is (= "forbidden" (get-in result [:response :body :error :type])))))
 
     (testing "returns 403 JSON for non-web routes with insufficient role"
       (let [ctx (create-test-context {:uri "/api/tenants/t1/settings"
                                       :tenant-membership active-member-membership})
             result ((:enter http-int/require-web-tenant-admin) ctx)]
         (is (= 403 (get-in result [:response :status])))
-        (is (= "forbidden" (get-in result [:response :body :error])))))))
+        (is (= "forbidden" (get-in result [:response :body :error :type])))))))

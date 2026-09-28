@@ -653,9 +653,9 @@
         ;; Unknown keys are dropped, so a camelCase body is missing its
         ;; fields, and `details` was empty.
         (is (contains? (get-in (call :post "/invoices" {:number "A-3" :totalAmount 1})
-                               [:body :details :errors])
+                               [:body :error :details :errors])
                        :total))
-        (is (seq (get-in (call :put (str "/invoices/" id) {:Number "x"}) [:body :details]))))
+        (is (seq (get-in (call :put (str "/invoices/" id) {:Number "x"}) [:body :error :details]))))
       (testing "an unknown id is a 404"
         (is (= 404 (:status (call :get (str "/invoices/" (java.util.UUID/randomUUID)) nil))))
         (is (= 404 (:status (call :put (str "/invoices/" (java.util.UUID/randomUUID)) {:number "x"}))))))))
@@ -787,8 +787,13 @@
             ;; The handler answered {:error {:type ..}}, the platform's mapper
             ;; {:error "validation-error" :message ..}: two shapes on one endpoint.
             (is (= 400 (:status bad)))
-            (is (= "validation-error" (:error (:body fk)) (:error (:body bad))) (pr-str (:body bad)))
-            (is (= (set (keys (:body fk))) (set (keys (:body bad)))))))))))
+            (is (= "validation-error"
+                   (get-in fk [:body :error :type])
+                   (get-in bad [:body :error :type]))
+                (pr-str (:body bad)))
+            ;; `details` is there when the error has some; the rest is the shape.
+            (is (= (disj (set (keys (:error (:body fk)))) :details)
+                   (disj (set (keys (:error (:body bad)))) :details)))))))))
 
 ;; =============================================================================
 ;; A generated API requires a signed-in user (BOU-539 review)
@@ -808,7 +813,7 @@
         (testing (str label " " method " " p)
           (let [resp ((http-caller routes :user nil) method p {:number "x"})]
             (is (= 401 (:status resp)) (pr-str resp))
-            (is (= "unauthorized" (:error (:body resp))))))))))
+            (is (= "unauthorized" (get-in resp [:body :error :type])))))))))
 
 (deftest ^:integration public-api-generates-open-routes
   (let [dir (temp-dir)

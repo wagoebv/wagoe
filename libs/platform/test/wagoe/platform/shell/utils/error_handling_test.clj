@@ -95,15 +95,15 @@
           response (wrapped request)]
 
       (is (= 500 (:status response)))
-      (is (= "application/problem+json" (get-in response [:headers "Content-Type"])))
+      (is (= "application/json" (get-in response [:headers "Content-Type"])))
 
       (let [body (json/parse-string (:body response) keyword)]
         ;; Untyped (500) errors must not leak the raw exception message.
-        (is (= "Internal Server Error" (:title body)))
-        (is (= "Internal Server Error" (:detail body)))
-        (is (not= "Test error" (:title body)))
-        (is (contains? (:errorContext body) :user-id))
-        (is (= (str user-id) (get-in body [:errorContext :user-id]))))))
+        (is (= "internal-error" (get-in body [:error :type])))
+        (is (= "Internal Server Error" (get-in body [:error :message])))
+        (is (not (re-find #"Test error" (:body response))))
+        ;; Request context goes to the log, not the client (BOU-586).
+        (is (not (re-find (re-pattern (str user-id)) (:body response)))))))
 
   (testing "passes through successful responses unchanged"
     (let [success-response {:status 201 :body {:id 123} :headers {"Location" "/api/users/123"}}
@@ -125,7 +125,8 @@
       (is (= 400 (:status response)))
 
       (let [body (json/parse-string (:body response) keyword)]
-        (is (= "Validation Error" (:title body))))))
+        (is (= "validation-error" (get-in body [:error :type])))
+        (is (= "Invalid email" (get-in body [:error :message]))))))
 
   (testing "includes correlation-id in response headers"
     (let [correlation-id "test-correlation-123"
@@ -150,10 +151,8 @@
       (is (= 500 (:status response)))
 
       (let [body (json/parse-string (:body response) keyword)]
-        (is (= "Internal Server Error" (:title body)))
-        (is (= "Internal Server Error" (:detail body)))
-        (is (contains? (:errorContext body) :user-id))
-        (is (contains? (:errorContext body) :timestamp))))))
+        (is (= {:type "internal-error" :message "Internal Server Error"}
+               (dissoc (:error body) :correlation-id)))))))
 
 ;; =============================================================================
 ;; CLI Error Context Tests
@@ -250,11 +249,11 @@
           response (wrapped request)]
 
       (is (= 500 (:status response)))
-      (is (= "application/problem+json" (get-in response [:headers "Content-Type"])))
+      (is (= "application/json" (get-in response [:headers "Content-Type"])))
 
       (let [body (json/parse-string (:body response) keyword)]
-        (is (= "Internal Server Error" (:title body)))
-        (is (= "Internal Server Error" (:detail body)))
-        (is (= (str user-id) (get-in body [:errorContext :user-id])))
-        (is (= (str tenant-id) (get-in body [:errorContext :tenant-id])))
-        (is (contains? (:errorContext body) :timestamp))))))
+        (is (= {:type "internal-error" :message "Internal Server Error"}
+               (dissoc (:error body) :correlation-id)))
+        ;; The context is logged, never sent (BOU-586).
+        (is (not (re-find (re-pattern (str user-id "|" tenant-id "|email"))
+                          (:body response))))))))

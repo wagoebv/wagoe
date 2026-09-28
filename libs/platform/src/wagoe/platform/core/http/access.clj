@@ -4,9 +4,11 @@
    Every route requires a signed-in user unless its route data carries
    `:public true` (BOU-568). A refusal has the shape the user module's
    `require-authenticated` interceptor answers with, so a client sees one 401
-   whichever layer refused it. No Content-Type: muuntaja encodes a map body
+   whichever layer refused it: the one error body of
+   `wagoe.platform.core.http.errors` (BOU-586). No Content-Type: muuntaja encodes a map body
    only when none is set (ZZP-120)."
-  (:require [clojure.string :as str]))
+  (:require [clojure.string :as str]
+            [wagoe.platform.core.http.errors :as errors]))
 
 (defn public?
   "Whether Reitit endpoint data opts out of authentication."
@@ -28,11 +30,7 @@
    :body    ""})
 
 (defn- error-response [status error message correlation-id]
-  {:status  status
-   :headers {"X-Correlation-ID" correlation-id}
-   :body    {:error          error
-             :message        message
-             :correlation-id correlation-id}})
+  (errors/response status error message {:correlation-id correlation-id}))
 
 (defn unauthorized-response
   "401 for an API caller; a web page sends the browser to the login form,

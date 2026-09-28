@@ -86,7 +86,7 @@
     (testing "409 when the user already has a membership, saying so"
       (let [response (invite (str tenant-id-1) {:userId (str user-id-1) :role "member"})]
         (is (= 409 (:status response)))
-        (is (re-find #"already exists" (:error (parse-body response))))))))
+        (is (re-find #"already exists" (get-in (parse-body response) [:error :message])))))))
 
 ;; =============================================================================
 ;; list-members-handler
@@ -137,7 +137,7 @@
       (ports/revoke-member *service* *invited-id*)
       (let [response (put *invited-id* {:status "suspended"})]
         (is (= 400 (:status response)))
-        (is (re-find #"revoked" (:error (parse-body response))))))
+        (is (re-find #"revoked" (get-in (parse-body response) [:error :message])))))
     (testing "400 for invalid role"
       (is (= 400 (:status (put *active-id* {:role "owner"})))))
     (testing "404 for non-existent membership"
@@ -170,7 +170,7 @@
     (testing "400 when membership is not in :invited status"
       (let [response (accept (as-invitee (make-request :post {:id (str *invited-id*)})))]
         (is (= 400 (:status response)))
-        (is (re-find #"invited" (:error (parse-body response))))))
+        (is (re-find #"invited" (get-in (parse-body response) [:error :message])))))
     (testing "404 for non-existent membership"
       (is (= 404 (:status (accept (make-request :post {:id (str (UUID/randomUUID))}))))))
     (testing "400 for invalid UUID"

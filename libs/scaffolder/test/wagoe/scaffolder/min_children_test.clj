@@ -59,7 +59,7 @@
         (testing "without line items the create is a 400 that names them, and writes nothing"
           (let [resp (call :post "/invoices" {:number "A-1"})]
             (is (= 400 (:status resp)) (pr-str resp))
-            (is (contains? (get-in resp [:body :details :errors]) :invoice-line-items) (pr-str resp)))
+            (is (contains? (get-in resp [:body :error :details :errors]) :invoice-line-items) (pr-str resp)))
           (is (= 400 (:status (call :post "/invoices" {:number "A-1" :invoice-line-items []}))))
           (is (= 0 (count-rows db "invoices"))))
 

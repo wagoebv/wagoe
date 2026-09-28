@@ -36,6 +36,7 @@
    All observability is handled automatically by interceptors."
   (:require [wagoe.core.interceptor :as interceptor]
             [wagoe.core.interceptor-context :as interceptor-context]
+            [wagoe.platform.core.http.errors :as errors]
             [wagoe.user.shell.http-interceptors]
             [wagoe.user.shell.interceptors :as user-interceptors]
             [wagoe.user.shell.middleware :as user-middleware]
@@ -48,7 +49,7 @@
 ;; =============================================================================
 
 (def user-error-mappings
-  "User module specific error type mappings for RFC 7807 problem details."
+  "User module specific error type -> HTTP status mappings."
   {:user-exists               [409 "User Already Exists"]
    :user-not-found            [404 "User Not Found"]
    :session-not-found         [404 "Session Not Found"]
@@ -261,10 +262,8 @@
                  :accountName (:account-name result)})}
         {:status 400
          :headers {"Content-Type" "application/json"}
-         ;; The message, not the map. mfa moved to the ADR-036 §3 return
-         ;; ({:error {:type … :message …}}); flattening here keeps this
-         ;; endpoint answering exactly what it answered before (BOU-323).
-         :body (json/generate-string {:error (get-in result [:error :message])})}))))
+         :body (json/generate-string (errors/body (get-in result [:error :type])
+                                                  (get-in result [:error :message])))}))))
 
 (defn mfa-enable-handler
   "POST /api/auth/mfa/enable - Enable MFA after verification."
@@ -284,10 +283,8 @@
          :body (json/generate-string {:message "MFA enabled successfully"})}
         {:status 400
          :headers {"Content-Type" "application/json"}
-         ;; The message, not the map. mfa moved to the ADR-036 §3 return
-         ;; ({:error {:type … :message …}}); flattening here keeps this
-         ;; endpoint answering exactly what it answered before (BOU-323).
-         :body (json/generate-string {:error (get-in result [:error :message])})}))))
+         :body (json/generate-string (errors/body (get-in result [:error :type])
+                                                  (get-in result [:error :message])))}))))
 
 (defn mfa-disable-handler
   "POST /api/auth/mfa/disable - Disable MFA for authenticated user."
@@ -303,10 +300,8 @@
          :body (json/generate-string {:message "MFA disabled successfully"})}
         {:status 400
          :headers {"Content-Type" "application/json"}
-         ;; The message, not the map. mfa moved to the ADR-036 §3 return
-         ;; ({:error {:type … :message …}}); flattening here keeps this
-         ;; endpoint answering exactly what it answered before (BOU-323).
-         :body (json/generate-string {:error (get-in result [:error :message])})}))))
+         :body (json/generate-string (errors/body (get-in result [:error :type])
+                                                  (get-in result [:error :message])))}))))
 
 (defn mfa-status-handler
   "GET /api/auth/mfa/status - Get MFA status for authenticated user."

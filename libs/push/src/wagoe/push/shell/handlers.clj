@@ -4,17 +4,31 @@
             [wagoe.push.shell.service :as service]
             [wagoe.push.core.analytics :as analytics]
             [malli.core :as m]
+            [malli.error :as me]
             [ring.util.response :as resp]))
 
 (def ^:private device-info-explainer (m/explainer schema/DeviceInfo))
 (def ^:private callback-payload-explainer (m/explainer schema/CallbackPayload))
+
+(defn- error-response
+  "The framework's one error body (BOU-586), written out: push does not
+   depend on platform."
+  [status type message & [details]]
+  {:status  status
+   :headers {}
+   :body    {:error (cond-> {:type type :message message}
+                      (seq details) (assoc :details details))}})
+
+(defn- invalid-body [explanation]
+  (error-response 400 "validation-error" "Request validation failed"
+                  (me/humanize explanation)))
 
 (defn register-device-handler
   [{:keys [device-store]} request]
   (let [user-id (get-in request [:user :id])
         body    (:body-params request)]
     (if-not (schema/valid-device-info? body)
-      (resp/bad-request {:errors (device-info-explainer body)})
+      (invalid-body (device-info-explainer body))
       (let [device (ports/register-device! device-store user-id body)]
         (-> (resp/created (str "/api/push/devices/" (:id device)) device)
             (resp/content-type "application/json"))))))
@@ -37,14 +51,13 @@
   (let [body (:body-params request)]
     (cond
       (not (schema/valid-callback? body))
-      (resp/bad-request {:errors (callback-payload-explainer body)})
+      (invalid-body (callback-payload-explainer body))
 
       (not (service/verify-callback-token
             callback-secret
             (:provider-message-id body)
             (:callback-token body)))
-      (-> (resp/response {:error "Invalid callback token"})
-          (resp/status 403))
+      (error-response 403 "forbidden" "Invalid callback token")
 
       :else
       (do

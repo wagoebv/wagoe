@@ -362,13 +362,13 @@
           context (pd/request->context* request {:timestamp (Instant/parse "2026-04-10T12:00:00Z")})
           exception (create-test-exception :message "Correlated error")
 
-          problem-response (pd/exception->problem-response exception :context context)
+          problem-response (pd/exception->problem-response exception correlation-id "/api/test" {} context)
           event-id (error-reporting/report-enhanced-application-error
                     mock-service exception "Correlated error" {} context)]
 
       ;; Verify the problem response structure  
       (is (= 500 (:status problem-response)))
-      (is (= "application/problem+json" (get-in problem-response [:headers "Content-Type"])))
+      (is (= "application/json" (get-in problem-response [:headers "Content-Type"])))
 
       ;; Parse the response body and check correlation information
       (let [error-data (first (get-reported-errors mock-service))
@@ -379,12 +379,11 @@
         (is (= correlation-id (get-in error-data [:context :trace-id])))
         (is (= request-id (get-in error-data [:context :request-id])))
 
-        ;; Check problem details response has correlation in the instance field.
-        ;; The untyped exception yields a 5xx whose detail is now generic to avoid
-        ;; leaking the raw message (BOU-161); correlation must still be present.
-        (is (= correlation-id (get-in response-body ["instance" "trace-id"])))
-        (is (= "user-456" (get-in response-body ["instance" "user-id"])))
-        (is (= "Internal Server Error" (get response-body "detail"))))))
+        ;; The client gets the correlation id and a generic message; the raw
+        ;; message (BOU-161) and the request context (BOU-586) stay server-side.
+        (is (= correlation-id (get-in response-body ["error" "correlation-id"])))
+        (is (not (re-find #"user-456" (:body problem-response))))
+        (is (= "Internal Server Error" (get-in response-body ["error" "message"]))))))
 
   (testing "maintains correlation across service boundaries"
     (let [mock-service (create-mock-error-service)

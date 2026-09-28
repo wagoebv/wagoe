@@ -28,7 +28,7 @@
    It used to be wrapped in `interfaces.http.middleware` first, under a helper
    whose docstring said that simulated production. No application ran that
    middleware — and it was not doing anything here either: these handlers run an
-   interceptor pipeline and return the RFC 7807 body themselves, which is what
+   interceptor pipeline and return the error body themselves, which is what
    the assertions below have always been reading (BOU-372)."
   [handler-fn request _error-mappings]
   (handler-fn request))
@@ -255,16 +255,13 @@
           response (-> (call-handler handler request user-http/user-error-mappings)
                        parse-json-response)]
 
-      ;; Assert RFC 7807 Problem Details fields
+      ;; The one error shape (BOU-586)
       (is (= 404 (:status response)))
-      (is (= "User Not Found" (get-in response [:body :title])))
-      (is (contains? (:body response) :type))
-      (is (contains? (:body response) :detail))
-      (is (contains? (:body response) :instance))
-      (is (contains? (:body response) :correlationId))
-      (is (string? (get-in response [:body :correlationId])))
-      ;; Extension member from ex-data
-      (is (= (str non-existent-id) (get-in response [:body :user-id]))))))
+      (is (= "user-not-found" (get-in response [:body :error :type])))
+      (is (string? (get-in response [:body :error :message])))
+      (is (string? (get-in response [:body :error :correlation-id])))
+      ;; ex-data lands in details
+      (is (= (str non-existent-id) (get-in response [:body :error :details :user-id]))))))
 
 (deftest ^:contract test-list-users-handler
   (testing "GET /users - List users with pagination"
@@ -346,15 +343,13 @@
           response (-> (call-handler handler request user-http/user-error-mappings)
                        parse-json-response)]
 
-      ;; Assert RFC 7807 Problem Details fields
+      ;; The one error shape (BOU-586)
       (is (= 404 (:status response)))
-      (is (= "User Not Found" (get-in response [:body :title])))
-      (is (contains? (:body response) :type))
-      (is (contains? (:body response) :detail))
-      (is (contains? (:body response) :instance))
-      (is (contains? (:body response) :correlationId))
-      ;; Extension member from ex-data
-      (is (= (str non-existent-id) (get-in response [:body :user-id]))))))
+      (is (= "user-not-found" (get-in response [:body :error :type])))
+      (is (string? (get-in response [:body :error :message])))
+      (is (string? (get-in response [:body :error :correlation-id])))
+      ;; ex-data lands in details
+      (is (= (str non-existent-id) (get-in response [:body :error :details :user-id]))))))
 
 (deftest ^:contract test-delete-user-handler
   (testing "DELETE /users/:id - Soft delete user successfully"
@@ -423,16 +418,14 @@
           response (-> (call-handler handler request user-http/user-error-mappings)
                        parse-json-response)]
 
-      ;; Assert RFC 7807 Problem Details fields
+      ;; The one error shape (BOU-586)
       (is (= 404 (:status response)))
-      (is (= "Session Not Found" (get-in response [:body :title])))
-      (is (contains? (:body response) :type))
-      (is (contains? (:body response) :detail))
-      (is (contains? (:body response) :instance))
-      (is (contains? (:body response) :correlationId))
-      ;; Extension members from ex-data
-      (is (false? (get-in response [:body :valid])))
-      (is (= invalid-token (get-in response [:body :token]))))))
+      (is (= "session-not-found" (get-in response [:body :error :type])))
+      (is (string? (get-in response [:body :error :message])))
+      (is (string? (get-in response [:body :error :correlation-id])))
+      (is (false? (get-in response [:body :error :details :valid])))
+      ;; The token is not echoed back in an error body.
+      (is (not (re-find (re-pattern invalid-token) (pr-str (:body response))))))))
 
 (deftest ^:contract test-invalidate-session-handler
   (testing "DELETE /sessions/:token - Invalidate session successfully"
@@ -456,12 +449,10 @@
 ;; MFA endpoints — the wire shape across the ADR-036 migration (BOU-323)
 ;; =============================================================================
 
-(deftest ^:unit mfa-endpoints-answer-with-an-error-string
-  ;; The MFA shell moved to {:error {:type … :message …}} and these handlers
-  ;; flatten it, so the endpoints answer exactly what they answered before.
-  ;; Nothing tested that: reverting the flattening left the whole suite green
-  ;; while the endpoints started returning a JSON object where clients expect a
-  ;; string.
+(deftest ^:unit mfa-endpoints-answer-in-the-one-error-shape
+  ;; The MFA shell returns {:error {:type … :message …}}; the endpoints answer
+  ;; it as the framework's one error body, with the type as a string
+  ;; (BOU-586). They used to flatten it to a bare message string.
   (let [user-id (UUID/randomUUID)
         request {:user {:id user-id}
                  :body-params {:secret "S" :backupCodes ["a"] :verificationCode "000000"}}
@@ -473,20 +464,22 @@
       (with-redefs [mfa/setup-mfa (fn [_ _] failure)]
         (let [resp ((user-http/mfa-setup-handler nil) request)]
           (is (= 400 (:status resp)))
-          (is (= "Invalid verification code" (:error (body-of resp)))
-              "a string, not the :error map"))))
+          (is (= {:type "invalid-code" :message "Invalid verification code"}
+                 (:error (body-of resp)))))))
 
     (testing "enable"
       (with-redefs [mfa/enable-mfa (fn [_ _ _ _ _] failure)]
         (let [resp ((user-http/mfa-enable-handler nil) request)]
           (is (= 400 (:status resp)))
-          (is (= "Invalid verification code" (:error (body-of resp)))))))
+          (is (= {:type "invalid-code" :message "Invalid verification code"}
+                 (:error (body-of resp)))))))
 
     (testing "disable"
       (with-redefs [mfa/disable-mfa (fn [_ _] failure)]
         (let [resp ((user-http/mfa-disable-handler nil) request)]
           (is (= 400 (:status resp)))
-          (is (= "Invalid verification code" (:error (body-of resp)))))))))
+          (is (= {:type "invalid-code" :message "Invalid verification code"}
+                 (:error (body-of resp)))))))))
 
 (deftest ^:contract create-user-rejects-a-policy-password-with-400
   ;; The service threw :password-policy-violation, which no mapping knew, so a
@@ -502,8 +495,8 @@
                                        :password "alice-Secret-123"
                                        :role "user"}}})]
     (is (= 400 (:status response)))
-    (is (= "validation-error" (get-in response [:body :type])))
+    (is (= "validation-error" (get-in response [:body :error :type])))
     (is (= [{:field :password
              :code :contains-email
              :message "Password cannot contain your email address"}]
-           (get-in response [:body :field-errors])))))
+           (get-in response [:body :error :details :field-errors])))))

@@ -18,6 +18,7 @@
    Every route requires authentication and answers 401 without it."
   (:require [wagoe.i18n.shell.middleware :as i18n-middleware]
             [wagoe.i18n.shell.render :as i18n]
+            [wagoe.platform.core.http.errors :as errors]
             [wagoe.workflow.ports :as ports]
             [wagoe.workflow.core.ui :as workflow-ui]
             [wagoe.user.shell.middleware :as user-middleware]
@@ -170,7 +171,8 @@
          :body   {:instance    (instance->response (:instance result) nil)
                   :audit-entry (audit-entry->response (:audit-entry result))}}
         {:status 422
-         :body   {:error (:error result)}}))))
+         :body   (errors/body (get-in result [:error :type])
+                              (get-in result [:error :message]))}))))
 
 ;; =============================================================================
 ;; Route definitions

@@ -20,7 +20,7 @@
   (:import [java.util UUID]))
 
 ;; =============================================================================
-;; Error Mappings - Admin-Specific RFC 7807 Problem Details
+;; Error Mappings - admin-specific :type -> status
 ;; =============================================================================
 
 (def admin-error-mappings

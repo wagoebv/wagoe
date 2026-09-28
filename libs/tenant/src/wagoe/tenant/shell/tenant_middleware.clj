@@ -12,10 +12,21 @@
    - Error handling for missing/invalid tenants
    
    Based on: docs/adr/ADR-004-multi-tenancy-architecture.md"
-  (:require [clojure.string :as str]
+  (:require [cheshire.core :as json]
+            [clojure.string :as str]
             [clojure.tools.logging :as log]
+            [wagoe.platform.core.http.errors :as errors]
             [wagoe.tenant.ports :as tenant-ports]
             [wagoe.platform.database :as db]))
+
+(defn- error-response
+  "The one error body, encoded here: this middleware may sit outside content
+   negotiation."
+  [status type message request]
+  {:status  status
+   :headers {"Content-Type" "application/json"}
+   :body    (json/generate-string
+             (errors/body type message {:correlation-id (:correlation-id request)}))})
 
 ;; =============================================================================
 ;; Tenant Extraction
@@ -262,11 +273,7 @@
        (if-not identifier
          ;; No tenant identifier found
          (if require-tenant?
-           {:status 404
-            :headers {"Content-Type" "application/json"}
-            :body {:error "Tenant not found"
-                   :message "No tenant identifier in request"
-                   :correlation-id (:correlation-id request)}}
+           (error-response 404 :not-found "No tenant identifier in request" request)
            ;; Tenant optional - continue without tenant
            (handler request))
 
@@ -283,11 +290,9 @@
                           :uri (:uri request)
                           :method (:request-method request)})
                (if require-tenant?
-                 {:status 404
-                  :headers {"Content-Type" "application/json"}
-                  :body {:error "Tenant not found"
-                         :message (str "Tenant '" (:value identifier) "' does not exist")
-                         :correlation-id (:correlation-id request)}}
+                 (error-response 404 :not-found
+                                 (str "Tenant '" (:value identifier) "' does not exist")
+                                 request)
                  ;; Tenant optional - continue without tenant
                  (handler request)))
 
@@ -358,11 +363,7 @@
                         :schema-name schema-name
                         :error (.getMessage e)
                         :uri (:uri request)})
-            {:status 500
-             :headers {"Content-Type" "application/json"}
-             :body {:error "Internal server error"
-                    :message "Failed to execute request"
-                    :correlation-id (:correlation-id request)}})))
+            (error-response 500 :internal-error "Failed to execute request" request))))
 
       ;; No tenant - continue without schema switching
       (handler request))))

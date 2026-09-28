@@ -26,6 +26,9 @@
 ;;     Those are reviewed, not gated, and pretending otherwise would be the
 ;;     kind of gate that reports green over what it cannot see.
 ;;
+;; BOU-586 added a third rule: a literal 4xx/5xx response map's body is the
+;; one JSON error shape, `{:error {:type … :message …}}`.
+;;
 ;; Escape hatch: `.wagoe/check-error-shape.edn`, one justification and one count
 ;; per entry. It shipped with 81 findings and BOU-323 walked it to empty; an
 ;; entry that stops exempting anything fails the build, so it cannot quietly
@@ -236,6 +239,58 @@
      finding)))
 
 ;; =============================================================================
+;; Rule 3 — an HTTP error body is {:error {:type … :message …}}  (BOU-586)
+;; =============================================================================
+
+(defn- error-status?
+  "A literal 4xx or 5xx status."
+  [v]
+  (boolean (and v (re-matches #"[45]\d\d" v))))
+
+(defn response-body-findings
+  "Every response-map literal — a literal 4xx/5xx `:status` beside a literal
+   map `:body` — whose body is not the one error shape: `:error` must be a map
+   literal carrying `:type` and `:message`.
+
+   A computed body, `(errors/body …)`, is not judged, and neither is a string:
+   one pre-encoded is read by the route sweep in `wagoe.error-shape-test`,
+   which sees what reaches the wire. This rule is the cheap half — it names
+   the file and line before anything boots."
+  ([text path] (response-body-findings text path (iso/code-only text)))
+  ([text path code]
+   (for [i     (map-literals code)
+         :let  [form (balanced-form code i)]
+         :when form
+         :let  [raw   (subs text i (+ i (count form)))
+                keys* (top-level-keys form)]
+         :when (error-status? (value-at form raw ":status"))
+         :let  [[a b] (get keys* ":body")]
+         :when (and a (= \{ (nth form a)))
+         :let  [bform (subs form a b)
+                braw  (subs raw a b)
+                bkeys (top-level-keys bform)
+                err   (value-at bform braw ":error")
+                line  (line-of text i)
+                finding
+                (cond
+                  (not (contains? bkeys ":error"))
+                  {:rule :body-without-error :file path :line line}
+
+                  (str/starts-with? err "{")
+                  (let [[ea eb] (get bkeys ":error")
+                        ekeys   (top-level-keys (subs bform ea eb))]
+                    (when-not (and (contains? ekeys ":type") (contains? ekeys ":message"))
+                      {:rule :body-error-incomplete :file path :line line}))
+
+                  (or (str/starts-with? err "\"") (str/starts-with? err ":"))
+                  {:rule :body-error-not-a-map :file path :line line}
+
+                  ;; Computed: `(:error result)`, `(name t)`. Not guessed.
+                  :else nil)]
+         :when finding]
+     finding)))
+
+;; =============================================================================
 ;; Scan
 ;; =============================================================================
 
@@ -278,7 +333,8 @@
                  ;; two thirds of this gate's runtime.
                  code (iso/code-only text)]
           fnd   (concat (when (shell-file? path) (untyped-throw-findings text path code))
-                        (failure-map-findings text path code))]
+                        (failure-map-findings text path code)
+                        (response-body-findings text path code))]
       fnd)))
 
 ;; =============================================================================
@@ -358,7 +414,10 @@
   {:untyped-throw "thrown ex-info with no :type in its data map (ADR-022)"
    :no-error      "{:success? false} with no :error (ADR-036 §3)"
    :string-error  "{:success? false} whose :error is a string, not a map"
-   :string-type   "{:success? false} whose :error :type is a string, not a keyword"})
+   :string-type   "{:success? false} whose :error :type is a string, not a keyword"
+   :body-without-error    "error response whose body has no :error (BOU-586)"
+   :body-error-not-a-map  "error response whose :error is a string, not {:type :message}"
+   :body-error-incomplete "error response whose :error lacks :type or :message"})
 
 (defn -main [& _]
   (println "Verifying errors carry the shape ADR-022 and ADR-036 decided")

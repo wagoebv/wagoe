@@ -6,6 +6,7 @@
   (:require [wagoe.observability.logging.ports :as logging]
             [wagoe.observability.metrics.ports :as metrics]
             [wagoe.observability.errors.ports :as error-reporting]
+            [wagoe.platform.core.http.errors :as errors]
             [clojure.string :as str])
   (:import [java.util UUID]
            [java.time Instant]))
@@ -125,6 +126,11 @@
                 :context-keys (keys (dissoc ctx :system :exception))}))
             ctx)})
 
+(defn- json-safe
+  "ex-data fit for a JSON body: UUIDs as strings."
+  [m]
+  (reduce-kv (fn [acc k v] (assoc acc k (if (instance? UUID v) (str v) v))) {} m))
+
 (def error-normalize
   "Generic error normalization interceptor that works with context error mappings.
    This runs in the :error phase when actual exceptions are thrown during pipeline execution."
@@ -132,27 +138,15 @@
    :error (fn [{:keys [correlation-id exception] :as ctx}]
             (let [error-data (ex-data exception)
                   error-type (or (:type error-data) :internal-server-error) ; Default if no type
-                  error-message (ex-message exception)
                   error-mappings (or (:error-mappings ctx) {}) ; Default empty mappings
-                  ;; Look up the error mapping for this error type
-                  [status-code title] (get error-mappings error-type [500 "Internal Server Error"])
-                  ;; Create generic error response using mappings
-                  base-body {:type (name error-type)
-                             :title title
-                             :status status-code
-                             :detail error-message
-                             :correlation-id correlation-id ; Use kebab-case to match test
-                             :timestamp (.toString (java.time.Instant/now))}
-                  ;; Add all extension fields from error-data except :type and :message
-                  ;; Convert UUID values to strings for JSON serialization
-                  extension-fields (reduce-kv (fn [acc k v]
-                                                (if (instance? java.util.UUID v)
-                                                  (assoc acc k (str v))
-                                                  (assoc acc k v)))
-                                              {}
-                                              (dissoc error-data :type :message))
-                  full-body (merge base-body extension-fields)]
-              (assoc ctx :response {:status status-code :body full-body})))})
+                  [status-code _title] (get error-mappings error-type [500 "Internal Server Error"])]
+              (assoc ctx :response
+                     {:status status-code
+                      :body   (errors/body error-type
+                                           (ex-message exception)
+                                           {:details        (json-safe (dissoc error-data :type :message))
+                                            :correlation-id correlation-id})})))})
+
 (defn convert-exception-to-response
   "Converts an exception in the context into an appropriate HTTP error response.
    Uses error mappings from the context to map domain-specific error types to HTTP responses."
@@ -164,7 +158,13 @@
         correlation-id (:correlation-id ctx)
         error-mappings (:error-mappings ctx)
         ;; Look up the error mapping for this error type
-        [status-code title] (get error-mappings error-type [500 "Internal Server Error"])]
+        [status-code _title] (get error-mappings error-type [500 "Internal Server Error"])
+        respond (fn [status type message details]
+                  (assoc ctx :response
+                         {:status status
+                          :body   (errors/body type message
+                                               {:details        details
+                                                :correlation-id correlation-id})}))]
 
     (cond
       ;; Handle validation errors with enhanced field extraction
@@ -192,78 +192,34 @@
                                errors)
             ;; Try to get provided fields from the original data in error context
             provided-fields (when-let [original-data (:original-data error-data)]
-                              (vec (keys original-data)))
-
-            response {:status 400
-                      :body {:type (name error-type)
-                             :title "Validation Error"
-                             :status 400
-                             :detail error-message
-                             :correlationId correlation-id
-                             :missing-fields missing-fields
-                             :field-errors field-errors
-                             :provided-fields (or provided-fields [])
-                             :interface-type (:interface-type error-data :cli)
-                             :validation-details errors ; Include original error details
-                             :timestamp (.toString (java.time.Instant/now))}}]
-        (assoc ctx :response response))
+                              (vec (keys original-data)))]
+        (respond 400 error-type error-message
+                 {:missing-fields     missing-fields
+                  :field-errors       field-errors
+                  :provided-fields    (or provided-fields [])
+                  :interface-type     (:interface-type error-data :cli)
+                  :validation-details errors}))
 
       ;; Handle user-related errors
       (= error-type :user-not-found)
-      (let [response {:status status-code
-                      :body {:type (name error-type)
-                             :title title
-                             :status status-code
-                             :detail error-message
-                             :instance (str "/users/" (:user-id error-data))
-                             :correlationId correlation-id
-                             :user-id (str (:user-id error-data))
-                             :timestamp (.toString (java.time.Instant/now))}}]
-        (assoc ctx :response response))
+      (respond status-code error-type error-message
+               {:user-id (str (:user-id error-data))})
 
       ;; Handle session-related errors
       (= error-type :session-not-found)
-      (let [response {:status status-code
-                      :body {:type (name error-type)
-                             :title title
-                             :status status-code
-                             :detail error-message
-                             :instance (str "/sessions/" (:token error-data))
-                             :correlationId correlation-id
-                             :token (str (:token error-data))
-                             :valid (:valid error-data)
-                             :timestamp (.toString (java.time.Instant/now))}}]
-        (assoc ctx :response response))
+      (respond status-code error-type error-message
+               {:valid (:valid error-data)})
 
       ;; Handle other domain errors with extension fields from error-data
       error-type
-      (let [base-body {:type (name error-type)
-                       :title title
-                       :status status-code
-                       :detail error-message
-                       :correlationId correlation-id
-                       :timestamp (.toString (java.time.Instant/now))}
-            ;; Add all extension fields from error-data except :type and :message
-            ;; Convert UUID values to strings for JSON serialization
-            extension-fields (reduce-kv (fn [acc k v]
-                                          (if (instance? java.util.UUID v)
-                                            (assoc acc k (str v))
-                                            (assoc acc k v)))
-                                        {}
-                                        (dissoc error-data :type :message))
-            full-body (merge base-body extension-fields)]
-        (assoc ctx :response {:status status-code :body full-body}))
+      (respond status-code error-type error-message
+               (json-safe (dissoc error-data :type :message)))
 
       ;; Default case for unhandled error types
       :else
-      (let [response {:status 500
-                      :body {:type "internal-server-error"
-                             :title "Internal Server Error"
-                             :status 500
-                             :detail "An unexpected error occurred while processing your request"
-                             :correlationId correlation-id
-                             :timestamp (.toString (java.time.Instant/now))}}]
-        (assoc ctx :response response)))))
+      (respond 500 :internal-error
+               "An unexpected error occurred while processing your request"
+               nil))))
 
 (def error-response-converter
   "Converts failed contexts (halted with exceptions) into proper HTTP error responses.
@@ -358,23 +314,14 @@
 
                   :error
                   (assoc ctx :response
-                         {:status 400
-                          :body {:type "domain-error"
-                                 :title "Business Rule Violation"
-                                 :status 400
-                                 :errors (:errors result)
-                                 :correlation-id (:correlation-id ctx)
-                                 :timestamp (.toString (:now ctx))}
-                          :headers {"X-Correlation-ID" (:correlation-id ctx)}})
+                         (errors/response 400 :business-rule-violation "Business Rule Violation"
+                                          {:details        {:errors (:errors result)}
+                                           :correlation-id (:correlation-id ctx)}))
 
                   ;; Default case
                   (assoc ctx :response
-                         {:status 500
-                          :body {:type "unknown-result-status"
-                                 :title "Unknown Result Status"
-                                 :status 500
-                                 :correlation-id (:correlation-id ctx)}
-                          :headers {"X-Correlation-ID" (:correlation-id ctx)}})))))})
+                         (errors/response 500 :internal-error "Unknown Result Status"
+                                          {:correlation-id (:correlation-id ctx)}))))))})
 
 (def response-shape-cli
   "Shapes results into CLI response format with exit codes.
@@ -395,11 +342,12 @@
                       exit-code (if (>= status 400) 1 0)]
                   (if (>= status 400)
                     ;; Error response - extract detailed error info
-                    (let [error-details (:detail body)
-                          missing-fields (seq (:missing-fields body))
-                          field-errors (seq (:field-errors body))
-                          provided-fields (:provided-fields body)
-                          interface-type (:interface-type body)
+                    (let [error-details (get-in body [:error :message])
+                          details (get-in body [:error :details])
+                          missing-fields (seq (:missing-fields details))
+                          field-errors (seq (:field-errors details))
+                          provided-fields (:provided-fields details)
+                          interface-type (:interface-type details)
 
                           ;; Build detailed error message
                           detailed-message (str error-details
