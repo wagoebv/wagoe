@@ -29,6 +29,16 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`bb db:reset` kept users, sessions and tenants** (BOU-585); it now drops what the app owns, then migrates.
+  Only in an explicitly named `dev`, `test` or `acc`, confirmed by the database name; prod changes through migrations.
+- **`bb setup --prod true` named variables prod does not read** (BOU-585). Its next steps now list what the prod config reads.
+- **`bb ai admin-entity` and `bb scaffold ai` took yes with no terminal** (BOU-585); they now refuse.
+  `--force` no longer prompts; in scripts pass `--yes` or `--force`.
+- **A `bb scaffold` wizard's `Command:` line did not paste back** (BOU-585); it is now shell-quoted.
+  Quote a `--workflow` spec yourself: unquoted, its `>` is a shell redirect.
+
 ## [1.0.0-rc-4] — 2026-09-28
 
 ### Breaking
@@ -77,7 +87,7 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
-- **`bb scaffold generate|entity --workflow status:entered>delivered>paid`** (BOU-569). The status
+- **`bb scaffold generate|entity --workflow 'status:entered>delivered>paid'`** (BOU-569). The status
   becomes a workflow that API and admin rows both start, moved by `POST /<entities>/:id/transition`.
 - **`bb scaffold entity --belongs-to invoice --min 1`** (BOU-578). The invoice API creates its line items
   in the same request and transaction, refuses fewer, and the admin gets `:min`.

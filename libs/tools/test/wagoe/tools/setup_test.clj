@@ -1212,3 +1212,39 @@
         (let [[exit out] (run-setup dir "" "--cache" "memory")]
           (is (nil? exit) out)
           (step "setup again"))))))
+
+;; -----------------------------------------------------------------------------
+;; Prod's next steps name what prod reads (BOU-585)
+;; -----------------------------------------------------------------------------
+
+(defn- active-env-reads
+  "The variables `profile`'s :active reads through #env."
+  [dir profile]
+  (->> (tree-seq coll? seq (:active (conf dir profile)))
+       (filter env-ref?)
+       (map (comp str second))
+       set))
+
+(defn- named-vars [steps]
+  (set (re-seq #"\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\b" steps)))
+
+(deftest ^:unit prod-next-steps-name-only-what-prod-reads
+  (with-project
+    (fn [dir]
+      (run-setup dir "" "--ai-provider" "replicate")
+      (spit (fs/file dir ".env") "JWT_SECRET=my-real-secret-of-32-characters!!\n")
+      (testing "AI stays in dev"
+        (let [[exit out] (run-setup dir "" "--prod" "true")
+              steps      (first (str/split (next-steps out) #"\n  2\."))]
+          (is (nil? exit) out)
+          (is (not (str/includes? steps "REPLICATE_API_TOKEN")) steps)
+          (is (not (str/includes? steps "AI_MODEL")) steps)
+          (is (str/includes? steps "SQLITE_PATH") steps)
+          (is (= (conj (active-env-reads dir "prod") "JWT_SECRET") (named-vars steps)) steps)))
+      (testing "prod moved to PostgreSQL"
+        (let [[exit out] (run-setup dir "" "--database" "postgresql" "--prod" "true")
+              steps      (first (str/split (next-steps out) #"\n  2\."))]
+          (is (nil? exit) out)
+          (is (not (str/includes? steps "SQLITE_PATH")) steps)
+          (is (str/includes? steps "POSTGRES_HOST") steps)
+          (is (= (conj (active-env-reads dir "prod") "JWT_SECRET") (named-vars steps)) steps))))))

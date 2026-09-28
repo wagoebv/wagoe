@@ -5,7 +5,7 @@
 ;;
 ;; Usage (via bb.edn task):
 ;;   bb db:status    # Show database config and migration info
-;;   bb db:reset     # Drop and recreate the database
+;;   bb db:reset     # Drop the app's tables and migrate (dev, test, acc)
 ;;   bb db:seed      # Seed database from dev seed file
 
 (ns wagoe.tools.db
@@ -186,83 +186,75 @@
          (println))))))
 
 (def ^:private disposable-envs
-  "Environments whose database may be destroyed or seeded. Allowlist, not denylist:
-   db-reset names prod/acc/production explicitly, which lets an unrecognised
-   environment such as \"staging\" through. Seeding writes rows into whatever
-   database the active config resolves to, and db:reset drops every table, so
-   refuse anything not known to be disposable.
+  "Environments whose database may be seeded. Allowlist, not denylist: a
+   denylist lets an unrecognised environment such as \"staging\" through.
+   Seeding writes rows into whatever database the active config resolves to,
+   so refuse anything not known to be disposable.
 
    Mirrors wagoe.platform.shell.adapters.database.config/disposable-envs — that
    one is authoritative; this copy exists because Babashka cannot load it."
   #{"dev" "development" "test" "local"})
 
+(def resettable-envs
+  "The profiles db:reset runs in. Mirrors
+   wagoe.platform.shell.adapters.database.config/resettable-envs, which is
+   authoritative; Babashka cannot load it."
+  #{"dev" "test" "acc"})
+
+(def env-aliases
+  "Mirrors wagoe.config's env-aliases, which Babashka cannot load; db-test
+   pins the two together."
+  {"development" "dev" "production" "prod" "acceptance" "acc" "testing" "test"})
+
+(def ^:dynamic *exit!* (fn [code] (System/exit code)))
+
+(defn- flag-value [args flag]
+  (second (drop-while #(not= flag %) args)))
+
+(defn- normalize-profile [s]
+  (let [s (some-> s str/trim str/lower-case)]
+    (get env-aliases s s)))
+
+(defn reset-profile
+  "{:profile p} for `bb db:reset args`, or {:refused why}. Every place that
+   names a profile must name dev, test or acc — one prod anywhere refuses —
+   and one must: the default is not a choice anybody made."
+  [args getenv]
+  (let [sources (filter second [["--env" (flag-value args "--env")]
+                                ["WAG_ENV" (getenv "WAG_ENV")]
+                                ["ENV" (getenv "ENV")]
+                                ["ENVIRONMENT" (getenv "ENVIRONMENT")]])
+        bad     (remove #(contains? resettable-envs (normalize-profile (second %))) sources)]
+    (cond
+      (empty? sources)
+      {:refused "No profile is named. Set WAG_ENV to dev, test or acc, or pass --env dev."}
+
+      (seq bad)
+      {:refused (str (str/join ", " (map (fn [[k v]] (str k "=" (pr-str v))) bad))
+                     " is not dev, test or acc.")}
+
+      :else {:profile (normalize-profile (second (first sources)))})))
+
 (defn db-reset
-  "Drop and recreate the database after confirmation.
+  "Drop the application's tables and migrate, in dev, test or acc only.
 
-   Refuses outside a disposable environment (dev/development/test/local).
-
-   Advisory only, like the db:seed check: Babashka runs in its own process and
-   cannot see the -Denv JVM property, so it cannot reproduce the platform's
-   detect-environment. The authoritative guard is in
-   wagoe.platform.shell.database.cli-migrations/cmd-reset, which runs in the
-   same JVM as the connection. This exists to fail fast with a friendly
-   message in the common case."
-  []
-  (let [env (or (System/getenv "WAG_ENV")
-                (System/getenv "ENV")
-                (System/getenv "ENVIRONMENT")
-                "dev")]
-    ;; Allowlist, not a denylist. The previous check named prod/acc/production
-    ;; explicitly, which let staging, uat, qa and a typo'd prd straight through
-    ;; to a drop (BOU-258).
-    (when-not (contains? disposable-envs env)
-      (println (red (str "  REFUSED: bb db:reset cannot run in the " env " environment.")))
-      (println (dim "  This drops every table. Disposable environments: dev, development, test, local."))
-      (System/exit 1))
-    (println)
-    (println (bold "Wagoe Database Reset"))
-    ;; The DETECTED environment. This line used to be the literal string "dev",
-    ;; so a run against another database told the operator it was dev — the one
-    ;; screen whose job is to make them stop and check.
-    (println (dim (str "  Environment: " env)))
-    (println)
-    (println (yellow (str "  WARNING: This will DROP and recreate the " env " database.")))
-    (println (yellow "  All data will be lost."))
-    (println)
-    (print "  Continue? [y/N] ")
-    (flush)
-    (let [answer (str/trim (or (read-line) ""))]
-      (if (contains? #{"y" "Y" "yes" "Yes"} answer)
-        (do
-          (println)
-          (println (dim "  Running: clojure -M:migrate reset"))
-          (try
-            ;; The migrate CLI asks for the environment name on its own stdin.
-            ;; That is a second prompt for a question already answered above, so
-            ;; it is answered here: a single `echo y | bb db:reset` used to feed
-            ;; the first prompt, leave the second at EOF, and report success over
-            ;; a reset that never ran (BOU-500).
-            (let [reset-result (process/shell {:in (str env "\n") :continue true}
-                                              "clojure" "-M:migrate" "reset")]
-              (when-not (zero? (:exit reset-result))
-                (println (red "  Reset failed or was cancelled — database unchanged."))
-                (System/exit 1)))
-            (println (green "  Reset complete."))
-            (println)
-            (println (dim "  Running: clojure -M:migrate up"))
-            (let [up-result (process/shell {:continue true} "clojure" "-M:migrate" "up")]
-              (when-not (zero? (:exit up-result))
-                (println (red "  Migrations failed."))
-                (System/exit 1)))
-            (println (green "  Migrations applied successfully."))
-            (println)
-            (catch Exception e
-              (println (red (str "  Migration failed: " (.getMessage e))))
-              (System/exit 1))))
-        (do
-          (println)
-          (println (dim "  Aborted."))
-          (println))))))
+   The profile goes to the JVM as -Denv, which outranks every variable, so
+   the platform resolves the same one. It checks again there, shows what it
+   will drop, and asks; this refusal only saves starting a JVM."
+  [& args]
+  (let [{env :profile why :refused} (reset-profile args #(System/getenv %))]
+    (if why
+      (do (println (red (str "  REFUSED: " why)))
+          (println (dim "  Production changes go through migrations: `bb migrate up`, with a down"))
+          (println (dim "  migration or a conversion migration for what must change or go. Never a reset."))
+          (println (dim "  Reset runs only in: acc, dev, test."))
+          (*exit!* 1))
+      (let [cmd (cond-> ["clojure" (str "-J-Denv=" env) "-M:migrate" "reset"]
+                  (some #{"--allow-remote"} args) (conj "--allow-remote"))
+            {:keys [exit]} (apply process/shell {:continue true} cmd)]
+        (when-not (zero? exit)
+          (println (red "  Reset refused, cancelled or failed."))
+          (*exit!* exit))))))
 
 (defn db-seed
   "Seed the database from the dev seed file.
@@ -312,8 +304,8 @@
       ;; Maven deps at runtime, so it cannot open a JDBC connection itself —
       ;; the same reason `bb migrate` shells out to `clojure -M:migrate`.
       (let [{:keys [exit]} (apply process/shell
-                                 {:out :inherit :err :inherit :continue true}
-                                 "clojure" "-M:seed" (seed-path) (seed-args (root-dir) args))]
+                                  {:out :inherit :err :inherit :continue true}
+                                  "clojure" "-M:seed" (seed-path) (seed-args (root-dir) args))]
         (when-not (zero? exit)
           (System/exit exit))))))
 
@@ -326,7 +318,7 @@
   (println)
   (println "Usage:")
   (println "  bb db:status     Show database type, connection info, and migration count")
-  (println "  bb db:reset      Drop and recreate database (with confirmation)")
+  (println "  bb db:reset      Drop the app's tables and migrate; dev, test, acc only [--env E] [--allow-remote]")
   (println "  bb db:seed       Seed database from resources/seeds/dev.edn")
   (println))
 
@@ -338,7 +330,7 @@
   (let [[subcmd & rest-args] args]
     (case subcmd
       "status" (db-status)
-      "reset"  (db-reset)
+      "reset"  (apply db-reset rest-args)
       "seed"   (apply db-seed rest-args)
       (print-help))))
 

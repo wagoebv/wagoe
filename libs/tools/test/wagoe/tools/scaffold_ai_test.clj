@@ -130,11 +130,29 @@
             (str "answer: " (pr-str in)))))))
 
 (deftest ^:unit a-declined-confirmation-generates-nothing
-  (with-redefs [scaffold/confirm (fn [_ _] false)]
+  (with-redefs [scaffold/confirm (fn [_ _] false)
+                scaffold/tty?    (constantly true)]
     (let [{:keys [calls out]} (run-wizard "product module" false
                                           [{:exit 0 :out spec-json}])]
       (is (= 1 (count calls)) "the scaffolder must not run when the answer is no")
       (is (str/includes? out "Cancelled")))))
+
+(deftest ^:unit nobody-to-ask-is-not-a-yes
+  ;; Without a terminal the prompt read EOF and took its default, yes (BOU-585).
+  (testing "no terminal and no --yes refuses"
+    (with-redefs [scaffold/tty? (constantly false)]
+      (let [{:keys [calls out exit]} (with-in-str "y\n"
+                                       (run-wizard "product module" false
+                                                   [{:exit 0 :out spec-json} {:exit 0}]))]
+        (is (= 1 (count calls)) "parsed, not generated")
+        (is (= 1 exit) out)
+        (is (str/includes? out "--yes") out))))
+  (testing "a closed stdin at a terminal is a no"
+    (with-redefs [scaffold/tty? (constantly true)]
+      (let [{:keys [calls out]} (with-in-str ""
+                                  (run-wizard "product module" false
+                                              [{:exit 0 :out spec-json} {:exit 0}]))]
+        (is (= 1 (count calls)) out)))))
 
 (deftest ^:unit a-failed-parse-does-not-scaffold
   (testing "a non-zero exit from the AI CLI stops the run"

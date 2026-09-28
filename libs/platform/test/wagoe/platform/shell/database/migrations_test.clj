@@ -272,7 +272,6 @@
                 :directory "migrations/"}
                (with-redefs [migrations/resolved-migration-dir (fn [& _] (io/file migrations/project-migration-dir))]
                  (migrations/create-migration "add-users"))))
-        (is (nil? (migrations/reset)))
         (is (nil? (migrations/init)))
         ;; Every read operation gets the discovered config verbatim. `create` is
         ;; the exception: migratus/create casts :migration-dir to String, so it
@@ -289,9 +288,6 @@
                 [:completed-list config]
                 [:pending-list config]
                 [:create (migrations/create-config config) "add-users"]
-                ;; Down with every module, up with the enabled ones (BOU-579).
-                [:rollback-until config 0]
-                [:migrate config]
                 [:init config]]
                @calls))
         (is (string? (:migration-dir (second (first (filter #(= :create (first %)) @calls)))))
@@ -318,8 +314,6 @@
                                        (migrations/rollback-until-just-after 20260325020202)))
               create-ex (is (thrown? clojure.lang.ExceptionInfo
                                      (migrations/create-migration "broken")))
-              reset-ex (is (thrown? clojure.lang.ExceptionInfo
-                                    (migrations/reset)))
               init-ex (is (thrown? clojure.lang.ExceptionInfo
                                    (migrations/init)))]
           (is (= "Migration failed" (ex-message migrate-ex)))
@@ -330,7 +324,6 @@
           (is (= 20260325020202 (:migration-id (ex-data rollback-ex))))
           (is (= "Migration creation failed" (ex-message create-ex)))
           (is (= "broken" (:name (ex-data create-ex))))
-          (is (= "Database reset failed" (ex-message reset-ex)))
           (is (= "Migration init failed" (ex-message init-ex)))
           (is (= [] (migrations/pending-list)))
           (is (= {:applied []
@@ -613,7 +606,7 @@
     ;; something failed but not that their migrations are in two places.
     (with-redefs [migrations/get-migration-config
                   (fn [& _] (throw (ex-info "Migrations exist in two directories, and only one is read."
-                                         {:type :migration-dir-conflict})))]
+                                            {:type :migration-dir-conflict})))]
       (doseq [[label op] [["migrate"  migrations/migrate]
                           ["rollback" migrations/rollback]]]
         (let [ex (is (thrown? clojure.lang.ExceptionInfo (op)) label)]

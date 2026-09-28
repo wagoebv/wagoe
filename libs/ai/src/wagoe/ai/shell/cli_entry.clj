@@ -294,13 +294,29 @@
   [["-r" "--root ROOT" "Project root" :default "."]
    ["-h" "--help"]])
 
+(def ^:dynamic *exit!*
+  "How a refusal ends the process; a test binds it to record the code."
+  (fn [code] (System/exit code)))
+
+(defn tty?
+  "Whether a person can answer a prompt. A console is not enough: newer JDKs
+   return one with stdin redirected. isTerminal is asked reflectively because
+   the baseline JDK lacks it."
+  []
+  (if-let [c (System/console)]
+    (try (boolean (clojure.lang.Reflector/invokeInstanceMethod c "isTerminal" (object-array 0)))
+         (catch Exception _ true))
+    false))
+
 (defn- confirm?
-  "Prompt for yes/no confirmation. Enter defaults to yes."
+  "Prompt for yes/no confirmation. Enter defaults to yes; a closed stdin is
+   a no."
   [label]
   (print (str label " [Y/n]: "))
   (flush)
-  (let [input (-> (or (read-line) "") str/trim str/lower-case)]
-    (or (empty? input) (= input "y") (= input "yes"))))
+  (when-let [line (read-line)]
+    (let [input (-> line str/trim str/lower-case)]
+      (or (empty? input) (= input "y") (= input "yes")))))
 
 (defn cmd-scaffold-parse
   "Turn a natural-language description into a module spec on stdout, as JSON.
@@ -516,7 +532,7 @@
 (def admin-entity-opts
   [["-r" "--root ROOT" "Project root" :default "."]
    ["-y" "--yes" "Skip confirmation and write immediately"]
-   ["-f" "--force" "Overwrite admin files that already exist"]
+   ["-f" "--force" "Overwrite admin files that already exist, without confirmation"]
    ["-h" "--help"]])
 
 (defn profiles
@@ -639,7 +655,12 @@
               (not writes?)
               (println (yellow "Nothing written: every file already exists. Re-run with --force to overwrite."))
 
-              (or (:yes options) (confirm? "Write these files?"))
+              ;; Asking with nobody to answer took the default (BOU-585).
+              (not (or (:yes options) force? (tty?)))
+              (do (println (red "No terminal to confirm on. Nothing written; pass --yes to write."))
+                  (*exit!* 1))
+
+              (or (:yes options) force? (confirm? "Write these files?"))
               (do
                 (println)
                 (doseq [{:keys [path written?]} (write-admin-entities! targets force?)

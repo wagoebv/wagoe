@@ -30,7 +30,7 @@
    "acceptance"  "acc"
    "testing"     "test"})
 
-(defn- normalize-env
+(defn normalize-env
   "Normalize a WAG_ENV value to one of the short config directory names (dev, test, prod, acc)."
   [env]
   (let [s (some-> env str .trim .toLowerCase)]

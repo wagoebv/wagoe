@@ -375,3 +375,18 @@
                 (scaffold/wizard-generate)))]
     (is (str/includes? out "Command: bb scaffold generate --module-name shop"))
     (is (not (str/includes? out "cli-entry")))))
+
+(deftest ^:unit a-printed-command-can-be-pasted
+  ;; Joined unquoted, `>` in a workflow spec became a redirect and a spaced
+  ;; argument split in two (BOU-585).
+  (let [args ["generate" "--module-name" "invoice" "--entity" "Invoice"
+              "--workflow" "status:entered>delivered>paid"
+              "--field" "note:string:description=The customer's note"
+              "--field" "" "--field" "amount:decimal:required"]
+        line (scaffold/command-line args)
+        back (:out (process/shell {:out :string :continue true
+                                   ;; Where a redirect lands if quoting fails.
+                                   :dir (str (fs/create-temp-dir))}
+                                  "bash" "-c" (str "printf '<%s>\\n' " (subs line (count "bb scaffold ")))))]
+    (is (str/starts-with? line "bb scaffold generate --module-name invoice"))
+    (is (= (map #(str "<" % ">") args) (str/split-lines back)) line)))
