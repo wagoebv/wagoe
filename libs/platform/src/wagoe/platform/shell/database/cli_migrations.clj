@@ -9,10 +9,10 @@
      rollback        - Roll back the last migration
      status          - Show migration status
      create <name>   - Create a new migration file
-     reset           - Drop every table and reapply (dev, test, acc only)
+     reset           - Drop what the app owns and migrate (dev, test, acc only)
      init            - Initialize migration system"
   (:require [wagoe.platform.shell.database.migrations :as migrations]
-            [wagoe.platform.shell.adapters.database.config :as db-config]
+            [wagoe.platform.shell.database.reset :as reset]
             [clojure.tools.cli :as cli]
             [clojure.string :as str])
   (:gen-class))
@@ -24,7 +24,8 @@
 (def cli-options
   "CLI options specification for migration commands."
   [["-h" "--help" "Show help"]
-   ["-v" "--verbose" "Verbose output"]])
+   ["-v" "--verbose" "Verbose output"]
+   [nil "--allow-remote" "reset: allow a database on another machine"]])
 
 ;; =============================================================================
 ;; Command Implementations
@@ -99,53 +100,65 @@
           (.printStackTrace e))
         1))))
 
-(defn cmd-reset
-  "Resets the database (WARNING: destructive operation).
+(defn tty?
+  "Whether a person can answer the prompt. A console is not enough: newer
+   JDKs return one with stdin redirected. isTerminal is asked reflectively
+   because the baseline JDK lacks it."
+  []
+  (if-let [c (System/console)]
+    (try (boolean (clojure.lang.Reflector/invokeInstanceMethod c "isTerminal" (object-array 0)))
+         (catch Exception _ true))
+    false))
 
-   Refuses outside dev, test and acc (BOU-585). This is the authoritative guard:
-   it runs in the same JVM as the connection and resolves the environment with
-   `detect-environment`, the same function the connection uses. `bb db:reset`
-   shells out to here, so a check only in libs/tools could be bypassed by
-   calling `clojure -M:migrate reset` directly — which previously had no
-   environment check of any kind (BOU-258)."
+(defn- print-plan [{:keys [env host database schema tables tenant-schemas]}]
+  (println "\n⚠️  bb db:reset drops everything below, then reapplies the migrations.")
+  (println (str "   Profile:  " env))
+  (println (str "   Host:     " host))
+  (println (str "   Database: " database (when schema (str "   Schema: " schema))))
+  (println "   Every migration, rolled back through its down migration")
+  (println (str "   Tables:   " (if (seq tables) (str/join ", " tables) "none")))
+  (println (str "   Tenant schemas: " (if (seq tenant-schemas) (str/join ", " tenant-schemas) "none"))))
+
+(defn cmd-reset
+  "Drops what the application owns and migrates again (BOU-585).
+
+   Refuses outside dev, test and acc, on another machine without
+   --allow-remote, and when something it does not own depends on what it
+   would drop. The profile is resolved by `detect-environment`, the function
+   the connection uses, so `clojure -M:migrate reset` is guarded as well as
+   `bb db:reset` (BOU-258). Then it shows what it will drop and asks for the
+   database's name, on a terminal only: piping `yes` answers nothing."
   [opts]
-  (let [env (db-config/detect-environment)]
-    (if-not (db-config/resettable-environment? env)
-      ;; Before the prompt, so piping `yes` cannot answer it (BOU-585).
-      (do
-        (println (str "\n❌ Refusing to reset the " (pr-str env) " profile."))
-        (println (str "\n   " db-config/reset-refusal))
-        (println "\n   Reset runs only in:" (str/join ", " (sort db-config/resettable-envs)))
-        (println)
-        1)
-      (do
-        (println "\n⚠️  WARNING: This will drop every table and reapply the migrations!")
-        (println (str "Environment: " env "   (resolved from -Denv / WAG_ENV / ENV / ENVIRONMENT)"))
-        (println "This is a DESTRUCTIVE operation and will delete all data.")
-        ;; Type the environment name, not "yes". The operator has to have read the
-        ;; line above — the previous prompt hardcoded "dev" in its wording while
-        ;; potentially pointing at another database.
-        (print (str "\nType '" env "' to continue: "))
-        (flush)
-        (let [confirmation (read-line)]
-          (if (= env confirmation)
-            (try
-              (println "\n🔄 Resetting database...")
-              (migrations/reset)
-              (println "✅ Database reset completed\n")
-              (migrations/print-status)
-              0
-              (catch Exception e
-                (println "❌ Reset failed:" (.getMessage e))
-                (when (:verbose opts)
-                  (.printStackTrace e))
-                1))
-            (do
-              ;; Non-zero: a cancelled destructive operation is not success for
-              ;; whoever shelled out to us. Returning 0 let `bb db:reset` announce
-              ;; "Reset complete." over a reset that never ran (BOU-500).
-              (println "\n❌ Reset cancelled")
-              1)))))))
+  (try
+    (let [plan (reset/plan {:allow-remote? (:allow-remote opts)})]
+      (print-plan plan)
+      (if-not (tty?)
+        (do (println "\n❌ No terminal to confirm on. Nothing was dropped.")
+            1)
+        (do
+          (print (str "\nType the database name (" (:database plan) ") to continue: "))
+          (flush)
+          (if (= (:database plan) (some-> (read-line) str/trim))
+            (do (println "\n🔄 Resetting database...")
+                (reset/execute! plan)
+                (println "✅ Database reset completed\n")
+                (migrations/print-status)
+                0)
+            ;; Non-zero: a cancelled destructive operation is not success for
+            ;; whoever shelled out to us (BOU-500).
+            (do (println "\n❌ Reset cancelled")
+                1)))))
+    (catch clojure.lang.ExceptionInfo e
+      (if (#{:forbidden :conflict} (:type (ex-data e)))
+        (do (println (str "\n❌ " (ex-message e) "\n"))
+            1)
+        (do (println "❌ Reset failed:" (or (:error (ex-data e)) (ex-message e)))
+            (when (:verbose opts) (.printStackTrace e))
+            1)))
+    (catch Exception e
+      (println "❌ Reset failed:" (.getMessage e))
+      (when (:verbose opts) (.printStackTrace e))
+      1)))
 
 (defn cmd-init
   "Initializes the migration system."
@@ -181,7 +194,7 @@
   (println "  status               Show current migration status")
   (println "  create <name>        Create a new migration file")
   (println "  init                 Initialize migration system (first time setup)")
-  (println "  reset                Drop every table and reapply migrations; dev, test and acc only [DESTRUCTIVE]\n")
+  (println "  reset [--allow-remote]  Drop what the app owns and migrate; dev, test and acc only [DESTRUCTIVE]\n")
   (println "Options:")
   (println "  -h, --help           Show this help message")
   (println "  -v, --verbose        Verbose output\n")
@@ -244,7 +257,10 @@
                      "down"     (cmd-rollback options)  ; common alias
                      "status"   (cmd-status options)
                      "create"   (cmd-create (first command-args) options)
-                     "reset"    (cmd-reset options)
+                     ;; After the command, which :in-order leaves unparsed.
+                     "reset"    (cmd-reset (cond-> options
+                                             (some #{"--allow-remote"} command-args)
+                                             (assoc :allow-remote true)))
                      "init"     (cmd-init options)
 
                      ;; Unknown command

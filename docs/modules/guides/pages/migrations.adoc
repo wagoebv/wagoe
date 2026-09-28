@@ -74,7 +74,11 @@ A last applied migration that no library on the classpath ships stops `rollback`
 
 == Resetting a database
 
-`bb db:reset` drops the application's tables and migrates again. It runs only in the `dev`, `test` and `acc` profiles, resolved the way the connection resolves them (`--env`, then `-Denv`, `WAG_ENV`, `ENV`, `ENVIRONMENT`), and refuses every other one, prod included, with no override.
+`bb db:reset` drops what the application owns and migrates again. It runs only in the `dev`, `test` and `acc` profiles, resolved the way the connection resolves them (`--env`, then `-Denv`, `WAG_ENV`, `ENV`, `ENVIRONMENT`), and refuses every other one, prod included, with no override.
+
+What the application owns: each migration's objects, removed by its down migration; the tables libraries create at boot, which each declares in `wagoe/boot-tables/<lib>.edn`; `schema_migrations`; and the schema of every tenant in `tenants`. Other tables, schemas and extensions stay. When a view, key or table the application does not own depends on something the reset would drop, it drops nothing and names it.
+
+Before it asks, the reset shows the host, database, schema, tables and tenant schemas. It confirms by the database's name, typed on a terminal, so piping `yes` does not answer it. A database on another machine needs `--allow-remote`.
 
 Production changes go through migrations: `bb migrate up`, with a down migration or a conversion migration for what must change or go. Never a reset.
 

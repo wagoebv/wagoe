@@ -1,6 +1,7 @@
 (ns wagoe.platform.shell.database.cli-migrations-test
   (:require [wagoe.platform.shell.database.cli-migrations :as sut]
             [wagoe.platform.shell.database.migrations :as migrations]
+            [wagoe.platform.shell.database.reset :as reset]
             [wagoe.platform.shell.adapters.database.config :as db-config]
             [clojure.test :refer [deftest is testing]]
             [clojure.tools.cli :as cli]))
@@ -15,9 +16,11 @@
                                                   (swap! calls conj [:create name])
                                                   {:message (str "Created " name)
                                                    :directory "migrations/"})
-                    migrations/reset (fn [] (swap! calls conj :reset))
+                    reset/plan (fn [_] {:database "app"})
+                    reset/execute! (fn [_] (swap! calls conj :reset))
+                    sut/tty? (constantly true)
                     migrations/init (fn [] (swap! calls conj :init))
-                    read-line (fn [] (db-config/detect-environment))]
+                    read-line (constantly "app")]
         (is (= 0 (sut/cmd-migrate {})))
         (is (= 0 (sut/cmd-rollback {})))
         (is (= 0 (sut/cmd-status {})))
@@ -39,7 +42,10 @@
     ;; A cancelled destructive operation is not success for a caller. Returning
     ;; 0 let `bb db:reset` announce "Reset complete." over a reset that never
     ;; ran (BOU-500).
-    (with-redefs [read-line (fn [] "nope")]
+    (with-redefs [reset/plan (fn [_] {:database "app"})
+                  reset/execute! (fn [_] (throw (ex-info "must not run" {})))
+                  sut/tty? (constantly true)
+                  read-line (fn [] "y")]
       (is (= 1 (sut/cmd-reset {})))))
 
   (testing "failing commands return one"
@@ -47,9 +53,11 @@
                   wagoe.platform.shell.database.migrations/rollback (fn [] (throw (ex-info "rollback boom" {})))
                   wagoe.platform.shell.database.migrations/print-status (fn [] (throw (ex-info "status boom" {})))
                   wagoe.platform.shell.database.migrations/create-migration (fn [_] (throw (ex-info "create boom" {})))
-                  wagoe.platform.shell.database.migrations/reset (fn [] (throw (ex-info "reset boom" {})))
+                  reset/plan (fn [_] {:database "app"})
+                  reset/execute! (fn [_] (throw (ex-info "reset boom" {})))
+                  sut/tty? (constantly true)
                   wagoe.platform.shell.database.migrations/init (fn [] (throw (ex-info "init boom" {})))
-                  read-line (fn [] (db-config/detect-environment))]
+                  read-line (constantly "app")]
       (is (= 1 (sut/cmd-migrate {})))
       (is (= 1 (sut/cmd-rollback {})))
       (is (= 1 (sut/cmd-status {})))
@@ -58,16 +66,41 @@
       (is (= 1 (sut/cmd-init {}))))))
 
 (deftest ^:unit reset-refuses-outside-dev-test-and-acc
-  ;; Before the prompt: `yes | bb db:reset` must not answer it (BOU-585).
+  ;; Before connecting and before asking (BOU-585).
   (doseq [env ["prod" "staging" ""]]
     (testing (pr-str env)
       (let [calls (atom [])
             out   (with-redefs [db-config/detect-environment (constantly env)
-                                migrations/reset (fn [] (swap! calls conj :reset))
+                                migrations/rollback-config (fn [] (swap! calls conj :connect) {})
+                                reset/execute! (fn [_] (swap! calls conj :reset))
+                                sut/tty? (constantly true)
                                 read-line (fn [] (swap! calls conj :read-line) env)]
                     (with-out-str (is (= 1 (sut/cmd-reset {})))))]
-        (is (= [] @calls) "neither asked nor reset")
+        (is (= [] @calls) "neither connected, asked nor reset")
         (is (re-find #"bb migrate up" out) out)))))
+
+(deftest ^:unit reset-asks-for-the-database-name-on-a-terminal-only
+  ;; `yes | bb db:reset` answered the old prompt; no terminal now refuses,
+  ;; and only the database's name confirms (BOU-585).
+  (let [plan  {:env "dev" :host "localhost" :database "shop_dev" :schema "public"
+               :tables ["auth_users" "schema_migrations"] :tenant-schemas ["tenant_acme"]}
+        run   (fn [tty answer]
+                (let [ran (atom false)
+                      out (with-redefs [reset/plan (fn [_] plan)
+                                        reset/execute! (fn [_] (reset! ran true))
+                                        migrations/print-status (fn [])
+                                        sut/tty? (constantly tty)
+                                        read-line (constantly answer)]
+                            (with-out-str (sut/cmd-reset {})))]
+                  [@ran out]))]
+    (testing "the plan is shown first"
+      (let [[_ out] (run true "shop_dev")]
+        (doseq [s ["localhost" "shop_dev" "public" "auth_users" "tenant_acme"]]
+          (is (re-find (re-pattern s) out) s))))
+    (is (not (first (run false "shop_dev"))) "no terminal")
+    (is (not (first (run true "y"))))
+    (is (not (first (run true "dev"))) "the profile is not the name")
+    (is (first (run true "shop_dev")))))
 
 (deftest ^:unit main-dispatches-and-exits-with-command-status
   (testing "help, missing command, parse errors, dispatch, and unknown commands set exit status"

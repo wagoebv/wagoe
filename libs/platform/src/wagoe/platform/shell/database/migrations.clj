@@ -79,13 +79,20 @@
   (log/warn (str "No migration manifest found; library migrations will not run. "
                  "A jar built without directory entries hides them.")))
 
+(defn classpath-manifests
+  "The `.edn` files directly inside classpath directory `dir`, in every jar and
+   directory that has one."
+  [dir]
+  (let [cl (context-classloader)]
+    (for [dir-url (enumeration-seq (.getResources cl dir))
+          file    (sort (manifest-names dir-url))
+          :when   (str/ends-with? file ".edn")]
+      (java.net.URL. ^java.net.URL dir-url ^String file))))
+
 (defn manifest-urls
   []
   (let [cl (context-classloader)]
-    (->> (concat (for [dir-url (enumeration-seq (.getResources cl migration-manifest-dir))
-                       file    (sort (manifest-names dir-url))
-                       :when   (str/ends-with? file ".edn")]
-                   (java.net.URL. ^java.net.URL dir-url ^String file))
+    (->> (concat (classpath-manifests migration-manifest-dir)
                  (enumeration-seq (.getResources cl legacy-manifest-resource)))
          (distinct)
          (seq)
@@ -481,7 +488,7 @@
                         :error (.getMessage e)}
                        e))))))
 
-(defn- rollback-config
+(defn rollback-config
   "The config for going down: every module's migrations, not only those that
    are on. migratus rolls back the last applied id among the migrations it can
    see, so a filtered view turned a rollback past a switched-off module into a
@@ -714,84 +721,6 @@
                       {:type :migration-failed
                        :error (.getMessage e)
                        :name name}
-                      e)))))
-
-(defn- quote-ident [^String product ^String ident]
-  (if (re-find #"(?i)mysql|mariadb" product)
-    (str "`" (str/replace ident "`" "``") "`")
-    (str "\"" (str/replace ident "\"" "\"\"") "\"")))
-
-(defn drop-every-table!
-  "Drop every table in the connection's schema, and on databases with schemas
-   every `tenant_*` schema.
-
-   A rollback only removes what migrations made. Users, sessions and tenants
-   are created at boot, outside any migration, so they survived a reset that
-   said all data would be lost (BOU-585)."
-  [^javax.sql.DataSource datasource]
-  (with-open [c (.getConnection datasource)
-              s (.createStatement c)]
-    (let [md       (.getMetaData c)
-          product  (.getDatabaseProductName md)
-          q        #(quote-ident product %)
-          mysql?   (re-find #"(?i)mysql|mariadb" product)
-          sqlite?  (re-find #"(?i)sqlite" product)
-          cascade  (if (or mysql? sqlite?) "" " CASCADE")
-          tables   (with-open [rs (.getTables md (.getCatalog c) (.getSchema c) "%"
-                                              (into-array String ["TABLE"]))]
-                     (vec (for [_ (repeat nil) :while (.next rs)]
-                            (.getString rs "TABLE_NAME"))))
-          tenants  (when-not (or mysql? sqlite?)
-                     (with-open [rs (.getSchemas md)]
-                       (vec (for [_ (repeat nil) :while (.next rs)
-                                  :let [schema (.getString rs "TABLE_SCHEM")]
-                                  :when (re-matches #"(?i)tenant_[a-z0-9_]+" schema)]
-                              schema))))]
-      ;; Without these, a table another references cannot be dropped first.
-      (cond mysql?  (.execute s "SET FOREIGN_KEY_CHECKS = 0")
-            sqlite? (.execute s "PRAGMA foreign_keys = OFF"))
-      (try
-        (doseq [schema tenants]
-          (log/info "Dropping tenant schema" {:schema schema})
-          (.execute s (str "DROP SCHEMA IF EXISTS " (q schema) " CASCADE")))
-        (doseq [table tables]
-          (log/info "Dropping table" {:table table})
-          (.execute s (str "DROP TABLE IF EXISTS " (q table) cascade)))
-        (finally
-          (cond mysql?  (.execute s "SET FOREIGN_KEY_CHECKS = 1")
-                sqlite? (.execute s "PRAGMA foreign_keys = ON")))))))
-
-(defn reset
-  "Drops every table, including those created at boot, and re-applies the
-   migrations.
-
-   WARNING: This is destructive! Use only in development.
-
-   Returns:
-     nil"
-  []
-  ;; Before the config is read or a connection opened (BOU-585).
-  (let [env (db-config/detect-environment)]
-    (when-not (db-config/resettable-environment? env)
-      (throw (ex-info (str "Refusing to reset the " (pr-str env) " profile. "
-                           db-config/reset-refusal)
-                      {:type :forbidden :env env}))))
-  (log/warn "Resetting database - dropping every table and re-applying migrations")
-  (try
-    ;; Down with every module's migrations, up with the enabled ones: a plain
-    ;; migratus/reset goes both ways with one set. The rollback still runs so
-    ;; down migrations remove what is not a table.
-    (let [config (rollback-config)]
-      (migratus/rollback-until-just-after config 0)
-      (drop-every-table! (get-in config [:db :datasource]))
-      (migratus/migrate (get-migration-config))
-      (log/info "Database reset completed"))
-    (catch Exception e
-      (rethrow-config-conflict! e)
-      (log/error e "Database reset failed")
-      (throw (ex-info "Database reset failed"
-                      {:type :migration-failed
-                       :error (.getMessage e)}
                       e)))))
 
 (defn init
