@@ -120,6 +120,11 @@
          discovered (modules/discover-module-config
                      active known base-ns modules/require-wiring! requiring-resolve)]
      (warn-code-enabled-migrations! active extra-modules)
+     ;; Said once, so nobody looks for it on :9999 in prod (BOU-588).
+     (when-let [profile (:wagoe/profile config)]
+       (when (not= :dev (keyword profile))
+         (log/info (str "Dev dashboard is off: it runs under the dev profile only, and this is "
+                        (name profile) "."))))
      ;; Framework modules first, then the scaffolded ones — the order routes are
      ;; concatenated in and mounted.
      (cond-> (merge (core-components config http
