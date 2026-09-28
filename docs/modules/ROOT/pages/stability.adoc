@@ -3,8 +3,7 @@
 
 This page states what you can rely on, what you cannot, and how a change that
 breaks you will reach you. It describes the framework as it is today — Wagoe is
-at its release candidate for `1.0.0`, and the surface below is the one `1.0.0`
-will promise.
+at `1.0.0`, and the surface below is the one it promises.
 
 == Current status
 
@@ -50,9 +49,8 @@ because something else in the suite did.
 
 == The version scheme
 
-Releases were `1.0.0-beta-N`, incrementing `N` per release, and are now
-`1.0.0-rc-N` on the way to `1.0.0`. Both replaced the older `1.0.1-alpha-N`
-scheme.
+Releases went `1.0.0-beta-N`, then `1.0.0-rc-N`, incrementing `N` per
+release, to `1.0.0`. Both replaced the older `1.0.1-alpha-N` scheme.
 
 .The alpha → beta transition
 [cols="1,1,2",options="header"]
