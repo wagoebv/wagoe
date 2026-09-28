@@ -41,6 +41,10 @@ bb ai docs --module libs/user --type agents  # Generate AGENTS.md
 bb ai admin-entity "products with name, price, status"  # Generate admin entity EDN
 ----
 
+`bb ai admin-entity` and `bb scaffold ai` ask before writing. Without a terminal
+— in a script or CI — they refuse unless you pass `--yes` (write) or `--force`
+(overwrite), neither of which prompts.
+
 === Deployment (framework repository only)
 
 These publish the Wagoe libraries themselves and exist only in the framework

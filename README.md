@@ -287,15 +287,15 @@ The version appears in 104 locations — 59 in source, 45 in documentation.
 **1. Bump:**
 
 ```bash
-bb bump 1.0.0-beta-6 --dry-run   # list what would change
-bb bump 1.0.0-beta-6
+bb bump 1.0.1 --dry-run   # list what would change
+bb bump 1.0.1
 ```
 
 It rewrites exactly the locations `check:versions` discovers and nothing else,
 prints a `git diff --stat`, and finishes by verifying the result against the
 version it just wrote. Re-running it is a no-op.
 
-Give the plain version, not the tag: `1.0.0-beta-6`, not `v1.0.0-beta-6`. It
+Give the plain version, not the tag: `1.0.1`, not `v1.0.1`. It
 refuses a leading `v` rather than writing it into 104 places, where every
 location would then agree and the check would pass on it.
 
@@ -303,7 +303,7 @@ location would then agree and the check would pass on it.
 
 ```bash
 bb check
-git add -A && git commit -m "bump library suite version to 1.0.0-beta-6"
+git add -A && git commit -m "bump library suite version to 1.0.1"
 ```
 
 The full `bb check` — not `--quick`, which skips `check:versions`. That gate is
@@ -316,14 +316,14 @@ The nightly first-run matrix doubles as the pre-release check — that is what i
 rather than trusting last night's run to describe today's tree.
 
 ```bash
-gh workflow run first-run-matrix.yml -f reason="pre-release gate for 1.0.0-beta-6"
+gh workflow run first-run-matrix.yml -f reason="pre-release gate for 1.0.1"
 ```
 
 **4. Tag. The tag is the release:**
 
 ```bash
 git push
-git tag -a "1.0.0-beta-6" -m "Release 1.0.0-beta-6"
+git tag -a "1.0.1" -m "Release 1.0.1"
 git push --tags
 ```
 
