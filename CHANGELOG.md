@@ -29,6 +29,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ## [Unreleased]
 
+## [1.0.0] — 2026-09-28
+
 ### Breaking
 
 - **Every JSON error body is `{"error": {"type": …, "message": …}}`** (BOU-586); refused input is `validation-error`.
