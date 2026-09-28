@@ -18,6 +18,7 @@
             [wagoe.user.ports :as user-ports]
             [wagoe.user.shell.auth :as auth-shell]
             [wagoe.user.shell.middleware :as user-middleware]
+            [wagoe.workflow.core.transitions :as transitions]
             [wagoe.workflow.ports :as ports]
             [wagoe.workflow.shell.http :as sut]
             [wagoe.workflow.shell.registry :as registry]
@@ -389,6 +390,16 @@
                  (select-keys (:instance body) [:entity-id :current-state :available-transitions])))
           (is (= (select-keys (:audit-entry transitioned) [:transition :from-state :to-state :actor-roles])
                  (select-keys (:audit-entry body) [:transition :from-state :to-state :actor-roles]))))))))
+
+(deftest ^:unit the-documented-transition-items-are-the-one-shape
+  ;; The entity's `workflow` and the instance list them alike (BOU-590); both
+  ;; build each item with transition-view.
+  (let [entity (nth (documented-json) 4 nil)]
+    (is (some? entity) "the docs show a scaffolded entity's transition")
+    (is (= [(transitions/transition-view {:id :paid :to :paid :label "Paid" :enabled? true})
+            (transitions/transition-view {:id :void :to :void :enabled? false
+                                          :reason :insufficient-permissions})]
+           (get-in entity [:workflow :available-transitions])))))
 
 (deftest ^:unit the-admin-list-page-hides-the-exception
   ;; The message can carry driver or config detail (BOU-555).

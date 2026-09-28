@@ -190,6 +190,26 @@ Both parameters are required. `GET /instances/:id` adds the available transition
   "updated-at":    "2026-09-27T12:00:00Z"}]
 ----
 
+=== One shape for what may follow
+
+`available-transitions` is the same list wherever it appears, next to the state
+it was computed from: on the instance here, and on a scaffolded entity's
+`workflow` after `POST /api/v1/<entities>/:id/transition`. Each item has `id`,
+`to` and `enabled`, a `label` when the transition has one, and a `reason` when
+it is not enabled. The entity's transition answers:
+
+[source,json]
+----
+{"id":       "5b1c9a52-6f0e-4d7a-9a57-2d9e3c1b8f40",
+ "number":   "A-1",
+ "status":   "delivered",
+ "workflow": {"instance-id": "0d4b7f3e-2a61-4c55-8f0e-9b7a1c2d3e4f",
+              "state":       "delivered",
+              "available-transitions":
+              [{"id": "paid", "to": "paid", "label": "Paid", "enabled": true},
+               {"id": "void", "to": "void", "enabled": false, "reason": "insufficient-permissions"}]}}
+----
+
 == Available transitions
 
 `available-transitions` takes the instance id, the actor's roles and the guard context.

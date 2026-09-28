@@ -285,7 +285,7 @@ Routes are defined in `shell/http.clj` as Reitit route data (no `/api` prefix) a
 |--------|-------------|-------------|
 | `POST` | `/api/v1/workflow/instances` | Start a new workflow instance |
 | `GET` | `/api/v1/workflow/instances?entity-type=order&entity-id=<uuid>` | An entity's instances, one per workflow it is in; `[]` for none |
-| `GET` | `/api/v1/workflow/instances/:id` | Current state + `available-transitions` (id, to, label, enabled) |
+| `GET` | `/api/v1/workflow/instances/:id` | Current state + `available-transitions` (id, to, enabled, label?, reason?), the same items a scaffolded entity's `workflow` carries |
 | `GET` | `/api/v1/workflow/instances/:id/audit` | Full audit log |
 | `POST` | `/api/v1/workflow/instances/:id/transition` | Execute a transition |
 

@@ -25,6 +25,7 @@
             [wagoe.scaffolder.ports :as ports]
             [wagoe.scaffolder.shell.service :as service]
             [wagoe.workflow.ports :as workflow]
+            [wagoe.workflow.shell.http :as workflow-http]
             [wagoe.workflow.shell.module-wiring]))
 
 (def ^:private svc (service/create-scaffolder-service))
@@ -364,6 +365,20 @@
         (is (<= 400 (:status (call :delete (str "/invoices/" id) nil))))
         (is (some? (workflow/find-instance-by-entity store :invoice (parse-uuid id)))
             "the row is still there, and so is its workflow")))))
+
+(deftest ^:integration the-entity-and-the-workflow-api-list-transitions-alike
+  ;; One shape for what may follow: the same key and items, on the entity's
+  ;; `workflow` and on the workflow API's instance (BOU-590).
+  (with-booted "t"
+    (fn [{:keys [call system]}]
+      (let [id       (get-in (call :post "/invoices" {:number "A-1"}) [:body :id])
+            moved    (get-in (call :post (str "/invoices/" id "/transition") {:transition "delivered"})
+                             [:body :workflow])
+            wf-call  (http-caller (workflow-http/workflow-routes (get-in system [:wagoe/workflow :engine])))
+            instance (:body (wf-call :get (str "/workflow/instances/" (:instance-id moved)) nil))]
+        (is (seq (:available-transitions moved)) (pr-str moved))
+        (is (= (:available-transitions instance) (:available-transitions moved)))
+        (is (= (:current-state instance) (:state moved)))))))
 
 (deftest ^:unit the-next-steps-name-only-the-modules-that-are-off
   (let [dir (project!)
