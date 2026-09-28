@@ -320,6 +320,18 @@
                  field (assoc :field field :errors {field ["No such record"]}))
                e))))
 
+(defn- unique-violation
+  "`e` as a :validation-error on the field whose unique key the database
+   enforced, as the platform names it; nil otherwise (BOU-590)."
+  [e]
+  (let [{:keys [type constraint field]} (ex-data e)]
+    (when (and (= :conflict type) (= :unique constraint) field)
+      (ex-info (str "Already taken: " (name field))
+               {:type   :validation-error
+                :field  field
+                :errors {field ["Another record already has this value"]}}
+               e))))
+
 ;; =============================================================================
 ;; Children and deletes (BOU-563)
 ;; =============================================================================
@@ -597,7 +609,7 @@
     (try
       (db/execute-one! conn {:insert-into table-name :values [db-data]})
       (catch Exception e
-        (throw (or (not-null-violation e) (foreign-key-violation e) e))))
+        (throw (or (not-null-violation e) (foreign-key-violation e) (unique-violation e) e))))
     (db/execute-one! conn {:select [:*] :from [table-name] :where [:= primary-key id-str]})))
 
 (defn- nested-relationships
@@ -844,7 +856,7 @@
                                                :set    db-data
                                                :where  [:= primary-key id-str]}))
                  (catch Exception e
-                   (throw (or (not-null-violation e) (foreign-key-violation e) e))))
+                   (throw (or (not-null-violation e) (foreign-key-violation e) (unique-violation e) e))))
 
               ; Fetch the updated record using join-aware query
              {:keys [from-clause select-clause join-clause field-aliases]} (resolve-query-config entity-config)
@@ -919,7 +931,7 @@
                _ (try
                    (db/execute-update! db-ctx update-query)
                    (catch Exception e
-                     (throw (or (not-null-violation e) (foreign-key-violation e) e))))
+                     (throw (or (not-null-violation e) (foreign-key-violation e) (unique-violation e) e))))
 
                ; Fetch updated record using join-aware query
                {:keys [from-clause select-clause join-clause field-aliases]} (resolve-query-config entity-config)

@@ -54,6 +54,7 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **The admin answered a duplicate unique value with "Failed to create Invoice"** (BOU-590); the form marks the field.
 - **Dev on `HTTP_PORT=3200` logged "searching ports 3000-3099"** (BOU-590). The log names the port requested and
   the port bound, and the range only when the requested port was taken.
 - **The workflow boot put the BOU-581 unique index on `workflow_instances` in production** (BOU-589). It changes
