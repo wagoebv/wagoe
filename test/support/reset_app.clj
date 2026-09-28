@@ -23,10 +23,13 @@
 
 (defn with-app
   "An app on `ctx`: one migration applied and the user module's boot tables,
-   with rows. Calls (f run-reset) in profile `env`, where run-reset returns nil
-   or the refusal's ex-data."
+   with rows. Calls (f run-reset) with WAG_ENV set to `env`, where run-reset
+   returns nil or the refusal's ex-data."
   [ctx env f]
-  (let [root (io/file "target" (str "bou585-" (System/nanoTime)))]
+  (let [root (io/file "target" (str "bou585-" (System/nanoTime)))
+        ;; The :test alias sets -Denv=test, which outranks WAG_ENV.
+        prop (System/getProperty "env")]
+    (System/clearProperty "env")
     (try
       (let [app (migration-dir! root 20260101000000 "app_table")]
         (migratus/migrate (migrations/migratus-config (:datasource ctx) [app]))
@@ -39,11 +42,12 @@
         (with-redefs [migrations/shadowed-migration-dirs (fn ([] nil) ([_ _] nil))
                       migrations/manifest-urls           (fn [] [])
                       migrations/discover-migration-dirs (fn [] [app])
-                      db-config/detect-environment       (constantly env)
+                      db-config/getenv                   #(when (= "WAG_ENV" %) env)
                       db-config/get-active-db-config     (fn [] {:datasource (:datasource ctx)})
                       db-config/load-config              (fn [_] {:active {}})]
           (f (fn [& [opts]]
                (try (reset/reset-database! (or opts {})) nil
                     (catch clojure.lang.ExceptionInfo e (ex-data e)))))))
       (finally
+        (when prop (System/setProperty "env" prop))
         (doseq [file (reverse (file-seq root))] (.delete ^java.io.File file))))))

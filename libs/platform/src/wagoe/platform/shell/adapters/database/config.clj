@@ -17,6 +17,7 @@
      (db-config/get-active-adapters \"dev\")     ; Get active adapters for dev env
      (db-config/adapter-active? :postgresql)    ; Check if adapter is active"
   (:require [clojure.tools.logging :as log]
+            [wagoe.config :as config]
             [aero.core :as aero]
             [clojure.java.io :as io]
             [wagoe.platform.shell.adapters.database.factory :as factory]))
@@ -76,13 +77,15 @@
   (System/getenv k))
 
 (defn detect-environment
-  "Detect current environment from various sources"
+  "Detect current environment from various sources, with the aliases the
+   config loader accepts resolved: `development` is `dev` (BOU-585)."
   []
-  (or (System/getProperty "env")
-      (getenv "WAG_ENV")
-      (getenv "ENV")
-      (getenv "ENVIRONMENT")
-      *default-environment*))
+  (config/normalize-env
+   (or (System/getProperty "env")
+       (getenv "WAG_ENV")
+       (getenv "ENV")
+       (getenv "ENVIRONMENT")
+       *default-environment*)))
 
 (def disposable-envs
   "Environments whose database may be destroyed or filled with demo data.

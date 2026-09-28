@@ -65,20 +65,20 @@
           (finally (db-factory/close-db-context! ctx)))))))
 
 (deftest ^:integration reset-runs-in-dev-test-and-acc-only
-  (doseq [env ["dev" "test" "acc"]]
+  (doseq [env ["dev" "test" "acc" "development" "acceptance"]]
     (testing env
       (let [ctx (h2)]
         (try
           (with-app ctx env (fn [run-reset] (is (nil? (run-reset)))))
           (is (not (contains? (tables ctx) "auth_users")))
           (finally (db-factory/close-db-context! ctx))))))
-  (doseq [env ["prod" "production" "staging" "local" "development" ""]]
+  (doseq [env ["prod" "production" "staging" "local" ""]]
     (testing (pr-str env)
       (let [ctx (h2)]
         (try
           (with-app ctx env
             (fn [run-reset]
-              (is (= {:type :forbidden :env env} (run-reset)))
+              (is (= :forbidden (:type (run-reset))))
               (is (contains? (tables ctx) "auth_users") "nothing is dropped")
               (is (contains? (tables ctx) "app_table"))))
           (finally (db-factory/close-db-context! ctx))))))

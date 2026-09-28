@@ -98,6 +98,8 @@
   (doseq [[args env] [[["--env" "prod"] {}]
                       [[] {"WAG_ENV" "prod"}]
                       [[] {"ENV" "staging"}]
+                      [[] {"WAG_ENV" "local"}]
+                      [[] {"WAG_ENV" "production"}]
                       [["--env" ""] {}]]]
     (testing (pr-str args env)
       (let [{:keys [exit out cmds]} (run-reset args env)]
@@ -105,6 +107,9 @@
         (is (empty? cmds) "no JVM is started")
         (is (str/includes? out "bb migrate up") out))))
   (doseq [[args env profile] [[[] {} "dev"]
+                              [[] {"WAG_ENV" "development"} "dev"]
+                              [["--env" "Development"] {} "dev"]
+                              [[] {"WAG_ENV" "acceptance"} "acc"]
                               [["--env" "test"] {"WAG_ENV" "prod"} "test"]
                               [[] {"WAG_ENV" "acc"} "acc"]]]
     (testing profile
@@ -115,3 +120,8 @@
   (testing "--allow-remote reaches the platform"
     (is (= [["clojure" "-J-Denv=dev" "-M:migrate" "reset" "--allow-remote"]]
            (:cmds (run-reset ["--allow-remote"] {}))))))
+
+(deftest ^:unit env-aliases-match-the-config-loader
+  (let [src (slurp (str (fs/path (repo-root) "libs" "config" "src" "wagoe" "config.clj")))
+        m   (second (re-find #"(?s)\(def \^:private env-aliases.*?(\{[^}]*\})" src))]
+    (is (= (read-string m) db/env-aliases))))

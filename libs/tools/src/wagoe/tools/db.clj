@@ -201,6 +201,11 @@
    authoritative; Babashka cannot load it."
   #{"dev" "test" "acc"})
 
+(def env-aliases
+  "Mirrors wagoe.config's env-aliases, which Babashka cannot load; db-test
+   pins the two together."
+  {"development" "dev" "production" "prod" "acceptance" "acc" "testing" "test"})
+
 (def ^:dynamic *exit!* (fn [code] (System/exit code)))
 
 (defn- flag-value [args flag]
@@ -208,13 +213,15 @@
 
 (defn reset-profile
   "The profile `bb db:reset args` resets: --env, else the variables the
-   platform reads, else dev."
+   platform reads, else dev, with the config loader's aliases resolved."
   [args getenv]
-  (or (flag-value args "--env")
-      (getenv "WAG_ENV")
-      (getenv "ENV")
-      (getenv "ENVIRONMENT")
-      "dev"))
+  (let [s (some-> (or (flag-value args "--env")
+                      (getenv "WAG_ENV")
+                      (getenv "ENV")
+                      (getenv "ENVIRONMENT")
+                      "dev")
+                  str/trim str/lower-case)]
+    (get env-aliases s s)))
 
 (defn db-reset
   "Drop the application's tables and migrate, in dev, test or acc only.
@@ -285,8 +292,8 @@
       ;; Maven deps at runtime, so it cannot open a JDBC connection itself —
       ;; the same reason `bb migrate` shells out to `clojure -M:migrate`.
       (let [{:keys [exit]} (apply process/shell
-                                 {:out :inherit :err :inherit :continue true}
-                                 "clojure" "-M:seed" (seed-path) (seed-args (root-dir) args))]
+                                  {:out :inherit :err :inherit :continue true}
+                                  "clojure" "-M:seed" (seed-path) (seed-args (root-dir) args))]
         (when-not (zero? exit)
           (System/exit exit))))))
 
