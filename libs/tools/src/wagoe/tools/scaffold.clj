@@ -74,8 +74,8 @@
        input))))
 
 (defn tty?
-  "Whether a person can answer a prompt. A console is not enough on JDK 22+,
-   which returns one with stdin redirected."
+  "Whether a person can answer a prompt. A console is not enough: newer JDKs
+   return one with stdin redirected."
   []
   (if-let [c (System/console)]
     (try (boolean (.isTerminal c))
@@ -447,10 +447,22 @@
 ;; Interactive wizards
 ;; =============================================================================
 
+(defn- shell-quote
+  "`s` as one shell word. Unquoted, a workflow's `>` is a redirect (BOU-585)."
+  [s]
+  (if (re-matches #"[A-Za-z0-9_./:=,@%+-]+" s)
+    s
+    (str "'" (str/replace s "'" "'\\''") "'")))
+
+(defn command-line
+  "`args` as a `bb scaffold` command line that pastes back as the same args."
+  [args]
+  (str "bb scaffold " (str/join " " (map shell-quote args))))
+
 (defn- print-command
   "The command a wizard is about to run, as the user would type it."
   [args]
-  (println (dim (str "Command: bb scaffold " (str/join " " args)))))
+  (println (dim (str "Command: " (command-line args)))))
 
 (defn wizard-generate []
   (println)
@@ -876,7 +888,7 @@
        "  default= is the column DEFAULT; a required enum without one takes its first value\n"
        "\n"
        "A status that only moves forward, as a workflow (generate and entity):\n"
-       "  --workflow status:entered>delivered>paid\n"
+       "  --workflow 'status:entered>delivered>paid'   (quoted: > is a shell redirect)\n"
        "\n"
        "For AI scaffolding, set one of:\n"
        "  ANTHROPIC_API_KEY, OPENAI_API_KEY, REPLICATE_API_TOKEN,\n"

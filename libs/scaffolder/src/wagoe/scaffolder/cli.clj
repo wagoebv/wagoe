@@ -38,7 +38,7 @@
     :multi true
     :default []
     :update-fn conj]
-   [nil "--workflow SPEC" "The entity's status as a workflow: field:first>second>third, forward only"]
+   [nil "--workflow SPEC" "The entity's status as a workflow, quoted: 'field:first>second>third', forward only"]
    [nil "--base-ns NS" "Base namespace + path for the module (default: the project's own)"]
    ;; `--[no-]x`, not `--x`: a bare boolean flag with `:default true` has no
    ;; way to say no — `--web false` set it to true and left "false" as a stray
@@ -78,7 +78,7 @@
    [nil "--min N" "With --belongs-to: the fewest the parent may have. Its create then takes them"
     :parse-fn #(or (parse-long %) %)
     :validate [pos-int? "Must be a whole number, 1 or more"]]
-   [nil "--workflow SPEC" "The entity's status as a workflow: field:first>second>third, forward only"]
+   [nil "--workflow SPEC" "The entity's status as a workflow, quoted: 'field:first>second>third', forward only"]
    [nil "--[no-]http" "Generate the entity's HTTP (REST API) routes (default: true)"
     :default true]
    [nil "--public-api" "API routes open to anyone (default: they require a signed-in user)"
@@ -411,7 +411,7 @@
         kebab? #(boolean (re-matches #"^[a-z][a-z0-9-]*$" (str %)))]
     (cond
       (or more (nil? states))
-      {:error (str "Invalid workflow " (pr-str spec) " (expected field:first>second, e.g. status:entered>delivered>paid)")}
+      {:error (str "Invalid workflow " (pr-str spec) " (expected field:first>second, e.g. --workflow 'status:entered>delivered>paid')")}
 
       (not (kebab? field))
       {:error (str "Invalid workflow field " (pr-str field) " (must be lowercase kebab-case)")}
@@ -1031,8 +1031,8 @@ Field Flags:
     --field status:enum:values=entered,paid:required:default=entered
 
 Workflow:
-  --workflow SPEC      The entity's status as a workflow, e.g.
-                       status:entered>delivered>paid. Each state moves only to
+  --workflow SPEC      The entity's status as a workflow, quoted, e.g.
+                       'status:entered>delivered>paid'. Each state moves only to
                        the next. The status column mirrors the workflow's state:
                        no request sets it, POST /<entities>/:id/transition
                        moves it, and every new row starts at the first state.

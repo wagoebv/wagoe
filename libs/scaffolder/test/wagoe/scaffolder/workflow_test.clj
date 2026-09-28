@@ -1,5 +1,5 @@
 (ns wagoe.scaffolder.workflow-test
-  "`--workflow status:entered>delivered>paid`: an entity whose status is a
+  "`--workflow 'status:entered>delivered>paid'`: an entity whose status is a
    workflow rather than a field anyone may set.
 
    Without it a user hand-wrote the definition, its registration, the start of

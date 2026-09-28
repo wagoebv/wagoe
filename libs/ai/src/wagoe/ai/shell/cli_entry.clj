@@ -299,9 +299,9 @@
   (fn [code] (System/exit code)))
 
 (defn tty?
-  "Whether a person can answer a prompt. A console is not enough on JDK 22+,
-   which returns one with stdin redirected; isTerminal is asked reflectively
-   because JDK 21 lacks it."
+  "Whether a person can answer a prompt. A console is not enough: newer JDKs
+   return one with stdin redirected. isTerminal is asked reflectively because
+   the baseline JDK lacks it."
   []
   (if-let [c (System/console)]
     (try (boolean (clojure.lang.Reflector/invokeInstanceMethod c "isTerminal" (object-array 0)))
