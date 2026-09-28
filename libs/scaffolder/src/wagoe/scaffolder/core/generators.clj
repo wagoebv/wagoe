@@ -109,8 +109,10 @@
                   "   [:deleted-at {:optional true} [:maybe inst?]]"
                   (when (:workflow entity)
                     (str "\n   ;; On GET: the workflow instance, which the workflow API takes, and its state;\n"
-                         "   ;; null before its first transition when a row has none yet.\n"
-                         "   [:workflow {:optional true} [:maybe [:map [:instance-id :uuid] [:state :keyword]]]]"))
+                         "   ;; null before its first transition when a row has none yet. A transition\n"
+                         "   ;; adds what the caller may do next, as the workflow API answers it.\n"
+                         "   [:workflow {:optional true} [:maybe [:map [:instance-id :uuid] [:state :keyword]\n"
+                         "                                       [:available-transitions {:optional true} [:vector :map]]]]]"))
                   "])\n")
      :requests (str "(def Create" entity-name "Request\n"
                     "  \"Schema for create " e " API requests.\"\n"
@@ -237,7 +239,8 @@
             (str "\n\n"
                  "  (transition-" e " [this id transition actor]\n"
                  "    \"Move the " e "'s " (get-in entity [:workflow :field]) " along its workflow. The result, with\n"
-                 "     the " e " as it is now on success; nil when there is no such " e ".\"))\n"
+                 "     the " e " as it is now on success, its :workflow saying what the actor\n"
+                 "     may do next; nil when there is no such " e ".\"))\n"
                  "\n"
                  "(defprotocol I" entity-name "Workflow\n"
                  "  \"The " e "'s " (get-in entity [:workflow :field]) " workflow, as the service drives it.\"\n"
@@ -255,7 +258,8 @@
                  "    \"Remove the workflow of a deleted " e ".\")\n"
                  "\n"
                  "  (transition-" e "-workflow! [this id transition actor]\n"
-                 "    \"Run `transition` as `actor`, starting the workflow if it has none.\"))\n")
+                 "    \"Run `transition` as `actor`, starting the workflow if it has none. On\n"
+                 "     success the result carries :available-transitions, the actor's next.\"))\n")
             ")\n"))}))
 
 (defn generate-ports-file
@@ -790,7 +794,11 @@ DROP TABLE IF EXISTS %s;
                  "          (mirror-" (:field wf) "! repository id state)))\n"
                  "      (let [result (ports/transition-" entity-lower "-workflow! workflow id transition actor)]\n"
                  "        (if (:success? result)\n"
-                 "          (assoc result :" entity-lower " (mirror-" (:field wf) "! repository id (get-in result [:instance :current-state])))\n"
+                 "          (let [{:keys [instance available-transitions]} result]\n"
+                 "            (assoc result :" entity-lower " (assoc (mirror-" (:field wf) "! repository id (:current-state instance))\n"
+                 "                                      :workflow {:instance-id           (:id instance)\n"
+                 "                                                 :state                 (:current-state instance)\n"
+                 "                                                 :available-transitions available-transitions})))\n"
                  "          result)))))\n")
             (str "    " delete-expr "))\n"))
           "\n"
@@ -1244,6 +1252,7 @@ DROP TABLE IF EXISTS %s;
          "   only thing that moves it.\"\n"
          "  (:require [" base-ns "." module-name ".ports :as ports]\n"
          "            [wagoe.events.ports :as events]\n"
+         "            [wagoe.workflow.core.transitions :as transitions]\n"
          "            [wagoe.workflow.ports :as workflow]))\n"
          "\n"
          "(def definition\n"
@@ -1298,11 +1307,18 @@ DROP TABLE IF EXISTS %s;
          "  (transition-" e "-workflow! [this id transition actor]\n"
          "    ;; Started here too: a row the admin wrote while the event bus was down\n"
          "    ;; has none yet.\n"
-         "    (let [instance (ports/start-" e "-workflow! this id)]\n"
-         "      (workflow/transition! engine {:instance-id (:id instance)\n"
-         "                                    :transition  transition\n"
-         "                                    :actor-id    (:id actor)\n"
-         "                                    :actor-roles (filterv some? [(some-> (:role actor) keyword)])})))\n"
+         "    (let [instance (ports/start-" e "-workflow! this id)\n"
+         "          roles    (filterv some? [(some-> (:role actor) keyword)])\n"
+         "          result   (workflow/transition! engine {:instance-id (:id instance)\n"
+         "                                                 :transition  transition\n"
+         "                                                 :actor-id    (:id actor)\n"
+         "                                                 :actor-roles roles})]\n"
+         "      ;; What GET /api/v1/workflow/instances/:id answers the same actor.\n"
+         "      (cond-> result\n"
+         "        (:success? result)\n"
+         "        (assoc :available-transitions\n"
+         "               (mapv transitions/transition-view\n"
+         "                     (workflow/available-transitions engine (:id instance) roles nil))))))\n"
          "\n"
          "  java.lang.AutoCloseable\n"
          "  (close [_]\n"

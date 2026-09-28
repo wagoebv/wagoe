@@ -240,3 +240,14 @@
          (:label t)          (assoc :label (:label t))
          (not (:allowed? check)) (assoc :reason (:reason check)))))
    (allowed-transitions definition current-state)))
+
+(defn transition-view
+  "One of `available-transitions-with-status` as the APIs answer it: names for
+   keywords, and `:enabled` for `:enabled?`. The workflow API and a scaffolded
+   module's transition route share it, so both answer the same shape."
+  [t]
+  (cond-> {:id      (name (:id t))
+           :to      (name (:to t))
+           :enabled (boolean (:enabled? t))}
+    (:label t)  (assoc :label (:label t))
+    (:reason t) (assoc :reason (name (:reason t)))))

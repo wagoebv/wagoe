@@ -134,7 +134,31 @@ Bodies are kebab-case JSON, as in a scaffolded module's API. Start an instance w
  "entity-id":   "5b1c9a52-6f0e-4d7a-9a57-2d9e3c1b8f40"}
 ----
 
-A transition answers `{"instance": {…}, "audit-entry": {…}}`.
+A transition answers the instance and its audit entry. The instance carries the
+transitions available from its new state to the caller, as `GET /instances/:id` does:
+
+[source,json]
+----
+{"instance":    {"id":            "0d4b7f3e-2a61-4c55-8f0e-9b7a1c2d3e4f",
+                 "workflow-id":   "order-workflow",
+                 "entity-type":   "order",
+                 "entity-id":     "5b1c9a52-6f0e-4d7a-9a57-2d9e3c1b8f40",
+                 "current-state": "delivered",
+                 "available-transitions": [{"id": "paid", "to": "paid", "enabled": true}],
+                 "created-at":    "2026-09-27T12:00:00Z",
+                 "updated-at":    "2026-09-27T12:05:00Z"},
+ "audit-entry": {"id":          "7c1e2d3f-4a5b-4c6d-8e9f-0a1b2c3d4e5f",
+                 "instance-id": "0d4b7f3e-2a61-4c55-8f0e-9b7a1c2d3e4f",
+                 "transition":  "delivered",
+                 "from-state":  "entered",
+                 "to-state":    "delivered",
+                 "actor-id":    "2f6c8a1e-5b3d-4e7f-9a0b-1c2d3e4f5a6b",
+                 "actor-roles": ["admin"],
+                 "occurred-at": "2026-09-27T12:05:00Z"}}
+----
+
+A transition not enabled for the caller has `"enabled": false` and a `reason`:
+`insufficient-permissions`, or `guard-rejected` when a guard refuses it.
 One the workflow does not make from the current state answers 422:
 
 [source,json]

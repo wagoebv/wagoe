@@ -232,10 +232,17 @@
         (testing "a step forward moves the workflow, and the status follows"
           (let [resp (move "delivered")]
             (is (= 200 (:status resp)) (pr-str resp))
-            (is (= "delivered" (get-in resp [:body :status])))))
+            (is (= "delivered" (get-in resp [:body :status])))
+            (testing "and says what the caller may do next, as the workflow API does (BOU-589)"
+              (is (= {:state "delivered"
+                      :available-transitions [{:id "paid" :to "paid" :enabled true :label "Paid"}]}
+                     (select-keys (get-in resp [:body :workflow]) [:state :available-transitions]))))))
 
         (testing "going back is refused"
           (is (= 422 (:status (move "entered")))))
+
+        (testing "from the last state, nothing follows"
+          (is (= [] (get-in (move "paid") [:body :workflow :available-transitions]))))
 
         (testing "deleting the invoice removes its workflow"
           (is (= 204 (:status (call :delete (str "/invoices/" id) nil))))

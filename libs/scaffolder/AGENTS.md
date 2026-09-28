@@ -127,7 +127,7 @@ each, as the admin takes; their workflows start after the commit, and a
 failure to start one removes the invoice again. `--min 1` (`:min`,
 `"min"` in the AI spec) makes them required: fewer is a 400 naming
 `invoice-line-items`, the API refuses the delete or move that would leave
-fewer (counted and written in one transaction holding the parent's row, so
+fewer with a 409 `conflict`, as the admin does (counted and written in one transaction holding the parent's row, so
 two at once cannot both pass), and the admin's `:has-many` gets `:min`. Only
 the first entity's create takes children, so `--min` on a child of another is
 refused. `bb scaffold field` on such a child adds the field to the parent's
@@ -163,7 +163,9 @@ request, `"workflow"` in the `bb scaffold ai` spec):
   store has its own connections), so a column left behind is brought level at
   the next transition.
   `POST /api/v1/<entities>/:id/transition {"transition": "delivered"}` answers
-  200 with the entity or 422 for a move the workflow does not make.
+  200 with the entity, its `workflow` carrying the `available-transitions` of the
+  new state for the caller as the workflow API answers them, or 422 for a move
+  the workflow does not make.
 - `GET /api/v1/<entities>/:id` includes `"workflow": {"instance-id": …, "state": …}`,
   the id the workflow API takes, or `null` for a row that has none yet (an admin
   row written while the event bus was down): a GET starts nothing, a transition
