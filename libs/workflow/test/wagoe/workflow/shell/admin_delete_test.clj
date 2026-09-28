@@ -24,7 +24,7 @@
 
 (defn- h2 [db-name]
   (let [ctx (db-factory/db-context {:adapter :h2 :database-path (str "mem:" db-name ";DB_CLOSE_DELAY=-1")})]
-    (ig/init-key :wagoe/workflow-db-schema {:ctx ctx})
+    (ig/init-key :wagoe/workflow-db-schema {:ctx ctx :profile :test})
     ctx))
 
 (use-fixtures :each

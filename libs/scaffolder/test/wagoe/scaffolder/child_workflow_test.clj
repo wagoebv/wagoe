@@ -39,7 +39,7 @@
   (let [build (ns-resolve (symbol (str base ".billing.shell.module-wiring")) 'ig-config)
         graph (:components (build {:enabled? true} {:config {:active {:wagoe/workflow {}}}}))]
     (ig/init (merge (walk/postwalk-replace {(ig/ref :wagoe/db-context) ctx} graph)
-                    {:wagoe/workflow-db-schema {:ctx ctx}
+                    {:wagoe/workflow-db-schema {:ctx ctx :profile :test}
                      :wagoe/workflow {:db-ctx ctx :db-schema (ig/ref :wagoe/workflow-db-schema)
                                       :guard-registry {}}}))))
 

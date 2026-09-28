@@ -360,6 +360,35 @@
       (str/ends-with? humanized "s") humanized
       :else (str humanized "s"))))
 
+(defn- singularize
+  "English plural -> singular on the last word: Categories -> Category,
+   Addresses -> Address, Statuses -> Status, Houses -> House, Invoices ->
+   Invoice. Irregular plurals (People) need :label-singular."
+  [s]
+  (cond
+    (re-find #"(?i)[^aeiou]ies$" s)      (str (subs s 0 (- (count s) 3)) "y")
+    ;; Statuses, Bonuses; not Houses or Causes, whose -u- follows a vowel.
+    (re-find #"(?i)(ss|x|ch|sh|[^aeiou]us)es$" s) (subs s 0 (- (count s) 2))
+    (re-find #"(?i)(ss|us|is)$" s)       s
+    (re-find #"(?i)s$" s)                (subs s 0 (dec (count s)))
+    :else                                s))
+
+(defn singular-label
+  "What to call one record of the entity: `:label-singular` when the config
+   has it, else `:label` made singular, else the entity name (BOU-589). A
+   `:label` that is not a string is returned as it is."
+  [entity-config entity-name]
+  (let [label (:label entity-config)]
+    (or (:label-singular entity-config)
+        (cond (string? label) (singularize label)
+              (some? label)   label
+              :else           (singularize (humanize-entity-name entity-name))))))
+
+(defn plural-label
+  "What to call the records of the entity: `:label`, else the entity name humanized."
+  [entity-config entity-name]
+  (or (:label entity-config) (humanize-entity-name entity-name)))
+
 ;; =============================================================================
 ;; Core Parsing - Database Metadata to Field Configurations
 ;; =============================================================================

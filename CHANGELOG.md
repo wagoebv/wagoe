@@ -33,6 +33,13 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **Every JSON error body is `{"error": {"type": …, "message": …}}`** (BOU-586); refused input is `validation-error`.
   Read `error.type` and `error.message`; `details` and `correlation-id` moved inside `error`.
+- **A scaffolded API refuses a delete or move below `--min` with 409 `conflict`** (BOU-589), as the admin does; it was 400.
+  Read 409 where you read 400 for it. Regenerated service files only; an existing module keeps its 400.
+
+### Added
+
+- **`workflow_instances.entity_uuid`** (BOU-589): the entity id as a UUID, NULL when it is not one, indexed.
+  Join on it instead of casting `entity_id`; `migrate up` adds it, rewriting the table once on PostgreSQL.
 
 ### Added
 
@@ -45,6 +52,12 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **The workflow boot put the BOU-581 unique index on `workflow_instances` in production** (BOU-589). It changes
+  that table only in dev, test and acc now; elsewhere it warns, so run `bb migrate up`.
+- **Admin toasts named one record in the plural**, "Invoices created successfully" (BOU-589). One record is singular now,
+  and translated; set `:label-singular` where `:label` made singular is wrong.
+- **A workflow transition answered `"available-transitions": null`** (BOU-589), in the workflow API and a scaffolded
+  `/:id/transition`. Both now list what the caller may do from the new state.
 - **`GET /web/admin/workflows/<id>` answered 500 for an id that is not a UUID** (BOU-586); it is a 404 now.
 - **An unknown admin entity answered 500** (BOU-586); it is a 404. Admin throws `:not-found` and `:validation-error`
   where it threw `:entity-not-allowed` and `:cannot-create-split-table-entity`.

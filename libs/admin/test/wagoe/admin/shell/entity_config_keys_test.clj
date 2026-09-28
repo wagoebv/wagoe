@@ -23,6 +23,7 @@
 
 (deftest ^:unit a-known-config-starts
   (is (nil? (startup-error {:label           "Invoices"
+                            :label-singular  "Invoice"
                             :soft-delete     true
                             :list-fields     [:number]
                             :fields          {:number {:type :string :label "Number" :width 2}}

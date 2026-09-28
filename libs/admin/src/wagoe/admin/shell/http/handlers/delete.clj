@@ -4,6 +4,7 @@
    [wagoe.admin.ports :as ports]
    [wagoe.admin.core.ui :as admin-ui]
    [wagoe.admin.core.permissions :as permissions]
+   [wagoe.admin.core.schema-introspection :as introspection]
    [wagoe.admin.shell.permissions :as shell-permissions]
    [wagoe.admin.shell.http.support :as support]
    [clojure.string :as str]
@@ -73,8 +74,9 @@
         ; Success - redirect back to return_to (parent context) or entity list
         (let [redirect-url (or safe-return-to
                                (str "/web/admin/" (name entity-name)))
-              label (or (:label entity-config) (name entity-name))
-              toast-json (str "{\"type\":\"success\",\"message\":\"" (escape-json-string (str label " deleted")) "\"}")]
+              message ((support/t-fn request) :admin/toast-deleted
+                                              {:label (introspection/singular-label entity-config entity-name)})
+              toast-json (str "{\"type\":\"success\",\"message\":\"" (escape-json-string message) "\"}")]
           (-> (ring-response/response "")
               (ring-response/status 200)
               (ring-response/header "X-Toast" toast-json)
@@ -99,11 +101,14 @@
                      :page (:page-number list-result)}
         permissions (permissions/get-entity-permissions user entity-name entity-config)
 
-        ; Create toast message
-        label (or (:label entity-config) (name entity-name))
+        ; One record is named in the singular (BOU-589)
+        label (if (= 1 success-count)
+                (introspection/singular-label entity-config entity-name)
+                (introspection/plural-label entity-config entity-name))
+        t (support/t-fn request)
         toast-msg (if (zero? failed-count)
-                    (str success-count " " label " deleted")
-                    (str success-count " " label " deleted, " failed-count " failed"))
+                    (t :admin/flash-bulk-deleted {:count success-count :label label})
+                    (t :admin/flash-bulk-deleted-partial {:count success-count :failed failed-count}))
         toast-json (str "{\"type\":\""
                         (if (zero? failed-count) "success" "warning")
                         "\",\"message\":\"" (escape-json-string toast-msg) "\"}")]

@@ -4,6 +4,7 @@
    [wagoe.admin.ports :as ports]
    [wagoe.admin.core.ui :as admin-ui]
    [wagoe.admin.core.forms :as forms]
+   [wagoe.admin.core.schema-introspection :as introspection]
    [wagoe.admin.core.permissions :as permissions]
    [wagoe.admin.shell.permissions :as shell-permissions]
    [wagoe.admin.shell.http.support :as support]
@@ -227,7 +228,7 @@
                                        :entity-configs entity-configs
                                        :logo-url (:logo-url config)
                                        :flash {:type :success
-                                               :message [:t :admin/flash-created {:label (:label entity-config)}]}}))))
+                                               :message [:t :admin/flash-created {:label (introspection/singular-label entity-config entity-name)}]}}))))
           (catch Exception e
             (let [;; A constraint the database enforced, reported on its field
                   ;; by the service (BOU-494).
@@ -258,7 +259,7 @@
                                                ;; (BOU-182: never echo raw exception text).
                                                 :message (or (client-safe-error-message e)
                                                              [:t :admin/flash-create-failed
-                                                              {:label (:label entity-config)}])}}))
+                                                              {:label (introspection/singular-label entity-config entity-name)}])}}))
                 refused? (assoc :status 422)))))
 
         ; Validation errors - re-render form
@@ -342,7 +343,7 @@
                                   (admin-ui/entity-detail-page entity-name entity-config updated-record {} permissions
                                                                (assoc (:page-opts ctx) :flash
                                                                       {:type :success
-                                                                       :message [:t :admin/flash-updated {:label (:label entity-config)}]}))
+                                                                       :message [:t :admin/flash-updated {:label (introspection/singular-label entity-config entity-name)}]}))
                                   {:user user
                                    :current-entity entity-name
                                    :entities (:entities ctx)

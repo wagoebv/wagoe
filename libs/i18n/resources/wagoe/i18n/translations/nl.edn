@@ -420,6 +420,7 @@
  :admin/inline-cancel              "Annuleren"
  :admin/flash-created              "{label} succesvol aangemaakt"
  :admin/flash-updated              "{label} succesvol bijgewerkt"
+ :admin/toast-deleted              "{label} verwijderd"
  :admin/flash-validation-errors    "Corrigeer de fouten hieronder"
  :admin/flash-create-failed        "Aanmaken van {label} mislukt"
  :admin/flash-delete-failed        "Verwijderen mislukt"

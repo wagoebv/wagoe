@@ -376,6 +376,17 @@
   [request]
   (UUID/fromString (get-in request [:path-params :id])))
 
+(defn t-fn
+  "The request's translation function; without i18n on the request, one that
+   answers the key's name."
+  [request]
+  (or (i18n-middleware/resolve-t-fn request)
+      (get request :i18n/t)
+      (fn
+        ([k] (name k))
+        ([k _params] (name k))
+        ([k _params _n] (name k)))))
+
 (defn html-response
   "Create HTML response with standard headers, resolving [:t ...] i18n markers.
 
@@ -386,14 +397,7 @@
    Returns:
      Ring response map"
   [request html]
-  (let [fallback-t (fn
-                     ([k] (name k))
-                     ([k _params] (name k))
-                     ([k _params _n] (name k)))
-        t-fn (or (i18n-middleware/resolve-t-fn request)
-                 (get request :i18n/t)
-                 fallback-t)
-        body-content (i18n/render html t-fn)]
+  (let [body-content (i18n/render html (t-fn request))]
     (-> (ring-response/response body-content)
         (ring-response/content-type "text/html; charset=utf-8"))))
 
