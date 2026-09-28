@@ -150,6 +150,56 @@
         (is (str/includes? out (str "bb db:" cmd)) out)
         (is (str/includes? out "Usage") out)))))
 
+(defn- run-seed
+  "Run `bb db:seed args` in project `root` with `env` as the environment.
+   Returns {:exit :out :cmds}."
+  [root args env]
+  (let [exit (atom nil)
+        cmds (atom [])
+        prev (System/getProperty "user.dir")]
+    (try
+      (System/setProperty "user.dir" root)
+      (let [out (with-redefs [babashka.process/shell (fn [_opts & cmd] (swap! cmds conj (vec (flatten cmd))) {:exit 0})
+                              db/getenv              #(get env %)]
+                  (binding [db/*exit!* #(reset! exit %)]
+                    (with-out-str (apply db/-main "seed" args))))]
+        {:exit @exit :out out :cmds @cmds})
+      (finally (System/setProperty "user.dir" prev)))))
+
+(deftest ^:unit seed-takes-the-path-it-is-given
+  (let [root (temp-project {"resources/seeds/dev.edn"   "[]"
+                            "resources/seeds/demo.edn"  "[]"})]
+    (testing "a path given is the one seeded"
+      (let [{:keys [cmds exit]} (run-seed root ["resources/seeds/demo.edn"] {"WAG_ENV" "dev"})]
+        (is (nil? exit))
+        (is (= [["clojure" "-M:seed" (str (fs/path root "resources/seeds/demo.edn"))]] cmds))))
+    (testing "with flags around it"
+      (is (= [["clojure" "-M:seed" (str (fs/path root "resources/seeds/demo.edn")) "--force"]]
+             (:cmds (run-seed root ["--force" "resources/seeds/demo.edn"] {"WAG_ENV" "dev"})))))
+    (testing "none given: resources/seeds/dev.edn"
+      (is (= [["clojure" "-M:seed" (str root "/resources/seeds/dev.edn")]]
+             (:cmds (run-seed root [] {"WAG_ENV" "dev"})))))
+    (testing "a path that is not there is refused, and named"
+      (let [{:keys [cmds exit out]} (run-seed root ["nope.edn"] {"WAG_ENV" "dev"})]
+        (is (= 1 exit))
+        (is (empty? cmds))
+        (is (str/includes? out "nope.edn") out)))))
+
+(deftest ^:unit seed-runs-where-reset-does
+  ;; One allowlist with db:reset, aliases resolved (BOU-588).
+  (let [root (temp-project {"resources/seeds/dev.edn" "[]"})]
+    (doseq [env [{"WAG_ENV" "dev"} {"WAG_ENV" "development"} {"WAG_ENV" "acc"}
+                 {"WAG_ENV" "acceptance"} {"ENV" "test"} {}]]
+      (testing (pr-str env)
+        (let [{:keys [exit cmds out]} (run-seed root [] env)]
+          (is (nil? exit) out)
+          (is (= 1 (count cmds))))))
+    (doseq [env [{"WAG_ENV" "prod"} {"WAG_ENV" "production"} {"WAG_ENV" "local"} {"ENV" "staging"}]]
+      (testing (pr-str env)
+        (let [{:keys [exit cmds]} (run-seed root [] env)]
+          (is (= 1 exit))
+          (is (empty? cmds)))))))
+
 (deftest ^:unit every-db-task-hands-its-arguments-over
   ;; db:status called (db/-main "status"), so --help never reached it.
   (doseq [f ["bb.edn" "libs/wagoe-cli/resources/wagoe/cli/templates/bb.edn.tmpl"]]

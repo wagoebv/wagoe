@@ -215,6 +215,6 @@
 (deftest ^:unit bb-guide-seed-explains-the-seed-file
   (let [out (get (guide-texts) "seed")]
     (is (some? out) "seed is a topic")
-    (doseq [s ["resources/seeds/dev.edn" ":id :invoice/acme" ":invoice-id :invoice/acme"
+    (doseq [s ["resources/seeds/dev.edn" ":id :invoice/acme" ":invoice-id :invoice/acme" "dev, test and acc"
                "created-at" "bb db:seed" "bb create-admin" "bb scaffold"]]
       (is (str/includes? (str out) s) s))))

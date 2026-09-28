@@ -87,34 +87,27 @@
        (getenv "ENVIRONMENT")
        *default-environment*)))
 
+(def resettable-envs
+  "The profiles `db:reset` may drop every table in, and `db:seed` may fill:
+   one allowlist, so a profile that can be reset can be seeded again
+   (BOU-588). Anything else — prod, an unknown name, a blank one — changes its
+   schema through migrations. Compare against `detect-environment`, which
+   resolves aliases."
+  #{"dev" "test" "acc"})
+
 (def disposable-envs
-  "Environments whose database may be destroyed or filled with demo data.
-
-   An allowlist, deliberately. A denylist naming prod/acc/production lets an
-   unrecognised name — staging, uat, qa, preprod, a typo'd prd — through to a
-   drop or an insert. Anything not known to be disposable is refused.
-
-   Single definition on purpose: `bb db:seed` gates on this, and two copies of
-   a destructive-operation allowlist is exactly the drift this codebase keeps
-   paying for. `db:reset` has its own, narrower `resettable-envs`."
-  #{"dev" "development" "test" "local"})
+  "The profiles whose database may be seeded: `resettable-envs`."
+  resettable-envs)
 
 (defn disposable-environment?
-  "True when `env` names a database that is safe to destroy or seed.
+  "True when `env` names a database that is safe to seed.
 
    Callers must pass the environment resolved by `detect-environment`, not a
    direct read of WAG_ENV — the connection uses the full precedence chain
    (-Denv > WAG_ENV > ENV > ENVIRONMENT), and a guard that asks a narrower
    question than the connection is not a guard."
   [env]
-  (contains? disposable-envs env))
-
-(def resettable-envs
-  "The profiles `db:reset` may drop every table in. Narrower than
-   `disposable-envs`: a reset destroys what no migration can bring back, so
-   anything else — prod, an unknown name, a blank one — changes its schema
-   through migrations instead."
-  #{"dev" "test" "acc"})
+  (contains? disposable-envs (config/normalize-env env)))
 
 (defn resettable-environment?
   "True when `env`, as `detect-environment` resolves it, may be reset."

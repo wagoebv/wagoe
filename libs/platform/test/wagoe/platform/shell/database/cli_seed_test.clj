@@ -4,18 +4,19 @@
             [wagoe.platform.shell.adapters.database.config :as db-config]))
 
 (deftest ^:unit seeding-is-refused-outside-development
-  (testing "development-like environments are allowed"
-    (doseq [env ["dev" "development" "test" "local"]]
+  ;; The profiles db:reset allows, aliases resolved: a reset in acc is useless
+  ;; if acc cannot be seeded afterwards (BOU-588).
+  (testing "the profiles a reset allows are allowed, by any alias"
+    (doseq [env ["dev" "development" "test" "testing" "acc" "acceptance" "DEV"]]
       (is (cli-seed/seedable? env false) (str env " should be seedable"))))
 
-  (testing "production-like environments are refused"
-    (doseq [env ["prod" "production" "acc"]]
+  (testing "production is refused"
+    (doseq [env ["prod" "production"]]
       (is (not (cli-seed/seedable? env false)) (str env " must not be seedable"))))
 
   (testing "an unrecognised environment is refused, not allowed through"
-    ;; The reason this is an allowlist: db-reset uses a denylist naming
-    ;; prod/acc/production, which lets these past.
-    (doseq [env ["staging" "uat" "qa" "preprod" "prod-eu" "prd"]]
+    ;; An allowlist: "local" is not a profile the config loader knows.
+    (doseq [env ["staging" "uat" "qa" "preprod" "prod-eu" "prd" "local" ""]]
       (is (not (cli-seed/seedable? env false)) (str env " must not be seedable"))))
 
   (testing "--force overrides deliberately"

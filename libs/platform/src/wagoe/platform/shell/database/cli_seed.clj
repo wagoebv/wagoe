@@ -37,22 +37,16 @@
     (println "   id, created-at and updated-at are filled in. `bb guide seed` has more."))
   (println))
 
-(def ^:private seedable-envs
-  "Environments where inserting seed data is safe by default.
-
-   Delegates to the shared allowlist beside `detect-environment` (BOU-258).
-   `db:reset` uses the narrower `resettable-envs` there."
-  db-config/disposable-envs)
-
 (defn seedable?
-  "True when seeding may proceed in `env`.
+  "True when seeding may proceed in `env`: the profiles `db:reset` allows,
+   aliases resolved (BOU-588).
 
    Pure, and public, so the decision is testable without driving `-main` and
    its `System/exit`. The environment must be resolved by the *same* detection
    the database connection uses — see the call site."
   [env force?]
   (or (boolean force?)
-      (contains? seedable-envs env)))
+      (db-config/disposable-environment? env)))
 
 (defn- refuse-environment
   [env]
@@ -60,7 +54,7 @@
   (println "❌ Refusing to seed the" env "environment")
   (println)
   (println "   Seeding inserts rows into the database the active config resolves")
-  (println "   to. In" env "that is not a disposable database.")
+  (println "   to. It runs where db:reset does: dev, test and acc.")
   (println)
   (println "   If this is genuinely intended, be explicit:")
   (println "     clojure -M:seed <path-to-seed-file> --force")
@@ -123,7 +117,7 @@
     (when-not (seedable? env force?)
       (refuse-environment env)
       (System/exit 1))
-    (when (and force? (not (contains? seedable-envs env)))
+    (when (and force? (not (db-config/disposable-environment? env)))
       (println)
       (println "⚠  --force given: seeding the" env "environment on purpose."))
     (seed-and-report path system)))

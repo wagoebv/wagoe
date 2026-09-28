@@ -71,7 +71,7 @@
                  :task (apply db/-main "status" *command-line-args*)}
   db:reset      {:doc "Drop the app's tables and migrate; dev, test and acc only (bb db:reset [--env E] [--allow-remote])"
                  :task (apply db/-main "reset" *command-line-args*)}
-  db:seed       {:doc "Seed database from resources/seeds/dev.edn (dev-like envs only; --force to override)"
+  db:seed       {:doc "Seed the database from resources/seeds/dev.edn or a path (bb db:seed [path] [--force]); dev, test and acc only"
                  :task (apply db/-main "seed" *command-line-args*)}
   quickstart    {:doc "Zero-to-running-app setup: check env, configure, scaffold, migrate, start"
                  :task (apply quickstart/-main *command-line-args*)}

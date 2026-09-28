@@ -3,12 +3,13 @@
             [wagoe.platform.shell.adapters.database.config :as db-config]))
 
 (deftest ^:unit disposable-environment-is-an-allowlist
-  (testing "development-like environments are disposable"
-    (doseq [env ["dev" "development" "test" "local"]]
-      (is (db-config/disposable-environment? env) (str env " should be disposable"))))
+  (testing "the profiles a reset allows are disposable, by any alias (BOU-588)"
+    (doseq [env ["dev" "development" "test" "acc" "acceptance"]]
+      (is (db-config/disposable-environment? env) (str env " should be disposable")))
+    (is (= db-config/resettable-envs db-config/disposable-envs)))
 
-  (testing "production-like environments are not"
-    (doseq [env ["prod" "production" "acc"]]
+  (testing "production and names the config loader does not know are not"
+    (doseq [env ["prod" "production" "local"]]
       (is (not (db-config/disposable-environment? env)) (str env " must not be disposable"))))
 
   (testing "an unrecognised environment is refused, not allowed through"
