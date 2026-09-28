@@ -7,17 +7,9 @@
 
 **Wagoe** is a batteries-included Clojure web framework that enforces the **Functional Core / Imperative Shell (FC/IS)** pattern: pure business logic in `core/`, side effects in `shell/`, and clean interfaces through `ports.clj` protocols.
 
----
+**Status: 1.0.0, stable.** The public surface follows Semantic Versioning: a breaking change needs a major version, after a deprecation of at least one minor release and 90 days. A few libraries are *incubating* — usable, outside that guarantee, and marked as such in `wagoe list modules`. See [Stability](https://wagoe.org/docs/stability.html).
 
-## Why Wagoe?
-
-**For developers:** 31 independently-publishable libraries on Clojars — use just `wagoe-core` for validation utilities, or go full-stack with JWT + MFA auth, auto-generated CRUD UIs, background jobs, multi-tenancy, real-time WebSockets, and more. Every library follows the same FC/IS structure, making any Wagoe codebase instantly familiar.
-
-**Ship faster:** The scaffolder generates fully structured modules (entity + routes + tests) in seconds. The admin UI auto-generates CRUD interfaces from your schema — no manual forms. Built-in observability, RFC 5988 pagination, and declarative interceptors mean you write business logic, not plumbing. AI tooling (`bb scaffold ai`, and the experimental `bb ai gen-tests` and `bb ai sql`) handles the repetitive parts.
-
-**Ship with confidence:** Reference deployment configs (systemd, nginx, Fly.io, Render), an OWASP-aligned security checklist, scaling guides, health check endpoints, and zero-downtime migration patterns.
-
-**Zero lock-in:** Each library is a standard `deps.edn` dependency. Swap what doesn't fit.
+Questions go to [GitHub Discussions](https://github.com/wagoebv/wagoe/discussions); bugs and feature requests to [Issues](https://github.com/wagoebv/wagoe/issues/new/choose).
 
 ---
 
@@ -44,19 +36,19 @@ Supports macOS, Debian/Ubuntu, Arch Linux, and WSL2.
 wagoe new my-app
 cd my-app
 
-# 2. Add optional modules (e.g. payments, cache, search)
-wagoe add payments
-wagoe list modules    # see all 19 optional modules
+# 2. Add optional modules (e.g. cache, jobs, search)
+wagoe add cache
+wagoe list modules    # see all optional modules
 
 # 3. Run database migrations
-clojure -M:migrate up
+bb migrate up
 
-# 4. Start the REPL (headless nREPL server on port 7888)
+# 4. Start the REPL (prompt + nREPL server on port 7888)
 export JWT_SECRET="change-me-dev-secret-min-32-chars"
-clojure -M:repl-clj
+bb repl
 ```
 
-Connect your editor (or the Wagoe MCP server) to the nREPL port, then eval:
+At the prompt — or from your editor (or the Wagoe MCP server) connected to port 7888 — eval:
 
 ```clojure
 (go)    ; start the system — http://localhost:3000
@@ -77,6 +69,19 @@ bb guide error BND-201   # what an error code means and how to fix it
 `wagoe doctor` runs the environment, config, command and project-setup checks in
 one pass and ends with a single next action. The `bb` tasks behind it still
 exist and CI calls them directly; you do not need to know which is which.
+
+
+---
+
+## Why Wagoe?
+
+**For developers:** 31 independently-publishable libraries on Clojars — use just `wagoe-core` for validation utilities, or go full-stack with JWT + MFA auth, auto-generated CRUD UIs, background jobs, multi-tenancy, real-time WebSockets, and more. Every library follows the same FC/IS structure, making any Wagoe codebase instantly familiar.
+
+**Ship faster:** The scaffolder generates fully structured modules (entity + routes + tests) in seconds. The admin UI auto-generates CRUD interfaces from your schema — no manual forms. Built-in observability, RFC 5988 pagination, and declarative interceptors mean you write business logic, not plumbing. AI tooling (`bb scaffold ai`, and the experimental `bb ai gen-tests` and `bb ai sql`) handles the repetitive parts.
+
+**Ship with confidence:** Reference deployment configs (systemd, nginx, Fly.io, Render), an OWASP-aligned security checklist, scaling guides, health check endpoints, and zero-downtime migration patterns.
+
+**Zero lock-in:** Each library is a standard `deps.edn` dependency. Swap what doesn't fit.
 
 ---
 

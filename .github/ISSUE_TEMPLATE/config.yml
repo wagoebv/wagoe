@@ -1,5 +1,8 @@
 blank_issues_enabled: false
 contact_links:
+  - name: Ask a question
+    url: https://github.com/wagoebv/wagoe/discussions/categories/q-a
+    about: Questions about using Wagoe go to Discussions, where answers stay findable.
   - name: Documentation
     url: https://wagoe.org/docs
     about: Getting-started guides, per-library references, and architecture docs.
