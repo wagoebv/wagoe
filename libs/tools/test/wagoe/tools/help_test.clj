@@ -173,3 +173,48 @@
     (is (= #{:pass} (set (map :level results)))
         (str "not clean: "
              (pr-str (map :msg (remove #(= :pass (:level %)) results)))))))
+
+;; =============================================================================
+;; What the guides say matches the code (BOU-588)
+;; =============================================================================
+
+(defn- guide-texts
+  "{topic output} for every topic, and the general listing, as a generated
+   project sees them."
+  []
+  (with-redefs [wagoe.tools.check/framework-repo? (constantly false)]
+    (into {"general" (with-out-str (help/-main))}
+          (for [t (keys help/topic-fns)] [t (with-out-str (help/-main t))]))))
+
+(defn- lib-source-roots []
+  (let [root (if (fs/exists? "libs") "." "../..")]
+    (map str (fs/glob root "libs/*/src"))))
+
+(defn- ns-source? [ns-name]
+  (let [rel (-> ns-name (str/replace "-" "_") (str/replace "." "/"))]
+    (some (fn [src] (some #(fs/exists? (fs/path src (str rel %))) [".clj" ".cljc"]))
+          (lib-source-roots))))
+
+(deftest ^:unit every-namespace-a-guide-names-exists
+  ;; `bb guide database` named wagoe.shared.core.utils.case-conversion, which
+  ;; does not exist. The published libraries are libs/*/src.
+  (let [named (for [[topic out] (guide-texts)
+                    ns-name     (distinct (re-seq #"\bwagoe(?:\.[a-z][a-z0-9-]*){2,}" out))]
+                [topic ns-name])]
+    (is (seq named) "otherwise this passes by checking nothing")
+    (doseq [[topic ns-name] named]
+      (is (ns-source? ns-name) (str "bb guide " topic " names " ns-name)))))
+
+(deftest ^:unit no-guide-says-the-api-is-camel-case
+  ;; It is kebab-case, as everywhere in Clojure.
+  (let [texts (guide-texts)]
+    (doseq [[topic out] texts]
+      (is (not (re-find #"(?i)camel" out)) (str "bb guide " topic)))
+    (is (re-find #"API" (get texts "database")) "the database guide still says what the API uses")))
+
+(deftest ^:unit bb-guide-seed-explains-the-seed-file
+  (let [out (get (guide-texts) "seed")]
+    (is (some? out) "seed is a topic")
+    (doseq [s ["resources/seeds/dev.edn" ":id :invoice/acme" ":invoice-id :invoice/acme"
+               "created-at" "bb db:seed" "bb create-admin" "bb scaffold"]]
+      (is (str/includes? (str out) s) s))))

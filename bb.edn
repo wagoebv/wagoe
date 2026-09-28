@@ -75,7 +75,7 @@
                  :task (apply db/-main "seed" *command-line-args*)}
   quickstart    {:doc "Zero-to-running-app setup: check env, configure, scaffold, migrate, start"
                  :task (apply quickstart/-main *command-line-args*)}
-  guide         {:doc "Contextual help and guidance (bb guide [next|scaffold|testing|database|fcis|config|error <code>])"
+  guide         {:doc "Contextual help and guidance (bb guide [next|scaffold|testing|database|seed|fcis|config|error <code>])"
                  :task (apply help/-main *command-line-args*)}
   setup         {:doc "Interactive config setup wizard (bb setup [ai <description>])"
                  :task (apply setup/-main *command-line-args*)}
