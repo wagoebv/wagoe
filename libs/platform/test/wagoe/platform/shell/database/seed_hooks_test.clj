@@ -22,7 +22,9 @@
 
 (defmethod ig/init-key ::dep [_ _] :dep)
 (defmethod ig/init-key ::hook [_ {:keys [dep]}]
-  (fn [inserted] (swap! seen conj [:hook dep inserted])))
+  (fn [inserted]
+    (swap! seen conj [:hook dep inserted])
+    ["Started 1 workflow instance (invoice-workflow)"]))
 (defmethod ig/halt-key! ::hook [_ _] (swap! seen conj [:halted]))
 (defmethod ig/init-key ::unrelated [_ _] (throw (ex-info "not a seed hook's dependency" {})))
 
@@ -30,9 +32,17 @@
   (reset! seen [])
   (let [rows {"invoices" [{:id 1 :status "paid"}]}]
     ;; ::unrelated throws on init: only the hooks and what they need start.
-    (is (= 1 (seed/run-seed-hooks! "wagoe.platform.shell.database.seed-hooks-test" rows)))
+    (testing "what each hook did, in its own words (BOU-591)"
+      (is (= ["Started 1 workflow instance (invoice-workflow)"]
+             (seed/run-seed-hooks! "wagoe.platform.shell.database.seed-hooks-test" rows))))
     (testing "each hook is started with its dependencies, called, and halted"
       (is (= [[:hook :dep rows] [:halted]] @seen)))))
+
+(deftest ^:unit a-hook-that-says-nothing-is-named
+  ;; A hook generated before BOU-591 returns nil.
+  (is (= ["Ran seed hook :x/seed"] (seed/hook-summary :x/seed nil)))
+  (is (= ["Started 2 workflow instances (a)"] (seed/hook-summary :x/seed "Started 2 workflow instances (a)")))
+  (is (= [] (seed/hook-summary :x/seed [])) "a hook that did nothing this time says nothing"))
 
 (deftest ^:unit the-arguments-name-the-application-s-system
   (is (= {:force? false :path "resources/seeds/dev.edn" :system nil}

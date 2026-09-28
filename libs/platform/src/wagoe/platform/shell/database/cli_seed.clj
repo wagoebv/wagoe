@@ -88,9 +88,8 @@
         ;; workflow gets its instance, in the state the row holds.
         (when system-ns
           (try
-            (let [n (seed/run-seed-hooks! system-ns inserted)]
-              (when (pos? n)
-                (println (str "   and " n " seed hook(s) of " system-ns ", workflows among them"))))
+            (doseq [line (seed/run-seed-hooks! system-ns inserted)]
+              (println (str "   " line)))
             (catch Exception e
               (println)
               (println "❌ The rows are in, but a seed hook failed:")

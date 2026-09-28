@@ -51,6 +51,15 @@
     (jdbc/execute! tx stmt)
     (count rows)))
 
+(defn hook-summary
+  "The lines the seeder prints for what hook `k` returned: a string or strings
+   saying what it did (BOU-591). A hook that returns neither is named."
+  [k result]
+  (cond
+    (string? result)     [result]
+    (sequential? result) (vec (filter string? result))
+    :else                [(str "Ran seed hook " k)]))
+
 (defn run-seed-hooks!
   "Hand `inserted` — {table-name rows} — to the application's seed hooks: the
    components of its system that derive from :wagoe/seed-hook. Only those, and
@@ -58,7 +67,8 @@
    module's is how a seeded row with a workflow gets one (BOU-578).
 
    `system-ns` is the application's system-config namespace: its `ig-config`,
-   and its `load-config` when it has one. Returns the number of hooks run."
+   and its `load-config` when it has one. Returns what the hooks did, as lines
+   to print (see `hook-summary`)."
   [system-ns inserted]
   (let [resolve!    (fn [sym]
                       (try (requiring-resolve (symbol system-ns sym))
@@ -72,12 +82,11 @@
         config      (ig-config (load-config))
         hook-keys   (keys (ig/find-derived config :wagoe/seed-hook))]
     (if (empty? hook-keys)
-      0
+      []
       (let [system (ig/init config hook-keys)]
         (try
-          (doseq [[_ hook] (ig/find-derived system :wagoe/seed-hook)]
-            (hook inserted))
-          (count hook-keys)
+          (vec (mapcat (fn [[k hook]] (hook-summary k (hook inserted)))
+                       (ig/find-derived system :wagoe/seed-hook)))
           (finally (ig/halt! system)))))))
 
 (defn- metadata-rows [^ResultSet rs f]
