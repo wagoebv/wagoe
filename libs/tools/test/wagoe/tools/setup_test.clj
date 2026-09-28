@@ -1049,19 +1049,30 @@
         (is (= 1 (count (re-seq #"(?m)^REDIS_HOST=" env-ex)))
             "cache and event bus share the Redis variables")))))
 
-(deftest ^:unit prod-refuses-what-prod-never-gets
+(deftest ^:unit prod-refuses-the-mock-payment-provider
   ;; Setup said "Payments: mock", exited 0 and wrote it nowhere (BOU-577).
-  (doseq [args [["--payment" "mock"] ["--ai-provider" "anthropic"]]]
-    (testing (str/join " " args)
-      (with-project
-        (fn [dir]
-          (let [before     (tree dir)
-                [exit out] (apply run-setup dir "" "--prod" "true" args)]
-            (is (= 1 exit) out)
-            (is (str/includes? out (str "--" (subs (first args) 2) " " (second args))) out)
-            (is (str/includes? out "never written to prod") out)
-            (is (str/includes? out "without --prod") out)
-            (is (= before (tree dir)))))))))
+  (with-project
+    (fn [dir]
+      (let [before     (tree dir)
+            [exit out] (run-setup dir "" "--prod" "true" "--payment" "mock")]
+        (is (= 1 exit) out)
+        (is (str/includes? out "--payment mock") out)
+        (is (str/includes? out "never written to prod") out)
+        (is (str/includes? out "without --prod") out)
+        (is (= before (tree dir)))))))
+
+(deftest ^:unit prod-leaves-the-ai-flag-out-and-writes-the-rest
+  ;; BOU-591: `--prod true … --ai-provider x` exited 1 and wrote nothing.
+  (with-project
+    (fn [dir]
+      (let [dev-before (slurp (conf-file dir "dev"))
+            [exit out] (run-setup dir "" "--prod" "true" "--cache" "redis" "--ai-provider" "anthropic")
+            prod       (slurp (conf-file dir "prod"))]
+        (is (nil? exit) out)
+        (is (str/includes? out "--ai-provider anthropic is left out of prod") out)
+        (is (str/includes? prod ":wagoe/cache") "the rest is applied")
+        (is (not (str/includes? prod ":wagoe/ai-service")))
+        (is (= dev-before (slurp (conf-file dir "dev"))))))))
 
 (deftest ^:unit the-wizard-asks-about-prod-first
   (with-project
@@ -1117,6 +1128,20 @@
         (is (not (str/includes? steps "JWT_SECRET")) "present, so not named")
         (is (= "HTTP_PORT=3000\nexport JWT_SECRET=my-real-secret-of-32-characters!!\n"
                (slurp (fs/file dir ".env"))))))))
+
+(deftest ^:unit a-setup-that-leaves-prod-unwritten-points-at-prod
+  ;; BOU-591: the first setup writes no prod config, and nothing said so.
+  (with-project
+    (fn [dir]
+      (let [[exit out] (run-setup dir "" "--database" "sqlite")]
+        (is (nil? exit) out)
+        (is (not (fs/exists? (conf-file dir "prod"))))
+        (is (str/includes? (next-steps out) "bb setup --prod true") out))
+      (testing "and once prod exists, it does not"
+        (let [_          (run-setup dir "" "--prod" "true")
+              [exit out] (run-setup dir "" "--database" "postgresql")]
+          (is (nil? exit) out)
+          (is (not (str/includes? (str (next-steps out)) "--prod true")) out))))))
 
 (deftest ^:unit a-complete-env-is-told-nothing-to-add
   (with-project
