@@ -90,6 +90,24 @@
       (is (= :error (:level (first result))))
       (is (= :warn (:level (second result)))))))
 
+(deftest ^:unit an-unset-optional-setting-is-a-warning
+  ;; BOU-591: a Redis without a password is valid, and doctor called an unset
+  ;; REDIS_PASSWORD an error.
+  (let [config "{:wagoe/events {:provider :redis\n :host #env REDIS_HOST\n :password #env REDIS_PASSWORD}}"
+        active {:wagoe/events {:provider :redis :host "ENV:REDIS_HOST" :password "ENV:REDIS_PASSWORD"}}
+        result (doctor/check-env-refs config {} (doctor/optional-env-refs active))
+        level  #(into {} (for [r result v (re-seq #"[A-Z_]{4,}" (:msg r))] [v (:level r)]))]
+    (is (= :warn (get (level) "REDIS_PASSWORD")) (pr-str result))
+    (is (= :error (get (level) "REDIS_HOST")) "the host is still required")))
+
+(deftest ^:unit optional-env-refs-finds-redis-passwords-only
+  (is (= #{"REDIS_PASSWORD" "JOBS_REDIS_PASSWORD"}
+         (doctor/optional-env-refs
+          {:wagoe/cache      {:provider :redis :password "ENV:REDIS_PASSWORD"}
+           :wagoe/jobs       {:redis {:host "ENV:H" :password "ENV:JOBS_REDIS_PASSWORD"}}
+           :wagoe/postgresql {:password "ENV:POSTGRES_PASSWORD"}
+           :wagoe/realtime   {:provider :memory :password "ENV:NOT_REDIS"}}))))
+
 ;; =============================================================================
 ;; check-providers
 ;; =============================================================================
@@ -155,6 +173,25 @@
     (let [fix (:fix (first (doctor/check-jwt-secret
                             {:wagoe/user-auth {:enabled? true}} {})))]
       (is (not (re-find #"your-32-char-secret" fix))))))
+
+(deftest ^:unit a-user-module-enabled-in-code-needs-jwt-secret
+  ;; BOU-591: a generated project switches user on through :extra-modules in
+  ;; system_config.clj, not config, and doctor said it was not active.
+  (let [result (doctor/check-jwt-secret {:wagoe/settings {:name "x"}} {} #{:wagoe/user})]
+    (is (= :error (:level (first result))) (pr-str result)))
+  (testing "and no module enabled in code is still no module"
+    (is (= :pass (:level (first (doctor/check-jwt-secret {:wagoe/settings {:name "x"}} {} #{})))))))
+
+(deftest ^:unit code-enabled-modules-reads-system-config
+  (let [dir (doto (io/file (System/getProperty "java.io.tmpdir") (str "doctor-extra-" (random-uuid)))
+              (.mkdirs))
+        f   (io/file dir "src" "shop" "system_config.clj")]
+    (io/make-parents f)
+    (spit f "(system/system-config config\n  {:extra-modules #{:wagoe/user}\n   :base-ns \"shop\"})")
+    (is (= #{:wagoe/user} (doctor/code-enabled-modules dir)))
+    (spit f "(system/system-config config {:extra-modules #{} :base-ns \"shop\"})")
+    (is (= #{} (doctor/code-enabled-modules dir)))
+    (is (= #{} (doctor/code-enabled-modules (io/file dir "nowhere"))))))
 
 ;; =============================================================================
 ;; check-admin-parity

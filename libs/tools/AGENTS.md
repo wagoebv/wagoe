@@ -63,9 +63,9 @@ bb doctor --ci               # Exit non-zero on any error (for CI pipelines)
 
 | Check | Level | What it catches |
 |-------|-------|-----------------|
-| `env-refs` | error | `#env VAR` references in the `:active` section that have no `#or` fallback and are not set in the environment |
+| `env-refs` | error | `#env VAR` references in the `:active` section that have no `#or` fallback and are not set in the environment. A warning instead when the setting is optional: inside a `:fallback` block, or a Redis `:password` |
 | `providers` | error | Unknown `:provider` values (e.g. `:provider :reddis` instead of `:redis`) |
-| `jwt-secret` | error | `JWT_SECRET` not set when the user module is active |
+| `jwt-secret` | error | `JWT_SECRET` not set when the user module is active, in config or through `:extra-modules` in `system_config.clj` |
 | `admin-parity` | warn | Admin entity EDN files that exist in `dev/admin/` but not `test/admin/` (or vice versa) |
 | `prod-placeholders` | error | Placeholder values like `company.com`, `example.com`, `TODO` in prod/acc configs |
 | `config-loadable` | error | `config.edn` does not parse, or has no `:active` section |
