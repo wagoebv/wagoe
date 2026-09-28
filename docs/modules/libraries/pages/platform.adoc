@@ -90,11 +90,35 @@ there when the error has them, and `dev` (the BND code, dev only) sits beside
 them. Everything is inside `error`, so a client reads one key. The correlation
 id is also the `X-Correlation-ID` response header.
 
-`type` is the `:type` of the thrown `ex-info`: `validation-error` (400),
-`unauthorized` (401), `forbidden` (403), `not-found` (404), `conflict` (409),
-the rest of `problem-details/default-error-mappings`, and anything unmapped is a 500 whose `type` is `internal-error` and whose
-message says nothing more. Build a body of your own with
-`wagoe.platform.core.http.errors/body` or `response`.
+`type` is the `:type` of the thrown `ex-info`, looked up in
+`problem-details/default-error-mappings` for its status. Anything unmapped is a
+500 whose `type` is `internal-error` and whose message says nothing more. Build
+a body of your own with `wagoe.platform.core.http.errors/body` or `response`.
+
+The types the framework answers with:
+
+[cols="1,3,1"]
+|===
+|Status |Type |Meaning
+
+|400 |`validation-error` |The request was read, and its input refused.
+|400 |`malformed-request` |The body does not parse as its `Content-Type`. Nothing else.
+|400 |`business-rule-violation`, `invalid-request` |Thrown by application code; the framework maps them.
+|401 |`unauthorized`, `auth-failed` |No valid credential.
+|403 |`forbidden`, `csrf-validation-failed`, `deletion-not-allowed`, `hard-deletion-not-allowed` |Known caller, not allowed.
+|404 |`not-found`, `user-not-found`, `resource-not-found` |Nothing there.
+|405 |`method-not-allowed` |The path exists; the method does not.
+|409 |`conflict`, `user-exists`, `resource-exists` |It already exists, or changed underneath.
+|422 |`unprocessable`; a workflow transition's refusal (`transition-not-found`, `insufficient-permissions`, `guard-rejected`, `guard-not-registered`) |Well-formed, and still refused.
+|429 |`rate-limit-exceeded` |Too many requests.
+|500 |`internal-error` |Our fault; the log has the rest.
+|500 |`missing-error-type` |Dev only: an `ex-info` without `:type` reached the boundary.
+|501 |`not-supported` |Not on this database or configuration.
+|503 |`unavailable` |The server has no handler yet.
+|===
+
+A handler that knows only its status gets its type from `errors/status->type`:
+`validation-error` for a 4xx with no type of its own, `internal-error` for a 5xx.
 
 == Interceptor phases
 

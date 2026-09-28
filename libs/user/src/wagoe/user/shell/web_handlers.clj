@@ -185,13 +185,19 @@
 
 (defn- mfa-error-message
   "What to show for a failed MFA result. `:cannot-*` carries the core's reason;
-   the `:mfa-*-failed` types fold an exception's message in, and mfa.clj has
-   logged it."
+   the `:mfa-*-failed` types mean an exception, which mfa.clj has logged."
   [result]
   (let [{:keys [type message]} (:error result)]
     (if (contains? #{:cannot-enable :cannot-disable} type)
       message
       [:t :common/error-generic])))
+
+(defn- field-errors
+  "`{field [message …]}` from a :validation-error's `:errors`, for a form."
+  [errors]
+  (reduce (fn [m {:keys [field message]}]
+            (update m (if (sequential? field) (first field) field) (fnil conj []) message))
+          {} errors))
 
 (def ^:private htmx-no-cache-headers
   {"Cache-Control" "no-store, no-cache, must-revalidate, max-age=0"
@@ -1431,18 +1437,19 @@
             prepared-data {:date-format (keyword (get form-data "date-format"))
                            :time-format (keyword (get form-data "time-format"))
                            :language    (get form-data "language")}]
-        (try
-          ;; Get existing user and update preferences
-          (let [user (user-ports/get-user-by-id user-service user-id)
-                ;; Remove nil values to avoid schema validation errors for optional fields
-                clean-user (remove-nil-values user)
-                updated-user (user-ports/update-user-profile user-service
-                                                             (merge clean-user prepared-data))]
-            ;; Return success with updated preferences card
-            (html-response request
-                           (profile-ui/preferences-fragment updated-user)))
-          (catch Exception e
-            (server-error request e "Error updating preferences"))))
+        (if-let [user (user-ports/get-user-by-id user-service user-id)]
+          (try
+            ;; Remove nil values to avoid schema validation errors for optional fields
+            (let [updated-user (user-ports/update-user-profile
+                                user-service (merge (remove-nil-values user) prepared-data))]
+              (html-response request (profile-ui/preferences-fragment updated-user)))
+            (catch clojure.lang.ExceptionInfo e
+              (if (= :validation-error (:type (ex-data e)))
+                (html-response request
+                               (profile-ui/preferences-edit-form user (field-errors (:errors (ex-data e))))
+                               400)
+                (server-error request e "Error updating preferences"))))
+          (html-response request (ui/error-message "User not found") 404)))
       (catch Exception e
         (server-error request e "Error in preferences-edit-handler")))))
 
@@ -1517,6 +1524,8 @@
                                                                        {:new-password ["Password does not meet requirements"]})
                                  400
                                  htmx-no-cache-headers)
+                  :user-not-found
+                  (html-response request (ui/error-message "User not found") 404)
                   ;; Default error: the detail goes to the log, not the page.
                   (do (log/error e "Error changing password")
                       (html-response request (ui/error-message [:t :common/error-generic]) 500)))))
@@ -1574,8 +1583,9 @@
             ;; Return QR code step (backup codes passed via hidden form field)
             (html-response request
                            (profile-ui/mfa-qr-code-step secret qr-code-url issuer account-name backup-codes)))
-          ;; Error during setup
-          (html-response request (ui/error-message (mfa-error-message setup-result)) 500)))
+          ;; A refusal is the caller's 400; a caught exception, our 500
+          (html-response request (ui/error-message (mfa-error-message setup-result))
+                         (if (= :mfa-setup-failed (get-in setup-result [:error :type])) 500 400))))
       (catch Exception e
         (server-error request e "Error in mfa-setup-initiate-handler")))))
 

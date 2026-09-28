@@ -451,8 +451,8 @@
 
 (deftest ^:unit mfa-endpoints-answer-in-the-one-error-shape
   ;; The MFA shell returns {:error {:type … :message …}}; the endpoints answer
-  ;; it as the framework's one error body, with the type as a string
-  ;; (BOU-586). They used to flatten it to a bare message string.
+  ;; a refusal as the one error body's validation-error, the MFA type as its
+  ;; reason (BOU-586). They used to flatten it to a bare message string.
   (let [user-id (UUID/randomUUID)
         request {:user {:id user-id}
                  :body-params {:secret "S" :backupCodes ["a"] :verificationCode "000000"}}
@@ -464,21 +464,24 @@
       (with-redefs [mfa/setup-mfa (fn [_ _] failure)]
         (let [resp ((user-http/mfa-setup-handler nil) request)]
           (is (= 400 (:status resp)))
-          (is (= {:type "invalid-code" :message "Invalid verification code"}
+          (is (= {:type "validation-error" :message "Invalid verification code"
+                  :details {:reason "invalid-code"}}
                  (:error (body-of resp)))))))
 
     (testing "enable"
       (with-redefs [mfa/enable-mfa (fn [_ _ _ _ _] failure)]
         (let [resp ((user-http/mfa-enable-handler nil) request)]
           (is (= 400 (:status resp)))
-          (is (= {:type "invalid-code" :message "Invalid verification code"}
+          (is (= {:type "validation-error" :message "Invalid verification code"
+                  :details {:reason "invalid-code"}}
                  (:error (body-of resp)))))))
 
     (testing "disable"
       (with-redefs [mfa/disable-mfa (fn [_ _] failure)]
         (let [resp ((user-http/mfa-disable-handler nil) request)]
           (is (= 400 (:status resp)))
-          (is (= {:type "invalid-code" :message "Invalid verification code"}
+          (is (= {:type "validation-error" :message "Invalid verification code"
+                  :details {:reason "invalid-code"}}
                  (:error (body-of resp)))))))))
 
 (deftest ^:contract create-user-rejects-a-policy-password-with-400
@@ -500,3 +503,27 @@
              :code :contains-email
              :message "Password cannot contain your email address"}]
            (get-in response [:body :error :details :field-errors])))))
+
+(deftest ^:unit ^:security a-failing-mfa-store-is-a-500-that-hides-the-exception
+  ;; mfa.clj folded (.getMessage e) into its :message and the endpoints sent
+  ;; it as a 400 (BOU-586).
+  (let [repo    (reify wagoe.user.ports/IUserRepository
+                  (find-user-by-id [_ _]
+                    (throw (java.sql.SQLException. "jdbc:postgresql://db password=hunter2")))
+                  (find-user-by-email [_ _] nil)
+                  (find-users [_ _] nil)
+                  (create-user [_ _] nil)
+                  (update-user [_ _] nil)
+                  (soft-delete-user [_ _] nil)
+                  (hard-delete-user [_ _] nil))
+        svc     (mfa/create-mfa-service repo {})
+        request {:user {:id (UUID/randomUUID)}
+                 :body-params {:secret "S" :backupCodes ["a"] :verificationCode "000000"}}]
+    (doseq [[label handler] [["setup"   (user-http/mfa-setup-handler svc)]
+                             ["enable"  (user-http/mfa-enable-handler svc)]
+                             ["disable" (user-http/mfa-disable-handler svc)]]]
+      (testing label
+        (let [resp (handler request)]
+          (is (= 500 (:status resp)))
+          (is (= "internal-error" (get-in (json/parse-string (:body resp) true) [:error :type])))
+          (is (not (re-find #"hunter2|jdbc" (:body resp))) (:body resp)))))))

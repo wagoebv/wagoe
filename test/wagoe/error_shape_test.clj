@@ -5,34 +5,38 @@
    Swept over the real route table with every module on, as an anonymous
    caller, a user and an admin, with an empty and a malformed body, plus a
    method no route takes and a path nobody serves. A client needs one parser;
-   a producer that answers in a shape of its own fails here, named."
+   a producer that answers in a shape of its own fails here, named. So does a
+   5xx or an escaped exception: every call is a client's mistake."
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest is testing use-fixtures]]
             [wagoe.platform.core.http.errors :as errors]
             [wagoe.user.shell.auth :as auth]
             [support.route-table :as rt]))
 
-(use-fixtures :once (rt/system-fixture "error-shape"))
-
-(defn- bearer [role]
+(defn- bearer [{:keys [id email role]}]
   {"authorization"
-   (str "Bearer " (auth/create-jwt-token
-                   {:id    (random-uuid)
-                    :email (str (name role) "@error-shape.test")
-                    :role  role}
-                   1))})
+   (str "Bearer " (auth/create-jwt-token {:id id :email email :role role} 1))})
 
-(def ^:private callers
-  {:anonymous {}
-   :user      (bearer :user)
-   :admin     (bearer :admin)})
+(def ^:dynamic ^:private callers
+  "Bound by `with-seeded-callers`: anonymous, the seeded user and admin — real
+   rows, so a handler that reads its caller finds one — and a valid token for
+   a user with no row, as one deleted since sign-in holds."
+  nil)
+
+(defn- with-seeded-callers [f]
+  (let [seeded (get-in (rt/decoded (rt/call :post "/test/reset" "{}")) [:seeded])]
+    (assert (get-in seeded [:admin :id]) (str "/test/reset seeded no admin: " (pr-str seeded)))
+    (binding [callers {:anonymous {}
+                       :user      (bearer (update (:user seeded) :role keyword))
+                       :admin     (bearer (update (:admin seeded) :role keyword))
+                       :deleted   (bearer {:id (random-uuid) :email "gone@error-shape.test" :role :user})}]
+      (f))))
+
+(use-fixtures :once (rt/system-fixture "error-shape") with-seeded-callers)
 
 (def ^:private skipped
   "Routes not swept, and why."
   {[:post "/test/reset"] "truncates the database the other calls read"})
-
-(defn- error-status? [{:keys [status]}]
-  (and (int? status) (>= status 400)))
 
 (defn- one-shape?
   "The body is the one error shape. A body that is not JSON is judged by the
@@ -44,20 +48,33 @@
       (str/starts-with? uri "/web") true
       :else                false)))
 
+(defn- offence
+  "Why `response` fails the sweep, or nil. An exception that escaped the
+   stack (`rt/call` reports it as a string status) and a 5xx are offences
+   whatever their body: every call here is a client's mistake — an empty or
+   malformed body, an id that names nothing — and a client's mistake is a
+   4xx (BOU-586)."
+  [uri {:keys [status] :as response}]
+  (cond
+    (string? status)               "escaped the stack"
+    (< status 400)                 nil
+    (>= status 500)                "a 5xx for the client's mistake"
+    (not (one-shape? uri response)) "not the one shape"))
+
 (defn- offenders
-  "`[who METHOD uri status]` for every error response in `calls` that is not
-   in the one shape. `calls` are `[who method uri body headers]`."
+  "`[who METHOD uri status why]` for every response in `calls` that is an
+   offence. `calls` are `[who method uri body headers]`."
   [calls]
   (->> (for [[who m uri body headers] calls
-             :let  [response (rt/call m uri body headers)]
-             :when (error-status? response)
-             :when (not (one-shape? uri response))]
-         [(name who) (str/upper-case (name m)) uri (:status response)])
+             :let  [response (rt/call m uri body headers)
+                    why      (offence uri response)]
+             :when why]
+         [(name who) (str/upper-case (name m)) uri (:status response) (str "— " why)])
        distinct
        sort))
 
 (defn- report [found]
-  (str (count found) " error response(s) not in the one shape:\n"
+  (str (count found) " response(s) the sweep refuses:\n"
        (str/join "\n" (map #(str "  " (str/join " " %)) found))))
 
 (deftest ^:integration every-route-answers-errors-in-one-shape

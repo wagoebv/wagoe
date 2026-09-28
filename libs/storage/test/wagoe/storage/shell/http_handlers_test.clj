@@ -6,7 +6,8 @@
             [wagoe.storage.shell.adapters.local :as local]
             [wagoe.storage.ports]
             [wagoe.platform.shell.http.reitit-router :as reitit-router]
-            [clojure.string]))
+            [clojure.string]
+            [cheshire.core]))
 
 (def test-dir "target/test-http-handlers-storage")
 
@@ -259,8 +260,11 @@
                              ["delete"   (sut/delete-file-handler svc)]
                              ["url"      (sut/get-file-url-handler svc)]]
             key             ["" "   "]]
-      (is (= 400 (:status (handler {:path-params {:file-key key} :query-params {}})))
-          (str label " with " (pr-str key))))))
+      (let [resp (handler {:path-params {:file-key key} :query-params {}})]
+        (is (= 400 (:status resp)) (str label " with " (pr-str key)))
+        ;; It said "bad-request", a type no other 400 used (BOU-586).
+        (is (= "validation-error"
+               (get-in (cheshire.core/parse-string (:body resp) true) [:error :type])))))))
 
 ;; ============================================================================
 ;; Who may download (BOU-568)

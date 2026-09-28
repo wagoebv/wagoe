@@ -2,7 +2,9 @@
   "The JSON sibling of exception-text-on-pages (BOU-555): a JSON API handler
    lets an untyped exception reach the platform, which logs it and answers a
    generic 500 (BOU-557). This fails on a `.getMessage` or `ex-message` outside
-   a log call in any shell web/http namespace that does not render HTML."
+   a log call in any shell web/http namespace that does not render HTML, and
+   in the shell namespaces whose returned `:message` a JSON handler sends on
+   (BOU-586: MFA folded the exception text into the 400 it answered)."
   (:require [babashka.fs :as fs]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
@@ -20,6 +22,11 @@
    "typed :validation-error only"
    ["libs/tenant/src/wagoe/tenant/shell/http.clj" 'typed-error-response]
    "typed 4xx and :not-supported only; anything else gets the generic 500"})
+
+(def ^:private message-sources
+  "Shell namespaces that are not handlers but whose `{:error {:message …}}`
+   a JSON handler puts in its body."
+  #{"libs/user/src/wagoe/user/shell/mfa.clj"})
 
 (defn- json-handler-file? [path]
   (let [p   (str/replace (str path) "\\" "/")
@@ -59,7 +66,7 @@
 (defn- scoped-files []
   (->> (fs/glob "libs" "*/src/**.clj")
        (map #(str (fs/relativize (fs/cwd) (fs/absolutize %))))
-       (filter json-handler-file?)
+       (filter #(or (json-handler-file? %) (contains? message-sources %)))
        sort))
 
 (deftest ^:unit the-scan-sees-a-leak
@@ -71,7 +78,8 @@
 (deftest ^:unit the-scope-holds-the-json-handlers
   (let [files (set (scoped-files))]
     (is (contains? files "libs/user/src/wagoe/user/shell/http.clj"))
-    (is (contains? files "libs/storage/src/wagoe/storage/shell/http_handlers.clj"))))
+    (is (contains? files "libs/storage/src/wagoe/storage/shell/http_handlers.clj"))
+    (is (contains? files "libs/user/src/wagoe/user/shell/mfa.clj"))))
 
 (deftest ^:unit no-exception-text-in-json-bodies
   (is (= [] (mapv (juxt :file :var :line) (mapcat #(violations % (slurp %)) (scoped-files))))

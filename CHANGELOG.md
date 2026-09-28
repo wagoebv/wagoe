@@ -31,7 +31,7 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Breaking
 
-- **Every JSON error body is `{"error": {"type": …, "message": …}}`** (BOU-586), 401/403 and 404/405 included.
+- **Every JSON error body is `{"error": {"type": …, "message": …}}`** (BOU-586); refused input is `validation-error`.
   Read `error.type` and `error.message`; `details` and `correlation-id` moved inside `error`.
 
 ### Fixed
@@ -41,6 +41,10 @@ for what is public API, what is internal, and how deprecations are announced.
   where it threw `:entity-not-allowed` and `:cannot-create-split-table-entity`.
 - **A non-`ex-info` failure in a handler answered the dev `missing-error-type` diagnostic** (BOU-586); it is a typed 500.
 - **Audience 422s sent the whole Malli schema in `details`** (BOU-586); they send the fields' messages.
+- **The MFA endpoints sent an exception's text in a 400** (BOU-586); that failure is a 500 that says nothing.
+- **The search API ignored the body it was sent** (BOU-586): indexing answered 500, and a search ran for "".
+- **Profile preferences, password and MFA setup answered 500** for bad input or a deleted user (BOU-586); 400 or 404 now.
+- **The audit log page answered 500 on H2** (BOU-586).
 
 ## [1.0.0-rc-4] — 2026-09-28
 

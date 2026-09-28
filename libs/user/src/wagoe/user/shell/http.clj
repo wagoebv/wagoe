@@ -240,6 +240,23 @@
 ;; MFA Handlers
 ;; =============================================================================
 
+(def ^:private mfa-failures
+  "The types mfa.clj answers when something threw: our fault, not the caller's."
+  #{:mfa-setup-failed :mfa-enable-failed :mfa-disable-failed})
+
+(defn- mfa-refusal
+  "A validation-error 400 for an MFA refusal the caller can act on, its MFA
+   type as the reason; a 500 when mfa.clj caught an exception, which it logged
+   (BOU-586)."
+  [result]
+  (let [{:keys [type message]} (:error result)
+        body (if (mfa-failures type)
+               (errors/body :internal-error "Internal Server Error")
+               (errors/body :validation-error message {:details {:reason (errors/type-name type)}}))]
+    {:status  (if (mfa-failures type) 500 400)
+     :headers {"Content-Type" "application/json"}
+     :body    (json/generate-string body)}))
+
 ;; Untyped exceptions are not caught here: the platform's http-error-handler
 ;; logs them and answers a generic 500 (BOU-557).
 
@@ -260,10 +277,7 @@
                  :backupCodes (:backup-codes result)
                  :issuer (:issuer result)
                  :accountName (:account-name result)})}
-        {:status 400
-         :headers {"Content-Type" "application/json"}
-         :body (json/generate-string (errors/body (get-in result [:error :type])
-                                                  (get-in result [:error :message])))}))))
+        (mfa-refusal result)))))
 
 (defn mfa-enable-handler
   "POST /api/auth/mfa/enable - Enable MFA after verification."
@@ -281,10 +295,7 @@
         {:status 200
          :headers {"Content-Type" "application/json"}
          :body (json/generate-string {:message "MFA enabled successfully"})}
-        {:status 400
-         :headers {"Content-Type" "application/json"}
-         :body (json/generate-string (errors/body (get-in result [:error :type])
-                                                  (get-in result [:error :message])))}))))
+        (mfa-refusal result)))))
 
 (defn mfa-disable-handler
   "POST /api/auth/mfa/disable - Disable MFA for authenticated user."
@@ -298,10 +309,7 @@
         {:status 200
          :headers {"Content-Type" "application/json"}
          :body (json/generate-string {:message "MFA disabled successfully"})}
-        {:status 400
-         :headers {"Content-Type" "application/json"}
-         :body (json/generate-string (errors/body (get-in result [:error :type])
-                                                  (get-in result [:error :message])))}))))
+        (mfa-refusal result)))))
 
 (defn mfa-status-handler
   "GET /api/auth/mfa/status - Get MFA status for authenticated user."

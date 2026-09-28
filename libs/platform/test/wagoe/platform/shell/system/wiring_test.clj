@@ -10,6 +10,7 @@
             [wagoe.observability.tracing.ports :as tracing-ports]
             [wagoe.observability.errors.shell.adapters.no-op]
             [aero.core :as aero]
+            [cheshire.core]
             [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]

@@ -165,8 +165,8 @@
      (problem-details->response status (errors/body type message {:details details})))))
 
 (def bad-request
-  "400 with `message` and optional `details`."
-  (builder 400 :bad-request))
+  "400 `validation-error` with `message` and optional `details`."
+  (builder 400 :validation-error))
 
 (def forbidden
   "403 with `message` and optional `details`."

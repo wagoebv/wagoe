@@ -27,8 +27,31 @@
             [wagoe.search.ports :as ports]
             [wagoe.search.shell.registry :as registry]
             [wagoe.search.core.ui :as search-ui]
-            [clojure.tools.logging :as log])
-  (:import [java.util UUID]))
+            [clojure.tools.logging :as log]))
+
+;; Declared so coercion puts the body in [:parameters :body]; without them it
+;; stayed nil whatever the caller sent (BOU-586). Open maps: an unknown key is
+;; dropped, not refused.
+(def ^:private IndexDocumentBody
+  [:map
+   [:indexId :string]
+   [:entityId :uuid]
+   [:fields {:optional true} [:map-of :keyword :any]]
+   [:metadata {:optional true} :any]
+   [:filterValues {:optional true} [:map-of :keyword :any]]])
+
+(def ^:private SearchBody
+  [:map
+   [:query {:optional true} :string]
+   [:limit {:optional true} :int]
+   [:offset {:optional true} :int]
+   [:highlight? {:optional true} :boolean]
+   [:filters {:optional true} [:map-of :keyword :any]]])
+
+(def ^:private SuggestBody
+  [:map
+   [:query {:optional true} :string]
+   [:limit {:optional true} :int]])
 
 ;; =============================================================================
 ;; Helpers
@@ -66,15 +89,16 @@
                              (access/correlation-id request (str (random-uuid)))))
 
 (defn- parse-uuid-param
+  "`s` as a UUID — already one when coercion read it — or a :validation-error."
   [s param-name]
-  (try
-    (UUID/fromString s)
-    (catch IllegalArgumentException _
-      (throw (ex-info (str "Invalid UUID for " param-name)
-                      {:type    :validation-error
-                       :field   param-name
-                       :value   s
-                       :message (str param-name " must be a valid UUID")})))))
+  (cond
+    (uuid? s) s
+    :else (or (parse-uuid (str s))
+              (throw (ex-info (str "Invalid UUID for " param-name)
+                              {:type    :validation-error
+                               :field   param-name
+                               :value   s
+                               :message (str param-name " must be a valid UUID")})))))
 
 (defn- resolve-t
   "Resolve an i18n translation function at render time.
@@ -249,6 +273,7 @@
   [engine]
   [["/search/documents"
     {:post {:handler    (fn [req] (handle-index-document engine req))
+            :parameters {:body IndexDocumentBody}
             :middleware [require-admin]
             :summary    "Index a search document"}}]
    ["/search/documents/:entity-type/:entity-id"
@@ -259,9 +284,11 @@
    ;; parameters, but declaring the specific ones first says so to a reader.
    ["/search/:index-id"
     {:post {:handler (fn [req] (handle-search engine req))
+            :parameters {:body SearchBody}
             :summary "Full-text search"}}]
    ["/search/:index-id/suggest"
     {:post {:handler (fn [req] (handle-suggest engine req))
+            :parameters {:body SuggestBody}
             :summary "Trigram suggestions"}}]])
 
 (defn search-web-routes

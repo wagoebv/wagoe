@@ -26,9 +26,10 @@
 
 (defn status->type
   "The `:type` a handler that knows only its status answers with: ADR-022's
-   vocabulary where it has a word, `:internal-error` for any other 5xx."
+   vocabulary where it has a word, `:validation-error` for any other 4xx and
+   `:internal-error` for any other 5xx."
   [status]
-  (get status-types status (if (>= status 500) :internal-error :bad-request)))
+  (get status-types status (if (>= status 500) :internal-error :validation-error)))
 
 (defn body
   "The error body. `details` is left out when empty."

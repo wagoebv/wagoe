@@ -52,9 +52,12 @@
     (-> base
         (update :active merge extra)
         (assoc-in [:active :wagoe/storage :expose-http?] true)
+        ;; Migrated at boot, as a generated test config is: push and the
+        ;; others keep their tables in migrations, not in code.
         (update-in [:active :wagoe/h2] assoc
                    :memory false
-                   :db     (str "mem:" db ";DB_CLOSE_DELAY=-1")))))
+                   :db     (str "mem:" db ";DB_CLOSE_DELAY=-1")
+                   :migrate-on-start? true))))
 
 (defmethod ig/init-key ::push-mounted [_ {:keys [routes]}]
   ;; Push's README says to mount its routes in your router; nothing in the

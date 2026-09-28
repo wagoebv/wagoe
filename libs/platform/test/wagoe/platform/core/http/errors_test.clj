@@ -30,4 +30,5 @@
 (deftest ^:unit a-status-names-a-type
   (is (= :not-found (sut/status->type 404)))
   (is (= :internal-error (sut/status->type 502)))
-  (is (= :bad-request (sut/status->type 418))))
+  (testing "a 4xx without a word of its own is the caller's input refused"
+    (is (= :validation-error (sut/status->type 413)))))
