@@ -26,6 +26,7 @@ Declarative cross-cutting concerns (auth, rate limiting, audit):
 
 [source,clojure]
 ----
+;; errors = wagoe.platform.core.http.errors
 ;; Define an interceptor
 (def require-admin
   {:name  :require-admin
@@ -36,10 +37,10 @@ Declarative cross-cutting concerns (auth, rate limiting, audit):
               ;; alone does not stop the pipeline, so the downstream handler
               ;; would run and overwrite this response. See "Interceptor phases".
               (assoc ctx :halt? true
-                         :response {:status 403 :body {:error "Forbidden"}})))
+                         :response (errors/response 403 :forbidden "Admin role required"))))
    :leave (fn [ctx] ctx)   ; optional response processing
    :error (fn [ctx err]    ; optional error handling
-            (assoc ctx :response {:status 500 :body {:error "Internal error"}}))})
+            (assoc ctx :response (errors/response 500 :internal-error "Internal Server Error")))})
 
 ;; Attach interceptors to routes
 [["/admin"
@@ -68,6 +69,56 @@ is applied to every route unless the route opts out with `:skip-interceptors? tr
 NOTE: `:skip-interceptors?` is independent of `:no-doc`. `:no-doc` only excludes a
 route from the Swagger spec; it does **not** affect interceptors. All `/web` routes are
 `:no-doc` yet still run the full stack so that security interceptors apply to the UI.
+
+[#error-responses]
+== Error responses
+
+Every JSON error the framework sends has one shape, whatever produced it —
+the exception mapping, the default-deny 401/403, CSRF, the rate limiter, a
+malformed body, an unknown route or method:
+
+[source,json]
+----
+{"error": {"type":           "validation-error",
+           "message":        "Request validation failed",
+           "details":        {"email": ["invalid"]},
+           "correlation-id": "5b1c9a52-6f0e-4d7a-9a57-2d9e3c1b8f40"}}
+----
+
+`type` and `message` are always there. `details` and `correlation-id` are
+there when the error has them, and `dev` (the BND code, dev only) sits beside
+them. Everything is inside `error`, so a client reads one key. The correlation
+id is also the `X-Correlation-ID` response header.
+
+`type` is the `:type` of the thrown `ex-info`, looked up in
+`problem-details/default-error-mappings` for its status. Anything unmapped is a
+500 whose `type` is `internal-error` and whose message says nothing more. Build
+a body of your own with `wagoe.platform.core.http.errors/body` or `response`.
+
+The types the framework answers with:
+
+[cols="1,3,1"]
+|===
+|Status |Type |Meaning
+
+|400 |`validation-error` |The request was read, and its input refused.
+|400 |`malformed-request` |The body does not parse as its `Content-Type`. Nothing else.
+|400 |`business-rule-violation`, `invalid-request` |Thrown by application code; the framework maps them.
+|401 |`unauthorized`, `auth-failed` |No valid credential.
+|403 |`forbidden`, `csrf-validation-failed`, `deletion-not-allowed`, `hard-deletion-not-allowed` |Known caller, not allowed.
+|404 |`not-found`, `user-not-found`, `resource-not-found` |Nothing there.
+|405 |`method-not-allowed` |The path exists; the method does not.
+|409 |`conflict`, `user-exists`, `resource-exists` |It already exists, or changed underneath.
+|422 |`unprocessable`; a workflow transition's refusal (`transition-not-found`, `insufficient-permissions`, `guard-rejected`, `guard-not-registered`) |Well-formed, and still refused.
+|429 |`rate-limit-exceeded` |Too many requests.
+|500 |`internal-error` |Our fault; the log has the rest.
+|500 |`missing-error-type` |Dev only: an `ex-info` without `:type` reached the boundary.
+|501 |`not-supported` |Not on this database or configuration.
+|503 |`unavailable` |The server has no handler yet.
+|===
+
+A handler that knows only its status gets its type from `errors/status->type`:
+`validation-error` for a 4xx with no type of its own, `internal-error` for a 5xx.
 
 == Interceptor phases
 

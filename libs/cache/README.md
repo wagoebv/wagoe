@@ -374,7 +374,7 @@ Extract tenant context from HTTP requests:
         user-id (get-in request [:path-params :id])]
     (if-let [user (cache-ports/get-value cache (keyword (str "user-" user-id)))]
       {:status 200 :body user}
-      {:status 404 :body {:error "Not found"}})))
+      {:status 404 :body {:error {:type "not-found" :message "User not found"}}})))
 ```
 
 ### Supported Operations

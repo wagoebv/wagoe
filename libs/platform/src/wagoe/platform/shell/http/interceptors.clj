@@ -46,6 +46,8 @@
             [wagoe.observability.tracing.ports :as tracing-ports]
             [wagoe.observability.errors.core :as error-reporting]
             [wagoe.platform.core.csrf :as csrf]
+            [wagoe.platform.core.http.errors :as errors]
+            [wagoe.platform.core.http.problem-details :as problem-details]
             [buddy.core.nonce :as nonce]
             [buddy.core.codecs :as codecs]
             [clojure.string :as str])
@@ -136,10 +138,9 @@
          ;; sets the header from what the caller asked for. Setting it here
          ;; made muuntaja skip the response, and Ring cannot write a map
          ;; (BOU-321).
-         :response {:status 403
-                    :body {:error "CSRF token validation failed"
-                           :message "Invalid or missing CSRF token"
-                           :type :csrf-validation-failed}}))
+         :response (errors/response 403 :csrf-validation-failed
+                                    "Invalid or missing CSRF token"
+                                    {:correlation-id (:correlation-id ctx)})))
 
 ;; ==============================================================================
 ;; HTTP Context Management
@@ -184,10 +185,8 @@
      Ring response map"
   [context]
   (or (:response context)
-      {:status 500
-       :body {:error "Internal server error"
-              :message "No response generated"
-              :correlation-id (:correlation-id context)}}))
+      (errors/response 500 :internal-error "No response generated"
+                       {:correlation-id (:correlation-id context)})))
 
 (defn set-response
   "Sets the Ring response in the HTTP context.
@@ -312,15 +311,14 @@
                      :correlation-id correlation-id
                      :ex-data-keys (sort (keys ex-data))}))
   (set-response ctx
-                {:status 500
-                 :headers {"X-Correlation-ID" correlation-id}
-                 :body {:error "missing-error-type"
-                        :message "Exceptions reaching the HTTP boundary must include :type in ex-data."
-                        :hint "Add :type to the ex-info data map (e.g., {:type :validation-error})."
-                        :correlation-id correlation-id
-                        :exception-class (.getName (class exception))
-                        :ex-data-keys (sort (keys ex-data))
-                        :uri (:uri request)}}))
+                (errors/response
+                 500 :missing-error-type
+                 "Exceptions reaching the HTTP boundary must include :type in ex-data."
+                 {:correlation-id correlation-id
+                  :details        {:hint            "Add :type to the ex-info data map (e.g., {:type :validation-error})."
+                                   :exception-class (.getName (class exception))
+                                   :ex-data-keys    (sort (keys ex-data))
+                                   :uri             (:uri request)}})))
 
 ;; ==============================================================================
 ;; HTTP-Specific Interceptors
@@ -507,13 +505,10 @@
                                    :headers {"Location" (:location ex-data)}
                                    :body ""})
                     ;; Handle errors
-                    (let [status (case error-type
-                                   :validation-error 400
-                                   :not-found 404
-                                   :unauthorized 401
-                                   :forbidden 403
-                                   :conflict 409
-                                   500)
+                    ;; One :type -> status table for every layer, the one
+                    ;; ADR-036 calls part of the vocabulary (BOU-586).
+                    (let [status (first (get problem-details/default-error-mappings
+                                             error-type [500]))
                           server-error? (>= status 500)
                           ;; Dev only, and only when the app wired an enricher:
                           ;; the BND code and its fix. The one place a 5xx says
@@ -534,22 +529,20 @@
                                             :message (some-> ^Throwable exception .getMessage)
                                             :ex-data ex-data})))
                       (set-response ctx
-                                    {:status status
-                                     :headers {"X-Correlation-ID" correlation-id}
-                                     :body (cond-> (if server-error?
-                                                     {:error "internal-error"
-                                                      :message "Internal Server Error"
-                                                      :correlation-id correlation-id}
-                                                     ;; A typed 4xx carries a domain-authored
-                                                     ;; message (ex-data :message or the
-                                                     ;; ex-info message) — safe to return.
-                                                     {:error (name error-type)
-                                                      :message (or (:message ex-data)
-                                                                   (.getMessage ^Throwable exception)
-                                                                   "An error occurred")
-                                                      :correlation-id correlation-id
-                                                      :details (dissoc ex-data :type :message)})
-                                             dev-info (assoc :dev dev-info))})))))))})
+                                    (if server-error?
+                                      (errors/response status :internal-error "Internal Server Error"
+                                                       {:correlation-id correlation-id
+                                                        :dev            dev-info})
+                                      ;; A typed 4xx carries a domain-authored
+                                      ;; message (ex-data :message or the
+                                      ;; ex-info message) — safe to return.
+                                      (errors/response status error-type
+                                                       (or (:message ex-data)
+                                                           (.getMessage ^Throwable exception)
+                                                           "An error occurred")
+                                                       {:correlation-id correlation-id
+                                                        :details        (dissoc ex-data :type :message)
+                                                        :dev            dev-info})))))))))})
 
 (def http-csrf-protection
   "Validates CSRF tokens for state-changing requests (POST, PUT, DELETE, PATCH) and
@@ -634,7 +627,7 @@
    serialized later in the stack)."
   {:status  403
    :headers {"Content-Type" "application/json"}
-   :body    "{\"error\":\"CSRF token validation failed\",\"message\":\"Invalid or missing CSRF token\",\"type\":\"csrf-validation-failed\"}"})
+   :body    "{\"error\":{\"type\":\"csrf-validation-failed\",\"message\":\"Invalid or missing CSRF token\"}}"})
 
 (defn wrap-csrf
   "Ring-middleware form of `http-csrf-protection`, for handlers that run OUTSIDE
@@ -859,16 +852,17 @@
       ;; is kept here as an explicit, self-documenting short-circuit.
       (-> ctx
           (assoc :halt? true)
+          ;; No Content-Type: muuntaja encodes a map body only when none is
+          ;; set, and Ring cannot write a map (BOU-321).
           (set-response {:status  429
-                         :headers {"Content-Type"          "application/json"
-                                   "Retry-After"           (str (:retry-after-seconds rate-check))
+                         :headers {"Retry-After"           (str (:retry-after-seconds rate-check))
                                    "X-RateLimit-Limit"     (str limit)
                                    "X-RateLimit-Remaining" "0"}
-                         :body    {:error               "Rate limit exceeded"
-                                   :message             (format "Too many requests. Limit: %d requests per %d seconds"
-                                                                limit window-seconds)
-                                   :retry-after-seconds (:retry-after-seconds rate-check)
-                                   :type                :rate-limit-exceeded}})))))
+                         :body    (errors/body :rate-limit-exceeded
+                                               (format "Too many requests. Limit: %d requests per %d seconds"
+                                                       limit window-seconds)
+                                               {:details        {:retry-after-seconds (:retry-after-seconds rate-check)}
+                                                :correlation-id (:correlation-id ctx)})})))))
 
 (defn- rate-limit-leave
   "Attach informational X-RateLimit headers when a check ran on :enter."

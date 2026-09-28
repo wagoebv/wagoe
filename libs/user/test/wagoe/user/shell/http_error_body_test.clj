@@ -33,17 +33,17 @@
     (is (= 500 status))
     (is (not (str/includes? raw "hunter2")) raw)
     (testing "the platform's error shape"
-      (is (= "internal-error" (:error body)))
-      (is (= "Internal Server Error" (:message body)))
-      (is (contains? body :correlation-id)))))
+      (is (= "internal-error" (get-in body [:error :type])))
+      (is (= "Internal Server Error" (get-in body [:error :message])))
+      (is (contains? (:error body) :correlation-id)))))
 
 (deftest ^:unit typed-validation-error-keeps-its-message
   (let [{:keys [status raw]} (serve #(throw (ex-info "Secret must be base32"
                                                      {:type :validation-error})))
         body                 (json/parse-string raw true)]
     (is (= 400 status))
-    (is (= "validation-error" (:error body)))
-    (is (= "Secret must be base32" (:message body)))))
+    (is (= "validation-error" (get-in body [:error :type])))
+    (is (= "Secret must be base32" (get-in body [:error :message])))))
 
 (deftest ^:unit the-auth-middleware-401-is-json
   ;; A hardcoded Content-Type made muuntaja skip the map, so the body was
@@ -56,7 +56,8 @@
         body    (:body resp)]
     (is (= 401 (:status resp)))
     (is (= "Authentication required"
-           (:message (json/parse-string (if (string? body) body (slurp body)) true))))))
+           (get-in (json/parse-string (if (string? body) body (slurp body)) true)
+                   [:error :message])))))
 
 (deftest ^:unit the-role-middleware-403-is-json
   (let [handler (reitit/compile-routes
@@ -68,4 +69,5 @@
         body    (:body resp)]
     (is (= 403 (:status resp)))
     (is (= "forbidden"
-           (:error (json/parse-string (if (string? body) body (slurp body)) true))))))
+           (get-in (json/parse-string (if (string? body) body (slurp body)) true)
+                   [:error :type])))))

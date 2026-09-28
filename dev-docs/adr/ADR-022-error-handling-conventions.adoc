@@ -75,6 +75,10 @@ with a `:type` keyword in the data map:
 | Unexpected internal error
 |===
 
+The body a client receives is decided in
+xref:ADR-036-error-convention.adoc[ADR-036] §4: `{"error": {"type": …,
+"message": …}}`.
+
 Additional specialized types (`:user-not-found`, `:resource-not-found`,
 `:auth-failed`, etc.) are defined in
 `wagoe.platform.core.http.problem-details/default-error-mappings` and map

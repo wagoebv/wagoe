@@ -232,8 +232,8 @@
           result-ctx ((:error interceptors/error-normalize) ctx)]
 
       (is (= 500 (get-in result-ctx [:response :status])))
-      (is (= "internal-server-error" (get-in result-ctx [:response :body :type])))
-      (is (= "test-correlation-id" (get-in result-ctx [:response :body :correlation-id]))))))
+      (is (= "internal-server-error" (get-in result-ctx [:response :body :error :type])))
+      (is (= "test-correlation-id" (get-in result-ctx [:response :body :error :correlation-id]))))))
 
 ;; Effects Dispatch Interceptor Tests
 
@@ -311,9 +311,9 @@
           result-ctx ((:leave interceptors/response-shape-http) ctx)]
 
       (is (= 400 (get-in result-ctx [:response :status])))
-      (is (= "domain-error" (get-in result-ctx [:response :body :type])))
+      (is (= "business-rule-violation" (get-in result-ctx [:response :body :error :type])))
       (is (= [{:field "email" :code "required" :message "Email is required"}]
-             (get-in result-ctx [:response :body :errors])))))
+             (get-in result-ctx [:response :body :error :details :errors])))))
 
   (testing "response-shape-http preserves existing response"
     (let [existing-response {:status 422 :body "Validation failed"}
@@ -414,7 +414,7 @@
                                                :code :password-policy-violation
                                                :message "Password must have: at least one number"}]})
                 :error-mappings {}})
-          body (get-in ctx [:response :body])]
+          body (get-in ctx [:response :body :error :details])]
       (is (empty? (:missing-fields body))
           "the caller did send a password — reporting it missing sends them the wrong way")
       (is (= [{:field :password
@@ -430,6 +430,6 @@
                                                :code :missing-required-field
                                                :message "missing required key"}]})
                 :error-mappings {}})
-          body (get-in ctx [:response :body])]
+          body (get-in ctx [:response :body :error :details])]
       (is (= [:email] (:missing-fields body)))
       (is (empty? (:field-errors body))))))

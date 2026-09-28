@@ -57,7 +57,7 @@
     (let [ctx {:correlation-id "test-123"}
           response (http-interceptors/extract-response ctx)]
       (is (= 500 (:status response)))
-      (is (= "test-123" (:correlation-id (:body response)))))))
+      (is (= "test-123" (get-in response [:body :error :correlation-id]))))))
 
 (deftest ^:unit set-response-test
   (testing "sets response in context"
@@ -221,7 +221,7 @@
           ctx {:exception exception :correlation-id "test-123"}
           result ((:error http-interceptors/http-error-handler) ctx)]
       (is (= 400 (get-in result [:response :status])))
-      (is (= "validation-error" (get-in result [:response :body :error])))))
+      (is (= "validation-error" (get-in result [:response :body :error :type])))))
 
   (testing "converts not-found to 404"
     (let [exception (ex-info "Not found" {:type :not-found})
@@ -245,7 +245,7 @@
     (let [exception (ex-info "Error" {})
           ctx {:exception exception :correlation-id "test-123"}
           result ((:error http-interceptors/http-error-handler) ctx)]
-      (is (= "test-123" (get-in result [:response :body :correlation-id]))))))
+      (is (= "test-123" (get-in result [:response :body :error :correlation-id]))))))
 
 (deftest ^:unit http-correlation-header-test
   (testing "adds correlation header on leave"
@@ -277,16 +277,16 @@
 
     (testing "a dev project that wired an enricher gets the code and the fix"
       (let [body (get-in (respond {:error-enricher stub-enricher :environment "development"} validation)
-                         [:response :body])]
+                         [:response :body :error])]
         (is (= "BND-201" (get-in body [:dev :code])))
         (is (= "Add the missing field" (get-in body [:dev :fix])))
         (testing "and the rest of the response is unchanged"
-          (is (= "validation-error" (:error body)))
+          (is (= "validation-error" (:type body)))
           (is (= {:errors {:title "required"}} (:details body))))))
 
     (testing "a 5xx in dev says what went wrong, and still not what the message was"
       (let [body (get-in (respond {:error-enricher stub-enricher :environment "dev"} boom)
-                         [:response :body])]
+                         [:response :body :error])]
         (is (= "BND-201" (get-in body [:dev :code])))
         (is (= "Internal Server Error" (:message body)))
         (is (not (str/includes? (pr-str body) "hunter2")))))
@@ -296,23 +296,23 @@
       ;; server is exactly the accident it exists for.
       (doseq [env ["production" "prod" "staging"]]
         (let [body (get-in (respond {:error-enricher stub-enricher :environment env} validation)
-                           [:response :body])]
+                           [:response :body :error])]
           (is (nil? (:dev body)) (str "leaked BND info in " env)))))
 
     (testing "no enricher wired, no :dev key"
-      (is (nil? (get-in (respond {:environment "development"} validation) [:response :body :dev]))))
+      (is (nil? (get-in (respond {:environment "development"} validation) [:response :body :error :dev]))))
 
     (testing "an enricher that throws does not replace the error being reported"
       (let [body (get-in (respond {:error-enricher (fn [_] (throw (RuntimeException. "enricher bug")))
                                    :environment "development"}
                                   validation)
-                         [:response :body])]
-        (is (= "validation-error" (:error body)))
+                         [:response :body :error])]
+        (is (= "validation-error" (:type body)))
         (is (nil? (:dev body)))))
 
     (testing "an enricher with nothing to say adds nothing"
       (is (nil? (get-in (respond {:error-enricher (constantly nil) :environment "development"} validation)
-                        [:response :body :dev]))))))
+                        [:response :body :error :dev]))))))
 
 ;; ==============================================================================
 ;; Error Type Enforcement Tests
@@ -328,7 +328,7 @@
           result ((:error http-interceptors/http-error-handler) ctx)]
       ;; In dev mode (default), should respond with missing-error-type
       (is (= 500 (get-in result [:response :status])))
-      (is (= "missing-error-type" (get-in result [:response :body :error])))))
+      (is (= "missing-error-type" (get-in result [:response :body :error :type])))))
 
   (testing "allows missing :type when enforcement is disabled"
     ;; Set environment to production-like to skip enforcement
@@ -339,7 +339,7 @@
                :system {:environment "production"}}
           result ((:error http-interceptors/http-error-handler) ctx)]
       (is (= 500 (get-in result [:response :status])))
-      (is (= "internal-error" (get-in result [:response :body :error])))))
+      (is (= "internal-error" (get-in result [:response :body :error :type])))))
 
   (testing "handles plain exceptions without ex-data gracefully"
     (let [exception (Exception. "Something went wrong")
@@ -350,7 +350,7 @@
           result ((:error http-interceptors/http-error-handler) ctx)]
       ;; Plain exceptions don't have ex-data, so no enforcement check
       (is (= 500 (get-in result [:response :status])))
-      (is (= "internal-error" (get-in result [:response :body :error])))))
+      (is (= "internal-error" (get-in result [:response :body :error :type])))))
 
   (testing "preserves explicit :type when provided"
     (let [exception (ex-info "Auth failed" {:type :unauthorized :reason "Invalid token"})
@@ -360,5 +360,5 @@
                :system {}}
           result ((:error http-interceptors/http-error-handler) ctx)]
       (is (= 401 (get-in result [:response :status])))
-      (is (= "unauthorized" (get-in result [:response :body :error])))
-      (is (= "Invalid token" (get-in result [:response :body :details :reason]))))))
+      (is (= "unauthorized" (get-in result [:response :body :error :type])))
+      (is (= "Invalid token" (get-in result [:response :body :error :details :reason]))))))

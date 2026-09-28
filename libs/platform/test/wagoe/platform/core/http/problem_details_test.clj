@@ -115,85 +115,67 @@
 ;; =============================================================================
 
 (deftest ^:unit test-exception->problem-body-with-context
-  (testing "creates problem body with context"
+  (testing "an untyped exception is a generic 500 in the one error shape"
     (let [exception (create-test-exception :message "Validation failed"
                                            :data {:field "email" :error "invalid"})
           context {:user-id "test-user" :tenant-id "test-tenant"}
-          problem-body (pd/exception->problem-body exception nil nil {} context)]
+          problem-body (pd/exception->problem-body exception "cid-1" "/api/users" {} context)]
 
-      ;; BOU-161: untyped exceptions are 500s whose body is generic — the raw
-      ;; message and ex-data extension members must not leak to the client.
-      (is (= "Internal Server Error" (:title problem-body)))
-      (is (= 500 (:status problem-body)))
-      (is (= "Internal Server Error" (:detail problem-body)))
-      (is (nil? (:field problem-body)))
-      (is (nil? (:error problem-body)))
-      ;; Context IS still preserved on 5xx (for the client's correlation), only
-      ;; internals are suppressed.
-      (is (= "test-user" (get-in problem-body [:errorContext :user-id])))
-      (is (= "test-tenant" (get-in problem-body [:errorContext :tenant-id])))
-      (is (not (contains? (:errorContext problem-body) :timestamp)))
-      (is (contains? problem-body :instance))))
+      ;; BOU-161: the raw message and ex-data must not leak to the client.
+      (is (= {:error {:type "internal-error" :message "Internal Server Error"
+                      :correlation-id "cid-1"}}
+             problem-body))
+      ;; BOU-586: request context is for the log, not the body.
+      (is (not (re-find #"test-user|test-tenant|email" (pr-str problem-body))))))
 
-  (testing "works without context"
-    (let [exception (create-test-exception :message "Simple error")
-          problem-body (pd/exception->problem-body exception nil nil {} {})]
-
-      (is (= "Internal Server Error" (:title problem-body)))
-      (is (= 500 (:status problem-body)))
-      (is (= "Internal Server Error" (:detail problem-body)))
-      (is (nil? (:errorContext problem-body)))))
+  (testing "works without context or correlation id"
+    (let [problem-body (pd/exception->problem-body (create-test-exception :message "Simple error")
+                                                   nil nil {} {})]
+      (is (= {:error {:type "internal-error" :message "Internal Server Error"}}
+             problem-body))))
 
   (testing "untyped exception with a :status key is still a generic 500"
-    (let [exception (create-test-exception :message "Not found"
-                                           :data {:status 404})
-          context {:user-id "test-user"}
-          problem-body (pd/exception->problem-body exception nil nil {} context)]
-
+    (let [exception (create-test-exception :message "Not found" :data {:status 404})]
       ;; A bare :status key in ex-data does NOT set the HTTP status — only a
-      ;; recognised :type via error-mappings does. Untyped => generic 500.
-      (is (= 500 (:status problem-body)))
-      (is (= "Internal Server Error" (:detail problem-body)))
-      (is (= "test-user" (get-in problem-body [:errorContext :user-id])))
-      (is (not (contains? (:errorContext problem-body) :timestamp))))))
+      ;; recognised :type via error-mappings does.
+      (is (= [500 "Internal Server Error"] (pd/exception-status exception {})))
+      (is (= "Internal Server Error"
+             (get-in (pd/exception->problem-body exception nil nil {} {}) [:error :message])))))
+
+  (testing "a typed 4xx carries its message and the rest of its ex-data as details"
+    (let [exception (create-test-exception :message "Invalid email"
+                                           :data {:type :validation-error :field "email"})
+          problem-body (pd/exception->problem-body exception "cid-2" nil {})]
+      (is (= {:error {:type "validation-error" :message "Invalid email"
+                      :details {:field "email"} :correlation-id "cid-2"}}
+             problem-body)))))
 
 (deftest ^:unit test-exception->problem-response-with-context
-  (testing "creates problem response with context"
+  (testing "creates a JSON response with the status of the exception"
     (let [exception (create-test-exception :message "Server error")
           context {:user-id "test-user" :operation "get-user"}
-          response (pd/exception->problem-response exception "test-correlation-123" nil {} context)]
-
-      (is (= 500 (:status response)))
-      (is (= "application/problem+json" (get-in response [:headers "Content-Type"])))
-
-      ;; Parse the JSON body since it's a string
-      (let [body (json/parse-string (:body response))]
-        (is (= "Internal Server Error" (get body "title")))
-        (is (= "Internal Server Error" (get body "detail")))
-        ;; Context contains only explicitly supplied values
-        (is (= "test-user" (get-in body ["errorContext" "user-id"])))
-        (is (not (contains? (get body "errorContext") "timestamp"))))))
-
-  (testing "includes correlation-id in headers when present in context"
-    (let [exception (create-test-exception)
-          context {:correlation-id "test-correlation-123"}
           response (pd/exception->problem-response exception "test-correlation-123" nil {} context)
           body (json/parse-string (:body response))]
-      (is (= "test-correlation-123" (get body "correlationId")))))
 
-  (testing "sets correct content type"
-    (let [exception (create-test-exception)
-          context {:user-id "test-user"}
-          response (pd/exception->problem-response exception nil nil {} context)]
+      (is (= 500 (:status response)))
+      (is (= "application/json" (get-in response [:headers "Content-Type"])))
+      (is (= "internal-error" (get-in body ["error" "type"])))
+      (is (= "Internal Server Error" (get-in body ["error" "message"])))
+      (is (= "test-correlation-123" (get-in body ["error" "correlation-id"])))
+      (is (not (re-find #"test-user|Server error" (:body response))))))
 
-      (is (= "application/problem+json" (get-in response [:headers "Content-Type"]))))))
+  (testing "a mapped type sets the status"
+    (let [exception (create-test-exception :message "Gone" :data {:type :not-found})
+          response (pd/exception->problem-response exception nil nil)]
+      (is (= 404 (:status response)))
+      (is (= "not-found" (get-in (json/parse-string (:body response)) ["error" "type"]))))))
 
 ;; =============================================================================
 ;; Integration Tests
 ;; =============================================================================
 
 (deftest ^:unit test-full-context-flow
-  (testing "full flow from request to problem response"
+  (testing "full flow from request to error response"
     (let [request (create-test-request :user-id (UUID/randomUUID)
                                        :tenant-id (UUID/randomUUID))
           context (pd/request->context* request)
@@ -201,16 +183,8 @@
                                                        :timestamp (Instant/parse "2026-04-10T12:00:00Z")})
           exception (create-test-exception :message "Business logic error"
                                            :data {:code "BUSINESS_ERROR"})
-          response (pd/exception->problem-response exception nil nil {} enriched-context)]
+          response (pd/exception->problem-response exception nil nil {} enriched-context)
+          body (json/parse-string (:body response))]
 
       (is (= 500 (:status response)))
-
-      ;; Parse the JSON body since it's a string
-      (let [body (json/parse-string (:body response))]
-        (is (= "Internal Server Error" (get body "title")))
-        (is (= "Internal Server Error" (get body "detail")))
-        ;; Check that context fields are present using string keys
-        (is (contains? (get body "errorContext") "user-id"))
-        (is (contains? (get body "errorContext") "tenant-id"))
-        (is (contains? (get body "errorContext") "timestamp"))
-        (is (contains? (get body "errorContext") "environment"))))))
+      (is (= {"error" {"type" "internal-error" "message" "Internal Server Error"}} body)))))

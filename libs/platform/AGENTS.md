@@ -242,16 +242,17 @@ a signed webhook, a token in the path. Roles are still the module's to check;
 ### Per-Route Interceptors
 
 ```clojure
-;; Define a custom interceptor
+;; Define a custom interceptor. errors = wagoe.platform.core.http.errors,
+;; which builds the one JSON error body.
 (def require-admin
   {:name :require-admin
    :enter (fn [ctx]
             (if (admin? (get-in ctx [:request :session :user]))
               ctx
-              (assoc ctx :response {:status 403 :body {:error "Forbidden"}})))
+              (assoc ctx :response (errors/response 403 :forbidden "Admin role required"))))
    :leave (fn [ctx] ctx)
    :error (fn [ctx _error]
-            (assoc ctx :response {:status 500 :body {:error "Internal error"}}))})
+            (assoc ctx :response (errors/response 500 :internal-error "Internal Server Error")))})
 
 ;; Apply to specific routes
 [["/admin"

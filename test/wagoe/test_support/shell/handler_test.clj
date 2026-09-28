@@ -51,6 +51,6 @@
           resp    (handler (post-request {:seed "baseline"}))]
       (is (= 500 (:status resp)))
       (is (false? (-> resp :body :ok)))
-      (is (= "boom" (-> resp :body :error)))
+      (is (= {:type "internal-error" :message "boom"} (-> resp :body :error)))
       (is (not (.contains (pr-str (:body resp)) "xyz"))
           "ex-data must not leak into the response body"))))

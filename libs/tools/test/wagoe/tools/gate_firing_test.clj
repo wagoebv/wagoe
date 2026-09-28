@@ -988,6 +988,20 @@
       "{:success? (not ok) :error \"x\"}\n"
       "{:success? false :error (build-error e)}\n"))
 
+  (testing "a literal error response carries {:error {:type :message}} (BOU-586)"
+    (are [rules src] (= rules (map :rule (check-error-shape/response-body-findings src "x.clj")))
+      [:body-error-not-a-map]  "{:status 401 :body {:error \"unauthorized\" :message \"m\"}}\n"
+      [:body-error-not-a-map]  "{:body {:error :forbidden} :headers {} :status 403}\n"
+      [:body-without-error]    "{:status 400 :body {:type \"x\" :title \"Bad\" :status 400}}\n"
+      [:body-error-incomplete] "{:status 422 :body {:error {:type :x}}}\n"
+      []                       "{:status 404 :body {:error {:type \"not-found\" :message \"m\"}}}\n"
+      ;; Not an error status, a computed body or error, or a pre-encoded string.
+      []                       "{:status 200 :body {:error \"fine, it is data\"}}\n"
+      []                       "{:status 400 :body (errors/body :x \"m\")}\n"
+      []                       "{:status 422 :body {:error (:error result)}}\n"
+      []                       "{:status 403 :body \"{\\\"error\\\":\\\"x\\\"}\"}\n"
+      []                       "{:status status :body {:error \"x\"}}\n"))
+
   (testing "an exemption without a reason, or without a count, is rejected"
     (is (thrown? clojure.lang.ExceptionInfo
                  (check-error-shape/parse-allowlist

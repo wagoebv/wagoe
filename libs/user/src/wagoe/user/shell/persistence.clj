@@ -284,6 +284,11 @@
                 (= "org.postgresql.util.PGobject" (.getName (class value)))
                 (cheshire.core/parse-string (.getValue value) true)
 
+                ;; H2 returns a CLOB for a JSON column
+                (instance? java.sql.Clob value)
+                (let [^java.sql.Clob clob value]
+                  (cheshire.core/parse-string (.getSubString clob 1 (int (.length clob))) true))
+
                 ;; Already a map (shouldn't happen, but handle it)
                 (map? value)
                 value

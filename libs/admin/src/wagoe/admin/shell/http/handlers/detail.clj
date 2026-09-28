@@ -21,8 +21,8 @@
 
           ; Verify entity is accessible
           _ (when-not (ports/validate-entity-exists schema-provider entity-name)
-              (throw (ex-info "Entity not allowed"
-                              {:type :entity-not-allowed
+              (throw (ex-info "Unknown entity"
+                              {:type :not-found
                                :entity-name entity-name})))
 
           entity-config (ports/get-entity-config schema-provider entity-name)
@@ -65,8 +65,8 @@
 
           ; Verify entity is accessible
           _ (when-not (ports/validate-entity-exists schema-provider entity-name)
-              (throw (ex-info "Entity not allowed"
-                              {:type :entity-not-allowed
+              (throw (ex-info "Unknown entity"
+                              {:type :not-found
                                :entity-name entity-name})))
 
           entity-config (ports/get-entity-config schema-provider entity-name)
@@ -141,8 +141,8 @@
     (let [user        (support/require-admin-user! request)
           entity-name (support/get-entity-name request)
           _           (when-not (ports/validate-entity-exists schema-provider entity-name)
-                        (throw (ex-info "Entity not allowed"
-                                        {:type :entity-not-allowed :entity-name entity-name})))
+                        (throw (ex-info "Unknown entity"
+                                        {:type :not-found :entity-name entity-name})))
           entity-config (ports/get-entity-config schema-provider entity-name)
           _           (shell-permissions/assert-can-create-entity! user entity-name entity-config)
           child       (keyword (get-in request [:path-params :child]))

@@ -36,6 +36,7 @@
    All observability is handled automatically by interceptors."
   (:require [wagoe.core.interceptor :as interceptor]
             [wagoe.core.interceptor-context :as interceptor-context]
+            [wagoe.platform.core.http.errors :as errors]
             [wagoe.user.shell.http-interceptors]
             [wagoe.user.shell.interceptors :as user-interceptors]
             [wagoe.user.shell.middleware :as user-middleware]
@@ -48,7 +49,7 @@
 ;; =============================================================================
 
 (def user-error-mappings
-  "User module specific error type mappings for RFC 7807 problem details."
+  "User module specific error type -> HTTP status mappings."
   {:user-exists               [409 "User Already Exists"]
    :user-not-found            [404 "User Not Found"]
    :session-not-found         [404 "Session Not Found"]
@@ -239,6 +240,23 @@
 ;; MFA Handlers
 ;; =============================================================================
 
+(def ^:private mfa-failures
+  "The types mfa.clj answers when something threw: our fault, not the caller's."
+  #{:mfa-setup-failed :mfa-enable-failed :mfa-disable-failed})
+
+(defn- mfa-refusal
+  "A validation-error 400 for an MFA refusal the caller can act on, its MFA
+   type as the reason; a 500 when mfa.clj caught an exception, which it logged
+   (BOU-586)."
+  [result]
+  (let [{:keys [type message]} (:error result)
+        body (if (mfa-failures type)
+               (errors/body :internal-error "Internal Server Error")
+               (errors/body :validation-error message {:details {:reason (errors/type-name type)}}))]
+    {:status  (if (mfa-failures type) 500 400)
+     :headers {"Content-Type" "application/json"}
+     :body    (json/generate-string body)}))
+
 ;; Untyped exceptions are not caught here: the platform's http-error-handler
 ;; logs them and answers a generic 500 (BOU-557).
 
@@ -259,12 +277,7 @@
                  :backupCodes (:backup-codes result)
                  :issuer (:issuer result)
                  :accountName (:account-name result)})}
-        {:status 400
-         :headers {"Content-Type" "application/json"}
-         ;; The message, not the map. mfa moved to the ADR-036 §3 return
-         ;; ({:error {:type … :message …}}); flattening here keeps this
-         ;; endpoint answering exactly what it answered before (BOU-323).
-         :body (json/generate-string {:error (get-in result [:error :message])})}))))
+        (mfa-refusal result)))))
 
 (defn mfa-enable-handler
   "POST /api/auth/mfa/enable - Enable MFA after verification."
@@ -282,12 +295,7 @@
         {:status 200
          :headers {"Content-Type" "application/json"}
          :body (json/generate-string {:message "MFA enabled successfully"})}
-        {:status 400
-         :headers {"Content-Type" "application/json"}
-         ;; The message, not the map. mfa moved to the ADR-036 §3 return
-         ;; ({:error {:type … :message …}}); flattening here keeps this
-         ;; endpoint answering exactly what it answered before (BOU-323).
-         :body (json/generate-string {:error (get-in result [:error :message])})}))))
+        (mfa-refusal result)))))
 
 (defn mfa-disable-handler
   "POST /api/auth/mfa/disable - Disable MFA for authenticated user."
@@ -301,12 +309,7 @@
         {:status 200
          :headers {"Content-Type" "application/json"}
          :body (json/generate-string {:message "MFA disabled successfully"})}
-        {:status 400
-         :headers {"Content-Type" "application/json"}
-         ;; The message, not the map. mfa moved to the ADR-036 §3 return
-         ;; ({:error {:type … :message …}}); flattening here keeps this
-         ;; endpoint answering exactly what it answered before (BOU-323).
-         :body (json/generate-string {:error (get-in result [:error :message])})}))))
+        (mfa-refusal result)))))
 
 (defn mfa-status-handler
   "GET /api/auth/mfa/status - Get MFA status for authenticated user."

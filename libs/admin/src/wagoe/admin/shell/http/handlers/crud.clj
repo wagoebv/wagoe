@@ -14,16 +14,10 @@
   "Message safe to show in an admin flash: a typed domain error whose mapped
    status is 4xx (same contract as the platform error path, BOU-161). Untyped,
    unmapped, or 5xx-mapped errors return nil — the caller shows a generic
-   flash instead and the details stay in the server log (BOU-182).
-
-   Handles both mapping shapes in combined-error-mappings: the platform's
-   [status title] vectors and the admin map form {:status ...}."
+   flash instead and the details stay in the server log (BOU-182)."
   [e]
   (when-let [error-type (:type (ex-data e))]
-    (let [mapping (get support/combined-error-mappings error-type)
-          status  (cond
-                    (vector? mapping) (first mapping)
-                    (map? mapping)    (:status mapping))]
+    (let [status (first (get support/combined-error-mappings error-type))]
       (when (and status (< status 500))
         (ex-message e)))))
 
@@ -160,8 +154,8 @@
 
           ; Verify entity is accessible
           _ (when-not (ports/validate-entity-exists schema-provider entity-name)
-              (throw (ex-info "Entity not allowed"
-                              {:type :entity-not-allowed
+              (throw (ex-info "Unknown entity"
+                              {:type :not-found
                                :entity-name entity-name})))
 
           entity-config (ports/get-entity-config schema-provider entity-name)
@@ -304,8 +298,8 @@
 
           ; Verify entity is accessible
           _ (when-not (ports/validate-entity-exists schema-provider entity-name)
-              (throw (ex-info "Entity not allowed"
-                              {:type :entity-not-allowed
+              (throw (ex-info "Unknown entity"
+                              {:type :not-found
                                :entity-name entity-name})))
 
           entity-config (ports/get-entity-config schema-provider entity-name)

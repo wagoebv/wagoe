@@ -96,12 +96,12 @@ In dev, an error over HTTP answers with a `dev` block:
 
 [source,json]
 ----
-{"error": "validation-error",
- "message": "Request validation failed",
- "details": {"email": ["missing required key"]},
- "dev": {"code": "BND-201",
-         "category": "validation",
-         "docs-url": "bb guide error BND-201"}}
+{"error": {"type":    "validation-error",
+           "message": "Request validation failed",
+           "details": {"email": ["missing required key"]},
+           "dev":     {"code": "BND-201",
+                       "category": "validation",
+                       "docs-url": "bb guide error BND-201"}}}
 ----
 
 Three things have to be true for that block to appear, and each is deliberate:

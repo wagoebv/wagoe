@@ -13,6 +13,7 @@
    changing them takes its admin role. A global admin may do both. Only the
    invitee may accept an invitation (BOU-568)."
   (:require [wagoe.platform.core.http.access :as access]
+            [wagoe.platform.core.http.errors :as errors]
             [wagoe.tenant.ports :as membership-ports]
             [cheshire.core :as json]
             [clojure.tools.logging :as log]))
@@ -30,9 +31,8 @@
 
 (defn- error-response
   [status message & [details]]
-  (json-response status
-                 (cond-> {:error message}
-                   details (assoc :details details))))
+  (json-response status (errors/body (errors/status->type status) message
+                                     {:details details})))
 
 (defn- parse-uuid-safe
   [s]

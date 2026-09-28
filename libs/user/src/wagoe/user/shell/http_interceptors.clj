@@ -25,6 +25,7 @@
                            'user.http-interceptors/log-action]}}]"
   (:require [wagoe.observability.logging.ports :as logging]
             [wagoe.observability.metrics.ports :as metrics]
+            [wagoe.platform.core.http.errors :as errors]
             [wagoe.tenant.core.membership :as membership-core]
             [clojure.string :as str]))
 
@@ -64,20 +65,11 @@
   (= :admin (normalize-role (:role user))))
 
 (defn- create-error-response
-  "Creates standardized error response.
-
-   Note: deliberately does NOT set a Content-Type header. muuntaja's
-   format-response middleware skips body encoding when a response already
-   carries a Content-Type, which would leave the Clojure-map :body unencoded
-   and cause Jetty to write an empty body on the interceptor short-circuit
-   path (ZZP-120). Leaving Content-Type unset lets muuntaja negotiate and
-   encode the body exactly like a normal handler response."
+  "The one error body (BOU-586). No Content-Type: muuntaja skips encoding a
+   response that already has one, and Jetty then writes an empty body on the
+   interceptor short-circuit path (ZZP-120)."
   [status error-type message correlation-id]
-  {:status status
-   :headers {"X-Correlation-ID" correlation-id}
-   :body {:error error-type
-          :message message
-          :correlation-id correlation-id}})
+  (errors/response status error-type message {:correlation-id correlation-id}))
 
 ;; =============================================================================
 ;; Authentication Interceptors

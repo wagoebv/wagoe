@@ -18,7 +18,8 @@
             [wagoe.audience.schema :as schema]
             [clojure.tools.logging :as log]
             [hiccup2.core :as h]
-            [malli.core :as m]))
+            [malli.core :as m]
+            [malli.error :as me]))
 
 ;; =============================================================================
 ;; Helpers
@@ -37,34 +38,26 @@
   (when (and (string? s) (re-matches #"[a-z0-9][a-z0-9\-]{0,63}" s))
     (keyword s)))
 
-(defn- bad-request-response
-  "Return a 400 Bad Request response."
-  [message]
-  {:status  400
-   :headers {"Content-Type" "application/json"}
-   :body    {:error message}})
+(defn- error-response
+  "The framework's one error body (BOU-586). Audience does not depend on
+   platform, so the shape of `wagoe.platform.core.http.errors` is written out.
+   No Content-Type: muuntaja encodes a map body only when none is set."
+  [status type message & [details]]
+  {:status status
+   :body   {:error (cond-> {:type type :message message}
+                     (seq details) (assoc :details details))}})
 
-(defn- not-found-response
-  "Return a 404 Not Found response."
-  [message]
-  {:status  404
-   :headers {"Content-Type" "application/json"}
-   :body    {:error message}})
+(defn- bad-request-response [message]
+  (error-response 400 "validation-error" message))
 
-(defn- unprocessable-response
-  "Return a 422 Unprocessable Entity response."
-  [message & [details]]
-  {:status  422
-   :headers {"Content-Type" "application/json"}
-   :body    (cond-> {:error message}
-              details (assoc :details details))})
+(defn- not-found-response [message]
+  (error-response 404 "not-found" message))
 
-(defn- internal-error-response
-  "Return a 500 Internal Server Error response."
-  [message]
-  {:status  500
-   :headers {"Content-Type" "application/json"}
-   :body    {:error message}})
+(defn- unprocessable-response [message & [details]]
+  (error-response 422 "unprocessable" message details))
+
+(defn- internal-error-response [message]
+  (error-response 500 "internal-error" message))
 
 (defn- html-response
   ([hiccup]
@@ -78,9 +71,9 @@
   ([body]
    (json-response body 200))
   ([body status]
-   {:status  status
-    :headers {"Content-Type" "application/json"}
-    :body    body}))
+   ;; No Content-Type: muuntaja encodes a map body only when none is set.
+   {:status status
+    :body   body}))
 
 (defn- handle-audience-error
   "Map ex-info :type to appropriate HTTP response."
@@ -164,7 +157,7 @@
       (let [explanation (dynamic-audience-definition-explainer definition)]
         (log/warn "Invalid audience definition submitted" {:errors explanation})
         (unprocessable-response "Invalid audience definition"
-                                {:errors (str explanation)}))
+                                {:errors (me/humanize explanation)}))
       (try
         (log/info "Creating audience" {:label (:label definition)})
         (let [saved (ports/save-audience store definition)]
@@ -187,7 +180,7 @@
             definition (assoc body :id id)]
         (if-not (dynamic-audience-definition-validator definition)
           (unprocessable-response "Invalid audience definition"
-                                  {:errors (str (dynamic-audience-definition-explainer definition))})
+                                  {:errors (me/humanize (dynamic-audience-definition-explainer definition))})
           (try
             (log/info "Updating audience" {:id id})
             (let [updated (ports/save-audience store definition)]

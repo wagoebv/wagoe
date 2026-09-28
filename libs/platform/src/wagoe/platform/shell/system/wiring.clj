@@ -69,6 +69,7 @@
             ;; which is the same coupling BOU-171/192/198 removed for user and
             ;; the feature modules.
             [cheshire.core]
+            [wagoe.platform.core.http.errors :as errors]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
             [integrant.core :as ig]
@@ -756,9 +757,11 @@
   (fn [request]
     (if-let [handler @handler-atom]
       (handler request)
+      ;; Jetty's own handler: nothing encodes this body but us.
       {:status 503
-       :headers {"Content-Type" "text/plain"}
-       :body "Handler not initialized"})))
+       :headers {"Content-Type" "application/json"}
+       :body (cheshire.core/generate-string
+              (errors/body :unavailable "Handler not initialized"))})))
 
 (defn current-handler
   "Return the current live HTTP handler, or nil if not initialized."

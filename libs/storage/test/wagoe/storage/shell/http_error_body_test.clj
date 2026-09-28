@@ -41,17 +41,17 @@
     (is (= 500 status))
     (is (not (str/includes? raw "wJalrXUtnFEMI")) raw)
     (testing "the platform's error shape"
-      (is (= "internal-error" (:error body)))
-      (is (= "Internal Server Error" (:message body)))
-      (is (contains? body :correlation-id)))))
+      (is (= "internal-error" (get-in body [:error :type])))
+      (is (= "Internal Server Error" (get-in body [:error :message])))
+      (is (contains? (:error body) :correlation-id)))))
 
 (deftest ^:unit typed-validation-error-keeps-its-message
   (let [{:keys [status raw]} (serve #(throw (ex-info "File name is not allowed"
                                                      {:type :validation-error})))
         body                 (json/parse-string raw true)]
     (is (= 400 status))
-    (is (= "validation-error" (:error body)))
-    (is (= "File name is not allowed" (:message body)))))
+    (is (= "validation-error" (get-in body [:error :type])))
+    (is (= "File name is not allowed" (get-in body [:error :message])))))
 
 (deftest ^:unit adapter-failure-does-not-reach-the-body
   (let [storage (reify ports/IFileStorage

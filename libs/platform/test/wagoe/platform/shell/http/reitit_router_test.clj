@@ -359,10 +359,10 @@
                              :headers {"x-correlation-id" correlation-id}})
           response-correlation-id (or (get-in response [:headers "X-Correlation-ID"])
                                       (get-in response [:headers "x-correlation-id"]))
-          body (response-body-as-map response)]
+          body (:error (response-body-as-map response))]
       (is (= 400 (:status response)))
       (is (= correlation-id response-correlation-id))
-      (is (= "validation-error" (:error body)))
+      (is (= "validation-error" (:type body)))
       (is (= "Invalid input" (:message body)))
       (is (= correlation-id (:correlation-id body)))
       (is (= {:foo "bar"} (:details body))))))
@@ -393,14 +393,14 @@
 ;; =============================================================================
 
 (defn- error-body
-  "The response body as data.
+  "The `error` of the response body, as data.
 
    Read through `slurp`: the exception middleware sits inside
    `format-response`, so its bodies are negotiated and encoded like any other
    response — which is the point, and which means the body arrives as a
    stream rather than the map the handler returned."
   [resp]
-  (json/parse-string (slurp (:body resp)) true))
+  (:error (json/parse-string (slurp (:body resp)) true)))
 
 (defn- login-like-handler
   "A route whose body schema requires two fields, wired the way the user module
@@ -424,7 +424,7 @@
                                        :body-params    {}})
         body (error-body resp)]
     (is (= 400 (:status resp)))
-    (is (= "validation-error" (:error body)))
+    (is (= "validation-error" (:type body)))
 
     (testing "and it names the fields the caller got wrong"
       (is (= {:email ["invalid"] :password ["invalid"]} (:details body))))
@@ -467,7 +467,7 @@
           (is (not (str/includes? raw secret))
               (str "leaked schema detail for " params ": " secret)))
         (is (= {:role ["invalid"] :age ["invalid"]}
-               (:details (json/parse-string raw true))))))))
+               (get-in (json/parse-string raw true) [:error :details])))))))
 
 (deftest ^:unit dev-gets-the-explanation-production-does-not
   (let [handler (fn [system]
@@ -476,10 +476,11 @@
                                                    :parameters {:body [:map {:closed true} [:role [:enum "admin"]]]}}}]]
                                          {:system system}))
         details (fn [system]
-                  (:details (json/parse-string
+                  (get-in (json/parse-string
                              (slurp (:body ((handler system) {:request-method :post :uri "/users"
                                                               :headers {} :body-params {}})))
-                             true)))]
+                             true)
+                          [:error :details]))]
     (is (= {:role ["missing required key"]}
            (details {:error-enricher (constantly {:code "BND-201"}) :environment "dev"})))
     (is (= {:role ["invalid"]}
@@ -1023,7 +1024,7 @@
                            :headers {"accept" "application/json" "x-correlation-id" "c-1"}
                            :body-params {:name "x"}})]
         (is (= 401 (:status resp)))
-        (is (= {:error "unauthorized" :message "Authentication required" :correlation-id "c-1"}
+        (is (= {:error {:type "unauthorized" :message "Authentication required" :correlation-id "c-1"}}
                (json/parse-string (slurp (:body resp)) true)))
         (is (= "c-1" (get-in resp [:headers "X-Correlation-ID"])))))
     (testing "before the body is checked: an anonymous caller is not told what a valid one looks like"

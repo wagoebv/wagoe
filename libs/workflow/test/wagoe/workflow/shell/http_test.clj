@@ -162,8 +162,8 @@
     (testing (name route)
       (let [response (call-route route nil)]
         (is (= 401 (:status response)))
-        (is (= {:error "unauthorized" :message "Authentication required"}
-               (select-keys (body-data response) [:error :message])))))))
+        (is (= {:type "unauthorized" :message "Authentication required"}
+               (select-keys (:error (body-data response)) [:type :message])))))))
 
 (deftest ^:unit every-api-route-serves-an-authenticated-caller
   (doseq [[route status] route-success]
@@ -214,7 +214,7 @@
                          body-params
                          (admin-token))]
       (is (= 400 (:status response)) (str label " answered " (:status response)))
-      (is (= "validation-error" (:error (body-data response))) label))))
+      (is (= "validation-error" (get-in (body-data response) [:error :type])) label))))
 
 (deftest ^:unit starting-a-workflow-reads-the-body-it-was-sent
   (let [entity-id (UUID/randomUUID)
@@ -237,7 +237,7 @@
 (deftest ^:unit starting-a-workflow-without-a-body-is-a-4xx-not-a-500
   (let [response (post "/workflow/instances" {} (admin-token))]
     (is (= 400 (:status response)))
-    (is (= "validation-error" (:error (body-data response))))))
+    (is (= "validation-error" (get-in (body-data response) [:error :type])))))
 
 ;; =============================================================================
 ;; Finding an entity's instance (BOU-581)
@@ -262,7 +262,7 @@
                      "entity-type=invoice&entity-id=nope"]]
         (let [response (lookup query)]
           (is (= 400 (:status response)) query)
-          (is (= "validation-error" (:error (body-data response))) query))))))
+          (is (= "validation-error" (get-in (body-data response) [:error :type])) query))))))
 
 ;; =============================================================================
 ;; The JSON shape: kebab-case, as the scaffolded APIs answer (BOU-579)
@@ -299,14 +299,14 @@
                         :entityId (str (UUID/randomUUID))}
                        (admin-token))]
     (is (= 400 (:status response)))
-    (is (= "validation-error" (:error (body-data response))))))
+    (is (= "validation-error" (get-in (body-data response) [:error :type])))))
 
 (deftest ^:unit an-unknown-instance-is-the-platforms-404
   (let [response (get-uri (str "/workflow/instances/" (UUID/randomUUID)) (admin-token))
         body     (body-data response)]
     (is (= 404 (:status response)))
-    (is (= "not-found" (:error body)))
-    (is (string? (:message body)))))
+    (is (= "not-found" (get-in body [:error :type])))
+    (is (string? (get-in body [:error :message])))))
 
 ;; =============================================================================
 ;; The documented bodies are what the API takes and answers (BOU-579)
@@ -375,3 +375,13 @@
     (is (= 500 (:status response)))
     (is (not (re-find #"hunter2" (:body response))))
     (is (re-find #"error-generic" (:body response)))))
+
+(deftest ^:unit the-admin-detail-page-answers-a-bad-or-unknown-id-with-404
+  ;; A non-UUID id threw a :validation-error inside the handler's catch-all,
+  ;; which answered 500 (BOU-586).
+  (let [store    (service-test/create-memory-store)
+        registry (registry/create-workflow-registry)]
+    (doseq [id ["not-a-uuid" (str (UUID/randomUUID))]]
+      (let [response (sut/handle-get-instance-web store registry {:path-params {:id id}})]
+        (is (= 404 (:status response)) id)
+        (is (re-find #"not found" (:body response)) id)))))

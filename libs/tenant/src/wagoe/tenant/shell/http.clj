@@ -8,6 +8,7 @@
    
    All routes require the global admin role (BOU-568)."
   (:require [wagoe.platform.core.http.access :as access]
+            [wagoe.platform.core.http.errors :as errors]
             [wagoe.tenant.ports :as tenant-ports]
             [wagoe.tenant.schema :as tenant-schema]
             [wagoe.tenant.shell.provisioning :as provisioning]
@@ -30,15 +31,13 @@
 
 (defn- error-response
   "Create error HTTP response."
-  [status message & [details]]
-  (json-response status
-                 (cond-> {:error message}
-                   details (assoc :details details))))
+  [status type message & [details]]
+  (json-response status (errors/body type message {:details details})))
 
 (defn- validation-error-response
   "Create validation error response from Malli errors."
   [errors]
-  (error-response 400 "Validation failed"
+  (error-response 400 :validation-error "Validation failed"
                   {:validation-errors (me/humanize errors)}))
 
 (defn- parse-tenant-uuid
@@ -73,14 +72,15 @@
   "The response for a thrown service error: its message and a status from its
    :type. Anything untyped is logged and answered with a generic 500."
   [e action]
-  (if-let [status (get {:validation-error 400
-                        :not-found        404
-                        :conflict         409
-                        :not-supported    501}
-                       (:type (ex-data e)))]
-    (error-response status (ex-message e))
-    (do (log/error e (str "Failed to " action))
-        (error-response 500 "Internal server error"))))
+  (let [type (:type (ex-data e))]
+    (if-let [status (get {:validation-error 400
+                          :not-found        404
+                          :conflict         409
+                          :not-supported    501}
+                         type)]
+      (error-response status type (ex-message e))
+      (do (log/error e (str "Failed to " action))
+          (error-response 500 :internal-error "Internal server error")))))
 
 (defn- with-typed-errors [action f]
   (try
@@ -93,7 +93,7 @@
   [request f]
   (if-let [tenant-id (some-> (get-in request [:path-params :id]) parse-tenant-uuid)]
     (f tenant-id)
-    (error-response 400 "Invalid tenant ID format")))
+    (error-response 400 :validation-error "Invalid tenant ID format")))
 
 (defn- request-body [request]
   (or (:body-params request)
@@ -165,7 +165,7 @@
 
                (and (:slug body)
                     (not= (:slug body) (:slug (tenant-ports/get-tenant tenant-service tenant-id))))
-               (error-response 400 "The slug cannot change: it names the tenant's schema")
+               (error-response 400 :validation-error "The slug cannot change: it names the tenant's schema")
 
                :else
                (json-response 200 (tenant-ports/update-existing-tenant
@@ -211,7 +211,7 @@
     (with-tenant-id request
       (fn [tenant-id]
         (if-not db-context
-          (error-response 500 "Database context not available")
+          (error-response 500 :internal-error "Database context not available")
           (with-typed-errors "provision tenant"
             #(json-response 200 (provisioning/provision-tenant!
                                  db-context

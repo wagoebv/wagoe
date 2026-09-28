@@ -70,13 +70,13 @@
     (testing "a taken slug is a conflict that says why"
       (let [response (post {:name "Again" :slug "new-tenant"})]
         (is (= 409 (:status response)))
-        (is (= "Tenant slug already exists" (:error (body response))))))
+        (is (= "Tenant slug already exists" (get-in (body response) [:error :message])))))
 
     (testing "input the schema refuses is a 400 naming the field"
       (let [response (post {:slug "no-name"})]
         (is (= 400 (:status response)))
-        (is (= "Validation failed" (:error (body response))))
-        (is (contains? (get-in (body response) [:details :validation-errors]) :name))))
+        (is (= "Validation failed" (get-in (body response) [:error :message])))
+        (is (contains? (get-in (body response) [:error :details :validation-errors]) :name))))
 
     (testing "nothing was written for a refusal"
       (is (= 1 (count (tenant-ports/list-tenants *service* {})))))))
@@ -118,7 +118,7 @@
     (testing "an unknown id is a 404"
       (let [response (call tenant-http/get-tenant-handler unknown-id)]
         (is (= 404 (:status response)))
-        (is (= "Tenant not found" (:error (body response))))))
+        (is (= "Tenant not found" (get-in (body response) [:error :message])))))
     (testing "an id that is not a UUID is a 400"
       (is (= 400 (:status (call tenant-http/get-tenant-handler "invalid-uuid")))))))
 
@@ -138,7 +138,7 @@
     (testing "the slug names the tenant's schema, so it cannot change"
       (let [response (put (:id tenant) {:slug "new-slug"})]
         (is (= 400 (:status response)))
-        (is (re-find #"slug" (:error (body response)))))
+        (is (re-find #"slug" (get-in (body response) [:error :message]))))
       (is (= 200 (:status (put (:id tenant) {:slug "acme-corp" :name "Same slug"})))))
     (testing "an unknown id is a 404"
       (is (= 404 (:status (put unknown-id {:name "x"})))))
@@ -173,7 +173,7 @@
         response ((tenant-http/create-tenant-handler *service*)
                   {:body-params {:name "Someone else" :slug "acme-corp"}})]
     (is (= 409 (:status response)))
-    (is (= "Tenant slug already exists" (:error (body response))))))
+    (is (= "Tenant slug already exists" (get-in (body response) [:error :message])))))
 
 (deftest ^:contract suspend-and-activate-tenant-handler-test
   (let [tenant (create! "acme-corp")]
@@ -203,7 +203,7 @@
     (testing "H2 has no schemas to provision: 501, saying so"
       (let [response (provision *ctx* (:id tenant))]
         (is (= 501 (:status response)))
-        (is (re-find #"PostgreSQL" (:error (body response))))))
+        (is (re-find #"PostgreSQL" (get-in (body response) [:error :message])))))
     (testing "an unknown id is a 404"
       (is (= 404 (:status (provision *ctx* unknown-id)))))
     (testing "no database context is a 500"

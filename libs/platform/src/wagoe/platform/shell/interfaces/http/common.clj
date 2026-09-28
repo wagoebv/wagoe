@@ -1,18 +1,16 @@
 (ns wagoe.platform.shell.interfaces.http.common
-  "Common HTTP utilities and RFC 7807 Problem Details support.
+  "Common HTTP utilities: error responses in the one error shape
+   (`wagoe.platform.core.http.errors`) and health checks.
 
-   This namespace provides common HTTP functionality including standardized
-   error responses following RFC 7807 Problem Details specification and
-   other utility functions used across HTTP interfaces.
-
-   Pure problem details transformations are now in wagoe.platform.core.http.problem-details"
-  (:require [wagoe.platform.core.http.problem-details :as core-problem]
+   The pure transformations are in wagoe.platform.core.http.problem-details."
+  (:require [wagoe.platform.core.http.errors :as errors]
+            [wagoe.platform.core.http.problem-details :as core-problem]
             [cheshire.core :as json]
             [clojure.string :as str]
             [clojure.tools.logging :as log]))
 
 ;; =============================================================================
-;; RFC 7807 Problem Details (Re-exported from core)
+;; Error responses (re-exported from core)
 ;; =============================================================================
 
 (def default-error-mappings
@@ -22,12 +20,7 @@
   core-problem/default-error-mappings)
 
 (defn exception->problem
-  "Convert exception to RFC 7807 problem details.
-   
-   Delegates to pure core function.
-
-   Creates standardized error responses following RFC 7807 Problem Details
-   for HTTP APIs specification.
+  "Convert exception to an error response in the one error shape.
 
    Args:
      ex: Exception to convert
@@ -36,7 +29,7 @@
      error-mappings: Optional custom error type mappings (overrides defaults)
 
    Returns:
-     Ring response map with RFC 7807 problem details"
+     Ring response map"
   ([ex correlation-id uri]
    (exception->problem ex correlation-id uri {}))
   ([ex correlation-id uri error-mappings]
@@ -53,13 +46,7 @@
      Ring handler function for 404 responses"
   []
   (fn [_]
-    {:status 404
-     :headers {"Content-Type" "application/problem+json"}
-     :body (json/generate-string
-            {:type "https://api.example.com/problems/not-found"
-             :title "Not Found"
-             :status 404
-             :detail "The requested resource was not found"})}))
+    (core-problem/not-found "The requested resource was not found")))
 
 (defn create-method-not-allowed-handler
   "Create a standardized 405 Method Not Allowed handler.
@@ -71,14 +58,10 @@
      Ring handler function for 405 responses"
   [allowed-methods]
   (fn [_]
-    {:status 405
-     :headers {"Content-Type" "application/problem+json"
-               "Allow" (str/join ", " (map name allowed-methods))}
-     :body (json/generate-string
-            {:type "https://api.example.com/problems/method-not-allowed"
-             :title "Method Not Allowed"
-             :status 405
-             :detail (str "Allowed methods: " (str/join ", " (map name allowed-methods)))})}))
+    (-> (core-problem/problem-details->response
+         405 (errors/body :method-not-allowed
+                          (str "Allowed methods: " (str/join ", " (map name allowed-methods)))))
+        (assoc-in [:headers "Allow"] (str/join ", " (map name allowed-methods))))))
 
 (defn health-check-handler
   "Create a generic health check handler.

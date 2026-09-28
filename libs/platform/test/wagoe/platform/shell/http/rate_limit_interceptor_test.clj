@@ -63,7 +63,7 @@
         (is (= 429 (:status resp)))
         (is (= "60" (get-in resp [:headers "Retry-After"])))
         (is (= "1" (get-in resp [:headers "X-RateLimit-Limit"])))
-        (is (= :rate-limit-exceeded (get-in resp [:body :type])))))))
+        (is (= "rate-limit-exceeded" (get-in resp [:body :error :type])))))))
 
 (deftest ^:unit ^:security allowed-response-carries-remaining-header
   (testing "allowed requests expose X-RateLimit-Remaining on the way out (Redis path)"

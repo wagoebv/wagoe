@@ -20,47 +20,13 @@
   (:import [java.util UUID]))
 
 ;; =============================================================================
-;; Error Mappings - Admin-Specific RFC 7807 Problem Details
+;; Error Mappings
 ;; =============================================================================
 
-(def admin-error-mappings
-  "Error type mappings for admin-specific errors.
-
-   Extends base error mappings with admin-specific error types:
-   - :table-not-found - Entity/table doesn't exist in database
-   - :entity-not-allowed - Entity not in allowlist
-   - :invalid-entity-data - Validation failed on entity data"
-  {:table-not-found
-   {:status 404
-    :type "https://wagoe.app/errors/table-not-found"
-    :title "Table Not Found"
-    :detail-fn (fn [ex-data] (str "Table '" (:table-name ex-data) "' does not exist"))}
-
-   :entity-not-allowed
-   {:status 403
-    :type "https://wagoe.app/errors/entity-not-allowed"
-    :title "Entity Not Allowed"
-    :detail-fn (fn [ex-data] (str "Entity '" (:entity-name ex-data) "' is not accessible"))}
-
-   :invalid-entity-data
-   {:status 422
-    :type "https://wagoe.app/errors/invalid-entity-data"
-    :title "Invalid Entity Data"
-    :detail-fn (fn [_ex-data] "Entity data failed validation")
-    :errors-fn (fn [ex-data] (:errors ex-data))}
-
-   :cannot-create-split-table-entity
-   {:status 400
-    :type "https://wagoe.app/errors/cannot-create-split-table-entity"
-    :title "Cannot Create Entity"
-    :detail-fn (fn [ex-data]
-                 (str "Entity '" (name (:entity-name ex-data))
-                      "' spans multiple tables and must be created via its dedicated"
-                      " create flow (configure :create-redirect-url on the entity)."))}})
-
 (def combined-error-mappings
-  "Merged error mappings: base + admin-specific"
-  (merge problem-details/default-error-mappings admin-error-mappings))
+  "The :type -> status table admin errors are answered with. Admin throws the
+   platform's own types, so the platform's status and this one agree (BOU-586)."
+  problem-details/default-error-mappings)
 
 ;; =============================================================================
 ;; Query Parameter Parsing

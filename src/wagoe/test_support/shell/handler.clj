@@ -23,4 +23,5 @@
       (catch Throwable t
         (log/error t "test-reset failed")
         {:status 500
-         :body   {:ok false :error (.getMessage t)}}))))
+         :body   {:ok    false
+                  :error {:type "internal-error" :message (str (.getMessage t))}}}))))

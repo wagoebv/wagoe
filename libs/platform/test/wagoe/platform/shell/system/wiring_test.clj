@@ -10,6 +10,7 @@
             [wagoe.observability.tracing.ports :as tracing-ports]
             [wagoe.observability.errors.shell.adapters.no-op]
             [aero.core :as aero]
+            [cheshire.core]
             [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
@@ -632,3 +633,11 @@
 
     (testing "and stopping clears it, so nothing reads a torn-down system"
       (is (nil? (wiring))))))
+
+(deftest ^:unit a-server-with-no-handler-yet-answers-the-one-error-shape
+  ;; It answered text/plain "Handler not initialized" (BOU-586).
+  (let [r ((#'wagoe.platform.shell.system.wiring/make-dispatch-handler (atom nil)) {})]
+    (is (= 503 (:status r)))
+    (is (= "application/json" (get-in r [:headers "Content-Type"])))
+    (is (= {:error {:type "unavailable" :message "Handler not initialized"}}
+           (cheshire.core/parse-string (:body r) true)))))

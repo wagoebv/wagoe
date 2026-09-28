@@ -52,7 +52,7 @@
       (let [secret "relation \"users\" does not exist at /var/app/db.clj"
             ctx    {:exception (RuntimeException. secret) :correlation-id "corr-500" :system {}}
             resp   (:response (error-handler ctx))
-            body   (:body resp)]
+            body   (get-in resp [:body :error])]
         (is (= 500 (:status resp)))
         (is (= "Internal Server Error" (:message body)))
         (is (= "corr-500" (:correlation-id body)))
@@ -63,7 +63,7 @@
     (testing "a typed :internal-error does not leak its ex-data"
       (let [ctx  {:exception (ex-info "boom" {:type :internal-error :sql "SELECT secret" :path "/etc/passwd"})
                   :correlation-id "corr-501" :system {}}
-            body (get-in (error-handler ctx) [:response :body])]
+            body (get-in (error-handler ctx) [:response :body :error])]
         (is (= "Internal Server Error" (:message body)))
         (is (nil? (:details body)))
         (is (not (str/includes? (pr-str body) "/etc/passwd")))
@@ -74,8 +74,8 @@
                   :correlation-id "corr-400" :system {}}
             resp (:response (error-handler ctx))]
         (is (= 400 (:status resp)))
-        (is (= "Email is required" (get-in resp [:body :message])))
-        (is (= {:field :email} (get-in resp [:body :details])))))))
+        (is (= "Email is required" (get-in resp [:body :error :message])))
+        (is (= {:field :email} (get-in resp [:body :error :details])))))))
 
 ;; =============================================================================
 ;; CSRF interceptor routing logic

@@ -192,7 +192,7 @@
         (log/error e "MFA setup failed")
         {:success? false
          :error {:type    :mfa-setup-failed
-                 :message (str "Failed to set up MFA: " (.getMessage e))}}))))
+                 :message "MFA setup failed"}}))))
 
 (defn enable-mfa
   "Enable MFA for a user after verifying setup.
@@ -245,7 +245,7 @@
         (log/error e "MFA enable failed")
         {:success? false
          :error {:type    :mfa-enable-failed
-                 :message (str "Failed to enable MFA: " (.getMessage e))}}))))
+                 :message "Enabling MFA failed"}}))))
 
 (defn disable-mfa
   "Disable MFA for a user.
@@ -277,7 +277,7 @@
         (log/error e "MFA disable failed")
         {:success? false
          :error {:type    :mfa-disable-failed
-                 :message (str "Failed to disable MFA: " (.getMessage e))}}))))
+                 :message "Disabling MFA failed"}}))))
 
 (defn- find-unused-backup-code-hash
   "Return the stored bcrypt hash that the presented plaintext `code` matches and
@@ -339,6 +339,7 @@
           {:enabled false
            :backup-codes-remaining 0}))
       (catch Exception e
+        (log/error e "MFA status lookup failed")
         {:enabled false
          :backup-codes-remaining 0
-         :error (.getMessage e)}))))
+         :error "MFA status unavailable"}))))

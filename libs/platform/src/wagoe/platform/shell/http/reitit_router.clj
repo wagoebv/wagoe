@@ -26,6 +26,7 @@
             [ring.util.io :as ring-io]
             [ring.util.request :as ring-request]
             [wagoe.platform.core.http.access :as access]
+            [wagoe.platform.core.http.errors :as errors]
             [wagoe.platform.shell.http.interceptors :as http-interceptors])
   (:import [java.io ByteArrayInputStream ByteArrayOutputStream]
            [java.security MessageDigest]
@@ -178,21 +179,22 @@
         ;; has no id to hand to whoever reads the log.
         cid  (or (get-in request [:headers "x-correlation-id"])
                  (str (java.util.UUID/randomUUID)))
-        body (cond-> {:error         "validation-error"
-                      :message       "Request validation failed"
-                      :details       (humanize-coercion-errors (ex-data e) (some? dev))
-                      :correlationId cid}
-               dev (assoc :dev dev))]
-    {:status  400
-     :headers {"X-Correlation-ID" cid}
-     :body    body}))
+        details (humanize-coercion-errors (ex-data e) (some? dev))]
+    (errors/response 400 :validation-error "Request validation failed"
+                     {:details details :correlation-id cid :dev dev})))
+
+(defn- malformed-body-response
+  "400 for a body that does not parse as the Content-Type it claims."
+  [e request]
+  (errors/response 400 :malformed-request
+                   (str "Malformed " (or (:format (ex-data e)) "request") " body")
+                   {:correlation-id (or (get-in request [:headers "x-correlation-id"])
+                                        (str (java.util.UUID/randomUUID)))}))
 
 (defn- server-error-response
   "A 500 that says nothing. What went wrong goes to the log."
   []
-  {:status 500
-   :body   {:error   "internal-error"
-            :message "Internal Server Error"}})
+  (errors/response 500 :internal-error "Internal Server Error"))
 
 (defn- create-exception-middleware
   "Reitit exception middleware, placed between response formatting and request
@@ -229,6 +231,10 @@
       exception/default-handlers
       {:reitit.coercion/request-coercion
        (fn [e request] (coercion-error-response system e request))
+
+       ;; Reitit's own answer is text/plain.
+       :muuntaja/decode
+       (fn [e request] (malformed-body-response e request))
 
        ;; A response that does not match its own schema is a bug in the app, not
        ;; in the request: generic 500, details in the log only.
@@ -423,22 +429,15 @@
   Returns:
     Ring handler function"
   []
-  (ring/create-default-handler
-   {:not-found (constantly {:status 404
-                            :headers {"Content-Type" "application/json"}
-                            :body (json/generate-string
-                                   {:error "Not Found"
-                                    :message "The requested resource was not found"})})
-    :method-not-allowed (constantly {:status 405
-                                     :headers {"Content-Type" "application/json"}
-                                     :body (json/generate-string
-                                            {:error "Method Not Allowed"
-                                             :message "The HTTP method is not allowed for this resource"})})
-    :not-acceptable (constantly {:status 406
-                                 :headers {"Content-Type" "application/json"}
-                                 :body (json/generate-string
-                                        {:error "Not Acceptable"
-                                         :message "The requested content type is not supported"})})}))
+  (let [answer (fn [status type message]
+                 ;; Outside muuntaja, so the body goes out already encoded.
+                 (constantly {:status  status
+                              :headers {"Content-Type" "application/json"}
+                              :body    (json/generate-string (errors/body type message))}))]
+    (ring/create-default-handler
+     {:not-found          (answer 404 :not-found "The requested resource was not found")
+      :method-not-allowed (answer 405 :method-not-allowed "The HTTP method is not allowed for this resource")
+      :not-acceptable     (answer 406 :not-acceptable "The requested content type is not supported")})))
 
 ;; =============================================================================
 ;; Swagger Documentation Routes
