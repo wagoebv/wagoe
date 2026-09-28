@@ -3,7 +3,8 @@
    
    This is part of the imperative shell - it performs database I/O,
    manages transactions, and handles side effects like logging."
-  (:require [wagoe.platform.core.database.query :as core-query]
+  (:require [wagoe.platform.core.database.constraint :as constraint]
+            [wagoe.platform.core.database.query :as core-query]
             [wagoe.platform.shell.database.validation :as core-validation]
             [wagoe.core.utils.type-conversion :as type-conversion]
             [wagoe.platform.ports.database :as protocols]
@@ -11,7 +12,8 @@
             [clojure.tools.logging :as log]
             [clojure.walk :as walk]
             [next.jdbc :as jdbc]
-            [next.jdbc.result-set :as rs]))
+            [next.jdbc.result-set :as rs])
+  (:import [java.sql SQLException]))
 
 ;; =============================================================================
 ;; Context Validation (Re-exported from core)
@@ -103,6 +105,34 @@
             (str "Unsupported query input. Expected HoneySQL map, SQL string, or JDBC vector. Got: "
                  (type query))))))
 
+(defn- constraint-violation
+  "The unique or foreign key `e` says the database enforced, as
+   `wagoe.platform.core.database.constraint/violation` reads it, or nil."
+  [e]
+  (when-let [^SQLException se (some #(when (instance? SQLException %) %)
+                                    (take-while some? (iterate ex-cause e)))]
+    (constraint/violation {:sql-state  (.getSQLState se)
+                           :error-code (.getErrorCode se)
+                           :message    (.getMessage se)})))
+
+(defn- conflict
+  "A refused unique or foreign key as a :conflict, which HTTP answers 409
+   (BOU-590). Its data reaches the client, so it names at most a field: the
+   driver's text holds the SQL and the values sent."
+  [{:keys [kind field]} operation-type e]
+  (let [delete? (= "delete" operation-type)
+        field   (when-not delete? field)]
+    (ex-info (case kind
+               :unique      (if field
+                              (str "Another record already has this " (name field))
+                              "Another record already has these values")
+               :foreign-key (if delete?
+                              "The record is still referenced by another record"
+                              "A referenced record does not exist"))
+             (cond-> {:type :conflict :constraint kind}
+               field (assoc :field field))
+             e)))
+
 (defn execute-query!
   "Execute SELECT query and return results.
    
@@ -180,6 +210,9 @@
 ;; Skip error reporting since database layer doesn't have error context
         ;; This prevents protocol errors when called from contexts without proper error reporting setup
 
+        (when-let [v (constraint-violation e)]
+          (log/info "Query refused by a constraint" {:adapter adapter-dialect :sql (first sql-query) :error (.getMessage e)})
+          (throw (conflict v (when (and (map? query) (contains? query :delete-from)) "delete") e)))
         ;; Side effect: error logging
         (log/error "Query failed"
                    {:adapter adapter-dialect
@@ -282,6 +315,9 @@
 ;; Skip error reporting since database layer doesn't have error context
         ;; This prevents protocol errors when called from contexts without proper error reporting setup
 
+        (when-let [v (constraint-violation e)]
+          (log/info "Update refused by a constraint" {:adapter adapter-dialect :sql (first sql-query) :error (.getMessage e)})
+          (throw (conflict v operation-type e)))
         ;; Side effect: error logging
         (log/error "Update failed"
                    {:adapter adapter-dialect

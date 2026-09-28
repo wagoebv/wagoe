@@ -758,22 +758,23 @@
       (is (empty? (idx)))
       (finally (.delete f)))))
 
-(deftest ^:integration a-reference-to-a-missing-row-is-a-validation-error
-  ;; BOU-540. A line item for an invoice that does not exist reached the
-  ;; database and came back as a :database-error, which the platform answers
-  ;; with a 500. The 400 seen in the #575 real flow was a body missing a
-  ;; required field, refused before any insert.
+(defn- sqlite-migrated [dir tag]
+  (let [f   (java.io.File/createTempFile tag ".db")
+        ctx (db-factory/db-context {:adapter :sqlite :database-path (.getPath f)})]
+    (doseq [[path sql] (files-under dir)
+            :when (str/ends-with? path ".up.sql")
+            st (statements sql)]
+      (jdbc/execute! (:datasource ctx) [st]))
+    ctx))
+
+(deftest ^:integration a-reference-to-a-missing-row-is-a-conflict
+  ;; A 500 until BOU-540, then a 400 until the platform answered every refused
+  ;; foreign key with a :conflict (BOU-590).
   (let [dir (invoice-module! (temp-dir) "bou540")]
     (add-line-item! dir "bou540")
     (load-and-test! dir)
     (doseq [[label db] [["H2" (h2-migrated dir "bou540")]
-                        ["SQLite" (let [f   (java.io.File/createTempFile "bou540" ".db")
-                                        ctx (db-factory/db-context {:adapter :sqlite :database-path (.getPath f)})]
-                                    (doseq [[path sql] (files-under dir)
-                                            :when (str/ends-with? path ".up.sql")
-                                            st (statements sql)]
-                                      (jdbc/execute! (:datasource ctx) [st]))
-                                    ctx)]]]
+                        ["SQLite" (sqlite-migrated dir "bou540")]]]
       (testing label
         (let [at   (fn [n s] @(ns-resolve (symbol (str "bou540.billing." n)) s))
               line ((at "shell.invoice-line-item-service" 'create-service)
@@ -782,18 +783,41 @@
               fk   (call :post "/invoice-line-items"
                          {:invoice-id (str (random-uuid)) :description "x" :quantity 1})
               bad  (call :post "/invoice-line-items" {:invoice-id "nope" :quantity 1})]
-          (is (= 400 (:status fk)) (pr-str fk))
-          (testing "and it has the shape of the handler's own 400 (BOU-540 review)"
-            ;; The handler answered {:error {:type ..}}, the platform's mapper
-            ;; {:error "validation-error" :message ..}: two shapes on one endpoint.
+          (is (= 409 (:status fk)) (pr-str fk))
+          (is (= "conflict" (get-in fk [:body :error :type])))
+          ;; SQLite's refusal names no column.
+          (when (= "H2" label)
+            (is (= "invoice-id" (get-in fk [:body :error :details :field])) (pr-str (:body fk))))
+          (testing "in the shape of the handler's own 400 (BOU-540 review)"
             (is (= 400 (:status bad)))
-            (is (= "validation-error"
-                   (get-in fk [:body :error :type])
-                   (get-in bad [:body :error :type]))
-                (pr-str (:body bad)))
             ;; `details` is there when the error has some; the rest is the shape.
             (is (= (disj (set (keys (:error (:body fk)))) :details)
                    (disj (set (keys (:error (:body bad)))) :details)))))))))
+
+(deftest ^:integration a-duplicate-unique-value-is-a-conflict-on-its-field
+  ;; It answered 500 internal-error, BND-304 (BOU-590).
+  (let [dir (temp-dir)
+        r   (ports/generate-module svc {:module-name "billing" :base-ns "bou590"
+                                        :entities    [{:name "Invoice"
+                                                       :fields [(cli/parse-field-spec "number:string:required:unique")]}]
+                                        :output-dir  (.getPath dir)})]
+    (is (:success r) (pr-str (:errors r)))
+    (load-and-test! dir)
+    (doseq [[label db] [["H2" (h2-migrated dir "bou590")]
+                        ["SQLite" (sqlite-migrated dir "bou590")]]]
+      (testing label
+        (let [at   (fn [n s] @(ns-resolve (symbol (str "bou590.billing." n)) s))
+              svc  ((at "shell.service" 'create-service) ((at "shell.persistence" 'create-repository) db))
+              call (api-caller (:api ((at "shell.http" 'billing-routes) svc {})))
+              _    (is (= 201 (:status (call :post "/invoices" {:number "A-1"}))))
+              dup  (call :post "/invoices" {:number "A-1"})
+              id   (get-in (call :post "/invoices" {:number "A-2"}) [:body :id])]
+          (is (= 409 (:status dup)) (pr-str dup))
+          (is (= "conflict" (get-in dup [:body :error :type])))
+          (is (= "number" (get-in dup [:body :error :details :field])) (pr-str (:body dup)))
+          (is (not (re-find #"(?i)insert|sqlite|invoices|A-1" (pr-str (:body dup)))) (pr-str (:body dup)))
+          (testing "and on update"
+            (is (= 409 (:status (call :put (str "/invoices/" id) {:number "A-1"}))))))))))
 
 ;; =============================================================================
 ;; A generated API requires a signed-in user (BOU-539 review)

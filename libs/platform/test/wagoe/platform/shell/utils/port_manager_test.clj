@@ -351,3 +351,27 @@
           (let [config {:port-range {:start 3000 :end 3099}}
                 result (pm/allocate-port -1 config)]
             (is (number? (:port result)))))))))
+
+(deftest ^:unit the-allocation-message-names-the-ports-and-a-range-only-when-searched
+  ;; HTTP_PORT=3200 in dev logged "searching ports 3000-3099" (BOU-590).
+  (with-redefs [pm/docker-environment? (constantly false)]
+    (let [config {:profile :dev :port-range {:start 3000 :end 3099}}]
+      (testing "the requested port is free: no range"
+        (with-redefs [pm/port-available? (constantly true)]
+          (let [{:keys [port message]} (pm/allocate-port 3200 config)]
+            (is (= 3200 port))
+            (is (re-find #"requested port 3200" message) message)
+            (is (re-find #"bound 3200" message) message)
+            (is (not (re-find #"3000|3099|search" message)) message))))
+      (testing "the requested port is taken: the range it searched"
+        (with-redefs [pm/port-available? (fn [p] (not= p 3000))
+                      pm/find-available-port (constantly 3001)]
+          (let [{:keys [message]} (pm/allocate-port 3000 config)]
+            (is (re-find #"requested port 3000" message) message)
+            (is (re-find #"searched 3000-3099" message) message)
+            (is (re-find #"bound 3001" message) message))))
+      (testing "an exact port says which"
+        (with-redefs [pm/port-available? (constantly true)]
+          (let [{:keys [message]} (pm/allocate-port 8080 {:profile :prod})]
+            (is (re-find #"requested port 8080" message) message)
+            (is (re-find #"bound 8080" message) message)))))))

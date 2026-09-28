@@ -35,6 +35,8 @@ for what is public API, what is internal, and how deprecations are announced.
   Read `error.type` and `error.message`; `details` and `correlation-id` moved inside `error`.
 - **A scaffolded API refuses a delete or move below `--min` with 409 `conflict`** (BOU-589), as the admin does; it was 400.
   Read 409 where you read 400 for it. Regenerated service files only; an existing module keeps its 400.
+- **A write a unique or foreign key refuses is 409 `conflict` naming the field** (BOU-590), on H2, SQLite and PostgreSQL;
+  it was a 500. A scaffolded API's missing reference was 400: read 409. `wagoe.platform.database` throws `:conflict`.
 
 ### Added
 
@@ -52,6 +54,9 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **The admin answered a duplicate unique value with "Failed to create Invoice"** (BOU-590); the form marks the field.
+- **Dev on `HTTP_PORT=3200` logged "searching ports 3000-3099"** (BOU-590). The log names the port requested and
+  the port bound, and the range only when the requested port was taken.
 - **`bb doctor` missed a user module switched on in `:extra-modules`, and failed an unset `REDIS_PASSWORD`** (BOU-591).
   It checks `JWT_SECRET` for it now; an optional variable like that is a warning.
 - **`bb setup --prod true … --ai-provider x` exited 1** (BOU-591); it writes the rest and leaves AI out of prod.
