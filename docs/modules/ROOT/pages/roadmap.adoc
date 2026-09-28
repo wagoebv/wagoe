@@ -1,8 +1,8 @@
 = Roadmap
-:description: Where Wagoe is today, what stands between here and 1.0.0, and what comes after.
+:description: Where Wagoe is at 1.0.0, what is left before the public launch, and what comes after.
 
 Wagoe is at `1.0.0`. This page is the public view of what is built, what
-is left before a stable `1.0.0`, and what we intend to build after it.
+is left before the public launch, and what we intend to build after it.
 
 It is a statement of intent, not a delivery commitment. Dates are deliberately
 absent — the ordering is the useful part.
@@ -11,7 +11,7 @@ absent — the ordering is the useful part.
 
 Thirty-one libraries are published on Clojars under `com.wagoe`, versioned in
 lockstep. The framework is feature-complete for the applications it targets; the
-remaining work before `1.0.0` is about trust rather than capability.
+remaining work is about trust rather than capability.
 
 .Built and shipping
 [cols="1,3",options="header"]
@@ -112,10 +112,11 @@ a version scheme in which a pre-release can never outrank a release, library
 tiers, and a frozen changelog carrying an explicit decision on every open
 breaking change. `1.0.0` ships no surprise.
 
-=== 2. A release candidate that is actually exercised
+=== 2. A release candidate that is actually exercised — done
 
-`1.0.0-rc-1` is published first and smoke-tested from Clojars on a clean
-machine, rather than tagged on the strength of a green build. Only then `1.0.0`.
+Four candidates, `1.0.0-rc-1` to `1.0.0-rc-4`, shipped before the tag. Of the
+twenty-five breaking changes they turned up, twenty-two landed in a candidate
+and were exercised there; the last three landed in `1.0.0` itself.
 
 === 3. First-run experience
 
@@ -196,7 +197,6 @@ up the list.
 
 == See also
 
-* xref:stability.adoc[Stability & Versioning] — what `1.0.0` will actually
-  promise
-* xref:getting-started:index.adoc[Getting Started] — try the release candidate
+* xref:stability.adoc[Stability & Versioning] — what `1.0.0` promises
+* xref:getting-started:index.adoc[Getting Started] — try it
 * xref:architecture:scaling.adoc[Sizing & Scaling] — what scales today

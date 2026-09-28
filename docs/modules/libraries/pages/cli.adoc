@@ -175,7 +175,7 @@ wrapper with an explicit classpath:
 
 [source,bash]
 ----
-TAG=1.0.0-rc-1
+TAG=1.0.0
 git clone --depth 1 --branch "$TAG" https://github.com/wagoebv/wagoe.git \
   "$HOME/.wagoe/releases/$TAG"
 
