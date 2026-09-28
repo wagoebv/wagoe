@@ -63,9 +63,9 @@ bb doctor --ci               # Exit non-zero on any error (for CI pipelines)
 
 | Check | Level | What it catches |
 |-------|-------|-----------------|
-| `env-refs` | error | `#env VAR` references in the `:active` section that have no `#or` fallback and are not set in the environment |
+| `env-refs` | error | `#env VAR` references in the `:active` section that have no `#or` fallback and are not set in the environment. A warning instead when the setting is optional: inside a `:fallback` block, or a Redis `:password` |
 | `providers` | error | Unknown `:provider` values (e.g. `:provider :reddis` instead of `:redis`) |
-| `jwt-secret` | error | `JWT_SECRET` not set when the user module is active |
+| `jwt-secret` | error | `JWT_SECRET` not set when the user module is active, in config or through `:extra-modules` in `system_config.clj` |
 | `admin-parity` | warn | Admin entity EDN files that exist in `dev/admin/` but not `test/admin/` (or vice versa) |
 | `prod-placeholders` | error | Placeholder values like `company.com`, `example.com`, `TODO` in prod/acc configs |
 | `config-loadable` | error | `config.edn` does not parse, or has no `:active` section |
@@ -117,7 +117,7 @@ Summary: 4 passed, 1 warning, 1 error
 
 Generates `config.edn` for dev and test environments plus a `.env.example` file. Three modes: interactive wizard, CLI flags, or AI-powered natural language.
 
-In a project that already has a dev or test config, setup writes only what was answered; every other key stays. A flag not given, or Enter in the wizard (which then offers "keep"), changes no file. A provider answer that matches the configured one keeps its map; a different one replaces the map, edits and all, and the summary says so first. The test profile keeps any provider and database it has. A new dev database moves the old one to `:inactive`, replacing an entry of the same key there. No missing config is created. With `--prod true` the answers go to prod alone: it is created, or merged into by these same rules, and dev and test are not touched. Prod never gets the mock payment provider or AI, so `--prod` refuses `--payment mock` and `--ai-provider`, and the wizard asks the prod question first and leaves both out. Before writing, setup reads each merged config back and refuses, writing nothing, if any entry it did not mean to change differs, and again if a file changed since it was planned. Files are replaced via a temp file that keeps the mode, and through a symlink. The wizard exits 1 on a closed stdin; scripts pass flags.
+In a project that already has a dev or test config, setup writes only what was answered; every other key stays. A flag not given, or Enter in the wizard (which then offers "keep"), changes no file. A provider answer that matches the configured one keeps its map; a different one replaces the map, edits and all, and the summary says so first. The test profile keeps any provider and database it has. A new dev database moves the old one to `:inactive`, replacing an entry of the same key there. No missing config is created. With `--prod true` the answers go to prod alone: it is created, or merged into by these same rules, and dev and test are not touched. Prod never gets the mock payment provider or AI, so `--prod` refuses `--payment mock`, writes the rest without `--ai-provider` and says so, and the wizard asks the prod question first and leaves both out. Before writing, setup reads each merged config back and refuses, writing nothing, if any entry it did not mean to change differs, and again if a file changed since it was planned. Files are replaced via a temp file that keeps the mode, and through a symlink. The wizard exits 1 on a closed stdin; scripts pass flags.
 
 ```bash
 # Interactive wizard — guided prompts for database, AI, payments, cache, etc.

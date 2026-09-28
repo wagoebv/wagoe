@@ -57,6 +57,12 @@ for what is public API, what is internal, and how deprecations are announced.
 - **The admin answered a duplicate unique value with "Failed to create Invoice"** (BOU-590); the form marks the field.
 - **Dev on `HTTP_PORT=3200` logged "searching ports 3000-3099"** (BOU-590). The log names the port requested and
   the port bound, and the range only when the requested port was taken.
+- **`bb doctor` missed a user module switched on in `:extra-modules`, and failed an unset `REDIS_PASSWORD`** (BOU-591).
+  It checks `JWT_SECRET` for it now; an optional variable like that is a warning.
+- **`bb setup --prod true … --ai-provider x` exited 1** (BOU-591); it writes the rest and leaves AI out of prod.
+  A setup that writes no prod config now says to run `bb setup --prod true`.
+- **`bb db:seed` says what its hooks did**, "Started 3 workflow instances (invoice-workflow)" (BOU-591).
+  A seed hook returns that line; one from an older module is only named.
 - **The workflow boot put the BOU-581 unique index on `workflow_instances` in production** (BOU-589). It changes
   that table only in dev, test and acc now; elsewhere it warns, so run `bb migrate up`.
 - **Admin toasts named one record in the plural**, "Invoices created successfully" (BOU-589). One record is singular now,

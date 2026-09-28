@@ -338,11 +338,13 @@
         (sql! ctx "INSERT INTO invoices (id, number, status, created_at) VALUES (?, 'A-2', 'delivered', CURRENT_TIMESTAMP)" b)
         (sql! ctx "INSERT INTO invoices (id, number, status, created_at) VALUES (?, 'A-3', 'paid', CURRENT_TIMESTAMP)" c)
         ;; As bb db:seed hands it over: rows by table, ids as the file wrote them.
-        (seed {"invoices" [{:id a} {:id (str b)} {:id c}] "other_table" [{:id 1}]})
+        (is (= ["Started 3 workflow instances (invoice-workflow)"]
+               (seed {"invoices" [{:id a} {:id (str b)} {:id c}] "other_table" [{:id 1}]}))
+            "what bb db:seed prints, in plain words (BOU-591)")
         (is (= [:entered :delivered :paid] (map state [a b c])))
         (is (= ["entered" "delivered" "paid"] (map #(column ctx %) [a b c])))
         (testing "a second run changes nothing"
-          (seed {"invoices" [{:id a} {:id b}]})
+          (is (= [] (seed {"invoices" [{:id a} {:id b}]})) "and says nothing")
           (is (= [:entered :delivered] (map state [a b]))))
         (testing "a seeded invoice moves on from where it was put"
           (let [resp (call :post (str "/invoices/" b "/transition") {:transition "paid"})]

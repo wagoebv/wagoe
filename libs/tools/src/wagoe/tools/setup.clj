@@ -1164,6 +1164,8 @@
           (println (dim (str "  1. " (if prod-only? (prod-env-step) (env-step)))))
           (println (dim "  2. Run: bb migrate up"))
           (println (dim "  3. Run: bb doctor  (to verify your config)"))
+          (when-not (read-target (conf-rel "prod"))
+            (println (dim "  4. For production: bb setup --prod true  (writes resources/conf/prod/config.edn)")))
           (when-let [steps (ai-provider-prerequisites (:ai-provider spec))]
             (println)
             (println (yellow (str "Before " (name (:ai-provider spec)) " answers:")))
@@ -1317,14 +1319,21 @@
    :prod?        (= "true" (:prod opts))})
 
 (defn- prod-errors
-  "Answers `--prod` would drop without a word: prod never gets the mock
-   payment provider or the AI service (BOU-577)."
+  "Refuses `--prod` with the mock payment provider, which accepts any webhook
+   as paid (BOU-577)."
   [spec]
-  (when (and (:prod? spec) (existing-project?))
-    (for [[k v] [[:payment :mock] [:ai-provider (:ai-provider spec)]]
-          :when (and (some? v) (not= :none v) (= v (get spec k)))]
-      (str "--" (name k) " " (name v) " is never written to prod."
-           " Run without --prod to set it for dev."))))
+  (when (and (:prod? spec) (existing-project?) (= :mock (:payment spec)))
+    ["--payment mock is never written to prod. Run without --prod to set it for dev."]))
+
+(defn- prod-without-ai
+  "`spec` without its AI answer when it is for prod, which never gets the AI
+   service, and the line saying so. The rest still applies (BOU-591)."
+  [spec]
+  (let [ai (:ai-provider spec)]
+    (if (and (:prod? spec) (existing-project?) (some? ai) (not= :none ai))
+      [(assoc spec :ai-provider nil)
+       (str "--ai-provider " (name ai) " is left out of prod: AI is a dev tool and never goes to prod.")]
+      [spec nil])))
 
 (defn from-flags [opts]
   (let [spec   (from-flags-spec opts)
@@ -1335,7 +1344,9 @@
       ;; choices (BOU-411).
       (do (doseq [e errors] (println (red e)))
           (*exit!* 1))
-      (run-setup! spec false))))
+      (let [[spec note] (prod-without-ai spec)]
+        (when note (println (yellow note)))
+        (run-setup! spec false)))))
 
 ;; =============================================================================
 ;; Help
@@ -1357,7 +1368,7 @@
   (println "  --cache CACHE          none, redis, memory")
   (println "  --email EMAIL          none, smtp")
   (println "  --admin-ui BOOL        true, false")
-  (println "  --prod true            Apply the answers to prod only (created, or merged into); dev and test are left alone")
+  (println "  --prod true            Apply the answers to prod only (created, or merged into); dev and test are left alone, and --ai-provider is ignored")
   (println)
   (println "Generated files:")
   (println "  resources/conf/dev/config.edn")
