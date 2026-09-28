@@ -90,3 +90,24 @@
                  [who :get uri (:empty rt/bodies) hdrs]))]
     (is (= 404 (:status (rt/call :get "/api/v1/no-such-thing"))))
     (is (empty? found) (report found))))
+
+(deftest ^:integration no-route-answers-the-missing-type-diagnostic
+  ;; The dev diagnostic is for an app's ex-info without :type. A framework
+  ;; route that answers it has thrown something the framework never typed —
+  ;; push's devices, where the interceptor runner wrapped a JDBC error (BOU-586).
+  (let [table (remove (fn [[p m]] (contains? skipped [m p])) (rt/route-table))
+        found (->> (for [[path m]   table
+                         [who hdrs] callers
+                         :let  [uri (rt/concrete-uri path)
+                                r   (rt/call m uri (:empty rt/bodies) hdrs)]
+                         :when (= "missing-error-type" (get-in (rt/decoded r) [:error :type]))]
+                     [(name who) (str/upper-case (name m)) uri])
+                    distinct sort)]
+    (is (empty? found) (str/join "\n" (map #(str/join " " %) found)))))
+
+(deftest ^:integration an-unknown-admin-entity-is-a-404
+  (doseq [uri ["/web/admin/no-such-entity" "/web/admin/no-such-entity/new"
+               "/web/admin/no-such-entity/00000000-0000-0000-0000-000000000001"]]
+    (let [r (rt/call :get uri (:empty rt/bodies) (:admin callers))]
+      (is (= 404 (:status r)) uri)
+      (is (= "not-found" (get-in (rt/decoded r) [:error :type])) uri))))

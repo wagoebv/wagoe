@@ -37,6 +37,10 @@ for what is public API, what is internal, and how deprecations are announced.
 ### Fixed
 
 - **`GET /web/admin/workflows/<id>` answered 500 for an id that is not a UUID** (BOU-586); it is a 404 now.
+- **An unknown admin entity answered 500** (BOU-586); it is a 404. Admin throws `:not-found` and `:validation-error`
+  where it threw `:entity-not-allowed` and `:cannot-create-split-table-entity`.
+- **A non-`ex-info` failure in a handler answered the dev `missing-error-type` diagnostic** (BOU-586); it is a typed 500.
+- **Audience 422s sent the whole Malli schema in `details`** (BOU-586); they send the fields' messages.
 
 ## [1.0.0-rc-4] — 2026-09-28
 

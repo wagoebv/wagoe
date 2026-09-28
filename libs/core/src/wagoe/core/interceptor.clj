@@ -39,9 +39,12 @@
       ;; unchanged so callers can see the original :type and :message.
       (if (instance? clojure.lang.ExceptionInfo t)
         (throw t)
-        ;; For non-domain throwables, wrap with interceptor metadata
+        ;; For non-domain throwables, wrap with interceptor metadata. Typed:
+        ;; a JDBC or NPE failure is the framework's 500, not an app's ex-info
+        ;; missing its :type, which is what the dev diagnostic is for (BOU-586).
         (throw (ex-info (str "Error in interceptor: " interceptor-name)
-                        {:interceptor interceptor-name
+                        {:type :internal-error
+                         :interceptor interceptor-name
                          :context-keys (keys ctx)
                          :original-exception (.getMessage t)}
                         t))))))

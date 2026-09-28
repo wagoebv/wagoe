@@ -757,7 +757,8 @@
     (let [entity-config (ports/get-entity-config schema-provider entity-name)]
       (when-let [split-cfg (:split-table-update entity-config)]
         (throw (ex-info "Cannot create split-table entity via generic admin flow"
-                        {:type :cannot-create-split-table-entity
+                        {:type :validation-error
+                         :reason :cannot-create-split-table-entity
                          :entity-name entity-name
                          :split-config split-cfg
                          :create-redirect-url (:create-redirect-url entity-config)}))))

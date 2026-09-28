@@ -92,7 +92,7 @@ id is also the `X-Correlation-ID` response header.
 
 `type` is the `:type` of the thrown `ex-info`: `validation-error` (400),
 `unauthorized` (401), `forbidden` (403), `not-found` (404), `conflict` (409),
-and anything unmapped is a 500 whose `type` is `internal-error` and whose
+the rest of `problem-details/default-error-mappings`, and anything unmapped is a 500 whose `type` is `internal-error` and whose
 message says nothing more. Build a body of your own with
 `wagoe.platform.core.http.errors/body` or `response`.
 

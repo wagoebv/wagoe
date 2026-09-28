@@ -280,3 +280,14 @@
 
       (is (= :executed (:single result)))
       (is (= [[:enter :single] [:leave :single]] (get-execution-log interceptor))))))
+(deftest ^:unit a-wrapped-throwable-is-an-internal-error
+  ;; Untyped, the HTTP boundary answered a JDBC failure with the dev
+  ;; diagnostic for an app's ex-info missing its :type (BOU-586).
+  (let [e (try (ic/execute-interceptor-fn (fn [_] (throw (java.sql.SQLException. "no table"))) {} :x)
+               (catch clojure.lang.ExceptionInfo e e))]
+    (is (= :internal-error (:type (ex-data e))))
+    (is (instance? java.sql.SQLException (ex-cause e))))
+  (testing "a domain ex-info passes through untouched"
+    (let [e (try (ic/execute-interceptor-fn (fn [_] (throw (ex-info "x" {:type :not-found}))) {} :x)
+                 (catch clojure.lang.ExceptionInfo e e))]
+      (is (= {:type :not-found} (ex-data e))))))

@@ -47,6 +47,7 @@
             [wagoe.observability.errors.core :as error-reporting]
             [wagoe.platform.core.csrf :as csrf]
             [wagoe.platform.core.http.errors :as errors]
+            [wagoe.platform.core.http.problem-details :as problem-details]
             [buddy.core.nonce :as nonce]
             [buddy.core.codecs :as codecs]
             [clojure.string :as str])
@@ -504,13 +505,10 @@
                                    :headers {"Location" (:location ex-data)}
                                    :body ""})
                     ;; Handle errors
-                    (let [status (case error-type
-                                   :validation-error 400
-                                   :not-found 404
-                                   :unauthorized 401
-                                   :forbidden 403
-                                   :conflict 409
-                                   500)
+                    ;; One :type -> status table for every layer, the one
+                    ;; ADR-036 calls part of the vocabulary (BOU-586).
+                    (let [status (first (get problem-details/default-error-mappings
+                                             error-type [500]))
                           server-error? (>= status 500)
                           ;; Dev only, and only when the app wired an enricher:
                           ;; the BND code and its fix. The one place a 5xx says

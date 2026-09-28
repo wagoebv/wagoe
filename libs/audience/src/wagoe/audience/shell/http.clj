@@ -18,7 +18,8 @@
             [wagoe.audience.schema :as schema]
             [clojure.tools.logging :as log]
             [hiccup2.core :as h]
-            [malli.core :as m]))
+            [malli.core :as m]
+            [malli.error :as me]))
 
 ;; =============================================================================
 ;; Helpers
@@ -156,7 +157,7 @@
       (let [explanation (dynamic-audience-definition-explainer definition)]
         (log/warn "Invalid audience definition submitted" {:errors explanation})
         (unprocessable-response "Invalid audience definition"
-                                {:errors (str explanation)}))
+                                {:errors (me/humanize explanation)}))
       (try
         (log/info "Creating audience" {:label (:label definition)})
         (let [saved (ports/save-audience store definition)]
@@ -179,7 +180,7 @@
             definition (assoc body :id id)]
         (if-not (dynamic-audience-definition-validator definition)
           (unprocessable-response "Invalid audience definition"
-                                  {:errors (str (dynamic-audience-definition-explainer definition))})
+                                  {:errors (me/humanize (dynamic-audience-definition-explainer definition))})
           (try
             (log/info "Updating audience" {:id id})
             (let [updated (ports/save-audience store definition)]

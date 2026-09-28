@@ -50,8 +50,8 @@
 
           ; Verify entity is accessible
           _ (when-not (ports/validate-entity-exists schema-provider entity-name)
-              (throw (ex-info "Entity not allowed"
-                              {:type :entity-not-allowed
+              (throw (ex-info "Unknown entity"
+                              {:type :not-found
                                :entity-name entity-name})))
 
           entity-config (ports/get-entity-config schema-provider entity-name)
@@ -126,8 +126,8 @@
 
           ; Verify entity is accessible
           _ (when-not (ports/validate-entity-exists schema-provider entity-name)
-              (throw (ex-info "Entity not allowed"
-                              {:type :entity-not-allowed
+              (throw (ex-info "Unknown entity"
+                              {:type :not-found
                                :entity-name entity-name})))
 
           entity-config (ports/get-entity-config schema-provider entity-name)

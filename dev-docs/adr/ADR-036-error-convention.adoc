@@ -193,7 +193,9 @@ already answered `{"error": {…}}` with nothing beside it, so inside is the
 placement that needs no second key, and a client reads one object. `type` is
 §1's `:type` keyword as a string. `wagoe.platform.core.http.errors` builds it;
 the RFC 7807 bodies of `problem-details` and the string `"error"` of the
-401/403 are gone. `bb check:error-shape` fails a literal 4xx/5xx response map
+401/403 are gone. The HTTP error handler reads its status from
+`problem-details/default-error-mappings`, so the two tables are one, and
+admin throws those types rather than its own. `bb check:error-shape` fails a literal 4xx/5xx response map
 in another shape, and `wagoe.error-shape-test` sweeps the route table for
 what the static rule cannot see.
 
