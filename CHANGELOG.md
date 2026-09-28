@@ -33,6 +33,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **Every JSON error body is `{"error": {"type": …, "message": …}}`** (BOU-586); refused input is `validation-error`.
   Read `error.type` and `error.message`; `details` and `correlation-id` moved inside `error`.
+- **A scaffolded API refuses a delete or move below `--min` with 409 `conflict`** (BOU-589), as the admin does; it was 400.
+  Read 409 where you read 400 for it. Regenerated service files only; an existing module keeps its 400.
 
 ### Fixed
 

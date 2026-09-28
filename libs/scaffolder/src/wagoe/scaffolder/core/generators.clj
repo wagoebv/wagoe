@@ -560,8 +560,9 @@ DROP TABLE IF EXISTS %s;
          "  (ports/" (transact-fn entity) " repository\n"
          "   (fn []\n"
          "     (when (and " parent "-id (<= (ports/" (count-fn entity) " repository " parent "-id) " n "))\n"
+         "       ;; 409, as the admin answers it: a valid request the " parent "'s state refuses.\n"
          "       (throw (ex-info \"Every " parent " keeps at least " n " of its " plural "\"\n"
-         "                       {:type :validation-error\n"
+         "                       {:type :conflict\n"
          "                        :errors {:" plural " [\"every " parent " keeps at least " n "\"]}})))\n"
          "     (f))))\n"
          "\n")))

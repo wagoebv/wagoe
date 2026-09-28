@@ -83,6 +83,6 @@
                              #(let [rs (mapv del (:invoice-line-items inv))]
                                 (.countDown go)
                                 (mapv deref rs)))]
-              (is (= #{:deleted :validation-error} (set results)) (pr-str results))
+              (is (= #{:deleted :conflict} (set results)) (pr-str results))
               (is (= 1 (count ((at "ports" 'list-invoice-line-items) lines {})))))
             (finally (stop!))))))))

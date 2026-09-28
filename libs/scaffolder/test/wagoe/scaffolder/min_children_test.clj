@@ -94,15 +94,16 @@
             (is (<= 400 (:status resp)) (pr-str resp))
             (is (= before (count-rows db "invoices")))))
 
-        (testing "the last line item cannot be deleted, or moved away"
+        (testing "the last line item cannot be deleted, or moved away: a 409, as in the admin (BOU-589)"
           (let [inv   (get-in (call :post "/invoices" {:number "A-4" :invoice-line-items [line line]}) [:body])
                 other (get-in (call :post "/invoices" {:number "A-5" :invoice-line-items [line]}) [:body])
                 [a b] (map :id (:invoice-line-items inv))]
             (is (= 204 (:status (call :delete (str "/invoice-line-items/" a) nil))))
-            (let [resp (call :delete (str "/invoice-line-items/" b) nil)]
-              (is (= 400 (:status resp)) (pr-str resp))
-              (is (str/includes? (pr-str (:body resp)) "invoice-line-items")))
-            (is (= 400 (:status (call :put (str "/invoice-line-items/" b) {:invoice-id (:id other)}))))
+            (doseq [resp [(call :delete (str "/invoice-line-items/" b) nil)
+                          (call :put (str "/invoice-line-items/" b) {:invoice-id (:id other)})]]
+              (is (= 409 (:status resp)) (pr-str resp))
+              (is (= "conflict" (get-in resp [:body :error :type])) (pr-str resp))
+              (is (contains? (get-in resp [:body :error :details :errors]) :invoice-line-items) (pr-str resp)))
             (is (= 200 (:status (call :get (str "/invoice-line-items/" b) nil))) "it is still there")))
         (finally
           (ig/halt! system)
