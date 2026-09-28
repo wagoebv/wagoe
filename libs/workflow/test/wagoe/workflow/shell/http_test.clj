@@ -126,6 +126,32 @@
         (is (= ["admin"] (get-in body [:audit-entry :actor-roles])))
         (is (some? (get-in body [:audit-entry :actor-id])))))))
 
+(declare get-uri)
+
+(deftest ^:unit a-transition-answers-what-the-caller-can-do-next
+  ;; It answered "available-transitions": null (BOU-589).
+  (registry/register-workflow! {:id            :gated
+                                :initial-state :a
+                                :states        #{:a :b :c :d}
+                                :transitions   [{:from :a :to :b}
+                                                {:from :b :to :c :required-permissions [:admin]}
+                                                {:from :b :to :d :guard :never}]
+                                :guards        {:never (constantly false)}})
+  (doseq [[role expected] [[:admin [{:id "c" :to "c" :enabled true}
+                                    {:id "d" :to "d" :enabled false :reason "guard-rejected"}]]
+                           [:user  [{:id "c" :to "c" :enabled false :reason "insufficient-permissions"}
+                                    {:id "d" :to "d" :enabled false :reason "guard-rejected"}]]]]
+    (testing (name role)
+      (let [token    (auth-shell/create-jwt-token {:id (UUID/randomUUID) :email "c@example.com" :role role} 1)
+            instance (ports/start-workflow! *service* {:workflow-id :gated :entity-type :x
+                                                       :entity-id   (UUID/randomUUID)})
+            uri      (str "/workflow/instances/" (:id instance))
+            moved    (body-data (post (str uri "/transition") {:transition "b"} token))]
+        (is (= expected (get-in moved [:instance :available-transitions])))
+        (is (= (:available-transitions (body-data (get-uri uri token)))
+               (get-in moved [:instance :available-transitions]))
+            "what GET /instances/:id answers")))))
+
 (defn- get-uri
   "GET `uri`, which may carry a query string."
   ([uri] (get-uri uri nil))
@@ -333,8 +359,8 @@
     (second (re-find #"(?m)^GET /api/v1(/workflow/instances\?\S+)" doc))))
 
 (deftest ^:unit the-documented-bodies-are-the-apis
-  (let [[start rejected found] (documented-json)]
-    (is (some? found) "the docs show a start body, a 422 and a lookup")
+  (let [[start transitioned rejected found] (documented-json)]
+    (is (some? found) "the docs show a start body, a transition, a 422 and a lookup")
     (registry/register-workflow! (assoc invoice-def :id (keyword (:workflow-id start))))
     (let [response (post "/workflow/instances" start (admin-token))
           instance (body-data response)]
@@ -353,11 +379,16 @@
           (is (= [(:id instance)] (mapv :id body)))
           (is (= (map (comp set keys) found) (map (comp set keys) body)))
           (is (= (map pick found) (map pick body)))))
-      (testing "a transition answers the instance and its audit entry"
-        (is (= #{:instance :audit-entry}
-               (set (keys (body-data (post (str "/workflow/instances/" (:id instance) "/transition")
-                                           {:transition "delivered"}
-                                           (admin-token)))))))))))
+      (testing "a transition answers the documented shape, with what may follow"
+        (let [body (body-data (post (str "/workflow/instances/" (:id instance) "/transition")
+                                    {:transition "delivered"}
+                                    (admin-token)))
+              shape (fn [b] (into {} (map (fn [[k v]] [k (set (keys v))])) b))]
+          (is (= (shape transitioned) (shape body)))
+          (is (= (select-keys (:instance transitioned) [:entity-id :current-state :available-transitions])
+                 (select-keys (:instance body) [:entity-id :current-state :available-transitions])))
+          (is (= (select-keys (:audit-entry transitioned) [:transition :from-state :to-state :actor-roles])
+                 (select-keys (:audit-entry body) [:transition :from-state :to-state :actor-roles]))))))))
 
 (deftest ^:unit the-admin-list-page-hides-the-exception
   ;; The message can carry driver or config detail (BOU-555).

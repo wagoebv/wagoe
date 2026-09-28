@@ -420,6 +420,7 @@
  :admin/inline-cancel              "Cancel"
  :admin/flash-created              "{label} created successfully"
  :admin/flash-updated              "{label} updated successfully"
+ :admin/toast-deleted              "{label} deleted"
  :admin/flash-validation-errors    "Please fix the errors below"
  :admin/flash-create-failed        "Failed to create {label}"
  :admin/flash-delete-failed        "Failed to delete entity"

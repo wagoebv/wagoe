@@ -2,7 +2,8 @@
   "One instance per workflow and entity (BOU-581). Without the unique index two
    lazy starts could both find none and both insert. Idempotent, and refuses by
    name a table that already holds duplicates."
-  (:require [next.jdbc :as jdbc]
+  (:require [clojure.string :as str]
+            [next.jdbc :as jdbc]
             [next.jdbc.result-set :as rs])
   (:import [java.sql Connection]))
 
@@ -13,6 +14,20 @@
                  [(str "SELECT workflow_id, entity_type, entity_id, COUNT(*) AS n FROM workflow_instances"
                        " GROUP BY workflow_id, entity_type, entity_id HAVING COUNT(*) > 1")]
                  {:builder-fn rs/as-unqualified-lower-maps}))
+
+(defn present?
+  "Whether workflow_instances has the unique index."
+  [datasource]
+  (with-open [^Connection c (jdbc/get-connection datasource)]
+    (let [md (.getMetaData c)]
+      (boolean
+       (some (fn [t]
+               (with-open [rs (.getIndexInfo md nil nil t true false)]
+                 (loop []
+                   (when (.next rs)
+                     (or (= index-name (some-> (.getString rs "INDEX_NAME") str/lower-case))
+                         (recur))))))
+             ["workflow_instances" "WORKFLOW_INSTANCES"])))))
 
 (defn ensure-unique!
   "Put the unique index on workflow_instances (workflow_id, entity_type, entity_id)."

@@ -186,6 +186,9 @@
   [:map {:title "Entity Configuration"}
    [:label {:description "Display label for entity (e.g., 'Users', 'Products')"}
     :string]
+   [:label-singular {:optional true
+                     :description "One record (e.g., 'User'); defaults to :label made singular"}
+    :string]
    [:table-name {:description "Database table name"}
     :keyword]
    [:primary-key {:optional true
@@ -306,7 +309,7 @@
               [:on-delete [:enum :cascade :restrict]]))
 
 (def EntityOverrides
-  (closed-map :label :description :icon :sidebar-hidden :table-name :primary-key
+  (closed-map :label :label-singular :description :icon :sidebar-hidden :table-name :primary-key
               :list-fields :detail-fields :search-fields :editable-fields
               :hide-fields :readonly-fields :field-order :default-sort
               :default-sort-dir :soft-delete :create-redirect-url

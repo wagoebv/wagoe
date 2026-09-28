@@ -20,6 +20,7 @@
             [wagoe.i18n.shell.render :as i18n]
             [wagoe.platform.core.http.errors :as errors]
             [wagoe.workflow.ports :as ports]
+            [wagoe.workflow.core.transitions :as transitions]
             [wagoe.workflow.core.ui :as workflow-ui]
             [wagoe.user.shell.middleware :as user-middleware]
             [clojure.tools.logging :as log])
@@ -58,7 +59,7 @@
   "Render a WorkflowInstance as a JSON-friendly map.
 
    available-ts — vector of status maps from ports/available-transitions,
-   or nil when not computed (start / transition responses)."
+   or nil when not computed (start responses)."
   [instance available-ts]
   {:id             (str (:id instance))
    :workflow-id    (name (:workflow-id instance))
@@ -66,14 +67,7 @@
    :entity-id      (str (:entity-id instance))
    :current-state  (name (:current-state instance))
    :available-transitions
-   (when available-ts
-     (mapv (fn [t]
-             (cond-> {:id      (name (:id t))
-                      :to      (name (:to t))
-                      :enabled (:enabled? t)}
-               (:label t)  (assoc :label (:label t))
-               (:reason t) (assoc :reason (name (:reason t)))))
-           available-ts))
+   (some->> available-ts (mapv transitions/transition-view))
    :created-at (str (:created-at instance))
    :updated-at (str (:updated-at instance))})
 
@@ -166,9 +160,11 @@
                                      :actor-roles (:actor-roles actor)
                                      :context     context})]
       ;; The scaffolded APIs' shape: the result, or {:error {:type :message}}.
+      ;; What the caller may do next is what GET /instances/:id answers.
       (if (:success? result)
         {:status 200
-         :body   {:instance    (instance->response (:instance result) nil)
+         :body   {:instance    (instance->response (:instance result)
+                                                   (ports/available-transitions engine id (:actor-roles actor) nil))
                   :audit-entry (audit-entry->response (:audit-entry result))}}
         {:status 422
          :body   (errors/body (get-in result [:error :type])

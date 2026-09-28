@@ -57,6 +57,7 @@ resources/conf/dev/
 ;; admin/products.edn
 {:products
  {:label           "Products"
+  :label-singular  "Product"   ; one record, in toasts; default :label made singular
   :list-fields     [:name :sku :price :created-at]
   :search-fields   [:name :sku]
   :hide-fields     #{:deleted-at}

@@ -23,6 +23,7 @@
             [wagoe.shared.ui.core.components :as ui-components]
             [wagoe.admin.core.ui :as ui]
             [wagoe.core.utils.type-conversion :as tc]
+            [wagoe.i18n.shell.catalogue :as i18n-catalogue]
             [clojure.test :refer [deftest is testing use-fixtures]]
             [clojure.string :as str])
   (:import [java.util UUID]
@@ -765,6 +766,51 @@
           ;; Should indicate success
           (is (or (= 200 (:status response))
                   (= 207 (:status response)))))))))
+
+;; =============================================================================
+;; Toasts name one record in the singular (BOU-589)
+;; =============================================================================
+
+(def ^:private catalogue
+  (i18n-catalogue/create-map-catalogue (i18n-catalogue/load-catalogue "wagoe/i18n/translations")))
+
+(defn- translated
+  "`make-request`, with the catalogue the i18n middleware would put on it."
+  [method uri params]
+  (assoc (make-request method uri admin-user params)
+         :i18n/catalogue catalogue
+         :i18n/default-locale :en))
+
+(defn- toast [response header]
+  (some->> (get-in response [:headers header]) (re-find #"\"message\":\"([^\"]*)\"") second))
+
+(deftest ^:contract a-toast-names-one-record-in-the-singular
+  (testing "create"
+    (let [body (:body (*handler* (translated :post "/web/admin/test-users"
+                                             {:path {:entity "test-users"}
+                                              :form {"email" "one@example.com" "name" "One"
+                                                     "password-hash" "h" "active" "true"}})))]
+      (is (str/includes? body "Test User created successfully"))
+      (is (not (str/includes? body "Test Users created")))))
+  (testing "update"
+    (let [id   (:id (create-test-user! "upd@example.com" "Upd" true))
+          body (:body (*handler* (translated :put (str "/web/admin/test-users/" id)
+                                             {:path {:entity "test-users" :id (str id)}
+                                              :form {"name" "Upd 2"}})))]
+      (is (str/includes? body "Test User updated successfully"))))
+  (testing "delete"
+    (let [id (:id (create-test-user! "del@example.com" "Del" true))]
+      (is (= "Test User deleted"
+             (toast (*handler* (translated :delete (str "/web/admin/test-users/" id)
+                                           {:path {:entity "test-users" :id (str id)}}))
+                    "X-Toast")))))
+  (testing "bulk delete: the plural, and the singular for one"
+    (let [ids (mapv #(str (:id (create-test-user! (str "b" % "@example.com") (str "B" %) true))) (range 3))
+          bulk #(toast (*handler* (translated :post "/web/admin/test-users/bulk-delete"
+                                              {:path {:entity "test-users"} :form {"ids[]" %}}))
+                       "HX-Trigger")]
+      (is (= "Successfully deleted 2 Test Users" (bulk (subvec ids 0 2))))
+      (is (= "Successfully deleted 1 Test User" (bulk [(peek ids)]))))))
 
 ;; =============================================================================
 ;; Error Response Tests

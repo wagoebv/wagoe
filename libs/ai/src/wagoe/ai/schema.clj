@@ -127,6 +127,7 @@
 (def AdminEntityConfig
   [:map {:closed true}
    [:label           :string]
+   [:label-singular  {:optional true} :string]
    [:table-name      :keyword]
    [:primary-key     {:optional true} :keyword]
    [:list-fields     {:optional true} [:vector :keyword]]

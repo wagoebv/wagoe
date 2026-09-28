@@ -216,7 +216,8 @@ Example subscriber that starts a workflow: see "Lifecycle Events" in
 - **`:min` on a has-many** refuses a delete or bulk delete that would leave a
   parent with fewer children: `:type :conflict`, and the delete handlers answer
   409 with an error toast. It is checked before the delete, outside its
-  transaction.
+  transaction. A scaffolded API refuses the same delete with the same 409
+  `conflict` (BOU-589).
 - **Create with children (BOU-570).** An `:editable` has-many with `:min` puts
   `:min` child rows in the parent's create form (`forms/nested-relationships`
   picks them; a child with its own create flow is left out). Rows are named

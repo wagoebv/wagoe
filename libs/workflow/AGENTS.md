@@ -290,7 +290,8 @@ Routes are defined in `shell/http.clj` as Reitit route data (no `/api` prefix) a
 | `POST` | `/api/v1/workflow/instances/:id/transition` | Execute a transition |
 
 Bodies are kebab-case JSON, as in a scaffolded API: start takes `workflow-id`, `entity-type`
-and `entity-id`; a transition answers `{"instance" … "audit-entry" …}`, or 422
+and `entity-id`; a transition answers `{"instance" … "audit-entry" …}`, the instance carrying
+the `available-transitions` of its new state for the caller as GET does, or 422
 `{"error": {"type" … "message" …}}` when the workflow does not make it.
 
 ## Database Migrations
@@ -301,6 +302,13 @@ them at boot for installations that do not migrate. Timestamps are
 `TIMESTAMP WITH TIME ZONE`; tables created before BOU-502 stored them as TEXT and
 are converted by the second migration, which only `migrate up` runs. Workflow
 supports PostgreSQL, H2 and SQLite, not MySQL.
+
+`entity_id` is text, because an entity need not be keyed by a UUID.
+`entity_uuid` is a generated column holding it as a UUID, or NULL when it is not
+one, with an index (BOU-589): join a UUID-keyed table on
+`w.entity_uuid = i.id`, never on `entity_id`, which needs a cast on PostgreSQL.
+`migrate up` adds it, rewriting the table once on PostgreSQL. The boot adds it, and the
+BOU-581 unique index, only in dev, test and acc; elsewhere it warns and changes nothing.
 
 ## Gotchas
 
