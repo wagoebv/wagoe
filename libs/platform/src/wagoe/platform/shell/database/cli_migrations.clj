@@ -143,6 +143,8 @@
                 (reset/execute! plan)
                 (println "✅ Database reset completed\n")
                 (migrations/print-status)
+                (when (some #(= "users" (str/lower-case %)) (:tables plan))
+                  (println "\nThe reset dropped every user account. Next: bb create-admin\n"))
                 0)
             ;; Non-zero: a cancelled destructive operation is not success for
             ;; whoever shelled out to us (BOU-500).
@@ -225,8 +227,9 @@
         command-args (rest arguments)]
 
     (cond
-      ;; Show help
-      (:help options)
+      ;; Show help. After the command too, which :in-order leaves unparsed:
+      ;; `reset --help` used to reset (BOU-588).
+      (or (:help options) (some #{"--help" "-h"} command-args))
       (do
         (print-help)
         (exit! 0))

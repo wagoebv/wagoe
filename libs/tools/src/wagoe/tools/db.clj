@@ -320,7 +320,31 @@
   (println "  bb db:status     Show database type, connection info, and migration count")
   (println "  bb db:reset      Drop the app's tables and migrate; dev, test, acc only [--env E] [--allow-remote]")
   (println "  bb db:seed       Seed database from resources/seeds/dev.edn")
-  (println))
+  (println)
+  (println (dim "  bb db:<command> --help for one command.")))
+
+(def ^:private usage
+  {"status" ["Usage: bb db:status"
+             ""
+             "Show the database type, connection info and migration files, read"
+             "from resources/conf/dev/config.edn. Connects to nothing."]
+   "reset"  ["Usage: bb db:reset [--env dev|test|acc] [--allow-remote]"
+             ""
+             "Roll back every migration, drop the tables the framework creates at"
+             "boot, and migrate again. Runs in dev, test and acc only, and asks for"
+             "the database name on a terminal first."
+             ""
+             "  --env E           The profile to reset; else WAG_ENV. One must be named."
+             "  --allow-remote    Allow a database on another machine."
+             ""
+             "It drops the user tables: run `bb create-admin` afterwards."]
+   "seed"   ["Usage: bb db:seed [path] [--force]"
+             ""
+             "Insert resources/seeds/dev.edn (or path) in one transaction. Dev-like"
+             "environments only; --force overrides that. `bb guide seed` explains"
+             "the file."]})
+
+(defn- help? [args] (boolean (some #{"--help" "-h"} args)))
 
 ;; =============================================================================
 ;; Main entry point
@@ -328,11 +352,14 @@
 
 (defn -main [& args]
   (let [[subcmd & rest-args] args]
-    (case subcmd
-      "status" (db-status)
-      "reset"  (apply db-reset rest-args)
-      "seed"   (apply db-seed rest-args)
-      (print-help))))
+    ;; Before any command runs: `bb db:reset --help` used to reset (BOU-588).
+    (if (and (contains? usage subcmd) (help? rest-args))
+      (run! println (usage subcmd))
+      (case subcmd
+        "status" (db-status)
+        "reset"  (apply db-reset rest-args)
+        "seed"   (apply db-seed rest-args)
+        (print-help)))))
 
 ;; Run when executed directly (not via bb.edn task)
 (when (= *file* (System/getProperty "babashka.file"))

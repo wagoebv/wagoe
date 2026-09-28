@@ -128,3 +128,32 @@
   (let [src (slurp (str (fs/path (repo-root) "libs" "config" "src" "wagoe" "config.clj")))
         m   (second (re-find #"(?s)\(def \^:private env-aliases.*?(\{[^}]*\})" src))]
     (is (= (read-string m) db/env-aliases))))
+
+(deftest ^:unit help-prints-usage-and-does-nothing-else
+  ;; `bb db:reset --help` ran the reset (BOU-588). With a resettable profile
+  ;; set, it must still reach neither the JVM, the status reader nor the seeder.
+  (doseq [cmd  ["status" "reset" "seed"]
+          flag ["--help" "-h"]]
+    (testing (str "db:" cmd " " flag)
+      (let [cmds (atom [])
+            ran  (atom [])
+            exit (atom nil)
+            out  (with-redefs [babashka.process/shell (fn [_opts & cmd] (swap! cmds conj (vec cmd)) {:exit 0})
+                               db/reset-profile       (fn [_ _] {:profile "dev"})
+                               db/db-status           (fn [& _] (swap! ran conj :status))
+                               db/db-seed             (fn [& _] (swap! ran conj :seed))]
+                   (binding [db/*exit!* #(reset! exit %)]
+                     (with-out-str (db/-main cmd flag))))]
+        (is (empty? @cmds) "no JVM is started")
+        (is (empty? @ran) "the command itself does not run")
+        (is (nil? @exit))
+        (is (str/includes? out (str "bb db:" cmd)) out)
+        (is (str/includes? out "Usage") out)))))
+
+(deftest ^:unit every-db-task-hands-its-arguments-over
+  ;; db:status called (db/-main "status"), so --help never reached it.
+  (doseq [f ["bb.edn" "libs/wagoe-cli/resources/wagoe/cli/templates/bb.edn.tmpl"]]
+    (let [src (slurp (str (fs/path (repo-root) f)))]
+      (doseq [cmd ["status" "reset" "seed"]]
+        (is (str/includes? src (str "(apply db/-main \"" cmd "\" *command-line-args*)"))
+            (str f " db:" cmd))))))

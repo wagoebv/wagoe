@@ -47,6 +47,8 @@ for what is public API, what is internal, and how deprecations are announced.
 - **The audit log page answered 500 on H2** (BOU-586).
 - **`bb db:reset` kept users, sessions and tenants** (BOU-585); it now drops what the app owns, then migrates.
   Only in an explicitly named `dev`, `test` or `acc`, confirmed by the database name; prod changes through migrations.
+- **`bb db:reset --help` ran the reset** (BOU-588). Every `bb db:*` task now prints usage for `--help`;
+  a reset that drops the users says to run `bb create-admin`.
 - **`bb setup --prod true` named variables prod does not read** (BOU-585). Its next steps now list what the prod config reads.
 - **`bb ai admin-entity` and `bb scaffold ai` took yes with no terminal** (BOU-585); they now refuse.
   `--force` no longer prompts; in scripts pass `--yes` or `--force`.
