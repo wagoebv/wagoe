@@ -38,6 +38,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **The seeder fills in `id`, `created-at` and `updated-at`** (BOU-588), and a child names its parent
   by a symbolic id: `:id :invoice/acme` on the parent, `:invoice-id :invoice/acme` on the child.
+- **`bb scaffold generate` and `entity` add a commented example per entity to `resources/seeds/dev.edn`**
+  (BOU-588). Existing seeds are kept; uncomment an example to seed it.
 
 ### Fixed
 
