@@ -31,7 +31,8 @@
 
    Everything in this namespace is pure. Validation returns typed error values
    rather than throwing — the shell decides how to present them."
-  (:require [wagoe.core.utils.case-conversion :as cc]))
+  (:require [clojure.string :as str]
+            [wagoe.core.utils.case-conversion :as cc]))
 
 (defn- table-error
   [table reason]
@@ -152,19 +153,24 @@
           {:refs {}}
           (for [[table rows] pairs, row rows :when (keyword? (:id row))] [table (:id row)])))
 
+(defn- id-column?
+  "Whether `k` holds an id: `:id`, or a reference such as `:invoice-id`. Only
+   these take symbolic ids; a namespaced keyword elsewhere is a value."
+  [k]
+  (or (= :id k) (str/ends-with? (name k) "-id")))
+
 (defn- stray-ref
-  "The first [table value] whose value looks like a symbolic id — a qualified
-   keyword in a declared id's namespace — that no row declares: a typo."
+  "The first [table value] where a reference column holds a qualified keyword
+   no row declares: a missing parent, or a typo."
   [pairs refs]
-  (let [nss (set (map namespace (keys refs)))]
-    (first (for [[table rows] pairs, row rows, [k v] row
-                 :when (and (not= :id k) (qualified-keyword? v)
-                            (nss (namespace v)) (not (contains? refs v)))]
-             [table v]))))
+  (first (for [[table rows] pairs, row rows, [k v] row
+               :when (and (not= :id k) (id-column? k) (qualified-keyword? v)
+                          (not (contains? refs v)))]
+           [table v])))
 
 (defn- fill-row [row info refs now new-id]
   (let [cols (:columns info #{})
-        row  (update-vals row #(get refs % %))]
+        row  (into {} (map (fn [[k v]] [k (if (id-column? k) (get refs v v) v)])) row)]
     (cond-> row
       (and (:uuid-id? info) (not (contains? row :id)))            (assoc :id (new-id))
       (and (cols "created_at") (not (contains? row :created-at))) (assoc :created-at now)
@@ -175,8 +181,9 @@
    as [table rows] pairs, or `{:error ...}`.
 
    A row whose `:id` is a qualified keyword, `:invoice/acme`, gets a new id,
-   and any value equal to that keyword becomes the same id: that is how a child
-   names its parent. A row without `:id` gets a new one when its table's key is
+   and a reference column (`:invoice-id`, any `*-id`) holding that keyword
+   gets the same id: that is how a child names its parent. Other columns keep
+   a namespaced keyword as text. A row without `:id` gets a new one when its table's key is
    a uuid `id`, and `:created-at`/`:updated-at` get `now` when the table has
    those columns.
 

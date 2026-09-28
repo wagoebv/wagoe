@@ -91,14 +91,15 @@
    for too."
   [^Connection c table]
   (let [md     (.getMetaData c)
+        catalog (try (.getCatalog c) (catch Exception _ nil))
         schema (try (.getSchema c) (catch Exception _ nil))
         lc     #(some-> ^String % str/lower-case)
-        cols   (fn [t] (into {} (metadata-rows (.getColumns md nil schema t "%")
+        cols   (fn [t] (into {} (metadata-rows (.getColumns md catalog schema t "%")
                                                #(vector (lc (.getString ^ResultSet % "COLUMN_NAME"))
                                                         (lc (.getString ^ResultSet % "TYPE_NAME"))))))
         [t columns] (some #(let [c (cols %)] (when (seq c) [% c])) [table (str/upper-case table)])]
     (when t
-      (let [pk (set (metadata-rows (.getPrimaryKeys md nil schema t)
+      (let [pk (set (metadata-rows (.getPrimaryKeys md catalog schema t)
                                    #(lc (.getString ^ResultSet % "COLUMN_NAME"))))]
         {:columns  (set (keys columns))
          :uuid-id? (boolean (and (= #{"id"} pk) (some->> (get columns "id") (re-find #"uuid"))))}))))

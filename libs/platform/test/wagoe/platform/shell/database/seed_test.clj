@@ -80,6 +80,36 @@
                    [:error :type])))
     (is (empty? (query ds "SELECT * FROM invoices")))))
 
+(defn- delegating
+  "A proxy of `iface` over `target` that calls `on-call` with each method
+   name and its arguments first, and `wrap` on each result."
+  [iface target on-call wrap]
+  (java.lang.reflect.Proxy/newProxyInstance
+   (.getClassLoader iface) (into-array Class [iface])
+   (reify java.lang.reflect.InvocationHandler
+     (invoke [_ _ m args]
+       (on-call (.getName m) (vec args))
+       (wrap (.getName m) (.invoke m target args))))))
+
+(deftest ^:integration table-info-asks-in-the-connection-s-catalog
+  ;; MySQL keeps tables in catalogs: a nil catalog searches every database on
+  ;; the server, and can find another one's table of the same name.
+  (let [ds    (h2)
+        calls (atom [])]
+    (doseq [s ddl] (jdbc/execute! ds [s]))
+    (with-open [c (jdbc/get-connection ds)]
+      (let [md    (.getMetaData c)
+            proxy (delegating java.sql.Connection c (fn [_ _])
+                              (fn [m r] (if (= "getMetaData" m)
+                                          (delegating java.sql.DatabaseMetaData md
+                                                      (fn [m args] (swap! calls conj [m (first args)]))
+                                                      (fn [_ r] r))
+                                          r)))]
+        (is (:uuid-id? (#'sut/table-info proxy "invoices")))
+        (let [asked (for [[m catalog] @calls :when (#{"getColumns" "getPrimaryKeys"} m)] catalog)]
+          (is (seq asked))
+          (is (every? #(= (.getCatalog c) %) asked) (pr-str @calls)))))))
+
 (deftest ^:integration an-application-without-an-admin-is-told
   (let [ds (h2)]
     (is (some? (io/resource "wagoe/boot-tables/user.edn")) "the user module is on this classpath")

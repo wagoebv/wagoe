@@ -130,6 +130,15 @@
     (is (re-find #":invoice/acmee"
                  (get-in (resolve-with [[:invoices [{:id :invoice/acme :number "A"}]]
                                         [:line-items [{:invoice-id :invoice/acmee :description "x"}]]])
+                         [:error :message]))))
+  (testing "a namespaced value outside an id column is a value, even in a declared id's namespace"
+    (let [{:keys [ok error]} (resolve-with [[:invoices [{:id :invoice/acme :number :invoice/acme}
+                                                        {:id :invoice/b :number :invoice/pending}]]])]
+      (is (nil? error) (pr-str error))
+      (is (= [:invoice/acme :invoice/pending] (map :number (second (first ok)))))))
+  (testing "an id column naming a parent nobody declares is refused, whatever its namespace"
+    (is (re-find #":customer/missing"
+                 (get-in (resolve-with [[:line-items [{:invoice-id :customer/missing :description "x"}]]])
                          [:error :message])))))
 
 (deftest ^:unit a-symbolic-id-is-refused-where-it-cannot-work
