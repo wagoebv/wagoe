@@ -29,6 +29,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`bb db:reset` kept users, sessions and tenants** (BOU-585); it now drops every table, then migrates.
+
 ## [1.0.0-rc-4] — 2026-09-28
 
 ### Breaking

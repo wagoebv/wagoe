@@ -4,6 +4,7 @@
             [wagoe.platform.shell.adapters.database.factory :as db-factory]
             [wagoe.platform.database :as db]
             [clojure.java.io :as io]
+            [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [migratus.core :as migratus]
             [migratus.migrations :as migratus-migrations]
@@ -192,6 +193,58 @@
           (is (re-find #"20260102000000" (str (ex-message e) (:error (ex-data e)))))))
       (is (db/table-exists? ctx :geo_table)))))
 
+(defn- reset-leaves
+  "Reset a database holding one migrated table and the tables a system's boot
+   creates, and return the tables left afterwards."
+  [db-spec]
+  (let [root (io/file "target" (str "bou585-" (System/nanoTime)))
+        ctx  (db-factory/db-context db-spec)]
+    (try
+      (let [app (migration-dir! root 20260101000000 "app_table")]
+        (migratus/migrate (migrations/migratus-config (:datasource ctx) [app]))
+        ;; What initialize-user-schema! makes at boot, outside any migration.
+        (db/execute-ddl! ctx "CREATE TABLE auth_users (id INT PRIMARY KEY)")
+        (db/execute-ddl! ctx (str "CREATE TABLE user_sessions (id INT, user_id INT"
+                                  " REFERENCES auth_users (id))"))
+        (db/execute-ddl! ctx "INSERT INTO auth_users (id) VALUES (1)")
+        (db/execute-ddl! ctx "INSERT INTO user_sessions (id, user_id) VALUES (1, 1)")
+        (with-redefs [migrations/shadowed-migration-dirs (fn ([] nil) ([_ _] nil))
+                      migrations/manifest-urls           (fn [] [])
+                      migrations/discover-migration-dirs (fn [] [app])
+                      db-config/get-active-db-config     (fn [] {:datasource (:datasource ctx)})
+                      db-config/load-config              (fn [_] {:active {}})]
+          (migrations/reset))
+        (set (map str/lower-case (db/list-tables ctx))))
+      (finally
+        (db-factory/close-db-context! ctx)
+        (doseq [file (reverse (file-seq root))] (.delete ^java.io.File file))))))
+
+(deftest ^:integration reset-drops-the-tables-no-migration-owns
+  ;; `bb db:reset` says all data will be lost. It rolled back the migrations
+  ;; only, so users and sessions — created at boot — survived it (BOU-585).
+  (doseq [[label spec] [["H2" {:adapter :h2
+                               :database-path (str "mem:reset_" (System/nanoTime)
+                                                   ";DB_CLOSE_DELAY=-1")}]
+                        ["SQLite" {:adapter :sqlite
+                                   :database-path (str (io/file "target" (str "bou585-" (System/nanoTime) ".db")))}]]]
+    (testing label
+      (is (= #{"app_table" "schema_migrations"} (reset-leaves spec))))))
+
+(deftest ^:integration reset-drops-tenant-schemas
+  (let [ctx (db-factory/db-context {:adapter :h2
+                                    :database-path (str "mem:reset_tenant_" (System/nanoTime)
+                                                        ";DB_CLOSE_DELAY=-1")})]
+    (try
+      (db/execute-ddl! ctx "CREATE SCHEMA tenant_acme")
+      (db/execute-ddl! ctx "CREATE TABLE tenant_acme.users (id INT)")
+      (let [schemas #(set (map (comp str/lower-case (some-fn :schema-name :schema_name))
+                               (db/execute-query! ctx {:select [:schema_name]
+                                                       :from   [:information_schema.schemata]})))]
+        (is (contains? (schemas) "tenant_acme"))
+        (migrations/drop-every-table! (:datasource ctx))
+        (is (not (contains? (schemas) "tenant_acme"))))
+      (finally (db-factory/close-db-context! ctx)))))
+
 (deftest ^:unit discover-migration-dirs-rejects-invalid-manifests
   (testing "invalid manifest shapes fail fast with a clear error"
     (with-temp-dir
@@ -253,6 +306,7 @@
                     migratus/create (fn [arg name]
                                       (swap! calls conj [:create arg name]))
                     migratus/reset (fn [arg] (swap! calls conj [:reset arg]))
+                    migrations/drop-every-table! (fn [_] (swap! calls conj [:drop-every-table]))
                     migratus/init (fn [arg] (swap! calls conj [:init arg]))]
         (is (nil? (migrations/migrate)))
         (is (nil? (migrations/rollback)))
@@ -291,6 +345,7 @@
                 [:create (migrations/create-config config) "add-users"]
                 ;; Down with every module, up with the enabled ones (BOU-579).
                 [:rollback-until config 0]
+                [:drop-every-table]
                 [:migrate config]
                 [:init config]]
                @calls))
@@ -613,7 +668,7 @@
     ;; something failed but not that their migrations are in two places.
     (with-redefs [migrations/get-migration-config
                   (fn [& _] (throw (ex-info "Migrations exist in two directories, and only one is read."
-                                         {:type :migration-dir-conflict})))]
+                                            {:type :migration-dir-conflict})))]
       (doseq [[label op] [["migrate"  migrations/migrate]
                           ["rollback" migrations/rollback]]]
         (let [ex (is (thrown? clojure.lang.ExceptionInfo (op)) label)]

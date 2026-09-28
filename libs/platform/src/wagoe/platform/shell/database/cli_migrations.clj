@@ -119,7 +119,7 @@
                (str/join ", " (sort db-config/disposable-envs)))
       (println)
       (System/exit 1))
-    (println "\n⚠️  WARNING: This will rollback ALL migrations and reapply them!")
+    (println "\n⚠️  WARNING: This will drop every table and reapply the migrations!")
     (println (str "Environment: " env "   (resolved from -Denv / WAG_ENV / ENV / ENVIRONMENT)"))
     (println "This is a DESTRUCTIVE operation and will delete all data.")
     ;; Type the environment name, not "yes". The operator has to have read the

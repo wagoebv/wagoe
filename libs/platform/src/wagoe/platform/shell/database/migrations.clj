@@ -716,20 +716,68 @@
                        :name name}
                       e)))))
 
+(defn- quote-ident [^String product ^String ident]
+  (if (re-find #"(?i)mysql|mariadb" product)
+    (str "`" (str/replace ident "`" "``") "`")
+    (str "\"" (str/replace ident "\"" "\"\"") "\"")))
+
+(defn drop-every-table!
+  "Drop every table in the connection's schema, and on databases with schemas
+   every `tenant_*` schema.
+
+   A rollback only removes what migrations made. Users, sessions and tenants
+   are created at boot, outside any migration, so they survived a reset that
+   said all data would be lost (BOU-585)."
+  [^javax.sql.DataSource datasource]
+  (with-open [c (.getConnection datasource)
+              s (.createStatement c)]
+    (let [md       (.getMetaData c)
+          product  (.getDatabaseProductName md)
+          q        #(quote-ident product %)
+          mysql?   (re-find #"(?i)mysql|mariadb" product)
+          sqlite?  (re-find #"(?i)sqlite" product)
+          cascade  (if (or mysql? sqlite?) "" " CASCADE")
+          tables   (with-open [rs (.getTables md (.getCatalog c) (.getSchema c) "%"
+                                              (into-array String ["TABLE"]))]
+                     (vec (for [_ (repeat nil) :while (.next rs)]
+                            (.getString rs "TABLE_NAME"))))
+          tenants  (when-not (or mysql? sqlite?)
+                     (with-open [rs (.getSchemas md)]
+                       (vec (for [_ (repeat nil) :while (.next rs)
+                                  :let [schema (.getString rs "TABLE_SCHEM")]
+                                  :when (re-matches #"(?i)tenant_[a-z0-9_]+" schema)]
+                              schema))))]
+      ;; Without these, a table another references cannot be dropped first.
+      (cond mysql?  (.execute s "SET FOREIGN_KEY_CHECKS = 0")
+            sqlite? (.execute s "PRAGMA foreign_keys = OFF"))
+      (try
+        (doseq [schema tenants]
+          (log/info "Dropping tenant schema" {:schema schema})
+          (.execute s (str "DROP SCHEMA IF EXISTS " (q schema) " CASCADE")))
+        (doseq [table tables]
+          (log/info "Dropping table" {:table table})
+          (.execute s (str "DROP TABLE IF EXISTS " (q table) cascade)))
+        (finally
+          (cond mysql?  (.execute s "SET FOREIGN_KEY_CHECKS = 1")
+                sqlite? (.execute s "PRAGMA foreign_keys = ON")))))))
+
 (defn reset
-  "Resets the database by rolling back all migrations and re-applying them.
+  "Drops every table, including those created at boot, and re-applies the
+   migrations.
 
    WARNING: This is destructive! Use only in development.
 
    Returns:
      nil"
   []
-  (log/warn "Resetting database - rolling back all migrations and re-applying")
+  (log/warn "Resetting database - dropping every table and re-applying migrations")
   (try
     ;; Down with every module's migrations, up with the enabled ones: a plain
-    ;; migratus/reset goes both ways with one set.
+    ;; migratus/reset goes both ways with one set. The rollback still runs so
+    ;; down migrations remove what is not a table.
     (let [config (rollback-config)]
       (migratus/rollback-until-just-after config 0)
+      (drop-every-table! (get-in config [:db :datasource]))
       (migratus/migrate (get-migration-config))
       (log/info "Database reset completed"))
     (catch Exception e
