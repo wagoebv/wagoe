@@ -52,6 +52,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Dev on `HTTP_PORT=3200` logged "searching ports 3000-3099"** (BOU-590). The log names the port requested and
+  the port bound, and the range only when the requested port was taken.
 - **The workflow boot put the BOU-581 unique index on `workflow_instances` in production** (BOU-589). It changes
   that table only in dev, test and acc now; elsewhere it warns, so run `bb migrate up`.
 - **Admin toasts named one record in the plural**, "Invoices created successfully" (BOU-589). One record is singular now,

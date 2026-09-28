@@ -847,7 +847,8 @@
                                                    (.setAttribute s "handler-atom" ha)
                                                    (configure-graceful-shutdown! s drain-timeout-ms))})]
       (log/info "HTTP server started successfully"
-                {:port allocated-port
+                {:requested-port port
+                 :port allocated-port
                  :host host
                  :url (str "http://" host ":" allocated-port)
                  :drain-timeout-ms drain-timeout-ms

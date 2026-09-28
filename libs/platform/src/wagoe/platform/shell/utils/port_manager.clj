@@ -120,8 +120,7 @@
       dev?
       {:strategy :range-search
        :port-range port-range
-       :message (format "Development environment - searching ports %d-%d"
-                        (:start port-range) (:end port-range))}
+       :message "Development environment"}
 
       ;; Production-like environment - be conservative
       :else
@@ -154,7 +153,7 @@
       :exact-or-fail
       (if (port-available? requested-port)
         {:port requested-port
-         :message (str message " - using requested port")}
+         :message (format "%s - requested port %d, bound %d" message requested-port requested-port)}
         (throw (ex-info "Requested port not available in strict environment"
                         {:type :port-unavailable
                          :requested-port requested-port
@@ -172,9 +171,13 @@
       (let [allocated-port (if (port-available? requested-port)
                              requested-port
                              (find-available-port (:start port-range) (:end port-range)))]
+        ;; The range only when it was searched: naming it otherwise read as if
+        ;; HTTP_PORT had been ignored (BOU-590).
         {:port allocated-port
-         :message (str message (when (not= allocated-port requested-port)
-                                 (format " - resolved conflict, using port %d" allocated-port)))}))))
+         :message (if (= allocated-port requested-port)
+                    (format "%s - requested port %d, bound %d" message requested-port allocated-port)
+                    (format "%s - requested port %d in use, resolved conflict: searched %d-%d, bound %d"
+                            message requested-port (:start port-range) (:end port-range) allocated-port))}))))
 
 (defn log-port-allocation
   "Log port allocation information for debugging.
@@ -191,7 +194,8 @@
 
     (if (= requested-port allocated-port)
       (log/info (format "%s started on requested port" service-name)
-                {:port allocated-port
+                {:requested-port requested-port
+                 :port allocated-port
                  :environment {:docker docker? :development dev?}})
       (log/warn (format "%s port conflict resolved" service-name)
                 {:requested-port requested-port
