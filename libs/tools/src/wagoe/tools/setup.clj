@@ -517,10 +517,16 @@
              (into ["# SMTP Email"]
                    (concat (map #(str % "=") (get component-env-vars :smtp)) [""])))]))
 
+(defn- exported
+  "`line` with `export` in front when it assigns, so a plain `source .env`
+   reaches the JVM (BOU-601)."
+  [line]
+  (cond->> line (re-matches #"[A-Z][A-Z0-9_]*=.*" line) (str "export ")))
+
 (defn build-env-example
   "Generate .env.example content from a setup spec."
   [spec]
-  (str/join "\n" (flatten (env-example-sections spec))))
+  (str/join "\n" (map exported (flatten (env-example-sections spec)))))
 
 (defn- root-dir [] (System/getProperty "user.dir"))
 
@@ -889,7 +895,7 @@
   "`existing` .env.example with the variables the answers in `spec` need and it
    lacks."
   [existing spec nl]
-  (let [have    (set (map second (re-seq #"(?m)^\s*([A-Z][A-Z0-9_]*)=" existing)))
+  (let [have    (set (map second (re-seq #"(?m)^\s*(?:export\s+)?([A-Z][A-Z0-9_]*)=" existing)))
         missing (fn [line]
                   (let [v (second (re-matches #"([A-Z][A-Z0-9_]*)=.*" line))]
                     (and v (not (have v)))))
@@ -909,7 +915,7 @@
       {:text    (str existing
                      (when-not (or (str/blank? existing) (str/ends-with? existing "\n")) nl)
                      (when-not (str/blank? existing) nl)
-                     (str/join nl (apply concat added)))
+                     (str/join nl (map exported (apply concat added))))
        :changes [(str "add " (str/join ", " (mapcat #(remove str/blank? (rest %)) added)))]})))
 
 (defn- read-target

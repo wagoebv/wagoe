@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# `wagoe` for the worktree mode of scripts/first-run-smoke.sh. The smoke runs
+# the documented first run verbatim, `wagoe new` included, so `wagoe` itself
+# has to be this checkout's CLI, and what it generates has to use this
+# checkout's libraries (BOU-604).
+set -euo pipefail
+. "$(dirname "$(readlink -f "$0")")/smoke-worktree.sh"
+
+bb --config /work/bb.edn -m wagoe.cli.main "$@"
+if [ "${1:-}" = new ]; then
+  pin_to_worktree "$PWD/$2"
+fi

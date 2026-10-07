@@ -75,10 +75,22 @@
       (touch! root "src" "shop" "main.clj")
       (is (= "shop" (project/module-base-ns "product" root))))))
 
-(deftest ^:unit an-underscored-directory-is-returned-as-written
-  ;; `wagoe new my-app` writes src/my_app/, and the generated namespaces are
-  ;; my_app.*. Converting back to dashes here would name a namespace that does
-  ;; not exist.
-  (let [root (tmp-root)]
-    (touch! root "src" "my_app" "main.clj")
-    (is (= "my_app" (project/base-ns root)))))
+(deftest ^:unit the-namespace-is-read-from-main-not-the-directory
+  ;; `wagoe new my-app` writes src/my_app/ holding my-app.* since BOU-602, and
+  ;; held my_app.* before. Only the ns form tells the two apart.
+  (testing "hyphenated namespace in an underscored directory"
+    (let [root (tmp-root)]
+      (spit (touch! root "src" "my_app" "main.clj") "(ns my-app.main\n  (:gen-class))")
+      (is (= "my-app" (project/base-ns root)))
+      (is (= "my_app" (project/base-dir root)))))
+
+  (testing "a project generated before BOU-602 keeps its underscored namespace"
+    (let [root (tmp-root)]
+      (spit (touch! root "src" "my_app" "main.clj") "(ns my_app.main)")
+      (is (= "my_app" (project/base-ns root)))))
+
+  (testing "an existing module is found under a hyphenated project namespace"
+    (let [root (tmp-root)]
+      (spit (touch! root "src" "my_app" "main.clj") "(ns my-app.main)")
+      (touch! root "src" "my_app" "product" "schema.clj")
+      (is (= "my-app" (project/module-base-ns "product" root))))))
