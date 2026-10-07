@@ -51,7 +51,7 @@ src/wagoe/mcp/
     ├── codec.clj      # cheshire JSON <-> data (kept out of core)
     ├── context.clj    # read env -> security context (I/O)
     ├── audit.clj      # AuditLog sinks: logging (stderr JSON) + in-memory
-    ├── guardrail.clj  # guardrail payloads from the devtools BND catalog (I/O)
+    ├── guardrail.clj  # guardrail payloads from the devtools WGE catalog (I/O)
     ├── system_source.clj # SystemSource adapters: in-process (now), nREPL (later)
     ├── tools.clj      # tool executors (Tier 0: kondo/Malli/ai/reflection; Tier 1: scaffold + verify; Tier 2: execute)
     ├── verify.clj     # verify-loop steps: kondo + FC/IS + tests over written files (BOU-101)
@@ -134,23 +134,23 @@ audit log.
 ## Guardrail error payload (ADR-032)
 
 "Guardrail, not straitjacket." Every enforcing tool returns one structured
-payload — the **rule** that fired (a BND code), the **principle** behind it, a
+payload — the **rule** that fired (a WGE code), the **principle** behind it, a
 suggested **fix**, and (when overridable) the audited bypass:
 
 ```clojure
-{:code "BND-803" :rule "Capability Tier Exceeded"
+{:code "WGE-803" :rule "Capability Tier Exceeded"
  :principle "...exceeds the ceiling..." :fix "Run in local dev, ..."
  :overridable? false :details {:tool "eval" :capability :execute :mode :no-execute}}
 ```
 
-- BND text comes from the shared `devtools` catalog (`BND-8xx` = MCP guardrails),
+- WGE text comes from the shared `devtools` catalog (`WGE-8xx` = MCP guardrails),
   the single source of truth. `core/guardrail` is pure; `shell/guardrail` does
   the catalog lookup (I/O) and `wagoe/devtools` is a **shell-only** dep.
 - Map a `security/authorize` denial → payload: `shell/guardrail/payload-for-denial`
   (or `error-for-denial` for the JSON-RPC error, app code `:forbidden` `-32001`).
-- **Hard vs soft:** security/capability denials (BND-801..805) are *not*
+- **Hard vs soft:** security/capability denials (WGE-801..805) are *not*
   per-call overridable — the audited override is changing the env/context
-  (`MCP_CAPABILITY_MODE`). Codegen guardrails (BND-806/807, Tier 1) *are*: the
+  (`MCP_CAPABILITY_MODE`). Codegen guardrails (WGE-806/807, Tier 1) *are*: the
   caller passes `{:allow true}` (`guardrail/override-requested?`) and the tool
   records a `:guardrail-override` audit event (`guardrail/override-event`)
   before proceeding.
@@ -195,7 +195,7 @@ error (`-32001`); unknown tool → `-32602`.
 
 | Tool | Does | Reuses |
 |------|------|--------|
-| `explain-error` | summarise a stacktrace + enrich any `BND-xxx` code | `ai.core.context`, devtools `error-codes` |
+| `explain-error` | summarise a stacktrace + enrich any `WGE-xxx` code | `ai.core.context`, devtools `error-codes` |
 | `lint` | clj-kondo structured findings for paths | `clj-kondo.core` |
 | `validate-schema` | Malli validate + humanized errors | `malli` |
 | `describe-module` | module deps / ports / libs from the live snapshot | BOU-99 `SystemSource` |
@@ -227,7 +227,7 @@ generate (scaffolder) → write → kondo → FC/IS → run affected tests → s
 - **Verify loop** (`shell/verify` → pure `core/verify`):
   - **kondo** — in-process over the written `.clj` files.
   - **FC/IS** — `wagoe.tools.check-fcis/check-file` per written `core/` file →
-    **BND-806**. (Per-file, not the monorepo's `core-source-paths`, so it works
+    **WGE-806**. (Per-file, not the monorepo's `core-source-paths`, so it works
     in any project layout.)
   - **Malli** — the scaffolder validates the request before writing; its errors
     flow through as generate `:errors`.
@@ -239,12 +239,12 @@ generate (scaffolder) → write → kondo → FC/IS → run affected tests → s
   :issues [{:step :severity :file :line :code :message [:expected] [:actual]}]
   :counts :steps}`.
 - **Hard vs soft.** kondo errors and failing tests are **hard** — never
-  overridable (the code does not compile / does not pass). FC/IS (BND-806) and
-  convention (BND-807) are **soft**: an audited `{:allow true}` turns a `:fail`
+  overridable (the code does not compile / does not pass). FC/IS (WGE-806) and
+  convention (WGE-807) are **soft**: an audited `{:allow true}` turns a `:fail`
   whose blocking issues are *all* soft into `:overridden`, recording a
   `:guardrail-override` audit event. A mixed hard+soft run stays `:fail`.
 - **Capability gate first.** `:generate` is denied in `:read-only`/CI/`:disabled`
-  contexts (BND-803/804/801) at dispatch, before any codegen runs.
+  contexts (WGE-803/804/801) at dispatch, before any codegen runs.
 - `scaffold-module` accepts `preview: true` (dry-run) → returns the file `:plan`
   without writing or verifying.
 
@@ -252,7 +252,7 @@ generate (scaffolder) → write → kondo → FC/IS → run affected tests → s
 
 The **RCE surface, off by default.** Capability `:execute` — the security gate
 denies it in every context except `:full` (local dev), so these refuse in prod
-(`:no-execute` → BND-803) and CI (`:read-only` → BND-803) **before** any work
+(`:no-execute` → WGE-803) and CI (`:read-only` → WGE-803) **before** any work
 runs. Every call is audited twice: the generic `:tool-call` event in the
 dispatch, plus an `:execute` event from the executor carrying the payload (the
 code run, the SQL, the migration direction) so the trail names what executed.

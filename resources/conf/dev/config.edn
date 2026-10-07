@@ -210,7 +210,7 @@
   ;; Developer dashboard — live system introspection UI (dev only)
   :wagoe/dashboard {:port 9999}
 
-  ;; Dev-only: an error over HTTP answers with its BND code and the fix
+  ;; Dev-only: an error over HTTP answers with its WGE code and the fix
   ;; (BOU-321). Never in prod config — the enrichment is gated on this key and
   ;; on a dev-like environment, and both exist so production says nothing.
   :wagoe/dev-error-enricher {}}

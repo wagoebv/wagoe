@@ -63,8 +63,8 @@
                       :error (.getMessage e)})
           (.close datasource)
           (throw (ex-info "Database initialization failed"
-                          ;; :db/error is what the BND classifier reads for
-                          ;; BND-303 ("Database Connection Failed"), which is
+                          ;; :db/error is what the WGE classifier reads for
+                          ;; WGE-303 ("Database Connection Failed"), which is
                           ;; exactly this case. A failed query or DDL is a
                           ;; different failure and carries :database-error, so
                           ;; the dashboard does not report every SQL error as a

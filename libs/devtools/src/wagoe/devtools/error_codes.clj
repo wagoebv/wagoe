@@ -6,16 +6,17 @@
    which is forbidden in core namespaces by the FC/IS boundary check.
 
    Error code ranges:
-     BND-1xx  Configuration errors
-     BND-2xx  Validation errors
-     BND-3xx  Persistence errors
-     BND-4xx  Authentication/authorization errors
-     BND-5xx  Interceptor pipeline errors
-     BND-6xx  FC/IS boundary violations
-     BND-7xx  Tooling / build errors
-     BND-8xx  MCP guardrails (wagoe-mcp)"
+     WGE-1xx  Configuration errors
+     WGE-2xx  Validation errors
+     WGE-3xx  Persistence errors
+     WGE-4xx  Authentication/authorization errors
+     WGE-5xx  Interceptor pipeline errors
+     WGE-6xx  FC/IS boundary violations
+     WGE-7xx  Tooling / build errors
+     WGE-8xx  MCP guardrails (wagoe-mcp)"
   (:require [clojure.edn :as edn]
-            [clojure.java.io :as io]))
+            [clojure.java.io :as io]
+            [clojure.string :as str]))
 
 ;; =============================================================================
 ;; Error catalog — single source of truth
@@ -33,10 +34,17 @@
 ;; Lookup functions
 ;; =============================================================================
 
+(defn canonical-code
+  "`code` upper-cased, with the pre-1.0.1 BND- prefix read as WGE-, so a code
+   from an old log or doc still resolves."
+  [code]
+  (when (string? code)
+    (str/replace (str/upper-case code) #"^BND-" "WGE-")))
+
 (defn lookup
   "Look up an error code. Returns the error definition map or nil."
   [code]
-  (get catalog code))
+  (get catalog (canonical-code code)))
 
 (defn by-category
   "Get all error codes for a category (:config, :validation, :persistence, :auth, :interceptor, :fcis, :tooling)."
@@ -54,12 +62,12 @@
   "Get the human-readable range description for a category."
   [category]
   (case category
-    :config      "BND-1xx"
-    :validation  "BND-2xx"
-    :persistence "BND-3xx"
-    :auth        "BND-4xx"
-    :interceptor "BND-5xx"
-    :fcis        "BND-6xx"
-    :tooling     "BND-7xx"
-    :mcp         "BND-8xx"
-    "BND-???"))
+    :config      "WGE-1xx"
+    :validation  "WGE-2xx"
+    :persistence "WGE-3xx"
+    :auth        "WGE-4xx"
+    :interceptor "WGE-5xx"
+    :fcis        "WGE-6xx"
+    :tooling     "WGE-7xx"
+    :mcp         "WGE-8xx"
+    "WGE-???"))

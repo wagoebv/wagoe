@@ -6,33 +6,33 @@
    (wagoe.devtools.shell.auto-fix) handles execution.")
 
 (def ^:private fix-catalog
-  "Map of BND error codes to fix descriptors."
-  {"BND-301" {:fix-id :apply-migration
+  "Map of WGE error codes to fix descriptors."
+  {"WGE-301" {:fix-id :apply-migration
               :label  "Apply pending database migration"
               :safe?  true
               :action :migrate-up}
 
-   "BND-101" {:fix-id :set-env-var
+   "WGE-101" {:fix-id :set-env-var
               :label  "Set missing environment variable for current session"
               :safe?  true
               :action :set-env}
 
-   "BND-103" {:fix-id :set-jwt-secret
+   "WGE-103" {:fix-id :set-jwt-secret
               :label  "Generate and set dev JWT_SECRET for current session"
               :safe?  true
               :action :set-jwt}
 
-   "BND-601" {:fix-id :refactor-fcis
+   "WGE-601" {:fix-id :refactor-fcis
               :label  "Show FC/IS refactoring steps"
               :safe?  false
               :action :show-refactoring}
 
-   "BND-WIRING" {:fix-id :integrate-module
+   "WGE-WIRING" {:fix-id :integrate-module
                  :label  "Wire scaffolded module into the system"
                  :safe?  true
                  :action :integrate-module}
 
-   "BND-DEP" {:fix-id :add-dependency
+   "WGE-DEP" {:fix-id :add-dependency
               :label  "Add missing dependency to deps.edn"
               :safe?  false
               :action :add-dependency}})

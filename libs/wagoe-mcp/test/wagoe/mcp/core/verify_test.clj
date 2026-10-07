@@ -40,7 +40,7 @@
                                     :kind :require}]}}
         r     (verify/build-report steps)
         r-ovr (verify/build-report steps {:overridden? true})]
-    (testing "blocks by default, flagged overridable, tagged BND-806"
+    (testing "blocks by default, flagged overridable, tagged WGE-806"
       (is (= :fail (:status r)))
       (is (true? (:overridable? r)))
       (is (= verify/fcis-code (:code (first (:issues r))))))

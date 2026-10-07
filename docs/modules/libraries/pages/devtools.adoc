@@ -15,7 +15,7 @@ The DX Vision feature set spans six phases:
 
 1. *Guidance Engine* — startup dashboard, post-scaffold tips, contextual help, command palette
 2. *Introspection* — route table, config tree (secrets redacted), module/migration/test state analysis, schema exploration
-3. *Error Pipeline* — BND-xxx error codes, classifier → enricher → formatter chain, auto-fix suggestions
+3. *Error Pipeline* — WGE-xxx error codes, classifier → enricher → formatter chain, auto-fix suggestions
 4. *Dev Dashboard* — browser-based UI at `localhost:9999` with live system views
 5. *Advanced REPL* — request/response recording, route testing, rapid prototyping
 6. *Dashboard Extensions + AI* — jobs monitoring, config editor, security status, AI-powered code review
@@ -24,18 +24,18 @@ The DX Vision feature set spans six phases:
 
 Layered pipeline: `classify → enrich → format → output`. All pure functions in `core/`, side effects in `shell/`.
 
-=== BND Error Codes
+=== WGE Error Codes
 
 [cols="1,2",options="header"]
 |===
 | Range | Category
 
-| BND-1xx | Configuration errors
-| BND-2xx | Validation errors
-| BND-3xx | Persistence errors
-| BND-4xx | Authentication / authorization
-| BND-5xx | Interceptor pipeline
-| BND-6xx | FC/IS violations
+| WGE-1xx | Configuration errors
+| WGE-2xx | Validation errors
+| WGE-3xx | Persistence errors
+| WGE-4xx | Authentication / authorization
+| WGE-5xx | Interceptor pipeline
+| WGE-6xx | FC/IS violations
 |===
 
 === Auto-Fix
@@ -66,7 +66,7 @@ Local web UI at `http://localhost:9999` providing live insight into the running 
 | `/dashboard/requests` | Live request stream (HTMX polling, 2s interval)
 | `/dashboard/schemas` | Malli schema browser with example generation
 | `/dashboard/db` | Database explorer: migrations, pool stats, query runner
-| `/dashboard/errors` | BND-coded errors with fix suggestions
+| `/dashboard/errors` | WGE-coded errors with fix suggestions
 | `/dashboard/jobs` | Job queue stats, failed jobs with retry button
 | `/dashboard/config` | Editable config tree with secret redaction and diff preview
 | `/dashboard/security` | Security posture: password policy, auth methods, MFA, CSRF, rate limiting
@@ -174,7 +174,7 @@ Steps: AI spec generation → confirm → scaffold → integrate → test.
 
 | `wagoe.devtools.core.error-classifier`
 | core
-| Exception → BND-xxx code mapping (5 strategies)
+| Exception → WGE-xxx code mapping (5 strategies)
 
 | `wagoe.devtools.core.error-enricher`
 | core
@@ -182,7 +182,7 @@ Steps: AI spec generation → confirm → scaffold → integrate → test.
 
 | `wagoe.devtools.core.error-formatter`
 | core
-| Rich formatted output with BND code header
+| Rich formatted output with WGE code header
 
 | `wagoe.devtools.core.auto-fix`
 | core
@@ -190,7 +190,7 @@ Steps: AI spec generation → confirm → scaffold → integrate → test.
 
 | `wagoe.devtools.error-codes`
 | core
-| BND error catalog (BND-1xx through BND-6xx)
+| WGE error catalog (WGE-1xx through WGE-6xx)
 
 | `wagoe.devtools.core.guidance`
 | core

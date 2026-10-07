@@ -15,10 +15,11 @@
 ;;   env    BND_...         environment-variable prefix
 ;;   dirs   boundary-cli / boundary-mcp  library directory names
 ;;   urls   boundary-app.org / thijs-creemers/boundary  external references
+;;   codes  BND-<digits>   user-facing error codes, now WGE- (BOU-603)
 ;;   prose  the word "boundary" (case-insensitive) in docs — REPORT ONLY,
 ;;          never fails (it is also a real FC/IS / hexagonal architecture term)
 ;;
-;; No args  -> all HARD groups (ns keys coords group env dirs urls); prose excluded.
+;; No args  -> all HARD groups (ns keys coords group env dirs urls codes); prose excluded.
 ;; `all`    -> hard groups + prose (prose still report-only).
 ;;
 ;; Allowlist: paths in .wagoe/check-no-boundary.edn `:allow-paths` (prefix
@@ -45,7 +46,7 @@
 (defn- ansi-red    [s] (esc "31" s))
 (defn- ansi-yellow [s] (esc "33" s))
 
-(def hard-groups [:ns :keys :coords :group :env :dirs :urls])
+(def hard-groups [:ns :keys :coords :group :env :dirs :urls :codes])
 
 (def token-defs
   "Each group: :desc human label, :grep git-grep args (before the pathspec),
@@ -113,6 +114,11 @@
             ;; appears under the old org (tcbv/boundary, in the systemd unit).
             ;; Pinning one owner would let Phase 5a miss the other variants.
             :grep  ["-nIE" "boundary-app\\.org|github\\.com/[A-Za-z0-9_-]+/boundary"]
+            :hard? true}
+   :codes  {:desc  "BND-<digits> error codes (now WGE-)"
+            ;; Digits required: the lookup code that still accepts the old
+            ;; spelling matches the bare "BND-" prefix and is not residue.
+            :grep  ["-nIE" "BND-[0-9]"]
             :hard? true}
    :prose  {:desc  "\"boundary\" word in prose (REPORT ONLY — also an arch term)"
             :grep  ["-nIiE" "boundary"]

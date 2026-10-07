@@ -3,8 +3,8 @@
             [wagoe.devtools.core.error-enricher :as enricher]))
 
 (deftest ^:unit enrich-classified-error-test
-  (let [ex (ex-info "validation failed" {:wagoe/error-code "BND-201"})
-        classified {:code "BND-201"
+  (let [ex (ex-info "validation failed" {:wagoe/error-code "WGE-201"})
+        classified {:code "WGE-201"
                     :category :validation
                     :exception ex
                     :data {}
@@ -28,15 +28,15 @@
       (is (string? (:docs-url enriched))))))
 
 (deftest ^:unit enrich-with-fix-test
-  (let [ex (ex-info "migration" {:wagoe/error-code "BND-301"})
-        classified {:code "BND-301"
+  (let [ex (ex-info "migration" {:wagoe/error-code "WGE-301"})
+        classified {:code "WGE-301"
                     :category :persistence
                     :exception ex
                     :data {}
                     :source :ex-data}
         enriched (enricher/enrich classified)]
 
-    (testing "enriched error has fix descriptor for BND-301"
+    (testing "enriched error has fix descriptor for WGE-301"
       (is (some? (:fix enriched)))
       (is (= :apply-migration (get-in enriched [:fix :fix-id]))))))
 
@@ -51,7 +51,7 @@
 
 (deftest ^:unit enrich-self-protection-test
   (testing "enricher survives when stacktrace filtering throws"
-    (let [classified {:code "BND-201" :category :validation :exception nil :data {} :source :ex-data}
+    (let [classified {:code "WGE-201" :category :validation :exception nil :data {} :source :ex-data}
           enriched (enricher/enrich classified)]
       (is (map? enriched))
-      (is (= "BND-201" (:code enriched))))))
+      (is (= "WGE-201" (:code enriched))))))

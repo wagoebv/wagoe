@@ -12,12 +12,12 @@ All pure functions in `core/`, side effects in `shell/`.
 
 | File | Purpose |
 |------|---------|
-| `core/error_classifier.clj` | Exception -> BND-xxx code (5 strategies: ex-data code, ex-data pattern, exception type, message regex, unclassified) |
+| `core/error_classifier.clj` | Exception -> WGE-xxx code (5 strategies: ex-data code, ex-data pattern, exception type, message regex, unclassified) |
 | `core/error_enricher.clj` | Adds filtered stacktrace, suggestions, fix descriptor, URLs. Self-protected: sub-call failures omit the field |
-| `core/error_formatter.clj` | Rich formatted output with BND code header, stack trace, fix hint. Also `format-unclassified-error` fallback |
+| `core/error_formatter.clj` | Rich formatted output with WGE code header, stack trace, fix hint. Also `format-unclassified-error` fallback |
 | `core/stacktrace.clj` | Reorder stack traces: user code first, framework/JVM collapsed. Namespace prefix classification |
-| `core/auto_fix.clj` | Pure fix descriptor registry. Maps BND codes to `{:fix-id :action :safe? :label}` |
-| `core/error_codes.clj` | BND error catalog: BND-1xx (config), BND-2xx (validation), BND-3xx (persistence), BND-4xx (auth), BND-5xx (interceptor), BND-6xx (FC/IS) |
+| `core/auto_fix.clj` | Pure fix descriptor registry. Maps WGE codes to `{:fix-id :action :safe? :label}` |
+| `core/error_codes.clj` | WGE error catalog: WGE-1xx (config), WGE-2xx (validation), WGE-3xx (persistence), WGE-4xx (auth), WGE-5xx (interceptor), WGE-6xx (FC/IS) |
 | `core/project_repl.clj` | Which Integrant keys are modules (a scaffolded module wires four; the user module eight), and the command palette a generated project has |
 
 ### Shell Modules
@@ -27,7 +27,7 @@ All pure functions in `core/`, side effects in `shell/`.
 | `shell/repl_error_handler.clj` | `last-exception*` atom + `handle-repl-error!` — runs full pipeline |
 | `shell/auto_fix.clj` | Executes fix descriptors: migrations, env vars, JWT, module wiring. Multimethod dispatch on `:action` |
 | `shell/http_error_middleware.clj` | `wrap-dev-error-enrichment` — catches exceptions, attaches `:wagoe/dev-info` to ex-data, re-throws |
-| `shell/fcis_checker.clj` | Post-reset namespace scan for BND-601 (core imports shell). Runs after `(go)` and `(reset)` |
+| `shell/fcis_checker.clj` | Post-reset namespace scan for WGE-601 (core imports shell). Runs after `(go)` and `(reset)` |
 | `shell/project_repl.clj` | The helpers a `wagoe new` project gets: `status`, `modules`, `routes`, `config`, `fix!`, `commands`. Its generated `dev/user.clj` resolves these by name at call time |
 
 ### REPL Commands
@@ -73,7 +73,7 @@ Local web UI at `localhost:9999` providing x-ray vision into the running system.
 - `/dashboard/requests` — Request Inspector: live request stream (HTMX polling 2s)
 - `/dashboard/schemas` — Schema Browser: Malli schema tree with example generation. Every loaded namespace ending in `.schema` is scanned; each schema is keyed by its full var name (`:wagoe.user.schema/User`) so same-named schemas from different namespaces stay distinct
 - `/dashboard/db` — Database Explorer: migrations, pool stats, query runner
-- `/dashboard/errors` — Error Dashboard: BND-coded errors with fix suggestions
+- `/dashboard/errors` — Error Dashboard: WGE-coded errors with fix suggestions
 
 ### Architecture
 
@@ -196,7 +196,7 @@ Three new commands exposed via the `ai/` alias (namespace `wagoe.ai.shell.repl`)
 (ai/refactor-fcis 'wagoe.product.core.validation)
 ;; FC/IS refactoring guide — locates the source file from the namespace symbol,
 ;; identifies violations, and prints a step-by-step migration plan.
-;; Also surfaced by (fix!) when a BND-601 violation is detected.
+;; Also surfaced by (fix!) when a WGE-601 violation is detected.
 ```
 
 All three degrade gracefully when no AI service is configured.

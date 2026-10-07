@@ -206,7 +206,7 @@ bb guide database         # migrations, seeds, adapters
 bb guide fcis             # what may live in core/ and what may not
 bb guide config           # config.edn, profiles, #env
 bb guide next             # what to do next in this project
-bb guide error BND-201    # what an error code means, and the fix
+bb guide error WGE-201    # what an error code means, and the fix
 ----
 
 `bb check` is a different thing: code-quality gates for code you have written,

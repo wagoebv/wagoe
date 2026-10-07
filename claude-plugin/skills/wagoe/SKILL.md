@@ -30,7 +30,7 @@ consistent.
 | Configure the project (DB, payments, …) | `bb setup ai "PostgreSQL with Stripe payments"` |
 | Validate config + environment | `bb doctor --all` |
 | Quality gates (FC/IS, deps, lint) | `bb check` |
-| Unsure what to do next | `bb guide next` — error codes: `bb guide error BND-003` |
+| Unsure what to do next | `bb guide next` — error codes: `bb guide error WGE-003` |
 
 Field spec format: `name:type[:values=a,b,c][:required][:unique]` with types
 `string text integer decimal boolean email uuid enum date datetime json`.

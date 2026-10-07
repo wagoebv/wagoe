@@ -8,15 +8,15 @@
 (deftest ^:integration handle-repl-error-stores-exception-test
   (testing "handle-repl-error! stores exception in last-exception* atom"
     (reset! handler/last-exception* nil)
-    (let [ex (ex-info "test error" {:wagoe/error-code "BND-201"})]
+    (let [ex (ex-info "test error" {:wagoe/error-code "WGE-201"})]
       (with-out-str (handler/handle-repl-error! ex))
       (is (= ex @handler/last-exception*)))))
 
 (deftest ^:integration handle-repl-error-prints-output-test
   (testing "handle-repl-error! prints formatted output for classified error"
-    (let [ex (ex-info "validation failed" {:wagoe/error-code "BND-201"})
+    (let [ex (ex-info "validation failed" {:wagoe/error-code "WGE-201"})
           output (with-out-str (handler/handle-repl-error! ex))]
-      (is (str/includes? output "BND-201"))))
+      (is (str/includes? output "WGE-201"))))
 
   (testing "handle-repl-error! prints fallback for unclassified error"
     (let [ex (Exception. "mystery error")
@@ -31,12 +31,12 @@
                         {:type :validation-error})
         ex     (ex-info "Error on key :acme/workflow when building system" {} cause)
         output (with-out-str (handler/handle-repl-error! ex))]
-    (is (str/includes? output "BND-201"))
+    (is (str/includes? output "WGE-201"))
     (is (str/includes? output ":on-enter-paid"))))
 
 (deftest ^:integration the-dashboard-link-uses-the-running-dashboard-port
   ;; BOU-561: the link was always :9999.
-  (let [ex (ex-info "validation failed" {:wagoe/error-code "BND-201"})]
+  (let [ex (ex-info "validation failed" {:wagoe/error-code "WGE-201"})]
     (testing "the port the dashboard is serving on, from a REPL (go)"
       (with-redefs [state/system            {:wagoe/dashboard {:port 9990}}
                     platform-system/running (constantly nil)]

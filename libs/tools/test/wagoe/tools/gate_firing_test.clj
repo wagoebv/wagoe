@@ -505,7 +505,8 @@
                                    :env    (str "(System/getenv \"" (str/upper-case brand) "_TENANT_ID\")")
                                    :group  (str "{:deps {org." new-brand "/" new-brand "-core {}}}")
                                    :dirs   (str ";; see libs/" brand "-cli/src")
-                                   :urls   (str ";; https://" brand "-app.org/docs")}]
+                                   :urls   (str ";; https://" brand "-app.org/docs")
+                                   :codes  (str ";; " "BND" "-103: Missing JWT Secret")}]
             (let [f (str "src/app/" (name group) "_probe.clj")]
               (spit-file! root f content)
               (git! root "add" "-A")

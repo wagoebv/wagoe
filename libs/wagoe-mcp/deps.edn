@@ -9,7 +9,7 @@
         ;; Reused by the Tier 0 tools (ai.core.context / ai.core.parsing) and the
         ;; sql-preview IAIProvider seam.
         wagoe/ai               {:local/root "../ai"}
-        ;; Shared BND error catalog (single source of truth) for guardrail
+        ;; Shared WGE error catalog (single source of truth) for guardrail
         ;; payloads + explain-error code lookup. Used only from shell.
         wagoe/devtools         {:local/root "../devtools"}
         ;; Runtime clj-kondo for the `lint` tool (structured findings).

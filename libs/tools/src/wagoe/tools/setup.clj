@@ -441,7 +441,7 @@
                   (when-not (= env "test") (http-template env))
                   (when-not (= env "test") (router-template env))
                   ;; wagoe new writes this key too (dev-config.edn.tmpl) — the
-                  ;; BND-code enrichment of BOU-321. Setup regenerates the whole
+                  ;; WGE-code enrichment of BOU-321. Setup regenerates the whole
                   ;; config, so leaving it out here silently un-ships the
                   ;; feature on any project that runs setup (BOU-416).
                   (when-not (#{"test" "prod"} env)

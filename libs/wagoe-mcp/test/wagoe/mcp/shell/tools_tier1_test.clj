@@ -26,7 +26,7 @@
         (try (t) (finally (run! #(.delete %) (reverse (file-seq dir)))))))))
 
 (def ^:private clean-core "(ns wagoe.tmp.core.thing)\n(defn add [a b] (+ a b))\n")
-;; Requiring clojure.java.io from a core ns is an FC/IS violation (BND-806).
+;; Requiring clojure.java.io from a core ns is an FC/IS violation (WGE-806).
 (def ^:private fcis-core "(ns wagoe.tmp.core.thing (:require [clojure.java.io :as io]))\n(defn f [] :ok)\n")
 
 (defn- core-path [] (.getPath (apply io/file *tmp* (conj core-dir-segments "thing.clj"))))

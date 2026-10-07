@@ -50,7 +50,7 @@
         resp (dispatch/dispatch d {:jsonrpc "2.0" :id 4 :method "resources/read"
                                    :params {:uri "wagoe://conventions"}})]
     (is (= -32001 (get-in resp [:error :code])))            ;; :forbidden
-    (is (= "BND-801" (get-in resp [:error :data :code])))   ;; capabilities disabled
+    (is (= "WGE-801" (get-in resp [:error :data :code])))   ;; capabilities disabled
     (testing "the denial is audited"
       (is (some #(= :resource-read-denied (:event %)) (audit/events (:audit d)))))))
 
@@ -61,12 +61,12 @@
 (deftest ^:unit generate-tool-denied-in-read-only-context
   ;; Tier 1 (:generate) tools are a hard capability gate: a read-only context
   ;; (CI / fail-closed) caps the ceiling at :read, so :generate is denied
-  ;; before any codegen runs (BND-803, capability tier exceeded).
+  ;; before any codegen runs (WGE-803, capability tier exceeded).
   (let [d    (deps (security/resolve-context {"CI" "true"}))
         resp (dispatch/dispatch d {:jsonrpc "2.0" :id 7 :method "tools/call"
                                    :params {:name "scaffold-module" :arguments {:module "x" :entities []}}})]
     (is (= -32001 (get-in resp [:error :code])))
-    (is (= "BND-803" (get-in resp [:error :data :code])))
+    (is (= "WGE-803" (get-in resp [:error :data :code])))
     (is (some #(= :tool-call-denied (:event %)) (audit/events (:audit d))))))
 
 (deftest ^:unit tools-list-advertises-catalog
@@ -99,7 +99,7 @@
         resp (dispatch/dispatch d {:jsonrpc "2.0" :id 4 :method "tools/call"
                                    :params {:name "validate-schema" :arguments {}}})]
     (is (= -32001 (get-in resp [:error :code])))
-    (is (= "BND-801" (get-in resp [:error :data :code])))
+    (is (= "WGE-801" (get-in resp [:error :data :code])))
     (is (some #(= :tool-call-denied (:event %)) (audit/events (:audit d))))))
 
 (deftest ^:unit tools-call-executor-error-is-iserror-result

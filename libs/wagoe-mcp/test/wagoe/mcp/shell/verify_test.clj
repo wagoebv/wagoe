@@ -36,14 +36,14 @@
     (is (= :passed (get-in report [:steps :tests])))))
 
 (deftest ^:unit fcis-violation-blocks-but-is-overridable
-  ;; A core namespace requiring clojure.java.io is an FC/IS violation (BND-806).
+  ;; A core namespace requiring clojure.java.io is an FC/IS violation (WGE-806).
   (let [file (core-file "bad.clj"
                         "(ns wagoe.tmp.core.bad (:require [clojure.java.io :as io]))\n(defn f [] :ok)\n")
         deps {:test-runner passing-runner}
         r    (verify/verify-generated deps {:success true :module "tmp" :files [file]})
         ovr  (verify/verify-generated deps {:success true :module "tmp" :files [file]}
                                       {:overridden? true})]
-    (testing "blocks by default with BND-806"
+    (testing "blocks by default with WGE-806"
       (is (= :fail (:status r)))
       (is (true? (:overridable? r)))
       (is (some #(= core-verify/fcis-code (:code %)) (:issues r))))
@@ -77,7 +77,7 @@
 
 (deftest ^:unit a-generated-test-namespace-is-not-a-core-namespace
   ;; The FC/IS step matched any path containing "/core/", so the module's own
-  ;; generated tests were checked as core code and BND-806 refused them for
+  ;; generated tests were checked as core code and WGE-806 refused them for
   ;; requiring clojure.test. scaffold-module then reported status "fail" on a
   ;; correct generation — the verify loop failing a file the same call had just
   ;; written (BOU-515).
@@ -117,7 +117,7 @@
 
 (deftest ^:unit a-violation-under-a-directory-named-test-is-still-caught
   ;; End to end: the silent pass this guards against. A core namespace that
-  ;; requires clojure.test is a BND-806 violation wherever the project lives.
+  ;; requires clojure.test is a WGE-806 violation wherever the project lives.
   (let [f (apply io/file *tmp* ["test" "proj" "src" "wagoe" "tmp" "core" "bad.clj"])]
     (.mkdirs (.getParentFile f))
     (spit f (str "(ns wagoe.tmp.core.bad\n"

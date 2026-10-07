@@ -5,7 +5,7 @@
 [![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
 [![Clojars Project](https://img.shields.io/clojars/v/com.wagoe/wagoe-devtools.svg)](https://clojars.org/com.wagoe/wagoe-devtools)
 
-Development-only tooling that gives x-ray vision into a running Wagoe application: BND-coded error pipeline, REPL power tools, and a live dev dashboard.
+Development-only tooling that gives x-ray vision into a running Wagoe application: WGE-coded error pipeline, REPL power tools, and a live dev dashboard.
 
 > **Dev-only library.** This is loaded exclusively via the `:dev` / `:repl-clj` aliases and adds **zero production overhead**. Never wire it into your production runtime.
 
@@ -27,7 +27,7 @@ Add as a **`:dev` alias** extra-dep so it never reaches production:
 |---------|-------------|
 | **Guidance Engine** | Startup dashboard, post-scaffold tips, contextual help, command palette (`:full` / `:minimal` / `:off` levels) |
 | **Introspection** | Route table, config tree (secrets redacted), module/migration/test state, schema exploration |
-| **Error Pipeline** | BND-xxx error codes with a `classify → enrich → format` chain and auto-fix suggestions |
+| **Error Pipeline** | WGE-xxx error codes with a `classify → enrich → format` chain and auto-fix suggestions |
 | **Dev Dashboard** | Browser UI at `localhost:9999` with live system views |
 | **Advanced REPL** | HTTP request/response recording, live route testing, rapid prototyping from Malli schemas |
 | **AI REPL Commands** | AI-powered code review, test-idea suggestions, and FC/IS refactoring guidance |
@@ -44,7 +44,7 @@ Add as a **`:dev` alias** extra-dep so it never reaches production:
 (fix! ex)
 ```
 
-BND error codes group failures by category: `BND-1xx` config, `BND-2xx` validation, `BND-3xx` persistence, `BND-4xx` auth, `BND-5xx` interceptor, `BND-6xx` FC/IS.
+WGE error codes group failures by category: `WGE-1xx` config, `WGE-2xx` validation, `WGE-3xx` persistence, `WGE-4xx` auth, `WGE-5xx` interceptor, `WGE-6xx` FC/IS.
 
 ### Introspection & schema tools
 

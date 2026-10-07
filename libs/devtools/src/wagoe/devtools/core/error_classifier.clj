@@ -1,9 +1,9 @@
 (ns wagoe.devtools.core.error-classifier
-  "Classify exceptions into BND-xxx error codes.
+  "Classify exceptions into WGE-xxx error codes.
    Pure functions — catalog data loaded once at namespace init via wagoe.devtools.error-codes.
 
    Classification strategy (ordered, first match wins):
-   1. ex-data with :wagoe/error-code — direct BND code
+   1. ex-data with :wagoe/error-code — direct WGE code
    2. ex-data pattern matching — infer from :type, :schema, :malli/error
    3. Message pattern — regex on .getMessage()
    4. Exception type — SQLException, ConnectException, etc.
@@ -46,33 +46,33 @@
             ;; the most common validation failure of all, and the one the
             ;; handler never even sees.
             (= :reitit.coercion/request-coercion (:type data)))
-        {:code "BND-201" :category :validation :data data :source :ex-data-pattern}
+        {:code "WGE-201" :category :validation :data data :source :ex-data-pattern}
 
         (= :db/error (:type data))
-        {:code "BND-303" :category :persistence :data data :source :ex-data-pattern}
+        {:code "WGE-303" :category :persistence :data data :source :ex-data-pattern}
 
         ;; A query, update or DDL that failed — not a connection problem, which
-        ;; is what BND-303's fix line tells you to go and check.
+        ;; is what WGE-303's fix line tells you to go and check.
         (= :database-error (:type data))
-        {:code "BND-304" :category :persistence :data data :source :ex-data-pattern}
+        {:code "WGE-304" :category :persistence :data data :source :ex-data-pattern}
 
         ;; Both spellings: :auth/required is what the auth lib throws,
         ;; :unauthorized what the HTTP error mapping expects.
         (contains? #{:auth/required :unauthorized :auth-failed} (:type data))
-        {:code "BND-401" :category :auth :data data :source :ex-data-pattern}
+        {:code "WGE-401" :category :auth :data data :source :ex-data-pattern}
 
         (contains? #{:auth/forbidden :forbidden} (:type data))
-        {:code "BND-402" :category :auth :data data :source :ex-data-pattern}
+        {:code "WGE-402" :category :auth :data data :source :ex-data-pattern}
 
         (and (= :configuration-error (:type data))
              (= "JWT_SECRET" (:required-env-var data)))
-        {:code "BND-103" :category :config :data data :source :ex-data-pattern}
+        {:code "WGE-103" :category :config :data data :source :ex-data-pattern}
 
         (and (= :configuration-error (:type data))
              (:required-env-var data))
-        {:code "BND-101" :category :config :data data :source :ex-data-pattern}
+        {:code "WGE-101" :category :config :data data :source :ex-data-pattern}
 
-        ;; BND-102 is "Unknown Provider", and it had no producer at all until
+        ;; WGE-102 is "Unknown Provider", and it had no producer at all until
         ;; the module wirings started typing their throws (BOU-323).
         ;;
         ;; Keyed on the type, not on "a :configuration-error that happens to
@@ -80,20 +80,20 @@
         ;; answering "check the valid providers list" to that is worse than
         ;; answering nothing.
         (= :unknown-provider (:type data))
-        {:code "BND-102" :category :config :data data :source :ex-data-pattern}
+        {:code "WGE-102" :category :config :data data :source :ex-data-pattern}
 
         :else nil))))
 
 (def ^:private message-patterns
   "Ordered list of [regex code category] for message-based classification."
-  [[#"(?i)relation .* does not exist"       "BND-301" :persistence]
-   [#"(?i)table .* not found"               "BND-301" :persistence]
-   [#"(?i)column .* does not exist"         "BND-301" :persistence]
-   [#"(?i)no such table"                    "BND-301" :persistence]
-   [#"(?i)pool.*exhaust"                    "BND-302" :persistence]
-   [#"(?i)connection.*refused"              "BND-303" :persistence]
-   [#"(?i)authentication.*required"         "BND-401" :auth]
-   [#"(?i)permission.*denied"              "BND-402" :auth]])
+  [[#"(?i)relation .* does not exist"       "WGE-301" :persistence]
+   [#"(?i)table .* not found"               "WGE-301" :persistence]
+   [#"(?i)column .* does not exist"         "WGE-301" :persistence]
+   [#"(?i)no such table"                    "WGE-301" :persistence]
+   [#"(?i)pool.*exhaust"                    "WGE-302" :persistence]
+   [#"(?i)connection.*refused"              "WGE-303" :persistence]
+   [#"(?i)authentication.*required"         "WGE-401" :auth]
+   [#"(?i)permission.*denied"              "WGE-402" :auth]])
 
 (defn- classify-message-pattern
   "Classify by regex matching on exception message."
@@ -109,15 +109,15 @@
   [ex]
   (cond
     (instance? java.sql.SQLException ex)
-    {:code "BND-303" :category :persistence :data {} :source :exception-type}
+    {:code "WGE-303" :category :persistence :data {} :source :exception-type}
 
     (instance? java.net.ConnectException ex)
-    {:code "BND-303" :category :persistence :data {} :source :exception-type}
+    {:code "WGE-303" :category :persistence :data {} :source :exception-type}
 
     :else nil))
 
 (defn classify
-  "Classify an exception into a BND-xxx error code.
+  "Classify an exception into a WGE-xxx error code.
 
    Order, and why. An explicit `:wagoe/error-code` wins. Then the *outermost*
    exception's own ex-data: the code that threw chose a `:type`, and that
@@ -127,7 +127,7 @@
    Reading the root cause first is what this used to do, and it produced the
    wrong answer for every wrapped database failure: an INSERT violating a
    unique constraint is thrown as `{:type :database-error}` around a
-   `SQLException`, and `instance? SQLException` reported BND-303 \"Database
+   `SQLException`, and `instance? SQLException` reported WGE-303 \"Database
    Connection Failed — verify the database is running\" (BOU-323).
 
    Returns a map with :code, :category, :exception, :data, :source

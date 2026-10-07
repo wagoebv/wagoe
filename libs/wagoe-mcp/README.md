@@ -19,7 +19,7 @@ This README is layered, read as far as you need:
 2. **[Using it](#2-using-it)** — wire it into Claude Code / Cursor and a worked walkthrough.
 3. **[How it works](#3-how-it-works-architecture)** — architecture for contributors.
 
-For the dense reference (every tool's inputs, every BND code, line refs), see
+For the dense reference (every tool's inputs, every WGE code, line refs), see
 [`AGENTS.md`](./AGENTS.md). This README is the narrative; `AGENTS.md` is the spec.
 
 ---
@@ -87,7 +87,7 @@ Two properties make this trustworthy:
   privilege, not the most.
 - **Enforced before work runs.** A `:execute` tool called in prod is denied at
   dispatch — before a line of code executes — and the agent gets a structured
-  explanation of _why_ (a `BND-8xx` guardrail with the rule, the principle, and
+  explanation of _why_ (a `WGE-8xx` guardrail with the rule, the principle, and
   the fix).
 
 ### The leverage: the closed verify loop
@@ -100,7 +100,7 @@ generate → write files → clj-kondo → FC/IS check → run affected tests �
 ```
 
 The agent gets back a precise report: which step failed, which file and line,
-which BND code, the expected vs actual. So instead of "I scaffolded a module,
+which WGE code, the expected vs actual. So instead of "I scaffolded a module,
 hope it's right," the loop is:
 
 > scaffold → _"FC/IS violation: core/invoice.clj:12 imports shell"_ → agent fixes it → re-verify → pass.
@@ -112,7 +112,7 @@ The guardrails distinguish **hard** failures from **soft** ones:
 
 - **Hard** (kondo errors, failing tests): not bypassable. The code doesn't
   compile or doesn't pass — there's nothing to override.
-- **Soft** (FC/IS `BND-806`, naming conventions `BND-807`): bypassable with an
+- **Soft** (FC/IS `WGE-806`, naming conventions `WGE-807`): bypassable with an
   explicit `"allow": true`, which is **audited**. "Guardrail, not straitjacket" —
   a deliberate override is allowed and recorded; an accidental one is blocked.
 
@@ -230,7 +230,7 @@ and `env`.
 
 | Tool | What you ask it for |
 |------|---------------------|
-| `explain-error` | Paste a stacktrace → summary + the matching `BND-xxx` rule, principle, and fix |
+| `explain-error` | Paste a stacktrace → summary + the matching `WGE-xxx` rule, principle, and fix |
 | `lint` | clj-kondo findings (file/row/col/level/message) for given paths |
 | `validate-schema` | Check a value against a Malli schema → humanized errors |
 | `describe-module` | A module's deps, ports, libraries — from the live project, not docs |
@@ -293,14 +293,14 @@ tests — and returns a structured report:
   "files":  [{"path":"src/wagoe/invoice/core/invoice.clj","action":"created"}, ...],
   "issues": [
     {"step":"fc-is","severity":"error","file":"src/wagoe/invoice/core/invoice.clj",
-     "line":7,"code":"BND-806","message":"core/ must not import shell"}
+     "line":7,"code":"WGE-806","message":"core/ must not import shell"}
   ],
   "counts": {"errors":1,"warnings":0},
   "steps":  ["kondo","fc-is","tests"]
 }
 ```
 
-**4. The agent reads the report and fixes it** — it sees `BND-806` at line 7,
+**4. The agent reads the report and fixes it** — it sees `WGE-806` at line 7,
 removes the offending `:require`, re-runs `scaffold-module` (or edits + re-lints).
 Now: `"status":"pass"`. No human approved anything; the framework's rule did the
 reviewing.
@@ -314,7 +314,7 @@ reviewing.
 ```
 
 Try that same `run-tests` call with `WAG_ENV=prod` and it's denied at dispatch
-with a `BND-803` guardrail _before anything runs_ — the enclosure holding.
+with a `WGE-803` guardrail _before anything runs_ — the enclosure holding.
 
 ### A preview/dry-run safety valve
 
@@ -348,7 +348,7 @@ src/wagoe/mcp/
     ├── codec.clj      #   cheshire JSON ↔ data (kept out of core)
     ├── context.clj    #   read env → security context
     ├── audit.clj      #   AuditLog sinks (stderr JSON + in-memory)
-    ├── guardrail.clj  #   guardrail payloads from the devtools BND catalog (I/O lookup)
+    ├── guardrail.clj  #   guardrail payloads from the devtools WGE catalog (I/O lookup)
     ├── system_source.clj  # SystemSource adapter (in-process file reflection now; nREPL later)
     ├── tools.clj      #   the tool executors (all three tiers)
     ├── verify.clj     #   verify-loop steps: kondo + FC/IS + tests over written files
@@ -379,7 +379,7 @@ Every `tools/call` and `resources/read` passes through `shell/dispatch`, which:
 1. Calls **`core/security/authorize`** with the context + tool's capability — a
    pure decision returning `{:allow? :violation :reason ...}`.
 2. On **deny**, builds the structured guardrail payload (`shell/guardrail`, which
-   looks the BND text up in the shared `devtools` catalog — the single source of
+   looks the WGE text up in the shared `devtools` catalog — the single source of
    truth) and does nothing else.
 3. On **allow**, runs the executor and **audits** the outcome.
 
@@ -432,7 +432,7 @@ still returns `{:status :unavailable}` — never a silent empty answer.
    `wagoe.mcp.ports/Transport`; the serve loop is transport-agnostic.
 
 See [`AGENTS.md`](./AGENTS.md) for the full reference: every tool's exact inputs
-and outputs, every BND guardrail code, the ADRs (ADR-031 gating, ADR-032
+and outputs, every WGE guardrail code, the ADRs (ADR-031 gating, ADR-032
 guardrails, ADR-033 reflective resources, ADR-034 verify loop), and file:line
 pointers.
 

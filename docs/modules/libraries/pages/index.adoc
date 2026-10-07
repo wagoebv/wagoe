@@ -115,7 +115,7 @@ from application code.
 | Library | Purpose
 
 | xref:devtools.adoc[devtools]
-| Dev-only: error pipeline (BND codes), dev dashboard (localhost:9999), REPL power tools, guidance engine, request recording, AI REPL commands.
+| Dev-only: error pipeline (WGE codes), dev dashboard (localhost:9999), REPL power tools, guidance engine, request recording, AI REPL commands.
 
 | xref:tools.adoc[tools]
 | Dev-only: deploy to Clojars, config doctor, setup wizard, scaffolder integration, quality checks, i18n management.

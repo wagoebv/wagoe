@@ -5,7 +5,7 @@
 
 (deftest ^:unit format-enriched-error-test
   (testing "enriched error with all fields"
-    (let [enriched {:code "BND-201"
+    (let [enriched {:code "WGE-201"
                     :category :validation
                     :data {:schema :user/create}
                     :stacktrace {:user-frames [{:ns "wagoe.user.core.validation"
@@ -19,26 +19,26 @@
                           :label "Apply pending migration"
                           :safe? true}
                     :dashboard-url "http://localhost:9999/dashboard/errors"
-                    :docs-url "https://wagoe.dev/errors/BND-201"}
+                    :docs-url "https://wagoe.dev/errors/WGE-201"}
           output (formatter/format-enriched-error enriched)]
-      (is (str/includes? output "BND-201"))
+      (is (str/includes? output "WGE-201"))
       (is (str/includes? output "Your code"))
       (is (str/includes? output "(fix!)"))
       (is (str/includes? output "localhost:9999"))))
 
   (testing "enriched error without fix"
-    (let [enriched {:code "BND-402"
+    (let [enriched {:code "WGE-402"
                     :category :auth
                     :data {}
                     :stacktrace {:user-frames [] :framework-frames [] :jvm-frames [] :total-hidden 3}
                     :dashboard-url "http://localhost:9999/dashboard/errors"
-                    :docs-url "https://wagoe.dev/errors/BND-402"}
+                    :docs-url "https://wagoe.dev/errors/WGE-402"}
           output (formatter/format-enriched-error enriched)]
-      (is (str/includes? output "BND-402"))
+      (is (str/includes? output "WGE-402"))
       (is (not (str/includes? output "(fix!)")))))
 
   (testing "enriched error with suggestions renders them"
-    (let [enriched {:code "BND-201"
+    (let [enriched {:code "WGE-201"
                     :category :validation
                     :data {}
                     :suggestions ["Did you mean :active? (instead of :actve)"]}
@@ -46,7 +46,7 @@
       (is (str/includes? output "Did you mean"))))
 
   (testing "enriched error without suggestions omits suggestion block"
-    (let [enriched {:code "BND-201"
+    (let [enriched {:code "WGE-201"
                     :category :validation
                     :data {}
                     :suggestions []}

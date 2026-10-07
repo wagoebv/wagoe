@@ -63,7 +63,7 @@ You get: SQLite database (zero-config, and your data survives a restart), HTTP s
 ```bash
 wagoe doctor      # checks the project and prints the one thing to fix
 bb guide          # topic guides: scaffold, testing, database, fcis, config
-bb guide error BND-201   # what an error code means and how to fix it
+bb guide error WGE-201   # what an error code means and how to fix it
 ```
 
 `wagoe doctor` runs the environment, config, command and project-setup checks in

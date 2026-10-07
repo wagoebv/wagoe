@@ -503,7 +503,7 @@ In deps.edn but not switched on. `wagoe add <module>` writes its config key.
 | events | Event bus for cross-process, asynchronous module communication — in-memory and Redis Streams | `wagoe add events` |
 | audience | Rule-based audience segmentation with SQL + predicate pipeline | `wagoe add audience` |
 | admin | Admin UI with entity config, HTMX forms | `wagoe add admin` |
-| devtools | Dev-only: error pipeline with BND codes, REPL helpers, dashboard component | `wagoe add devtools` |
+| devtools | Dev-only: error pipeline with WGE codes, REPL helpers, dashboard component | `wagoe add devtools` |
 
 <!-- /wagoe:available-modules -->
 

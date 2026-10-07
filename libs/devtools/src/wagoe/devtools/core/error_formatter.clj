@@ -17,7 +17,7 @@
 (defn format-error
   "Format a rich error message for development output.
    `error-info` is a map with:
-     :code       - BND-xxx error code string
+     :code       - WGE-xxx error code string
      :handler    - handler keyword (optional)
      :schema     - schema name (optional)
      :errors     - seq of {:field :message :suggestion} maps (optional)
@@ -54,7 +54,7 @@
 (defn format-config-error
   "Format a configuration error with specific fix instructions.
    `error-info` is a map with:
-     :code      - BND-1xx error code
+     :code      - WGE-1xx error code
      :config-key - the config key path (e.g. :wagoe/user-service :jwt-secret)
      :expected   - what was expected (e.g. \"#env JWT_SECRET\")
      :found      - what was found (e.g. nil)
@@ -82,7 +82,7 @@
      :requires-ns - the shell namespace it incorrectly requires
      :module      - the module name"
   [{:keys [source-ns requires-ns module]}]
-  (str (separator "BND-601" "FC/IS Boundary Violation") "\n"
+  (str (separator "WGE-601" "FC/IS Boundary Violation") "\n"
        source-ns " requires " requires-ns "\n"
        "\n"
        "Why this matters: Core namespaces must be pure functions \u2014 no I/O,\n"
@@ -97,7 +97,7 @@
 
 (defn format-enriched-error
   "Format a fully enriched error map for rich development output.
-   Combines the BND code header, stack trace, and auto-fix suggestion.
+   Combines the WGE code header, stack trace, and auto-fix suggestion.
 
    opts (optional):
      :guidance-level — :full (default), :minimal, or :off

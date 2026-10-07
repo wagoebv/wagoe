@@ -17,21 +17,27 @@
       (is (string? (:description entry)) (str code " missing :description"))
       (is (string? (:fix entry)) (str code " missing :fix"))))
 
-  (testing "error codes follow BND-xxx format"
+  (testing "error codes follow WGE-xxx format"
     (doseq [code (keys @help/error-catalog)]
-      (is (re-matches #"BND-\d{3}" code)
+      (is (re-matches #"WGE-\d{3}" code)
           (str "invalid error code format: " code))))
 
   (testing "runtime codes are present"
-    (is (some? (get @help/error-catalog "BND-201")) "BND-201 must resolve")
-    (is (some? (get @help/error-catalog "BND-601")) "BND-601 must resolve"))
+    (is (some? (get @help/error-catalog "WGE-201")) "WGE-201 must resolve")
+    (is (some? (get @help/error-catalog "WGE-601")) "WGE-601 must resolve"))
 
   (testing "both families present"
     (let [codes (set (keys @help/error-catalog))]
-      (is (some #(str/starts-with? % "BND-1") codes) "BND-1xx config family")
-      (is (some #(str/starts-with? % "BND-2") codes) "BND-2xx validation family")
-      (is (some #(str/starts-with? % "BND-6") codes) "BND-6xx FC/IS family")
-      (is (some #(str/starts-with? % "BND-7") codes) "BND-7xx tooling family"))))
+      (is (some #(str/starts-with? % "WGE-1") codes) "WGE-1xx config family")
+      (is (some #(str/starts-with? % "WGE-2") codes) "WGE-2xx validation family")
+      (is (some #(str/starts-with? % "WGE-6") codes) "WGE-6xx FC/IS family")
+      (is (some #(str/starts-with? % "WGE-7") codes) "WGE-7xx tooling family"))))
+
+(deftest ^:unit guide-error-accepts-pre-1-0-1-codes
+  (testing "`bb guide error` resolves the old BND- spelling (BOU-603)"
+    (let [output (with-out-str (#'help/help-error (str "bnd" "-103")))]
+      (is (str/includes? output "WGE-103"))
+      (is (not (str/includes? output "Unknown error code"))))))
 
 ;; BOU-76: namespace-load must not depend on the catalogue resource, so that a
 ;; consumer project depending on wagoe-tools alone can run any bb task.
@@ -47,7 +53,7 @@
 
   (testing "`bb guide error` degrades gracefully when catalogue is empty"
     (with-redefs [help/error-catalog (delay {})]
-      (let [output (with-out-str (#'help/help-error "BND-003"))]
+      (let [output (with-out-str (#'help/help-error "WGE-003"))]
         (is (re-find #"(?i)not available" output))))))
 
 ;; =============================================================================

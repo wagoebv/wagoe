@@ -86,7 +86,7 @@ malformed body, an unknown route or method:
 ----
 
 `type` and `message` are always there. `details` and `correlation-id` are
-there when the error has them, and `dev` (the BND code, dev only) sits beside
+there when the error has them, and `dev` (the WGE code, dev only) sits beside
 them. Everything is inside `error`, so a client reads one key. The correlation
 id is also the `X-Correlation-ID` response header.
 

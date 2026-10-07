@@ -5,7 +5,7 @@
                 \"message\":        \"User not found\",
                 \"details\":        {...},    ; optional
                 \"correlation-id\": \"...\",  ; optional
-                \"dev\":            {...}}}   ; optional, dev only (BND code)
+                \"dev\":            {...}}}   ; optional, dev only (WGE code)
 
    Everything about the failure sits inside `error`, so a client reads one
    key. `type` is a string: the `:type` keyword of the ex-info, without its

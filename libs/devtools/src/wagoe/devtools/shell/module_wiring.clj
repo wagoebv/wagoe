@@ -14,7 +14,7 @@
    pipeline has nothing to say about it.
 
    This is what turns a 400 that reads \"Validation failed\" into one that names
-   BND-201 and the field to add. It also records the error for the dashboard,
+   WGE-201 and the field to add. It also records the error for the dashboard,
    so the page shows what the API returned rather than a separate story.
 
    Returned as a plain fn: platform calls `(enrich ex)` and knows nothing about
@@ -82,7 +82,7 @@
   "This module's Integrant entries, for `wagoe.platform.shell.system.config`.
 
    Two keys, so it dispatches on `:module-key`: the HTTP error enricher, which
-   makes an error over HTTP answer with its BND code and the fix instead of
+   makes an error over HTTP answer with its WGE code and the fix instead of
    \"Validation failed\", and the dev dashboard.
 
    Both are dev-only. devtools lives in the `:repl` alias, so a project running
