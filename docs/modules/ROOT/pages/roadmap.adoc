@@ -1,7 +1,7 @@
 = Roadmap
-:description: Where Wagoe is at 1.0.0, what is left before the public launch, and what comes after.
+:description: Where Wagoe is at 1.0.1, what is left before the public launch, and what comes after.
 
-Wagoe is at `1.0.0`. This page is the public view of what is built, what
+Wagoe is at `1.0.1`. This page is the public view of what is built, what
 is left before the public launch, and what we intend to build after it.
 
 It is a statement of intent, not a delivery commitment. Dates are deliberately

@@ -1,11 +1,11 @@
-{:cli-version       "1.0.0"
- :catalogue-version "1.0.0"
+{:cli-version       "1.0.1"
+ :catalogue-version "1.0.1"
  :modules
  [;; ─── Core (always included) ───────────────────────────────────────────────
   {:name                "config"
    :description         "Aero config loading and the typed accessors libraries read through"
    :clojars             com.wagoe/wagoe-config
-   :version             "1.0.0"
+   :version             "1.0.1"
    :category            :core
    :tier                :incubating
    :config-snippet      ""
@@ -16,7 +16,7 @@
   {:name                "core"
    :description         "Pure validation, case conversion, interceptor pipeline, feature flags"
    :clojars             com.wagoe/wagoe-core
-   :version             "1.0.0"
+   :version             "1.0.1"
    :category            :core
    :tier                :stable
    :config-snippet      ""
@@ -27,7 +27,7 @@
   {:name                "observability"
    :description         "Interceptor-based metrics, logging, and error reporting"
    :clojars             com.wagoe/wagoe-observability
-   :version             "1.0.0"
+   :version             "1.0.1"
    :category            :core
    :tier                :stable
    :config-snippet      "  :wagoe/metrics\n  {:provider :no-op}\n\n  :wagoe/error-reporting\n  {:provider :no-op}\n"
@@ -38,7 +38,7 @@
   {:name                "platform"
    :description         "HTTP server, Reitit router, Ring middleware pipeline"
    :clojars             com.wagoe/wagoe-platform
-   :version             "1.0.0"
+   :version             "1.0.1"
    :category            :core
    :tier                :stable
    :config-snippet      "  :wagoe/http\n  {:port #or [#env HTTP_PORT 3000] :host \"0.0.0.0\" :join? false}\n\n  :wagoe/router\n  {:coercion :malli :middleware []}\n"
@@ -49,7 +49,7 @@
   {:name                "user"
    :description         "Authentication, JWT, MFA, user management"
    :clojars             com.wagoe/wagoe-user
-   :version             "1.0.0"
+   :version             "1.0.1"
    :category            :core
    :tier                :stable
    :config-snippet      ""
@@ -64,7 +64,7 @@
   {:name                "payments"
    :description         "PSP abstraction — Mollie, Stripe, Mock checkout and webhook verification"
    :clojars             com.wagoe/wagoe-payments
-   :version             "1.0.0"
+   :version             "1.0.1"
    :category            :optional
    :tier                :incubating
    ;; The mock accepts any webhook as paid, so it stays in dev and test
@@ -80,7 +80,7 @@
   {:name                "storage"
    :description         "File storage — local filesystem and S3, image processing"
    :clojars             com.wagoe/wagoe-storage
-   :version             "1.0.0"
+   :version             "1.0.1"
    :category            :optional
    :tier                :stable
    :config-snippet      "  :wagoe/storage\n  {:provider :local :root \"uploads\"}\n"
@@ -91,7 +91,7 @@
   {:name                "jobs"
    :description         "Background job processing with retry logic"
    :clojars             com.wagoe/wagoe-jobs
-   :version             "1.0.0"
+   :version             "1.0.1"
    :category            :optional
    :tier                :stable
    ;; In memory a queue is per process; prod queues in its database.
@@ -107,7 +107,7 @@
   {:name                "email"
    :description         "SMTP email sending, async and queued modes"
    :clojars             com.wagoe/wagoe-email
-   :version             "1.0.0"
+   :version             "1.0.1"
    :category            :optional
    :tier                :stable
    :dev-config-snippet  "  :wagoe.external/smtp\n  {:host #or [#env SMTP_HOST \"localhost\"] :port 1025 :tls? false :from \"no-reply@localhost\"}\n"
@@ -122,7 +122,7 @@
   {:name                "cache"
    :description         "Distributed caching — Redis or in-memory, TTL, atomic ops"
    :clojars             com.wagoe/wagoe-cache
-   :version             "1.0.0"
+   :version             "1.0.1"
    :category            :optional
    :tier                :stable
    :dev-config-snippet  "  :wagoe/cache\n  {:provider :memory :default-ttl 300}\n"
@@ -135,7 +135,7 @@
   {:name                "search"
    :description         "Full-text search"
    :clojars             com.wagoe/wagoe-search
-   :version             "1.0.0"
+   :version             "1.0.1"
    :category            :optional
    :tier                :stable
    :config-snippet      "  :wagoe/search\n  {}\n"
@@ -146,7 +146,7 @@
   {:name                "realtime"
    :description         "WebSocket pub/sub messaging"
    :clojars             com.wagoe/wagoe-realtime
-   :version             "1.0.0"
+   :version             "1.0.1"
    :category            :optional
    :tier                :stable
    :dev-config-snippet  "  :wagoe/realtime\n  {:provider :memory}\n"
@@ -159,7 +159,7 @@
   {:name                "tenant"
    :description         "Multi-tenancy with schema-per-tenant isolation"
    :clojars             com.wagoe/wagoe-tenant
-   :version             "1.0.0"
+   :version             "1.0.1"
    :category            :optional
    :tier                :stable
    ;; Warned at `wagoe add` for each profile on anything else (BOU-576).
@@ -172,7 +172,7 @@
   {:name                "ai"
    :description         "Multi-provider AI — Ollama, Anthropic Claude, OpenAI"
    :clojars             com.wagoe/wagoe-ai
-   :version             "1.0.0"
+   :version             "1.0.1"
    :category            :optional
    :tier                :incubating
    ;; A build-time tool: dev only, as `bb setup` has it.
@@ -185,7 +185,7 @@
   {:name                "external"
    :description         "External service adapters — Twilio, SMTP, IMAP"
    :clojars             com.wagoe/wagoe-external
-   :version             "1.0.0"
+   :version             "1.0.1"
    :category            :optional
    :tier                :incubating
    :config-snippet      ""
@@ -196,7 +196,7 @@
   {:name                "workflow"
    :description         "Workflow orchestration with state machines"
    :clojars             com.wagoe/wagoe-workflow
-   :version             "1.0.0"
+   :version             "1.0.1"
    :category            :optional
    :tier                :incubating
    :config-snippet      "  :wagoe/workflow\n  {}\n"
@@ -207,7 +207,7 @@
   {:name                "reports"
    :description         "PDF/CSV export and scheduled report generation"
    :clojars             com.wagoe/wagoe-reports
-   :version             "1.0.0"
+   :version             "1.0.1"
    :category            :optional
    :tier                :incubating
    :config-snippet      "  ;; Report definitions are registered in code with `defreport`.\n  :wagoe/reports\n  {:enabled? true}\n"
@@ -220,7 +220,7 @@
   {:name                "calendar"
    :description         "iCal, RRULE recurrence, conflict detection, Hiccup UI"
    :clojars             com.wagoe/wagoe-calendar
-   :version             "1.0.0"
+   :version             "1.0.1"
    :category            :optional
    :tier                :stable
    :config-snippet      "  :wagoe/calendar\n  {:enabled? true}\n"
@@ -233,7 +233,7 @@
   {:name                "geo"
    :description         "Multi-provider geocoding (OSM/Google/Mapbox), Haversine distance"
    :clojars             com.wagoe/wagoe-geo
-   :version             "1.0.0"
+   :version             "1.0.1"
    :category            :optional
    :tier                :incubating
    :config-snippet      "  :wagoe/geo-service\n  {:provider :openstreetmap}\n"
@@ -244,7 +244,7 @@
   {:name                "i18n"
    :description         "Marker-based i18n, translation catalogues, locale chains"
    :clojars             com.wagoe/wagoe-i18n
-   :version             "1.0.0"
+   :version             "1.0.1"
    :category            :optional
    :tier                :stable
    :config-snippet      "  :wagoe/i18n\n  {:default-locale :en}\n"
@@ -257,7 +257,7 @@
   {:name                "push"
    :description         "Multi-platform push notifications — FCM (Firebase) + APNs (Apple)"
    :clojars             com.wagoe/wagoe-push
-   :version             "1.0.0"
+   :version             "1.0.1"
    :category            :optional
    :tier                :stable
    :config-snippet      "  :wagoe/push\n  {:fcm-credentials  {:project-id       #env WAG_PUSH_FCM_PROJECT_ID\n                     :credentials-path #env WAG_PUSH_FCM_CREDENTIALS_PATH}\n   :apns-credentials {:team-id   #env WAG_PUSH_APNS_TEAM_ID\n                      :key-id    #env WAG_PUSH_APNS_KEY_ID\n                      :key-path  #env WAG_PUSH_APNS_KEY_PATH\n                      :bundle-id #env WAG_PUSH_APNS_BUNDLE_ID}}\n"
@@ -268,7 +268,7 @@
   {:name                "events"
    :description         "Event bus for cross-process, asynchronous module communication \u2014 in-memory and Redis Streams"
    :clojars             com.wagoe/wagoe-events
-   :version             "1.0.0"
+   :version             "1.0.1"
    :category            :optional
    :tier                :stable
    ;; Dev runs in one process, so it needs no Redis; prod does (BOU-564).
@@ -283,7 +283,7 @@
   {:name                "audience"
    :description         "Rule-based audience segmentation with SQL + predicate pipeline"
    :clojars             com.wagoe/wagoe-audience
-   :version             "1.0.0"
+   :version             "1.0.1"
    :category            :optional
    :tier                :incubating
    :config-snippet      "  ;; Segments the users table. :users-table and :users-field-mapping\n  ;; say where to read and what the filter columns are called there.\n  :wagoe/audience\n  {:enabled? true}\n"
@@ -297,7 +297,7 @@
   {:name                "admin"
    :description         "Admin UI with entity config, HTMX forms"
    :clojars             com.wagoe/wagoe-admin
-   :version             "1.0.0"
+   :version             "1.0.1"
    :category            :optional
    :tier                :stable
    :config-snippet      "  :wagoe/admin\n  {:enabled? true :base-path \"/web/admin\" :require-role :admin}\n"
@@ -317,7 +317,7 @@
   {:name                "ui-style"
    :description         "Shared CSS/JS style bundles — :base, :pilot, :admin-pilot"
    :clojars             com.wagoe/wagoe-ui-style
-   :version             "1.0.0"
+   :version             "1.0.1"
    :category            :optional
    :tier                :stable
    :config-snippet      ""
@@ -330,7 +330,7 @@
   {:name                "devtools"
    :description         "Dev-only: error pipeline with WGE codes, REPL helpers, dashboard component"
    :clojars             com.wagoe/wagoe-devtools
-   :version             "1.0.0"
+   :version             "1.0.1"
    :category            :optional
    :tier                :tooling
    ;; Dev-only. `wagoe add devtools` puts this in the :repl alias, not :deps —

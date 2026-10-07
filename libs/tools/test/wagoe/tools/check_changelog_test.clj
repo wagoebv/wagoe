@@ -143,6 +143,18 @@
                          "### Breaking\n\n- **E** (X-5). Do e.")
             (released-stability "Two" ["a" "b"] "Four" "seven")))))
 
+(deftest ^:unit a-patch-release-is-held-to-the-1-0-0-rules
+  ;; 1.0.1 failed this gate with "no current version": the pattern knew only
+  ;; 1.0.0 and its candidates.
+  (let [page (str/replace (released-stability "Two" ["a" "b"] "Four" "seven")
+                          "| `1.0.0`\n" "| `1.0.1`\n")]
+    (is (empty? (sut/stability-findings released-changelog page)))
+    (testing "and still refuses an unreleased break"
+      (is (seq (sut/stability-findings
+                (str/replace released-changelog "### Fixed\n\n- **D** (X-4)."
+                             "### Breaking\n\n- **E** (X-5). Do e.")
+                page))))))
+
 (deftest ^:unit the-shipped-stability-page-agrees-with-the-changelog
   (is (empty? (sut/stability-findings (slurp "CHANGELOG.md")
                                       (slurp "docs/modules/ROOT/pages/stability.adoc")))))
