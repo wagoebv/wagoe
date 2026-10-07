@@ -262,7 +262,7 @@
   (boolean (dev-like-environments (or (detect-environment system) "development"))))
 
 (defn dev-error-info
-  "BND code, category and fix for `exception`, or nil.
+  "WGE code, category and fix for `exception`, or nil.
 
    Two conditions, both required. The app must have wired an enricher —
    `:wagoe/dev-error-enricher`, which only a dev config asks for — and the
@@ -511,7 +511,7 @@
                                              error-type [500]))
                           server-error? (>= status 500)
                           ;; Dev only, and only when the app wired an enricher:
-                          ;; the BND code and its fix. The one place a 5xx says
+                          ;; the WGE code and its fix. The one place a 5xx says
                           ;; more than "Internal Server Error", which is why it
                           ;; is gated twice (BOU-321).
                           dev-info      (dev-error-info system exception)]

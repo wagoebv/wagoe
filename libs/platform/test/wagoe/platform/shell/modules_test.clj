@@ -69,7 +69,7 @@
     (testing "the message names the key, the namespace it looked for, and the fix"
       (is (str/includes? (ex-message e) ":wagoe/tsaks"))
       (is (str/includes? (ex-message e) "acme.tsaks.shell.module-wiring")))
-    (testing "and carries a BND code so the error catalogue can explain it"
+    (testing "and carries a WGE code so the error catalogue can explain it"
       (is (= :wagoe/module-wiring-not-found (:type (ex-data e)))))))
 
 (deftest ^:unit a-module-is-looked-for-under-the-projects-namespace-first

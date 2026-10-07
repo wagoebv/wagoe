@@ -28,10 +28,11 @@
 
 ;; --- explain-error ----------------------------------------------------------
 ;; Deterministic: summarise the stacktrace (ai.core.context) and, if the text
-;; names a BND code, enrich with the catalog entry (rule / principle / fix).
+;; names a WGE code, enrich with the catalog entry (rule / principle / fix).
+;; The pre-1.0.1 BND- spelling is accepted and reported as its WGE- code.
 
 (defn- explain-error [{:keys [error]} _deps]
-  (let [code  (some-> error (->> (re-find #"BND-\d{3}")))
+  (let [code  (some->> error (re-find #"(?:WGE|BND)-\d{3}") codes/canonical-code)
         entry (when code (codes/lookup code))]
     (cond-> {:summary (context/summarise-stacktrace (or error "") 40)}
       code  (assoc :code code)

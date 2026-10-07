@@ -7,7 +7,7 @@
    Steps:
      * kondo  — clj-kondo over the written .clj files (static; in-process).
      * fcis   — wagoe.tools.check-fcis/check-file over written core/ files,
-                so FC/IS (BND-806) violations are caught per-file regardless of
+                so FC/IS (WGE-806) violations are caught per-file regardless of
                 the monorepo's `core-source-paths` discovery.
      * tests  — the project's affected tests, via an injected `:test-runner`
                 (a fn of the module name). The runner is injected, not hardcoded,
@@ -72,7 +72,7 @@
 
    Test roots are excluded. The scaffolder writes a module's unit tests to
    `test/<base>/<module>/core/`, so matching on `/core/` alone pulled the
-   generated test namespace in, and FC/IS then refused it with BND-806 for
+   generated test namespace in, and FC/IS then refused it with WGE-806 for
    requiring `clojure.test` — the verify loop failing a file the same call had
    just written, and reporting `status: fail` on a correct generation
    (BOU-515). `bb check:fcis` never had this problem because it walks `src/`."

@@ -447,7 +447,7 @@ NOPE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 http://localhost:300
 ok "/api/v1/tasks returned $MODULE_CODE with a JSON body, and unknown paths still 404"
 
 # ── are the devtools the docs point at on the classpath? ────────────────────
-# devtools ships the BND error pipeline, (fix!) and the dashboard, and until
+# devtools ships the WGE error pipeline, (fix!) and the dashboard, and until
 # BOU-318 it reached generated projects nowhere: not in :deps, not in the :repl
 # alias, not in the module catalogue. Loading it through the REPL that is
 # already running is the assert — a classpath grep would pass on a jar that
@@ -509,7 +509,7 @@ ok "(status), (modules) and (commands) work in the generated project"
 
 # ── does a bad request explain itself? ──────────────────────────────────────
 # A validation failure used to answer "Validation failed" and nothing else. The
-# pipeline that names the BND code and the fix lived in devtools, which reached
+# pipeline that names the WGE code and the fix lived in devtools, which reached
 # no downstream classpath, and its classifier did not recognise
 # :validation-error — the type every Wagoe handler raises (BOU-321).
 #
@@ -524,14 +524,14 @@ case "$LOGIN_CODE" in
   *)   head -c 400 /tmp/badreq.json 2>/dev/null; echo
        fail "POST /api/v1/auth/login with an empty body returned $LOGIN_CODE, expected 400" ;;
 esac
-grep -q "BND-" /tmp/badreq.json \
+grep -q "WGE-" /tmp/badreq.json \
   || { head -c 600 /tmp/badreq.json 2>/dev/null; echo
-       fail "the 400 carries no BND code — dev error enrichment is not wired in a generated project"; }
+       fail "the 400 carries no WGE code — dev error enrichment is not wired in a generated project"; }
 # The enrichment is dev-only. Nothing here can run the app as production — the
 # generated project has no prod config — so the negative is asserted in
 # wagoe.platform.shell.http.reitit-router-test and interceptors-test instead,
 # with the profile the wiring passes through.
-ok "a malformed request answers 400 with a BND code"
+ok "a malformed request answers 400 with a WGE code"
 
 # ── 9. is there anywhere to type (go)? ──────────────────────────────────────
 # `bb repl` started a headless nREPL server and nothing else, so the quickstart

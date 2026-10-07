@@ -111,7 +111,7 @@
   ;; the module wirings: :configuration-error in events, :validation-error in
   ;; storage — which mapped to a 400, telling the caller they had sent a bad
   ;; request when the server was misconfigured — and :internal-error here.
-  ;; One type now, and the BND classifier reads it for BND-102 "Unknown
+  ;; One type now, and the WGE classifier reads it for WGE-102 "Unknown
   ;; Provider" (BOU-323).
   (testing "an unknown provider names itself"
     (let [ex   (config-error {:provider :paypal})

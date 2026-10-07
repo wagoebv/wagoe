@@ -39,7 +39,7 @@
                :target-dir class-dir})
   ;; BOU-76: ship the shared error catalogue inside the wagoe-tools jar so
   ;; consumer projects that depend on wagoe-tools alone (without
-  ;; wagoe-devtools) can run `bb guide error BND-xxx` and don't crash on
+  ;; wagoe-devtools) can run `bb guide error WGE-xxx` and don't crash on
   ;; namespace-load of wagoe.tools.help. Source of truth lives in
   ;; libs/devtools/resources; copied here at build time.
   (b/copy-file {:src    "../devtools/resources/wagoe/devtools/error_catalog.edn"

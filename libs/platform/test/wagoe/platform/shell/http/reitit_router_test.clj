@@ -482,19 +482,19 @@
                              true)
                           [:error :details]))]
     (is (= {:role ["missing required key"]}
-           (details {:error-enricher (constantly {:code "BND-201"}) :environment "dev"})))
+           (details {:error-enricher (constantly {:code "WGE-201"}) :environment "dev"})))
     (is (= {:role ["invalid"]}
-           (details {:error-enricher (constantly {:code "BND-201"}) :environment "prod"})))))
+           (details {:error-enricher (constantly {:code "WGE-201"}) :environment "prod"})))))
 
-(deftest ^:unit coercion-failures-carry-the-bnd-code-in-dev-only
-  (let [enricher (fn [_] {:code "BND-201" :category :validation})
+(deftest ^:unit coercion-failures-carry-the-wge-code-in-dev-only
+  (let [enricher (fn [_] {:code "WGE-201" :category :validation})
         body-of  (fn [system]
                    (error-body ((login-like-handler system) {:request-method :post
                                                              :uri            "/auth/login"
                                                              :headers        {}
                                                              :body-params    {}})))]
     (testing "dev"
-      (is (= "BND-201" (get-in (body-of {:error-enricher enricher :environment "development"})
+      (is (= "WGE-201" (get-in (body-of {:error-enricher enricher :environment "development"})
                                [:dev :code]))))
 
     (testing "production, with the same enricher wired"

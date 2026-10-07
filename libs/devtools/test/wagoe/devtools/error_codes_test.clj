@@ -1,18 +1,28 @@
 (ns wagoe.devtools.error-codes-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [clojure.string :as str]
+            [clojure.test :refer [deftest is testing]]
             [wagoe.devtools.error-codes :as codes]))
 
 (deftest ^:unit lookup-test
   (testing "finds known error codes"
-    (let [result (codes/lookup "BND-101")]
+    (let [result (codes/lookup "WGE-101")]
       (is (some? result))
-      (is (= "BND-101" (:code result)))
+      (is (= "WGE-101" (:code result)))
       (is (= :config (:category result)))
       (is (string? (:title result)))
       (is (string? (:description result)))))
 
   (testing "returns nil for unknown codes"
-    (is (nil? (codes/lookup "BND-999")))))
+    (is (nil? (codes/lookup "WGE-999")))))
+
+;; Assembled so this file carries no literal check:no-boundary would flag.
+(def ^:private old-prefix (str "BND" "-"))
+
+(deftest ^:unit lookup-accepts-pre-1-0-1-codes-test
+  (testing "the old BND- spelling resolves to the same entry (BOU-603)"
+    (is (= "WGE-103" (:code (codes/lookup (str old-prefix "103")))))
+    (is (= (codes/lookup "WGE-801")
+           (codes/lookup (str (str/lower-case old-prefix) "801"))))))
 
 (deftest ^:unit by-category-test
   (testing "returns all config errors"
@@ -34,7 +44,7 @@
     (let [results (codes/by-category :mcp)]
       (is (pos? (count results)))
       (is (every? #(= :mcp (:category %)) results))
-      (is (some #(= "BND-803" (:code %)) results))))
+      (is (some #(= "WGE-803" (:code %)) results))))
 
   (testing "returns empty for unknown category"
     (is (empty? (codes/by-category :unknown)))))

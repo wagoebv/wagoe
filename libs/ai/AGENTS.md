@@ -13,7 +13,7 @@
 6. **Admin Entity Generator** — generate admin UI entity EDN config from a description (`bb ai admin-entity "..."`)
 7. **Setup Parser** — parse a NL project setup description into a config spec (`bb setup ai "..."`)
 
-**Experimental (1.0):** 2, 3 and 4 can give confidently wrong answers (BOU-511/512/513); review their output. `bb ai explain` prints the error's own BND code and `Fix:` text before the model's summary.
+**Experimental (1.0):** 2, 3 and 4 can give confidently wrong answers (BOU-511/512/513); review their output. `bb ai explain` prints the error's own WGE code and `Fix:` text before the model's summary.
 
 **Provider strategy:** offline-first via Ollama (no data leaves the machine by default), with cloud opt-in via `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OPENAI_BASE_URL` (any OpenAI-compatible endpoint) or `REPLICATE_API_TOKEN` (hosted, no local GPU). Setting one takes precedence over `config.edn`, so opting in needs no config edit; the dev default stays local.
 

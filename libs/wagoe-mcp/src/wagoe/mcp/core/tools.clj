@@ -11,8 +11,8 @@
    (scaffold-module, add-field, gen-tests, gen-migration). Each runs the closed
    verify loop (generate → write → kondo → FC/IS → run affected tests →
    structured report) so the agent self-corrects. The `allow` flag requests an
-   audited override of the *soft* guardrails (FC/IS BND-806, convention
-   BND-807); kondo errors and test failures are never overridable.
+   audited override of the *soft* guardrails (FC/IS WGE-806, convention
+   WGE-807); kondo errors and test failures are never overridable.
 
    Tier 2 (BOU-102): :execute — the RCE surface, off by default (run-tests,
    eval, run-migration, query-db). The security gate denies :execute in every
@@ -23,7 +23,7 @@
 
 (def catalog
   [{:name        "explain-error"
-    :description "Explain a Clojure/Wagoe error or stacktrace: a concise summary plus any matching BND error code (rule, principle, fix)."
+    :description "Explain a Clojure/Wagoe error or stacktrace: a concise summary plus any matching WGE error code (rule, principle, fix)."
     :capability  :read
     :inputSchema {:type       "object"
                   :properties {"error" {:type "string"

@@ -1,7 +1,7 @@
 (ns wagoe.devtools.shell.fcis-checker
   "Post-reset namespace scanner for FC/IS violations.
-   Only detects BND-601: core namespace importing shell namespace via :require.
-   BND-602 (core uses I/O) is detected statically by bb check:fcis."
+   Only detects WGE-601: core namespace importing shell namespace via :require.
+   WGE-602 (core uses I/O) is detected statically by bb check:fcis."
   (:require [wagoe.devtools.core.error-formatter :as formatter]
             [clojure.java.io :as io]
             [clojure.string :as str]))

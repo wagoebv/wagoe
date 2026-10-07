@@ -328,7 +328,7 @@
                          "Reference a bundle from your page templates."]}
 
   {:name                "devtools"
-   :description         "Dev-only: error pipeline with BND codes, REPL helpers, dashboard component"
+   :description         "Dev-only: error pipeline with WGE codes, REPL helpers, dashboard component"
    :clojars             com.wagoe/wagoe-devtools
    :version             "1.0.0"
    :category            :optional

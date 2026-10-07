@@ -90,7 +90,7 @@
        (for [{:keys [code message count timestamp-ms]} entries]
          [:div.error-list-row
           [:span.error-code {:style "color: var(--color-red, #f87171); font-family: monospace; font-weight: bold;"}
-           (or code "BND-000")]
+           (or code "WGE-000")]
           [:span.error-message message]
           (when count
             (c/count-badge count "yellow"))

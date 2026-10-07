@@ -11,7 +11,7 @@ Framework-aware AI tooling for Wagoe applications. Unlike a generic assistant, i
 4. *SQL Copilot* (experimental) - translate a description into HoneySQL format
 5. *Documentation Wizard* - generate AGENTS.md, OpenAPI YAML, or README
 
-WARNING: The error explainer, test generator and SQL copilot are experimental for 1.0: their answers can be confidently wrong, so review them before use. `bb ai explain` prints the error's own BND code and `Fix:` text before the model's summary.
+WARNING: The error explainer, test generator and SQL copilot are experimental for 1.0: their answers can be confidently wrong, so review them before use. `bb ai explain` prints the error's own WGE code and `Fix:` text before the model's summary.
 
 == CLI commands
 

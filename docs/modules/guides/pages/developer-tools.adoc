@@ -29,9 +29,9 @@ it. Add to the `:active` section of `resources/conf/dev/config.edn`:
 
 The dashboard provides 10 pages: Overview, Routes, Requests, Schemas, Database, Errors, Jobs, Config, Security, and Docs. All pages use HTMX polling for live updates.
 
-== Using BND Error Codes
+== Using WGE Error Codes
 
-When an error occurs, the error pipeline classifies it with a BND code (e.g. `BND-201` for validation errors, `BND-601` for FC/IS violations). Each code comes with a human-readable explanation and fix suggestion.
+When an error occurs, the error pipeline classifies it with a WGE code (e.g. `WGE-201` for validation errors, `WGE-601` for FC/IS violations). Each code comes with a human-readable explanation and fix suggestion.
 
 === In the REPL
 
@@ -40,7 +40,7 @@ Errors are automatically classified when they occur. Use `(fix!)` to apply the s
 [source,clojure]
 ----
 ;; An error occurs...
-;; => BND-201: Malli validation failed for :user/CreateUser
+;; => WGE-201: Malli validation failed for :user/CreateUser
 ;;    Missing required key: :email
 ;;    Suggestion: Add :email to the input map
 
@@ -50,7 +50,7 @@ Errors are automatically classified when they occur. Use `(fix!)` to apply the s
 
 === In the Dashboard
 
-Navigate to `http://localhost:9999/dashboard/errors` to see all recent BND-coded errors with fix suggestions and stack traces.
+Navigate to `http://localhost:9999/dashboard/errors` to see all recent WGE-coded errors with fix suggestions and stack traces.
 
 === Error Code Reference
 
@@ -58,16 +58,16 @@ Navigate to `http://localhost:9999/dashboard/errors` to see all recent BND-coded
 |===
 | Range | Category
 
-| BND-1xx | Configuration (missing env vars, invalid providers, bad config structure)
-| BND-2xx | Validation (Malli schema failures, type mismatches)
-| BND-3xx | Persistence (SQL errors, migration issues, connection problems)
-| BND-4xx | Auth (JWT failures, session issues, permission denied)
-| BND-5xx | Interceptor pipeline (missing interceptors, execution errors)
-| BND-6xx | FC/IS violations (core importing shell, side effects in core)
-| BND-7xx | Tooling (circular library deps, admin entity config, wiring issues)
+| WGE-1xx | Configuration (missing env vars, invalid providers, bad config structure)
+| WGE-2xx | Validation (Malli schema failures, type mismatches)
+| WGE-3xx | Persistence (SQL errors, migration issues, connection problems)
+| WGE-4xx | Auth (JWT failures, session issues, permission denied)
+| WGE-5xx | Interceptor pipeline (missing interceptors, execution errors)
+| WGE-6xx | FC/IS violations (core importing shell, side effects in core)
+| WGE-7xx | Tooling (circular library deps, admin entity config, wiring issues)
 |===
 
-Use `bb guide error BND-xxx` to look up any code with its full explanation and fix.
+Use `bb guide error WGE-xxx` to look up any code with its full explanation and fix.
 
 == Inspecting Routes
 

@@ -264,7 +264,7 @@
   "Stands in for devtools: platform must not depend on it, and the interceptor
    only ever calls `(enrich ex)`."
   [_exception]
-  {:code "BND-201" :category :validation :fix "Add the missing field" :docs-url "https://x/BND-201"})
+  {:code "WGE-201" :category :validation :fix "Add the missing field" :docs-url "https://x/WGE-201"})
 
 (deftest ^:unit dev-error-enrichment-test
   (let [validation (ex-info "Validation failed" {:type :validation-error :errors {:title "required"}})
@@ -278,7 +278,7 @@
     (testing "a dev project that wired an enricher gets the code and the fix"
       (let [body (get-in (respond {:error-enricher stub-enricher :environment "development"} validation)
                          [:response :body :error])]
-        (is (= "BND-201" (get-in body [:dev :code])))
+        (is (= "WGE-201" (get-in body [:dev :code])))
         (is (= "Add the missing field" (get-in body [:dev :fix])))
         (testing "and the rest of the response is unchanged"
           (is (= "validation-error" (:type body)))
@@ -287,7 +287,7 @@
     (testing "a 5xx in dev says what went wrong, and still not what the message was"
       (let [body (get-in (respond {:error-enricher stub-enricher :environment "dev"} boom)
                          [:response :body :error])]
-        (is (= "BND-201" (get-in body [:dev :code])))
+        (is (= "WGE-201" (get-in body [:dev :code])))
         (is (= "Internal Server Error" (:message body)))
         (is (not (str/includes? (pr-str body) "hunter2")))))
 
@@ -297,7 +297,7 @@
       (doseq [env ["production" "prod" "staging"]]
         (let [body (get-in (respond {:error-enricher stub-enricher :environment env} validation)
                            [:response :body :error])]
-          (is (nil? (:dev body)) (str "leaked BND info in " env)))))
+          (is (nil? (:dev body)) (str "leaked WGE info in " env)))))
 
     (testing "no enricher wired, no :dev key"
       (is (nil? (get-in (respond {:environment "development"} validation) [:response :body :error :dev]))))

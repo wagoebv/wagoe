@@ -30,4 +30,7 @@
   ;; relocation. Whole-file exemption because the allowlist matches on path
   ;; prefix only — when editing the rest of this file, note the gate is blind
   ;; to it and check old coordinates by hand.
-  "dev-docs/reference/publishing.adoc"]}
+  "dev-docs/reference/publishing.adoc"
+  ;; ADRs record decisions as made, in the BND- error codes of the time
+  ;; (BOU-603). History, like CHANGELOG.md.
+  "dev-docs/adr/"]}

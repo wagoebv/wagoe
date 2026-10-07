@@ -26,12 +26,17 @@
       (is (false? (:valid? r)))
       (is (contains? (:errors r) :name)))))
 
-(deftest ^:unit explain-error-enriches-bnd-code
-  (testing "text naming a BND code is enriched from the catalog"
+(deftest ^:unit explain-error-enriches-wge-code
+  (testing "text naming a WGE code is enriched from the catalog"
     (let [r (tools/run (deps) "explain-error"
-                       {:error "Boot failed: BND-101 something about an env var"})]
-      (is (= "BND-101" (:code r)))
+                       {:error "Boot failed: WGE-101 something about an env var"})]
+      (is (= "WGE-101" (:code r)))
       (is (string? (:rule r)))
+      (is (string? (:fix r)))))
+  (testing "the pre-1.0.1 BND- spelling resolves to its WGE- code (BOU-603)"
+    (let [r (tools/run (deps) "explain-error"
+                       {:error (str "Boot failed: " "BND" "-101 missing env var")})]
+      (is (= "WGE-101" (:code r)))
       (is (string? (:fix r)))))
   (testing "plain error text still summarises"
     (let [r (tools/run (deps) "explain-error" {:error "NullPointerException at foo"})]

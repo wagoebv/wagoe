@@ -7,7 +7,7 @@
 ;;   bb guide                    # General help listing all commands
 ;;   bb guide next               # State-aware guidance (what to do next)
 ;;   bb guide <topic>            # Detailed help for a topic
-;;   bb guide error BND-xxx      # Look up an error code
+;;   bb guide error WGE-xxx      # Look up an error code
 
 (ns wagoe.tools.help
   (:require [wagoe.tools.check :as check]
@@ -37,7 +37,7 @@
     {}))
 
 (def error-catalog
-  "Delay of {BND-xxx code → {:code :category :title :description :fix}}.
+  "Delay of {WGE-xxx code → {:code :category :title :description :fix}}.
 
    Loaded lazily (not at namespace-load time) and degrades gracefully to {}
    when the resource is missing — see read-catalog. Deref with @error-catalog.
@@ -46,7 +46,7 @@
   (delay (read-catalog (io/resource "wagoe/devtools/error_catalog.edn"))))
 
 (def ^:private category-order
-  "Display order matching BND-1xx..7xx numerical range scheme."
+  "Display order matching WGE-1xx..7xx numerical range scheme."
   [:config :validation :persistence :auth :interceptor :fcis :tooling])
 
 (def ^:private category-label
@@ -289,7 +289,7 @@
   (println "  bb guide                               This listing")
   (println "  bb guide next                          State-aware guidance (what to do next)")
   (println "  bb guide <topic>                       Detailed help for a topic")
-  (println "  bb guide error BND-xxx                 Look up an error code")
+  (println "  bb guide error WGE-xxx                 Look up an error code")
   (println)
   (println (dim (str "Topics: " (str/join ", " (sort (keys topic-fns)))))))
 
@@ -468,13 +468,13 @@
         (println (bold "Error Code Reference"))
         (println)
         (println (dim "Ranges:"))
-        (println "  BND-1xx   Configuration (missing env vars, invalid providers, bad config)")
-        (println "  BND-2xx   Validation (Malli schema failures, type mismatches)")
-        (println "  BND-3xx   Persistence (SQL errors, migration issues, connection problems)")
-        (println "  BND-4xx   Auth (JWT failures, session issues, permission denied)")
-        (println "  BND-5xx   Interceptor pipeline (missing interceptors, execution errors)")
-        (println "  BND-6xx   FC/IS violations (core importing shell, side effects in core)")
-        (println "  BND-7xx   Tooling (circular deps, admin config, wiring issues)")
+        (println "  WGE-1xx   Configuration (missing env vars, invalid providers, bad config)")
+        (println "  WGE-2xx   Validation (Malli schema failures, type mismatches)")
+        (println "  WGE-3xx   Persistence (SQL errors, migration issues, connection problems)")
+        (println "  WGE-4xx   Auth (JWT failures, session issues, permission denied)")
+        (println "  WGE-5xx   Interceptor pipeline (missing interceptors, execution errors)")
+        (println "  WGE-6xx   FC/IS violations (core importing shell, side effects in core)")
+        (println "  WGE-7xx   Tooling (circular deps, admin config, wiring issues)")
         (println)
         (let [by-cat (group-by :category (vals catalog))]
           (doseq [cat category-order
@@ -484,18 +484,18 @@
             (doseq [{:keys [code title]} codes]
               (println (str "    " (cyan code) "  " title)))))
         (println)
-        (println (dim "Usage: bb guide error BND-xxx")))
+        (println (dim "Usage: bb guide error WGE-xxx")))
 
       :else
-      (let [upper-code (str/upper-case code)
+      (let [upper-code (str/replace (str/upper-case code) #"^BND-" "WGE-") ; pre-1.0.1 spelling
             entry      (get catalog upper-code)]
         (println)
         (if-not entry
           (do
             (println (red (str "Unknown error code: " upper-code)))
             (println)
-            (println (dim "Known ranges: BND-1xx config, BND-2xx validation, BND-3xx persistence,"))
-            (println (dim "              BND-4xx auth, BND-5xx interceptor, BND-6xx FC/IS, BND-7xx tooling"))
+            (println (dim "Known ranges: WGE-1xx config, WGE-2xx validation, WGE-3xx persistence,"))
+            (println (dim "              WGE-4xx auth, WGE-5xx interceptor, WGE-6xx FC/IS, WGE-7xx tooling"))
             (println (dim "Run `bb guide error` (no code) for the full listing.")))
           (do
             (println (bold (str upper-code " — " (:title entry))))

@@ -2,7 +2,7 @@
   "Pure construction of guardrail error payloads — \"guardrail, not
    straitjacket\" (ADR-032).
 
-   Every enforcing tool returns the same shape: the BND code + rule that fired,
+   Every enforcing tool returns the same shape: the WGE code + rule that fired,
    the principle behind it, a suggested fix, and — when the rule is overridable
    — the audited bypass.
 
@@ -14,22 +14,22 @@
        generated code. SOFT — bypassable per call with `--allow`, which is
        audited.
 
-   This namespace is pure: it maps a denial to a BND code and assembles the
+   This namespace is pure: it maps a denial to a WGE code and assembles the
    payload from a catalog entry passed in. The catalog lookup (I/O) lives in
    wagoe.mcp.shell.guardrail."
   (:require [wagoe.mcp.core.protocol :as proto]))
 
-;; Security/authorize :violation -> BND code (see devtools error catalog).
+;; Security/authorize :violation -> WGE code (see devtools error catalog).
 (def violation->code
-  {:disabled           "BND-801"
-   :unknown-capability "BND-802"
-   :tier-exceeded      "BND-803"
-   :read-only          "BND-804"
-   :allowlist          "BND-805"})
+  {:disabled           "WGE-801"
+   :unknown-capability "WGE-802"
+   :tier-exceeded      "WGE-803"
+   :read-only          "WGE-804"
+   :allowlist          "WGE-805"})
 
 ;; Codes whose guardrail may be bypassed per call with an audited override.
 ;; Security gates (8xx 801-805) are deliberately absent — they are hard.
-(def overridable-codes #{"BND-806" "BND-807"})
+(def overridable-codes #{"WGE-806" "WGE-807"})
 
 (defn overridable?
   [code]
@@ -42,9 +42,9 @@
 (defn from-denial
   "Map a `wagoe.mcp.core.security/authorize` denial to a guardrail
    descriptor: {:code :rule :reason :overridable? :context}. No catalog text —
-   the shell enriches it via the BND catalog."
+   the shell enriches it via the WGE catalog."
   [denial]
-  (let [code (get violation->code (:violation denial) "BND-800")]
+  (let [code (get violation->code (:violation denial) "WGE-800")]
     {:code         code
      :rule         (:violation denial)
      :reason       (:reason denial)
@@ -53,7 +53,7 @@
 
 (defn build
   "Assemble the full guardrail payload from a `descriptor` (from `from-denial`
-   or a codegen guardrail) and a BND `catalog-entry` map (or nil if the code is
+   or a codegen guardrail) and a WGE `catalog-entry` map (or nil if the code is
    unknown / the catalog is unavailable).
 
    Payload shape:

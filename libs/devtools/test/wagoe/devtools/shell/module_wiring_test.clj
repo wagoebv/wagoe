@@ -15,11 +15,11 @@
         info   (enrich (ex-info "Validation failed"
                                 {:type   :validation-error
                                  :errors {:title ["missing required key"]}}))]
-    (is (= "BND-201" (:code info)))
+    (is (= "WGE-201" (:code info)))
     (is (= :validation (:category info)))
 
     (testing "and it says where to read more"
-      (is (= "bb guide error BND-201" (:help info))))
+      (is (= "bb guide error WGE-201" (:help info))))
 
     (testing "nothing the HTTP layer should not hand out"
       ;; The formatted terminal block, the stacktrace and the raw exception stay
@@ -36,7 +36,7 @@
 (deftest ^:unit the-integrant-key-yields-a-callable-enricher
   (let [enrich (ig/init-key :wagoe/dev-error-enricher {})]
     (is (fn? enrich))
-    (is (= "BND-201" (:code (enrich (ex-info "x" {:type :validation-error :errors {}})))))
+    (is (= "WGE-201" (:code (enrich (ex-info "x" {:type :validation-error :errors {}})))))
     (is (nil? (ig/halt-key! :wagoe/dev-error-enricher enrich)))))
 
 (deftest ^:unit the-dashboard-is-assembled-from-config

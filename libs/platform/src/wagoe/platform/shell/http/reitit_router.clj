@@ -170,7 +170,7 @@
   "400 for a request the client got wrong, naming the fields.
 
    Which fields went wrong is what the caller sent. Why they are wrong is the schema
-   talking, so the full message is dev-only — the same gate the BND block uses."
+   talking, so the full message is dev-only — the same gate the WGE block uses."
   [system e request]
   (let [dev  (http-interceptors/dev-error-info system e)
         ;; This response never reaches the interceptor stack — it is produced

@@ -90,7 +90,7 @@ Add temporary logging in handlers:
     (throw (ex-info "Invalid UUID" {:type :validation-error :value id-string}))))
 ----
 
-=== An error response carries a BND code — where does it come from?
+=== An error response carries a WGE code — where does it come from?
 
 In dev, an error over HTTP answers with a `dev` block:
 
@@ -99,10 +99,13 @@ In dev, an error over HTTP answers with a `dev` block:
 {"error": {"type":    "validation-error",
            "message": "Request validation failed",
            "details": {"email": ["missing required key"]},
-           "dev":     {"code": "BND-201",
+           "dev":     {"code": "WGE-201",
                        "category": "validation",
-                       "docs-url": "bb guide error BND-201"}}}
+                       "docs-url": "bb guide error WGE-201"}}}
 ----
+
+Before 1.0.1 these codes were spelled `BND-NNN`; the number is unchanged, and
+`bb guide error` and the MCP `explain-error` tool still accept the old spelling.
 
 Three things have to be true for that block to appear, and each is deliberate:
 

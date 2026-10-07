@@ -1,5 +1,5 @@
 (ns wagoe.mcp.shell.guardrail
-  "Resolves guardrail payloads against the shared BND error catalog
+  "Resolves guardrail payloads against the shared WGE error catalog
    (wagoe.devtools.error-codes — the single source of truth). The catalog
    lookup loads a resource (I/O), so it lives in the shell; payload assembly
    stays pure in wagoe.mcp.core.guardrail."
@@ -8,7 +8,7 @@
 
 (defn payload-for-denial
   "Full guardrail payload for a `wagoe.mcp.core.security/authorize` denial,
-   enriched with the BND catalog entry (title / principle / fix)."
+   enriched with the WGE catalog entry (title / principle / fix)."
   [denial]
   (let [descriptor (guardrail/from-denial denial)
         entry      (codes/lookup (:code descriptor))]
@@ -20,8 +20,8 @@
   (guardrail/->jsonrpc-error id (payload-for-denial denial)))
 
 (defn payload-for-code
-  "Full guardrail payload for a codegen guardrail identified by BND `code`
-   (e.g. BND-806 FC/IS, BND-807 convention). `extra` merges into the descriptor
+  "Full guardrail payload for a codegen guardrail identified by WGE `code`
+   (e.g. WGE-806 FC/IS, WGE-807 convention). `extra` merges into the descriptor
    (e.g. {:reason ... :context {:tool ...}})."
   ([code] (payload-for-code code {}))
   ([code extra]

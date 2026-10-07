@@ -795,7 +795,7 @@
                    (disj (set (keys (:error (:body bad)))) :details)))))))))
 
 (deftest ^:integration a-duplicate-unique-value-is-a-conflict-on-its-field
-  ;; It answered 500 internal-error, BND-304 (BOU-590).
+  ;; It answered 500 internal-error, WGE-304 (BOU-590).
   (let [dir (temp-dir)
         r   (ports/generate-module svc {:module-name "billing" :base-ns "bou590"
                                         :entities    [{:name "Invoice"

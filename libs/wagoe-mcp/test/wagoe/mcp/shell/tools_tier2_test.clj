@@ -127,7 +127,7 @@
   (testing "prod (no-execute) refuses the Tier 2 tool with the tier-exceeded guardrail"
     (let [resp (call prod)]
       (is (= -32001 (get-in resp [:error :code])) "capability denial → app forbidden code")
-      (is (= "BND-803" (get-in resp [:error :data :code])) "tier-exceeded")))
+      (is (= "WGE-803" (get-in resp [:error :data :code])) "tier-exceeded")))
   (testing "dev (full) runs the Tier 2 tool"
     (let [resp (call dev)]
       (is (false? (get-in resp [:result :isError])))

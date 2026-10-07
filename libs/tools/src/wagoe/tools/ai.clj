@@ -137,13 +137,13 @@
       (str/replace #"\u001B[@-_]?" "")
       (str/replace #"[\p{Cc}&&[^\n]]" "")))
 
-(defn- bnd-fix-lines
-  "The `Fix:` lines inside a BND block, which devtools opens with a
-   `━━━ BND-301: Title ━━━` header and closes with a rule of `━`."
+(defn- wge-fix-lines
+  "The `Fix:` lines inside a WGE block, which devtools opens with a
+   `━━━ WGE-301: Title ━━━` header and closes with a rule of `━`."
   [lines]
   (:fixes (reduce (fn [{:keys [in-block?] :as acc} line]
                     (cond
-                      (re-find #"BND-\d{3}:" line)     (assoc acc :in-block? true)
+                      (re-find #"(?:WGE|BND)-\d{3}:" line)     (assoc acc :in-block? true)
                       (re-matches #"\u2501+" line)     (assoc acc :in-block? false)
                       (and in-block? (str/starts-with? line "Fix:"))
                       (update acc :fixes conj line)
@@ -154,19 +154,23 @@
 (defn known-remedy
   "What the error already says about fixing itself, or nil.
 
-   The catalogue title and fix for each BND code in `input`, then the `Fix:`
-   lines inside its BND blocks. Other `Fix:` lines are pasted text, not ours,
+   The catalogue title and fix for each WGE code in `input`, then the `Fix:`
+   lines inside its WGE blocks. Other `Fix:` lines are pasted text, not ours,
    and are not printed under our header. The model's summary is printed after
    this, never instead of it: it has been confidently wrong (BOU-512)."
   [input catalog]
   (let [lines     (map str/trim (str/split-lines (strip-control input)))
-        codes     (distinct (mapcat #(re-seq #"BND-\d{3}" %) lines))
+        codes     (->> lines
+                       (mapcat #(re-seq #"(?:WGE|BND)-\d{3}" %))
+                       ;; Output from before 1.0.1 says BND-; same codes.
+                       (map #(str/replace % #"^BND-" "WGE-"))
+                       distinct)
         from-code (mapcat (fn [code]
                             (when-let [{:keys [title fix]} (get catalog code)]
                               (cond-> [(str code ": " title)]
                                 fix (conj (str "Fix: " fix)))))
                           codes)
-        own-fixes (bnd-fix-lines lines)
+        own-fixes (wge-fix-lines lines)
         out       (distinct (concat from-code own-fixes))]
     (when (seq out)
       (str/join "\n" out))))

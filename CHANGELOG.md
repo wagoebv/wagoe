@@ -31,6 +31,9 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Error codes are `WGE-NNN`, not `BND-NNN`** (BOU-603). Same numbers; `bb guide error` and MCP `explain-error`
+  still accept the old spelling, but update anything that matches on `BND-`.
+
 - **The AI scaffolder's system prompt said the API is camelCase and named a namespace that does not exist**,
   `wagoe.shared.core.utils.case-conversion`. It says kebab-case and `wagoe.core.utils.case-conversion`, as `bb guide` does.
 

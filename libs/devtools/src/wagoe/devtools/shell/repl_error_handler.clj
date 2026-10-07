@@ -50,7 +50,7 @@
            (println formatted))
          (do
            (dashboard-errors/record-error!
-            {:code         "BND-000"
+            {:code         "WGE-000"
              :message      (.getMessage exception)
              :category     :unclassified
              :timestamp-ms (System/currentTimeMillis)})
