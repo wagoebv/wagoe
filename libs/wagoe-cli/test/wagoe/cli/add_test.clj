@@ -354,14 +354,16 @@
     (try
       (spit (io/file tmp "resources/conf/dev/config.edn")
             "{\n :active\n {:wagoe/settings {:name \"shop-dev\"}\n }\n}")
-      (spit env-ex "# mine\nJWT_SECRET=keep-me\nREDIS_PORT=6380\n")
+      (spit env-ex "# mine\nJWT_SECRET=keep-me\nexport REDIS_PORT=6380\n")
       (add/patch-env-example! tmp module (add/patch-configs! tmp module))
       (is (= "shop" (get-in (active-of tmp "prod") [:wagoe/events :group])))
       (let [text (slurp env-ex)]
-        (is (str/starts-with? text "# mine\nJWT_SECRET=keep-me\nREDIS_PORT=6380\n") "only added to")
-        (is (str/includes? text "REDIS_HOST="))
-        (is (str/includes? text "REDIS_PASSWORD="))
-        (is (= 1 (count (re-seq #"(?m)^REDIS_PORT=" text)))))
+        (is (str/starts-with? text "# mine\nJWT_SECRET=keep-me\nexport REDIS_PORT=6380\n") "only added to")
+        ;; Exported, so `source .env` reaches the JVM (BOU-601).
+        (is (str/includes? text "export REDIS_HOST="))
+        (is (str/includes? text "export REDIS_PASSWORD="))
+        (is (= 1 (count (re-seq #"(?m)^(?:export )?REDIS_PORT=" text)))
+            "an exported line counts as present"))
       (testing "and nothing when no profile runs it on Redis"
         (spit env-ex "X=1\n")
         (add/patch-env-example! tmp module [["dev" :present] ["test" :present]])

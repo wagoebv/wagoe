@@ -8,21 +8,18 @@
   (:require [clojure.java.io :as io]
             [clojure.string :as str]))
 
-(defn base-ns
-  "The namespace this project's own code lives under.
+(defn base-dir
+  "The directory under src/ holding this project's own code.
 
    Read from the layout rather than from a config file, because there is no
-   config file to forget to update: `wagoe new` writes `src/<ns>/main.clj`, and
+   config file to forget to update: `wagoe new` writes `src/<dir>/main.clj`, and
    has done since long before this mattered. The framework's own repository
    answers `wagoe` by the same rule — its application really is `wagoe.main` —
    so the monorepo keeps behaving exactly as it did.
 
    Falls back to `wagoe` when there is no such directory: a project laid out
-   some other way keeps the old behaviour rather than getting a guess.
-
-   Returns the *directory* name, which is also the namespace segment —
-   `wagoe new my-app` writes `src/my_app/`, and its namespaces are `my_app.*`."
-  ([] (base-ns (System/getProperty "user.dir")))
+   some other way keeps the old behaviour rather than getting a guess."
+  ([] (base-dir (System/getProperty "user.dir")))
   ([root]
    (or (some->> (.listFiles (io/file root "src"))
                 seq
@@ -32,6 +29,19 @@
                 sort
                 first)
        "wagoe")))
+
+(defn base-ns
+  "The namespace this project's own code lives under.
+
+   Read from main.clj's ns form, because `src/my_app/` holds `my-app.*` in a
+   project generated since BOU-602 and `my_app.*` in one generated before."
+  ([] (base-ns (System/getProperty "user.dir")))
+  ([root]
+   (let [dir  (base-dir root)
+         main (io/file root "src" dir "main.clj")]
+     (or (when (.isFile main)
+           (second (re-find #"\(ns\s+([^\s()]+)\.main[\s)]" (slurp main))))
+         dir))))
 
 (defn module-base-ns
   "The namespace `module` actually lives under in this project.
@@ -51,6 +61,6 @@
          ;; Directory name, not namespace segment: `invoice-line-item` lives in
          ;; `invoice_line_item/` (BOU-447).
          dir     (str/replace module "-" "_")]
-     (or (first (filter #(.isDirectory (io/file root "src" (str/replace % "." "/") dir))
+     (or (first (filter #(.isDirectory (io/file root "src" (-> % (str/replace "." "/") (str/replace "-" "_")) dir))
                         (distinct [project "wagoe"])))
          project))))

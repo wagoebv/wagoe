@@ -3,7 +3,8 @@
 #
 # Walks the documented path a newcomer takes — install.sh, wagoe new,
 # bb quickstart, start the app — inside a *bare* container, and asserts on the
-# result rather than on exit codes.
+# result rather than on exit codes. It also runs the first run the quickstart
+# page documents, verbatim, in bash, zsh and fish (BOU-604).
 #
 # Run locally exactly as CI does:
 #   scripts/first-run-smoke.sh
@@ -121,7 +122,7 @@ echo "     package manager: $PKG"
 pkg_install curl ca-certificates
 
 # ── 1. bare image: prerequisites must be reported, not delegated ────────────
-echo "[1/9] prerequisite detection on a bare image"
+echo "[1/11] prerequisite detection on a bare image"
 set +e
 PREREQ_OUT="$(bash /repo/scripts/install.sh 2>&1)"
 PREREQ_RC=$?
@@ -136,8 +137,8 @@ grep -qi -- "$EXPECT_HINT" <<<"$PREREQ_OUT" \
 ok "names the missing tools and the $PKG command to install them"
 
 # ── 2. install ──────────────────────────────────────────────────────────────
-echo "[2/9] install.sh"
-pkg_install git unzip zip which
+echo "[2/11] install.sh"
+pkg_install git unzip zip which zsh fish
 if [ "$PKG" = pacman ]; then
   # install.sh:122 installs the JVM with a plain `pacman -S`, and pacman cannot
   # sandbox inside this container: under qemu it fails with "restricting
@@ -186,50 +187,32 @@ ok "installed; java, clojure, bb, wagoe all resolve (published tag: ${WAGOE_TAG:
 # released: use the `wagoe` on PATH, which install.sh built from the latest
 #           published tag. That wrapper is the whole point of this mode — it
 #           runs the templates in that tag, which is where BOU-402 lived.
-echo "[3/9] wagoe new  (target: $TARGET)"
+echo "[3/11] wagoe new my-app  (target: $TARGET)"
+#
+# A hyphenated name on purpose: it is the name in every doc and post, and
+# `wagoe new my-app` once wrote my_app.* namespaces that failed lint (BOU-602).
 cd /root
 if [ "$TARGET" = worktree ]; then
   cp -r /repo /work
-  bash -ic "bb --config /work/bb.edn -e \"(require (quote wagoe.cli.main)) (wagoe.cli.main/-main \\\"new\\\" \\\"demo\\\")\"" \
-    >/tmp/new.log 2>&1 || { log_excerpt /tmp/new.log 20; fail "wagoe new failed"; }
-else
-  bash -ic "wagoe new demo" </dev/null >/tmp/new.log 2>&1 \
-    || { log_excerpt /tmp/new.log 20; fail "wagoe new failed"; }
+  # The installed `wagoe` becomes this checkout, so the documented flow in
+  # step 5 can call it verbatim. The wrapper also points the new project at
+  # /work and fails if any com.wagoe pin survives.
+  ln -sf /repo/scripts/lib/wagoe-worktree "$(bash -ic "command -v wagoe")"
 fi
-cd /root/demo
+bash -ic "wagoe new my-app" </dev/null >/tmp/new.log 2>&1 \
+  || { log_excerpt /tmp/new.log 20; fail "wagoe new failed"; }
+cd /root/my-app
 grep -vE "^\s*;;" resources/conf/dev/config.edn | grep -q ":wagoe/sqlite" \
   || fail "generated project does not default to sqlite (BOU-228)"
 ok "project generated, defaults to sqlite"
 
 if [ "$TARGET" = worktree ]; then
-  # Point EVERY com.wagoe dep at this checkout. Overriding only a couple is not
-  # enough and fails quietly: the first version of this script rewrote platform
-  # and tools, and the run still exercised the *published* scaffolder, so a fixed
-  # migration-naming bug appeared unfixed.
-  #
-  # Artifact id maps to a directory under libs/: wagoe-core -> libs/core,
-  # wagoe-tools -> libs/tools, but wagoe-cli -> libs/wagoe-cli. Try the stripped
-  # name first, then the full one, and leave the pin alone if neither exists.
-  for d in /work/libs/*/; do
-    name=$(basename "$d")
-    case "$name" in
-      wagoe-*) art="$name" ;;
-      *)       art="wagoe-$name" ;;
-    esac
-    sed -E -i "s|com\.wagoe/${art}([[:space:]]+)\{:mvn/version \"[^\"]+\"\}|com.wagoe/${art}\1{:local/root \"${d%/}\"}|g" \
-      deps.edn bb.edn
-  done
-
-  # Assert on what is LEFT, not on what is present. Checking merely that some
-  # :local/root exists would pass with one com.wagoe artifact still pinned to a
-  # published version — and that single pin is enough to test released code while
-  # the run reports success, which is the whole failure mode this guards against.
-  for f in deps.edn bb.edn; do
-    STILL_PINNED=$(grep -oE "com\.wagoe/[a-z0-9-]+[[:space:]]*\{:mvn/version" "$f" || true)
-    [ -z "$STILL_PINNED" ] \
-      || fail "$f still pins published com.wagoe artifacts, so this run would test the release:
-$STILL_PINNED"
-  done
+  # scripts/lib/wagoe-worktree has rewritten the pins and asserted that none
+  # survived. Assert on what is LEFT, not on what is present: one com.wagoe pin
+  # still on a published version is enough to test released code while the run
+  # reports success.
+  grep -qE "com\.wagoe/[a-z0-9-]+[[:space:]]*\{:mvn/version" deps.edn bb.edn \
+    && fail "a com.wagoe dep is still on a published version, so this run would test the release"
   LEFT=$(grep -c ":mvn/version" deps.edn || true)
   ok "no com.wagoe dep left on a published version ($LEFT third-party pins untouched)"
 else
@@ -250,6 +233,76 @@ $LOCAL"
   ok "every com.wagoe dep is a published version ($PINNED in deps.edn)"
 fi
 
+# ── 4. is a project nobody has touched green? ───────────────────────────────
+# Step 8 runs `bb check` after quickstart scaffolded a module, and never on the
+# project as generated. That is how `wagoe new my-app` shipped my_app.*
+# namespaces clj-kondo warns on: 1.0.0 was red before anyone wrote a line
+# (BOU-602). With .env loaded the documented way: the config doctor in it
+# requires JWT_SECRET.
+echo "[4/11] bb check on a fresh project"
+set +e
+bash -ic "cd /root/my-app && source .env && bb check --ci" >/tmp/check-fresh.log 2>&1
+CHECK_RC=$?
+set -e
+[ "$CHECK_RC" -eq 0 ] \
+  || { cat /tmp/check-fresh.log; fail "bb check failed on a project fresh from wagoe new (BOU-602)"; }
+grep -qE "Summary: .*0 failed" /tmp/check-fresh.log \
+  || { grep -E "Summary" /tmp/check-fresh.log | head -3
+       fail "bb check exited 0 but its summary does not say 0 failed"; }
+ok "gates pass on the generated project"
+
+# ── 5. the documented first run, verbatim ───────────────────────────────────
+# Everything else here starts the app with `set -a; . ./.env; set +a`. The
+# quickstart page says `source .env`, and 1.0.0 wrote .env without `export`, so
+# the documented path failed with a missing JWT_SECRET while this script passed
+# (BOU-601). So: run the block the page renders, read from the page, in each
+# shell we claim. env -i, because this shell sourced nothing yet but a leaked
+# variable would make the test pass without the fix.
+echo "[5/11] documented first run in bash, zsh and fish"
+QS=/repo/docs/modules/getting-started/pages/quickstart.adoc
+FLOW=$(sed -n "/^\/\/ tag::first-run\[\]/,/^\/\/ end::first-run\[\]/p" "$QS" \
+         | sed -n "/^----$/,/^----$/p" | grep -v "^----$" || true)
+grep -q "source .env" <<<"$FLOW" \
+  || fail "no first-run block with source .env in $QS (the tag::first-run region)"
+FLOW_PATH=$(bash -ic "printf %s \"\$PATH\"")
+for sh in bash zsh fish; do
+  mkdir -p "/root/flow-$sh"
+  cd "/root/flow-$sh"
+  env -i HOME=/root PATH="$FLOW_PATH" TERM=dumb "$sh" -c "$FLOW" </dev/null >"/tmp/flow-$sh.log" 2>&1 &
+  FLOW_PID=$!
+  # Generous: the first shell downloads every dependency.
+  for _ in $(seq 1 300); do
+    (echo > /dev/tcp/127.0.0.1/7888) 2>/dev/null && break
+    kill -0 "$FLOW_PID" 2>/dev/null || break
+    sleep 2
+  done
+  (echo > /dev/tcp/127.0.0.1/7888) 2>/dev/null \
+    || { log_excerpt "/tmp/flow-$sh.log" 25; fail "$sh: the documented flow never opened the nREPL"; }
+  bash -ic "clj-nrepl-eval -p 7888 \"(go)\"" >"/tmp/flow-$sh-go.log" 2>&1 || true
+  # Computed, because clj-nrepl-eval echoes its input and exits 0 when (go) threw.
+  bash -ic "clj-nrepl-eval -p 7888 \"(str (quote system-up=) (some? integrant.repl.state/system))\"" \
+    >"/tmp/flow-$sh-up.log" 2>&1 || true
+  grep -q "system-up=true" "/tmp/flow-$sh-up.log" \
+    || { log_excerpt "/tmp/flow-$sh-go.log" 20
+         fail "$sh: (go) did not start the system after the documented flow (BOU-601: did source .env export JWT_SECRET?)"; }
+  CODE=000
+  for _ in $(seq 1 45); do
+    CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 3 http://localhost:3000/api-docs/ || true)
+    [ "$CODE" != "000" ] && break
+    sleep 2
+  done
+  [ "$CODE" = "200" ] || { log_excerpt "/tmp/flow-$sh.log" 25; fail "$sh: /api-docs/ returned $CODE, expected 200"; }
+  # Free 7888 and 3000 for the next shell and for step 10.
+  bash -ic "clj-nrepl-eval -p 7888 \"(System/exit 0)\"" >/dev/null 2>&1 || true
+  wait "$FLOW_PID" 2>/dev/null || true
+  for _ in $(seq 1 30); do
+    (echo > /dev/tcp/127.0.0.1/7888) 2>/dev/null || (echo > /dev/tcp/127.0.0.1/3000) 2>/dev/null || break
+    sleep 1
+  done
+  ok "$sh: the quickstart block starts the system and serves /api-docs/"
+done
+cd /root/my-app
+
 # ── optional: enable an AI provider before quickstart (BOU-414) ─────────────
 # SMOKE_AI runs `bb setup --ai-provider <x>` here, in the order BOU-414
 # reproduced: setup writes :wagoe/ai-service into :active, quickstart keeps an
@@ -265,8 +318,8 @@ if [ -n "${SMOKE_AI:-}" ]; then
   ok "AI provider ${SMOKE_AI} enabled in config"
 fi
 
-# ── 4. quickstart ───────────────────────────────────────────────────────────
-echo "[4/9] bb quickstart"
+# ── 6. quickstart ───────────────────────────────────────────────────────────
+echo "[6/11] bb quickstart"
 set -a; . ./.env 2>/dev/null || true; set +a
 # The scaffolder is injected via -Sdeps at a hardcoded version rather than read
 # from deps.edn, so the :local/root rewrite above cannot reach it. Without this
@@ -286,10 +339,10 @@ grep -vE "^\s*;;" resources/conf/dev/config.edn | grep -q ":wagoe/sqlite" \
   || fail "quickstart overwrote the working config (BOU-228)"
 ok "completed without clobbering the config"
 
-# ── 5. the scaffolded migration must actually apply ─────────────────────────
+# ── 7. the scaffolded migration must actually apply ─────────────────────────
 # `bb quickstart` reports 8/8 Done even when zero migrations run, which is how
 # BOU-256 stayed hidden: the sample module had no table.
-echo "[5/9] scaffolded migration applied"
+echo "[7/11] scaffolded migration applied"
 if ls migrations/*.sql >/dev/null 2>&1; then
   STATUS="$(bash -ic "bb migrate status" 2>&1 || true)"
   APPLIED="$(grep -oE "Applied migrations: [0-9]+" <<<"$STATUS" | grep -oE "[0-9]+" | tail -1)"
@@ -300,14 +353,14 @@ else
   fail "quickstart scaffolded no migration at all"
 fi
 
-# ── 6. do the gates pass on what the scaffolder just produced? ──────────────
+# ── 8. do the gates pass on what the scaffolder just produced? ──────────────
 # `bb quickstart` above scaffolds a sample module, and AGENTS.md tells the user
 # to run `bb check`. Nobody had ever run both: this script stopped before
 # `bb check`, and BOU-264 verified `bb check` on a bare project with no module
 # in it. The combination was the gap, and it hid untagged deftests, an
 # `(is true)`, 36 lint warnings, a protocol method declared twice, and a service
 # calling a repository method that did not exist (BOU-267).
-echo "[6/9] bb check on the scaffolded module"
+echo "[8/11] bb check on the scaffolded module"
 # --ci is load-bearing. Without it `bb check` prints its ✗ lines and still exits
 # 0 — it only calls System/exit on failure when :ci is set (check.clj). The
 # first version of this step omitted it and was therefore a gate that could
@@ -315,7 +368,7 @@ echo "[6/9] bb check on the scaffolded module"
 #   bb check      -> exit 0, "7 passed, 2 failed"
 #   bb check --ci -> exit 1, "7 passed, 2 failed"
 set +e
-bash -ic "cd /root/demo && bb check --ci" >/tmp/check.log 2>&1
+bash -ic "cd /root/my-app && bb check --ci" >/tmp/check.log 2>&1
 CHECK_RC=$?
 set -e
 # Print the whole log, not the ✗ lines. A gate names the violation underneath
@@ -333,7 +386,7 @@ grep -q "Skipped .* framework-only" /tmp/check.log \
   || fail "bb check did not report the framework-only checks it skipped (BOU-264)"
 ok "gates pass, and the skipped framework-only checks are named"
 
-# ── 7. can you create the admin user you are told to create? ────────────────
+# ── 9. can you create the admin user you are told to create? ────────────────
 # Added after BOU-266: `bb create-admin` could not create a user at all — the
 # :user-cli alias ran the CLI through -e, so clojure.main swallowed the `create`
 # verb and the CLI rejected --email as an unknown global option. Nothing caught
@@ -341,11 +394,11 @@ ok "gates pass, and the skipped framework-only checks are named"
 # user CLI call run-cli! directly with a well-formed vector, which is precisely
 # the step the alias got wrong. Assert on the outcome, not the exit code.
 # (No apostrophes below: this whole body is a single-quoted docker argument.)
-echo "[7/9] bb create-admin"
+echo "[9/11] bb create-admin"
 ADMIN_PW="Str0ng-Dev-Pass-x9"
 set +e
 printf "%s\n%s\n" "$ADMIN_PW" "$ADMIN_PW" \
-  | bash -ic "cd /root/demo && set -a && . ./.env && set +a && bb create-admin --email admin@demo.test --name Admin" \
+  | bash -ic "cd /root/my-app && set -a && . ./.env && set +a && bb create-admin --email admin@demo.test --name Admin" \
     >/tmp/admin.log 2>&1
 ADMIN_RC=$?
 set -e
@@ -363,9 +416,9 @@ grep -q "Admin user created successfully" /tmp/admin.log \
        fail "bb create-admin exited 0 without reporting that it created the user"; }
 ok "admin user created"
 
-# ── 7. does it actually serve? ──────────────────────────────────────────────
-echo "[8/9] app serves HTTP"
-bash -ic "cd /root/demo && set -a && . ./.env && set +a && clojure -M:repl" >/tmp/repl.log 2>&1 &
+# ── 10. does it actually serve? ──────────────────────────────────────────────
+echo "[10/11] app serves HTTP"
+bash -ic "cd /root/my-app && set -a && . ./.env && set +a && clojure -M:repl" >/tmp/repl.log 2>&1 &
 for _ in $(seq 1 90); do (echo > /dev/tcp/127.0.0.1/7888) 2>/dev/null && break; sleep 2; done
 (echo > /dev/tcp/127.0.0.1/7888) 2>/dev/null || { log_excerpt /tmp/repl.log 25; fail "nREPL never came up"; }
 bash -ic "clj-nrepl-eval -p 7888 \"(go)\"" >/tmp/go.log 2>&1 || { log_excerpt /tmp/go.log 15; fail "(go) failed"; }
@@ -533,7 +586,7 @@ grep -q "BND-" /tmp/badreq.json \
 # with the profile the wiring passes through.
 ok "a malformed request answers 400 with a BND code"
 
-# ── 9. is there anywhere to type (go)? ──────────────────────────────────────
+# ── 11. is there anywhere to type (go)? ──────────────────────────────────────
 # `bb repl` started a headless nREPL server and nothing else, so the quickstart
 # instruction "start the REPL and eval (go)" left a user staring at one line of
 # output with no prompt (BOU-403). --port is not incidental: 7888 is taken by
@@ -542,9 +595,9 @@ ok "a malformed request answers 400 with a BND code"
 #
 # No apostrophes or single quotes below: this whole script body is one
 # single-quoted string handed to docker, and either would terminate it.
-echo "[9/9] bb repl gives a prompt"
+echo "[11/11] bb repl gives a prompt"
 printf "(+ 1 2)\n:repl/quit\n" \
-  | bash -ic "cd /root/demo && set -a && . ./.env && set +a && bb repl --port 7999" \
+  | bash -ic "cd /root/my-app && set -a && . ./.env && set +a && bb repl --port 7999" \
     >/tmp/replprompt.log 2>&1 || true
 # Order matters. A task that drops *command-line-args* never sees --port, so it
 # reaches for 7888, which the system above is already holding, and dies at bind

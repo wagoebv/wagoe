@@ -392,13 +392,13 @@
                (some (fn [[env r]] (and (not (#{"dev" "test"} env)) (#{:added :present} r)))
                      results))
       (let [text    (slurp f)
-            have    (set (map second (re-seq #"(?m)^\s*([A-Z][A-Z0-9_]*)=" text)))
+            have    (set (map second (re-seq #"(?m)^\s*(?:export\s+)?([A-Z][A-Z0-9_]*)=" text)))
             missing (remove have prod-env-vars)]
         (when (seq missing)
           (spit f (str text
                        (when-not (or (str/blank? text) (str/ends-with? text "\n")) "\n")
                        (when-not (str/blank? text) "\n")
-                       (str/join "\n" (map #(str % "=") missing)) "\n"))
+                       (str/join "\n" (map #(str "export " % "=") missing)) "\n"))
           (vec missing))))))
 
 ;; ─── AGENTS.md module blocks ──────────────────────────────────────────────

@@ -1033,7 +1033,7 @@
           (let [env-ex (slurp (fs/file dir ".env.example"))]
             (is (str/starts-with? env-ex env-before) "only added to")
             (doseq [v ["REDIS_HOST" "REDIS_PORT" "REDIS_PASSWORD"]]
-              (is (= 1 (count (re-seq (re-pattern (str "(?m)^" v "=")) env-ex))) v))))))))
+              (is (= 1 (count (re-seq (re-pattern (str "(?m)^export " v "=")) env-ex))) v))))))))
 
 (deftest ^:unit an-explicit-answer-still-keeps-the-mock-out-of-prod
   (with-project
@@ -1046,7 +1046,7 @@
             env-ex     (slurp (fs/file dir ".env.example"))]
         (is (nil? exit) out)
         (is (not (str/includes? text ":mock")))
-        (is (= 1 (count (re-seq #"(?m)^REDIS_HOST=" env-ex)))
+        (is (= 1 (count (re-seq #"(?m)^export REDIS_HOST=" env-ex)))
             "cache and event bus share the Redis variables")))))
 
 (deftest ^:unit prod-refuses-the-mock-payment-provider

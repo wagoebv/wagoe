@@ -25,10 +25,51 @@
     (is (string? (new/validate-name "my--app")))))  ; double hyphen
 
 (deftest ^:unit name->ns-test
-  (testing "converts hyphens to underscores"
-    (is (= "my_app" (new/name->ns "my-app")))
-    (is (= "myapp" (new/name->ns "myapp")))
-    (is (= "my_long_name" (new/name->ns "my-long-name")))))
+  (testing "the namespace keeps the hyphens; only the directory swaps them (BOU-602)"
+    (is (= "my-app" (new/name->ns "my-app")))
+    (is (= "my_app" (new/name->dir "my-app")))
+    (is (= "myapp" (new/name->dir "myapp")))))
+
+(defn- generate-tmp! [project-name]
+  (let [tmp (str (System/getProperty "java.io.tmpdir") "/wagoe-test-" (System/nanoTime))]
+    (new/generate! tmp project-name {})
+    tmp))
+
+(deftest ^:integration hyphenated-project-namespaces-test
+  ;; clj-kondo warns on `my_app.main`, so `bb check` was red on a project
+  ;; nobody had touched (BOU-602).
+  (let [tmp (generate-tmp! "my-app")]
+    (try
+      (is (.exists (io/file tmp "src/my_app/main.clj")))
+      (doseq [f (->> (file-seq (io/file tmp))
+                     (filter #(.isFile %))
+                     (remove #(str/includes? (str %) "/.git/")))]
+        (testing (str f)
+          (is (empty? (re-seq #"my_app(?!/)" (slurp f)))
+              "my_app may only appear as a directory, never as a namespace")))
+      (is (str/starts-with? (slurp (io/file tmp "src/my_app/main.clj")) "(ns my-app.main"))
+      (finally (sh/sh "rm" "-rf" tmp)))))
+
+(defn- env-seen-by-child
+  "JWT_SECRET as a child process sees it after `source .env` in `shell`."
+  [shell dir]
+  (:out (sh/sh shell "-c" "source .env && sh -c 'printf %s \"$JWT_SECRET\"'"
+               :dir dir :env {"PATH" (System/getenv "PATH") "HOME" (System/getenv "HOME")})))
+
+(deftest ^:integration plain-source-exports-env-test
+  ;; The documented first run is `source .env && clojure -M:repl`. Without
+  ;; `export`, source sets shell variables the JVM never sees (BOU-601).
+  (let [tmp    (generate-tmp! "my-app")
+        secret (second (re-find #"(?m)^export JWT_SECRET=(\S+)$" (slurp (io/file tmp ".env"))))
+        shells (filter #(zero? (:exit (sh/sh "sh" "-c" (str "command -v " %))))
+                       ["bash" "zsh" "fish"])]
+    (try
+      (is (some? secret) ".env assigns JWT_SECRET with export")
+      (is (some #{"bash"} shells) "bash must be available, or this test checks nothing")
+      (doseq [shell shells]
+        (testing shell
+          (is (= secret (env-seen-by-child shell tmp)))))
+      (finally (sh/sh "rm" "-rf" tmp)))))
 
 (deftest ^:integration generate-project-test
   (let [tmp (str (System/getProperty "java.io.tmpdir") "/wagoe-test-" (System/currentTimeMillis))]
@@ -102,7 +143,7 @@
 
       (testing ".env has a generated JWT_SECRET (no unreplaced placeholder)"
         (let [content (slurp (io/file tmp ".env"))]
-          (is (str/includes? content "JWT_SECRET="))
+          (is (str/includes? content "export JWT_SECRET="))
           (is (not (str/includes? content "{{jwt-secret}}")))))
 
       (testing "substitutes project name in CLAUDE.md"

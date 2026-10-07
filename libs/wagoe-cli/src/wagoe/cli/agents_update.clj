@@ -85,7 +85,7 @@
       (let [current      (slurp f)
             project-name (or (project-name-from-agents current)
                              (.getName (.getCanonicalFile (io/file "."))))
-            project-ns   (str/replace project-name "-" "_")
+            project-ns   project-name
             dir          (System/getProperty "user.dir")
             states       (when (.exists (io/file dir "deps.edn"))
                            (add/module-states dir))
@@ -95,7 +95,8 @@
               (update-agents-content current current {} states)
               (update-agents-content current (templates/read-template "AGENTS.md.tmpl")
                                      {:project-name project-name
-                                      :project-ns   project-ns}
+                                      :project-ns   project-ns
+                                      :project-dir  (str/replace project-name "-" "_")}
                                      states))]
         (doseq [block missing]
           (println (str "  Warning: markers for '" block "' not found — block skipped")))
