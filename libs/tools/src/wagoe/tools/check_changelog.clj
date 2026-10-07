@@ -234,8 +234,8 @@
    per-release counts. The page names no tickets, so counts are what can be
    held; which item is which is a reviewer's job (BOU-579)."
   [changelog stability]
-  (let [version (second (re-find #"Current version\s*\n\|\s*`(1\.0\.0(?:-rc-\d+)?)`" stability))
-        final?  (= "1.0.0" version)
+  (let [version (second (re-find #"Current version\s*\n\|\s*`(1\.\d+\.\d+(?:-rc-\d+)?)`" stability))
+        final?  (some? (re-matches #"1\.\d+\.\d+" (str version)))
         current (some-> (re-find #"-rc-(\d+)$" (str version)) second parse-long)
         counted (for [[_ word v] (re-seq #"(?m)^\* \*(\S+)[^*\n]*? in `(1\.0\.0(?:-rc-\d+)?)`:\*" stability)]
                   [v (number word)])
@@ -249,7 +249,7 @@
         sum     (reduce + (keep second counted))]
     (cond-> []
       (nil? version)
-      (conj "no `1.0.0-rc-N` or `1.0.0` current version")
+      (conj "no `1.0.0-rc-N` or `1.x.y` current version")
 
       (and current (not= breaks (get rcs nxt-v 0)))
       (conj (str "`[Unreleased]` has " breaks " breaking entries; the rc-" nxt " paragraph counts "

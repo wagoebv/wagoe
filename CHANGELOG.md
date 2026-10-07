@@ -29,11 +29,12 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ## [Unreleased]
 
+## [1.0.1] — 2026-10-07
+
 ### Fixed
 
 - **Error codes are `WGE-NNN`, not `BND-NNN`** (BOU-603). Same numbers; `bb guide error` and MCP `explain-error`
   still accept the old spelling, but update anything that matches on `BND-`.
-
 - **`source .env && clojure -M:repl` failed with a missing JWT_SECRET** (BOU-601): `wagoe new` now writes `export` lines.
   In an older project, add `export` to each `.env` line or use `set -a; source .env; set +a`.
 - **`wagoe new my-app` wrote `my_app.*` namespaces, so `bb check` failed on a fresh project** (BOU-602). They are `my-app.*` now;
