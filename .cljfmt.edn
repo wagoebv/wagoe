@@ -1,0 +1,14 @@
+;; Clojure formatting rules (cljfmt). Read by clojure-lsp (editor formatting)
+;; and by the cljfmt CLI, so every tool formats the same way.
+;; These are cljfmt's defaults, written out on purpose: ~96% of the code
+;; already follows them. Project-specific macro indents go in :extra-indents.
+{:indentation?                          true
+ :function-arguments-indentation        :community
+ :remove-surrounding-whitespace?        true
+ :remove-trailing-whitespace?           true
+ :insert-missing-whitespace?            true
+ :remove-consecutive-blank-lines?       true
+ :remove-multiple-non-indenting-spaces? false
+ :split-keypairs-over-multiple-lines?   false
+ :sort-ns-references?                   false
+ :extra-indents                         {}}
