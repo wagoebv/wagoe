@@ -106,6 +106,23 @@
   (is (= "shop" (agents-update/project-name-from-agents project-agents)))
   (is (nil? (agents-update/project-name-from-agents "no title here"))))
 
+(deftest ^:integration project-namespace-is-read-from-main-test
+  ;; A project generated before BOU-602 has my_app.* under src/my_app/, so the
+  ;; name alone would point AGENTS.md at a namespace that does not exist.
+  (let [tmp  (str (System/getProperty "java.io.tmpdir") "/agents-ns-" (System/nanoTime))
+        main (io/file tmp "src/my_app/main.clj")]
+    (try
+      (testing "no main.clj: the name is the namespace"
+        (is (= "my-app" (agents-update/project-ns tmp "my-app"))))
+      (io/make-parents main)
+      (testing "a project from before BOU-602 keeps my_app"
+        (spit main "(ns my_app.main\n  (:gen-class))")
+        (is (= "my_app" (agents-update/project-ns tmp "my-app"))))
+      (testing "a current project"
+        (spit main "(ns my-app.main)")
+        (is (= "my-app" (agents-update/project-ns tmp "my-app"))))
+      (finally (sh/sh "rm" "-rf" tmp)))))
+
 (deftest ^:unit modules-only-leaves-the-gen-blocks-alone
   ;; What `wagoe agents update --modules` does, for `bb setup` (BOU-573).
   (let [{:keys [content updated]} (agents-update/update-agents-content project-agents project-agents {} states)]

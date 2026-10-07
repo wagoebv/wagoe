@@ -72,6 +72,15 @@
                               (remove #(= (block-content content %) (block-content modules %))
                                       module-blocks)))))))
 
+(defn project-ns
+  "The namespace the project in `dir` uses, from its main.clj: `my-app.*`
+   since BOU-602, `my_app.*` before it."
+  [dir project-name]
+  (let [main (io/file dir "src" (str/replace project-name "-" "_") "main.clj")]
+    (or (when (.isFile main)
+          (second (re-find #"\(ns\s+([^\s()]+)\.main[\s)]" (slurp main))))
+        project-name)))
+
 (defn -main [args]
   (let [check?        (some #{"--check"} args)
         ;; The module blocks alone: they follow the project, the rest stays
@@ -85,8 +94,8 @@
       (let [current      (slurp f)
             project-name (or (project-name-from-agents current)
                              (.getName (.getCanonicalFile (io/file "."))))
-            project-ns   project-name
             dir          (System/getProperty "user.dir")
+            project-ns   (project-ns dir project-name)
             states       (when (.exists (io/file dir "deps.edn"))
                            (add/module-states dir))
             {:keys [content updated missing]}
