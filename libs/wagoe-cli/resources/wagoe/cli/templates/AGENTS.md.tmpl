@@ -87,7 +87,7 @@ bb repl
 ## Architecture: Functional Core / Imperative Shell
 
 ```
-src/{{project-ns}}/
+src/{{project-dir}}/
 ├── core/    # Pure functions ONLY — business logic, calculations, transformations
 │             # No I/O, no logging, no exceptions, no side effects
 └── shell/   # All side effects — HTTP handlers, DB access, external calls, services
@@ -129,7 +129,7 @@ Every module MUST define `ports.clj`.
 **Module structure when adding new functionality:**
 
 ```
-src/{{project-ns}}/
+src/{{project-dir}}/
 ├── schema.clj               # Malli validation schemas (shared)
 ├── ports.clj                # Protocol definitions (interfaces)
 ├── core/
@@ -198,7 +198,7 @@ Valid `:type` values: `:validation-error` `:not-found` `:unauthorized` `:forbidd
 Never manually fix unbalanced parentheses — use the tool:
 
 ```bash
-clj-paren-repair src/{{project-ns}}/core/product.clj
+clj-paren-repair src/{{project-dir}}/core/product.clj
 ```
 
 ---

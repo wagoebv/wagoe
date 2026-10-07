@@ -18,7 +18,14 @@
     (not (re-matches #"[a-z][a-z0-9]*(-[a-z0-9]+)*" n))  "Project name must be kebab-case (lowercase letters, digits, hyphens; must start with a letter)"
     :else nil))
 
-(defn name->ns [n]
+(defn name->ns
+  "Namespaces keep the hyphen; clj-kondo warns on `my_app.main` (BOU-602)."
+  [n]
+  n)
+
+(defn name->dir
+  "The directory Clojure loads `(name->ns n)` from."
+  [n]
   (str/replace n "-" "_"))
 
 (defn- write-file! [dir relative-path content]
@@ -50,6 +57,7 @@
    `--no-user` in `-main`."
   [dir project-name opts]
   (let [project-ns  (name->ns project-name)
+        project-dir (name->dir project-name)
         jwt-secret  (random-jwt-secret)
         with-user?  (not (false? (:with-user? opts)))
         subs        {;; The set `system-config` takes as :extra-modules — the
@@ -57,6 +65,7 @@
                      :user-modules             (if with-user? "#{:wagoe/user}" "#{}")
                      :project-name             project-name
                      :project-ns               project-ns
+                     :project-dir              project-dir
                      :jwt-secret               jwt-secret
                      :wagoe-tools-version   wagoe-tools-version
                      :wagoe-mcp-version     wagoe-mcp-version
@@ -115,14 +124,14 @@
                      ;; the application's wiring, and a project called shop
                      ;; should not be defining namespaces in the framework's
                      ;; root (BOU-360).
-                     (str "src/" project-ns "/system_config.clj") "config.clj.tmpl"
+                     (str "src/" project-dir "/system_config.clj") "config.clj.tmpl"
                      "dev/user.clj"                        "user.clj.tmpl"
-                     (str "src/" project-ns "/system.clj") "system.clj.tmpl"
+                     (str "src/" project-dir "/system.clj") "system.clj.tmpl"
                      ;; Non-REPL entry point + the build path that uses it.
                      ;; Without these a generated project could only be started
                      ;; from an editor-connected REPL, so it could not be
                      ;; containerised, supervised, or smoke-tested (BOU-254).
-                     (str "src/" project-ns "/main.clj")   "main.clj.tmpl"
+                     (str "src/" project-dir "/main.clj")   "main.clj.tmpl"
                      "build.clj"                           "build.clj.tmpl"
                      "Dockerfile"                          "Dockerfile.tmpl"
                      ".mcp.json"                           "mcp.json.tmpl"

@@ -39,8 +39,8 @@
    application's system-config when it has one, so the application's seed
    hooks run — a seeded row with a workflow gets one (BOU-578)."
   [root args]
-  (let [f  (io/file root "src" (project/base-ns root) "system_config.clj")
-        ;; What the file declares: `wagoe new my-app` writes my_app.*, and a
+  (let [f  (io/file root "src" (project/base-dir root) "system_config.clj")
+        ;; What the file declares: my-app.* or, before BOU-602, my_app.*. A
         ;; name derived from the directory cannot tell which it is.
         ns (when (.isFile f) (second (re-find #"\(ns\s+([^\s()]+)" (slurp f))))]
     (cond-> (vec args)

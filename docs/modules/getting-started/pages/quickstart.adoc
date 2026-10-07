@@ -19,6 +19,21 @@ curl -fsSL https://raw.githubusercontent.com/wagoebv/wagoe/main/scripts/install.
 Supports macOS, Debian/Ubuntu, Arch Linux, and WSL2.
 See xref:getting-started:installation.adoc[Installation] for manual setup.
 
+== In short
+
+// scripts/first-run-smoke.sh runs this block verbatim in bash, zsh and fish.
+// tag::first-run[]
+[source,bash]
+----
+wagoe new my-app && cd my-app
+clojure -M:migrate up
+source .env && clojure -M:repl
+----
+// end::first-run[]
+
+Then connect to the REPL on port 7888 and eval `(go)`. The rest of this page
+walks through the same steps.
+
 == Bootstrap a new project
 
 [TIP]
@@ -78,7 +93,7 @@ source .env          # wagoe new already generated this with a real JWT_SECRET
 clojure -M:repl
 ----
 
-NOTE: `wagoe new` writes a `.env` (git-ignored) containing a generated `JWT_SECRET` — no need to export one by hand. `source .env` (or `direnv allow`) loads it into the shell.
+NOTE: `wagoe new` writes a `.env` (git-ignored) containing a generated `JWT_SECRET` — no need to export one by hand. `source .env` (or `direnv allow`) exports it. A project generated before 1.0.1 has no `export` lines in `.env`; use `set -a; source .env; set +a` there.
 
 `clojure -M:repl` starts a headless nREPL server on port 7888. Connect your editor
 (or the Wagoe MCP server) to it, then eval:

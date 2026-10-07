@@ -31,6 +31,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **`source .env && clojure -M:repl` failed with a missing JWT_SECRET** (BOU-601): `wagoe new` now writes `export` lines.
+  In an older project, add `export` to each `.env` line or use `set -a; source .env; set +a`.
+- **`wagoe new my-app` wrote `my_app.*` namespaces, so `bb check` failed on a fresh project** (BOU-602). They are `my-app.*` now;
+  existing projects keep working and `bb scaffold` follows whichever the project uses.
 - **The AI scaffolder's system prompt said the API is camelCase and named a namespace that does not exist**,
   `wagoe.shared.core.utils.case-conversion`. It says kebab-case and `wagoe.core.utils.case-conversion`, as `bb guide` does.
 
