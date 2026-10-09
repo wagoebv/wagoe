@@ -33,10 +33,12 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **`DBAdapter` answers `engine`, `capabilities`, `column-type` and `like`** (BOU-450, ADR-039). Ask these instead of
   parsing the product name or reading a nil dialect as PostgreSQL.
+- **`db/engine-of`** (BOU-450): which engine a datasource speaks, for code that holds no db-context.
 
 ### Changed
 
 - **`build-where` string filters ignore case on every database** (BOU-450). They were case-sensitive on H2.
+- **A database reset drops in one transaction on SQLite too** (BOU-450), as on PostgreSQL: a failed drop leaves everything.
 
 ### Fixed
 

@@ -7,6 +7,7 @@
    tenant in the `tenants` table. Nothing else in the database is touched, and
    when anything else depends on what would go, nothing is dropped (BOU-585)."
   (:require [wagoe.platform.shell.adapters.database.config :as db-config]
+            [wagoe.platform.shell.adapters.database.factory :as db-factory]
             [wagoe.platform.shell.database.migrations :as migrations]
             [migratus.core :as migratus]
             [migratus.migrations :as migratus-migrations]
@@ -301,8 +302,8 @@
               owned?   (fn [s t] (or (tenant? (lc s))
                                      (and (= (lc s) (lc schema)) (contains? ours (lc t)))))
               outside? (fn [s _] (tenant? (lc s)))
-              product  (.getDatabaseProductName md)
-              found    (if (re-find #"(?i)postgres" product)
+              engine   (db-factory/engine-of-product (.getDatabaseProductName md))
+              found    (if (= :postgresql engine)
                          (pg-blockers c tenants tables (keep existing migrated))
                          (concat
                           (mapcat #(blockers c md catalog schema % owned?) tables)
@@ -318,24 +319,23 @@
            :host           (or h "this machine")
            :database       (or catalog (last (str/split url #"[:/]")))
            :schema         schema
-           :product        product
+           :engine         engine
            :tables         (drop-order md catalog schema tables)
            :tenant-schemas tenants
            :config         config})))))
 
-(defn- quote-ident [^String product ^String ident]
-  (if (re-find #"(?i)mysql|mariadb" product)
+(defn- quote-ident [engine ^String ident]
+  (if (= :mysql engine)
     (str "`" (str/replace ident "`" "``") "`")
     (str "\"" (str/replace ident "\"" "\"\"") "\"")))
 
 (defn drop-table-sql [q t] (str "DROP TABLE IF EXISTS " (q t)))
 
 (defn- drop-owned!
-  "Drop the tenant schemas, then the tables, in one transaction on
-   PostgreSQL, whose DDL is transactional: a failure leaves all of them."
-  [^javax.sql.DataSource ds product tables tenant-schemas]
-  (let [q   #(quote-ident product %)
-        tx? (boolean (re-find #"(?i)postgres" product))]
+  "Drop the tenant schemas, then the tables, in one transaction where DDL is
+   transactional (PostgreSQL, SQLite): a failure leaves all of them."
+  [^javax.sql.DataSource ds engine tx? tables tenant-schemas]
+  (let [q #(quote-ident engine %)]
     (with-open [c (.getConnection ds)]
       (when tx? (.setAutoCommit c false))
       (try
@@ -359,8 +359,9 @@
   "Carry out `plan`: roll every migration back, drop the tenant schemas, the
    boot tables and schema_migrations, then migrate. A failure names the steps
    that finished and how to recover."
-  [{:keys [config product tables tenant-schemas]}]
+  [{:keys [config engine tables tenant-schemas]}]
   (let [ds       (get-in config [:db :datasource])
+        tx?      (some-> engine db-factory/transactional-ddl?)
         done     (atom [])
         recovery "Run `bb migrate up` to put the schema back."
         step     (fn [label f]
@@ -368,13 +369,13 @@
                         (catch Exception e
                           (throw (ex-info (str "Reset stopped at: " label ". " (ex-message e)
                                                "\n   Finished: " (if (seq @done) (str/join ", " @done) "nothing")
-                                               (when (re-find #"(?i)postgres" product)
+                                               (when tx?
                                                  "\n   The drops ran in one transaction, so none of them happened.")
                                                "\n   " recovery)
                                           {:type :reset-failed :done @done :failed label :recovery recovery}
                                           e)))))]
     (step "roll back every migration" #(migratus/rollback-until-just-after config 0))
-    (step "drop the tenant schemas and tables" #(drop-owned! ds product tables tenant-schemas))
+    (step "drop the tenant schemas and tables" #(drop-owned! ds engine tx? tables tenant-schemas))
     (step "apply the migrations" #(migratus/migrate (migrations/get-migration-config)))
     nil))
 

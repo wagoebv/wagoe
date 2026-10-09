@@ -20,6 +20,7 @@
             [wagoe.platform.shell.adapters.database.common.schema :as schema]
             [wagoe.platform.shell.adapters.database.common.utils :as utils]
             [wagoe.platform.shell.adapters.database.config :as config]
+            [wagoe.platform.shell.adapters.database.factory :as factory]
             [wagoe.platform.shell.adapters.database.utils.schema :as schema-utils]
             [wagoe.platform.shell.database.migrations :as migrations]))
 
@@ -42,6 +43,16 @@
 (def execute-batch!
   "Run one statement over many parameter sets."
   execution/execute-batch!)
+
+;; =============================================================================
+;; Which engine
+;; =============================================================================
+
+(def engine-of
+  "Which engine a DataSource or Connection speaks: :postgresql, :mysql,
+   :sqlite or :h2. For code holding no db-context; with one, ask its adapter
+   (ADR-039)."
+  factory/engine-of)
 
 ;; =============================================================================
 ;; Transactions
