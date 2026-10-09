@@ -1,5 +1,8 @@
 (ns wagoe.platform.shell.adapters.database.sqlite.connection
-  "SQLite connection settings and JDBC URL.")
+  "SQLite connection settings and JDBC URL."
+  (:import [java.lang.reflect Method]
+           [java.util Locale]
+           [org.sqlite Function]))
 
 (def ^:private mmap-size-bytes
   "Memory-mapped I/O size in bytes (256MB)."
@@ -30,6 +33,29 @@
          [(str "PRAGMA cache_size=" cache-size-pages)]
          [(str "PRAGMA busy_timeout=" busy-timeout-ms)]]
         (map vector (:pragmas db-config))))
+
+(defn- protected-method
+  "A protected method of org.sqlite.Function, which a proxy cannot call directly."
+  ^Method [name & arg-types]
+  (doto (.getDeclaredMethod Function name (into-array Class arg-types))
+    (.setAccessible true)))
+
+(def ^:private value-text (delay (protected-method "value_text" Integer/TYPE)))
+(def ^:private result-text (delay (protected-method "result" String)))
+
+(defn register-unicode-lower!
+  "Replace lower() on `connection` with one that folds all of Unicode. SQLite's
+   own folds ASCII only, so `like` missed \"Élodie\" for \"%élodie%\". Root locale,
+   so the JVM's (a Turkish \"I\") does not change the answer (BOU-606)."
+  [connection]
+  (Function/create connection "lower"
+                   (proxy [Function] []
+                     (xFunc []
+                       (let [s (.invoke ^Method @value-text this (object-array [(int 0)]))]
+                         (.invoke ^Method @result-text this
+                                  (object-array [(some-> ^String s (.toLowerCase Locale/ROOT))])))))
+                   1
+                   Function/FLAG_DETERMINISTIC))
 
 (def pool-defaults
   "HikariCP defaults for an embedded database. SQLite serialises writes, so the

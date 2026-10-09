@@ -78,8 +78,6 @@
    {:ticket "BOU-574" :reason "instants are written as ISO strings, which strict mode refuses"}
    [:mysql :round-trip/true]
    {:ticket "BOU-574" :reason "TINYINT(1) reads back as a Boolean, and db->boolean expects an int"}
-   [:sqlite :strings/unicode]
-   {:ticket "BOU-606" :reason "SQLite's lower() folds ASCII only, so é and É differ"}
    [:mysql :conflicts/unique-key]
    {:ticket "BOU-574" :reason "the constraint reader finds no field in MySQL's message"}})
 
@@ -175,6 +173,25 @@
           "\"ID\" did not match a stored \"ID-7\" under a Turkish locale"))
       (finally (Locale/setDefault default)))))
 
+(def ^:private session-setting
+  "Per engine, a setting Wagoe gives each connection, and what it reads."
+  {:sqlite     ["PRAGMA foreign_keys" "1"]
+   :mysql      ["SELECT @@session.time_zone" "+00:00"]
+   :h2         ["SELECT SETTING_VALUE FROM INFORMATION_SCHEMA.SETTINGS WHERE SETTING_NAME = 'TIME ZONE'" "UTC"]
+   :postgresql ["SHOW statement_timeout" "30s"]})
+
+(defn- every-connection-is-set-up
+  "Held at once, so the pool has to open several (BOU-606: the settings reached
+   whichever connection ran them first, and no other)."
+  [ctx]
+  (let [[sql expected] (session-setting (protocols/engine (adapter ctx)))
+        conns          (doall (repeatedly 3 #(jdbc/get-connection (:datasource ctx))))]
+    (try
+      (let [seen (mapv #(str (val (first (jdbc/execute-one! % [sql])))) conns)]
+        (when-not (every? #{expected} seen)
+          (str sql " on three connections: " (pr-str seen))))
+      (finally (run! #(.close ^java.sql.Connection %) conns)))))
+
 (defn- rollback-undoes [ctx]
   (ddl! ctx "DROP TABLE IF EXISTS tx_probe")
   (ddl! ctx "CREATE TABLE tx_probe (id INTEGER NOT NULL PRIMARY KEY)")
@@ -256,6 +273,7 @@
    {:strings/ignore-case       strings-ignore-case
     :strings/any-locale        strings-ignore-case-in-any-locale
     :strings/unicode           strings-ignore-unicode-case
+    :connections/session       every-connection-is-set-up
     :transactions/rollback     rollback-undoes
     :conflicts/unique-key      refused-key-is-a-conflict}))
 

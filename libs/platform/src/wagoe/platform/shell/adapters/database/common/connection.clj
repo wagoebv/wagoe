@@ -2,11 +2,36 @@
   "Common connection pool management utilities."
   (:require [wagoe.platform.ports.database :as protocols]
             [clojure.tools.logging :as log])
-  (:import [com.zaxxer.hikari HikariConfig HikariDataSource]))
+  (:import [com.zaxxer.hikari HikariConfig HikariDataSource]
+           [com.zaxxer.hikari.util DriverDataSource]
+           [java.sql Connection]
+           [java.util Properties]
+           [javax.sql DataSource]))
 
 ;; =============================================================================
 ;; Connection Pool Management
 ;; =============================================================================
+
+(defn- initialising-data-source
+  "Hikari's own driver data source, with `init!` run on each connection it
+   opens. Session settings and SQLite PRAGMAs are per connection; run once on
+   the pool they reached one connection and the rest ran without them (BOU-606)."
+  [adapter db-config init!]
+  (let [ds    (DriverDataSource. (protocols/jdbc-url adapter db-config) (protocols/jdbc-driver adapter)
+                                 (Properties.) (:username db-config) (:password db-config))
+        ready (fn [^Connection c]
+                (try (init! c) c
+                     (catch Throwable t (.close c) (throw t))))]
+    (reify DataSource
+      (getConnection [_] (ready (.getConnection ds)))
+      (getConnection [_ user password] (ready (.getConnection ds user password)))
+      (getLogWriter [_] (.getLogWriter ds))
+      (setLogWriter [_ w] (.setLogWriter ds w))
+      (setLoginTimeout [_ seconds] (.setLoginTimeout ds seconds))
+      (getLoginTimeout [_] (.getLoginTimeout ds))
+      (getParentLogger [_] (.getParentLogger ds))
+      (unwrap [_ iface] (.unwrap ds iface))
+      (isWrapperFor [_ iface] (.isWrapperFor ds iface)))))
 
 (defn create-connection-pool
   "Create HikariCP connection pool using database adapter configuration.
@@ -28,8 +53,9 @@
   (let [pool-config (or (:pool db-config) {})
         defaults (protocols/pool-defaults adapter)
         hikari-config (doto (HikariConfig.)
-                        (.setDriverClassName (protocols/jdbc-driver adapter))
-                        (.setJdbcUrl (protocols/jdbc-url adapter db-config))
+                        (.setDataSource (initialising-data-source
+                                         adapter db-config
+                                         #(protocols/init-connection! adapter % db-config)))
                         (.setMinimumIdle (get pool-config :minimum-idle (:minimum-idle defaults 1)))
                         (.setMaximumPoolSize (get pool-config :maximum-pool-size (:maximum-pool-size defaults 10)))
                         (.setConnectionTimeout (get pool-config :connection-timeout-ms (:connection-timeout-ms defaults 30000)))
@@ -51,8 +77,8 @@
 
     (let [datasource (HikariDataSource. hikari-config)]
       (try
-        ;; Initialize database-specific connection settings
-        (protocols/init-connection! adapter datasource db-config)
+        ;; Every connection is initialised as it opens; this proves one can be.
+        (with-open [_ (.getConnection datasource)])
         (log/info "Database connection pool created successfully"
                   {:adapter (protocols/dialect adapter)
                    :pool-name (.getPoolName hikari-config)})

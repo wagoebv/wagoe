@@ -91,8 +91,9 @@
 
   (init-connection! [this datasource db-config]
     "Initialize database connection with database-specific settings.
-     
-     Performs one-time connection initialization such as:
+
+     The pool calls this with each connection as it opens, since these settings
+     are per connection (BOU-606). Initialization such as:
      - SQLite: Apply PRAGMA settings
      - PostgreSQL: Set application_name, timezone
      - MySQL: Set sql_mode, timezone
@@ -213,8 +214,7 @@
 
   (like [this field pattern]
     "A HoneySQL condition matching `field` against the LIKE `pattern`
-     regardless of case, on every engine. SQLite folds ASCII letters only
-     until BOU-606.
+     regardless of case, on every engine.
 
      Example:
        (like h2-adapter :email \"%john%\")
