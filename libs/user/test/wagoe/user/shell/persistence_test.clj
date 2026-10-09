@@ -24,7 +24,11 @@
         (number? value) (not (zero? value))
         :else (boolean value)))
     (table-exists? [_ _ _] false)
-    (get-table-info [_ _ _] [])))
+    (get-table-info [_ _ _] [])
+    (engine [_] nil)
+    (capabilities [_] #{})
+    (column-type [_ _] nil)
+    (like [_ _ _] nil)))
 
 (deftest ^:contract db->user-entity-normalizes-types-and-preferences
   (let [ctx {:adapter (adapter-stub {:dialect :sqlite

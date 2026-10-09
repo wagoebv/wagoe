@@ -16,7 +16,11 @@
     (boolean->db [_ value] value)
     (db->boolean [_ value] value)
     (table-exists? [_ _ _] false)
-    (get-table-info [_ _ _] [])))
+    (get-table-info [_ _ _] [])
+    (engine [_] nil)
+    (capabilities [_] #{})
+    (column-type [_ _] nil)
+    (like [_ _ _] nil)))
 
 (deftest ^:unit create-adapter-and-context-delegate-to-core
   (let [adapter (adapter-stub :sqlite "org.sqlite.JDBC")
