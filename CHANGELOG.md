@@ -40,6 +40,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **SQLite enforced foreign keys on one pooled connection in five; MySQL ran most connections without strict mode or UTC**
+  (BOU-606). Session settings now reach every connection. Check SQLite data written since for orphaned rows.
 - **`migrate up` failed on MySQL in geo and workflow, and every later run did nothing while reporting success** (BOU-544).
   Workflow ids, entity types and states are now capped at 255 characters. If a failed run left a `schema_migrations` row with id -1, delete it.
 - **`ITenantSchemaProvider` promised row-level tenancy for non-PostgreSQL databases** (BOU-449). Tenancy is PostgreSQL-only, as boot already enforces; nothing to do.

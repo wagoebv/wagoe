@@ -90,8 +90,8 @@ parsing product names, comparing drivers or reading nil as PostgreSQL.
 
 String matching becomes part of the contract rather than a per-site choice:
 `build-where`'s containment and a new `(like this field pattern)` are
-case-insensitive on every engine. SQLite's `lower()` folds ASCII letters only,
-listed as a divergence until BOU-606 gives it a Unicode one. The `ILIKE` call
+case-insensitive on every engine, Unicode included: SQLite's own `lower()` folds
+ASCII only, so each connection gets a Unicode one (BOU-606). The `ILIKE` call
 sites move to it.
 
 === 2. A conformance suite pins what they must agree on

@@ -21,7 +21,9 @@
      :table-info         (fn [datasource table-name] -> vector of column maps)
      :engine             :postgresql, :mysql, :sqlite or :h2
      :capabilities       a subset of protocols/capability-keywords
-     :column-types       {logical-type DDL-type} for protocols/logical-column-types"
+     :column-types       {logical-type DDL-type} for protocols/logical-column-types
+     :on-connect         optional (fn [java.sql.Connection]), run on each new
+                         connection after the session statements"
   (:require [wagoe.core.utils.type-conversion :as tc]
             [wagoe.platform.ports.database :as protocols]
             [clojure.tools.logging :as log]
@@ -53,8 +55,8 @@
   "`field` LIKE `pattern`, ignoring case. ILIKE where the engine has it;
    elsewhere both sides lowered, since H2's LIKE is case-sensitive (ADR-039).
    The pattern is lowered in SQL too: the JVM's locale folds differently (a
-   Turkish one turns \"ID\" into \"ıd\"). SQLite's lower() folds ASCII only
-   (BOU-606)."
+   Turkish one turns \"ID\" into \"ıd\"). SQLite's lower() is replaced by a
+   Unicode one on each connection (BOU-606)."
   [string-match field pattern]
   (if (= :ilike string-match)
     [:ilike field pattern]
@@ -129,7 +131,9 @@
   (init-connection! [_ datasource db-config]
     (run-session-statements! (:label spec)
                              datasource
-                             ((:session-statements spec) db-config)))
+                             ((:session-statements spec) db-config))
+    (when-let [on-connect (and (instance? java.sql.Connection datasource) (:on-connect spec))]
+      (on-connect datasource)))
 
   (build-where [_ filters] (build-where-clause spec filters))
 
