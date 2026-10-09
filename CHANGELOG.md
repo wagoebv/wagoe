@@ -29,6 +29,11 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The redis-streams reclaim test failed on slow CI runners** (BOU-600). Test-only; nothing to do.
+- **`ITenantSchemaProvider` promised row-level tenancy for non-PostgreSQL databases** (BOU-449). Tenancy is PostgreSQL-only, as boot already enforces; nothing to do.
+
 ## [1.0.1] — 2026-10-07
 
 ### Fixed
