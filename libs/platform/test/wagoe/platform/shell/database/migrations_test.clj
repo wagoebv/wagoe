@@ -239,6 +239,47 @@
         (db-factory/close-db-context! ctx)
         (doseq [file (reverse (file-seq root))] (.delete ^java.io.File file))))))
 
+(defn half-a-data-migration
+  "An EDN migration that writes, then fails."
+  [config]
+  (jdbc/execute! (:conn config) ["INSERT INTO items (id) VALUES (2)"])
+  (throw (ex-info "second write failed" {:type :internal-error})))
+
+(defn undo-nothing [_config] nil)
+
+(deftest ^:integration a-failed-data-migration-writes-nothing
+  ;; Running outside migratus's outer transaction must not leave half a data
+  ;; migration committed: it stays pending, and a retry would write it twice.
+  (let [root  (io/file "target" (str "bou544-dml-" (System/nanoTime)))
+        dir   (doto (io/file root "m") .mkdirs)
+        ctx   (db-factory/db-context {:adapter :h2
+                                      :database-path (str "mem:bou544d_" (System/nanoTime) ";DB_CLOSE_DELAY=-1")})
+        ds    (:datasource ctx)
+        items #(mapv :ITEMS/ID (jdbc/execute! ds ["SELECT id FROM items ORDER BY id"]))
+        file  #(io/file dir %)]
+    (try
+      (spit (file "20260101000000-items.up.sql") "CREATE TABLE items (id INT PRIMARY KEY)")
+      (spit (file "20260101000000-items.down.sql") "DROP TABLE items")
+      (with-redefs [migrations/migration-dirs          (fn [_] [(str (.getPath dir) "/")])
+                    migrations/shadowed-migration-dirs (fn ([] nil) ([_ _] nil))]
+        (migrations/migrate-datasource! ds)
+        (testing "SQL"
+          (spit (file "20260102000000-rows.up.sql") "INSERT INTO items (id) VALUES (1);\n--;;\nINSERT INTO missing (id) VALUES (1)")
+          (spit (file "20260102000000-rows.down.sql") "DELETE FROM items WHERE id = 1")
+          (is (thrown? Exception (migrations/migrate-datasource! ds)))
+          (is (= [] (items)) "the first insert was committed"))
+        (testing "EDN"
+          (.delete (file "20260102000000-rows.up.sql"))
+          (.delete (file "20260102000000-rows.down.sql"))
+          (spit (file "20260103000000-half.edn")
+                (pr-str {:ns 'wagoe.platform.shell.database.migrations-test
+                         :up-fn "half-a-data-migration" :down-fn "undo-nothing"}))
+          (is (thrown? Exception (migrations/migrate-datasource! ds)))
+          (is (= [] (items)) "the write before the failure was committed")))
+      (finally
+        (db-factory/close-db-context! ctx)
+        (doseq [f (reverse (file-seq root))] (.delete ^java.io.File f))))))
+
 (deftest ^:unit discover-migration-dirs-rejects-invalid-manifests
   (testing "invalid manifest shapes fail fast with a clear error"
     (with-temp-dir

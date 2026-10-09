@@ -21,6 +21,7 @@
             [migratus.migrations :as migratus-migrations]
             [migratus.protocols :as migratus-protocols]
             [migratus.database :as migratus-database]
+            [next.jdbc :as jdbc]
             [wagoe.platform.core.database.migration-sql :as migration-sql]
             [wagoe.platform.shell.adapters.database.config :as db-config]
             [wagoe.platform.shell.modules :as modules]
@@ -396,12 +397,45 @@
   (with-open [c (.getConnection ^javax.sql.DataSource datasource)]
     (boolean (re-find #"(?i)mysql|mariadb|h2" (.getDatabaseProductName (.getMetaData c))))))
 
+(defn- migrate-reserved!
+  "migratus's `migrate-up*` / `migrate-down*`, with the reservation taken and
+   released on `conn` in auto-commit, outside the migration's transaction. The
+   migration and its row in the table still share one, when it asks for one."
+  [^java.sql.Connection conn config migration direction]
+  (let [table (:migration-table-name config)
+        id    (migratus-protocols/id migration)
+        up?   (= :up direction)
+        run   (fn [c]
+                (let [done? (migratus-database/complete? c table id)]
+                  (when (if up? (not done?) done?)
+                    (if up?
+                      (do (migratus-protocols/up migration (assoc config :conn c))
+                          (migratus-database/mark-complete c table (migratus-protocols/name migration) id))
+                      (do (migratus-protocols/down migration (assoc config :conn c))
+                          (migratus-database/mark-not-complete c table id)))
+                    :success)))]
+    (if (migratus-database/mark-reserved conn table)
+      (try
+        (if (migratus-protocols/tx? migration direction)
+          (jdbc/with-transaction [tx conn] (run tx))
+          (run conn))
+        (catch Throwable e
+          ;; As migratus does: DDL that committed before the failure is undone
+          ;; by the down migration, as far as it can.
+          (when (and up? (not (:tx-handles-ddl? config)))
+            (log/error (str "Migration " (migratus-protocols/name migration) " failed; backing out"))
+            (try (migratus-protocols/down migration (assoc config :conn conn))
+                 (catch Throwable _)))
+          (throw e))
+        (finally
+          (migratus-database/mark-unreserved conn table)))
+      :ignore)))
+
 (defmethod migratus-protocols/make-store ::ddl-commits
   ;; migratus takes its reservation row (id -1) and releases it in a `finally`,
   ;; both inside the migration's transaction. Where DDL commits implicitly, a
   ;; failure committed the row and rolled back its release, and every later run
-  ;; did nothing while reporting success (BOU-544). Outside that transaction the
-  ;; release commits. The migration's own statements still run in one.
+  ;; did nothing while reporting success (BOU-544).
   ;;
   ;; On the store's open connection, as migratus's own path is: a fresh one from
   ;; a small pool can time out, which migratus reads as "reserved" and skips.
@@ -413,8 +447,8 @@
       (init [_] (migratus-protocols/init store))
       (completed-ids [_] (migratus-protocols/completed-ids store))
       (completed [_] (migratus-protocols/completed store))
-      (migrate-up [_ migration] (migratus-database/migrate-up* (conn) config migration))
-      (migrate-down [_ migration] (migratus-database/migrate-down* (conn) config migration))
+      (migrate-up [_ migration] (migrate-reserved! (conn) config migration :up))
+      (migrate-down [_ migration] (migrate-reserved! (conn) config migration :down))
       (squash [_ ids name] (migratus-protocols/squash store ids name))
       (connect [_] (migratus-protocols/connect store))
       (disconnect [_] (migratus-protocols/disconnect store)))))
