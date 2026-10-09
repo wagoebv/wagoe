@@ -15,6 +15,18 @@
                        " GROUP BY workflow_id, entity_type, entity_id HAVING COUNT(*) > 1")]
                  {:builder-fn rs/as-unqualified-lower-maps}))
 
+(defn- mysql? [connectable]
+  (let [product (if (instance? Connection connectable)
+                  (.getDatabaseProductName (.getMetaData ^Connection connectable))
+                  (with-open [^Connection c (jdbc/get-connection connectable)]
+                    (.getDatabaseProductName (.getMetaData c))))]
+    (boolean (re-find #"(?i)mysql|mariadb" (str product)))))
+
+(defn- mysql-index? [connectable]
+  (seq (jdbc/execute! connectable
+                      [(str "SELECT 1 FROM information_schema.statistics WHERE table_schema = DATABASE()"
+                            " AND table_name = 'workflow_instances' AND index_name = ?") index-name])))
+
 (defn present?
   "Whether workflow_instances has the unique index."
   [datasource]
@@ -38,8 +50,13 @@
                          " instance of each (delete the others and their workflow_audit rows), then run"
                          " this again. The first: " (pr-str (vec (take 5 dups))))
                     {:type :conflict :duplicates (vec dups)})))
-  (jdbc/execute! connectable [(str "CREATE UNIQUE INDEX IF NOT EXISTS " index-name
-                                   " ON workflow_instances (workflow_id, entity_type, entity_id)")]))
+  ;; MySQL has no IF NOT EXISTS on an index (BOU-544).
+  (if (mysql? connectable)
+    (when-not (mysql-index? connectable)
+      (jdbc/execute! connectable [(str "CREATE UNIQUE INDEX " index-name
+                                       " ON workflow_instances (workflow_id, entity_type, entity_id)")]))
+    (jdbc/execute! connectable [(str "CREATE UNIQUE INDEX IF NOT EXISTS " index-name
+                                     " ON workflow_instances (workflow_id, entity_type, entity_id)")])))
 
 (defn- connectable
   "Migratus's open connection, which SQLite needs used rather than a second one."
@@ -55,4 +72,8 @@
 (defn down
   "Migratus entry point."
   [config]
-  (jdbc/execute! (connectable config) [(str "DROP INDEX IF EXISTS " index-name)]))
+  (let [db (connectable config)]
+    (if (mysql? db)
+      (when (mysql-index? db)
+        (jdbc/execute! db [(str "DROP INDEX " index-name " ON workflow_instances")]))
+      (jdbc/execute! db [(str "DROP INDEX IF EXISTS " index-name)]))))

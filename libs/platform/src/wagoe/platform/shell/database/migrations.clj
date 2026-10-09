@@ -20,6 +20,7 @@
             ;; happily — `get-all-supported-extensions` returns ["sql" "edn"].
             [migratus.migrations :as migratus-migrations]
             [migratus.protocols :as migratus-protocols]
+            [next.jdbc :as jdbc]
             [wagoe.platform.core.database.migration-sql :as migration-sql]
             [wagoe.platform.shell.adapters.database.config :as db-config]
             [wagoe.platform.shell.modules :as modules]
@@ -529,6 +530,35 @@
   (when (= :migration-dir-conflict (:type (ex-data e)))
     (throw e)))
 
+(defn- release-reservation!
+  "Delete migratus's reservation row (id -1) after a failed run.
+
+   migratus deletes it in a `finally` inside the migration's transaction. Where
+   DDL commits implicitly (MySQL, H2) the row is committed with the DDL and the
+   delete is rolled back with the failure, so every later run did nothing and
+   reported success (BOU-544)."
+  [config]
+  (when-let [ds (get-in config [:db :datasource])]
+    (try
+      (jdbc/execute! ds [(str "DELETE FROM " (:migration-table-name config) " WHERE id = -1")])
+      (catch Exception e
+        (log/warn e "Could not delete the migration reservation row (id -1)")))))
+
+(defn- run-migratus!
+  "`(f config)`; true when it ran. migratus returns :ignore, not an exception,
+   when another run holds the reservation."
+  [f config]
+  (try
+    (if (= :ignore (f config))
+      (do (log/warn (str "Migrations skipped: " (:migration-table-name config) " is reserved by row"
+                         " id -1. Another process is migrating, or a failed run left it behind. If"
+                         " nothing else is migrating, delete that row and run again."))
+          false)
+      true)
+    (catch Exception e
+      (release-reservation! config)
+      (throw e))))
+
 (defn migrate
   "Runs all pending database migrations.
 
@@ -540,8 +570,7 @@
   []
   (log/info "Running database migrations...")
   (try
-    (let [config (get-migration-config)]
-      (migratus/migrate config)
+    (when (run-migratus! migratus/migrate (get-migration-config))
       (log/info "Database migrations completed successfully"))
     (catch Exception e
       (rethrow-config-conflict! e)
@@ -575,8 +604,8 @@
    (refuse-shadowed-migration-dirs!)
    (log/info "Running database migrations on the application's own datasource")
    (try
-     (migratus/migrate (migratus-config datasource (migration-dirs enabled-libs)))
-     (log/info "Database migrations completed successfully")
+     (when (run-migratus! migratus/migrate (migratus-config datasource (migration-dirs enabled-libs)))
+       (log/info "Database migrations completed successfully"))
      (catch Exception e
        (rethrow-config-conflict! e)
        (log/error e "Database migration failed")
@@ -598,7 +627,7 @@
   (try
     (let [config (rollback-config)]
       (refuse-unreadable-last-migration! config)
-      (migratus/rollback config)
+      (run-migratus! migratus/rollback config)
       (log/info "Database rollback completed successfully"))
     (catch Exception e
       (rethrow-config-conflict! e)
@@ -620,7 +649,7 @@
   (log/info "Rolling back to migration" {:migration-id migration-id})
   (try
     (let [config (rollback-config)]
-      (migratus/rollback-until-just-after config migration-id)
+      (run-migratus! #(migratus/rollback-until-just-after % migration-id) config)
       (log/info "Database rollback to migration completed" {:migration-id migration-id}))
     (catch Exception e
       (rethrow-config-conflict! e)

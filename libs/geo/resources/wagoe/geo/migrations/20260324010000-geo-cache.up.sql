@@ -1,5 +1,5 @@
 CREATE TABLE IF NOT EXISTS geo_cache (
-  address_hash      TEXT PRIMARY KEY,
+  address_hash      VARCHAR(255) PRIMARY KEY,
   lat               NUMERIC(10, 7) NOT NULL,
   lng               NUMERIC(10, 7) NOT NULL,
   formatted_address TEXT,

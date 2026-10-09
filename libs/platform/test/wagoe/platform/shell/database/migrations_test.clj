@@ -192,6 +192,28 @@
           (is (re-find #"20260102000000" (str (ex-message e) (:error (ex-data e)))))))
       (is (db/table-exists? ctx :geo_table)))))
 
+(deftest ^:integration a-failed-migration-does-not-block-the-next-run
+  ;; DDL commits implicitly on H2 and MySQL, so a failed migration committed
+  ;; migratus's reservation row and rolled back its removal. Every later run then
+  ;; did nothing and reported success (BOU-544).
+  (let [root (io/file "target" (str "bou544-" (System/nanoTime)))
+        dir  (doto (io/file root "m") .mkdirs)
+        up   (io/file dir "20260101000000-broken.up.sql")
+        ctx  (db-factory/db-context {:adapter :h2
+                                     :database-path (str "mem:bou544_" (System/nanoTime) ";DB_CLOSE_DELAY=-1")})]
+    (try
+      (spit up "CREATE TABLE half_done (id INT);\n--;;\nCREATE TABLE broken (")
+      (spit (io/file dir "20260101000000-broken.down.sql") "DROP TABLE IF EXISTS half_done")
+      (with-redefs [migrations/migration-dirs          (fn [_] [(str (.getPath dir) "/")])
+                    migrations/shadowed-migration-dirs (fn ([] nil) ([_ _] nil))]
+        (is (thrown? clojure.lang.ExceptionInfo (migrations/migrate-datasource! (:datasource ctx))))
+        (spit up "CREATE TABLE fixed (id INT)")
+        (migrations/migrate-datasource! (:datasource ctx))
+        (is (db/table-exists? ctx :fixed) "the fixed migration did not run"))
+      (finally
+        (db-factory/close-db-context! ctx)
+        (doseq [file (reverse (file-seq root))] (.delete ^java.io.File file))))))
+
 (deftest ^:unit discover-migration-dirs-rejects-invalid-manifests
   (testing "invalid manifest shapes fail fast with a clear error"
     (with-temp-dir
