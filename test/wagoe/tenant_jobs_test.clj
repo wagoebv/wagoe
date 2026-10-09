@@ -28,7 +28,7 @@
                     {:id (random-uuid) :job-type :read-note :args {}
                      :metadata {:tenant-id tenant-id}}
                     (fn [_args db-ctx]
-                      (:v (jdbc/execute-one! (or (:tx db-ctx) (:datasource db-ctx))
+                      (:v (jdbc/execute-one! (:datasource (or (:tx db-ctx) db-ctx))
                                              ["SELECT v FROM notes"]
                                              {:builder-fn rs/as-unqualified-lower-maps})))
                     ctx
