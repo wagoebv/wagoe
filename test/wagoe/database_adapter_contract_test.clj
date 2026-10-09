@@ -78,6 +78,8 @@
    {:ticket "BOU-574" :reason "instants are written as ISO strings, which strict mode refuses"}
    [:mysql :round-trip/true]
    {:ticket "BOU-574" :reason "TINYINT(1) reads back as a Boolean, and db->boolean expects an int"}
+   [:sqlite :strings/unicode]
+   {:ticket "BOU-606" :reason "SQLite's lower() folds ASCII only, so é and É differ"}
    [:mysql :conflicts/unique-key]
    {:ticket "BOU-574" :reason "the constraint reader finds no field in MySQL's message"}})
 
@@ -144,6 +146,17 @@
              :like        (ids (protocols/like a :name "%OHN%"))}]
     (when-not (= {:build-where #{1 2} :like #{1 2}} got)
       (str "matched " (pr-str got)))))
+
+(defn- strings-ignore-unicode-case [ctx]
+  (ddl! ctx "DROP TABLE IF EXISTS names_u")
+  (ddl! ctx "CREATE TABLE names_u (id INTEGER NOT NULL PRIMARY KEY, name VARCHAR(50))")
+  (db/execute-update! ctx {:insert-into :names_u :values [{:id 1 :name "Élodie"}]})
+  (let [a   (adapter ctx)
+        hit (fn [where] (seq (db/execute-query! ctx {:select [:id] :from [:names_u] :where where})))
+        got {:build-where (boolean (hit (protocols/build-where a {:name "ÉLODIE"})))
+             :like        (boolean (hit (protocols/like a :name "%élodie%")))}]
+    (when-not (= {:build-where true :like true} got)
+      (str "a stored \"Élodie\" matched " (pr-str got)))))
 
 (defn- strings-ignore-case-in-any-locale
   "A Turkish JVM lowers \"ID\" to \"ıd\"; the database lowers it to \"id\". The
@@ -242,6 +255,7 @@
    (into {} (for [k (keys round-trips)] [(keyword "round-trip" (name k)) (round-trip-case k)]))
    {:strings/ignore-case       strings-ignore-case
     :strings/any-locale        strings-ignore-case-in-any-locale
+    :strings/unicode           strings-ignore-unicode-case
     :transactions/rollback     rollback-undoes
     :conflicts/unique-key      refused-key-is-a-conflict}))
 

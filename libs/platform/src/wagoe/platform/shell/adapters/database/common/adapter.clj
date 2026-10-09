@@ -53,7 +53,8 @@
   "`field` LIKE `pattern`, ignoring case. ILIKE where the engine has it;
    elsewhere both sides lowered, since H2's LIKE is case-sensitive (ADR-039).
    The pattern is lowered in SQL too: the JVM's locale folds differently (a
-   Turkish one turns \"ID\" into \"ıd\")."
+   Turkish one turns \"ID\" into \"ıd\"). SQLite's lower() folds ASCII only
+   (BOU-606)."
   [string-match field pattern]
   (if (= :ilike string-match)
     [:ilike field pattern]

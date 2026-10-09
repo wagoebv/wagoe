@@ -213,7 +213,8 @@
 
   (like [this field pattern]
     "A HoneySQL condition matching `field` against the LIKE `pattern`
-     regardless of case, on every engine.
+     regardless of case, on every engine. SQLite folds ASCII letters only
+     until BOU-606.
 
      Example:
        (like h2-adapter :email \"%john%\")
