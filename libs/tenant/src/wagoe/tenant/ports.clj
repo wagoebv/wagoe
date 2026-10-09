@@ -110,8 +110,8 @@
   (with-tenant-schema [this db-ctx schema-name f]
     "Execute function f within the specified tenant schema context.
 
-     For PostgreSQL: Sets search_path to tenant schema for the duration of f
-     For other databases: May use row-level filtering or other mechanisms
+     Sets search_path to the tenant schema for the duration of f. Tenancy is
+     PostgreSQL-only; other databases are refused at boot (BOU-449).
 
      Args:
        db-ctx: Database context map with :datasource

@@ -241,8 +241,11 @@
    (let [topic  (unique-topic)
          group  (str "g-" (name topic))
          p      (pool)
+         ;; Retries forever: with the default 5 it can dead-letter the entry
+         ;; on a slow runner before stop! lands, leaving nothing to reclaim
+         ;; (BOU-600).
          first-bus (redis-streams/create-redis-streams-bus
-                    p {:group group :min-idle-ms 100})
+                    p {:group group :min-idle-ms 100 :max-deliveries nil})
          saw-it (atom 0)]
      (try
        ;; First consumer takes the event and never acknowledges it.

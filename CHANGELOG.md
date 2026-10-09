@@ -33,6 +33,7 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **`migrate up` failed on MySQL in geo and workflow, and every later run did nothing while reporting success** (BOU-544).
   If a failed run left a `schema_migrations` row with id -1, delete it.
+- **`ITenantSchemaProvider` promised row-level tenancy for non-PostgreSQL databases** (BOU-449). Tenancy is PostgreSQL-only, as boot already enforces; nothing to do.
 
 ## [1.0.1] — 2026-10-07
 
