@@ -13,6 +13,17 @@
   (:require [malli.core :as m]
             [malli.error :as me]))
 
+(def max-identifier-length
+  "Longest workflow id, entity type or state name, stored as VARCHAR(255) since
+   MySQL cannot index TEXT (BOU-544)."
+  255)
+
+(def Identifier
+  "A keyword whose name fits its VARCHAR(255) column."
+  [:and keyword?
+   [:fn {:error/message (str "must be at most " max-identifier-length " characters")}
+    #(<= (count (name %)) max-identifier-length)]])
+
 ;; =============================================================================
 ;; Workflow Definition
 ;; =============================================================================
@@ -58,9 +69,9 @@
       :hooks          {:on-enter-paid    [create-invoice-fn]
                        :on-any-transition [log-audit-fn]}}"
   [:map
-   [:id            keyword?]
-   [:initial-state keyword?]
-   [:states        [:set keyword?]]
+   [:id            Identifier]
+   [:initial-state Identifier]
+   [:states        [:set Identifier]]
    [:transitions   [:vector TransitionDef]]
    [:description   {:optional true} :string]
    ;; Optional per-state display metadata (label, color).
@@ -82,10 +93,10 @@
   "A running instance of a workflow, associated with a domain entity."
   [:map
    [:id            uuid?]
-   [:workflow-id   keyword?]
-   [:entity-type   keyword?]
+   [:workflow-id   Identifier]
+   [:entity-type   Identifier]
    [:entity-id     uuid?]
-   [:current-state keyword?]
+   [:current-state Identifier]
    [:created-at    inst?]
    [:updated-at    inst?]
    [:metadata      {:optional true} [:map-of keyword? any?]]])
@@ -93,8 +104,8 @@
 (def WorkflowInstanceInput
   "Input to create a new workflow instance."
   [:map
-   [:workflow-id   keyword?]
-   [:entity-type   keyword?]
+   [:workflow-id   Identifier]
+   [:entity-type   Identifier]
    [:entity-id     uuid?]
    [:metadata      {:optional true} [:map-of keyword? any?]]])
 

@@ -20,7 +20,7 @@
             ;; happily — `get-all-supported-extensions` returns ["sql" "edn"].
             [migratus.migrations :as migratus-migrations]
             [migratus.protocols :as migratus-protocols]
-            [next.jdbc :as jdbc]
+            [migratus.database :as migratus-database]
             [wagoe.platform.core.database.migration-sql :as migration-sql]
             [wagoe.platform.shell.adapters.database.config :as db-config]
             [wagoe.platform.shell.modules :as modules]
@@ -390,12 +390,41 @@
   (with-open [c (.getConnection ^javax.sql.DataSource datasource)]
     (boolean (re-find #"(?i)mysql|mariadb" (.getDatabaseProductName (.getMetaData c))))))
 
+(defn ddl-commits?
+  "Whether `datasource` commits DDL implicitly: MySQL, MariaDB and H2."
+  [datasource]
+  (with-open [c (.getConnection ^javax.sql.DataSource datasource)]
+    (boolean (re-find #"(?i)mysql|mariadb|h2" (.getDatabaseProductName (.getMetaData c))))))
+
+(defmethod migratus-protocols/make-store ::ddl-commits
+  ;; migratus takes its reservation row (id -1) and releases it in a `finally`,
+  ;; both inside the migration's transaction. Where DDL commits implicitly, a
+  ;; failure committed the row and rolled back its release, and every later run
+  ;; did nothing while reporting success (BOU-544). Outside that transaction the
+  ;; release commits. The migration's own statements still run in one.
+  ;;
+  ;; On the store's open connection, as migratus's own path is: a fresh one from
+  ;; a small pool can time out, which migratus reads as "reserved" and skips.
+  [config]
+  (let [store (migratus-protocols/make-store (assoc config :store :database))
+        conn  #(migratus-database/connection-or-spec @(:connection store))]
+    (reify migratus-protocols/Store
+      (config [_] (migratus-protocols/config store))
+      (init [_] (migratus-protocols/init store))
+      (completed-ids [_] (migratus-protocols/completed-ids store))
+      (completed [_] (migratus-protocols/completed store))
+      (migrate-up [_ migration] (migratus-database/migrate-up* (conn) config migration))
+      (migrate-down [_ migration] (migratus-database/migrate-down* (conn) config migration))
+      (squash [_ ids name] (migratus-protocols/squash store ids name))
+      (connect [_] (migratus-protocols/connect store))
+      (disconnect [_] (migratus-protocols/disconnect store)))))
+
 (defn migratus-config
   "The migratus config for running the migrations in `migration-dir` (one
    directory or several) against `datasource`. On MySQL each statement is
    rewritten from the dialect the scaffolder writes (BOU-569)."
   [datasource migration-dir]
-  (cond-> {:store                :database
+  (cond-> {:store                (if (ddl-commits? datasource) ::ddl-commits :database)
            :migration-dir        migration-dir
            :init-script          nil
            :init-in-transaction? false
@@ -530,34 +559,16 @@
   (when (= :migration-dir-conflict (:type (ex-data e)))
     (throw e)))
 
-(defn- release-reservation!
-  "Delete migratus's reservation row (id -1) after a failed run.
-
-   migratus deletes it in a `finally` inside the migration's transaction. Where
-   DDL commits implicitly (MySQL, H2) the row is committed with the DDL and the
-   delete is rolled back with the failure, so every later run did nothing and
-   reported success (BOU-544)."
-  [config]
-  (when-let [ds (get-in config [:db :datasource])]
-    (try
-      (jdbc/execute! ds [(str "DELETE FROM " (:migration-table-name config) " WHERE id = -1")])
-      (catch Exception e
-        (log/warn e "Could not delete the migration reservation row (id -1)")))))
-
 (defn- run-migratus!
   "`(f config)`; true when it ran. migratus returns :ignore, not an exception,
    when another run holds the reservation."
   [f config]
-  (try
-    (if (= :ignore (f config))
-      (do (log/warn (str "Migrations skipped: " (:migration-table-name config) " is reserved by row"
-                         " id -1. Another process is migrating, or a failed run left it behind. If"
-                         " nothing else is migrating, delete that row and run again."))
-          false)
-      true)
-    (catch Exception e
-      (release-reservation! config)
-      (throw e))))
+  (if (= :ignore (f config))
+    (do (log/warn (str "Migrations skipped: " (:migration-table-name config) " is reserved by row"
+                       " id -1. Another process is migrating, or a run that failed before BOU-544"
+                       " left it behind. If nothing else is migrating, delete that row and run again."))
+        false)
+    true))
 
 (defn migrate
   "Runs all pending database migrations.

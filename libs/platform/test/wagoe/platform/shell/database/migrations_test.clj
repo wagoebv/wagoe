@@ -8,7 +8,8 @@
             [migratus.core :as migratus]
             [migratus.migrations :as migratus-migrations]
             [migratus.utils :as migratus-utils]
-            [migratus.protocols]))
+            [migratus.protocols]
+            [next.jdbc :as jdbc]))
 
 (defn- with-temp-dir [f]
   (let [dir (.toFile (java.nio.file.Files/createTempDirectory "wagoe-migrations-test"
@@ -129,6 +130,7 @@
     (fn []
       (with-redefs [migrations/shadowed-migration-dirs (fn ([] nil) ([_ _] nil))
                     migrations/mysql?                  (constantly false)
+                    migrations/ddl-commits?            (constantly false)
                     db-config/get-active-db-config     (fn [] {:datasource ::ds})
                     db-config/load-config              (fn [_] {:active {:wagoe/geo-service {:provider :osm}}})]
         (is (= ["migrations/" "wagoe/geo/migrations/" "acme/billing/migrations/"]
@@ -214,6 +216,29 @@
         (db-factory/close-db-context! ctx)
         (doseq [file (reverse (file-seq root))] (.delete ^java.io.File file))))))
 
+(deftest ^:integration a-failed-run-leaves-another-migrators-reservation-alone
+  ;; A run that fails before it reserves must not release a reservation it
+  ;; never held: a third run would then migrate alongside the second.
+  (let [root (io/file "target" (str "bou544-other-" (System/nanoTime)))
+        dir  (doto (io/file root "m") .mkdirs)
+        ctx  (db-factory/db-context {:adapter :h2
+                                     :database-path (str "mem:bou544o_" (System/nanoTime) ";DB_CLOSE_DELAY=-1")})
+        ds   (:datasource ctx)
+        held #(seq (jdbc/execute! ds ["SELECT id FROM schema_migrations WHERE id = -1"]))]
+    (try
+      (spit (io/file dir "20260101000000-first.up.sql") "CREATE TABLE first_table (id INT)")
+      (spit (io/file dir "20260101000000-first.down.sql") "DROP TABLE first_table")
+      (with-redefs [migrations/migration-dirs          (fn [_] [(str (.getPath dir) "/")])
+                    migrations/shadowed-migration-dirs (fn ([] nil) ([_ _] nil))]
+        (migrations/migrate-datasource! ds)
+        (jdbc/execute! ds ["INSERT INTO schema_migrations (id) VALUES (-1)"])
+        (spit (io/file dir "20260102000000-unreadable.edn") "{:ns")
+        (is (thrown? Exception (migrations/migrate-datasource! ds)))
+        (is (held) "another migrator's reservation was released"))
+      (finally
+        (db-factory/close-db-context! ctx)
+        (doseq [file (reverse (file-seq root))] (.delete ^java.io.File file))))))
+
 (deftest ^:unit discover-migration-dirs-rejects-invalid-manifests
   (testing "invalid manifest shapes fail fast with a clear error"
     (with-temp-dir
@@ -229,6 +254,7 @@
 (deftest ^:unit create-migratus-config-includes-discovered-dirs-and-datasource
   (testing "migratus config keeps datasource and merged migration directories"
     (with-redefs [migrations/mysql? (constantly false)
+                  migrations/ddl-commits? (constantly false)
                   migrations/discover-migration-dirs (fn [] ["migrations/" "wagoe/geo/migrations/"])]
       (is (= {:store :database
               :migration-dir ["migrations/" "wagoe/geo/migrations/"]
