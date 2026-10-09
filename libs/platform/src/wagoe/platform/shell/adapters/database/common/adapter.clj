@@ -24,7 +24,6 @@
      :column-types       {logical-type DDL-type} for protocols/logical-column-types"
   (:require [wagoe.core.utils.type-conversion :as tc]
             [wagoe.platform.ports.database :as protocols]
-            [clojure.string :as str]
             [clojure.tools.logging :as log]
             [next.jdbc :as jdbc]))
 
@@ -52,11 +51,13 @@
 
 (defn case-insensitive-like
   "`field` LIKE `pattern`, ignoring case. ILIKE where the engine has it;
-   elsewhere both sides lowered, since H2's LIKE is case-sensitive (ADR-039)."
+   elsewhere both sides lowered, since H2's LIKE is case-sensitive (ADR-039).
+   The pattern is lowered in SQL too: the JVM's locale folds differently (a
+   Turkish one turns \"ID\" into \"ıd\")."
   [string-match field pattern]
   (if (= :ilike string-match)
     [:ilike field pattern]
-    [:like [:lower field] (str/lower-case pattern)]))
+    [:like [:lower field] [:lower pattern]]))
 
 (defn build-where-clause
   "Build a WHERE fragment from `filters`, in this engine's terms.

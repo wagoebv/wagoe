@@ -217,7 +217,7 @@
 
      Example:
        (like h2-adapter :email \"%john%\")
-       ;; => [:like [:lower :email] \"%john%\"]"))
+       ;; => [:like [:lower :email] [:lower \"%john%\"]]"))
 
 (def capability-keywords
   "What a database may honour, each consumed somewhere (ADR-039):

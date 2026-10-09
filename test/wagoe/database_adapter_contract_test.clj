@@ -20,7 +20,7 @@
             [wagoe.platform.ports.database :as protocols]
             [wagoe.platform.shell.adapters.database.factory :as factory])
   (:import [java.time Instant]
-           [java.util UUID]))
+           [java.util Locale UUID]))
 
 ;; =============================================================================
 ;; Engines
@@ -145,6 +145,23 @@
     (when-not (= {:build-where #{1 2} :like #{1 2}} got)
       (str "matched " (pr-str got)))))
 
+(defn- strings-ignore-case-in-any-locale
+  "A Turkish JVM lowers \"ID\" to \"ıd\"; the database lowers it to \"id\". The
+   match must not depend on which one folds the pattern."
+  [ctx]
+  (ddl! ctx "DROP TABLE IF EXISTS codes_tr")
+  (ddl! ctx "CREATE TABLE codes_tr (id INTEGER NOT NULL PRIMARY KEY, code VARCHAR(20))")
+  (db/execute-update! ctx {:insert-into :codes_tr :values [{:id 1 :code "ID-7"}]})
+  (let [default (Locale/getDefault)]
+    (try
+      (Locale/setDefault (Locale/forLanguageTag "tr-TR"))
+      (let [a   (adapter ctx)
+            hit (fn [where] (seq (db/execute-query! ctx {:select [:id] :from [:codes_tr] :where where})))]
+        (when-not (and (hit (protocols/build-where a {:code "ID"}))
+                       (hit (protocols/like a :code "%ID%")))
+          "\"ID\" did not match a stored \"ID-7\" under a Turkish locale"))
+      (finally (Locale/setDefault default)))))
+
 (defn- rollback-undoes [ctx]
   (ddl! ctx "DROP TABLE IF EXISTS tx_probe")
   (ddl! ctx "CREATE TABLE tx_probe (id INTEGER NOT NULL PRIMARY KEY)")
@@ -224,6 +241,7 @@
   (merge
    (into {} (for [k (keys round-trips)] [(keyword "round-trip" (name k)) (round-trip-case k)]))
    {:strings/ignore-case       strings-ignore-case
+    :strings/any-locale        strings-ignore-case-in-any-locale
     :transactions/rollback     rollback-undoes
     :conflicts/unique-key      refused-key-is-a-conflict}))
 
