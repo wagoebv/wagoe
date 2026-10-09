@@ -22,6 +22,10 @@
    :session-statements connection/session-statements
    :booleans           :int
    :string-match       :like
+   :engine             :sqlite
+   :capabilities       #{:transactional-ddl :index-if-not-exists :on-conflict}
+   :column-types       {:uuid "CHAR(36)" :instant "TEXT" :json "TEXT"
+                        :boolean "INTEGER" :text "TEXT"}
    :table-exists?      introspection/sqlite-table-exists?
    :table-info         introspection/sqlite-table-info})
 

@@ -29,6 +29,15 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ## [Unreleased]
 
+### Added
+
+- **`DBAdapter` answers `engine`, `capabilities`, `column-type` and `like`** (BOU-450, ADR-039). Ask these instead of
+  parsing the product name or reading a nil dialect as PostgreSQL.
+
+### Changed
+
+- **`build-where` string filters ignore case on every database** (BOU-450). They were case-sensitive on H2.
+
 ### Fixed
 
 - **`migrate up` failed on MySQL in geo and workflow, and every later run did nothing while reporting success** (BOU-544).

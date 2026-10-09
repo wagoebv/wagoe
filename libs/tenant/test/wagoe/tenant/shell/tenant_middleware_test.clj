@@ -98,7 +98,11 @@
                        (boolean->db [_ bool-val] bool-val)
                        (db->boolean [_ db-val] db-val)
                        (table-exists? [_ _datasource _table-name] false)
-                       (get-table-info [_ _datasource _table-name] []))]
+                       (get-table-info [_ _datasource _table-name] [])
+                       (engine [_] :postgresql)
+                       (capabilities [_] #{})
+                       (column-type [_ _] nil)
+                       (like [_ _ _] nil))]
     {:datasource mock-datasource
      :adapter mock-adapter
      :schema-calls-atom schema-calls  ; Store atom in context for test access

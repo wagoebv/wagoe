@@ -18,7 +18,10 @@
      :booleans           :native or :int
      :string-match       :like or :ilike
      :table-exists?      (fn [datasource table-name] -> boolean)
-     :table-info         (fn [datasource table-name] -> vector of column maps)"
+     :table-info         (fn [datasource table-name] -> vector of column maps)
+     :engine             :postgresql, :mysql, :sqlite or :h2
+     :capabilities       a subset of protocols/capability-keywords
+     :column-types       {logical-type DDL-type} for protocols/logical-column-types"
   (:require [wagoe.core.utils.type-conversion :as tc]
             [wagoe.platform.ports.database :as protocols]
             [clojure.tools.logging :as log]
@@ -46,6 +49,17 @@
 ;; WHERE building
 ;; =============================================================================
 
+(defn case-insensitive-like
+  "`field` LIKE `pattern`, ignoring case. ILIKE where the engine has it;
+   elsewhere both sides lowered, since H2's LIKE is case-sensitive (ADR-039).
+   The pattern is lowered in SQL too: the JVM's locale folds differently (a
+   Turkish one turns \"ID\" into \"ıd\"). SQLite's lower() folds ASCII only
+   (BOU-606)."
+  [string-match field pattern]
+  (if (= :ilike string-match)
+    [:ilike field pattern]
+    [:like [:lower field] [:lower pattern]]))
+
 (defn build-where-clause
   "Build a WHERE fragment from `filters`, in this engine's terms.
 
@@ -58,7 +72,7 @@
     (let [conditions (for [[field value] filters
                            :when (some? value)]
                        (cond
-                         (string? value)  [string-match field (str "%" value "%")]
+                         (string? value)  (case-insensitive-like string-match field (str "%" value "%"))
                          (vector? value)  [:in field value]
                          (boolean? value) [:= field (boolean->db booleans value)]
                          :else            [:= field value]))]
@@ -127,7 +141,18 @@
     ((:table-exists? spec) datasource table-name))
 
   (get-table-info [_ datasource table-name]
-    ((:table-info spec) datasource table-name)))
+    ((:table-info spec) datasource table-name))
+
+  (engine [_] (:engine spec))
+
+  (capabilities [_] (:capabilities spec))
+
+  (column-type [_ logical]
+    (or (get (:column-types spec) logical)
+        (throw (ex-info (str "No column type for " logical)
+                        {:type :validation-error :logical logical}))))
+
+  (like [_ field pattern] (case-insensitive-like (:string-match spec) field pattern)))
 
 (defn new-adapter
   "Build the adapter described by `spec`. See this namespace's docstring."

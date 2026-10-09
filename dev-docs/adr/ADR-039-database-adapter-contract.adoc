@@ -1,0 +1,151 @@
+= ADR-039: The database adapter contract
+:status: Accepted
+:date: 2026-10-09
+:deciders: wagoe-team
+
+== Status
+
+Accepted (BOU-450). Builds on BOU-367, which made the four adapters one
+implementation over per-engine specs. Follows the cache (BOU-288) and job queue
+(BOU-289) contract suites.
+
+== Context
+
+`wagoe.platform.ports.database/DBAdapter` names what the engines differ in:
+dialect, driver, JDBC URL, pool defaults, session settings, boolean storage,
+string matching, table introspection. Nothing checks that the four engines
+agree on the rest, and the rest is where the bugs are.
+
+A survey of `libs/*/src` (2026-10-09) found about 45 places outside the adapter
+that branch on the engine, through five mechanisms:
+
+* `protocols/dialect`, with `(or dialect :postgresql)` reading nil as PostgreSQL;
+* `jdbc-driver` compared with `"org.postgresql.Driver"`;
+* five private `.getDatabaseProductName` parsers (audience, timestamp-tz,
+  migrations, two in workflow), plus regexes in `reset.clj`;
+* `(:database-type db-ctx)`;
+* the class of a returned value or exception (`PGobject`, `PSQLException`).
+
+What they ask about, grouped:
+
+[cols="2,1,3"]
+|===
+| Question | Sites | Engines, per the code
+
+| Schemas per tenant (`search_path`) | 8 | PostgreSQL
+| Column type for a UUID, instant, JSON, boolean | 15 | differs on all four
+| `IF NOT EXISTS` on an index or column | 5 | index: PG, H2, SQLite; column: PG, H2
+| Full-text search | 5 | PostgreSQL
+| DDL inside a transaction | 3 | PostgreSQL, SQLite
+| Upsert (`ON CONFLICT`) | 1 | PostgreSQL (others have other syntax)
+| `SELECT … FOR UPDATE` | 1 | all but SQLite
+| Constraint violation from its SQLState | 1 | PostgreSQL only; others match message text
+|===
+
+Each of these was answered locally, so each answer is tested only where it was
+written. Three are wrong today:
+
+* `jobs/shell/tenant_context.clj:201` compares `:database-type` with the keyword
+  `:postgresql`; it is a string where it is set at all, so tenant jobs never run
+  in their tenant's schema (BOU-605).
+* Admin search and filters and the user audit emit `ILIKE` on every engine,
+  bypassing the adapter's `:string-match`. SQLite and MySQL have no `ILIKE`.
+* `provisioning/postgresql-context?` tests `(= :postgresql dialect)`, which is
+  never true; it works through its driver-name fallback.
+
+The adapter tests (`core_test.clj`) run on H2 only. The one test across engines,
+`constraint_violation_test`, leaves out MySQL.
+
+== Decision
+
+=== 1. The port answers the questions, and nothing else does
+
+`DBAdapter` gains three methods. Code outside the adapter asks these and stops
+parsing product names, comparing drivers or reading nil as PostgreSQL.
+
+`(engine this)`:: `:postgresql`, `:mysql`, `:sqlite` or `:h2`. Never nil.
+  `dialect` stays for HoneySQL; it is no longer the way to ask which engine
+  this is. A helper `(engine-of datasource)` serves code that holds only a
+  datasource, such as migrations.
+
+`(capabilities this)`:: a set, from this closed list. A capability is listed
+  only when code consumes it:
++
+[cols="1,3,2"]
+|===
+| Keyword | Means | Today
+
+| `:schemas` | a schema per tenant, switched by `search_path` | PG
+| `:transactional-ddl` | DDL in a rolled-back transaction is undone | PG, SQLite
+| `:index-if-not-exists` | `CREATE INDEX IF NOT EXISTS` | PG, H2, SQLite
+| `:column-if-not-exists` | `ADD COLUMN IF NOT EXISTS` | PG, H2
+| `:full-text` | `to_tsvector` / `ts_rank` | PG
+| `:on-conflict` | `INSERT … ON CONFLICT DO UPDATE` | PG, SQLite
+| `:row-locks` | `SELECT … FOR UPDATE` | PG, H2, MySQL
+|===
+
+`(column-type this logical)`:: the DDL type for `:uuid`, `:instant`, `:json`,
+  `:boolean`, `:text`. Replaces the per-module type tables in audience, user and
+  workflow, and the type half of `migration-sql/for-mysql`.
+
+String matching becomes part of the contract rather than a per-site choice:
+`build-where`'s containment and a new `(like this field pattern)` are
+case-insensitive on every engine. SQLite's `lower()` folds ASCII letters only,
+listed as a divergence until BOU-606 gives it a Unicode one. The `ILIKE` call
+sites move to it.
+
+=== 2. A conformance suite pins what they must agree on
+
+`test/wagoe/database_adapter_contract_test.clj` runs every case on H2, SQLite,
+embedded PostgreSQL and MySQL. It lives in the root `test/` tree because the
+`:unit` CI job is the one with a MySQL service. MySQL fails the suite when it is
+not reachable, like the other sweeps, and is registered in
+`wagoe.tools.test-services`. `database-adapter-surface-test` keeps checking that
+each port method answers; this checks the behaviour behind the answers. Cases:
+
+* *Round trip.* Each of UUID, `Instant`, boolean, long, `BigDecimal`, unicode
+  string, long text, JSON and nil, written into a `column-type` column and read
+  back through `wagoe.platform.database`, equals what was written. Instants to
+  the millisecond.
+* *Strings.* Containment and `like` match regardless of case.
+* *Transactions.* A rolled-back write is gone; a committed one stays.
+* *Introspection.* `table-exists?` and `get-table-info` are already swept by
+  `database-adapter-surface-test`, and stay there.
+* *Constraint violations.* A unique or foreign-key refusal is a `:conflict`
+  naming its field (BOU-590), now including MySQL.
+* *Capabilities, both ways.* Each listed capability is exercised and works; each
+  unlisted one is shown not to, where that is cheap to show
+  (`:transactional-ddl` is checked by rolling back a `CREATE TABLE`). A claim the
+  database does not honour fails, and so does an honoured one left unclaimed.
+
+=== 3. Known divergences are listed, with a ticket
+
+A case an engine cannot pass yet goes in `known-divergences`, keyed by engine
+and case, each with its reason and ticket. Everything unlisted must pass. An
+entry for a case that now passes fails the suite too, so the list only shrinks.
+MySQL starts with entries for the BOU-574 inventory (instants, UUIDs, booleans).
+
+=== Rollout
+
+. This ADR, the three port methods, and the suite with its divergence list. No
+  callers change.
+. Callers move to the port, one module per PR: the five product-name parsers,
+  `(or dialect :postgresql)`, `postgresql-context?`, the `ILIKE` sites. The jobs
+  tenant-schema bug is fixed here (BOU-605).
+. MySQL divergences close under BOU-574.
+
+== Consequences
+
+* One answer per question, tested on all four engines, instead of a guess per
+  module tested on one.
+* Adding a fifth engine means writing a spec and passing the suite; the
+  capability set says what it may decline.
+* `dialect` returning nil for PostgreSQL stays, for HoneySQL, but callers stop
+  relying on it.
+* The suite needs MySQL wherever it runs; the `:unit` CI job has it already.
+
+== Not decided here
+
+* Row-level tenancy: tenancy stays PostgreSQL-only (BOU-449).
+* Engine-specific SQL in the scaffolder's templates, which already go through
+  `migration-sql/for-mysql`.

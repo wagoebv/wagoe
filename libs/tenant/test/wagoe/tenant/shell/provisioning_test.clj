@@ -30,7 +30,11 @@
     (boolean->db [_ _] 1)
     (db->boolean [_ _] true)
     (table-exists? [_ _ _] false)
-    (get-table-info [_ _ _] [])))
+    (get-table-info [_ _ _] [])
+    (engine [_] :postgresql)
+    (capabilities [_] #{})
+    (column-type [_ _] nil)
+    (like [_ _ _] nil)))
 
 (defn with-h2-database
   "Test fixture that creates an H2 in-memory database for testing."
@@ -74,7 +78,11 @@
                          (boolean->db [_ _] 1)
                          (db->boolean [_ _] true)
                          (table-exists? [_ _ _] false)
-                         (get-table-info [_ _ _] []))
+                         (get-table-info [_ _ _] [])
+                         (engine [_] :postgresql)
+                         (capabilities [_] #{})
+                         (column-type [_ _] nil)
+                         (like [_ _ _] nil))
           ctx {:adapter mock-adapter
                :datasource nil}]
       (is (thrown-with-msg? clojure.lang.ExceptionInfo
@@ -92,7 +100,11 @@
                          (boolean->db [_ _] 1)
                          (db->boolean [_ _] true)
                          (table-exists? [_ _ _] false)
-                         (get-table-info [_ _ _] []))
+                         (get-table-info [_ _ _] [])
+                         (engine [_] :postgresql)
+                         (capabilities [_] #{})
+                         (column-type [_ _] nil)
+                         (like [_ _ _] nil))
           ctx {:adapter mock-adapter
                :datasource nil}
           tenant {:name "Test Tenant"}]
@@ -111,7 +123,11 @@
                          (boolean->db [_ _] 0)
                          (db->boolean [_ _] false)
                          (table-exists? [_ _ _] false)
-                         (get-table-info [_ _ _] []))
+                         (get-table-info [_ _ _] [])
+                         (engine [_] :sqlite)
+                         (capabilities [_] #{})
+                         (column-type [_ _] nil)
+                         (like [_ _ _] nil))
           ctx {:adapter mock-adapter
                :datasource nil}
           tenant {:schema-name "tenant_test"}]
@@ -130,7 +146,11 @@
                          (boolean->db [_ _] 0)
                          (db->boolean [_ _] false)
                          (table-exists? [_ _ _] false)
-                         (get-table-info [_ _ _] []))
+                         (get-table-info [_ _ _] [])
+                         (engine [_] :mysql)
+                         (capabilities [_] #{})
+                         (column-type [_ _] nil)
+                         (like [_ _ _] nil))
           ctx {:adapter mock-adapter
                :datasource nil}
           tenant {:schema-name "tenant_test"}]
@@ -152,7 +172,11 @@
                          (boolean->db [_ _] 1)
                          (db->boolean [_ _] true)
                          (table-exists? [_ _ _] false)
-                         (get-table-info [_ _ _] []))
+                         (get-table-info [_ _ _] [])
+                         (engine [_] :postgresql)
+                         (capabilities [_] #{})
+                         (column-type [_ _] nil)
+                         (like [_ _ _] nil))
           ctx {:adapter mock-adapter
                :datasource nil}]
       (is (true? (#'sut/postgresql-context? ctx))))))
@@ -232,7 +256,11 @@
                          (boolean->db [_ _] 1)
                          (db->boolean [_ _] true)
                          (table-exists? [_ _ _] false)
-                         (get-table-info [_ _ _] []))
+                         (get-table-info [_ _ _] [])
+                         (engine [_] :postgresql)
+                         (capabilities [_] #{})
+                         (column-type [_ _] nil)
+                         (like [_ _ _] nil))
           ctx {:adapter mock-adapter
                :datasource nil}]
       (is (thrown-with-msg? clojure.lang.ExceptionInfo
@@ -250,7 +278,11 @@
                          (boolean->db [_ _] 1)
                          (db->boolean [_ _] true)
                          (table-exists? [_ _ _] false)
-                         (get-table-info [_ _ _] []))
+                         (get-table-info [_ _ _] [])
+                         (engine [_] :postgresql)
+                         (capabilities [_] #{})
+                         (column-type [_ _] nil)
+                         (like [_ _ _] nil))
           ctx {:adapter mock-adapter
                :datasource nil}
           tenant {:name "Test Tenant"}]
@@ -356,7 +388,11 @@
                           (boolean->db [_ value] value)
                           (db->boolean [_ value] value)
                           (table-exists? [_ _ _] false)
-                          (get-table-info [_ _ _] []))
+                          (get-table-info [_ _ _] [])
+                          (engine [_] :sqlite)
+                          (capabilities [_] #{})
+                          (column-type [_ _] nil)
+                          (like [_ _ _] nil))
                :datasource ::ds
                :database-type :sqlite}]
       (try

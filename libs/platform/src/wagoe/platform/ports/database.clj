@@ -195,7 +195,47 @@
        
      Example:
        (get-table-info sqlite-adapter ds :users)
-       ;; => [{:name \"id\" :type \"TEXT\" :not-null true :primary-key true} ...]"))
+       ;; => [{:name \"id\" :type \"TEXT\" :not-null true :primary-key true} ...]")
+
+  (engine [this]
+    "Which database this is: :postgresql, :mysql, :sqlite or :h2. Never nil.
+     Ask this, not `dialect`, not the driver and not the product name (ADR-039).")
+
+  (capabilities [this]
+    "The set of `capability-keywords` this database honours. The conformance
+     suite checks each claim both ways (ADR-039).")
+
+  (column-type [this logical]
+    "The DDL type for `logical`, one of `logical-column-types`.
+
+     Example:
+       (column-type mysql-adapter :uuid) ;; => \"CHAR(36)\"")
+
+  (like [this field pattern]
+    "A HoneySQL condition matching `field` against the LIKE `pattern`
+     regardless of case, on every engine. SQLite folds ASCII letters only
+     until BOU-606.
+
+     Example:
+       (like h2-adapter :email \"%john%\")
+       ;; => [:like [:lower :email] [:lower \"%john%\"]]"))
+
+(def capability-keywords
+  "What a database may honour, each consumed somewhere (ADR-039):
+
+     :schemas               a schema per tenant, switched by search_path
+     :transactional-ddl     DDL in a rolled-back transaction is undone
+     :index-if-not-exists   CREATE INDEX IF NOT EXISTS
+     :column-if-not-exists  ALTER TABLE … ADD COLUMN IF NOT EXISTS
+     :full-text             to_tsvector / ts_rank
+     :on-conflict           INSERT … ON CONFLICT DO UPDATE
+     :row-locks             SELECT … FOR UPDATE"
+  #{:schemas :transactional-ddl :index-if-not-exists :column-if-not-exists
+    :full-text :on-conflict :row-locks})
+
+(def logical-column-types
+  "What `column-type` answers for."
+  #{:uuid :instant :json :boolean :text})
 
 ;; =============================================================================
 ;; Configuration Schemas (Malli)

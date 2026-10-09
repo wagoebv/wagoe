@@ -22,6 +22,11 @@
    :session-statements connection/session-statements
    :booleans           :native
    :string-match       :like
+   :engine             :h2
+   :capabilities       #{:index-if-not-exists :column-if-not-exists :row-locks}
+   ;; VARCHAR, not CLOB or TEXT: those read back as a JdbcClob, not a String.
+   :column-types       {:uuid "UUID" :instant "TIMESTAMP WITH TIME ZONE" :json "VARCHAR"
+                        :boolean "BOOLEAN" :text "VARCHAR"}
    :table-exists?      (partial introspection/information-schema-table-exists?
                                 introspection-spec)
    :table-info         (partial introspection/information-schema-table-info

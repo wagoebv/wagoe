@@ -105,9 +105,11 @@
         (testing "a nil value is not a filter"
           (is (nil? (protocols/build-where adapter {:name nil}))))
 
-        (testing "a string is a containment match, in this adapter's operator"
-          (is (= [string-match :name "%jo%"]
-                 (protocols/build-where adapter {:name "jo"}))))
+        (testing "a string is a containment match that ignores case (ADR-039)"
+          (is (= (if (= :ilike string-match)
+                   [:ilike :name "%Jo%"]
+                   [:like [:lower :name] [:lower "%Jo%"]])
+                 (protocols/build-where adapter {:name "Jo"}))))
 
         (testing "a vector is an IN"
           (is (= [:in :role [:admin :user]]
