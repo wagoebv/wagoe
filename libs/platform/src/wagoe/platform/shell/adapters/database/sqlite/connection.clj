@@ -1,8 +1,6 @@
 (ns wagoe.platform.shell.adapters.database.sqlite.connection
   "SQLite connection settings and JDBC URL."
-  (:import [java.lang.reflect Method]
-           [java.util Locale]
-           [org.sqlite Function]))
+  (:import [java.lang.reflect Method]))
 
 (def ^:private mmap-size-bytes
   "Memory-mapped I/O size in bytes (256MB)."
@@ -36,26 +34,38 @@
 
 (defn- protected-method
   "A protected method of org.sqlite.Function, which a proxy cannot call directly."
-  ^Method [name & arg-types]
-  (doto (.getDeclaredMethod Function name (into-array Class arg-types))
+  ^Method [^Class function name & arg-types]
+  (doto (.getDeclaredMethod function name (into-array Class arg-types))
     (.setAccessible true)))
 
-(def ^:private value-text (delay (protected-method "value_text" Integer/TYPE)))
-(def ^:private result-text (delay (protected-method "result" String)))
+(def ^:private register-lower
+  "Compiled on first use, not at load: platform does not ship the SQLite
+   driver, and this namespace must load without it."
+  (delay
+    (let [function    (Class/forName "org.sqlite.Function")
+          value-text  (protected-method function "value_text" Integer/TYPE)
+          result-text (protected-method function "result" String)
+          register    (binding [*ns* (the-ns 'wagoe.platform.shell.adapters.database.sqlite.connection)]
+                        (eval '(fn [connection ^java.lang.reflect.Method value-text
+                                    ^java.lang.reflect.Method result-text]
+                                 (org.sqlite.Function/create
+                                  connection "lower"
+                                  (proxy [org.sqlite.Function] []
+                                    (xFunc []
+                                      (let [s (.invoke value-text this (object-array [(int 0)]))]
+                                        (.invoke result-text this
+                                                 (object-array [(some-> ^String s
+                                                                        (.toLowerCase java.util.Locale/ROOT))])))))
+                                  1
+                                  org.sqlite.Function/FLAG_DETERMINISTIC))))]
+      #(register % value-text result-text))))
 
 (defn register-unicode-lower!
   "Replace lower() on `connection` with one that folds all of Unicode. SQLite's
    own folds ASCII only, so `like` missed \"Élodie\" for \"%élodie%\". Root locale,
    so the JVM's (a Turkish \"I\") does not change the answer (BOU-606)."
   [connection]
-  (Function/create connection "lower"
-                   (proxy [Function] []
-                     (xFunc []
-                       (let [s (.invoke ^Method @value-text this (object-array [(int 0)]))]
-                         (.invoke ^Method @result-text this
-                                  (object-array [(some-> ^String s (.toLowerCase Locale/ROOT))])))))
-                   1
-                   Function/FLAG_DETERMINISTIC))
+  (@register-lower connection))
 
 (def pool-defaults
   "HikariCP defaults for an embedded database. SQLite serialises writes, so the
