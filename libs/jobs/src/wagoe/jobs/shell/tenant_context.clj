@@ -24,6 +24,7 @@
    
    See ADR-004 for architecture details (lines 525-554)."
   (:require [wagoe.jobs.ports :as ports]
+            [wagoe.platform.ports.database :as db-ports]
             [wagoe.tenant.ports :as tenant-ports]
             [clojure.tools.logging :as log]))
 
@@ -164,7 +165,7 @@
    Args:
      job: Job map with :id, :job-type, :args, :metadata
      handler-fn: Job handler function (fn [args db-ctx] -> result)
-     db-ctx: Database context with :datasource, :database-type
+     db-ctx: Database context with :adapter and :datasource
      tenant-service: ITenantService implementation
      tenant-schema-provider: ITenantSchemaProvider implementation (optional, required for tenant jobs)
    
@@ -198,7 +199,10 @@
         {:keys [tenant-id tenant-schema]} (extract-tenant-context job tenant-service)]
 
     (try
-      (if (and tenant-schema (= (:database-type db-ctx) :postgresql))
+      ;; Asked of the adapter: this compared a :database-type the system's
+      ;; db-context never has, so every tenant job ran in public (BOU-605).
+      (if (and tenant-schema
+               (contains? (some-> (:adapter db-ctx) db-ports/capabilities) :schemas))
         ;; Execute in tenant schema context (PostgreSQL only)
         (do
           (log/info "Executing job in tenant schema"
@@ -228,10 +232,10 @@
         ;; No tenant or non-PostgreSQL - use public schema
         (do
           (when tenant-id
-            (log/debug "Job has tenant but not PostgreSQL, using default schema"
+            (log/debug "Job has tenant but the database has no schemas, using default schema"
                        {:job-id job-id
                         :tenant-id tenant-id
-                        :database-type (:database-type db-ctx)}))
+                        :engine (some-> (:adapter db-ctx) db-ports/engine)}))
 
           (handler-fn (:args job) db-ctx)))
 

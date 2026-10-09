@@ -40,6 +40,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Tenant jobs ran in the public schema** (BOU-605). `process-tenant-job!` now switches to the tenant's schema on PostgreSQL;
+  re-run tenant jobs whose writes landed in public.
 - **SQLite enforced foreign keys on one pooled connection in five; MySQL ran most connections without strict mode or UTC**
   (BOU-606). Session settings now reach every connection. Check SQLite data written since for orphaned rows.
 - **`migrate up` failed on MySQL in geo and workflow, and every later run did nothing while reporting success** (BOU-544).
