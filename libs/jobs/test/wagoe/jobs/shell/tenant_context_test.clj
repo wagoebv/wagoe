@@ -2,6 +2,9 @@
   "Tests for tenant-aware background job processing."
   (:require [wagoe.jobs.ports :as ports]
             [wagoe.jobs.shell.tenant-context :as tenant-jobs]
+            [wagoe.platform.ports.database :as db-ports]
+            [wagoe.platform.shell.adapters.database.postgresql.core :as postgresql]
+            [wagoe.platform.shell.adapters.database.sqlite.core :as sqlite]
             [wagoe.tenant.ports]
             [clojure.test :refer [deftest is testing]]))
 
@@ -37,8 +40,7 @@
   "Create mock database context for testing."
   []
   {:datasource (Object.)  ; Mock datasource
-   :adapter :postgresql   ; Required by db-context validation
-   :database-type :postgresql})
+   :adapter (postgresql/new-adapter)})
 
 (defn- create-mock-tenant-schema-provider
   "Create mock tenant schema provider for testing.
@@ -51,7 +53,7 @@
     (with-tenant-schema [_this _db-ctx _schema-name f]
       ;; In tests, just call the function without actual schema switching
       ;; since we're using mock datasources
-      (f {:datasource (Object.) :database-type :postgresql}))
+      (f {:datasource (Object.) :adapter (postgresql/new-adapter)}))
     (tenant-provisioned? [_this _db-ctx _tenant-entity] true)
     (list-tenant-schemas [_this _db-ctx] [])))
 
@@ -183,8 +185,7 @@
           tenant-schema-provider (create-mock-tenant-schema-provider)
           ;; Use non-PostgreSQL to skip schema switching in tests
           db-ctx {:datasource (Object.)
-                  :adapter :sqlite
-                  :database-type :sqlite}
+                  :adapter (sqlite/new-adapter)}
           executed-args (atom nil)
           executed-context (atom nil)
 
@@ -211,7 +212,7 @@
 
       ;; Handler should receive db-context
       (is (some? @executed-context))
-      (is (= :sqlite (:database-type @executed-context)))
+      (is (= :sqlite (db-ports/engine (:adapter @executed-context))))
 
       ;; Result should indicate success
       (is (= true (:success? result)))
@@ -222,8 +223,7 @@
           tenant-schema-provider (create-mock-tenant-schema-provider)
           ;; Use SQLite mock to skip schema switching in tests
           db-ctx {:datasource (Object.)
-                  :adapter :sqlite
-                  :database-type :sqlite}
+                  :adapter (sqlite/new-adapter)}
           executed? (atom false)
 
           handler-fn (fn [_ _]
@@ -250,8 +250,7 @@
           tenant-schema-provider (create-mock-tenant-schema-provider)
           ;; Use SQLite mock to skip schema switching in tests
           db-ctx {:datasource (Object.)
-                  :adapter :sqlite
-                  :database-type :sqlite}
+                  :adapter (sqlite/new-adapter)}
 
           handler-fn (fn [_args _ctx]
                        (throw (Exception. "Handler error")))
@@ -282,8 +281,7 @@
           tenant-schema-provider (create-mock-tenant-schema-provider)
           ;; Use SQLite mock to skip schema switching in tests
           db-ctx {:datasource (Object.)
-                  :adapter :sqlite
-                  :database-type :sqlite}
+                  :adapter (sqlite/new-adapter)}
           original-handler (fn [args ctx]
                              {:success? true
                               :result {:args args
@@ -338,8 +336,7 @@
           tenant-schema-provider (create-mock-tenant-schema-provider)
           ;; Use SQLite mock to skip schema switching in tests
           db-ctx {:datasource (Object.)
-                  :adapter :sqlite
-                  :database-type :sqlite}
+                  :adapter (sqlite/new-adapter)}
           job-queue (create-mock-job-queue)
 
           ;; Track execution
