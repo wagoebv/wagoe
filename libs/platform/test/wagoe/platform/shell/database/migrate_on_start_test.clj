@@ -25,6 +25,7 @@
   [config]
   (let [calls (atom [])
         ctx   (with-redefs [migrations/mysql? (constantly false)
+                            migrations/ddl-commits? (constantly false)
                             db-factory/db-context (fn [_] {:adapter ::adapter
                                                            :datasource ::the-pool})
                             db-factory/close-db-context! (fn [_] nil)
@@ -58,6 +59,7 @@
     (is (thrown-with-msg?
          clojure.lang.ExceptionInfo #"Migration failed"
          (with-redefs [migrations/mysql? (constantly false)
+                       migrations/ddl-commits? (constantly false)
                        db-factory/db-context (fn [_] {:datasource ::pool})
                        db-factory/close-db-context! (fn [ctx] (swap! closed conj ctx))
                        migrations/refuse-shadowed-migration-dirs! (fn [] nil)
@@ -78,6 +80,7 @@
   (is (thrown-with-msg?
        clojure.lang.ExceptionInfo #"Migration failed"
        (with-redefs [migrations/mysql? (constantly false)
+                     migrations/ddl-commits? (constantly false)
                      db-factory/db-context (fn [_] {:datasource ::pool})
                      db-factory/close-db-context! (fn [_] (throw (Exception. "pool stuck")))
                      migrations/refuse-shadowed-migration-dirs! (fn [] nil)
@@ -90,6 +93,7 @@
   ;; pool on every path.
   (let [closed (atom [])]
     (with-redefs [migrations/mysql? (constantly false)
+                  migrations/ddl-commits? (constantly false)
                   db-factory/db-context (fn [_] {:datasource ::pool})
                   db-factory/close-db-context! (fn [ctx] (swap! closed conj ctx))
                   migrations/refuse-shadowed-migration-dirs! (fn [] nil)
@@ -105,6 +109,7 @@
   ;; quietly opt out of either.
   (let [calls (atom [])]
     (with-redefs [migrations/mysql? (constantly false)
+                  migrations/ddl-commits? (constantly false)
                   migrations/discover-migration-dirs (fn [] ["migrations" "wagoe/geo/migrations/"])
                   migrations/refuse-shadowed-migration-dirs! (fn [] nil)
                   migratus/migrate (fn [cfg] (swap! calls conj cfg))]
@@ -128,6 +133,7 @@
   ;; created tables for modules nobody switched on (BOU-579).
   (let [asked (atom [])]
     (with-redefs [migrations/mysql? (constantly false)
+                  migrations/ddl-commits? (constantly false)
                   db-factory/db-context (fn [_] {:adapter ::adapter :datasource ::the-pool})
                   migrations/refuse-shadowed-migration-dirs! (fn [] nil)
                   migrations/migration-dirs (fn [libs] (swap! asked conj libs) ["migrations"])

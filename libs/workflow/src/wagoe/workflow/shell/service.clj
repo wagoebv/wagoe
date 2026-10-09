@@ -13,6 +13,7 @@
             [wagoe.workflow.core.machine :as machine]
             [wagoe.workflow.core.transitions :as transitions]
             [wagoe.workflow.core.audit :as audit]
+            [wagoe.workflow.schema :as schema]
             [clojure.tools.logging :as log])
   (:import [java.util UUID]
            [java.time Instant]))
@@ -157,6 +158,19 @@
           (log/warn e "Failed to enqueue side-effect job"
                     {:effect effect-key :instance-id (:id instance)}))))))
 
+(defn- refuse-long-entity-keys!
+  "Throw when entity-type or entity-id will not fit its VARCHAR(255) column,
+   rather than failing in the database (BOU-544)."
+  [{:keys [entity-type entity-id]}]
+  (doseq [[field v] [[:entity-type entity-type] [:entity-id entity-id]]
+          :let [stored (if (keyword? v) (name v) (str v))]
+          :when (< schema/max-identifier-length (count stored))]
+    (throw (ex-info (str (name field) " must be at most " schema/max-identifier-length " characters")
+                    {:type    :validation-error
+                     :field   field
+                     :message (str (name field) " must be at most " schema/max-identifier-length
+                                   " characters; it is " (count stored))}))))
+
 ;; =============================================================================
 ;; WorkflowService record
 ;; =============================================================================
@@ -172,6 +186,7 @@
                         {:type        :not-found
                          :workflow-id workflow-id
                          :message     (str "No workflow registered with id: " (name workflow-id))})))
+      (refuse-long-entity-keys! input)
       (let [now      (Instant/now)
             instance {:id            (UUID/randomUUID)
                       :workflow-id   workflow-id

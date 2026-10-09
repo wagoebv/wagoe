@@ -130,6 +130,27 @@
                                                     :entity-type :order
                                                     :entity-id   entity-id}))))))
 
+(deftest ^:unit identifiers-must-fit-their-columns
+  ;; Stored as VARCHAR(255), so a longer name is refused before it is written,
+  ;; on every database (BOU-544).
+  (let [long-name (apply str (repeat 256 "a"))]
+    (testing "a workflow with a longer id or state does not register"
+      (is (thrown? clojure.lang.ExceptionInfo
+                   (registry/register-workflow! (assoc order-def :id (keyword long-name)))))
+      (is (thrown? clojure.lang.ExceptionInfo
+                   (registry/register-workflow! (update order-def :states conj (keyword long-name))))))
+    (testing "an instance with a longer entity type or id is not started"
+      (doseq [input [{:entity-type (keyword long-name) :entity-id (UUID/randomUUID)}
+                     {:entity-type :order :entity-id long-name}]]
+        (let [e (is (thrown? clojure.lang.ExceptionInfo
+                             (ports/start-workflow! *service* (assoc input :workflow-id :order-workflow))))]
+          (is (= :validation-error (:type (ex-data e)))))
+        (is (empty? (ports/list-instances *store* {})) "nothing was written")))
+    (testing "255 characters fit"
+      (is (some? (ports/start-workflow! *service* {:workflow-id :order-workflow
+                                                   :entity-type (keyword (subs long-name 1))
+                                                   :entity-id   (UUID/randomUUID)}))))))
+
 ;; =============================================================================
 ;; transition! — happy path
 ;; =============================================================================

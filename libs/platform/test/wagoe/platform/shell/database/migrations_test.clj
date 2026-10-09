@@ -8,7 +8,8 @@
             [migratus.core :as migratus]
             [migratus.migrations :as migratus-migrations]
             [migratus.utils :as migratus-utils]
-            [migratus.protocols]))
+            [migratus.protocols]
+            [next.jdbc :as jdbc]))
 
 (defn- with-temp-dir [f]
   (let [dir (.toFile (java.nio.file.Files/createTempDirectory "wagoe-migrations-test"
@@ -129,6 +130,7 @@
     (fn []
       (with-redefs [migrations/shadowed-migration-dirs (fn ([] nil) ([_ _] nil))
                     migrations/mysql?                  (constantly false)
+                    migrations/ddl-commits?            (constantly false)
                     db-config/get-active-db-config     (fn [] {:datasource ::ds})
                     db-config/load-config              (fn [_] {:active {:wagoe/geo-service {:provider :osm}}})]
         (is (= ["migrations/" "wagoe/geo/migrations/" "acme/billing/migrations/"]
@@ -192,6 +194,92 @@
           (is (re-find #"20260102000000" (str (ex-message e) (:error (ex-data e)))))))
       (is (db/table-exists? ctx :geo_table)))))
 
+(deftest ^:integration a-failed-migration-does-not-block-the-next-run
+  ;; DDL commits implicitly on H2 and MySQL, so a failed migration committed
+  ;; migratus's reservation row and rolled back its removal. Every later run then
+  ;; did nothing and reported success (BOU-544).
+  (let [root (io/file "target" (str "bou544-" (System/nanoTime)))
+        dir  (doto (io/file root "m") .mkdirs)
+        up   (io/file dir "20260101000000-broken.up.sql")
+        ctx  (db-factory/db-context {:adapter :h2
+                                     :database-path (str "mem:bou544_" (System/nanoTime) ";DB_CLOSE_DELAY=-1")})]
+    (try
+      (spit up "CREATE TABLE half_done (id INT);\n--;;\nCREATE TABLE broken (")
+      (spit (io/file dir "20260101000000-broken.down.sql") "DROP TABLE IF EXISTS half_done")
+      (with-redefs [migrations/migration-dirs          (fn [_] [(str (.getPath dir) "/")])
+                    migrations/shadowed-migration-dirs (fn ([] nil) ([_ _] nil))]
+        (is (thrown? clojure.lang.ExceptionInfo (migrations/migrate-datasource! (:datasource ctx))))
+        (spit up "CREATE TABLE fixed (id INT)")
+        (migrations/migrate-datasource! (:datasource ctx))
+        (is (db/table-exists? ctx :fixed) "the fixed migration did not run"))
+      (finally
+        (db-factory/close-db-context! ctx)
+        (doseq [file (reverse (file-seq root))] (.delete ^java.io.File file))))))
+
+(deftest ^:integration a-failed-run-leaves-another-migrators-reservation-alone
+  ;; A run that fails before it reserves must not release a reservation it
+  ;; never held: a third run would then migrate alongside the second.
+  (let [root (io/file "target" (str "bou544-other-" (System/nanoTime)))
+        dir  (doto (io/file root "m") .mkdirs)
+        ctx  (db-factory/db-context {:adapter :h2
+                                     :database-path (str "mem:bou544o_" (System/nanoTime) ";DB_CLOSE_DELAY=-1")})
+        ds   (:datasource ctx)
+        held #(seq (jdbc/execute! ds ["SELECT id FROM schema_migrations WHERE id = -1"]))]
+    (try
+      (spit (io/file dir "20260101000000-first.up.sql") "CREATE TABLE first_table (id INT)")
+      (spit (io/file dir "20260101000000-first.down.sql") "DROP TABLE first_table")
+      (with-redefs [migrations/migration-dirs          (fn [_] [(str (.getPath dir) "/")])
+                    migrations/shadowed-migration-dirs (fn ([] nil) ([_ _] nil))]
+        (migrations/migrate-datasource! ds)
+        (jdbc/execute! ds ["INSERT INTO schema_migrations (id) VALUES (-1)"])
+        (spit (io/file dir "20260102000000-unreadable.edn") "{:ns")
+        (is (thrown? Exception (migrations/migrate-datasource! ds)))
+        (is (held) "another migrator's reservation was released"))
+      (finally
+        (db-factory/close-db-context! ctx)
+        (doseq [file (reverse (file-seq root))] (.delete ^java.io.File file))))))
+
+(defn half-a-data-migration
+  "An EDN migration that writes, then fails."
+  [config]
+  (jdbc/execute! (:conn config) ["INSERT INTO items (id) VALUES (2)"])
+  (throw (ex-info "second write failed" {:type :internal-error})))
+
+(defn undo-nothing [_config] nil)
+
+(deftest ^:integration a-failed-data-migration-writes-nothing
+  ;; Running outside migratus's outer transaction must not leave half a data
+  ;; migration committed: it stays pending, and a retry would write it twice.
+  (let [root  (io/file "target" (str "bou544-dml-" (System/nanoTime)))
+        dir   (doto (io/file root "m") .mkdirs)
+        ctx   (db-factory/db-context {:adapter :h2
+                                      :database-path (str "mem:bou544d_" (System/nanoTime) ";DB_CLOSE_DELAY=-1")})
+        ds    (:datasource ctx)
+        items #(mapv :ITEMS/ID (jdbc/execute! ds ["SELECT id FROM items ORDER BY id"]))
+        file  #(io/file dir %)]
+    (try
+      (spit (file "20260101000000-items.up.sql") "CREATE TABLE items (id INT PRIMARY KEY)")
+      (spit (file "20260101000000-items.down.sql") "DROP TABLE items")
+      (with-redefs [migrations/migration-dirs          (fn [_] [(str (.getPath dir) "/")])
+                    migrations/shadowed-migration-dirs (fn ([] nil) ([_ _] nil))]
+        (migrations/migrate-datasource! ds)
+        (testing "SQL"
+          (spit (file "20260102000000-rows.up.sql") "INSERT INTO items (id) VALUES (1);\n--;;\nINSERT INTO missing (id) VALUES (1)")
+          (spit (file "20260102000000-rows.down.sql") "DELETE FROM items WHERE id = 1")
+          (is (thrown? Exception (migrations/migrate-datasource! ds)))
+          (is (= [] (items)) "the first insert was committed"))
+        (testing "EDN"
+          (.delete (file "20260102000000-rows.up.sql"))
+          (.delete (file "20260102000000-rows.down.sql"))
+          (spit (file "20260103000000-half.edn")
+                (pr-str {:ns 'wagoe.platform.shell.database.migrations-test
+                         :up-fn "half-a-data-migration" :down-fn "undo-nothing"}))
+          (is (thrown? Exception (migrations/migrate-datasource! ds)))
+          (is (= [] (items)) "the write before the failure was committed")))
+      (finally
+        (db-factory/close-db-context! ctx)
+        (doseq [f (reverse (file-seq root))] (.delete ^java.io.File f))))))
+
 (deftest ^:unit discover-migration-dirs-rejects-invalid-manifests
   (testing "invalid manifest shapes fail fast with a clear error"
     (with-temp-dir
@@ -207,6 +295,7 @@
 (deftest ^:unit create-migratus-config-includes-discovered-dirs-and-datasource
   (testing "migratus config keeps datasource and merged migration directories"
     (with-redefs [migrations/mysql? (constantly false)
+                  migrations/ddl-commits? (constantly false)
                   migrations/discover-migration-dirs (fn [] ["migrations/" "wagoe/geo/migrations/"])]
       (is (= {:store :database
               :migration-dir ["migrations/" "wagoe/geo/migrations/"]

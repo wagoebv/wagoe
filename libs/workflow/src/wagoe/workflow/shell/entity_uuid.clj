@@ -29,6 +29,10 @@
    :h2         (str "ALTER TABLE workflow_instances ADD COLUMN IF NOT EXISTS entity_uuid UUID"
                     " GENERATED ALWAYS AS (CASE WHEN REGEXP_LIKE(entity_id, '" uuid-regex "')"
                     " THEN CAST(entity_id AS UUID) END)")
+   ;; CHAR(36), as MySQL migrations store a UUID (BOU-544).
+   :mysql      (str "ALTER TABLE workflow_instances ADD COLUMN entity_uuid CHAR(36)"
+                    " GENERATED ALWAYS AS (CASE WHEN REGEXP_LIKE(entity_id, '" uuid-regex "')"
+                    " THEN entity_id END) STORED")
    ;; No IF NOT EXISTS for a column, and only a virtual one may be added.
    :sqlite     (str "ALTER TABLE workflow_instances ADD COLUMN entity_uuid TEXT"
                     " GENERATED ALWAYS AS (CASE WHEN entity_id GLOB '" uuid-glob "'"
@@ -47,6 +51,7 @@
       (str/includes? product "postgres") :postgresql
       (str/includes? product "h2")       :h2
       (str/includes? product "sqlite")   :sqlite
+      (re-find #"mysql|mariadb" product) :mysql
       :else                              :unknown)))
 
 (defn- sqlite-has-column? [connectable]
@@ -64,15 +69,27 @@
                (with-open [rs (.getColumns md nil nil t col)] (.next rs)))
              [["workflow_instances" "entity_uuid"] ["WORKFLOW_INSTANCES" "ENTITY_UUID"]])))))
 
+(defn- mysql-has? [connectable table-sql]
+  (seq (jdbc/execute! connectable [(str "SELECT 1 FROM information_schema." table-sql
+                                        " AND table_schema = DATABASE()"
+                                        " AND table_name = 'workflow_instances'")])))
+
 (defn ensure-entity-uuid!
   "Add workflow_instances.entity_uuid and its index, unless they are there."
   [connectable]
   (let [e (engine connectable)]
     (if-let [ddl (add-column e)]
-      (do (when-not (and (= :sqlite e) (sqlite-has-column? connectable))
-            (jdbc/execute! connectable [ddl]))
-          (jdbc/execute! connectable [(str "CREATE INDEX IF NOT EXISTS " index-name
-                                           " ON workflow_instances (entity_uuid)")]))
+      (case e
+        ;; MySQL has no IF NOT EXISTS on a column or an index.
+        :mysql (do (when-not (mysql-has? connectable "columns WHERE column_name = 'entity_uuid'")
+                     (jdbc/execute! connectable [ddl]))
+                   (when-not (mysql-has? connectable (str "statistics WHERE index_name = '" index-name "'"))
+                     (jdbc/execute! connectable [(str "CREATE INDEX " index-name
+                                                      " ON workflow_instances (entity_uuid)")])))
+        (do (when-not (and (= :sqlite e) (sqlite-has-column? connectable))
+              (jdbc/execute! connectable [ddl]))
+            (jdbc/execute! connectable [(str "CREATE INDEX IF NOT EXISTS " index-name
+                                             " ON workflow_instances (entity_uuid)")])))
       (log/warn "workflow_instances.entity_uuid is not supported on this database; join on entity_id"
                 {:engine e}))))
 
@@ -91,5 +108,9 @@
   "Migratus entry point."
   [config]
   (let [db (connectable config)]
-    (jdbc/execute! db [(str "DROP INDEX IF EXISTS " index-name)])
-    (jdbc/execute! db ["ALTER TABLE workflow_instances DROP COLUMN entity_uuid"])))
+    (if (= :mysql (engine db))
+      ;; MySQL drops a column's index with the column.
+      (when (mysql-has? db "columns WHERE column_name = 'entity_uuid'")
+        (jdbc/execute! db ["ALTER TABLE workflow_instances DROP COLUMN entity_uuid"]))
+      (do (jdbc/execute! db [(str "DROP INDEX IF EXISTS " index-name)])
+          (jdbc/execute! db ["ALTER TABLE workflow_instances DROP COLUMN entity_uuid"])))))
