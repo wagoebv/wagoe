@@ -19,7 +19,10 @@
      (db/execute-query! ctx {:select [:*] :from [:users]})"
   (:require [wagoe.platform.shell.adapters.database.common.core :as core]
             [wagoe.platform.ports.database :as protocols]
-            [clojure.tools.logging :as log]))
+            [clojure.string :as str]
+            [clojure.tools.logging :as log])
+  (:import [java.sql Connection]
+           [javax.sql DataSource]))
 
 ;; =============================================================================
 ;; Forward Declarations for Adapter Constructors
@@ -96,6 +99,41 @@
     (throw (IllegalArgumentException.
             (str "Unsupported database adapter: " adapter
                  ". Supported adapters: :sqlite, :postgresql, :mysql, :h2")))))
+
+(defn engine-of-product
+  "The engine a JDBC product name names: :postgresql, :mysql (MariaDB too),
+   :sqlite or :h2. nil for anything else (ADR-039)."
+  [product]
+  (let [p (str/lower-case (str product))]
+    (cond
+      (str/includes? p "postgres") :postgresql
+      (or (str/includes? p "mysql")
+          (str/includes? p "mariadb")) :mysql
+      (str/includes? p "sqlite") :sqlite
+      (str/includes? p "h2") :h2)))
+
+(defn engine-of
+  "Which engine `db` speaks, a DataSource or an open Connection, from the
+   driver's own answer. For code handed a datasource and nothing else, such as
+   a migration."
+  [db]
+  (let [product (if (instance? Connection db)
+                  (.getDatabaseProductName (.getMetaData ^Connection db))
+                  (with-open [c (.getConnection ^DataSource db)]
+                    (.getDatabaseProductName (.getMetaData c))))]
+    (or (engine-of-product product)
+        (throw (ex-info (str "Not a database Wagoe supports: " product)
+                        {:type :not-supported :product product})))))
+
+(defn adapter-for
+  "The adapter for `engine`, one of :postgresql, :mysql, :sqlite or :h2."
+  [engine]
+  ((load-adapter-constructor engine)))
+
+(defn transactional-ddl?
+  "Whether `engine` undoes DDL in a rolled-back transaction."
+  [engine]
+  (contains? (protocols/capabilities (adapter-for engine)) :transactional-ddl))
 
 (defn create-datasource
   "Create connection pool datasource using adapter and configuration.

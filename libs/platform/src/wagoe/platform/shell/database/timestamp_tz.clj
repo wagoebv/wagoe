@@ -16,7 +16,8 @@
    safe to run from a migration and from a boot-time schema check."
   (:require [clojure.string :as str]
             [clojure.tools.logging :as log]
-            [next.jdbc :as jdbc])
+            [next.jdbc :as jdbc]
+            [wagoe.platform.shell.adapters.database.factory :as db-factory])
   (:import [java.sql Connection DatabaseMetaData]))
 
 (def ^:private identifier-pattern
@@ -34,14 +35,7 @@
   "Which engine this connection speaks, from JDBC metadata rather than config —
    a migration is handed a datasource and nothing else."
   [^DatabaseMetaData md]
-  (let [product (str/lower-case (or (.getDatabaseProductName md) ""))]
-    (cond
-      (str/includes? product "postgres") :postgresql
-      (str/includes? product "mysql")    :mysql
-      (str/includes? product "mariadb")  :mysql
-      (str/includes? product "h2")       :h2
-      (str/includes? product "sqlite")   :sqlite
-      :else                              :unknown)))
+  (or (db-factory/engine-of-product (.getDatabaseProductName md)) :unknown))
 
 (defn- column-type-name
   "What this engine calls the type of `column`, or nil when the column is absent.

@@ -107,3 +107,17 @@
            (sut/sqlite-config "app.db")))
     (is (= {:adapter :h2 :database-path "mem:testdb"}
            (sut/h2-config :memory)))))
+
+(deftest ^:unit a-product-name-names-one-engine
+  (doseq [[product engine] [["PostgreSQL" :postgresql]
+                            ["MySQL" :mysql]
+                            ["MariaDB" :mysql]
+                            ["SQLite" :sqlite]
+                            ["H2" :h2]
+                            ["Oracle" nil]
+                            [nil nil]]]
+    (is (= engine (sut/engine-of-product product)) (pr-str product))))
+
+(deftest ^:unit an-engine-has-its-adapter
+  (doseq [engine [:postgresql :mysql :sqlite :h2]]
+    (is (= engine (protocols/engine (sut/adapter-for engine))))))

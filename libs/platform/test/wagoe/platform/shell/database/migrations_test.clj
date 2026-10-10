@@ -129,8 +129,7 @@
   (with-library-manifests
     (fn []
       (with-redefs [migrations/shadowed-migration-dirs (fn ([] nil) ([_ _] nil))
-                    migrations/mysql?                  (constantly false)
-                    migrations/ddl-commits?            (constantly false)
+                    db-factory/engine-of               (constantly :postgresql)
                     db-config/get-active-db-config     (fn [] {:datasource ::ds})
                     db-config/load-config              (fn [_] {:active {:wagoe/geo-service {:provider :osm}}})]
         (is (= ["migrations/" "wagoe/geo/migrations/" "acme/billing/migrations/"]
@@ -294,8 +293,7 @@
 
 (deftest ^:unit create-migratus-config-includes-discovered-dirs-and-datasource
   (testing "migratus config keeps datasource and merged migration directories"
-    (with-redefs [migrations/mysql? (constantly false)
-                  migrations/ddl-commits? (constantly false)
+    (with-redefs [db-factory/engine-of (constantly :postgresql)
                   migrations/discover-migration-dirs (fn [] ["migrations/" "wagoe/geo/migrations/"])]
       (is (= {:store :database
               :migration-dir ["migrations/" "wagoe/geo/migrations/"]

@@ -299,6 +299,7 @@
       (let [[ctx close!] (open)]
         (try
           (is (= engine (protocols/engine (adapter ctx))))
+          (is (= engine (db/engine-of (:datasource ctx))) "engine-of reads the driver the same way")
           (doseq [[case-name f] (sort-by key cases)]
             (check engine case-name (try (f ctx) (catch Exception e (str "threw " (ex-message e))))))
           (finally (close!)))))))
