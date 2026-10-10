@@ -120,9 +120,10 @@
   ;; The manifest's file name is what ties a directory to a module; one that
   ;; drifted from the library name would be migrated whatever the config says.
   (let [shipped (set (migrations/discover-migration-dirs))
-        off     #{"wagoe/geo/migrations/" "wagoe/push/migrations/" "wagoe/audience/migrations/"}]
+        off     #{"wagoe/geo/migrations/" "wagoe/push/migrations/" "wagoe/audience/migrations/"
+                  "wagoe/tenant/migrations/"}]
     (is (every? shipped off) "the libraries' manifests are not on this classpath")
-    (is (= (disj shipped "wagoe/geo/migrations/" "wagoe/push/migrations/" "wagoe/audience/migrations/")
+    (is (= (apply disj shipped off)
            (set (migrations/migration-dirs #{"workflow"}))))))
 
 (deftest ^:unit migrate-up-reads-the-modules-from-the-profiles-config

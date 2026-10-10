@@ -56,6 +56,24 @@
   [db]
   (factory/engine-of db))
 
+(defn adapter-of
+  "The adapter for the engine a DataSource or Connection speaks, for code that
+   holds a connection and must build DDL, such as a migration."
+  [db]
+  (factory/adapter-for (factory/engine-of db)))
+
+(defn context-of
+  "A db-context for a DataSource or Connection: it and the adapter for its engine."
+  [db]
+  {:datasource db :adapter (adapter-of db)})
+
+(defn migration-connectable
+  "What a Clojure migration runs on: migratus's open connection, which SQLite
+   needs used rather than a second one, or else its datasource."
+  [config]
+  (let [conn (:conn config)]
+    (if (instance? java.sql.Connection conn) conn (:datasource (:db config)))))
+
 ;; =============================================================================
 ;; Transactions
 ;; =============================================================================

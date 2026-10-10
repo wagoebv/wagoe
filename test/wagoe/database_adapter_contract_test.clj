@@ -192,6 +192,15 @@
           (str sql " on three connections: " (pr-str seen))))
       (finally (run! #(.close ^java.sql.Connection %) conns)))))
 
+(defn- index-twice
+  "An index created twice is created once, on every engine, with or without
+   IF NOT EXISTS (BOU-607)."
+  [ctx]
+  (ddl! ctx "DROP TABLE IF EXISTS idx_twice")
+  (ddl! ctx "CREATE TABLE idx_twice (id INTEGER NOT NULL PRIMARY KEY, code VARCHAR(20))")
+  (attempt #(dotimes [_ 2]
+              (db/create-index-if-not-exists! ctx "uk_idx_twice_code" :idx_twice [:code] {:unique? true}))))
+
 (defn- rollback-undoes [ctx]
   (ddl! ctx "DROP TABLE IF EXISTS tx_probe")
   (ddl! ctx "CREATE TABLE tx_probe (id INTEGER NOT NULL PRIMARY KEY)")
@@ -274,6 +283,7 @@
     :strings/any-locale        strings-ignore-case-in-any-locale
     :strings/unicode           strings-ignore-unicode-case
     :connections/session       every-connection-is-set-up
+    :ddl/index-twice           index-twice
     :transactions/rollback     rollback-undoes
     :conflicts/unique-key      refused-key-is-a-conflict}))
 

@@ -86,28 +86,31 @@
                         e))))))
 
 (defn create-index-if-not-exists!
-  "Create index with IF NOT EXISTS support when available.
-
-   Args:
-     ctx: Database context
-     index-name: String index name
-     table: String or keyword table name
-     columns: Vector of column names
-
-   Returns:
-     Execution result
+  "Create an index unless it is there. IF NOT EXISTS where the adapter claims
+   :index-if-not-exists; elsewhere (MySQL) the CREATE runs and \"already there\"
+   counts as done, so a second call does nothing (BOU-607).
 
    Example:
-     (create-index-if-not-exists! ctx \"idx_users_email\" :users [:email])"
-  [ctx index-name table columns]
-  (execution/validate-context ctx)
-  (let [adapter (:adapter ctx)
-        dialect (protocols/dialect adapter)
-        table-str (name table)
-        cols-str (str/join ", " (map name columns))
-        ;; Most databases support IF NOT EXISTS for indexes
-        if-not-exists (case dialect
-                        :mysql ""  ; MySQL doesn't support IF NOT EXISTS for indexes
-                        "IF NOT EXISTS ")
-        ddl (str "CREATE INDEX " if-not-exists index-name " ON " table-str " (" cols-str ")")]
-    (execute-ddl! ctx ddl)))
+     (create-index-if-not-exists! ctx \"idx_users_email\" :users [:email])
+     (create-index-if-not-exists! ctx \"uk_users_email\" :users [:email] {:unique? true})"
+  ([ctx index-name table columns]
+   (create-index-if-not-exists! ctx index-name table columns {}))
+  ([ctx index-name table columns {:keys [unique?]}]
+   (execution/validate-context ctx)
+   (let [native? (contains? (protocols/capabilities (:adapter ctx)) :index-if-not-exists)
+         ddl     (str "CREATE " (when unique? "UNIQUE ") "INDEX " (when native? "IF NOT EXISTS ")
+                      index-name " ON " (name table) " (" (str/join ", " (map name columns)) ")")]
+     (if native?
+       (execute-ddl! ctx ddl)
+       ;; Not through execute-ddl!, which logs every failure: an index that is
+       ;; already there would be an ERROR line on each boot.
+       (try
+         (jdbc/execute! (execution/current-datasource ctx) [ddl])
+         (catch java.sql.SQLException e
+           (when-not (= 1061 (.getErrorCode e)) ; MySQL ER_DUP_KEYNAME: already there
+             (throw (ex-info "DDL execution failed"
+                             {:type           :database-error
+                              :adapter        (protocols/dialect (:adapter ctx))
+                              :statement      ddl
+                              :original-error (.getMessage e)}
+                             e)))))))))

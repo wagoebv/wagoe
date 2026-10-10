@@ -4,7 +4,7 @@
             [wagoe.platform.shell.persistence-interceptors :as persistence-interceptors]
             [wagoe.tenant.ports :as ports]
             [wagoe.tenant.shell.provisioning :as provisioning]
-            [wagoe.tenant.schema :as tenant-schema]
+            [wagoe.tenant.shell.tenant-tables :as tenant-tables]
             [cheshire.core]
             [clojure.set]
             [clojure.string :as str]
@@ -14,42 +14,12 @@
 ;; Schema Initialization
 ;; =============================================================================
 
-(def ^:private indexes
-  "[name table columns unique?] the generated DDL does not make. Created
-   separately, IF NOT EXISTS, so a table that already exists gets them too.
-   A deleted tenant keeps its slug: its schema is not dropped, and the schema
-   name derives from the slug (BOU-576)."
-  [["uk_tenants_slug" "tenants" ["slug"] true]
-   ["uk_tenants_schema_name" "tenants" ["schema_name"] true]
-   ["uk_tenant_memberships_tenant_user" "tenant_memberships" ["tenant_id" "user_id"] true]
-   ["uk_tenant_member_invites_token_hash" "tenant_member_invites" ["token_hash"] true]
-   ["idx_tenant_member_invites_email" "tenant_member_invites" ["email"] false]])
-
 (defn initialize-tenant-schema!
-  "Initialize database schema for tenant entities using Malli schema definitions.
-
-   Creates the tenants and tenant_memberships tables from the Malli schemas.
-
-   Args:
-     ctx: Database context
-
-   Returns:
-     nil"
+  "Create the tenant tables at boot, for installations that never ran
+   `migrate up`. The migration runs the same definition (BOU-551)."
   [ctx]
-  (log/info "Initializing tenant schema from Malli definitions")
-  (db/initialize-tables-from-schemas! ctx
-                                      {"tenants" tenant-schema/Tenant
-                                       "tenant_memberships" tenant-schema/TenantMembership
-                                       "tenant_member_invites" tenant-schema/TenantInvite})
-  (doseq [[index table columns unique?] indexes]
-    (try
-      (db/execute-ddl! ctx (str "CREATE " (when unique? "UNIQUE ") "INDEX IF NOT EXISTS "
-                                index " ON " table " (" (str/join ", " columns) ")"))
-      (catch Exception e
-        (throw (ex-info (str "Cannot make " (str/join ", " columns) " unique on " table
-                             ": rows already share a value. Remove the duplicates, then restart.")
-                        {:type :conflict :table table :columns columns}
-                        e))))))
+  (log/info "Initializing tenant schema")
+  (tenant-tables/ensure-tables! ctx))
 
 ;; =============================================================================
 ;; Entity Transformations
