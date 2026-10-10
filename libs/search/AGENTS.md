@@ -85,14 +85,13 @@ Converts field values to weighted content columns (pure — `wagoe.search.core.i
 
 ### Dual Query Strategy
 
-| Database   | Strategy                               |
-|------------|----------------------------------------|
-| PostgreSQL | `to_tsvector` / `plainto_tsquery` / `ts_rank` / `ts_headline` |
-| H2, SQLite | `LOWER(content_all) LIKE LOWER('%q%')` |
+| Adapter capability | Strategy |
+|--------------------|----------|
+| `:full-text` (PostgreSQL) | `to_tsvector` / `plainto_tsquery` / `ts_rank` / `ts_headline` |
+| no `:full-text` (H2, SQLite, MySQL) | `LOWER(content_all) LIKE LOWER('%q%')` |
 
-Adapter is selected by `db-type` passed to `create-search-store`.
-`module_wiring.clj` detects it automatically via `db-protocols/dialect`
-(nil → assumes `:postgresql`).
+`create-search-store` takes the adapter: `:full-text` picks the query and
+`:on-conflict` the upsert (ADR-039).
 
 ---
 
@@ -258,11 +257,9 @@ Before rc-4, or if you would rather not commit the imports, keep the rule local:
     (f)))
 ```
 
-### 2. db-type Detection in module_wiring
+### 2. Pass the adapter in tests
 
-`module_wiring.clj` calls `db-protocols/dialect` on the datasource.
-`nil` return value is treated as `:postgresql` (FTS path).
-In tests, always pass `:h2` explicitly to `create-search-store`.
+Pass the test database's adapter to `create-search-store`, e.g. `(h2/new-adapter)`.
 
 ### 3. Metadata Encoding
 
