@@ -4,6 +4,7 @@
    name a table that already holds duplicates."
   (:require [clojure.string :as str]
             [next.jdbc :as jdbc]
+            [wagoe.platform.database :as db]
             [next.jdbc.result-set :as rs])
   (:import [java.sql Connection]))
 
@@ -16,11 +17,7 @@
                  {:builder-fn rs/as-unqualified-lower-maps}))
 
 (defn- mysql? [connectable]
-  (let [product (if (instance? Connection connectable)
-                  (.getDatabaseProductName (.getMetaData ^Connection connectable))
-                  (with-open [^Connection c (jdbc/get-connection connectable)]
-                    (.getDatabaseProductName (.getMetaData c))))]
-    (boolean (re-find #"(?i)mysql|mariadb" (str product)))))
+  (= :mysql (db/engine-of connectable)))
 
 (defn- mysql-index? [connectable]
   (seq (jdbc/execute! connectable

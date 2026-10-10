@@ -10,6 +10,7 @@
   (:require [clojure.string :as str]
             [clojure.tools.logging :as log]
             [next.jdbc :as jdbc]
+            [wagoe.platform.database :as db]
             [next.jdbc.result-set :as rs])
   (:import [java.sql Connection]))
 
@@ -38,21 +39,13 @@
                     " GENERATED ALWAYS AS (CASE WHEN entity_id GLOB '" uuid-glob "'"
                     " THEN entity_id END) VIRTUAL")})
 
-(defn- product-name [connectable]
-  (if (instance? Connection connectable)
-    ;; Migratus's connection: read, not closed.
-    (.getDatabaseProductName (.getMetaData ^Connection connectable))
-    (with-open [^Connection c (jdbc/get-connection connectable)]
-      (.getDatabaseProductName (.getMetaData c)))))
-
-(defn- engine [connectable]
-  (let [product (str/lower-case (str (product-name connectable)))]
-    (cond
-      (str/includes? product "postgres") :postgresql
-      (str/includes? product "h2")       :h2
-      (str/includes? product "sqlite")   :sqlite
-      (re-find #"mysql|mariadb" product) :mysql
-      :else                              :unknown)))
+(defn- engine
+  "The connectable's engine, or :unknown for one Wagoe does not support, which
+   is skipped with a warning rather than failing the migration."
+  [connectable]
+  (try (db/engine-of connectable)
+       (catch clojure.lang.ExceptionInfo e
+         (if (= :not-supported (:type (ex-data e))) :unknown (throw e)))))
 
 (defn- sqlite-has-column? [connectable]
   (some #(= "entity_uuid" (:name %))
