@@ -133,11 +133,9 @@
       (let [response (put *active-id* {:status "suspended"})]
         (is (= 200 (:status response)))
         (is (= "suspended" (:status (parse-body response))))))
-    (testing "400 when suspending a revoked membership"
+    (testing "404 when suspending a revoked membership, which is deleted"
       (ports/revoke-member *service* *invited-id*)
-      (let [response (put *invited-id* {:status "suspended"})]
-        (is (= 400 (:status response)))
-        (is (re-find #"revoked" (get-in (parse-body response) [:error :message])))))
+      (is (= 404 (:status (put *invited-id* {:status "suspended"})))))
     (testing "400 for invalid role"
       (is (= 400 (:status (put *active-id* {:role "owner"})))))
     (testing "404 for non-existent membership"
@@ -153,7 +151,7 @@
       (let [response (delete *invited-id*)]
         (is (= 200 (:status response)))
         (is (= "Membership revoked successfully" (:message (parse-body response))))
-        (is (= :revoked (:status (ports/get-membership *service* *invited-id*))))))
+        (is (thrown? clojure.lang.ExceptionInfo (ports/get-membership *service* *invited-id*)))))
     (testing "404 for non-existent membership"
       (is (= 404 (:status (delete (UUID/randomUUID))))))))
 

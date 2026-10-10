@@ -82,6 +82,7 @@ parsing product names, comparing drivers or reading nil as PostgreSQL.
 | `:full-text` | `to_tsvector` / `ts_rank` | PG
 | `:on-conflict` | `INSERT … ON CONFLICT DO UPDATE` | PG, SQLite
 | `:row-locks` | `SELECT … FOR UPDATE` | PG, H2, MySQL
+| `:alter-foreign-key` | `ALTER TABLE … ADD CONSTRAINT … FOREIGN KEY` | PG, H2, MySQL
 |===
 
 `(column-type this logical)`:: the DDL type for `:uuid`, `:instant`, `:json`,

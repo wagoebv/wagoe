@@ -95,7 +95,11 @@
     (let [existing {:id (UUID/randomUUID) :slug "acme-corp" :status :active}
           result (sut/update-tenant-decision existing {:status :invalid-status})]
       (is (false? (:valid? result)))
-      (is (= "Invalid status" (:error result))))))
+      (is (= "Invalid status" (:error result)))))
+
+  (testing "refuses :deleted: only delete may delete, and it sets deleted-at"
+    (let [result (sut/update-tenant-decision {:id (random-uuid) :status :active} {:status :deleted})]
+      (is (false? (:valid? result))))))
 
 (deftest ^:unit prepare-tenant-update-test
   (testing "merges update data with existing tenant"
