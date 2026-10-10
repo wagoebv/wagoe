@@ -74,9 +74,25 @@
         ;; filter empty strings here.)
         params (into {}
                      (remove (fn [[_ v]] (= "" v)))
-                     (merge (table-ui/table-query->params table-query)
-                            (table-ui/search-filters->params filters)))
-        qs (table-ui/encode-query-params params)]
+                     (table-ui/table-query->params table-query))
+        search (:search table-query)
+        ;; A parsed filter is a spec map; it goes back in the filter bar's
+        ;; own format, which is what the handler parses.
+        filter-pairs (for [[field spec] filters
+                           :let [k #(url-encode (str "filters[" (name field) "][" % "]"))]
+                           pair (if (map? spec)
+                                  (concat [[(k "op") (name (:op spec :eq))]]
+                                          (for [x [:value :min :max] :when (contains? spec x)]
+                                            [(k (name x)) (get spec x)])
+                                          (for [v (:values spec)]
+                                            [(str (k "values") (url-encode "[]")) v]))
+                                  [[(url-encode (name field)) spec]])]
+                       (str (first pair) "=" (url-encode (str (second pair)))))
+        qs (str/join "&" (remove str/blank?
+                                 (concat [(table-ui/encode-query-params params)
+                                          (when-not (str/blank? search)
+                                            (str "search=" (url-encode search)))]
+                                         filter-pairs)))]
     (if (str/blank? qs)
       base
       (str base "?" qs))))
@@ -457,17 +473,17 @@
    (or (:width field-config)
        (get role-weights role)
        (let [field-name (name field)]
-        (case (:type field-config)
-          :boolean 1
-          :enum 2
-          (:int :decimal :uuid :json :binary) 2
-          (:date :instant) 3
-          :text 6
+         (case (:type field-config)
+           :boolean 1
+           :enum 2
+           (:int :decimal :uuid :json :binary) 2
+           (:date :instant) 3
+           :text 6
           ;; :string and anything unrecognised fall through to the heuristic
-          (cond
-            (re-find long-name-pattern field-name) 6
-            (re-find medium-name-pattern field-name) 4
-            :else 3))))))
+           (cond
+             (re-find long-name-pattern field-name) 6
+             (re-find medium-name-pattern field-name) 4
+             :else 3))))))
 
 (defn- format-pct
   "Render a percentage with at most two decimals, dropping a trailing `.0`
@@ -507,6 +523,14 @@
 ;; =============================================================================
 ;; Utility Functions
 ;; =============================================================================
+
+(defn filtered-list-url
+  "The `entity` list filtered to `field` = `value`, in the filter bar's own
+   format, so the bar shows the filter."
+  [entity field value]
+  (let [param #(url-encode (str "filters[" (name field) "][" % "]"))]
+    (str "/web/admin/" (name entity) "?" (param "op") "=eq&"
+         (param "value") "=" (url-encode (str value)))))
 
 (defn format-field-label
   "Format field name as human-readable label.
@@ -553,12 +577,17 @@
   "Beyond this many days a relative date says less than the date itself."
   60)
 
+(defn- days-from
+  "Calendar days in `zone` from `now`'s date to `d`."
+  [^Instant now zone ^LocalDate d]
+  (.between ChronoUnit/DAYS (.toLocalDate (.atZone now zone)) d))
+
 (defn date-distance
   "Days from today (in `display`'s zone, at `now`) to the stored date `value`:
    positive in the future, negative in the past. Nil when `value` is not a date."
   [value ^Instant now display]
   (when-let [^LocalDate d (->local-date value)]
-    (.between ChronoUnit/DAYS (.toLocalDate (.atZone now (display-zone display))) d)))
+    (days-from now (display-zone display) d)))
 
 (defn instant-distance
   "Seconds from `now` to the stored timestamp `value`: positive in the future.
@@ -595,23 +624,22 @@
     (let [secs     (.getSeconds (Duration/between now inst))
           abs-secs (Math/abs (long secs))
           future?  (pos? secs)
-          n        (fn [unit] (long (quot abs-secs unit)))]
+          n        (fn [unit] (long (quot abs-secs unit)))
+          zone     (display-zone display)
+          days     (days-from now zone (.toLocalDate (.atZone inst zone)))]
       (cond
         (< abs-secs 60)   [:t :admin/relative-just-now]
         (< abs-secs 3600) (if future?
                             [:t :admin/relative-in-minutes {:n (n 60)} (n 60)]
                             [:t :admin/relative-minutes-ago {:n (n 60)} (n 60)])
-        (< abs-secs 86400) (if future?
-                             [:t :admin/relative-in-hours {:n (n 3600)} (n 3600)]
-                             [:t :admin/relative-hours-ago {:n (n 3600)} (n 3600)])
+        (and (< abs-secs 86400) (zero? days))
+        (if future?
+          [:t :admin/relative-in-hours {:n (n 3600)} (n 3600)]
+          [:t :admin/relative-hours-ago {:n (n 3600)} (n 3600)])
+        (> (Math/abs (long days)) relative-horizon-days)
+        (format-instant value display)
         :else
-        (let [zone (display-zone display)
-              days (.between ChronoUnit/DAYS
-                             (.toLocalDate (.atZone now zone))
-                             (.toLocalDate (.atZone inst zone)))]
-          (if (> (Math/abs (long days)) relative-horizon-days)
-            (format-instant value display)
-            (relative-days days)))))))
+        (relative-days days)))))
 
 (defn ->decimal
   "A stored number as a BigDecimal, or nil. Drivers hand back BigDecimal,
@@ -619,8 +647,10 @@
   ^BigDecimal [value]
   (cond
     (instance? BigDecimal value) value
-    (integer? value)             (BigDecimal/valueOf (long value))
-    (number? value)              (BigDecimal/valueOf (double value))
+    (integer? value)             (BigDecimal. (biginteger value))
+    ;; NaN and the infinities have no BigDecimal
+    (number? value)              (let [d (double value)]
+                                   (when (Double/isFinite d) (BigDecimal/valueOf d)))
     (string? value)              (try (BigDecimal. (str/trim ^String value))
                                       (catch NumberFormatException _ nil))))
 

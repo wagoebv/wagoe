@@ -310,10 +310,10 @@ A list cell renders by its field's **display role** ([ADR-040](../../dev-docs/ad
 |---|---|---|
 | `:title` | the entity's `:title-field` | value, links to the record |
 | `:relation` | a belongs-to field (`client-id`) | the target's title, links to it |
-| `:count` | a has-many's child entity named in `:list-fields` | count, links to the filtered child list |
+| `:count` | a has-many's child entity named in `:list-fields` (`<entity>-by-<foreign-key>` when two share a child) | count, links to the filtered child list |
 | `:enum` | `:type :enum` | `:options` label in its tone |
-| `:money` | `:decimal` named amount, price, total, cost, fee, rate, bedrag, prijs, totaal | `€ 1.234,50` |
-| `:number` / `:percent` | `:int`, `:decimal` / name ends in `-pct`, `-percent` | locale-formatted |
+| `:money` | `:decimal` named amount, price, total, cost, fee, bedrag, prijs, totaal | `€ 1.234,50` |
+| `:number` / `:percent` | `:int`, `:decimal` / name ends in `-pct`, `-percent`, `-rate` | locale-formatted |
 | `:date` / `:datetime` | `:date` / `:instant` | relative, absolute on hover |
 | `:email` / `:url` / `:identifier` | name contains mail / ends in url, website / a code, number, sku, UUID | link / host / monospace |
 | `:boolean` | `:boolean` | check mark |
@@ -332,7 +332,7 @@ A list cell renders by its field's **display role** ([ADR-040](../../dev-docs/ad
             :tones   {:sent :info :overdue :danger :paid :success}}       ; :neutral :info :success :warning :danger
    :amount {:currency "EUR" :total true}                                   ; :total adds a page total
    :due-on {:urgency {:warn-days 7 :until {:status [:paid]}}}             ; past → danger, within 7 days → warning; not once paid
-   :rate   {:display :number}}}}                                           ; a name rule that misfired
+   :hourly-rate {:display :money}}}}                                       ; a name rule that misfired
 ```
 
 The admin's `[:ui :currency]` is the default for money fields. In the REPL, `(explain-entity :invoices)` prints each field's role and why it got it.

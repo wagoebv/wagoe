@@ -47,11 +47,11 @@ explicit `:display` wins. The set is closed:
 
 | `:title` | the entity's `:title-field` | value, links to the record | left
 | `:relation` | a belongs-to field | the target's title, links to it | left
-| `:count` | a has-many listed in `:list-fields` | `7`, links to the filtered child list | right
+| `:count` | a has-many listed in `:list-fields` by its child entity, or `<entity>-by-<foreign-key>` when two share one | `7`, links to the filtered child list | right
 | `:enum` | `:type :enum` | badge with the option's label and tone | left
 | `:money` | `:decimal` and a money name ¹ | `€ 1.234,50`, tabular | right
 | `:number` | `:int`, `:decimal` | locale-formatted, tabular | right
-| `:percent` | name ends in `-pct`, `-percentage` | `21 %` | right
+| `:percent` | name ends in `-pct`, `-percentage`, `-rate` | `21 %` | right
 | `:date` | `:date` | relative ("in 5 d"), absolute in `title` | left
 | `:datetime` | `:instant` | relative ("3 h ago"), absolute in `title` | left
 | `:boolean` | `:boolean` | check mark, empty when false | center
@@ -61,7 +61,7 @@ explicit `:display` wins. The set is closed:
 | `:text` | anything else | one line, cut by CSS with an ellipsis | left
 |===
 
-¹ `amount`, `price`, `total`, `cost`, `fee`, `rate`, `bedrag`, `prijs`, `totaal`. +
+¹ `amount`, `price`, `total`, `cost`, `fee`, `bedrag`, `prijs`, `totaal`. +
 ² `number`, `code`, `reference`, `nummer`, `kenmerk`, `sku`.
 
 `nil` renders as nothing, in every role. `:json` and long `:text` fields are not
@@ -191,7 +191,7 @@ one-line override, found in seconds rather than by reading the page.
 * A list request costs up to `1 + R + H + 1 + S` queries instead of 2. All are
   indexed lookups or `GROUP BY` on the filtered set; `:summary` is the one an
   app can make expensive, and it is opt-in.
-* Name rules are heuristics and will misfire (`rate` on a non-money field).
+* Name rules are heuristics and will misfire (`hourly-rate` is money, not a percentage).
   They run only on the type they name, explicit `:display` wins, and `explain`
   shows the cause.
 * Multi-currency rows are out of scope: `:currency` is per field, not per row.

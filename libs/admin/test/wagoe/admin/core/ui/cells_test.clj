@@ -3,6 +3,7 @@
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [hiccup2.core :as h]
+            [wagoe.admin.core.display :as display]
             [wagoe.admin.core.ui.cells :as cells])
   (:import (java.time Instant ZoneId)
            (java.util Locale)))
@@ -24,14 +25,17 @@
                        :or   {display display}}]
   (str (h/html (cells/cell field (merge {:id "r1" field value} record)
                            {:role role :field-config field-config :entity-config entity-config
-                            :display display :overview (merge {:now now} overview) :href href}))))
+                            :relation (or (get (display/belongs-to-fields entity-config) field)
+                                          (get (display/has-many-columns entity-config) field))
+                            :display (assoc display :overview (merge {:now now} overview))
+                            :href href}))))
 
 (defn- t-keys
   "The translation keys a cell's hiccup asks for."
   [role field value & {:keys [field-config]}]
   (->> (cells/cell field {:id "r1" field value}
                    {:role role :field-config field-config :entity-config entity-config
-                    :display display :overview {:now now}})
+                    :display (assoc display :overview {:now now})})
        (tree-seq sequential? seq)
        (keep #(when (and (vector? %) (= :t (first %))) (second %)))
        set))
@@ -52,7 +56,8 @@
     (is (str/includes? (render :relation :client-id "c1") "c-mono")))
 
   (testing ":count links to the filtered child list, and 0 is plain"
-    (is (= "<a href=\"/web/admin/invoices?client-id=r1\">7</a>"
+    (is (= (str "<a href=\"/web/admin/invoices?filters%5Bclient-id%5D%5Bop%5D=eq&amp;"
+                "filters%5Bclient-id%5D%5Bvalue%5D=r1\">7</a>")
            (render :count :invoices nil :overview {:counts {:invoices {"r1" 7}}})))
     (is (= "<span class=\"c-zero\">0</span>" (render :count :invoices nil))))
 

@@ -733,12 +733,16 @@
     (when (and target (seq ids) (ports/validate-entity-exists schema-provider target))
       (let [tcfg  (ports/get-entity-config schema-provider target)
             tpk   (:primary-key tcfg :id)
-            title (or (:title-field tcfg) (display/title-field tcfg))
+            title (:title-field tcfg)
             qc    (resolve-query-config tcfg)
             col   #(get (:field-aliases qc) % %)]
-        (when (not= title tpk)
+        (when (and title (not= title tpk))
           (into {}
-                (map (juxt (comp str :id) (comp str :title)))
+                ;; A blank title would render an empty, invisible link; the cell
+                ;; shows the id instead
+                (keep (fn [{:keys [id title]}]
+                        (when-not (str/blank? (some-> title str))
+                          [(str id) (str title)])))
                 (db/execute-query! db-ctx
                                    (with-from {:select [[(col tpk) :id] [(col title) :title]]}
                                      qc [:in (col tpk) ids]))))))))
@@ -788,7 +792,8 @@
         base    (list-where (:adapter db-ctx) entity-config aliases options)]
     (vec
      (for [{:keys [label agg field where] :or {agg :count}} (take 4 (:summary entity-config))
-           :let [expr  (if (or (= agg :count) (nil? field)) :%count.* [agg (col field)])
+           :let [count? (or (= agg :count) (nil? field))
+                 expr  (if count? :%count.* [agg (col field)])
                  extra (build-filter-where (:adapter db-ctx)
                                            (into {} (map (fn [[f spec]] [(col f) spec]))
                                                  (param-filters where)))
@@ -800,9 +805,7 @@
        {:label label
         :value (or value (when (= agg :count) 0))
         :field field
-        :role  (if (or (= agg :count) (nil? field))
-                 :number
-                 (display/display-role entity-config field))}))))
+        :role  (if count? :number (get-in entity-config [:display-roles field]))}))))
 
 (defn- list-overview*
   [db-ctx schema-provider entity-name options records]
@@ -823,8 +826,9 @@
                           #(relation-titles db-ctx schema-provider entity-config records %))
      :counts  (per-column :counts (of-role :count)
                           #(has-many-counts db-ctx schema-provider entity-config records %))
-     :facets  (per-column :facet (when facet [facet])
-                          (fn [_] (facet-counts db-ctx entity-config qc options)))
+     :facets  (when facet
+                {facet (overview-part entity-name [:facet facet]
+                                      #(facet-counts db-ctx entity-config qc options))})
      :summary (summary-values db-ctx entity-name entity-config qc options)}))
 
 (defrecord AdminService [db-ctx schema-provider logger error-reporter config workflows]

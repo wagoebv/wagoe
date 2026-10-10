@@ -60,8 +60,7 @@
 (defn- humanize-column
   "The humanized key — without its `-id` for a relation, which shows a name."
   [field relation?]
-  (let [n (cond-> (name field) relation? (str/replace #"[-_]id$" ""))]
-    (str/capitalize (str/replace n #"[-_]" " "))))
+  (base/format-field-label (cond-> (name field) relation? (str/replace #"[-_]id$" ""))))
 
 (defn- columns
   "`fields` as list columns: {:field :config :role :class :label :relation :data?}.
@@ -95,12 +94,12 @@
      entity-config: Entity configuration map
      permissions: Permission flags for this entity
      display: Optional display options (zone/date patterns) for value rendering
+     cols: Optional list columns, when the caller built them for the table
 
    Returns:
      Hiccup table row"
-  [entity-name record entity-config permissions & [display]]
-  (let [list-fields (:list-fields entity-config)
-        primary-key (:primary-key entity-config :id)
+  [entity-name record entity-config permissions & [display cols]]
+  (let [primary-key (:primary-key entity-config :id)
         record-id (get record primary-key)
         readonly-fields (set (:readonly-fields entity-config))
         ;; The detail/edit handler is guarded by assert-can-edit-entity!, so only
@@ -114,14 +113,14 @@
      [:td.checkbox-cell
        ;; Alpine.js row checkbox with x-model binding to selectedIds array
       [:input (alpine/row-checkbox-attrs record-id)]]
-     (for [{:keys [field config role label relation data?] :as column} (columns entity-config list-fields)]
+     (for [{:keys [field config role label relation data?] :as column}
+           (or cols (columns entity-config (:list-fields entity-config)))]
        (let [content (cells/cell field record
                                  {:role          role
                                   :field-config  config
                                   :entity-config entity-config
                                   :relation      relation
                                   :display       display
-                                  :overview      (:overview display)
                                   :href          (when can-open?
                                                    (str "/web/admin/" (name entity-name) "/" record-id))})
              classes (str "field-" (name field) " " (:class column))
@@ -157,9 +156,8 @@
 (defn totals-row
   "A footer with the page total of each `:total` money or number column, or
    nil when the list has none (ADR-040)."
-  [records entity-config display]
-  (let [cols   (columns entity-config (:list-fields entity-config))
-        totals (into {}
+  [records cols entity-config display]
+  (let [totals (into {}
                      (keep (fn [{:keys [field config role]}]
                              (when (and (:total config) (#{:money :number} role))
                                (when-let [t (cells/page-total records field)]
@@ -266,7 +264,8 @@
         filter-params (table-ui/search-filters->params (or filters {}))
         qs-map (merge table-params filter-params)
         hx-url (str base-url "?" (table-ui/encode-query-params qs-map))
-        list-fields (:list-fields entity-config)]
+        list-fields (:list-fields entity-config)
+        cols (columns entity-config list-fields)]
     ;; Table container - Alpine.js scope is at parent entity-list-page level
     ;; MutationObserver automatically handles HTMX DOM updates (no afterSwap needed)
     [:div#entity-table-container
@@ -328,7 +327,7 @@
                [:th {:class "checkbox-header"}
                 ;; Alpine.js select-all checkbox with reactive binding
                 [:input (alpine/select-all-checkbox-attrs)]]
-               (for [{:keys [field config label data?] role-class :class} (columns entity-config list-fields)]
+               (for [{:keys [field config label data?] role-class :class} cols]
                  (let [sortable? (and data? (:sortable config true))]
                    (if sortable?
                      (update-in
@@ -351,8 +350,8 @@
                [:th {:class "actions-header"} [:t :admin/column-actions]]]]
              [:tbody
               (for [record records]
-                (entity-table-row entity-name record entity-config permissions display))]
-             (totals-row records entity-config display)]]]
+                (entity-table-row entity-name record entity-config permissions display cols))]
+             (totals-row records cols entity-config display)]]]
           pagination]))]))
 
 (defn filter-table-container

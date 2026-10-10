@@ -25,9 +25,6 @@
   [id]
   (some-> id str))
 
-(defn- kebab [k]
-  (keyword (str/replace (name k) "_" "-")))
-
 (defn value-name
   "An enum value as the string the config names it by: `:paid`, `\"paid\"`
    and `paid` are all \"paid\"."
@@ -46,7 +43,7 @@
   [field-config value]
   (let [v (value-name value)]
     (or (some (fn [[k label]] (when (= v (name k)) label)) (:options field-config))
-        (str/capitalize (str/replace v #"[-_]" " ")))))
+        (base/format-field-label v))))
 
 (defn enum-tone
   "The tone `:tones` gives `value`, else :neutral."
@@ -118,24 +115,24 @@
      :role          the field's display role
      :field-config  its config (may be nil for a has-many column)
      :entity-config the entity's config
-     :display       zone, locale and patterns from the shell
-     :overview      {:titles :counts :now} from the shell (ADR-040)
+     :display       zone, locale, patterns and the `:overview` ({:titles :counts
+                    :now}) from the shell (ADR-040)
      :href          the record's detail URL, when the user may open it
-     :relation      the column's belongs-to or has-many, when the caller has it
+     :relation      the column's belongs-to or has-many
 
    Nil renders as nothing in every role but :count, which is 0."
-  [field record {:keys [role field-config entity-config display overview href relation]}]
-  (let [value (get record field)
-        now   (:now overview)]
+  [field record {:keys [role field-config entity-config display href relation]}]
+  (let [value    (get record field)
+        overview (:overview display)
+        now      (:now overview)]
     (case role
       :count
-      (let [rel   (or relation (get (display/has-many-columns entity-config) field))
-            pk    (:primary-key entity-config :id)
-            id    (get record pk)
-            n     (get-in overview [:counts field (id-key id)] 0)]
-        (if (and rel id (pos? n))
-          [:a {:href (str "/web/admin/" (name (:entity rel)) "?"
-                          (name (kebab (:foreign-key rel))) "=" (base/url-encode (str id)))}
+      (let [id (get record (:primary-key entity-config :id))
+            n  (get-in overview [:counts field (id-key id)] 0)]
+        (if (and relation id (pos? n))
+          [:a {:href (base/filtered-list-url (:entity relation)
+                                             (str/replace (name (:foreign-key relation)) "_" "-")
+                                             id)}
            (str n)]
           [:span {:class "c-zero"} (str n)]))
 
@@ -145,10 +142,9 @@
           (if href [:a {:href href} (str value)] (str value))
 
           :relation
-          (let [rel   (or relation (get (display/belongs-to-fields entity-config) field))
-                title (get-in overview [:titles field (id-key value)])]
-            (if (and rel title)
-              [:a {:href (entity-url (:entity rel) value) :title (str value)} title]
+          (let [title (get-in overview [:titles field (id-key value)])]
+            (if (and relation title)
+              [:a {:href (entity-url (:entity relation) value) :title (str value)} title]
               (identifier value)))
 
           :enum
@@ -173,7 +169,7 @@
           (relative-cell value now record field-config
                          {:relative #(base/relative-instant value now display)
                           :absolute #(base/format-instant value display)
-                          :days     #(some-> (base/instant-distance value now display) (quot 86400))})
+                          :days     #(some-> (base/instant-distance value now display) (Math/floorDiv 86400))})
 
           :boolean
           (if (true? (if (string? value) (contains? #{"true" "1" "t"} value) (boolean value)))
@@ -194,7 +190,7 @@
             (str value))
 
           ;; :text and anything unforeseen
-          (let [s (if (string? value) value (str value))]
+          (let [s (str value)]
             [:span {:title s} s]))))))
 
 (defn page-total

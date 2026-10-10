@@ -25,6 +25,7 @@
                      :status      :enum
                      :amount      :decimal
                      :vat-pct     :decimal
+                     :tax-rate    :decimal
                      :quantity    :int
                      :email       :string
                      :website     :string
@@ -42,11 +43,12 @@
                                  [:status     :enum       "type :enum"]
                                  [:amount     :money      "name rule: amount"]
                                  [:vat-pct    :percent    "name rule: pct"]
+                                 [:tax-rate   :percent    "name rule: rate"]
                                  [:quantity   :number     "type default"]
                                  [:email      :email      "name rule: mail"]
                                  [:website    :url        "name rule: website"]
                                  [:code       :identifier "name rule: code"]
-                                 [:id         :identifier "type default"]
+                                 [:id         :identifier "primary key"]
                                  [:notes      :text       "type default"]
                                  [:paid       :boolean    "type default"]
                                  [:due-on     :date       "type default"]
@@ -55,9 +57,10 @@
       (is (= [role source] (display/role-with-source cfg field)) (name field))))
 
   (testing "an explicit :display wins over everything"
-    (let [cfg (entity {:id :uuid :name :string :rate :decimal})]
-      (is (= [:number "explicit"]
-             (display/role-with-source (assoc-in cfg [:fields :rate :display] :number) :rate)))
+    (let [cfg (entity {:id :uuid :name :string :hourly-rate :decimal})]
+      (is (= [:percent "name rule: rate"] (display/role-with-source cfg :hourly-rate)))
+      (is (= [:money "explicit"]
+             (display/role-with-source (assoc-in cfg [:fields :hourly-rate :display] :money) :hourly-rate)))
       (is (= [:text "explicit"]
              (display/role-with-source (assoc-in cfg [:fields :name :display] :text) :name)))))
 
@@ -94,6 +97,17 @@
   (is (= :status (display/facet-field (entity {:id :uuid :status :enum :note :string} :facet :note)))
       "an explicit facet that is not an enum is ignored"))
 
+(deftest ^:unit has-many-columns-are-keyed-by-child-entity
+  (let [billing {:entity :invoices :foreign-key :billing-order-id}
+        refund  {:entity :invoices :foreign-key :refund_order_id}
+        lines   {:entity :order-lines :foreign-key :order-id}]
+    (is (= {:order-lines lines} (display/has-many-columns {:has-many [lines]})))
+    (is (= {:invoices-by-billing-order-id billing
+            :invoices-by-refund-order-id  refund
+            :order-lines                  lines}
+           (display/has-many-columns {:has-many [billing refund lines]}))
+        "two relations to one child entity each get their own column")))
+
 (deftest ^:unit default-list-fields-follow-the-roles
   (let [cfg   (entity {:id :uuid :notes :text :created-at :instant :updated-at :instant
                        :amount :decimal :status :enum :kind :enum :client-id :uuid
@@ -115,18 +129,20 @@
 (deftest ^:unit with-display-adds-the-derived-keys
   (let [cfg (display/with-display (entity {:id :uuid :name :string :status :enum :amount :decimal}
                                           :list-fields [:name :amount])
-                                  {:derive-list-fields? false})]
+              {:derive-list-fields? false})]
     (is (= :name (:title-field cfg)))
     (is (= :status (:facet cfg)))
     (is (= [:name :amount] (:list-fields cfg)) "configured list fields are kept")
     (is (= {:name :title :amount :money :status :enum :id :identifier} (:display-roles cfg))))
-  (let [cfg (display/with-display (entity {:id :uuid :name :string :status :enum})
-                                  {:derive-list-fields? true :field-order [:id :name :status]})]
+  (let [cfg (display/with-display (entity {:id :uuid :name :string :status :enum}
+                                          :field-order [:id :name :status])
+              {:derive-list-fields? true})]
     (is (= [:name :status] (:list-fields cfg)))))
 
 (deftest ^:unit explain-says-where-each-role-came-from
-  (let [cfg       (display/with-display (entity {:id :uuid :name :string :total :decimal})
-                                        {:derive-list-fields? true :field-order [:id :name :total]})
+  (let [cfg       (display/with-display (entity {:id :uuid :name :string :total :decimal}
+                                                :field-order [:id :name :total])
+                    {:derive-list-fields? true})
         explained (display/explain cfg)
         text      (display/format-explain :orders explained)]
     (is (= :name (:title-field explained)))

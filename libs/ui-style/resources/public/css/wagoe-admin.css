@@ -28,8 +28,6 @@
   /* wagoe.org */
   --wg-ink:          #0F1C18;   /* dark green: chrome */
   --wg-teal:         #5FD3B6;   /* accent on dark */
-  --wg-teal-ink:     #0E7C66;   /* accent on light */
-  --wg-copper:       #E0A579;
   --wg-chrome-text:  #C9D6D1;   /* text on the dark green */
   --wg-chrome-muted: #7F918A;
   --wg-chrome-hover: rgba(255, 255, 255, 0.06);
@@ -63,21 +61,21 @@
 
   /* Tones: foreground and background of each */
   --tone-neutral-fg: light-dark(#4A5651, #B6C3BE);  --tone-neutral-bg: light-dark(#EEF0EF, rgba(255, 255, 255, 0.06));
-  --tone-info-fg:    light-dark(#2D4E7A, #8DB4E8);  --tone-info-bg:    light-dark(#E7EEF7, rgba(141, 180, 232, 0.12));
-  --tone-success-fg: light-dark(#0B6B57, #5FD3B6);  --tone-success-bg: light-dark(#E1F3EC, rgba(95, 211, 182, 0.12));
-  --tone-warning-fg: light-dark(#9A5B26, #E0A579);  --tone-warning-bg: light-dark(#FBEFE3, rgba(224, 165, 121, 0.14));
-  --tone-danger-fg:  light-dark(#A33A1C, #F2A48C);  --tone-danger-bg:  light-dark(#FBE7E1, rgba(242, 164, 140, 0.14));
+  --tone-info-fg:    var(--color-info);     --tone-info-bg:    light-dark(#E7EEF7, rgba(141, 180, 232, 0.12));
+  --tone-success-fg: var(--color-success);  --tone-success-bg: light-dark(#E1F3EC, rgba(95, 211, 182, 0.12));
+  --tone-warning-fg: var(--color-warning);  --tone-warning-bg: light-dark(#FBEFE3, rgba(224, 165, 121, 0.14));
+  --tone-danger-fg:  var(--color-error);    --tone-danger-bg:  light-dark(#FBE7E1, rgba(242, 164, 140, 0.14));
 
   /* Wagoe variables the older admin.css reads */
-  --text-primary:   light-dark(#15201C, #E6EEEB);
+  --text-primary:   var(--color-base-content);
   --text-muted:     light-dark(#5E6B66, #9FB2AB);
   --text-faint:     light-dark(#8A9691, #7F918A);
-  --border-default: light-dark(#E3E7E5, #26372F);
+  --border-default: var(--color-base-300);
   --border-subtle:  light-dark(#EDF0EE, #1E2D27);
-  --surface-0:      light-dark(#FFFFFF, #14231E);
+  --surface-0:      var(--color-base-100);
   --surface-1:      light-dark(#FAFBFA, #172822);
-  --surface-2:      light-dark(#F6F7F6, #0F1C18);
-  --accent-primary: light-dark(#0E7C66, #5FD3B6);
+  --surface-2:      var(--color-base-200);
+  --accent-primary: var(--color-primary);
   --accent-primary-light: light-dark(rgba(14, 124, 102, 0.10), rgba(95, 211, 182, 0.12));
   --color-primary-faint:  light-dark(rgba(14, 124, 102, 0.06), rgba(95, 211, 182, 0.06));
   --row-hover:      light-dark(#F1F6F4, #1A2C25);
@@ -227,14 +225,12 @@
 }
 .admin-content .totals-label { color: var(--text-muted); font-weight: 400; font-size: 12px; }
 
-/* Compact/comfortable: [data-density="comfortable"] on any ancestor */
-[data-density="comfortable"] { --table-row-height: 44px; --cell-pad-y: 10px; }
-
 /* -----------------------------------------------------------------------------
    3. Display roles (ADR-040)
    ----------------------------------------------------------------------------- */
 
-.c-money, .c-number, .c-percent, .c-count { text-align: right !important; }
+td.c-money, td.c-number, td.c-percent, td.c-count,
+th.c-money, th.c-number, th.c-percent, th.c-count { text-align: right !important; }
 
 .c-money   { font-weight: 500; }
 .c-title a { font-weight: 500; color: var(--text-primary); text-decoration: none; }
@@ -295,11 +291,12 @@
   border-radius: 50%;
   background: currentColor;
 }
-.c-badge.tone-neutral { color: var(--tone-neutral-fg) !important; background: var(--tone-neutral-bg) !important; }
-.c-badge.tone-info    { color: var(--tone-info-fg)    !important; background: var(--tone-info-bg)    !important; }
-.c-badge.tone-success { color: var(--tone-success-fg) !important; background: var(--tone-success-bg) !important; }
-.c-badge.tone-warning { color: var(--tone-warning-fg) !important; background: var(--tone-warning-bg) !important; }
-.c-badge.tone-danger  { color: var(--tone-danger-fg)  !important; background: var(--tone-danger-bg)  !important; }
+.c-badge.tone-neutral { --tone-fg: var(--tone-neutral-fg); --tone-bg: var(--tone-neutral-bg); }
+.c-badge.tone-info    { --tone-fg: var(--tone-info-fg);    --tone-bg: var(--tone-info-bg); }
+.c-badge.tone-success { --tone-fg: var(--tone-success-fg); --tone-bg: var(--tone-success-bg); }
+.c-badge.tone-warning { --tone-fg: var(--tone-warning-fg); --tone-bg: var(--tone-warning-bg); }
+.c-badge.tone-danger  { --tone-fg: var(--tone-danger-fg);  --tone-bg: var(--tone-danger-bg); }
+.c-badge[class*="tone-"] { color: var(--tone-fg) !important; background: var(--tone-bg) !important; }
 
 time.tone-warning { color: var(--tone-warning-fg); font-weight: 500; }
 time.tone-danger  { color: var(--tone-danger-fg);  font-weight: 600; }
@@ -332,7 +329,6 @@ time.tone-danger  { color: var(--tone-danger-fg);  font-weight: 600; }
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.01em;
-  text-align: left !important;
 }
 
 .facet-tabs { display: flex; flex-wrap: wrap; gap: 4px; order: -1; width: 100%; }

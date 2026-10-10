@@ -26,9 +26,9 @@
   (str/split (str/lower-case (name field)) #"[-_]+"))
 
 (def ^:private money-words
-  #{"amount" "price" "total" "subtotal" "cost" "fee" "rate" "bedrag" "prijs" "totaal"})
+  #{"amount" "price" "total" "subtotal" "cost" "fee" "bedrag" "prijs" "totaal"})
 
-(def ^:private percent-words #{"pct" "percent" "percentage"})
+(def ^:private percent-words #{"pct" "percent" "percentage" "rate"})
 
 (def ^:private identifier-words
   #{"number" "code" "reference" "ref" "nummer" "kenmerk" "sku"})
@@ -44,9 +44,9 @@
         word (peek ws)
         rule #(vector % (str "name rule: " word))]
     (case type
-      :decimal (cond
-                 (some money-words ws) [:money (str "name rule: " (some money-words ws))]
-                 (percent-words word)  (rule :percent))
+      :decimal (if-let [w (some money-words ws)]
+                 [:money (str "name rule: " w)]
+                 (when (percent-words word) (rule :percent)))
       :int     (when (percent-words word) (rule :percent))
       (:string :text)
       (cond
@@ -72,6 +72,13 @@
 
 (def ^:private title-candidates [:name :title :label :email :slug :number])
 
+(defn- field-order
+  "The entity's fields in the order its config gives them."
+  [entity-config]
+  (or (seq (:field-order entity-config))
+      (seq (:detail-fields entity-config))
+      (sort (keys (:fields entity-config)))))
+
 (defn title-field
   "What a record of this entity is called: the explicit `:title-field`, else
    the first of :name :title :label :email :slug :number the entity has and
@@ -81,9 +88,7 @@
   (let [fields (:fields entity-config)
         hidden (set (:hide-fields entity-config))
         shown? #(and (contains? fields %) (not (hidden %)))
-        order  (or (seq (:field-order entity-config))
-                   (seq (:detail-fields entity-config))
-                   (sort (keys fields)))]
+        order  (field-order entity-config)]
     (or (let [explicit (:title-field entity-config)]
           (when (and explicit (contains? fields explicit)) explicit))
         (some #(when (shown? %) %) title-candidates)
@@ -111,9 +116,18 @@
 
 (defn has-many-columns
   "List column key → the has-many relationship it counts. A has-many is a list
-   column when `:list-fields` names its child entity."
+   column when `:list-fields` names its key: its child entity, or
+   `<entity>-by-<foreign-key>` when two relations share that child."
   [entity-config]
-  (into {} (map (juxt :entity identity)) (:has-many entity-config)))
+  (let [rels   (:has-many entity-config)
+        shared (into #{} (keep (fn [[e n]] (when (> n 1) e))) (frequencies (map :entity rels)))]
+    (into {}
+          (map (fn [{:keys [entity foreign-key] :as rel}]
+                 [(if (shared entity)
+                    (keyword (str (name entity) "-by-" (str/replace (name foreign-key) "_" "-")))
+                    entity)
+                  rel]))
+          rels)))
 
 ;; -----------------------------------------------------------------------------
 ;; Field roles
@@ -140,6 +154,8 @@
       rel              [:relation (str "belongs-to " (name (:entity rel)))]
       children         [:count (str "has-many " (name (:entity children)))]
       (= :enum type)   [:enum "type :enum"]
+      ;; An integer key is a number to nobody: no grouping, no "1,234"
+      (= field (:primary-key entity-config :id)) [:identifier "primary key"]
       :else            (or (name-rule field type)
                            [(type-default type) "type default"]))))
 
@@ -165,11 +181,18 @@
 
 (def ^:private audit-fields #{:updated-at :deleted-at :created-by :updated-by})
 
+(def ^:private technical-name
+  ;; Kept out of a derived list the way introspection's own defaults keep them
+  ;; out (should-be-in-list-view?): an MFA secret or a reset token is not hidden
+  ;; by name, only by this.
+  #"hash|secret|token|backup-codes")
+
 (defn- list-rank
   "Where a role goes in the default column order, or nil to leave it out."
   [entity-config facet field role]
   (let [type (get-in entity-config [:fields field :type])]
     (cond
+      (re-find technical-name (name field))    nil
       (= role :title)                          0
       (= role :relation)                       1
       (= field facet)                          2
@@ -213,16 +236,13 @@
   "`entity-config` with its derived `:title-field`, `:facet` and
    `:display-roles` (list column → role). With `derive-list-fields?`, an
    entity whose config names no `:list-fields` gets `default-list-fields`."
-  [entity-config {:keys [derive-list-fields? field-order]}]
+  [entity-config {:keys [derive-list-fields?]}]
   (let [facet (facet-field entity-config)
         cfg   (cond-> (assoc entity-config :title-field (title-field entity-config))
                 facet (assoc :facet facet)
                 derive-list-fields?
                 (as-> c (assoc c :list-fields
-                               (default-list-fields c (or (seq field-order)
-                                                          (:field-order c)
-                                                          (:detail-fields c)
-                                                          (keys (:fields c)))))))
+                               (default-list-fields c (field-order c)))))
         ctx   (role-context cfg)
         cols  (distinct (concat (:list-fields cfg) (keys (:fields cfg))))]
     (assoc cfg :display-roles
