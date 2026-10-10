@@ -35,6 +35,11 @@
 ;; Schema Initialization
 ;; =============================================================================
 
+(defn- string-type
+  "A string column of length `n`: TEXT on SQLite, which ignores the length."
+  [ctx n]
+  (if (= :sqlite (protocols/engine (:adapter ctx))) "TEXT" (str "VARCHAR(" n ")")))
+
 (defn- ensure-auth-users-audit-columns!
   "Ensure the auth_users table has audit timestamp columns.
 
@@ -51,11 +56,8 @@
     (let [existing-cols (->> (db/get-table-info ctx :auth_users)
                              (map :name)
                              set)
-          dialect (or (protocols/dialect (:adapter ctx)) :postgresql)
-          ;; inst? is stored as string in this project; use TEXT for sqlite and VARCHAR for others.
-          ts-type (case dialect
-                    :sqlite "TEXT"
-                    "VARCHAR(255)")
+          ;; inst? is stored as string in this project.
+          ts-type (string-type ctx 255)
           columns [{:name "created_at" :type ts-type}
                    {:name "updated_at" :type ts-type}
                    {:name "deleted_at" :type ts-type}]]
@@ -76,17 +78,9 @@
     (let [existing-cols (->> (db/get-table-info ctx :users)
                              (map :name)
                              set)
-          dialect (or (protocols/dialect (:adapter ctx)) :postgresql)
-          bool-type (case dialect
-                      :sqlite "INTEGER"
-                      :mysql "TINYINT(1)"
-                      "BOOLEAN")
-          varchar-255 (case dialect
-                        :sqlite "TEXT"
-                        "VARCHAR(255)")
-          varchar-50 (case dialect
-                       :sqlite "TEXT"
-                       "VARCHAR(50)")
+          bool-type (protocols/column-type (:adapter ctx) :boolean)
+          varchar-255 (string-type ctx 255)
+          varchar-50 (string-type ctx 50)
           columns [{:name "notifications_email" :type bool-type}
                    {:name "notifications_push" :type bool-type}
                    {:name "notifications_sms" :type bool-type}
@@ -130,7 +124,7 @@
    - Query performance (role, active status, expiration dates)
    - Audit trail queries (target_user_id, actor_id, created_at)
 
-   On PostgreSQL, also creates:
+   Where the adapter claims :full-text (PostgreSQL), also creates:
    - search_vector GENERATED column for full-text search on users.name
    - GIN index on search_vector for fast full-text search queries
 
@@ -164,9 +158,9 @@
   (ensure-auth-users-audit-columns! ctx)
   (ensure-users-preference-columns! ctx)
 
-  ;; PostgreSQL-only: full-text search vector
-  (when (= "org.postgresql.Driver" (protocols/jdbc-driver (:adapter ctx)))
-    (log/info "Adding PostgreSQL full-text search vector to users table")
+  ;; Full-text search vector, where the database has it (ADR-039)
+  (when (contains? (protocols/capabilities (:adapter ctx)) :full-text)
+    (log/info "Adding full-text search vector to users table")
     (db/execute-ddl! ctx
                      "ALTER TABLE users ADD COLUMN IF NOT EXISTS search_vector tsvector GENERATED ALWAYS AS (setweight(to_tsvector('english', coalesce(name, '')), 'A')) STORED")
     (db/execute-ddl! ctx

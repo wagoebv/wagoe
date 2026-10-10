@@ -43,6 +43,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Changed
 
+- **The tenant tables ship as a library migration** (BOU-551), built from the same definition boot uses. Run
+  `bb migrate up`; existing tables are left as they are.
 - **`build-where` string filters ignore case on every database** (BOU-450). They were case-sensitive on H2.
 - **A database reset drops in one transaction on SQLite too** (BOU-450), as on PostgreSQL: a failed drop leaves everything.
 - **`search/create-search-store` takes the adapter, not a db-type** (BOU-450): pass `(:adapter db-ctx)`.
@@ -56,6 +58,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Tables built from Malli failed on MySQL, and `create-index-if-not-exists!` failed when run twice there** (BOU-607):
+  `CREATE INDEX IF NOT EXISTS`. Where the adapter lacks it, an index already there counts as created.
+- **A hard delete refused by a foreign key answered 409 instead of `:hard-deletion-not-allowed`** (BOU-450), on every
+  database. Tenant tables have no foreign key to users yet, so a member's delete is not refused (BOU-611).
 - **Admin search, admin text filters and the user audit email filters failed on SQLite and MySQL** (BOU-450): they
   emitted `ILIKE`. They ignore case on every database now. `build-search-where`/`build-filter-where` take the adapter first.
 - **Tenant jobs ran in the public schema** (BOU-605). `process-tenant-job!` now switches to the tenant's schema on PostgreSQL;
