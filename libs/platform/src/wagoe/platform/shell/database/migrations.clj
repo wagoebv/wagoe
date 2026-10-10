@@ -23,6 +23,7 @@
             [migratus.database :as migratus-database]
             [next.jdbc :as jdbc]
             [wagoe.platform.core.database.migration-sql :as migration-sql]
+            [wagoe.platform.shell.adapters.database.factory :as db-factory]
             [wagoe.platform.shell.adapters.database.config :as db-config]
             [wagoe.platform.shell.modules :as modules]
             [clojure.edn :as edn]
@@ -385,18 +386,6 @@
   (modules/enabled-libraries
    (:active (db-config/load-config (db-config/detect-environment)))))
 
-(defn mysql?
-  "Whether `datasource` is MySQL or MariaDB, from the driver's own answer."
-  [datasource]
-  (with-open [c (.getConnection ^javax.sql.DataSource datasource)]
-    (boolean (re-find #"(?i)mysql|mariadb" (.getDatabaseProductName (.getMetaData c))))))
-
-(defn ddl-commits?
-  "Whether `datasource` commits DDL implicitly: MySQL, MariaDB and H2."
-  [datasource]
-  (with-open [c (.getConnection ^javax.sql.DataSource datasource)]
-    (boolean (re-find #"(?i)mysql|mariadb|h2" (.getDatabaseProductName (.getMetaData c))))))
-
 (defn- migrate-reserved!
   "migratus's `migrate-up*` / `migrate-down*`, with the reservation taken and
    released on `conn` in auto-commit, outside the migration's transaction. The
@@ -458,13 +447,14 @@
    directory or several) against `datasource`. On MySQL each statement is
    rewritten from the dialect the scaffolder writes (BOU-569)."
   [datasource migration-dir]
-  (cond-> {:store                (if (ddl-commits? datasource) ::ddl-commits :database)
-           :migration-dir        migration-dir
-           :init-script          nil
-           :init-in-transaction? false
-           :migration-table-name "schema_migrations"
-           :db                   {:datasource datasource}}
-    (mysql? datasource) (assoc :modify-sql-fn migration-sql/for-mysql)))
+  (let [engine (db-factory/engine-of datasource)]
+    (cond-> {:store                (if (db-factory/transactional-ddl? engine) :database ::ddl-commits)
+             :migration-dir        migration-dir
+             :init-script          nil
+             :init-in-transaction? false
+             :migration-table-name "schema_migrations"
+             :db                   {:datasource datasource}}
+      (= :mysql engine) (assoc :modify-sql-fn migration-sql/for-mysql))))
 
 (defn create-migratus-config
   "Creates Migratus configuration from database config.
