@@ -1,7 +1,7 @@
 (ns wagoe.user.shell.persistence-test
   (:require [wagoe.platform.database :as db-core]
-            [wagoe.platform.ports.database :as protocols]
             [wagoe.platform.shell.adapters.database.mysql.core :as mysql]
+            [wagoe.platform.shell.adapters.database.postgresql.core :as postgresql]
             [wagoe.platform.shell.adapters.database.sqlite.core :as sqlite]
             [wagoe.user.shell.persistence :as sut]
             [cheshire.core :as json]
@@ -10,31 +10,8 @@
            [java.util UUID]
            [org.postgresql.util PGobject]))
 
-(defn- adapter-stub
-  [{:keys [dialect jdbc-driver]}]
-  (reify protocols/DBAdapter
-    (dialect [_] dialect)
-    (jdbc-driver [_] jdbc-driver)
-    (jdbc-url [_ _] nil)
-    (pool-defaults [_] {})
-    (init-connection! [_ _ _] nil)
-    (build-where [_ _] nil)
-    (boolean->db [_ value] (when (some? value) (if value 1 0)))
-    (db->boolean [_ value]
-      (cond
-        (nil? value) nil
-        (number? value) (not (zero? value))
-        :else (boolean value)))
-    (table-exists? [_ _ _] false)
-    (get-table-info [_ _ _] [])
-    (engine [_] nil)
-    (capabilities [_] #{})
-    (column-type [_ _] nil)
-    (like [_ _ _] nil)))
-
 (deftest ^:contract db->user-entity-normalizes-types-and-preferences
-  (let [ctx {:adapter (adapter-stub {:dialect :sqlite
-                                     :jdbc-driver "org.sqlite.JDBC"})}
+  (let [ctx {:adapter (sqlite/new-adapter)}
         user-id (str (UUID/randomUUID))
         tenant-id (str (UUID/randomUUID))
         result (#'sut/db->user-entity
@@ -154,8 +131,7 @@
                @ddl-statements))))))
 
 (deftest ^:contract create-user-repository-runs-preference-upgrade
-  (let [ctx {:adapter (adapter-stub {:dialect :postgresql
-                                     :jdbc-driver "org.postgresql.Driver"})}
+  (let [ctx {:adapter (postgresql/new-adapter)}
         called? (atom false)
         repo (with-redefs [wagoe.user.shell.persistence/ensure-users-preference-columns!
                            (fn [arg]

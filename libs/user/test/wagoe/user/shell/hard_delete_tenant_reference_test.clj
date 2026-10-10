@@ -1,8 +1,7 @@
 (ns wagoe.user.shell.hard-delete-tenant-reference-test
   "A user still referenced by a tenant membership cannot be hard-deleted, on a
-   real database. The check read PostgreSQL's exception class, but the delete
-   runs through the platform, which reports a refused foreign key as a
-   :conflict (BOU-590) on every engine (ADR-039)."
+   real database: the platform's foreign-key :conflict (BOU-590) becomes
+   :hard-deletion-not-allowed."
   (:require [clojure.test :refer [deftest is testing]]
             [next.jdbc :as jdbc]
             [wagoe.platform.shell.adapters.database.factory :as db-factory]
@@ -17,7 +16,7 @@
 
 (deftest ^:integration a-member-cannot-be-hard-deleted
   (doseq [[engine make] [[:h2 #(db-factory/db-context {:adapter :h2 :database-path (str "mem:harddel_" (System/nanoTime) ";DB_CLOSE_DELAY=-1")})]
-                         [:sqlite #(db-factory/db-context {:adapter :sqlite :database-path (.getPath (File/createTempFile "harddel" ".db"))})]]]
+                         [:sqlite #(db-factory/db-context {:adapter :sqlite :database-path (.getPath (doto (File/createTempFile "harddel" ".db") .deleteOnExit))})]]]
     (testing (name engine)
       (let [ctx (make)]
         (try

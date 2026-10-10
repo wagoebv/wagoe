@@ -22,6 +22,7 @@
             [wagoe.user.core.audit :as audit-core]
             [wagoe.user.shell.auth :as auth-shell]
             [wagoe.user.ports :as ports]
+            [wagoe.platform.core.database.constraint :as constraint]
             [wagoe.platform.shell.service-interceptors :as service-interceptors]
             [clojure.string :as str])
   (:import (java.security SecureRandom)
@@ -98,20 +99,19 @@
            :audit-repository audit-repository
            :auth-service auth-service)))
 
-(defn- tenant-reference-violation?
-  "Whether `e`, or anything that caused it, is a refused foreign key. Read from
-   the platform's :constraint (BOU-590) or the SQLState, on every database: it
-   checked PostgreSQL's exception class, which the platform wraps (ADR-039)."
+(defn- foreign-key-refusal?
+  "Whether `e`, or anything that caused it, is a refused foreign key: the
+   platform's :constraint (BOU-590), or a driver error read by the platform's
+   constraint reader, on every database."
   [e]
   (boolean
    (some (fn [x]
-           (let [message (ex-message x)]
-             (or (= :foreign-key (:constraint (ex-data x)))
-                 (and (instance? java.sql.SQLException x)
-                      (= "23503" (.getSQLState ^java.sql.SQLException x)))
-                 (and message
-                      (or (str/includes? message "tenant_memberships")
-                          (str/includes? message "tenant_member_invites"))))))
+           (or (= :foreign-key (:constraint (ex-data x)))
+               (and (instance? java.sql.SQLException x)
+                    (= :foreign-key (:kind (constraint/violation
+                                            {:sql-state  (.getSQLState ^java.sql.SQLException x)
+                                             :error-code (.getErrorCode ^java.sql.SQLException x)
+                                             :message    (ex-message x)}))))))
          (take-while some? (iterate ex-cause e)))))
 
 ;; =============================================================================
@@ -579,7 +579,7 @@
              result (try
                       (.hard-delete-user user-repository user-id)
                       (catch Exception e
-                        (if (tenant-reference-violation? e)
+                        (if (foreign-key-refusal? e)
                           (throw (ex-info "Cannot permanently delete user with tenant memberships or accepted invites"
                                           {:type :hard-deletion-not-allowed
                                            :user-id user-id}
