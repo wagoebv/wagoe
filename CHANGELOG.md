@@ -42,6 +42,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Admin search, admin text filters and the user audit email filters failed on SQLite and MySQL** (BOU-450): they
+  emitted `ILIKE`. They ignore case on every database now. `build-search-where`/`build-filter-where` take the adapter first.
 - **Tenant jobs ran in the public schema** (BOU-605). `process-tenant-job!` now switches to the tenant's schema on PostgreSQL;
   re-run tenant jobs whose writes landed in public.
 - **SQLite enforced foreign keys on one pooled connection in five; MySQL ran most connections without strict mode or UTC**
