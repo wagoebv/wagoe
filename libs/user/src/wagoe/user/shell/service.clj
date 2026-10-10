@@ -580,7 +580,7 @@
                       (.hard-delete-user user-repository user-id)
                       (catch Exception e
                         (if (foreign-key-refusal? e)
-                          (throw (ex-info "Cannot permanently delete user with tenant memberships or accepted invites"
+                          (throw (ex-info "Cannot permanently delete a user other records still reference"
                                           {:type :hard-deletion-not-allowed
                                            :user-id user-id}
                                           e))

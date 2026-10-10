@@ -1,7 +1,8 @@
 (ns wagoe.user.shell.hard-delete-tenant-reference-test
   "A user still referenced by a tenant membership cannot be hard-deleted, on a
    real database: the platform's foreign-key :conflict (BOU-590) becomes
-   :hard-deletion-not-allowed."
+   :hard-deletion-not-allowed. The test makes the foreign key itself; the tenant
+   tables boot creates have none yet (BOU-551)."
   (:require [clojure.test :refer [deftest is testing]]
             [next.jdbc :as jdbc]
             [wagoe.platform.shell.adapters.database.factory :as db-factory]
