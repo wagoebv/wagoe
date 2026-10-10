@@ -32,7 +32,7 @@
     (table-exists? [_ _ _] false)
     (get-table-info [_ _ _] [])
     (engine [_] :postgresql)
-    (capabilities [_] #{})
+    (capabilities [_] #{:schemas})
     (column-type [_ _] nil)
     (like [_ _ _] nil)))
 
@@ -68,21 +68,7 @@
 
 (deftest ^:unit provision-tenant-validation-test
   (testing "rejects nil tenant entity"
-    (let [mock-adapter (reify protocols/DBAdapter
-                         (dialect [_] :postgresql)
-                         (jdbc-driver [_] "org.postgresql.Driver")
-                         (jdbc-url [_ _] "jdbc:postgresql://localhost:5432/test")
-                         (pool-defaults [_] {})
-                         (init-connection! [_ _ _] nil)
-                         (build-where [_ _] [])
-                         (boolean->db [_ _] 1)
-                         (db->boolean [_ _] true)
-                         (table-exists? [_ _ _] false)
-                         (get-table-info [_ _ _] [])
-                         (engine [_] :postgresql)
-                         (capabilities [_] #{})
-                         (column-type [_ _] nil)
-                         (like [_ _ _] nil))
+    (let [mock-adapter (postgres-adapter-stub)
           ctx {:adapter mock-adapter
                :datasource nil}]
       (is (thrown-with-msg? clojure.lang.ExceptionInfo
@@ -90,21 +76,7 @@
                             (sut/provision-tenant! ctx nil)))))
 
   (testing "rejects tenant entity without schema-name"
-    (let [mock-adapter (reify protocols/DBAdapter
-                         (dialect [_] :postgresql)
-                         (jdbc-driver [_] "org.postgresql.Driver")
-                         (jdbc-url [_ _] "jdbc:postgresql://localhost:5432/test")
-                         (pool-defaults [_] {})
-                         (init-connection! [_ _ _] nil)
-                         (build-where [_ _] [])
-                         (boolean->db [_ _] 1)
-                         (db->boolean [_ _] true)
-                         (table-exists? [_ _ _] false)
-                         (get-table-info [_ _ _] [])
-                         (engine [_] :postgresql)
-                         (capabilities [_] #{})
-                         (column-type [_ _] nil)
-                         (like [_ _ _] nil))
+    (let [mock-adapter (postgres-adapter-stub)
           ctx {:adapter mock-adapter
                :datasource nil}
           tenant {:name "Test Tenant"}]
@@ -159,27 +131,7 @@
         (is false "Should have thrown exception")
         (catch clojure.lang.ExceptionInfo e
           (is (= :not-supported (:type (ex-data e))))
-          (is (= :mysql (:dialect (ex-data e))))))))
-
-  (testing "accepts PostgreSQL adapter when dialect is nil but driver is PostgreSQL"
-    (let [mock-adapter (reify protocols/DBAdapter
-                         (dialect [_] nil)
-                         (jdbc-driver [_] "org.postgresql.Driver")
-                         (jdbc-url [_ _] "jdbc:postgresql://localhost:5432/test")
-                         (pool-defaults [_] {})
-                         (init-connection! [_ _ _] nil)
-                         (build-where [_ _] [])
-                         (boolean->db [_ _] 1)
-                         (db->boolean [_ _] true)
-                         (table-exists? [_ _ _] false)
-                         (get-table-info [_ _ _] [])
-                         (engine [_] :postgresql)
-                         (capabilities [_] #{})
-                         (column-type [_ _] nil)
-                         (like [_ _ _] nil))
-          ctx {:adapter mock-adapter
-               :datasource nil}]
-      (is (true? (#'sut/postgresql-context? ctx))))))
+          (is (= :mysql (:engine (ex-data e)))))))))
 
 (deftest ^:unit provision-tenant-existing-schema-and-failure-paths-test
   (testing "already provisioned schemas return success when validation passes"
@@ -246,21 +198,7 @@
 
 (deftest ^:unit deprovision-tenant-validation-test
   (testing "rejects nil tenant entity"
-    (let [mock-adapter (reify protocols/DBAdapter
-                         (dialect [_] :postgresql)
-                         (jdbc-driver [_] "org.postgresql.Driver")
-                         (jdbc-url [_ _] "jdbc:postgresql://localhost:5432/test")
-                         (pool-defaults [_] {})
-                         (init-connection! [_ _ _] nil)
-                         (build-where [_ _] [])
-                         (boolean->db [_ _] 1)
-                         (db->boolean [_ _] true)
-                         (table-exists? [_ _ _] false)
-                         (get-table-info [_ _ _] [])
-                         (engine [_] :postgresql)
-                         (capabilities [_] #{})
-                         (column-type [_ _] nil)
-                         (like [_ _ _] nil))
+    (let [mock-adapter (postgres-adapter-stub)
           ctx {:adapter mock-adapter
                :datasource nil}]
       (is (thrown-with-msg? clojure.lang.ExceptionInfo
@@ -268,21 +206,7 @@
                             (sut/deprovision-tenant! ctx nil)))))
 
   (testing "rejects tenant entity without schema-name"
-    (let [mock-adapter (reify protocols/DBAdapter
-                         (dialect [_] :postgresql)
-                         (jdbc-driver [_] "org.postgresql.Driver")
-                         (jdbc-url [_ _] "jdbc:postgresql://localhost:5432/test")
-                         (pool-defaults [_] {})
-                         (init-connection! [_ _ _] nil)
-                         (build-where [_ _] [])
-                         (boolean->db [_ _] 1)
-                         (db->boolean [_ _] true)
-                         (table-exists? [_ _ _] false)
-                         (get-table-info [_ _ _] [])
-                         (engine [_] :postgresql)
-                         (capabilities [_] #{})
-                         (column-type [_ _] nil)
-                         (like [_ _ _] nil))
+    (let [mock-adapter (postgres-adapter-stub)
           ctx {:adapter mock-adapter
                :datasource nil}
           tenant {:name "Test Tenant"}]
@@ -503,11 +427,10 @@
         ;; This test verifies the flow but may need PostgreSQL for full testing
         (let [tenant {:schema-name "tenant_test"
                       :slug "test-tenant"}
-              adapter (:adapter *test-ctx*)
-              dialect (protocols/dialect adapter)]
+              adapter (:adapter *test-ctx*)]
 
           (testing "H2 database detected"
-            (is (= :ansi dialect)))  ; H2 in PostgreSQL compatibility mode reports as :ansi
+            (is (= :h2 (protocols/engine adapter))))
 
           (testing "provisioning on H2 throws not-supported error"
             ;; Provisioning should only work with PostgreSQL
