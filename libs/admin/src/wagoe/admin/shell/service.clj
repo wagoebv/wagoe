@@ -13,6 +13,7 @@
    - Handle soft/hard deletes, children included, as the config says"
   (:require
    [wagoe.admin.ports :as ports]
+   [wagoe.platform.ports.database :as db-ports]
    [wagoe.platform.database :as db]
    [wagoe.platform.shell.persistence-interceptors :as persist-interceptors]
    [wagoe.core.utils.type-conversion :as type-conversion]
@@ -113,6 +114,7 @@
   "Build WHERE clause for case-insensitive text search across multiple fields.
 
    Args:
+     adapter: the database's DBAdapter, whose `like` ignores case on every engine
      search-term: String to search for
      search-fields: Vector of field keywords to search in
 
@@ -120,15 +122,15 @@
      HoneySQL WHERE clause (nil if no search term)
 
    Example:
-     (build-search-where john [:email :name])
+     (build-search-where postgres-adapter john [:email :name])
      => [:or [:ilike :email percent-john-percent]
              [:ilike :name percent-john-percent]]"
-  [search-term search-fields]
+  [adapter search-term search-fields]
   (when (and search-term (seq search-fields))
     (let [search-pattern (str "%" search-term "%")]
       (vec (cons :or
                  (mapv (fn [field]
-                         [:ilike field search-pattern])
+                         (db-ports/like adapter field search-pattern))
                        search-fields))))))
 
 (defn build-filter-where
@@ -138,6 +140,7 @@
    Week 2: Advanced operators (gt, lt, contains, in, between, etc.)
 
    Args:
+     adapter: the database's DBAdapter; text operators ignore case through its `like`
      filters: Map of field -> value (Week 1) or field -> filter-map (Week 2)
               Week 1: {:role :admin :active true}
               Week 2: {:created-at {:op :gte :value \"2024-01-01\"}
@@ -147,13 +150,13 @@
      HoneySQL WHERE clause (nil if no filters)
 
    Example:
-     (build-filter-where {:role :admin :active true})
+     (build-filter-where adapter {:role :admin :active true})
      ;=> [:and [:= :role :admin] [:= :active true]]
 
-     (build-filter-where {:price {:op :gte :value 100}
+     (build-filter-where adapter {:price {:op :gte :value 100}
                           :status {:op :in :values [:active :pending]}})
      ;=> [:and [:>= :price 100] [:in :status [:active :pending]]]"
-  [filters]
+  [adapter filters]
   (when (seq filters)
     (let [clauses (mapv (fn [[field filter-value]]
                           (if (map? filter-value)
@@ -166,9 +169,9 @@
                                 :gte         [:>= field value]
                                 :lt          [:< field value]
                                 :lte         [:<= field value]
-                                :contains    [:ilike field (str "%" value "%")]
-                                :starts-with [:ilike field (str value "%")]
-                                :ends-with   [:ilike field (str "%" value)]
+                                :contains    (db-ports/like adapter field (str "%" value "%"))
+                                :starts-with (db-ports/like adapter field (str value "%"))
+                                :ends-with   (db-ports/like adapter field (str "%" value))
                                 :in          [:in field (vec values)]
                                 :not-in      [:not-in field (vec values)]
                                 :is-null     [:= field nil]
@@ -692,8 +695,8 @@
                                               filters)))
 
              ; Build query components
-             search-where (build-search-where search-term resolved-search-fields)
-             filter-where (build-filter-where resolved-filters)
+             search-where (build-search-where (:adapter db-ctx) search-term resolved-search-fields)
+             filter-where (build-filter-where (:adapter db-ctx) resolved-filters)
              ; Exclude soft-deleted records if entity uses soft delete
              soft-delete-where (when soft-delete? [:= soft-delete-field nil])
              where-clause (combine-where-clauses [search-where filter-where soft-delete-where])
@@ -958,7 +961,7 @@
              soft-delete? (:soft-delete entity-config false)
              {:keys [from-clause join-clause field-aliases]} (resolve-query-config entity-config)
              soft-delete-field (get field-aliases :deleted-at :deleted_at)
-             filter-where (build-filter-where filters)
+             filter-where (build-filter-where (:adapter db-ctx) filters)
              ; Exclude soft-deleted records if entity uses soft delete
              soft-delete-where (when soft-delete? [:= soft-delete-field nil])
              where-clause (combine-where-clauses [filter-where soft-delete-where])
