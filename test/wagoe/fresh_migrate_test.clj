@@ -65,6 +65,9 @@
               "and the application then boots on it")
           (is (db/table-exists? ctx :users))
           (is (db/table-exists? ctx :tenants))
+          (is (= (= "postgresql" label)
+                 (contains? (set (map :name (db/get-table-info ctx :users))) "search_vector"))
+              "users gets the full-text column exactly where the adapter claims :full-text")
           (finally (close!)))))))
 
 (deftest ^:integration migrate-after-boot

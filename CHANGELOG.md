@@ -46,6 +46,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **A hard delete refused by a foreign key answered 409 instead of `:hard-deletion-not-allowed`** (BOU-450), on every
+  database. Tenant tables have no foreign key to users yet, so a member's delete is not refused (BOU-551).
 - **Admin search, admin text filters and the user audit email filters failed on SQLite and MySQL** (BOU-450): they
   emitted `ILIKE`. They ignore case on every database now. `build-search-where`/`build-filter-where` take the adapter first.
 - **Tenant jobs ran in the public schema** (BOU-605). `process-tenant-job!` now switches to the tenant's schema on PostgreSQL;
