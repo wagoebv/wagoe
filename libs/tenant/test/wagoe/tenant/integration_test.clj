@@ -194,7 +194,7 @@
       ;; 2. Provision tenant schema (H2 doesn't support PostgreSQL schemas)
       ;; Note: Provisioning only works with PostgreSQL, H2 test will skip
       ;; Schema existence verification is tested in provisioning-test.clj
-      (when (= :postgresql (get-in *test-ctx* [:adapter :dialect]))
+      (when (#'provisioning/schemas? *test-ctx*)
         (provisioning/provision-tenant! *test-ctx* tenant)
         (log/info "Provisioned tenant schema: tenant_acme_corp"))
 
@@ -335,7 +335,7 @@
 
 (deftest ^:integration schema-switching-test
   (testing "PostgreSQL schema switching with with-tenant-schema"
-    (if (= :postgresql (get-in *test-ctx* [:adapter :dialect]))
+    (if (#'provisioning/schemas? *test-ctx*)
       (let [tenant (create-test-tenant *tenant-service* "test-schema" "Test Schema Co")
             schema-name (:schema-name tenant)]
 
@@ -348,7 +348,7 @@
         (log/info "Schema switching test passed (provision-tenant! validates internally)"))
 
       ;; H2/non-PostgreSQL databases: schema-per-tenant not supported
-      (is (not= :postgresql (get-in *test-ctx* [:adapter :dialect]))
+      (is (not (#'provisioning/schemas? *test-ctx*))
           "Schema switching test skipped (non-PostgreSQL database)"))))
 
 ;; =============================================================================
