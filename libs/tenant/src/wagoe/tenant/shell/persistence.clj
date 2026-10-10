@@ -129,33 +129,20 @@
      ctx))
 
   (update-tenant [_this tenant-entity]
+    ;; A tenant marked deleted takes its memberships with it (BOU-611; see
+    ;; shell.user-foreign-keys).
     (persistence-interceptors/execute-persistence-operation
      :update-tenant
-     {:tenant-id (:id tenant-entity)}
-     (fn [_]
-       (let [db-record (tenant-entity->db ctx tenant-entity)
-             updates (select-keys db-record [:name :status :settings :updated_at :deleted_at])
-             query {:update :tenants
-                    :set updates
-                    :where [:= :id (:id db-record)]}
-             _ (db/execute-update! ctx query)]
-         tenant-entity))
-     ctx))
-
-  (soft-delete-tenant [_this tenant-entity]
-    ;; The memberships go with it: a row left behind would keep its user from
-    ;; ever being hard-deleted, through the key to auth_users (BOU-611).
-    (persistence-interceptors/execute-persistence-operation
-     :soft-delete-tenant
      {:tenant-id (:id tenant-entity)}
      (fn [_]
        (let [db-record (tenant-entity->db ctx tenant-entity)]
          (db/with-transaction [tx ctx]
            (db/execute-update! tx {:update :tenants
-                                   :set    (select-keys db-record [:status :updated_at :deleted_at])
+                                   :set    (select-keys db-record [:name :status :settings :updated_at :deleted_at])
                                    :where  [:= :id (:id db-record)]})
-           (db/execute-update! tx {:delete-from :public.tenant_memberships
-                                   :where       [:= :tenant_id (:id db-record)]}))
+           (when (= :deleted (:status tenant-entity))
+             (db/execute-update! tx {:delete-from :public.tenant_memberships
+                                     :where       [:= :tenant_id (:id db-record)]})))
          tenant-entity))
      ctx))
 

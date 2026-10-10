@@ -143,8 +143,7 @@
            (throw (ex-info "Membership not found"
                            {:type          :not-found
                             :membership-id (:membership-id params)})))
-         ;; Deleted, not kept as :revoked: a row left behind would keep its user
-         ;; from ever being hard-deleted (BOU-611).
+         ;; Deleted, not kept as :revoked (BOU-611; see shell.user-foreign-keys).
          (ports/delete-membership membership-repository (:id membership))
          (membership-core/revoke-membership membership (time/now))))
      {:logger          logger

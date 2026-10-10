@@ -14,12 +14,16 @@
             [wagoe.user.shell.persistence :as user-persistence]
             [wagoe.user.shell.service :as user-service]))
 
+(defn- h2-ctx [label]
+  (factory/db-context (factory/h2-config (str "mem:tenant_fk_" label "_" (System/nanoTime) ";DB_CLOSE_DELAY=-1"))))
+
+(defn- user-svc [ctx]
+  (user-service/->UserService (user-persistence/create-user-repository ctx) nil nil {} nil nil))
+
 (defn- engines []
   [[:postgresql (fn [] (let [pg (epg/start!) ctx (epg/db-context pg)]
                          [ctx (fn [] (factory/close-db-context! ctx) (epg/stop! pg))]))]
-   [:h2 (fn [] (let [ctx (factory/db-context
-                          (factory/h2-config (str "mem:tenant_fk_" (System/nanoTime) ";DB_CLOSE_DELAY=-1")))]
-                 [ctx #(factory/close-db-context! ctx)]))]])
+   [:h2 (fn [] (let [ctx (h2-ctx "engine")] [ctx #(factory/close-db-context! ctx)]))]])
 
 (defn- new-user! [ctx]
   (ports/create-user (user-persistence/create-user-repository ctx)
@@ -46,9 +50,6 @@
   (mapv :tenant_memberships/status
         (jdbc/execute! (:datasource ctx) ["SELECT status FROM tenant_memberships WHERE user_id = ?" user-id])))
 
-(defn- h2-ctx [label]
-  (factory/db-context (factory/h2-config (str "mem:tenant_fk_" label "_" (System/nanoTime) ";DB_CLOSE_DELAY=-1"))))
-
 (deftest ^:integration a-member-cannot-be-hard-deleted-after-migrate-up
   (doseq [[engine open] (engines)]
     (testing (name engine)
@@ -56,7 +57,7 @@
         (try
           (migrations/migrate-datasource! (:datasource ctx))
           (let [user (new-user! ctx)
-                svc  (user-service/->UserService (user-persistence/create-user-repository ctx) nil nil {} nil nil)]
+                svc  (user-svc ctx)]
             (membership! ctx (:id user))
             (let [e (try (ports/permanently-delete-user svc (:id user)) nil
                          (catch clojure.lang.ExceptionInfo e e))]
@@ -90,9 +91,9 @@
       (let [user      (new-user! ctx)
             tenant-id (tenant! ctx "active")
             repo      (tenant-persistence/create-tenant-repository ctx nil nil)
-            svc       (user-service/->UserService (user-persistence/create-user-repository ctx) nil nil {} nil nil)]
+            svc       (user-svc ctx)]
         (membership! ctx (:id user) tenant-id "active")
-        (tenant-ports/soft-delete-tenant repo (assoc (tenant-ports/find-tenant-by-id repo tenant-id)
+        (tenant-ports/update-tenant repo (assoc (tenant-ports/find-tenant-by-id repo tenant-id)
                                                      :status :deleted :deleted-at (java.time.Instant/now)))
         (is (nil? (tenant-ports/find-tenant-by-id repo tenant-id)) "a deleted tenant is not found")
         (is (empty? (memberships-of ctx (:id user))))

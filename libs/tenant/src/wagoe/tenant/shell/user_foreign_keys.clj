@@ -11,14 +11,17 @@
            [javax.sql DataSource]))
 
 (def ^:private references
-  "[table column constraint-name on-delete departed]: each references auth_users(id).
-   An accepted invite is history, not membership, so it must not block a delete.
-   `departed` deletes rows that revoking or deleting a tenant now deletes, but
-   which older versions kept, before the key would make them block a delete."
-  [["tenant_memberships" "user_id" "fk_tenant_memberships_user" nil
-    (str "DELETE FROM tenant_memberships WHERE status = 'revoked'"
-         " OR tenant_id IN (SELECT id FROM tenants WHERE status = 'deleted')")]
-   ["tenant_member_invites" "accepted_by_user_id" "fk_tenant_member_invites_user" "SET NULL" nil]])
+  "Each references auth_users(id). An accepted invite is history, not
+   membership, so it must not block a delete."
+  [{:table "tenant_memberships" :column "user_id" :constraint "fk_tenant_memberships_user"}
+   {:table "tenant_member_invites" :column "accepted_by_user_id"
+    :constraint "fk_tenant_member_invites_user" :on-delete "SET NULL"}])
+
+(def ^:private departed-memberships
+  "Rows revoking a member or deleting a tenant now deletes, but older versions
+   kept. Under the key they would block their user's hard delete."
+  (str "DELETE FROM tenant_memberships WHERE status = 'revoked'"
+       " OR tenant_id IN (SELECT id FROM tenants WHERE status = 'deleted')"))
 
 (defn- auth-users-key-name
   "The name of `table`'s (as spelled) key from `column` to auth_users, or nil."
@@ -56,9 +59,9 @@
   [ctx]
   (when (and (db/table-exists? ctx :auth_users)
              (contains? (protocols/capabilities (:adapter ctx)) :alter-foreign-key))
-    (doseq [[table column constraint on-delete departed] references
+    (doseq [{:keys [table column constraint on-delete]} references
             :when (and (db/table-exists? ctx table) (not (foreign-key-name ctx table column)))]
-      (when departed (db/execute-update! ctx [departed]))
+      (when (= "tenant_memberships" table) (db/execute-update! ctx [departed-memberships]))
       (when-let [found (not-empty (orphans ctx table column))]
         (throw (ex-info (str table " has rows whose " column " names no user, so it cannot take a"
                              " foreign key to auth_users. Delete them, then run again. The first: "
@@ -80,7 +83,7 @@
         drop-kw (if (= :mysql (protocols/engine (:adapter ctx))) "FOREIGN KEY" "CONSTRAINT")]
     ;; The name found, not the one `up` would give: a key made before up ran
     ;; may carry another, and dropping a name that is not there fails.
-    (doseq [[table column] references
+    (doseq [{:keys [table column]} references
             :let [constraint (foreign-key-name ctx table column)]
             :when constraint]
       (db/execute-ddl! ctx (str "ALTER TABLE " table " DROP " drop-kw " " constraint)))))

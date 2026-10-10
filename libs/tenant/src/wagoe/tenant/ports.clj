@@ -11,8 +11,6 @@
 
   (update-tenant [this tenant-entity])
 
-  (soft-delete-tenant [this tenant-entity])
-
   (delete-tenant [this tenant-id])
 
   (tenant-slug-exists? [this slug])
