@@ -4,8 +4,8 @@
    name a table that already holds duplicates."
   (:require [clojure.string :as str]
             [next.jdbc :as jdbc]
-            [wagoe.platform.database :as db]
-            [next.jdbc.result-set :as rs])
+            [next.jdbc.result-set :as rs]
+            [wagoe.platform.database :as db])
   (:import [java.sql Connection]))
 
 (def ^:private index-name "uq_workflow_instances_entity")

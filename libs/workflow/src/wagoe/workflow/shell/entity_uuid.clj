@@ -8,10 +8,9 @@
    Idempotent. On PostgreSQL the column is stored, so adding it rewrites the
    table once; on SQLite, which has no uuid type, it is virtual text."
   (:require [clojure.string :as str]
-            [clojure.tools.logging :as log]
             [next.jdbc :as jdbc]
-            [wagoe.platform.database :as db]
-            [next.jdbc.result-set :as rs])
+            [next.jdbc.result-set :as rs]
+            [wagoe.platform.database :as db])
   (:import [java.sql Connection]))
 
 (def ^:private index-name "idx_workflow_instances_entity_uuid")
@@ -39,14 +38,6 @@
                     " GENERATED ALWAYS AS (CASE WHEN entity_id GLOB '" uuid-glob "'"
                     " THEN entity_id END) VIRTUAL")})
 
-(defn- engine
-  "The connectable's engine, or :unknown for one Wagoe does not support, which
-   is skipped with a warning rather than failing the migration."
-  [connectable]
-  (try (db/engine-of connectable)
-       (catch clojure.lang.ExceptionInfo e
-         (if (= :not-supported (:type (ex-data e))) :unknown (throw e)))))
-
 (defn- sqlite-has-column? [connectable]
   (some #(= "entity_uuid" (:name %))
         (jdbc/execute! connectable ["SELECT name FROM pragma_table_xinfo('workflow_instances')"]
@@ -70,21 +61,19 @@
 (defn ensure-entity-uuid!
   "Add workflow_instances.entity_uuid and its index, unless they are there."
   [connectable]
-  (let [e (engine connectable)]
-    (if-let [ddl (add-column e)]
-      (case e
-        ;; MySQL has no IF NOT EXISTS on a column or an index.
-        :mysql (do (when-not (mysql-has? connectable "columns WHERE column_name = 'entity_uuid'")
-                     (jdbc/execute! connectable [ddl]))
-                   (when-not (mysql-has? connectable (str "statistics WHERE index_name = '" index-name "'"))
-                     (jdbc/execute! connectable [(str "CREATE INDEX " index-name
-                                                      " ON workflow_instances (entity_uuid)")])))
-        (do (when-not (and (= :sqlite e) (sqlite-has-column? connectable))
-              (jdbc/execute! connectable [ddl]))
-            (jdbc/execute! connectable [(str "CREATE INDEX IF NOT EXISTS " index-name
-                                             " ON workflow_instances (entity_uuid)")])))
-      (log/warn "workflow_instances.entity_uuid is not supported on this database; join on entity_id"
-                {:engine e}))))
+  (let [e   (db/engine-of connectable)
+        ddl (add-column e)]
+    (case e
+      ;; MySQL has no IF NOT EXISTS on a column or an index.
+      :mysql (do (when-not (mysql-has? connectable "columns WHERE column_name = 'entity_uuid'")
+                   (jdbc/execute! connectable [ddl]))
+                 (when-not (mysql-has? connectable (str "statistics WHERE index_name = '" index-name "'"))
+                   (jdbc/execute! connectable [(str "CREATE INDEX " index-name
+                                                    " ON workflow_instances (entity_uuid)")])))
+      (do (when-not (and (= :sqlite e) (sqlite-has-column? connectable))
+            (jdbc/execute! connectable [ddl]))
+          (jdbc/execute! connectable [(str "CREATE INDEX IF NOT EXISTS " index-name
+                                           " ON workflow_instances (entity_uuid)")])))))
 
 (defn- connectable
   "Migratus's open connection, which SQLite needs used rather than a second one."
@@ -101,7 +90,7 @@
   "Migratus entry point."
   [config]
   (let [db (connectable config)]
-    (if (= :mysql (engine db))
+    (if (= :mysql (db/engine-of db))
       ;; MySQL drops a column's index with the column.
       (when (mysql-has? db "columns WHERE column_name = 'entity_uuid'")
         (jdbc/execute! db ["ALTER TABLE workflow_instances DROP COLUMN entity_uuid"]))
