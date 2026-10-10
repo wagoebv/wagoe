@@ -995,10 +995,10 @@
                              (conj [:= :result (name filter-result)])
 
                              filter-target-email
-                             (conj [:ilike :target_user_email (str "%" filter-target-email "%")])
+                             (conj (protocols/like (:adapter ctx) :target_user_email (str "%" filter-target-email "%")))
 
                              filter-actor-email
-                             (conj [:ilike :actor_email (str "%" filter-actor-email "%")])
+                             (conj (protocols/like (:adapter ctx) :actor_email (str "%" filter-actor-email "%")))
 
                              filter-created-after
                              (conj [:>= :created_at (type-conversion/instant->string filter-created-after)])
