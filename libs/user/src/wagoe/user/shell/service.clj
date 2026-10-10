@@ -22,6 +22,7 @@
             [wagoe.user.core.audit :as audit-core]
             [wagoe.user.shell.auth :as auth-shell]
             [wagoe.user.ports :as ports]
+            [wagoe.platform.core.database.constraint :as constraint]
             [wagoe.platform.shell.service-interceptors :as service-interceptors]
             [clojure.string :as str])
   (:import (java.security SecureRandom)
@@ -98,15 +99,20 @@
            :audit-repository audit-repository
            :auth-service auth-service)))
 
-(defn- tenant-reference-violation?
+(defn- foreign-key-refusal?
+  "Whether `e`, or anything that caused it, is a refused foreign key: the
+   platform's :constraint (BOU-590), or a driver error read by the platform's
+   constraint reader, on every database."
   [e]
-  (let [message (.getMessage e)]
-    (boolean
-     (or (and (= "org.postgresql.util.PSQLException" (.getName (class e)))
-              (= "23503" (.getSQLState ^java.sql.SQLException e)))
-         (and message
-              (or (str/includes? message "tenant_memberships")
-                  (str/includes? message "tenant_member_invites")))))))
+  (boolean
+   (some (fn [x]
+           (or (= :foreign-key (:constraint (ex-data x)))
+               (and (instance? java.sql.SQLException x)
+                    (= :foreign-key (:kind (constraint/violation
+                                            {:sql-state  (.getSQLState ^java.sql.SQLException x)
+                                             :error-code (.getErrorCode ^java.sql.SQLException x)
+                                             :message    (ex-message x)}))))))
+         (take-while some? (iterate ex-cause e)))))
 
 ;; =============================================================================
 ;; Database-Agnostic User Service (I/O Shell Layer)
@@ -573,8 +579,8 @@
              result (try
                       (.hard-delete-user user-repository user-id)
                       (catch Exception e
-                        (if (tenant-reference-violation? e)
-                          (throw (ex-info "Cannot permanently delete user with tenant memberships or accepted invites"
+                        (if (foreign-key-refusal? e)
+                          (throw (ex-info "Cannot permanently delete a user other records still reference"
                                           {:type :hard-deletion-not-allowed
                                            :user-id user-id}
                                           e))

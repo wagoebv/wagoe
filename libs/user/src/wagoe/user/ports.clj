@@ -140,7 +140,7 @@
 
   (permanently-delete-user [this user-id])
   ;; Irreversible erasure. Returns boolean.
-  ;; Throws :user-not-found, :hard-deletion-not-allowed (tenant references).
+  ;; Throws :user-not-found, :hard-deletion-not-allowed (another record still references the user).
 
   (authenticate-user [this user-credentials])
   ;; user-credentials: {:email :password :ip-address :user-agent :mfa-code}
