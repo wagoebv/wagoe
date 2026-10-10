@@ -173,13 +173,12 @@
 ;; Index Generation Tests
 ;; =============================================================================
 
-(deftest ^:unit generate-indexes-ddl-test
-  (testing "Indexes generated for foreign key fields"
+(deftest ^:unit generate-indexes-test
+  (testing "Indexes generated for foreign key and timestamp fields"
     (let [malli-schema [:map
                         [:id :uuid]
                         [:tenant-id :uuid]
-                        [:created-at 'inst?]]
-          indexes (schema/generate-indexes-ddl h2-ctx "items" malli-schema)]
-      (is (vector? indexes))
-      (is (some #(.contains % "idx_items_tenant_id") indexes))
-      (is (some #(.contains % "idx_items_created_at") indexes)))))
+                        [:created-at 'inst?]]]
+      (is (= [["idx_items_tenant_id" "items" ["tenant_id"]]
+              ["idx_items_created_at" "items" ["created_at"]]]
+             (schema/generate-indexes "items" malli-schema))))))

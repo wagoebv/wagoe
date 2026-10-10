@@ -47,27 +47,18 @@
                          " instance of each (delete the others and their workflow_audit rows), then run"
                          " this again. The first: " (pr-str (vec (take 5 dups))))
                     {:type :conflict :duplicates (vec dups)})))
-  ;; MySQL has no IF NOT EXISTS on an index (BOU-544).
-  (let [on-mysql? (mysql? connectable)]
-    (when-not (and on-mysql? (mysql-index? connectable))
-      (jdbc/execute! connectable [(str "CREATE UNIQUE INDEX " (when-not on-mysql? "IF NOT EXISTS ") index-name
-                                       " ON workflow_instances (workflow_id, entity_type, entity_id)")]))))
-
-(defn- connectable
-  "Migratus's open connection, which SQLite needs used rather than a second one."
-  [config]
-  (let [conn (:conn config)]
-    (if (instance? Connection conn) conn (:datasource (:db config)))))
+  (db/create-index-if-not-exists! (db/context-of connectable) index-name :workflow_instances
+                                  [:workflow_id :entity_type :entity_id] {:unique? true}))
 
 (defn up
   "Migratus entry point."
   [config]
-  (ensure-unique! (connectable config)))
+  (ensure-unique! (db/migration-connectable config)))
 
 (defn down
   "Migratus entry point."
   [config]
-  (let [db (connectable config)]
+  (let [db (db/migration-connectable config)]
     (if (mysql? db)
       (when (mysql-index? db)
         (jdbc/execute! db [(str "DROP INDEX " index-name " ON workflow_instances")]))

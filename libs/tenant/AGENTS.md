@@ -221,6 +221,13 @@ The raw token is **never** stored in the database:
 
 ---
 
+## The library's own tables
+
+`tenants`, `tenant_memberships` and `tenant_member_invites` ship as a library
+migration (`wagoe/tenant/migrations/`, BOU-551). Boot creates them from the same
+definition, `wagoe.tenant.shell.tenant-tables`, so `bb migrate up` and a first
+boot give the same tables. Change them there, never in a second copy.
+
 ## Tenant migrations
 
 Tenants use a **schema-per-tenant** layout, so schema changes to tenant-scoped

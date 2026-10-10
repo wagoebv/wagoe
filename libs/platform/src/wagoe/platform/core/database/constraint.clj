@@ -45,3 +45,10 @@
     (let [field (some #(some-> (re-find % (str message)) second column->field) column-patterns)]
       (cond-> {:kind k}
         field (assoc :field field)))))
+
+(defn already-exists?
+  "Whether the driver reports that what a CREATE names is already there.
+   Only MySQL is asked: it takes no IF NOT EXISTS on an index (ER_DUP_KEYNAME,
+   1061), and the other engines do (BOU-607)."
+  [{:keys [error-code]}]
+  (= 1061 error-code))

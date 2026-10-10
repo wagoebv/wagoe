@@ -1,6 +1,7 @@
 (ns wagoe.platform.shell.adapters.database.common.schema
   "Common schema management and DDL utilities."
-  (:require [wagoe.platform.ports.database :as protocols]
+  (:require [wagoe.platform.core.database.constraint :as constraint]
+            [wagoe.platform.ports.database :as protocols]
             [wagoe.platform.shell.adapters.database.common.execution :as execution]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
@@ -46,6 +47,14 @@
 ;; DDL Execution
 ;; =============================================================================
 
+(defn- ddl-error [ctx statement ^Exception e]
+  (ex-info "DDL execution failed"
+           {:type           :database-error
+            :adapter        (protocols/dialect (:adapter ctx))
+            :statement      statement
+            :original-error (.getMessage e)}
+           e))
+
 (defn execute-ddl!
   "Execute DDL statement with logging.
 
@@ -78,36 +87,39 @@
                     :statement ddl-statement
                     :error (.getMessage e)
                     :exception-type (type e)})
-        (throw (ex-info "DDL execution failed"
-                        {:type :database-error
-                         :adapter (protocols/dialect (:adapter ctx))
-                         :statement ddl-statement
-                         :original-error (.getMessage e)}
-                        e))))))
+        (throw (ddl-error ctx ddl-statement e))))))
 
 (defn create-index-if-not-exists!
-  "Create index with IF NOT EXISTS support when available.
-
-   Args:
-     ctx: Database context
-     index-name: String index name
-     table: String or keyword table name
-     columns: Vector of column names
-
-   Returns:
-     Execution result
+  "Create an index unless it is there. IF NOT EXISTS where the adapter claims
+   :index-if-not-exists; elsewhere (MySQL) the CREATE runs and \"already there\"
+   counts as done, so a second call does nothing (BOU-607). A unique index the
+   rows break is a :conflict naming the table and columns.
 
    Example:
-     (create-index-if-not-exists! ctx \"idx_users_email\" :users [:email])"
-  [ctx index-name table columns]
-  (execution/validate-context ctx)
-  (let [adapter (:adapter ctx)
-        dialect (protocols/dialect adapter)
-        table-str (name table)
-        cols-str (str/join ", " (map name columns))
-        ;; Most databases support IF NOT EXISTS for indexes
-        if-not-exists (case dialect
-                        :mysql ""  ; MySQL doesn't support IF NOT EXISTS for indexes
-                        "IF NOT EXISTS ")
-        ddl (str "CREATE INDEX " if-not-exists index-name " ON " table-str " (" cols-str ")")]
-    (execute-ddl! ctx ddl)))
+     (create-index-if-not-exists! ctx \"idx_users_email\" :users [:email])
+     (create-index-if-not-exists! ctx \"uk_users_email\" :users [:email] {:unique? true})"
+  ([ctx index-name table columns]
+   (create-index-if-not-exists! ctx index-name table columns {}))
+  ([ctx index-name table columns {:keys [unique?]}]
+   (execution/validate-context ctx)
+   (let [native? (contains? (protocols/capabilities (:adapter ctx)) :index-if-not-exists)
+         cols    (str/join ", " (map name columns))
+         ddl     (str "CREATE " (when unique? "UNIQUE ") "INDEX " (when native? "IF NOT EXISTS ")
+                      index-name " ON " (name table) " (" cols ")")]
+     (try
+       (if native?
+         (execute-ddl! ctx ddl)
+         ;; Not through execute-ddl!, which logs every failure: an index that is
+         ;; already there would be an ERROR line on each boot.
+         (try
+           (jdbc/execute! (execution/current-datasource ctx) [ddl])
+           (catch java.sql.SQLException e
+             (when-not (constraint/already-exists? (execution/reported e))
+               (throw (ddl-error ctx ddl e))))))
+       (catch Exception e
+         (throw (if (and unique? (= :unique (some-> (execution/reported e) constraint/violation :kind)))
+                  (ex-info (str "Cannot make " cols " unique on " (name table)
+                                ": rows already share a value. Remove the duplicates, then run again.")
+                           {:type :conflict :table (name table) :columns (mapv name columns)}
+                           e)
+                  e)))))))
