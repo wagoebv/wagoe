@@ -8,9 +8,9 @@
    Idempotent. On PostgreSQL the column is stored, so adding it rewrites the
    table once; on SQLite, which has no uuid type, it is virtual text."
   (:require [clojure.string :as str]
-            [clojure.tools.logging :as log]
             [next.jdbc :as jdbc]
-            [next.jdbc.result-set :as rs])
+            [next.jdbc.result-set :as rs]
+            [wagoe.platform.database :as db])
   (:import [java.sql Connection]))
 
 (def ^:private index-name "idx_workflow_instances_entity_uuid")
@@ -38,22 +38,6 @@
                     " GENERATED ALWAYS AS (CASE WHEN entity_id GLOB '" uuid-glob "'"
                     " THEN entity_id END) VIRTUAL")})
 
-(defn- product-name [connectable]
-  (if (instance? Connection connectable)
-    ;; Migratus's connection: read, not closed.
-    (.getDatabaseProductName (.getMetaData ^Connection connectable))
-    (with-open [^Connection c (jdbc/get-connection connectable)]
-      (.getDatabaseProductName (.getMetaData c)))))
-
-(defn- engine [connectable]
-  (let [product (str/lower-case (str (product-name connectable)))]
-    (cond
-      (str/includes? product "postgres") :postgresql
-      (str/includes? product "h2")       :h2
-      (str/includes? product "sqlite")   :sqlite
-      (re-find #"mysql|mariadb" product) :mysql
-      :else                              :unknown)))
-
 (defn- sqlite-has-column? [connectable]
   (some #(= "entity_uuid" (:name %))
         (jdbc/execute! connectable ["SELECT name FROM pragma_table_xinfo('workflow_instances')"]
@@ -77,21 +61,18 @@
 (defn ensure-entity-uuid!
   "Add workflow_instances.entity_uuid and its index, unless they are there."
   [connectable]
-  (let [e (engine connectable)]
-    (if-let [ddl (add-column e)]
-      (case e
-        ;; MySQL has no IF NOT EXISTS on a column or an index.
-        :mysql (do (when-not (mysql-has? connectable "columns WHERE column_name = 'entity_uuid'")
-                     (jdbc/execute! connectable [ddl]))
-                   (when-not (mysql-has? connectable (str "statistics WHERE index_name = '" index-name "'"))
-                     (jdbc/execute! connectable [(str "CREATE INDEX " index-name
-                                                      " ON workflow_instances (entity_uuid)")])))
-        (do (when-not (and (= :sqlite e) (sqlite-has-column? connectable))
-              (jdbc/execute! connectable [ddl]))
-            (jdbc/execute! connectable [(str "CREATE INDEX IF NOT EXISTS " index-name
-                                             " ON workflow_instances (entity_uuid)")])))
-      (log/warn "workflow_instances.entity_uuid is not supported on this database; join on entity_id"
-                {:engine e}))))
+  (let [e      (db/engine-of connectable)
+        mysql? (= :mysql e)
+        ;; MySQL has no IF NOT EXISTS on a column or an index; SQLite none on a column.
+        has?   (case e
+                 :mysql  (mysql-has? connectable "columns WHERE column_name = 'entity_uuid'")
+                 :sqlite (sqlite-has-column? connectable)
+                 false)]
+    (when-not has?
+      (jdbc/execute! connectable [(add-column e)]))
+    (when-not (and mysql? (mysql-has? connectable (str "statistics WHERE index_name = '" index-name "'")))
+      (jdbc/execute! connectable [(str "CREATE INDEX " (when-not mysql? "IF NOT EXISTS ") index-name
+                                       " ON workflow_instances (entity_uuid)")]))))
 
 (defn- connectable
   "Migratus's open connection, which SQLite needs used rather than a second one."
@@ -108,7 +89,7 @@
   "Migratus entry point."
   [config]
   (let [db (connectable config)]
-    (if (= :mysql (engine db))
+    (if (= :mysql (db/engine-of db))
       ;; MySQL drops a column's index with the column.
       (when (mysql-has? db "columns WHERE column_name = 'entity_uuid'")
         (jdbc/execute! db ["ALTER TABLE workflow_instances DROP COLUMN entity_uuid"]))
