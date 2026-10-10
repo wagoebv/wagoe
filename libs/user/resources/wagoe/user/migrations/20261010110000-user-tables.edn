@@ -1,0 +1,6 @@
+;; auth_users, users, user_sessions and user_audit_log, from the same Malli
+;; definition boot uses (BOU-611). Only what is missing is created, so a
+;; database boot already set up is left as it is.
+{:ns      wagoe.user.shell.user-tables
+ :up-fn   "up"
+ :down-fn "down"}

@@ -23,7 +23,7 @@
    :booleans           :native
    :string-match       :like
    :engine             :h2
-   :capabilities       #{:index-if-not-exists :column-if-not-exists :row-locks}
+   :capabilities       #{:index-if-not-exists :column-if-not-exists :row-locks :alter-foreign-key}
    ;; VARCHAR, not CLOB or TEXT: those read back as a JdbcClob, not a String.
    :column-types       {:uuid "UUID" :instant "TIMESTAMP WITH TIME ZONE" :json "VARCHAR"
                         :boolean "BOOLEAN" :text "VARCHAR"}

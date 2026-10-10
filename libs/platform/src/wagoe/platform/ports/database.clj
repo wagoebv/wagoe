@@ -229,9 +229,10 @@
      :column-if-not-exists  ALTER TABLE … ADD COLUMN IF NOT EXISTS
      :full-text             to_tsvector / ts_rank
      :on-conflict           INSERT … ON CONFLICT DO UPDATE
-     :row-locks             SELECT … FOR UPDATE"
+     :row-locks             SELECT … FOR UPDATE
+     :alter-foreign-key     ALTER TABLE … ADD CONSTRAINT … FOREIGN KEY"
   #{:schemas :transactional-ddl :index-if-not-exists :column-if-not-exists
-    :full-text :on-conflict :row-locks})
+    :full-text :on-conflict :row-locks :alter-foreign-key})
 
 (def logical-column-types
   "What `column-type` answers for."
