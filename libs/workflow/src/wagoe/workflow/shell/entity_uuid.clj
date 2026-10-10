@@ -61,19 +61,18 @@
 (defn ensure-entity-uuid!
   "Add workflow_instances.entity_uuid and its index, unless they are there."
   [connectable]
-  (let [e   (db/engine-of connectable)
-        ddl (add-column e)]
-    (case e
-      ;; MySQL has no IF NOT EXISTS on a column or an index.
-      :mysql (do (when-not (mysql-has? connectable "columns WHERE column_name = 'entity_uuid'")
-                   (jdbc/execute! connectable [ddl]))
-                 (when-not (mysql-has? connectable (str "statistics WHERE index_name = '" index-name "'"))
-                   (jdbc/execute! connectable [(str "CREATE INDEX " index-name
-                                                    " ON workflow_instances (entity_uuid)")])))
-      (do (when-not (and (= :sqlite e) (sqlite-has-column? connectable))
-            (jdbc/execute! connectable [ddl]))
-          (jdbc/execute! connectable [(str "CREATE INDEX IF NOT EXISTS " index-name
-                                           " ON workflow_instances (entity_uuid)")])))))
+  (let [e      (db/engine-of connectable)
+        mysql? (= :mysql e)
+        ;; MySQL has no IF NOT EXISTS on a column or an index; SQLite none on a column.
+        has?   (case e
+                 :mysql  (mysql-has? connectable "columns WHERE column_name = 'entity_uuid'")
+                 :sqlite (sqlite-has-column? connectable)
+                 false)]
+    (when-not has?
+      (jdbc/execute! connectable [(add-column e)]))
+    (when-not (and mysql? (mysql-has? connectable (str "statistics WHERE index_name = '" index-name "'")))
+      (jdbc/execute! connectable [(str "CREATE INDEX " (when-not mysql? "IF NOT EXISTS ") index-name
+                                       " ON workflow_instances (entity_uuid)")]))))
 
 (defn- connectable
   "Migratus's open connection, which SQLite needs used rather than a second one."

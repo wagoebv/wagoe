@@ -48,11 +48,11 @@
 ;; Which engine
 ;; =============================================================================
 
+;; A function, not an alias, so a stub of factory/engine-of reaches its callers.
 (defn engine-of
   "Which engine a DataSource or Connection speaks: :postgresql, :mysql,
    :sqlite or :h2. For code holding no db-context; with one, ask its adapter
-   (ADR-039). A function, not an alias, so a stub of factory/engine-of reaches
-   its callers."
+   (ADR-039)."
   [db]
   (factory/engine-of db))
 
