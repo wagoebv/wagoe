@@ -325,6 +325,13 @@ so two of them deleting the same rows is that DELETE twice.
 A revoked session is pruned on the same terms as any other: revoking hides it,
 expiry plus retention removes it.
 
+## The library's own tables
+
+`auth_users`, `users`, `user_sessions` and `user_audit_log` ship as a library
+migration (`wagoe/user/migrations/`, BOU-611) that runs `initialize-user-schema!`,
+the definition boot uses. Other libraries' migrations can therefore reference
+them. Change them in `initialize-user-schema!`, never in a second copy.
+
 ## Gotchas
 
 - `JWT_SECRET` must be set (≥ 32 chars) for all auth-related tests and runtime operations.

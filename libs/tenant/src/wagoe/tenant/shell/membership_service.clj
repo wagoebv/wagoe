@@ -143,10 +143,10 @@
            (throw (ex-info "Membership not found"
                            {:type          :not-found
                             :membership-id (:membership-id params)})))
-         (let [now     (time/now)
-               updated (membership-core/revoke-membership membership now)]
-           (ports/update-membership membership-repository updated)
-           updated)))
+         ;; Deleted, not kept as :revoked: a row left behind would keep its user
+         ;; from ever being hard-deleted (BOU-611).
+         (ports/delete-membership membership-repository (:id membership))
+         (membership-core/revoke-membership membership (time/now))))
      {:logger          logger
       :metrics-emitter metrics-emitter
       :error-reporter  error-reporter}))

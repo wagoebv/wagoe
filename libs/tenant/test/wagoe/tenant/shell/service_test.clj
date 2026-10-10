@@ -87,6 +87,10 @@
     (swap! state assoc (:id tenant-entity) tenant-entity)
     tenant-entity)
 
+  (soft-delete-tenant [_ tenant-entity]
+    (swap! state assoc (:id tenant-entity) tenant-entity)
+    tenant-entity)
+
   (delete-tenant [_ tenant-id]
     (swap! state dissoc tenant-id)
     nil)

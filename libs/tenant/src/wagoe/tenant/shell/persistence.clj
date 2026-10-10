@@ -142,6 +142,23 @@
          tenant-entity))
      ctx))
 
+  (soft-delete-tenant [_this tenant-entity]
+    ;; The memberships go with it: a row left behind would keep its user from
+    ;; ever being hard-deleted, through the key to auth_users (BOU-611).
+    (persistence-interceptors/execute-persistence-operation
+     :soft-delete-tenant
+     {:tenant-id (:id tenant-entity)}
+     (fn [_]
+       (let [db-record (tenant-entity->db ctx tenant-entity)]
+         (db/with-transaction [tx ctx]
+           (db/execute-update! tx {:update :tenants
+                                   :set    (select-keys db-record [:status :updated_at :deleted_at])
+                                   :where  [:= :id (:id db-record)]})
+           (db/execute-update! tx {:delete-from :public.tenant_memberships
+                                   :where       [:= :tenant_id (:id db-record)]}))
+         tenant-entity))
+     ctx))
+
   (delete-tenant [_this tenant-id]
     (persistence-interceptors/execute-persistence-operation
      :delete-tenant

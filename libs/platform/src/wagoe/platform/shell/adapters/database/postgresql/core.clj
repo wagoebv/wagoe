@@ -26,7 +26,7 @@
    :string-match       :ilike
    :engine             :postgresql
    :capabilities       #{:schemas :transactional-ddl :index-if-not-exists :column-if-not-exists
-                         :full-text :on-conflict :row-locks}
+                         :full-text :on-conflict :row-locks :alter-foreign-key}
    :column-types       {:uuid "UUID" :instant "TIMESTAMP WITH TIME ZONE" :json "JSONB"
                         :boolean "BOOLEAN" :text "TEXT"}
    :table-exists?      (partial introspection/information-schema-table-exists?

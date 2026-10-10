@@ -121,7 +121,7 @@
   ;; drifted from the library name would be migrated whatever the config says.
   (let [shipped (set (migrations/discover-migration-dirs))
         off     #{"wagoe/geo/migrations/" "wagoe/push/migrations/" "wagoe/audience/migrations/"
-                  "wagoe/tenant/migrations/"}]
+                  "wagoe/tenant/migrations/" "wagoe/user/migrations/"}]
     (is (every? shipped off) "the libraries' manifests are not on this classpath")
     (is (= (apply disj shipped off)
            (set (migrations/migration-dirs #{"workflow"}))))))

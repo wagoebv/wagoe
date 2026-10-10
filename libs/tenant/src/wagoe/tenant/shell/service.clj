@@ -149,7 +149,7 @@
 
          (let [now (time/now)
                deleted-tenant (tenant-core/prepare-tenant-deletion existing-tenant now)]
-           (.update-tenant tenant-repository deleted-tenant)
+           (.soft-delete-tenant tenant-repository deleted-tenant)
            nil)))
      {:logger logger
       :metrics-emitter metrics-emitter

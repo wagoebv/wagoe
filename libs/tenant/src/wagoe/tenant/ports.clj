@@ -11,6 +11,8 @@
 
   (update-tenant [this tenant-entity])
 
+  (soft-delete-tenant [this tenant-entity])
+
   (delete-tenant [this tenant-id])
 
   (tenant-slug-exists? [this slug])
@@ -43,6 +45,7 @@
   (find-memberships-by-user           [this user-id])
   (create-membership                  [this membership-entity])
   (update-membership                  [this membership-entity])
+  (delete-membership                  [this membership-id])
   (membership-exists?                 [this user-id tenant-id]))
 
 (defprotocol ITenantMembershipService

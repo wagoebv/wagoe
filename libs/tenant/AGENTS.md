@@ -228,6 +228,16 @@ migration (`wagoe/tenant/migrations/`, BOU-551). Boot creates them from the same
 definition, `wagoe.tenant.shell.tenant-tables`, so `bb migrate up` and a first
 boot give the same tables. Change them there, never in a second copy.
 
+A later migration keys `tenant_memberships.user_id` and
+`tenant_member_invites.accepted_by_user_id` to `auth_users(id)` (BOU-611), so a
+user still in a tenant cannot be hard-deleted; an accepted invite's key is
+`ON DELETE SET NULL`. It refuses, naming them, rows that point at no user. Boot
+adds these keys only with `:migrate-on-start?`; otherwise run `bb migrate up`.
+
+So a membership row exists only while the user belongs: `revoke-member` deletes
+it rather than storing `:revoked`, and deleting a tenant deletes its
+memberships. The migration deletes rows older versions kept before adding the key.
+
 ## Tenant migrations
 
 Tenants use a **schema-per-tenant** layout, so schema changes to tenant-scoped
