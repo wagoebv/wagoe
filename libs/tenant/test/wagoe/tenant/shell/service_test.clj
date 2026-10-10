@@ -139,7 +139,7 @@
     (let [repository (->MockTenantRepository (atom {})
                                              (ex-info "Tenant provisioning requires PostgreSQL database"
                                                       {:type :not-supported
-                                                       :dialect :h2}))
+                                                       :engine :h2}))
           service (sut/create-tenant-service repository {} mock-logger mock-metrics-emitter mock-error-reporter)
           result (ports/create-new-tenant service {:slug "h2-test" :name "H2 Test"})]
       (is (uuid? (:id result)))

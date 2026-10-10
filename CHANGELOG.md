@@ -39,6 +39,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **`build-where` string filters ignore case on every database** (BOU-450). They were case-sensitive on H2.
 - **A database reset drops in one transaction on SQLite too** (BOU-450), as on PostgreSQL: a failed drop leaves everything.
+- **Tenant's `:not-supported` and `:unsupported-database` errors carry `:engine`** (BOU-450), not `:dialect` or
+  `:database-type`. Read `:engine` (`:h2`, not `:ansi`).
 
 ### Fixed
 

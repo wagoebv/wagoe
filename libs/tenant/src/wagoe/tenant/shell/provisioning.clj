@@ -140,38 +140,32 @@
                   :error-message (.getMessage e)})
       false)))
 
-(defn- postgresql-context?
-  "Return true when the database context points at PostgreSQL.
-
-   Some parts of the platform still report PostgreSQL via a nil HoneySQL
-   dialect because PostgreSQL is the library default. Fall back to the JDBC
-   driver so provisioning and schema switching still work in real runtimes."
+(defn- schemas?
+  "Whether `ctx`'s adapter claims :schemas, a schema per tenant (ADR-039)."
   [ctx]
-  (let [adapter (:adapter ctx)
-        dialect (protocols/dialect adapter)
-        driver (some-> adapter protocols/jdbc-driver)]
-    (or (= :postgresql dialect)
-        (= "org.postgresql.Driver" driver))))
+  (contains? (protocols/capabilities (:adapter ctx)) :schemas))
+
+(defn- engine [ctx] (protocols/engine (:adapter ctx)))
 
 (def ^:private engine-names
-  {:sqlite "SQLite" :mysql "MySQL" :ansi "H2"})
+  {:postgresql "PostgreSQL" :sqlite "SQLite" :mysql "MySQL" :h2 "H2"})
 
 (defn refuse-unsupported-database!
-  "Throw unless tenancy can run on `ctx`: PostgreSQL, or H2 when `allow-h2?`
-   says so. The test profile runs H2 with tenant rows but no per-tenant
-   schemas; anywhere else a tenant could be created but never provisioned or
-   selected (BOU-576)."
+  "Throw unless tenancy can run on `ctx`: a database whose adapter claims
+   :schemas (PostgreSQL), or H2 when `allow-h2?` says so. The test profile runs
+   H2 with tenant rows but no per-tenant schemas; anywhere else a tenant could
+   be created but never provisioned or selected (BOU-576)."
   [ctx allow-h2?]
-  (let [dialect (protocols/dialect (:adapter ctx))]
-    (when-not (or (postgresql-context? ctx) (and allow-h2? (= :ansi dialect)))
-      (let [engine (get engine-names dialect (some-> dialect name))]
-        (throw (ex-info (str "Tenancy needs PostgreSQL, which gives each tenant its own"
-                             " schema; this database is " engine ". Use :wagoe/postgresql,"
-                             " or remove :wagoe/tenant from the config."
-                             (when (= :ansi dialect)
-                               " A test profile on H2 sets :allow-h2? true under :wagoe/tenant."))
-                        {:type    :not-supported
-                         :dialect dialect}))))))
+  (let [engine (engine ctx)]
+    (when-not (or (schemas? ctx) (and allow-h2? (= :h2 engine)))
+      (throw (ex-info (str "Tenancy needs PostgreSQL, which gives each tenant its own schema; this"
+                           " database's adapter (" (get engine-names engine (name engine))
+                           ") does not claim :schemas. Use :wagoe/postgresql, or remove"
+                           " :wagoe/tenant from the config."
+                           (when (= :h2 engine)
+                             " A test profile on H2 sets :allow-h2? true under :wagoe/tenant."))
+                      {:type   :not-supported
+                       :engine engine})))))
 
 (defn- create-schema!
   "Create PostgreSQL schema if it doesn't exist.
@@ -300,9 +294,7 @@
          :table-count 5
          :message \"Tenant schema provisioned successfully\"}"
   [ctx tenant-entity]
-  (let [adapter (:adapter ctx)
-        dialect (protocols/dialect adapter)
-        schema-name (:schema-name tenant-entity)]
+  (let [schema-name (:schema-name tenant-entity)]
 
     ;; Validate inputs
     (when-not schema-name
@@ -313,13 +305,14 @@
 
     (assert-safe-schema-name! schema-name)
 
-    (when-not (postgresql-context? ctx)
-      (log/warn "Tenant provisioning only supported for PostgreSQL, skipping"
-                {:dialect dialect :schema-name schema-name})
-      (throw (ex-info "Tenant provisioning only supported for PostgreSQL"
-                      {:type :not-supported
-                       :dialect dialect
-                       :message "Tenant provisioning requires PostgreSQL database"})))
+    (when-not (schemas? ctx)
+      (let [engine (engine ctx)]
+        (log/warn "Tenant provisioning only supported for PostgreSQL, skipping"
+                  {:engine engine :schema-name schema-name})
+        (throw (ex-info "Tenant provisioning only supported for PostgreSQL"
+                        {:type :not-supported
+                         :engine engine
+                         :message "Tenant provisioning requires PostgreSQL database"}))))
 
     ;; Check if already provisioned
     (if (schema-exists? ctx schema-name)
@@ -389,7 +382,7 @@
       (throw (ex-info "Tenant entity missing :schema-name"
                       {:type :validation-error
                        :field :schema-name})))
-    (if (postgresql-context? ctx)
+    (if (schemas? ctx)
       (schema-exists? ctx schema-name)
       false)))
 
@@ -398,7 +391,7 @@
    Returns a vector of schema name strings matching the tenant_* pattern.
    Returns empty vector for non-PostgreSQL databases."
   [ctx]
-  (if (postgresql-context? ctx)
+  (if (schemas? ctx)
     (let [query ["SELECT schema_name FROM information_schema.schemata
                   WHERE schema_name LIKE 'tenant_%'
                   ORDER BY schema_name"]]
@@ -423,7 +416,7 @@
 
    Returns {:schemas-synced [schema-name ...] :tables [table-name ...]}."
   [ctx]
-  (if (postgresql-context? ctx)
+  (if (schemas? ctx)
     (let [schemas (list-tenant-schemas ctx)
           tables  (get-public-tables ctx)]
       (doseq [schema schemas]
@@ -544,11 +537,10 @@
      - Schema must exist before calling this function"
   [ctx tenant-schema-name f]
   (assert-safe-schema-name! tenant-schema-name)
-  (when-not (postgresql-context? ctx)
+  (when-not (schemas? ctx)
     (throw (ex-info "Tenant schema context only supported for PostgreSQL"
                     {:type :unsupported-database
-                     :database-type (:database-type ctx)
-                     :dialect (some-> (:adapter ctx) protocols/dialect)})))
+                     :engine (engine ctx)})))
 
   (db/with-transaction [tx ctx]
     (try

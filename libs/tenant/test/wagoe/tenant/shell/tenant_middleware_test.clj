@@ -100,7 +100,7 @@
                        (table-exists? [_ _datasource _table-name] false)
                        (get-table-info [_ _datasource _table-name] [])
                        (engine [_] :postgresql)
-                       (capabilities [_] #{})
+                       (capabilities [_] #{:schemas})
                        (column-type [_ _] nil)
                        (like [_ _ _] nil))]
     {:datasource mock-datasource

@@ -32,7 +32,7 @@
     (table-exists? [_ _ _] false)
     (get-table-info [_ _ _] [])
     (engine [_] :postgresql)
-    (capabilities [_] #{})
+    (capabilities [_] #{:schemas})
     (column-type [_ _] nil)
     (like [_ _ _] nil)))
 
@@ -80,7 +80,7 @@
                          (table-exists? [_ _ _] false)
                          (get-table-info [_ _ _] [])
                          (engine [_] :postgresql)
-                         (capabilities [_] #{})
+                         (capabilities [_] #{:schemas})
                          (column-type [_ _] nil)
                          (like [_ _ _] nil))
           ctx {:adapter mock-adapter
@@ -102,7 +102,7 @@
                          (table-exists? [_ _ _] false)
                          (get-table-info [_ _ _] [])
                          (engine [_] :postgresql)
-                         (capabilities [_] #{})
+                         (capabilities [_] #{:schemas})
                          (column-type [_ _] nil)
                          (like [_ _ _] nil))
           ctx {:adapter mock-adapter
@@ -159,9 +159,9 @@
         (is false "Should have thrown exception")
         (catch clojure.lang.ExceptionInfo e
           (is (= :not-supported (:type (ex-data e))))
-          (is (= :mysql (:dialect (ex-data e))))))))
+          (is (= :mysql (:engine (ex-data e))))))))
 
-  (testing "accepts PostgreSQL adapter when dialect is nil but driver is PostgreSQL"
+  (testing "refuses a database that reports PostgreSQL but does not claim :schemas"
     (let [mock-adapter (reify protocols/DBAdapter
                          (dialect [_] nil)
                          (jdbc-driver [_] "org.postgresql.Driver")
@@ -179,7 +179,9 @@
                          (like [_ _ _] nil))
           ctx {:adapter mock-adapter
                :datasource nil}]
-      (is (true? (#'sut/postgresql-context? ctx))))))
+      (is (false? (#'sut/schemas? ctx)))
+      (let [e (is (thrown? clojure.lang.ExceptionInfo (sut/refuse-unsupported-database! ctx false)))]
+        (is (= {:type :not-supported :engine :postgresql} (select-keys (ex-data e) [:type :engine])))))))
 
 (deftest ^:unit provision-tenant-existing-schema-and-failure-paths-test
   (testing "already provisioned schemas return success when validation passes"
@@ -258,7 +260,7 @@
                          (table-exists? [_ _ _] false)
                          (get-table-info [_ _ _] [])
                          (engine [_] :postgresql)
-                         (capabilities [_] #{})
+                         (capabilities [_] #{:schemas})
                          (column-type [_ _] nil)
                          (like [_ _ _] nil))
           ctx {:adapter mock-adapter
@@ -280,7 +282,7 @@
                          (table-exists? [_ _ _] false)
                          (get-table-info [_ _ _] [])
                          (engine [_] :postgresql)
-                         (capabilities [_] #{})
+                         (capabilities [_] #{:schemas})
                          (column-type [_ _] nil)
                          (like [_ _ _] nil))
           ctx {:adapter mock-adapter
