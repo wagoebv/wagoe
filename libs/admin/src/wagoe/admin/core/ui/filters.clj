@@ -215,7 +215,9 @@
         ;; without a manual :list-fields.
         candidate-fields (or (seq (:list-fields entity-config))
                              (keys (:fields entity-config)))
-        filterable-fields (filter #(get-in entity-config [:fields % :filterable] true)
+        ;; A has-many count column (ADR-040) is not a column of the table
+        filterable-fields (filter #(and (contains? (:fields entity-config) %)
+                                        (get-in entity-config [:fields % :filterable] true))
                                   candidate-fields)
         has-active-filters? (seq current-filters)
         current-filters (or current-filters {})]

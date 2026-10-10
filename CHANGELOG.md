@@ -34,6 +34,12 @@ for what is public API, what is internal, and how deprecations are announced.
 - **`DBAdapter` answers `engine`, `capabilities`, `column-type` and `like`** (BOU-450, ADR-039). Ask these instead of
   parsing the product name or reading a nil dialect as PostgreSQL.
 - **`db/engine-of`** (BOU-450): which engine a datasource speaks, for code that holds no db-context.
+- **Admin list cells render by display role** (ADR-040). A relation shows its target's name, linked; an enum its
+  `:options` label in a tone; money is formatted in its currency; dates are relative. Status tabs with counts, page
+  totals and a header summary come from the same contract. New config keys, all optional: per field `:display`,
+  `:tones`, `:currency`, `:urgency`, `:total`; per entity `:title-field`, `:facet`, `:summary`; admin
+  `[:ui :currency]`. `(explain-entity :e)` in the REPL shows each field's role and why.
+- **`IListOverview`** (ADR-040): the admin port a list page asks for titles, counts, facets and summaries.
 
 ### Changed
 
@@ -43,6 +49,10 @@ for what is public API, what is internal, and how deprecations are announced.
   SQLite indexing now upserts with `ON CONFLICT`.
 - **Tenant's `:not-supported` and `:unsupported-database` errors carry `:engine`** (BOU-450), not `:dialect` or
   `:database-type`. Read `:engine` (`:h2`, not `:ansi`).
+- **Admin relation and enum cells changed** (ADR-040): a foreign key shows its target's title instead of the UUID,
+  and an enum its `:options` label instead of the capitalized value. E2E selectors matching either need updating.
+- **Entities without `:list-fields` get role-ordered default columns** (ADR-040): title, relations, status, enums,
+  money, dates, then the rest, at most seven; UUIDs, long text and audit columns other than `created-at` are left out.
 
 ### Fixed
 

@@ -10,7 +10,8 @@
    All schemas follow Malli specifications and include documentation
    for auto-generated validation and error messages."
   (:require
-   [malli.core :as m]))
+   [malli.core :as m]
+   [wagoe.admin.core.display :as display]))
 
 ;; =============================================================================
 ;; Admin Configuration Schemas
@@ -164,7 +165,10 @@
          :closed true}
    [:field-grouping {:optional true
                      :description "Field grouping display configuration"}
-    FieldGroupingConfig]])
+    FieldGroupingConfig]
+   [:currency {:optional true
+               :description "ISO currency for :money fields without their own :currency (default EUR; ADR-040)"}
+    :string]])
 
 (def FieldGroup
   "Schema for a single field group.
@@ -298,10 +302,27 @@
                        [e {:optional true} :any])))
         entries))
 
+(def DisplayRole (into [:enum] (sort display/roles)))
+
 (def FieldOverride
   (closed-map :name :label :type :widget :required :readonly :hidden :searchable
               :sortable :filterable :primary-key :default-value :options :min :max
-              :pattern :help-text :placeholder :width :rows))
+              :pattern :help-text :placeholder :width :rows
+              ;; The overview (ADR-040)
+              [:display DisplayRole]
+              [:tones [:map-of :keyword (into [:enum] (sort display/tones))]]
+              [:currency :string]
+              [:urgency [:or :boolean
+                         [:map {:closed true}
+                          [:warn-days {:optional true} [:int {:min 0}]]
+                          [:until {:optional true} [:map-of :keyword [:sequential :any]]]]]]
+              [:total :boolean]))
+
+(def SummaryEntry
+  (closed-map :label
+              [:agg [:enum :count :sum :avg :min :max]]
+              [:field :keyword]
+              [:where [:map-of :keyword :any]]))
 
 (def HasManyEntry
   (closed-map :entity :table :foreign-key :label :fields :editable
@@ -321,7 +342,11 @@
               [:query-overrides (closed-map :from :join :select :field-aliases :soft-delete-table)]
               [:split-table-update (closed-map :secondary-table :secondary-fields)]
               [:workflow [:map {:closed true} [:entity-type :keyword]]]
-              [:ui UIConfig]))
+              [:ui UIConfig]
+              ;; The overview (ADR-040)
+              [:title-field :keyword]
+              [:facet :keyword]
+              [:summary [:sequential {:max 4} SummaryEntry]]))
 
 (def ^:private entities-explainer
   (m/explainer [:map [:entities {:optional true} [:map-of :keyword EntityOverrides]]]))

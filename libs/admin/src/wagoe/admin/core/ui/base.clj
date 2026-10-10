@@ -9,9 +9,12 @@
             [wagoe.shared.ui.core.components :as ui]
             [wagoe.shared.ui.core.table :as table-ui]
             [clojure.string :as str])
-  (:import (java.time DateTimeException Instant LocalDate LocalDateTime ZoneId ZoneOffset ZonedDateTime)
+  (:import (java.math BigDecimal)
+           (java.text NumberFormat)
+           (java.time DateTimeException Duration Instant LocalDate LocalDateTime ZoneId ZoneOffset ZonedDateTime)
            (java.time.format DateTimeFormatter DateTimeParseException)
-           (java.util Locale)))
+           (java.time.temporal ChronoUnit)
+           (java.util Currency Locale)))
 
 ;; =============================================================================
 ;; URL Helpers
@@ -432,6 +435,12 @@
   ;; String fields that are typically a sentence-ish label.
   #"(?i)\b(name|naam|title|titel|label|subject|onderwerp|e-?mail|url|slug|path|pad)\b")
 
+(def ^:private role-weights
+  "Width weights by display role (ADR-040). :text falls through to the name
+   heuristic, which tells a description from a status."
+  {:boolean 1 :count 2 :enum 2 :number 2 :percent 2 :identifier 2
+   :date 3 :datetime 3 :money 3 :url 3 :relation 4 :email 4 :title 5})
+
 (defn list-column-weight
   "Relative width weight for a list column, used to distribute table width
    proportionally instead of evenly.
@@ -442,9 +451,12 @@
       (e.g. \"description\" gets more room than \"status\").
 
    Pure: takes a field keyword + its config map, returns a positive number."
-  [field field-config]
-  (or (:width field-config)
-      (let [field-name (name field)]
+  ([field field-config]
+   (list-column-weight field field-config nil))
+  ([field field-config role]
+   (or (:width field-config)
+       (get role-weights role)
+       (let [field-name (name field)]
         (case (:type field-config)
           :boolean 1
           :enum 2
@@ -455,7 +467,7 @@
           (cond
             (re-find long-name-pattern field-name) 6
             (re-find medium-name-pattern field-name) 4
-            :else 3)))))
+            :else 3))))))
 
 (defn- format-pct
   "Render a percentage with at most two decimals, dropping a trailing `.0`
@@ -478,7 +490,8 @@
    Pure helper — no I/O."
   [list-fields entity-config]
   (let [weights (mapv (fn [field]
-                        (list-column-weight field (get-in entity-config [:fields field])))
+                        (list-column-weight field (get-in entity-config [:fields field])
+                                            (get-in entity-config [:display-roles field])))
                       list-fields)
         total   (max (reduce + 0 weights) 1)
         rounded (mapv (fn [w] (/ (Math/round (/ (* 10000.0 w) total)) 100.0)) weights)
@@ -528,3 +541,111 @@
 
     :else
     []))
+
+;; =============================================================================
+;; Overview Formatting (ADR-040)
+;; =============================================================================
+
+;; Relative dates and formatted numbers for the list cells. `now` comes from
+;; the shell, like the zone: core may not read the clock.
+
+(def ^:private relative-horizon-days
+  "Beyond this many days a relative date says less than the date itself."
+  60)
+
+(defn date-distance
+  "Days from today (in `display`'s zone, at `now`) to the stored date `value`:
+   positive in the future, negative in the past. Nil when `value` is not a date."
+  [value ^Instant now display]
+  (when-let [^LocalDate d (->local-date value)]
+    (.between ChronoUnit/DAYS (.toLocalDate (.atZone now (display-zone display))) d)))
+
+(defn instant-distance
+  "Seconds from `now` to the stored timestamp `value`: positive in the future.
+   Nil when `value` is not a timestamp."
+  [value ^Instant now display]
+  (when-let [^Instant inst (->instant value (server-zone display))]
+    (.getSeconds (Duration/between now inst))))
+
+(defn- relative-days
+  [days]
+  (cond
+    (zero? days)  [:t :admin/relative-today]
+    (= 1 days)    [:t :admin/relative-tomorrow]
+    (= -1 days)   [:t :admin/relative-yesterday]
+    (pos? days)   [:t :admin/relative-in-days {:n days} days]
+    :else         [:t :admin/relative-days-ago {:n (- days)} (- days)]))
+
+(defn relative-date
+  "A stored date as \"today\", \"in 5 d\", \"3 d ago\" — or the formatted
+   date when it is further than the horizon. Nil when `value` is not a date."
+  [value now display]
+  (when-let [days (date-distance value now display)]
+    (if (> (Math/abs (long days)) relative-horizon-days)
+      (format-date value display)
+      (relative-days days))))
+
+(defn relative-instant
+  "A stored timestamp as \"just now\", \"5 min ago\", \"in 3 h\", \"2 d ago\" —
+   or the formatted timestamp beyond the horizon. Days count calendar days in
+   the display zone, so yesterday 23:00 is \"yesterday\", not \"1 h ago\" at
+   midnight. Nil when `value` is not a timestamp."
+  [value ^Instant now display]
+  (when-let [^Instant inst (->instant value (server-zone display))]
+    (let [secs     (.getSeconds (Duration/between now inst))
+          abs-secs (Math/abs (long secs))
+          future?  (pos? secs)
+          n        (fn [unit] (long (quot abs-secs unit)))]
+      (cond
+        (< abs-secs 60)   [:t :admin/relative-just-now]
+        (< abs-secs 3600) (if future?
+                            [:t :admin/relative-in-minutes {:n (n 60)} (n 60)]
+                            [:t :admin/relative-minutes-ago {:n (n 60)} (n 60)])
+        (< abs-secs 86400) (if future?
+                             [:t :admin/relative-in-hours {:n (n 3600)} (n 3600)]
+                             [:t :admin/relative-hours-ago {:n (n 3600)} (n 3600)])
+        :else
+        (let [zone (display-zone display)
+              days (.between ChronoUnit/DAYS
+                             (.toLocalDate (.atZone now zone))
+                             (.toLocalDate (.atZone inst zone)))]
+          (if (> (Math/abs (long days)) relative-horizon-days)
+            (format-instant value display)
+            (relative-days days)))))))
+
+(defn ->decimal
+  "A stored number as a BigDecimal, or nil. Drivers hand back BigDecimal,
+   Long, Double or — SQLite — a string."
+  ^BigDecimal [value]
+  (cond
+    (instance? BigDecimal value) value
+    (integer? value)             (BigDecimal/valueOf (long value))
+    (number? value)              (BigDecimal/valueOf (double value))
+    (string? value)              (try (BigDecimal. (str/trim ^String value))
+                                      (catch NumberFormatException _ nil))))
+
+(defn- display-locale
+  ^Locale [display]
+  (or (:locale display) Locale/ENGLISH))
+
+(defn format-money
+  "`value` in `currency` (an ISO code) for `display`'s locale: € 1.234,50 in
+   Dutch, €1,234.50 in English. An unknown currency code or a value that is
+   not a number is shown as it is."
+  [value currency display]
+  (if-let [d (->decimal value)]
+    (let [fmt (NumberFormat/getCurrencyInstance (display-locale display))]
+      (try
+        (.setCurrency fmt (Currency/getInstance ^String (or currency "EUR")))
+        (catch IllegalArgumentException _ nil))
+      (.format fmt d))
+    (str value)))
+
+(defn format-number
+  "`value` with the locale's grouping and decimals: 1.234,5 or 1,234.5."
+  [value display]
+  (if-let [d (->decimal value)]
+    (let [fmt (NumberFormat/getNumberInstance (display-locale display))]
+      (.setMaximumFractionDigits fmt (max 0 (min 6 (.scale d))))
+      (.format fmt d))
+    (str value)))

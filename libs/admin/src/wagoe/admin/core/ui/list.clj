@@ -4,7 +4,9 @@
 
    Pure Hiccup generators. Depends on `base` for URL helpers, field-value
    rendering, and column sizing, and on `filters` for the filter builder."
-  (:require [wagoe.admin.core.ui.base :as base]
+  (:require [wagoe.admin.core.display :as display]
+            [wagoe.admin.core.ui.base :as base]
+            [wagoe.admin.core.ui.cells :as cells]
             [wagoe.admin.core.ui.filters :as filters]
             [wagoe.shared.ui.core.icons :as icons]
             [wagoe.shared.ui.core.table :as table-ui]
@@ -52,6 +54,38 @@
   [entity-config]
   (some? (:workflow entity-config)))
 
+;; A list column, described once per table so a row does not re-derive its
+;; role, label and relation for every cell (ADR-040).
+
+(defn- humanize-column
+  "The humanized key — without its `-id` for a relation, which shows a name."
+  [field relation?]
+  (let [n (cond-> (name field) relation? (str/replace #"[-_]id$" ""))]
+    (str/capitalize (str/replace n #"[-_]" " "))))
+
+(defn- columns
+  "`fields` as list columns: {:field :config :role :class :label :relation :data?}.
+   `:data?` is a column of the table, not a computed one: only those sort,
+   filter and edit. The role comes with the config, or is derived now for a
+   config built without it."
+  [entity-config fields]
+  (let [belongs-to (display/belongs-to-fields entity-config)
+        has-many   (display/has-many-columns entity-config)]
+    (mapv (fn [field]
+            (let [config (get-in entity-config [:fields field])
+                  role   (or (get-in entity-config [:display-roles field])
+                             (display/display-role entity-config field))]
+              {:field    field
+               :config   config
+               :role     role
+               :class    (cells/cell-class role)
+               :label    (or (:label config)
+                             (:label (get has-many field))
+                             (humanize-column field (contains? belongs-to field)))
+               :relation (or (get belongs-to field) (get has-many field))
+               :data?    (contains? (:fields entity-config) field)}))
+          fields)))
+
 (defn entity-table-row
   "Generate entity table row.
 
@@ -80,27 +114,35 @@
      [:td.checkbox-cell
        ;; Alpine.js row checkbox with x-model binding to selectedIds array
       [:input (alpine/row-checkbox-attrs record-id)]]
-     (for [field list-fields]
-       (let [field-config (get-in entity-config [:fields field])
-             field-label (:label field-config (str/capitalize (name field)))
-             value (get record field)
+     (for [{:keys [field config role label relation data?] :as column} (columns entity-config list-fields)]
+       (let [content (cells/cell field record
+                                 {:role          role
+                                  :field-config  config
+                                  :entity-config entity-config
+                                  :relation      relation
+                                  :display       display
+                                  :overview      (:overview display)
+                                  :href          (when can-open?
+                                                   (str "/web/admin/" (name entity-name) "/" record-id))})
+             classes (str "field-" (name field) " " (:class column))
              editable? (and (:can-edit permissions)
+                            data?
                             (not (contains? readonly-fields field))
                             (not= field primary-key))]
          (if editable?
            ; Editable cell with double-click to edit (Week 2)
-           [:td {:class (str "field-" (name field) " editable")
-                 :data-label field-label
+           [:td {:class (str classes " editable")
+                 :data-label label
                  :hx-get (str "/web/admin/" (name entity-name) "/" record-id "/" (name field) "/edit")
                  :hx-trigger "dblclick"
                  :hx-target "this"
                  :hx-swap "innerHTML"
                  :title [:t :admin/cell-dblclick-hint]}
-            (base/render-field-value field value field-config display)]
+            content]
            ; Non-editable cell
-           [:td {:class (str "field-" (name field))
-                 :data-label field-label}
-            (base/render-field-value field value field-config display)])))
+           [:td {:class classes
+                 :data-label label}
+            content])))
      (when (workflow-column? entity-config)
        [:td.field-workflow {:data-label [:t :admin/column-workflow]}
         (base/workflow-state-link (:admin/workflow record))])
@@ -111,6 +153,95 @@
           :aria-label [:t :common/button-edit]
           :tabindex 0}
          (icons/icon :chevron-right {:size 14})])]]))
+
+(defn totals-row
+  "A footer with the page total of each `:total` money or number column, or
+   nil when the list has none (ADR-040)."
+  [records entity-config display]
+  (let [cols   (columns entity-config (:list-fields entity-config))
+        totals (into {}
+                     (keep (fn [{:keys [field config role]}]
+                             (when (and (:total config) (#{:money :number} role))
+                               (when-let [t (cells/page-total records field)]
+                                 [field (cells/format-aggregate t role config entity-config display)]))))
+                     cols)]
+    (when (seq totals)
+      [:tfoot
+       [:tr {:class "totals-row"}
+        [:td {:class "checkbox-cell"}]
+        (for [[i {:keys [field] :as column}] (map-indexed vector cols)]
+          [:td {:class (str "field-" (name field) " " (:class column))}
+           (or (get totals field)
+               (when (zero? i) [:span {:class "totals-label"} [:t :admin/page-total]]))])
+        (when (workflow-column? entity-config) [:td])
+        [:td {:class "actions-cell"}]]])))
+
+(defn- facet-value
+  "The value the list is filtered on for `facet`, as a string, or nil."
+  [filters facet]
+  (let [v (get filters facet)]
+    (some-> (if (map? v) (when (= :eq (:op v :eq)) (:value v)) v)
+            cells/value-name)))
+
+(defn facet-tabs
+  "The facet's values as tabs with their counts over the filtered set, the
+   current one marked; `All` clears it (ADR-040). Nil without a facet."
+  [entity-name entity-config table-query filters display]
+  (let [facet  (:facet entity-config)
+        counts (get-in display [:overview :facets facet])]
+    (when (and facet (seq counts))
+      (let [fc       (get-in entity-config [:fields facet])
+            current  (facet-value filters facet)
+            others   (dissoc filters facet)
+            href     (fn [v]
+                       (base/current-list-url entity-name (dissoc table-query :page)
+                                              (cond-> others v (assoc facet v))))
+            known    (map (comp name first) (:options fc))
+            values   (distinct (concat known (sort (remove nil? (keys counts)))))
+            tab      (fn [v label n]
+                       (let [active?   (= v current)
+                             page-url  (href v)
+                             list-path (str "/web/admin/" (name entity-name))]
+                         [:a {:href         page-url
+                              :class        (str "facet-tab"
+                                                 (when v (str " tone-" (name (cells/enum-tone fc v))))
+                                                 (when active? " active"))
+                              :aria-current (when active? "page")
+                              ;; Through the fragment, into the filter container:
+                              ;; the filter builder then shows the facet's filter too
+                              :hx-get       (str list-path "/table" (subs page-url (count list-path)))
+                              :hx-target    "#filter-table-container"
+                              :hx-swap      "outerHTML"
+                              :hx-push-url  page-url}
+                          label
+                          [:span {:class "facet-count"} (str n)]]))]
+        [:nav {:class "facet-tabs" :aria-label (:label (first (columns entity-config [facet])))}
+         (tab nil [:t :admin/facet-all] (reduce + 0 (vals counts)))
+         (for [v values
+               :let [n (get counts v 0)]
+               :when (or (pos? n) (= v current))]
+           (tab v (cells/enum-label fc v) n))]))))
+
+(defn summary-line
+  "The entity's `:summary` aggregates over the filtered set (ADR-040)."
+  [entity-config display]
+  (when-let [items (seq (get-in display [:overview :summary]))]
+    [:dl {:class "list-summary"}
+     (for [{:keys [label value role field]} items]
+       [:div {:class "list-summary-item"}
+        [:dt label]
+        [:dd {:class (cells/cell-class role)}
+         (if (some? value)
+           (cells/format-aggregate value role (get-in entity-config [:fields field]) entity-config display)
+           "—")]])]))
+
+(defn overview-strip
+  "Summary and facet tabs above the table."
+  [entity-name entity-config table-query filters display]
+  (let [summary (summary-line entity-config display)
+        tabs    (facet-tabs entity-name entity-config table-query filters display)]
+    (when (or summary tabs)
+      [:div {:class "list-overview"} summary tabs])))
 
 (defn entity-table
   "Generate entity table with sorting and pagination.
@@ -143,6 +274,8 @@
       :hx-trigger "entityCreated from:body, entityUpdated from:body, entityDeleted from:body"
       :hx-target hx-target
       :hx-swap "outerHTML"}
+     ;; Inside the swap target, so search, sort and paging keep them current
+     (overview-strip entity-name entity-config table-query filters display)
      (if (empty? records)
        [:div.empty-state {:class "p-10 text-center"}
         [:div.empty-state-icon
@@ -195,11 +328,11 @@
                [:th {:class "checkbox-header"}
                 ;; Alpine.js select-all checkbox with reactive binding
                 [:input (alpine/select-all-checkbox-attrs)]]
-               (for [field list-fields]
-                 (let [field-config (get-in entity-config [:fields field])
-                       sortable? (:sortable field-config true)]
+               (for [{:keys [field config label data?] role-class :class} (columns entity-config list-fields)]
+                 (let [sortable? (and data? (:sortable config true))]
                    (if sortable?
-                     (table-ui/sortable-th {:label (:label field-config (str/capitalize (name field)))
+                     (update-in
+                      (table-ui/sortable-th {:label label
                                             :field field
                                             :current-sort sort
                                             :current-dir dir
@@ -210,13 +343,16 @@
                                             :hx-target hx-target
                                             :hx-push-url? true
                                             :extra-params filters})
-                     [:th (:label field-config (str/capitalize (name field)))])))
+                      ;; The role aligns the header with its cells
+                      [1 :class] str " " role-class)
+                     [:th {:class role-class} label])))
                (when (workflow-column? entity-config)
                  [:th [:t :admin/column-workflow]])
                [:th {:class "actions-header"} [:t :admin/column-actions]]]]
              [:tbody
               (for [record records]
-                (entity-table-row entity-name record entity-config permissions display))]]]]
+                (entity-table-row entity-name record entity-config permissions display))]
+             (totals-row records entity-config display)]]]
           pagination]))]))
 
 (defn filter-table-container

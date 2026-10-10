@@ -1,0 +1,212 @@
+= ADR-040: The admin overview contract
+:status: Proposed
+:date: 2026-10-10
+:deciders: wagoe-team
+
+== Status
+
+Proposed. The first of three steps for the admin redesign (sister of the
+wagoe.org design): this contract, then the design tokens, then the hiccup
+helpers and CSS that render it. Builds on ADR-006 (HTMX + Hiccup).
+
+== Context
+
+A list cell is rendered from the field's `:type` alone
+(`base/render-field-value`). What the admin already knows about a field does
+not reach the overview. A reading of `libs/admin` (2026-10-10):
+
+* *Relations.* `detect-foreign-keys` finds every belongs-to, but nothing
+  renders it: a `client-id` cell shows a UUID. The display field is guessed as
+  `:name`, or `:email` for users.
+* *Enums.* Rendered as `(str/capitalize (name value))`, so the `:options`
+  labels, translations included, are ignored. Every value gets the same outline
+  badge; `:paid` and `:overdue` look alike.
+* *Has-many.* `inverse-has-many` is detected and shown on the detail page only.
+  The list cannot say "7 invoices".
+* *Numbers.* A decimal is `(str value)`: no currency, no alignment, no total.
+* *Dates.* Absolute only. "Due in 3 days" and "14 days overdue" have to be
+  worked out by the reader.
+* *Text.* Cut at 47 characters on the server, whatever the column width.
+* *Empty.* `nil` renders a badge, so a sparse column is a column of badges.
+* *Header.* The only aggregate is the record count.
+
+Each of these is fixed per entity today by hand, or not at all. The fix belongs
+in the derivation: an entity with no config should get an overview that a
+person can work from.
+
+== Decision
+
+=== 1. Every field has a display role
+
+A field's `:display` says what the value _is_ to a reader. It is derived, and an
+explicit `:display` wins. The set is closed:
+
+[cols="1,2,3,1"]
+|===
+| Role | Derived when | Cell | Align
+
+| `:title` | the entity's `:title-field` | value, links to the record | left
+| `:relation` | a belongs-to field | the target's title, links to it | left
+| `:count` | a has-many listed in `:list-fields` | `7`, links to the filtered child list | right
+| `:enum` | `:type :enum` | badge with the option's label and tone | left
+| `:money` | `:decimal` and a money name ¹ | `€ 1.234,50`, tabular | right
+| `:number` | `:int`, `:decimal` | locale-formatted, tabular | right
+| `:percent` | name ends in `-pct`, `-percentage` | `21 %` | right
+| `:date` | `:date` | relative ("in 5 d"), absolute in `title` | left
+| `:datetime` | `:instant` | relative ("3 h ago"), absolute in `title` | left
+| `:boolean` | `:boolean` | check mark, empty when false | center
+| `:identifier` | `:uuid` not a relation, or a code name ² | monospace, copyable | left
+| `:email` | name contains `email`, `mail` | `mailto:` link | left
+| `:url` | name ends in `url`, `website` | link, host only | left
+| `:text` | anything else | one line, cut by CSS with an ellipsis | left
+|===
+
+¹ `amount`, `price`, `total`, `cost`, `fee`, `rate`, `bedrag`, `prijs`, `totaal`. +
+² `number`, `code`, `reference`, `nummer`, `kenmerk`, `sku`.
+
+`nil` renders as nothing, in every role. `:json` and long `:text` fields are not
+list roles; they appear on the detail page only.
+
+Precedence, in one pure function `wagoe.admin.core.display/display-role`:
+explicit `:display`, then the title field, then belongs-to, then has-many,
+then `:enum`, then the name rules, then the type default. The name rules run
+only on the type they name (money on `:decimal`, percent on `:int` and
+`:decimal`, the rest on strings), and match whole words of the name: a string
+called `amount` stays `:text`, a decimal called `pricelist-name` is a number.
+
+=== 2. The config gains a few keys, all optional
+
+Field keys (`FieldOverride`):
+
+`:display`:: one of the roles above.
+`:tones`:: for `:enum`, value to tone: `{:paid :success :overdue :danger}`.
+  Tones are `:neutral :info :success :warning :danger`. Unlisted values are
+  `:neutral`.
+`:currency`:: for `:money`, an ISO code. Defaults to the admin's `[:ui :currency]`,
+  `"EUR"`.
+`:urgency`:: for `:date`/`:datetime`, `true` colours the cell: past is
+  `:danger`, within `:warn-days` (default 7) is `:warning`. For due dates.
+`:total`:: for `:money`/`:number`, `true` adds a page total to the table footer.
+
+Entity keys (`EntityOverrides`):
+
+`:title-field`:: what a record is called. A relation pointing at this entity
+  shows it; the detail drawer uses it as its heading. Derived as the first of
+  `:name`, `:title`, `:label`, `:email`, `:slug`, `:number` the entity shows,
+  else its first string identifier (`sku`, `code`, `reference`), else the
+  primary key. The relation lookup reads it from the target's config, not the
+  `:name`/`:email` guess in `detect-foreign-keys`.
+`:facet`:: an `:enum` field whose values become the status tabs above the
+  table, each with its count. Derived as the field called `status` or `state`,
+  if it is an enum.
+`:summary`:: up to four aggregates for the page header, over the filtered set:
++
+[source,clojure]
+----
+:summary [{:label [:t :invoices/outstanding] :agg :sum :field :amount
+           :where {:status {:op :in :values [:sent :overdue]}}}
+          {:label [:t :invoices/overdue] :agg :count
+           :where {:status {:op :eq :value :overdue}}}]
+----
++
+`:where` uses the filter language of `ListEntitiesOptions`; `:agg` is
+`:count`, `:sum`, `:avg`, `:min` or `:max`. Not derived.
+
+Existing configs need no change. Every key above has a derived default except
+`:summary`.
+
+=== 3. The shell enriches the page; the core renders it
+
+`list-entities` keeps returning records. A separate port,
+`IListOverview/list-overview`, runs after it and hands the core everything the
+cells need. It is its own protocol so a service that does not implement it
+still renders a plain list:
+
+[source,clojure]
+----
+{:titles  {:client-id {"…uuid…" "Veldhuis Advies", …}}   ; per relation column
+ :counts  {:invoices {"…uuid…" 7, …}}                    ; per has-many column
+ :facets  {:status {"draft" 4 "sent" 12 "overdue" 3 "paid" 41}}
+ :summary [{:label … :value 18940.00M :role :money :field :amount}]
+ :now     #inst "…"}                                     ; for relative dates
+----
+
+Keys are id strings, whatever the driver read. Titles are keyed by field, not
+by target entity, so two relations to the same entity stay apart.
+
+The queries are bounded by the config, not by the page:
+
+* one `WHERE id IN (…)` per belongs-to in `:list-fields`;
+* one `GROUP BY fk` per has-many in `:list-fields`;
+* one `GROUP BY` for the facet, over the filtered set without the facet's own
+  filter (so the other tabs keep their counts);
+* one query per `:summary` entry.
+
+A 50-row page of an entity with two relations, a has-many, a facet and two
+summaries is 1 + 2 + 1 + 1 + 2 = 7 queries, whatever the row count. No N+1.
+Page totals are computed in the core from the records. The summary and the
+facet tabs render inside the table's swap target, so search, sort and paging
+keep them current; a facet tab swaps the filter container, so the filter
+builder shows the facet's filter too.
+
+`:now` comes from the shell, so the core stays free of the clock (as
+`display-options` already does for the zone).
+
+=== 4. Cells are rendered by role, and styled by role
+
+`(cells/cell field record ctx)`, with the role in `ctx`, replaces `render-field-value` for
+the list. It is pure, and each role emits `[:td {:class "c-<role>"} …]` with the
+same classes everywhere. The CSS in step three styles roles, never fields, so a
+new entity looks right without a stylesheet change. `render-field-value` stays
+for the detail page until the drawer moves to the same function.
+
+Truncation moves from `subs` to CSS (`text-overflow: ellipsis`), with the full
+value in `title`.
+
+=== 5. Default list fields follow the roles
+
+With no `:list-fields`, the derived order is: title, relations, facet enum,
+other enums, money, dates, then the rest, at most seven columns. `:text`,
+`:json`, UUIDs that are not the title, and audit timestamps other than
+`created-at` are left out. A string identifier (an invoice number, a SKU)
+stays: unlike a UUID it means something to the reader. Column widths keep their three layers; the role
+replaces the type in the first one.
+
+=== 6. The derivation is visible
+
+`(explain-entity :invoices)` in the REPL prints each field's role and where it
+came from (`explicit`, `belongs-to clients`, `name rule: amount`, `type
+default`), the title field, the facet and the list fields. It reads the running
+system's schema provider, so enums from Malli schemas count; a `bb` task could
+not see those without starting the system. A misfired heuristic is then a
+one-line override, found in seconds rather than by reading the page.
+
+== Consequences
+
+* An entity with no config gets names instead of UUIDs, labelled and coloured
+  enums, aligned money, relative dates and status tabs with counts.
+* Visible change for existing apps: relation cells show titles, enum cells show
+  their `:options` labels. Both are corrections, but screenshots and E2E
+  selectors that matched UUIDs or raw enum names will change.
+* A list request costs up to `1 + R + H + 1 + S` queries instead of 2. All are
+  indexed lookups or `GROUP BY` on the filtered set; `:summary` is the one an
+  app can make expensive, and it is opt-in.
+* Name rules are heuristics and will misfire (`rate` on a non-money field).
+  They run only on the type they name, explicit `:display` wins, and `explain`
+  shows the cause.
+* Multi-currency rows are out of scope: `:currency` is per field, not per row.
+* `:summary` aggregates over the whole filtered set, by decision (2026-10-10):
+  a header that says "€ 18.940 outstanding" must be true for the list, not for
+  the page. If a large table makes that slow, the scope can later become a
+  per-entity choice (filtered set, or page only), or follow the table's size;
+  nothing else in this contract depends on it.
+
+== Testing
+
+* Every `FieldType` maps to a role (property test over `schema/FieldType`).
+* The precedence table, one case per row, in `display_role_test`.
+* `list-overview` issues the bounded number of queries: count them on H2 for 1,
+  50 and 200 rows, and assert they are equal.
+* Facet counts ignore the facet's own filter and respect every other.
+* `cells/cell` for each role, including `nil`, and a `javascript:` URL that
+  must not become a link.
