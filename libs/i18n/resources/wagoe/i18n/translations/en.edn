@@ -442,6 +442,20 @@
  :admin/modal-button-cancel        "Cancel"
  :admin/modal-button-delete        "Delete"
 
+ ;; Overview (ADR-040)
+ :admin/relative-today             "today"
+ :admin/relative-tomorrow          "tomorrow"
+ :admin/relative-yesterday         "yesterday"
+ :admin/relative-just-now          "just now"
+ :admin/relative-in-days           "in {n} d"
+ :admin/relative-days-ago          "{n} d ago"
+ :admin/relative-in-hours          "in {n} h"
+ :admin/relative-hours-ago         "{n} h ago"
+ :admin/relative-in-minutes        "in {n} min"
+ :admin/relative-minutes-ago       "{n} min ago"
+ :admin/page-total                 "Page total"
+ :admin/facet-all                  "All"
+
  ;; =============================================================================
  ;; Search module
  ;; =============================================================================

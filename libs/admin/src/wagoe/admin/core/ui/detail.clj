@@ -488,13 +488,6 @@
       (str (base/entity-create-url entity child-cfg) "?" fk-param "=" parent-id
            (when return-qs (str "&" return-qs))))))
 
-(defn- view-all-url
-  "The child list filtered to this parent, in the filter bar's own format."
-  [entity fk-param parent-id]
-  (let [param #(base/url-encode (str "filters[" fk-param "][" % "]"))]
-    (str "/web/admin/" entity "?" (param "op") "=eq&"
-         (param "value") "=" (base/url-encode (str parent-id)))))
-
 (defn related-records-table
   "Render a table of related records for a has-many relationship.
    When :editable true, adds an Edit link per row and a link to create a child
@@ -556,7 +549,7 @@
                              (when return-qs (str "?" return-qs)))}
                  [:t :common/button-edit]]])])]]])
      (when (and (:has-more? relationship) fk-param (some? (:parent-id relationship)))
-       [:a.button.secondary {:href (view-all-url entity fk-param (:parent-id relationship))}
+       [:a.button.secondary {:href (base/filtered-list-url entity fk-param (:parent-id relationship))}
         [:t :admin/relationship-view-all {:label label}]])]))
 
 (defn- with-field-options

@@ -18,12 +18,15 @@
    "/css/daisy-admin.css"])
 
 (def admin-pilot-css
-  "Admin pilot stack with legacy admin rules plus daisy overrides."
+  "Admin pilot stack with legacy admin rules plus daisy overrides.
+   wagoe-admin.css loads last: the wagoe.org tokens and the display-role
+   styles (ADR-040) override what comes before."
   ["/css/fonts.css"
    "/css/wagoe-tokens.css"
    "/css/admin.css"
    "/css/app.css"
-   "/css/daisy-admin.css"])
+   "/css/daisy-admin.css"
+   "/css/wagoe-admin.css"])
 
 (def css-bundles
   "Registry of known stylesheet bundles."

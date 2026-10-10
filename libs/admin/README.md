@@ -302,6 +302,43 @@ Fields with `:filterable false` (or not listed) are excluded from the filter dro
 
 ---
 
+## List Overview
+
+A list cell renders by its field's **display role** ([ADR-040](../../dev-docs/adr/ADR-040-admin-overview-contract.adoc)), derived from type, name and relations. No config is needed; every key below only overrides.
+
+| Role | Derived when | Cell |
+|---|---|---|
+| `:title` | the entity's `:title-field` | value, links to the record |
+| `:relation` | a belongs-to field (`client-id`) | the target's title, links to it |
+| `:count` | a has-many's child entity named in `:list-fields` (`<entity>-by-<foreign-key>` when two share a child) | count, links to the filtered child list |
+| `:enum` | `:type :enum` | `:options` label in its tone |
+| `:money` | `:decimal` named amount, price, total, cost, fee, bedrag, prijs, totaal | `€ 1.234,50` |
+| `:number` / `:percent` | `:int`, `:decimal` / name ends in `-pct`, `-percent`, `-rate` | locale-formatted |
+| `:date` / `:datetime` | `:date` / `:instant` | relative, absolute on hover |
+| `:email` / `:url` / `:identifier` | name contains mail / ends in url, website / a code, number, sku, UUID | link / host / monospace |
+| `:boolean` | `:boolean` | check mark |
+| `:text` | anything else | one line, ellipsis |
+
+```clojure
+{:invoices
+ {:title-field :number                 ; what a record is called (derived: name, title, label, email, slug, number)
+  :facet       :status                 ; status tabs with counts (derived: an enum called status or state)
+  :list-fields [:number :client-id :status :amount :due-on :invoice-lines]  ; a has-many column by its child entity
+  :summary     [{:label "Outstanding" :agg :sum :field :amount
+                 :where {:status {:op :in :values [:sent :overdue]}}}]       ; header, over the filtered list
+  :fields
+  {:status {:type :enum
+            :options [[:sent "Sent"] [:overdue "Overdue"] [:paid "Paid"]]
+            :tones   {:sent :info :overdue :danger :paid :success}}       ; :neutral :info :success :warning :danger
+   :amount {:currency "EUR" :total true}                                   ; :total adds a page total
+   :due-on {:urgency {:warn-days 7 :until {:status [:paid]}}}             ; past → danger, within 7 days → warning; not once paid
+   :hourly-rate {:display :money}}}}                                       ; a name rule that misfired
+```
+
+The admin's `[:ui :currency]` is the default for money fields. In the REPL, `(explain-entity :invoices)` prints each field's role and why it got it.
+
+---
+
 ## Malli Schema Integration
 
 If you register your Malli schemas with the admin schema provider, enum types and their options are **auto-detected** — you don't need to list `:options` manually in the `.edn` file.

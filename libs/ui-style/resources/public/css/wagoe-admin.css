@@ -1,0 +1,376 @@
+/* =============================================================================
+   wagoe-admin.css — the admin as the working sister of wagoe.org
+
+   Loads last in the :admin-pilot bundle. Three parts:
+   1. Tokens: the wagoe.org palette and type, as daisyUI and Wagoe variables,
+      for light and dark.
+   2. Density: chrome, toolbar and table without the cards, gradients, pills
+      and row animations of the earlier look.
+   3. Display roles (ADR-040): every list cell carries `c-<role>`; this file
+      styles roles, never fields, so a new entity looks right unstyled.
+
+   Colour rule: the dark green is chrome, not content. Bright teal (#5FD3B6)
+   only on dark; on light the accent is the deeper teal (#0E7C66), which passes
+   4.5:1 for text. Copper marks attention (due soon, unsaved), never decoration.
+   ============================================================================= */
+
+/* -----------------------------------------------------------------------------
+   1. Tokens
+   ----------------------------------------------------------------------------- */
+
+/* One block for both themes: light-dark() picks by `color-scheme`, which the
+   system sets and [data-theme] (theme.js, daisyUI) overrides. */
+:root                { color-scheme: light dark; }
+[data-theme="light"] { color-scheme: light; }
+[data-theme="dark"]  { color-scheme: dark; }
+
+:root {
+  /* wagoe.org */
+  --wg-ink:          #0F1C18;   /* dark green: chrome */
+  --wg-teal:         #5FD3B6;   /* accent on dark */
+  --wg-chrome-text:  #C9D6D1;   /* text on the dark green */
+  --wg-chrome-muted: #7F918A;
+  --wg-chrome-hover: rgba(255, 255, 255, 0.06);
+
+  /* daisyUI */
+  --color-base-100:          light-dark(#FFFFFF, #14231E);
+  --color-base-200:          light-dark(#F6F7F6, #0F1C18);
+  --color-base-300:          light-dark(#E3E7E5, #26372F);
+  --color-base-content:      light-dark(#15201C, #E6EEEB);
+  --color-primary:           light-dark(#0E7C66, #5FD3B6);
+  --color-primary-content:   light-dark(#FFFFFF, #0F1C18);
+  --color-secondary:         light-dark(#9A5B26, #E0A579);
+  --color-secondary-content: light-dark(#FFFFFF, #0F1C18);
+  --color-accent:            #E0A579;
+  --color-accent-content:    #0F1C18;
+  --color-neutral:           #0F1C18;
+  --color-neutral-content:   #E6EEEB;
+  --color-info:              light-dark(#2D4E7A, #8DB4E8);
+  --color-info-content:      light-dark(#FFFFFF, #0F1C18);
+  --color-success:           light-dark(#0B6B57, #5FD3B6);
+  --color-success-content:   light-dark(#FFFFFF, #0F1C18);
+  --color-warning:           light-dark(#9A5B26, #E0A579);
+  --color-warning-content:   light-dark(#FFFFFF, #0F1C18);
+  --color-error:             light-dark(#A33A1C, #F2A48C);
+  --color-error-content:     light-dark(#FFFFFF, #0F1C18);
+  --radius-selector: 4px;
+  --radius-field:    4px;
+  --radius-box:      6px;
+  --depth: 0;
+  --noise: 0;
+
+  /* Tones: foreground and background of each */
+  --tone-neutral-fg: light-dark(#4A5651, #B6C3BE);  --tone-neutral-bg: light-dark(#EEF0EF, rgba(255, 255, 255, 0.06));
+  --tone-info-fg:    var(--color-info);     --tone-info-bg:    light-dark(#E7EEF7, rgba(141, 180, 232, 0.12));
+  --tone-success-fg: var(--color-success);  --tone-success-bg: light-dark(#E1F3EC, rgba(95, 211, 182, 0.12));
+  --tone-warning-fg: var(--color-warning);  --tone-warning-bg: light-dark(#FBEFE3, rgba(224, 165, 121, 0.14));
+  --tone-danger-fg:  var(--color-error);    --tone-danger-bg:  light-dark(#FBE7E1, rgba(242, 164, 140, 0.14));
+
+  /* Wagoe variables the older admin.css reads */
+  --text-primary:   var(--color-base-content);
+  --text-muted:     light-dark(#5E6B66, #9FB2AB);
+  --text-faint:     light-dark(#8A9691, #7F918A);
+  --border-default: var(--color-base-300);
+  --border-subtle:  light-dark(#EDF0EE, #1E2D27);
+  --surface-0:      var(--color-base-100);
+  --surface-1:      light-dark(#FAFBFA, #172822);
+  --surface-2:      var(--color-base-200);
+  --accent-primary: var(--color-primary);
+  --accent-primary-light: light-dark(rgba(14, 124, 102, 0.10), rgba(95, 211, 182, 0.12));
+  --color-primary-faint:  light-dark(rgba(14, 124, 102, 0.06), rgba(95, 211, 182, 0.06));
+  --row-hover:      light-dark(#F1F6F4, #1A2C25);
+  --row-selected:   light-dark(#E6F3EE, #1E3A30);
+
+  /* Type */
+  --font-sans:    'Inter', system-ui, -apple-system, sans-serif;
+  --font-display: 'Space Grotesk', 'Inter', system-ui, sans-serif;
+  --font-mono:    'JetBrains Mono', ui-monospace, 'SF Mono', monospace;
+
+  /* Density */
+  --table-row-height: 34px;
+  --cell-pad-y: 6px;
+  --cell-pad-x: 12px;
+}
+
+/* -----------------------------------------------------------------------------
+   2. Type and chrome
+   ----------------------------------------------------------------------------- */
+
+.admin-shell {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.4;
+  font-feature-settings: "cv11", "ss01";   /* Inter: single-storey a, open digits */
+}
+
+.admin-shell h1,
+.admin-shell h2,
+.admin-shell .entity-list-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.admin-content .entity-list-title { font-size: 22px; line-height: 1.2; }
+
+/* The sidebar is the dark green in both themes: chrome, not content */
+.admin-sidebar,
+.admin-sidebar-header {
+  background: var(--wg-ink) !important;
+  border-right-color: var(--wg-chrome-hover) !important;
+  box-shadow: none !important;
+  backdrop-filter: none;
+  color: var(--wg-chrome-text);
+}
+.admin-sidebar-nav h3 {
+  color: var(--wg-chrome-muted) !important;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+.admin-sidebar .entity-list a,
+.admin-sidebar-footer a {
+  color: var(--wg-chrome-text) !important;
+  border-radius: 4px !important;
+}
+.admin-sidebar .entity-list a:hover,
+.admin-sidebar-footer a:hover {
+  background: var(--wg-chrome-hover) !important;
+  color: #F2F6F4 !important;
+}
+.admin-sidebar .entity-list li.active a {
+  background: rgba(95, 211, 182, 0.12) !important;
+  color: var(--wg-teal) !important;
+  font-weight: 500;
+}
+.admin-sidebar button { color: #9FB2AB; }
+
+.admin-topbar {
+  background: var(--color-base-100) !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+}
+
+/* No cards around the list: structure from hairlines and alignment */
+.admin-content .table-toolbar-container,
+.admin-content #filter-table-container,
+.admin-content .filter-builder {
+  box-shadow: none !important;
+  background: transparent !important;
+}
+
+/* -----------------------------------------------------------------------------
+   2b. The table
+   ----------------------------------------------------------------------------- */
+
+.admin-content .table-wrapper {
+  background: var(--color-base-100) !important;
+  border: 1px solid var(--color-base-300) !important;
+  border-radius: var(--radius-box) !important;
+  overflow-x: auto;
+}
+
+.admin-content .data-table {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-content .data-table th,
+.admin-content .data-table td {
+  height: var(--table-row-height);
+  padding: var(--cell-pad-y) var(--cell-pad-x);
+}
+
+.admin-content .data-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface-1) !important;
+  color: var(--text-muted) !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  text-transform: none;
+  letter-spacing: 0;
+  border-bottom: 1px solid var(--color-base-300) !important;
+}
+
+.admin-content .data-table th.sortable-header--active .sort-label { color: var(--text-primary); }
+.admin-content .data-table th.sortable-header .sort-icon {
+  background: none !important;
+  color: var(--accent-primary);
+  width: auto;
+  height: auto;
+}
+
+.admin-content .data-table tbody tr {
+  animation: none !important;
+  border-bottom: 1px solid var(--border-subtle) !important;
+}
+.admin-content .data-table tbody td { border-bottom: 1px solid var(--border-subtle); }
+.admin-content .data-table tbody tr:hover,
+.admin-content .data-table tbody tr:nth-child(even):hover { background: var(--row-hover) !important; }
+.admin-content .data-table tbody tr:hover td:first-child { box-shadow: none !important; }
+.admin-content .data-table tbody tr:has(input[type="checkbox"]:checked) { background: var(--row-selected) !important; }
+
+.admin-content .data-table input[type="checkbox"] { accent-color: var(--accent-primary); }
+
+/* Row actions appear on hover or focus, like the mockup */
+.admin-content .data-table .row-nav-hint { opacity: 0; transition: opacity 120ms; }
+.admin-content .data-table tbody tr:hover .row-nav-hint,
+.admin-content .data-table .row-nav-hint:focus-visible { opacity: 1; }
+
+.admin-content .data-table tfoot td {
+  background: var(--surface-1);
+  border-top: 1px solid var(--color-base-300);
+  font-weight: 600;
+}
+.admin-content .totals-label { color: var(--text-muted); font-weight: 400; font-size: 12px; }
+
+/* -----------------------------------------------------------------------------
+   3. Display roles (ADR-040)
+   ----------------------------------------------------------------------------- */
+
+td.c-money, td.c-number, td.c-percent, td.c-count,
+th.c-money, th.c-number, th.c-percent, th.c-count { text-align: right !important; }
+
+.c-money   { font-weight: 500; }
+.c-title a { font-weight: 500; color: var(--text-primary); text-decoration: none; }
+.c-title a:hover { color: var(--accent-primary); text-decoration: underline; }
+
+.c-relation a,
+.c-count a,
+.c-email a,
+.c-url a { color: var(--accent-primary); text-decoration: none; }
+.c-relation a:hover,
+.c-count a:hover,
+.c-email a:hover,
+.c-url a:hover { text-decoration: underline; }
+
+.c-zero { color: var(--text-faint); }
+
+.c-mono {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.c-text span,
+.c-relation a,
+.c-identifier .c-mono {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.c-date time,
+.c-datetime time { color: var(--text-muted); }
+
+.c-boolean { text-align: center; }
+.c-check { color: var(--accent-primary); display: inline-flex; }
+
+/* Tones: enum badges, urgent dates, facet tab dots */
+.c-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 10px;
+  border: 0 !important;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  min-width: 0 !important;
+  width: auto !important;
+}
+.c-badge::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.c-badge.tone-neutral { --tone-fg: var(--tone-neutral-fg); --tone-bg: var(--tone-neutral-bg); }
+.c-badge.tone-info    { --tone-fg: var(--tone-info-fg);    --tone-bg: var(--tone-info-bg); }
+.c-badge.tone-success { --tone-fg: var(--tone-success-fg); --tone-bg: var(--tone-success-bg); }
+.c-badge.tone-warning { --tone-fg: var(--tone-warning-fg); --tone-bg: var(--tone-warning-bg); }
+.c-badge.tone-danger  { --tone-fg: var(--tone-danger-fg);  --tone-bg: var(--tone-danger-bg); }
+.c-badge[class*="tone-"] { color: var(--tone-fg) !important; background: var(--tone-bg) !important; }
+
+time.tone-warning { color: var(--tone-warning-fg); font-weight: 500; }
+time.tone-danger  { color: var(--tone-danger-fg);  font-weight: 600; }
+
+/* -----------------------------------------------------------------------------
+   3b. Summary and facet tabs above the table
+   ----------------------------------------------------------------------------- */
+
+.list-overview {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px 24px;
+  margin-bottom: 10px;
+}
+
+.list-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 28px;
+  margin: 0;
+}
+.list-summary-item { display: flex; flex-direction: column; gap: 2px; }
+.list-summary-item dt { font-size: 12px; color: var(--text-muted); }
+.list-summary-item dd {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+.facet-tabs { display: flex; flex-wrap: wrap; gap: 4px; order: -1; width: 100%; }
+.facet-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  font-weight: 500;
+  text-decoration: none;
+}
+.facet-tab:hover { background: var(--surface-2); color: var(--text-primary); }
+.facet-tab.active {
+  background: var(--accent-primary-light);
+  border-color: color-mix(in oklab, var(--accent-primary) 30%, transparent);
+  color: var(--accent-primary);
+}
+.facet-count {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-faint);
+}
+.facet-tab.active .facet-count { color: inherit; }
+.facet-tab.tone-danger .facet-count  { color: var(--tone-danger-fg); }
+.facet-tab.tone-warning .facet-count { color: var(--tone-warning-fg); }
+
+/* -----------------------------------------------------------------------------
+   Focus and touch
+   ----------------------------------------------------------------------------- */
+
+.admin-shell :focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 1px; }
+
+@media (pointer: coarse) {
+  .facet-tab { min-height: 44px; }
+  .admin-content .data-table th,
+  .admin-content .data-table td { height: 44px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-content .data-table .row-nav-hint { transition: none; }
+}

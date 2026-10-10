@@ -20,6 +20,7 @@
    [wagoe.core.utils.case-conversion :as case-conversion]
    [wagoe.admin.core.db-errors :as db-errors]
    [wagoe.admin.core.schema-introspection :as introspection]
+   [wagoe.admin.core.display :as display]
    [wagoe.admin.core.forms :as forms]
    [wagoe.events.core.event :as event]
    [wagoe.events.ports :as events]
@@ -204,6 +205,21 @@
       (if (= 1 (count non-nil-clauses))
         (first non-nil-clauses)
         (vec (cons :and non-nil-clauses))))))
+
+(defn- list-where
+  "The WHERE a list applies for `options`: its search, its filters and, for a
+   soft-deleting entity, live rows only. The overview's facet and summary
+   queries use it too, so they count exactly the rows the list shows."
+  [adapter entity-config field-aliases options]
+  (let [search-fields (mapv #(get field-aliases % %) (:search-fields entity-config))
+        filters       (when-let [filters (:filters options)]
+                        (into {} (map (fn [[field spec]] [(get field-aliases field field) spec]))
+                              filters))]
+    (combine-where-clauses
+     [(build-search-where adapter (:search options) search-fields)
+      (build-filter-where adapter filters)
+      (when (:soft-delete entity-config false)
+        [:= (get field-aliases :deleted-at :deleted_at) nil])])))
 
 ;; =============================================================================
 ;; Query Config Resolution
@@ -662,7 +678,164 @@
                                       (assoc (ex-data e) :child {:entity entity :index index})
                                       e))))})))
 
+;; =============================================================================
+;; List Overview (ADR-040)
+;; =============================================================================
+
+;; What a list page shows besides its rows, in queries bounded by the config:
+;; one per relation column, one per has-many column, one for the facet and one
+;; per summary. Each part is optional — a failing query costs the page that
+;; part, logged, never the page.
+
+(defn- with-from
+  "`q` reading from the entity the way its own list does."
+  [q {:keys [from-clause join-clause]} where]
+  (cond-> (assoc q :from from-clause)
+    join-clause (assoc :join join-clause)
+    where       (assoc :where where)))
+
+(defn- id-strings
+  "The distinct non-nil values of `k` in `records`, as strings: how the
+   overview keys them, and how the admin compares ids across engines."
+  [records k]
+  (into [] (comp (keep #(get % k)) (map str) (distinct)) records))
+
+(defn- param-value
+  "A config value as a query parameter. HoneySQL reads a keyword as a column,
+   so an enum value written `:overdue` in `:summary` becomes \"overdue\"."
+  [v]
+  (if (keyword? v) (name v) v))
+
+(defn- param-filters
+  [filters]
+  (into {} (map (fn [[field spec]]
+                  [field (if (map? spec)
+                           (cond-> spec
+                             (contains? spec :value)  (update :value param-value)
+                             (contains? spec :values) (update :values #(mapv param-value %)))
+                           (param-value spec))]))
+        filters))
+
+(defn- overview-part
+  "`(f)`, or nil when it throws: logged, and the page renders without it."
+  [entity-name part f]
+  (try (f)
+       (catch Exception e
+         (log/warn e "admin overview query failed" {:entity entity-name :part part})
+         nil)))
+
+(defn- relation-titles
+  "{id-string title} for the targets of relation `field` on this page."
+  [db-ctx schema-provider entity-config records field]
+  (let [rel    (get (display/belongs-to-fields entity-config) field)
+        target (:entity rel)
+        ids    (id-strings records field)]
+    (when (and target (seq ids) (ports/validate-entity-exists schema-provider target))
+      (let [tcfg  (ports/get-entity-config schema-provider target)
+            tpk   (:primary-key tcfg :id)
+            title (:title-field tcfg)
+            qc    (resolve-query-config tcfg)
+            col   #(get (:field-aliases qc) % %)]
+        (when (and title (not= title tpk))
+          (into {}
+                ;; A blank title would render an empty, invisible link; the cell
+                ;; shows the id instead
+                (keep (fn [{:keys [id title]}]
+                        (when-not (str/blank? (some-> title str))
+                          [(str id) (str title)])))
+                (db/execute-query! db-ctx
+                                   (with-from {:select [[(col tpk) :id] [(col title) :title]]}
+                                     qc [:in (col tpk) ids]))))))))
+
+(defn- has-many-counts
+  "{parent-id-string n} for has-many column `column` on this page."
+  [db-ctx schema-provider entity-config records column]
+  (let [rel (get (display/has-many-columns entity-config) column)
+        ids (id-strings records (:primary-key entity-config :id))]
+    (when (and rel (seq ids))
+      (let [{:keys [child-cfg qualify query]} (related-query schema-provider nil rel)
+            fk    (qualify (fk-field rel))
+            where (if (:soft-delete child-cfg false)
+                    [:and [:in fk ids] [:= (qualify :deleted-at) nil]]
+                    [:in fk ids])]
+        (into {}
+              (map (juxt (comp str :parent) :n))
+              (db/execute-query! db-ctx
+                                 (cond-> {:select   [[fk :parent] [:%count.* :n]]
+                                          :from     (:from query)
+                                          :where    where
+                                          :group-by [fk]}
+                                   (:join query) (assoc :join (:join query)))))))))
+
+(defn- facet-counts
+  "{value-string n} for the facet over the filtered set, the facet's own
+   filter left out so every tab keeps its count. A nil value counts under nil."
+  [db-ctx entity-config qc options]
+  (when-let [facet (:facet entity-config)]
+    (let [col   (get (:field-aliases qc) facet facet)
+          where (list-where (:adapter db-ctx) entity-config (:field-aliases qc)
+                            (update options :filters dissoc facet))]
+      ;; `value` is reserved in H2, hence facet-value
+      (into {}
+            (map (fn [{:keys [facet-value n]}]
+                   [(some-> facet-value param-value str) n]))
+            (db/execute-query! db-ctx
+                               (-> {:select [[col :facet-value] [:%count.* :n]] :group-by [col]}
+                                   (with-from qc where)))))))
+
+(defn- summary-values
+  "Each `:summary` entry's aggregate over the filtered set, narrowed by its
+   own `:where`."
+  [db-ctx entity-name entity-config qc options]
+  (let [aliases (:field-aliases qc)
+        col     #(get aliases % %)
+        base    (list-where (:adapter db-ctx) entity-config aliases options)]
+    (vec
+     (for [{:keys [label agg field where] :or {agg :count}} (take 4 (:summary entity-config))
+           :let [count? (or (= agg :count) (nil? field))
+                 expr  (if count? :%count.* [agg (col field)])
+                 extra (build-filter-where (:adapter db-ctx)
+                                           (into {} (map (fn [[f spec]] [(col f) spec]))
+                                                 (param-filters where)))
+                 value (overview-part entity-name [:summary label]
+                                      #(:v (db/execute-one!
+                                            db-ctx
+                                            (with-from {:select [[expr :v]]} qc
+                                              (combine-where-clauses [base extra])))))]]
+       {:label label
+        :value (or value (when (= agg :count) 0))
+        :field field
+        :role  (if count? :number (get-in entity-config [:display-roles field]))}))))
+
+(defn- list-overview*
+  [db-ctx schema-provider entity-name options records]
+  (let [entity-config (ports/get-entity-config schema-provider entity-name)
+        roles         (:display-roles entity-config)
+        columns       (:list-fields entity-config)
+        of-role       (fn [role] (filter #(= role (get roles %)) columns))
+        qc            (resolve-query-config entity-config)
+        ;; {column result} for `columns`, leaving out a part that failed
+        per-column    (fn [part columns f]
+                        (into {} (keep (fn [c]
+                                         (some->> (overview-part entity-name [part c] #(f c))
+                                                  (vector c))))
+                              columns))
+        facet         (:facet entity-config)]
+    {:now     (Instant/now)
+     :titles  (per-column :titles (of-role :relation)
+                          #(relation-titles db-ctx schema-provider entity-config records %))
+     :counts  (per-column :counts (of-role :count)
+                          #(has-many-counts db-ctx schema-provider entity-config records %))
+     :facets  (when facet
+                {facet (overview-part entity-name [:facet facet]
+                                      #(facet-counts db-ctx entity-config qc options))})
+     :summary (summary-values db-ctx entity-name entity-config qc options)}))
+
 (defrecord AdminService [db-ctx schema-provider logger error-reporter config workflows]
+  ports/IListOverview
+  (list-overview [_ entity-name options records]
+    (list-overview* db-ctx schema-provider entity-name options records))
+
   ports/IAdminService
 
   (list-entities [_ entity-name options]
@@ -673,33 +846,18 @@
       :offset (:offset options)}
      (fn [{:keys [_params]}]
        (let [entity-config (ports/get-entity-config schema-provider entity-name)
-             soft-delete? (:soft-delete entity-config false)
-             search-term (:search options)
-             search-fields (:search-fields entity-config)
-             filters (:filters options)
              sort-field (:sort options)
              sort-dir (:sort-dir options)
              default-sort (:default-sort entity-config :id)
 
              {:keys [from-clause select-clause join-clause field-aliases]} (resolve-query-config entity-config)
 
-             ; Resolve field aliases for WHERE and ORDER BY
-             resolved-search-fields (mapv #(get field-aliases % %) search-fields)
+             ; Resolve field aliases for ORDER BY
              resolved-sort-field    (when sort-field (get field-aliases sort-field sort-field))
              resolved-default-sort  (get field-aliases default-sort default-sort)
-             soft-delete-field      (get field-aliases :deleted-at :deleted_at)
 
-             resolved-filters (when filters
-                                (into {} (map (fn [[field spec]]
-                                                [(get field-aliases field field) spec])
-                                              filters)))
-
-             ; Build query components
-             search-where (build-search-where (:adapter db-ctx) search-term resolved-search-fields)
-             filter-where (build-filter-where (:adapter db-ctx) resolved-filters)
-             ; Exclude soft-deleted records if entity uses soft delete
-             soft-delete-where (when soft-delete? [:= soft-delete-field nil])
-             where-clause (combine-where-clauses [search-where filter-where soft-delete-where])
+             ; Search, filters and soft delete, shared with the overview (ADR-040)
+             where-clause (list-where (:adapter db-ctx) entity-config field-aliases options)
              ordering (build-ordering resolved-sort-field sort-dir resolved-default-sort)
              pagination (build-pagination options config)
 
@@ -1126,6 +1284,11 @@
   ;; without one runs exactly the code it did before. Each write publishes
   ;; after it returns, which is after it committed. Reads for :prior happen
   ;; only here, for the same reason.
+  ports/IListOverview
+  (list-overview [_ entity-name options records]
+    (when (satisfies? ports/IListOverview inner)
+      (ports/list-overview inner entity-name options records)))
+
   ports/IAdminService
   (list-entities [_ entity-name options] (ports/list-entities inner entity-name options))
   (get-entity [_ entity-name id] (ports/get-entity inner entity-name id))

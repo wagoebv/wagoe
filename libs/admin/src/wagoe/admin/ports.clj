@@ -458,3 +458,25 @@
      connection and :transaction-of the datasource it was opened on. A store
      on another datasource cannot join it; it removes the instances on its
      own, after the fact. `tx` may be nil. Returns the number removed."))
+
+;; =============================================================================
+;; List Overview Port (ADR-040)
+;; =============================================================================
+
+(defprotocol IListOverview
+  "What a list page shows besides its rows. Separate from IAdminService so a
+   service that does not implement it still renders a plain list."
+
+  (list-overview [this entity-name options records]
+    "What the cells of `records` need, in a number of queries bounded by the
+     entity's config rather than by the page:
+
+       {:now     #inst \"…\"                         ; relative dates
+        :titles  {field {id-string title}}          ; per relation column
+        :counts  {column {parent-id-string n}}      ; per has-many column
+        :facets  {field {value-string n}}           ; the facet, its own filter left out
+        :summary [{:label … :value … :role … :field …}]}
+
+     `options` are the list's: search and filters narrow facets and summary
+     the way they narrow the rows. A part whose query fails is left out; the
+     page still renders."))

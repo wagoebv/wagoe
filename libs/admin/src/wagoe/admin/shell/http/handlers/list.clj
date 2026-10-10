@@ -9,6 +9,18 @@
    [wagoe.admin.shell.http.support :as support]))
 
 ;; =============================================================================
+;; List Overview (ADR-040)
+;; =============================================================================
+
+(defn- display-with-overview
+  "The display options for a list page, with the overview its cells need when
+   the service provides one (ADR-040)."
+  [admin-service config request entity-name options records]
+  (cond-> (support/display-options config request)
+    (satisfies? ports/IListOverview admin-service)
+    (assoc :overview (ports/list-overview admin-service entity-name options records))))
+
+;; =============================================================================
 ;; Admin Home Handler
 ;; =============================================================================
 
@@ -82,7 +94,8 @@
       (support/html-response request
                              (admin-ui/admin-layout
                               (admin-ui/entity-list-page entity-name records entity-config table-query total-count permissions
-                                                        (assoc options :display (support/display-options config request)))
+                                                        (assoc options :display (display-with-overview admin-service config request
+                                                                                                       entity-name options records)))
                               {:user user
                                :current-entity entity-name
                                :entities entities
@@ -141,14 +154,15 @@
           ; Filter actions target #filter-table-container (needs filter+table).
           ; Search/sort/pagination target #entity-table-container (table only).
           htmx-target (get-in request [:headers "hx-target"])
-          filters (:filters options)]
+          filters (:filters options)
+          display (display-with-overview admin-service config request entity-name options records)]
 
       (if (= htmx-target "filter-table-container")
          ; Filter action: return filter builder + table so the filter UI stays visible
         (support/htmx-fragment-response request
                                         (admin-ui/filter-table-container entity-name records entity-config table-query total-count permissions filters
-                                                                         (support/display-options config request)))
+                                                                         display))
          ; Search / sort / pagination: return just the table
         (support/htmx-fragment-response request
                                         (admin-ui/entity-table entity-name records entity-config table-query total-count permissions filters
-                                                               (support/display-options config request)))))))
+                                                               display))))))

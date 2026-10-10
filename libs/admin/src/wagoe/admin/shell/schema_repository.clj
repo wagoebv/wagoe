@@ -20,6 +20,7 @@
    [wagoe.admin.ports :as ports]
    [wagoe.admin.schema :as admin-schema]
    [wagoe.admin.core.schema-introspection :as introspection]
+   [wagoe.admin.core.display :as display]
    [wagoe.platform.ports.database :as db-protocols]
    [wagoe.core.utils.case-conversion :as case-conv]
    [clojure.string :as str]
@@ -171,7 +172,12 @@
                                   (remove #{entity-name}
                                           (try (ports/list-available-entities this)
                                                (catch clojure.lang.ExceptionInfo _ []))))
-              entity-config (introspection/with-inverse-relationships entity-name own all)]
+              ;; Roles last: a has-many column needs the inverse relations, and
+              ;; the default columns need the roles (ADR-040).
+              entity-config (-> (introspection/with-inverse-relationships entity-name own all)
+                                (display/with-display
+                                  {:derive-list-fields?
+                                   (not (contains? (get-in config [:entities entity-name]) :list-fields))}))]
           ;; Here and not in compute-entity-config, which also runs for each
           ;; entity as another's possible child.
           (doseq [{:keys [message]} (:create-config-errors own)]
