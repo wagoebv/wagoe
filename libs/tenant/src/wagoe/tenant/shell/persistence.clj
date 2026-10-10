@@ -15,8 +15,7 @@
 ;; =============================================================================
 
 (defn initialize-tenant-schema!
-  "Create the tenant tables at boot, for installations that never ran
-   `migrate up`. The migration runs the same definition (BOU-551)."
+  "Create the tenant tables at boot; see wagoe.tenant.shell.tenant-tables."
   [ctx]
   (log/info "Initializing tenant schema")
   (tenant-tables/ensure-tables! ctx))

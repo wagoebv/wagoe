@@ -351,23 +351,8 @@
 
 (defn generate-indexes
   "The indexes for `malli-schema`'s table, as [index-name table [column ...]]."
-  [_ctx table-name malli-schema]
+  [table-name malli-schema]
   (generate-table-indexes table-name (keep extract-field-info (rest malli-schema))))
-
-(defn generate-indexes-ddl
-  "Generate CREATE INDEX statements from Malli schema analysis.
-
-   Args:
-     ctx: Database context
-     table-name: String name of the table
-     malli-schema: Malli schema definition
-
-   Returns:
-     Vector of DDL index statements"
-  [ctx table-name malli-schema]
-  (mapv (fn [[index table columns]]
-          (str "CREATE INDEX IF NOT EXISTS " index " ON " table " (" (str/join ", " columns) ")"))
-        (generate-indexes ctx table-name malli-schema)))
 
 ;; =============================================================================
 ;; Idempotent Enum-Constraint Repair
@@ -475,7 +460,7 @@
 
     ; Create indexes
     (doseq [[table-name malli-schema] schema-definitions]
-      (doseq [[index table columns] (generate-indexes ctx table-name malli-schema)]
+      (doseq [[index table columns] (generate-indexes table-name malli-schema)]
         (log/debug "Creating index" {:table table :index index})
         (db-core/create-index-if-not-exists! ctx index table columns)))
 

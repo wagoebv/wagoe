@@ -105,15 +105,20 @@
             (str "Unsupported query input. Expected HoneySQL map, SQL string, or JDBC vector. Got: "
                  (type query))))))
 
+(defn reported
+  "What the driver said, from the first SQLException in `e`'s causes, or nil."
+  [e]
+  (when-let [^SQLException se (some #(when (instance? SQLException %) %)
+                                    (take-while some? (iterate ex-cause e)))]
+    {:sql-state  (.getSQLState se)
+     :error-code (.getErrorCode se)
+     :message    (.getMessage se)}))
+
 (defn- constraint-violation
   "The unique or foreign key `e` says the database enforced, as
    `wagoe.platform.core.database.constraint/violation` reads it, or nil."
   [e]
-  (when-let [^SQLException se (some #(when (instance? SQLException %) %)
-                                    (take-while some? (iterate ex-cause e)))]
-    (constraint/violation {:sql-state  (.getSQLState se)
-                           :error-code (.getErrorCode se)
-                           :message    (.getMessage se)})))
+  (some-> (reported e) constraint/violation))
 
 (defn- conflict
   "A refused unique or foreign key as a :conflict, which HTTP answers 409

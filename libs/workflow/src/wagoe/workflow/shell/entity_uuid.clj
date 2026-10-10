@@ -10,7 +10,8 @@
   (:require [clojure.string :as str]
             [next.jdbc :as jdbc]
             [next.jdbc.result-set :as rs]
-            [wagoe.platform.database :as db])
+            [wagoe.platform.database :as db]
+            [wagoe.platform.ports.database :as protocols])
   (:import [java.sql Connection]))
 
 (def ^:private index-name "idx_workflow_instances_entity_uuid")
@@ -61,7 +62,8 @@
 (defn ensure-entity-uuid!
   "Add workflow_instances.entity_uuid and its index, unless they are there."
   [connectable]
-  (let [e    (db/engine-of connectable)
+  (let [ctx  (db/context-of connectable)
+        e    (protocols/engine (:adapter ctx))
         ;; MySQL and SQLite have no IF NOT EXISTS on a column.
         has? (case e
                :mysql  (mysql-has? connectable "columns WHERE column_name = 'entity_uuid'")
@@ -69,7 +71,7 @@
                false)]
     (when-not has?
       (jdbc/execute! connectable [(add-column e)]))
-    (db/create-index-if-not-exists! (db/context-of connectable) index-name :workflow_instances [:entity_uuid])))
+    (db/create-index-if-not-exists! ctx index-name :workflow_instances [:entity_uuid])))
 
 (defn up
   "Migratus entry point."
