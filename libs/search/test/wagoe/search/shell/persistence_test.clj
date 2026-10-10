@@ -37,10 +37,6 @@
 
     (create-search-documents-table! ds)
 
-    (jdbc/execute! ds
-                   ["CREATE INDEX IF NOT EXISTS idx_search_documents_index_id
-                      ON search_documents (index_id)"])
-
     (reset! test-store (persistence/create-search-store ds (h2/new-adapter)))))
 
 (defn- teardown-test-db []

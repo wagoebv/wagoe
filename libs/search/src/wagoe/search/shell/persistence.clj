@@ -92,8 +92,8 @@
           {:insert-into   :search_documents
            :values        [row]
            :on-conflict   [:index_id :entity_id]
-           :do-update-set [:entity_type :language :weight_a :weight_b :weight_c :weight_d
-                           :content_all :metadata :filters :updated_at]})
+           ;; Every column but the key, so a column added to doc->db is updated too.
+           :do-update-set (vec (remove #{:id :index_id :entity_id} (keys row)))})
          {:builder-fn rs/as-unqualified-lower-maps})
         ;; No ON CONFLICT: delete existing row then insert fresh (atomic transaction)
         (jdbc/with-transaction [tx datasource]
@@ -190,10 +190,6 @@
    Returns:
      SearchStore implementing ISearchStore"
   [datasource adapter]
-  ;; Callers used to pass a db-type keyword; say so rather than fail on protocol dispatch.
-  (when-not (satisfies? db-ports/DBAdapter adapter)
-    (throw (ex-info "create-search-store needs the database adapter, e.g. (:adapter db-ctx)"
-                    {:type :internal-error :adapter adapter})))
   (let [capabilities (db-ports/capabilities adapter)]
     (->SearchStore datasource
                    (contains? capabilities :full-text)

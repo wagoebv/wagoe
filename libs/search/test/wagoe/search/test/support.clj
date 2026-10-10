@@ -5,7 +5,8 @@
            [java.util UUID]))
 
 (defn create-search-documents-table!
-  "The search_documents table, as the tests create it on H2 and SQLite."
+  "The search_documents table and its index, as the tests create them on H2 and
+   SQLite."
   [ds]
   (jdbc/execute! ds ["CREATE TABLE IF NOT EXISTS search_documents (
                         id          TEXT NOT NULL PRIMARY KEY,
@@ -21,7 +22,9 @@
                         metadata    TEXT,
                         filters     TEXT,
                         updated_at  TEXT NOT NULL,
-                        UNIQUE (index_id, entity_id))"]))
+                        UNIQUE (index_id, entity_id))"])
+  (jdbc/execute! ds ["CREATE INDEX IF NOT EXISTS idx_search_documents_index_id
+                        ON search_documents (index_id)"]))
 
 (defn make-doc
   "A product search document, with `overrides` merged in."

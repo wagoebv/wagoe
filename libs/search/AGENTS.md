@@ -257,10 +257,9 @@ Before rc-4, or if you would rather not commit the imports, keep the rule local:
     (f)))
 ```
 
-### 2. Pass the adapter
+### 2. Pass the adapter in tests
 
-`module_wiring.clj` passes the db-context's adapter to `create-search-store`.
-In tests, pass the test database's adapter, e.g. `(h2/new-adapter)`.
+Pass the test database's adapter to `create-search-store`, e.g. `(h2/new-adapter)`.
 
 ### 3. Metadata Encoding
 
