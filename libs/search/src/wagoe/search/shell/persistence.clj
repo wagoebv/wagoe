@@ -4,12 +4,15 @@
    Implements ISearchStore using next.jdbc + HoneySQL for DML
    and raw parameterized SQL for FTS-specific queries.
 
-   Two query strategies selected by db-type:
-   - :postgresql — to_tsvector/plainto_tsquery + ts_rank + ts_headline
-   - :h2 / :sqlite — LOWER/LIKE fallback (used in tests and dev)"
+   Strategies chosen by the adapter's capabilities (ADR-039):
+   - :full-text — to_tsvector/plainto_tsquery + ts_rank + ts_headline;
+     without it, a LOWER/LIKE fallback
+   - :on-conflict — INSERT … ON CONFLICT DO UPDATE; without it, delete and
+     insert in one transaction"
   (:require [wagoe.search.ports :as ports]
             [wagoe.search.core.index :as index]
             [wagoe.search.core.query :as qry]
+            [wagoe.platform.ports.database :as db-ports]
             [cheshire.core :as json]
             [next.jdbc :as jdbc]
             [next.jdbc.result-set :as rs]
@@ -74,25 +77,25 @@
 ;; ISearchStore implementation
 ;; =============================================================================
 
-(defrecord SearchStore [datasource db-type]
+(defrecord SearchStore [datasource full-text? on-conflict?]
   ports/ISearchStore
 
   (upsert-document! [_ doc]
     (log/debug "Upserting search document"
                {:index-id (:index-id doc) :entity-id (:entity-id doc)})
     (let [row (doc->db doc)]
-      (if (= db-type :postgresql)
-        ;; PostgreSQL: native ON CONFLICT ... DO UPDATE SET ... = EXCLUDED.*
+      (if on-conflict?
+        ;; Native ON CONFLICT ... DO UPDATE SET ... = EXCLUDED.*
         (jdbc/execute-one!
          datasource
          (sql/format
           {:insert-into   :search_documents
            :values        [row]
            :on-conflict   [:index_id :entity_id]
-           :do-update-set [:language :weight_a :weight_b :weight_c :weight_d
+           :do-update-set [:entity_type :language :weight_a :weight_b :weight_c :weight_d
                            :content_all :metadata :filters :updated_at]})
          {:builder-fn rs/as-unqualified-lower-maps})
-        ;; H2 / SQLite: delete existing row then insert fresh (atomic transaction)
+        ;; No ON CONFLICT: delete existing row then insert fresh (atomic transaction)
         (jdbc/with-transaction [tx datasource]
           (jdbc/execute-one!
            tx
@@ -124,7 +127,7 @@
                {:index-id index-id :entity-type entity-type :query query})
     (let [{:keys [language limit offset highlight? filters]
            :or   {limit 20 offset 0 language "english" highlight? false}} opts
-          sql-vec (if (= db-type :postgresql)
+          sql-vec (if full-text?
                     (qry/build-postgres-search-sql
                      (kw->str index-id) (kw->str entity-type)
                      language query limit offset highlight? filters)
@@ -139,7 +142,7 @@
     (log/debug "Counting search results"
                {:entity-type entity-type :query query})
     (let [{:keys [language index-id filters] :or {language "english"}} opts
-          sql-vec (if (= db-type :postgresql)
+          sql-vec (if full-text?
                     (qry/build-postgres-count-sql
                      (kw->str index-id) (kw->str entity-type)
                      language query filters)
@@ -155,7 +158,7 @@
                {:index-id index-id :entity-type entity-type :query query})
     (let [{:keys [limit threshold filters]
            :or   {limit 5 threshold 0.15}} opts
-          sql-vec (if (= db-type :postgresql)
+          sql-vec (if full-text?
                     (qry/build-postgres-suggest-sql
                      (kw->str index-id) (kw->str entity-type)
                      query limit threshold filters)
@@ -181,9 +184,17 @@
 
    Args:
      datasource - javax.sql.DataSource
-     db-type    - :postgresql (FTS path) or :h2 / :sqlite (LIKE fallback)
+     adapter    - the database's DBAdapter; its :full-text and :on-conflict
+                  capabilities choose the query and upsert strategies
 
    Returns:
      SearchStore implementing ISearchStore"
-  [datasource db-type]
-  (->SearchStore datasource db-type))
+  [datasource adapter]
+  ;; Callers used to pass a db-type keyword; say so rather than fail on protocol dispatch.
+  (when-not (satisfies? db-ports/DBAdapter adapter)
+    (throw (ex-info "create-search-store needs the database adapter, e.g. (:adapter db-ctx)"
+                    {:type :internal-error :adapter adapter})))
+  (let [capabilities (db-ports/capabilities adapter)]
+    (->SearchStore datasource
+                   (contains? capabilities :full-text)
+                   (contains? capabilities :on-conflict))))

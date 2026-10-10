@@ -1,7 +1,8 @@
 (ns wagoe.search.shell.persistence-test
   "Integration tests for SearchStore persistence layer against H2.
 
-   Uses the LIKE-based fallback path (db-type :h2), which validates:
+   Uses the LIKE-based fallback path (H2 claims neither :full-text nor :on-conflict),
+   which validates:
    - upsert-document! (insert + conflict update)
    - delete-document!
    - search-documents (LIKE fallback)
@@ -9,12 +10,13 @@
    - suggest-documents (LIKE fallback)
    - count-documents"
   (:require [clojure.test :refer [deftest testing is use-fixtures]]
+            [wagoe.platform.shell.adapters.database.h2.core :as h2]
+            [wagoe.search.test.support :refer [create-search-documents-table! make-doc]]
             [wagoe.search.ports :as ports]
             [wagoe.search.shell.persistence :as persistence]
             [next.jdbc :as jdbc]
             [next.jdbc.connection :as connection])
   (:import [java.util UUID]
-           [java.time Instant]
            [com.zaxxer.hikari HikariDataSource]))
 
 ;; =============================================================================
@@ -33,29 +35,13 @@
           :password ""})]
     (reset! test-datasource ds)
 
-    (jdbc/execute! ds
-                   ["CREATE TABLE IF NOT EXISTS search_documents (
-                      id          TEXT NOT NULL PRIMARY KEY,
-                      index_id    TEXT NOT NULL,
-                      entity_type TEXT NOT NULL,
-                      entity_id   TEXT NOT NULL,
-                      language    TEXT NOT NULL DEFAULT 'english',
-                      weight_a    TEXT NOT NULL DEFAULT '',
-                      weight_b    TEXT NOT NULL DEFAULT '',
-                      weight_c    TEXT NOT NULL DEFAULT '',
-                      weight_d    TEXT NOT NULL DEFAULT '',
-                      content_all TEXT NOT NULL DEFAULT '',
-                      metadata    TEXT,
-                      filters     TEXT,
-                      updated_at  TEXT NOT NULL,
-                      UNIQUE (index_id, entity_id)
-                    )"])
+    (create-search-documents-table! ds)
 
     (jdbc/execute! ds
                    ["CREATE INDEX IF NOT EXISTS idx_search_documents_index_id
                       ON search_documents (index_id)"])
 
-    (reset! test-store (persistence/create-search-store ds :h2))))
+    (reset! test-store (persistence/create-search-store ds (h2/new-adapter)))))
 
 (defn- teardown-test-db []
   (when-let [ds @test-datasource]
@@ -74,27 +60,6 @@
       (teardown-test-db))))
 
 (use-fixtures :each db-fixture)
-
-;; =============================================================================
-;; Test data helpers
-;; =============================================================================
-
-(defn- make-doc
-  ([]
-   (make-doc {}))
-  ([overrides]
-   (merge {:id          (str (UUID/randomUUID))
-           :index-id    :product-search
-           :entity-type :product
-           :entity-id   (UUID/randomUUID)
-           :language    "english"
-           :weight-a    "Widget Pro"
-           :weight-b    "A great widget for professionals"
-           :weight-c    "tools hardware"
-           :weight-d    ""
-           :content-all "Widget Pro A great widget for professionals tools hardware"
-           :updated-at  (Instant/now)}
-          overrides)))
 
 ;; =============================================================================
 ;; upsert-document! / count-documents
