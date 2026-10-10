@@ -320,74 +320,39 @@
          "\n);")))
 
 (defn- generate-table-indexes
-  "Generate CREATE INDEX statements based on table name and field analysis.
-   
+  "The indexes a table gets from its field analysis, as [name table columns].
+
    Args:
      table-name: String name of the table
      field-infos: Vector of field info maps
-     
+
    Returns:
-     Vector of DDL index statements"
+     Vector of [index-name table-name [column ...]]"
   [table-name field-infos]
   (let [; Categorize fields for automatic index generation
         id-fields (filter #(str/ends-with? (:name %) "-id") field-infos)
         enum-fields (filter #(and (vector? (:schema %))
                                   (= :enum (first (:schema %)))) field-infos)
-        timestamp-fields (filter #(str/ends-with? (:name %) "-at") field-infos)]
-
+        timestamp-fields (filter #(str/ends-with? (:name %) "-at") field-infos)
+        single (fn [{:keys [name]}]
+                 [(str "idx_" table-name "_" (col-name name)) table-name [(col-name name)]])]
     (vec (concat
-          ; Indexes on foreign key fields
-          (map (fn [{:keys [name]}]
-                 (str "CREATE INDEX IF NOT EXISTS idx_" table-name "_"
-                      (col-name name) " ON " table-name " ("
-                      (col-name name) ")"))
-               id-fields)
+          ; Foreign key, enum and timestamp fields
+          (map single (concat id-fields enum-fields timestamp-fields))
 
-          ; Indexes on enum fields (like role, active)
-          (map (fn [{:keys [name]}]
-                 (str "CREATE INDEX IF NOT EXISTS idx_" table-name "_"
-                      (col-name name) " ON " table-name " ("
-                      (col-name name) ")"))
-               enum-fields)
-
-          ; Indexes on timestamp fields
-          (map (fn [{:keys [name]}]
-                 (str "CREATE INDEX IF NOT EXISTS idx_" table-name "_"
-                      (col-name name) " ON " table-name " ("
-                      (col-name name) ")"))
-               timestamp-fields)
-
-          ; Table-specific compound indexes
+          ; Table-specific indexes
           (case table-name
-            "auth_users"
-            ["CREATE INDEX IF NOT EXISTS idx_auth_users_email ON auth_users (email)"
-             "CREATE INDEX IF NOT EXISTS idx_auth_users_active ON auth_users (active)"]
-
-            "users"
-            ["CREATE INDEX IF NOT EXISTS idx_users_role ON users (role)"]
-
-            "user_sessions"
-            ["CREATE INDEX IF NOT EXISTS idx_sessions_token ON user_sessions (session_token)"
-             "CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON user_sessions (expires_at)"]
-
+            "auth_users"    [["idx_auth_users_email" "auth_users" ["email"]]
+                             ["idx_auth_users_active" "auth_users" ["active"]]]
+            "users"         [["idx_users_role" "users" ["role"]]]
+            "user_sessions" [["idx_sessions_token" "user_sessions" ["session_token"]]
+                             ["idx_sessions_expires_at" "user_sessions" ["expires_at"]]]
             [])))))
 
-(defn generate-indexes-ddl
-  "Generate CREATE INDEX statements from Malli schema analysis.
-   
-   Args:
-     ctx: Database context
-     table-name: String name of the table
-     malli-schema: Malli schema definition
-     
-   Returns:
-     Vector of DDL index statements"
-  [_ctx table-name malli-schema]
-  (let [fields (rest malli-schema)
-        field-infos (->> fields
-                         (map extract-field-info)
-                         (filter some?))]
-    (generate-table-indexes table-name field-infos)))
+(defn generate-indexes
+  "The indexes for `malli-schema`'s table, as [index-name table [column ...]]."
+  [table-name malli-schema]
+  (generate-table-indexes table-name (keep extract-field-info (rest malli-schema))))
 
 ;; =============================================================================
 ;; Idempotent Enum-Constraint Repair
@@ -495,10 +460,9 @@
 
     ; Create indexes
     (doseq [[table-name malli-schema] schema-definitions]
-      (let [index-ddls (generate-indexes-ddl ctx table-name malli-schema)]
-        (doseq [index-ddl index-ddls]
-          (log/debug "Creating index" {:table table-name :ddl index-ddl})
-          (db-core/execute-ddl! ctx index-ddl))))
+      (doseq [[index table columns] (generate-indexes table-name malli-schema)]
+        (log/debug "Creating index" {:table table :index index})
+        (db-core/create-index-if-not-exists! ctx index table columns)))
 
     (log/info "Database schema initialization completed successfully"
               {:dialect (protocols/dialect (:adapter ctx))

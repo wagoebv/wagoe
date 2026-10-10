@@ -1,0 +1,6 @@
+;; tenants, tenant_memberships and tenant_member_invites, from the same Malli
+;; definition boot uses (BOU-551). Only what is missing is created, so a
+;; database boot already set up is left as it is.
+{:ns      wagoe.tenant.shell.tenant-tables
+ :up-fn   "up"
+ :down-fn "down"}

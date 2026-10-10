@@ -10,7 +10,8 @@
   (:require [clojure.string :as str]
             [next.jdbc :as jdbc]
             [next.jdbc.result-set :as rs]
-            [wagoe.platform.database :as db])
+            [wagoe.platform.database :as db]
+            [wagoe.platform.ports.database :as protocols])
   (:import [java.sql Connection]))
 
 (def ^:private index-name "idx_workflow_instances_entity_uuid")
@@ -61,34 +62,26 @@
 (defn ensure-entity-uuid!
   "Add workflow_instances.entity_uuid and its index, unless they are there."
   [connectable]
-  (let [e      (db/engine-of connectable)
-        mysql? (= :mysql e)
-        ;; MySQL has no IF NOT EXISTS on a column or an index; SQLite none on a column.
-        has?   (case e
-                 :mysql  (mysql-has? connectable "columns WHERE column_name = 'entity_uuid'")
-                 :sqlite (sqlite-has-column? connectable)
-                 false)]
+  (let [ctx  (db/context-of connectable)
+        e    (protocols/engine (:adapter ctx))
+        ;; MySQL and SQLite have no IF NOT EXISTS on a column.
+        has? (case e
+               :mysql  (mysql-has? connectable "columns WHERE column_name = 'entity_uuid'")
+               :sqlite (sqlite-has-column? connectable)
+               false)]
     (when-not has?
       (jdbc/execute! connectable [(add-column e)]))
-    (when-not (and mysql? (mysql-has? connectable (str "statistics WHERE index_name = '" index-name "'")))
-      (jdbc/execute! connectable [(str "CREATE INDEX " (when-not mysql? "IF NOT EXISTS ") index-name
-                                       " ON workflow_instances (entity_uuid)")]))))
-
-(defn- connectable
-  "Migratus's open connection, which SQLite needs used rather than a second one."
-  [config]
-  (let [conn (:conn config)]
-    (if (instance? Connection conn) conn (:datasource (:db config)))))
+    (db/create-index-if-not-exists! ctx index-name :workflow_instances [:entity_uuid])))
 
 (defn up
   "Migratus entry point."
   [config]
-  (ensure-entity-uuid! (connectable config)))
+  (ensure-entity-uuid! (db/migration-connectable config)))
 
 (defn down
   "Migratus entry point."
   [config]
-  (let [db (connectable config)]
+  (let [db (db/migration-connectable config)]
     (if (= :mysql (db/engine-of db))
       ;; MySQL drops a column's index with the column.
       (when (mysql-has? db "columns WHERE column_name = 'entity_uuid'")

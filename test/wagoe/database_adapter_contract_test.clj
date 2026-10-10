@@ -192,6 +192,28 @@
           (str sql " on three connections: " (pr-str seen))))
       (finally (run! #(.close ^java.sql.Connection %) conns)))))
 
+(defn- index-twice
+  "An index created twice is created once, on every engine, with or without
+   IF NOT EXISTS (BOU-607)."
+  [ctx]
+  (ddl! ctx "DROP TABLE IF EXISTS idx_twice")
+  (ddl! ctx "CREATE TABLE idx_twice (id INTEGER NOT NULL PRIMARY KEY, code VARCHAR(20))")
+  (attempt #(dotimes [_ 2]
+              (db/create-index-if-not-exists! ctx "uk_idx_twice_code" :idx_twice [:code] {:unique? true}))))
+
+(defn- unique-index-on-duplicates
+  "A unique index the rows break is a :conflict naming the table, not a raw
+   driver error."
+  [ctx]
+  (ddl! ctx "DROP TABLE IF EXISTS idx_dups")
+  (ddl! ctx "CREATE TABLE idx_dups (id INTEGER NOT NULL PRIMARY KEY, code VARCHAR(20))")
+  (db/execute-update! ctx {:insert-into :idx_dups :values [{:id 1 :code "A"} {:id 2 :code "A"}]})
+  (let [data (try (db/create-index-if-not-exists! ctx "uk_idx_dups_code" :idx_dups [:code] {:unique? true})
+                  nil
+                  (catch Exception e (ex-data e)))]
+    (when-not (= {:type :conflict :table "idx_dups"} (select-keys data [:type :table]))
+      (str "a unique index over duplicates gave " (pr-str (select-keys data [:type :table]))))))
+
 (defn- rollback-undoes [ctx]
   (ddl! ctx "DROP TABLE IF EXISTS tx_probe")
   (ddl! ctx "CREATE TABLE tx_probe (id INTEGER NOT NULL PRIMARY KEY)")
@@ -274,6 +296,8 @@
     :strings/any-locale        strings-ignore-case-in-any-locale
     :strings/unicode           strings-ignore-unicode-case
     :connections/session       every-connection-is-set-up
+    :ddl/index-twice           index-twice
+    :ddl/unique-over-duplicates unique-index-on-duplicates
     :transactions/rollback     rollback-undoes
     :conflicts/unique-key      refused-key-is-a-conflict}))
 
