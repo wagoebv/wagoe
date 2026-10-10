@@ -21,7 +21,7 @@
   "Rows revoking a member or deleting a tenant now deletes, but older versions
    kept. Under the key they would block their user's hard delete."
   (str "DELETE FROM tenant_memberships WHERE status = 'revoked'"
-       " OR tenant_id IN (SELECT id FROM tenants WHERE status = 'deleted')"))
+       " OR tenant_id IN (SELECT id FROM tenants WHERE deleted_at IS NOT NULL)"))
 
 (defn- auth-users-key-name
   "The name of `table`'s (as spelled) key from `column` to auth_users, or nil."
@@ -45,23 +45,31 @@
       (probe ds)
       (with-open [c (.getConnection ^DataSource ds)] (probe c)))))
 
+(defn- orphaned
+  "WHERE clause matching `column` values that name no user."
+  [column]
+  (str " WHERE " column " IS NOT NULL AND NOT EXISTS (SELECT 1 FROM auth_users u"
+       " WHERE u.id = t." column ")"))
+
 (defn- orphans
   "Up to five values of `table`.`column` that name no user."
   [ctx table column]
   (mapv (comp val first)
-        (db/execute-query! ctx [(str "SELECT DISTINCT " column " FROM " table " t WHERE " column
-                                     " IS NOT NULL AND NOT EXISTS (SELECT 1 FROM auth_users u"
-                                     " WHERE u.id = t." column ") LIMIT 5")])))
+        (db/execute-query! ctx [(str "SELECT DISTINCT " column " FROM " table " t"
+                                     (orphaned column) " LIMIT 5")])))
 
 (defn ensure-foreign-keys!
   "Give each tenant table's user column a foreign key to auth_users, unless it
-   has one. Refuses, naming them, rows that point at no user."
+   has one. Refuses, naming them, rows that point at no user, except where the
+   key would set the column NULL: those are set NULL, as the key would have."
   [ctx]
   (when (and (db/table-exists? ctx :auth_users)
              (contains? (protocols/capabilities (:adapter ctx)) :alter-foreign-key))
     (doseq [{:keys [table column constraint on-delete]} references
             :when (and (db/table-exists? ctx table) (not (foreign-key-name ctx table column)))]
       (when (= "tenant_memberships" table) (db/execute-update! ctx [departed-memberships]))
+      (when (= "SET NULL" on-delete)
+        (db/execute-update! ctx [(str "UPDATE " table " t SET " column " = NULL" (orphaned column))]))
       (when-let [found (not-empty (orphans ctx table column))]
         (throw (ex-info (str table " has rows whose " column " names no user, so it cannot take a"
                              " foreign key to auth_users. Delete them, then run again. The first: "

@@ -233,8 +233,9 @@ A later migration keys `tenant_memberships.user_id` and
 user still in a tenant cannot be hard-deleted; an accepted invite's key is
 `ON DELETE SET NULL`. So a membership row exists only while its user belongs:
 revoking deletes it, and a tenant marked deleted loses its memberships. The
-migration first deletes such rows older versions kept, and refuses, naming
-them, rows that point at no user. Boot adds the keys only with
+migration first deletes such rows older versions kept, clears an accepted
+invite's user that no longer exists, and refuses, naming them, memberships that
+point at no user. Boot adds the keys only with
 `:migrate-on-start?`; otherwise run `bb migrate up`.
 
 ## Tenant migrations

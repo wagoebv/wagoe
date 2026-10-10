@@ -43,6 +43,8 @@ for what is public API, what is internal, and how deprecations are announced.
 - **A database reset drops in one transaction on SQLite too** (BOU-450), as on PostgreSQL: a failed drop leaves everything.
 - **`search/create-search-store` takes the adapter, not a db-type** (BOU-450): pass `(:adapter db-ctx)`.
   SQLite indexing now upserts with `ON CONFLICT`.
+- **A tenant update refuses `status: deleted`, and a revoked membership is deleted, not kept** (BOU-611). Delete a
+  tenant through `DELETE /tenants/:id`; a revoked membership now answers 404.
 - **Tenant's `:not-supported` and `:unsupported-database` errors carry `:engine`** (BOU-450), not `:dialect` or
   `:database-type`. Read `:engine` (`:h2`, not `:ansi`).
 

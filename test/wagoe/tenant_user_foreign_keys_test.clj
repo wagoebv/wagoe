@@ -41,9 +41,10 @@
 (defn- tenant! [ctx status]
   (let [id (random-uuid)]
     (jdbc/execute! (:datasource ctx)
-                   [(str "INSERT INTO tenants (id, slug, name, schema_name, status, created_at)"
-                         " VALUES (?, ?, 'Acme', ?, ?, CURRENT_TIMESTAMP)")
-                    id (str "t-" id) (str "t_" (System/nanoTime)) status])
+                   [(str "INSERT INTO tenants (id, slug, name, schema_name, status, created_at, deleted_at)"
+                         " VALUES (?, ?, 'Acme', ?, ?, CURRENT_TIMESTAMP, ?)")
+                    id (str "t-" id) (str "t_" (System/nanoTime)) status
+                    (when (= "deleted" status) (java.sql.Timestamp. (System/currentTimeMillis)))])
     id))
 
 (defn- memberships-of [ctx user-id]
@@ -93,12 +94,29 @@
             repo      (tenant-persistence/create-tenant-repository ctx nil nil)
             svc       (user-svc ctx)]
         (membership! ctx (:id user) tenant-id "active")
+        (tenant-ports/update-tenant repo (assoc (tenant-ports/find-tenant-by-id repo tenant-id) :status :suspended))
+        (is (= ["active"] (memberships-of ctx (:id user))) "any other update keeps the members")
         (tenant-ports/update-tenant repo (assoc (tenant-ports/find-tenant-by-id repo tenant-id)
-                                                     :status :deleted :deleted-at (java.time.Instant/now)))
+                                                :status :deleted :deleted-at (java.time.Instant/now)))
         (is (nil? (tenant-ports/find-tenant-by-id repo tenant-id)) "a deleted tenant is not found")
         (is (empty? (memberships-of ctx (:id user))))
         (ports/permanently-delete-user svc (:id user))
         (is (nil? (ports/find-user-by-id (user-persistence/create-user-repository ctx) (:id user)))))
+      (finally (factory/close-db-context! ctx)))))
+
+(deftest ^:integration an-invite-accepted-by-a-deleted-user-is-cleared-not-refused
+  (let [ctx (h2-ctx "invite")]
+    (try
+      (user-persistence/initialize-user-schema! ctx)
+      (tenant-persistence/initialize-tenant-schema! ctx)
+      (jdbc/execute! (:datasource ctx)
+                     [(str "INSERT INTO tenant_member_invites (id, tenant_id, email, role, status, token_hash,"
+                           " expires_at, accepted_by_user_id, created_at) VALUES (?, ?, 'a@example.com', 'member',"
+                           " 'accepted', ?, CURRENT_TIMESTAMP, ?, CURRENT_TIMESTAMP)")
+                      (random-uuid) (random-uuid) (apply str (repeat 32 "a")) (random-uuid)])
+      (fks/ensure-foreign-keys! ctx)
+      (is (= [nil] (mapv :tenant_member_invites/accepted_by_user_id
+                         (jdbc/execute! (:datasource ctx) ["SELECT accepted_by_user_id FROM tenant_member_invites"]))))
       (finally (factory/close-db-context! ctx)))))
 
 (deftest ^:integration departed-memberships-are-cleared-before-the-key-is-added

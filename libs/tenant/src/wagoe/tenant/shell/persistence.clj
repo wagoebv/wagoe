@@ -129,8 +129,8 @@
      ctx))
 
   (update-tenant [_this tenant-entity]
-    ;; A tenant marked deleted takes its memberships with it (BOU-611; see
-    ;; shell.user-foreign-keys).
+    ;; A deleted tenant takes its memberships with it (BOU-611; see
+    ;; shell.user-foreign-keys). Keyed on deleted_at, which only delete sets.
     (persistence-interceptors/execute-persistence-operation
      :update-tenant
      {:tenant-id (:id tenant-entity)}
@@ -140,7 +140,7 @@
            (db/execute-update! tx {:update :tenants
                                    :set    (select-keys db-record [:name :status :settings :updated_at :deleted_at])
                                    :where  [:= :id (:id db-record)]})
-           (when (= :deleted (:status tenant-entity))
+           (when (:deleted-at tenant-entity)
              (db/execute-update! tx {:delete-from :public.tenant_memberships
                                      :where       [:= :tenant_id (:id db-record)]})))
          tenant-entity))
