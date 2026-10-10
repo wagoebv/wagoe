@@ -88,12 +88,13 @@ Higher-weight fields boost ranking:
 
 ### Dual Query Strategy
 
-| Database | Strategy |
-|----------|----------|
-| PostgreSQL | `to_tsvector` / `plainto_tsquery` / `ts_rank` / `ts_headline` |
-| H2, SQLite | `LOWER(content_all) LIKE LOWER('%q%')` |
+| Adapter capability | Strategy |
+|--------------------|----------|
+| `:full-text` (PostgreSQL) | `to_tsvector` / `plainto_tsquery` / `ts_rank` / `ts_headline` |
+| no `:full-text` (H2, SQLite, MySQL) | `LOWER(content_all) LIKE LOWER('%q%')` |
 
-The adapter is selected automatically from the shared `:wagoe/db-context` dialect.
+`create-search-store` takes the adapter: `:full-text` picks the query and
+`:on-conflict` the upsert (ADR-039).
 
 ### Empty Query Handling
 
