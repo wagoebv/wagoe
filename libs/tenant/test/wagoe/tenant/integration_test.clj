@@ -23,7 +23,6 @@
    PostgreSQL-specific tests (schema provisioning, schema switching) are skipped
    on H2 and validated separately via provisioning_test.clj."
   (:require [wagoe.cache.ports :as cache-ports]
-            [wagoe.platform.ports.database :as db-ports]
             [wagoe.cache.shell.adapters.in-memory :as mem-cache]
             [wagoe.cache.shell.tenant-cache :as tenant-cache]
             [wagoe.jobs.ports :as job-ports]
@@ -66,11 +65,6 @@
 ;; =============================================================================
 ;; Mock Helpers (Must be defined before fixtures)
 ;; =============================================================================
-
-(defn- schemas?
-  "Whether the test database gives each tenant its own schema (ADR-039)."
-  [ctx]
-  (contains? (db-ports/capabilities (:adapter ctx)) :schemas))
 
 (defn- create-mock-job-queue
   "Create in-memory job queue for testing."
@@ -200,7 +194,7 @@
       ;; 2. Provision tenant schema (H2 doesn't support PostgreSQL schemas)
       ;; Note: Provisioning only works with PostgreSQL, H2 test will skip
       ;; Schema existence verification is tested in provisioning-test.clj
-      (when (schemas? *test-ctx*)
+      (when (#'provisioning/schemas? *test-ctx*)
         (provisioning/provision-tenant! *test-ctx* tenant)
         (log/info "Provisioned tenant schema: tenant_acme_corp"))
 
@@ -341,7 +335,7 @@
 
 (deftest ^:integration schema-switching-test
   (testing "PostgreSQL schema switching with with-tenant-schema"
-    (if (schemas? *test-ctx*)
+    (if (#'provisioning/schemas? *test-ctx*)
       (let [tenant (create-test-tenant *tenant-service* "test-schema" "Test Schema Co")
             schema-name (:schema-name tenant)]
 
@@ -354,7 +348,7 @@
         (log/info "Schema switching test passed (provision-tenant! validates internally)"))
 
       ;; H2/non-PostgreSQL databases: schema-per-tenant not supported
-      (is (not (schemas? *test-ctx*))
+      (is (not (#'provisioning/schemas? *test-ctx*))
           "Schema switching test skipped (non-PostgreSQL database)"))))
 
 ;; =============================================================================

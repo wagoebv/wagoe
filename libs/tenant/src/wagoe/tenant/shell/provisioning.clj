@@ -156,16 +156,16 @@
    H2 with tenant rows but no per-tenant schemas; anywhere else a tenant could
    be created but never provisioned or selected (BOU-576)."
   [ctx allow-h2?]
-  (let [engine (engine ctx)]
-    (when-not (or (schemas? ctx) (and allow-h2? (= :h2 engine)))
+  (let [e (engine ctx)]
+    (when-not (or (schemas? ctx) (and allow-h2? (= :h2 e)))
       (throw (ex-info (str "Tenancy needs PostgreSQL, which gives each tenant its own schema; this"
-                           " database's adapter (" (get engine-names engine (name engine))
+                           " database's adapter (" (get engine-names e (name e))
                            ") does not claim :schemas. Use :wagoe/postgresql, or remove"
                            " :wagoe/tenant from the config."
-                           (when (= :h2 engine)
+                           (when (= :h2 e)
                              " A test profile on H2 sets :allow-h2? true under :wagoe/tenant."))
                       {:type   :not-supported
-                       :engine engine})))))
+                       :engine e})))))
 
 (defn- create-schema!
   "Create PostgreSQL schema if it doesn't exist.
@@ -306,12 +306,12 @@
     (assert-safe-schema-name! schema-name)
 
     (when-not (schemas? ctx)
-      (let [engine (engine ctx)]
+      (let [e (engine ctx)]
         (log/warn "Tenant provisioning only supported for PostgreSQL, skipping"
-                  {:engine engine :schema-name schema-name})
+                  {:engine e :schema-name schema-name})
         (throw (ex-info "Tenant provisioning only supported for PostgreSQL"
                         {:type :not-supported
-                         :engine engine
+                         :engine e
                          :message "Tenant provisioning requires PostgreSQL database"}))))
 
     ;; Check if already provisioned
@@ -382,9 +382,7 @@
       (throw (ex-info "Tenant entity missing :schema-name"
                       {:type :validation-error
                        :field :schema-name})))
-    (if (schemas? ctx)
-      (schema-exists? ctx schema-name)
-      false)))
+    (and (schemas? ctx) (schema-exists? ctx schema-name))))
 
 (defn list-tenant-schemas
   "List all tenant schemas in the database.

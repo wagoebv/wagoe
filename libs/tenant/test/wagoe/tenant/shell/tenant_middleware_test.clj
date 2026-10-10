@@ -1,6 +1,7 @@
 (ns wagoe.tenant.shell.tenant-middleware-test
   "Tests for multi-tenant HTTP middleware."
-  (:require [cheshire.core :as json]
+  (:require [wagoe.platform.shell.adapters.database.postgresql.core :as postgresql]
+            [cheshire.core :as json]
             [clojure.test :refer [deftest testing is]]
             [wagoe.platform.database :as db]
             [wagoe.tenant.shell.tenant-middleware :as tenant-mw]
@@ -87,22 +88,7 @@
                           (valAt
                             ([_k] nil)
                             ([_k _default] nil)))
-        mock-adapter (reify
-                       wagoe.platform.ports.database/DBAdapter
-                       (dialect [_] :postgresql)
-                       (jdbc-driver [_] "org.postgresql.Driver")
-                       (jdbc-url [_ _db-config] "jdbc:postgresql://localhost:5432/test")
-                       (pool-defaults [_] {:minimum-idle 1 :maximum-pool-size 5})
-                       (init-connection! [_ _datasource _db-config] nil)
-                       (build-where [_ _filters] nil)
-                       (boolean->db [_ bool-val] bool-val)
-                       (db->boolean [_ db-val] db-val)
-                       (table-exists? [_ _datasource _table-name] false)
-                       (get-table-info [_ _datasource _table-name] [])
-                       (engine [_] :postgresql)
-                       (capabilities [_] #{:schemas})
-                       (column-type [_ _] nil)
-                       (like [_ _ _] nil))]
+        mock-adapter (postgresql/new-adapter)]
     {:datasource mock-datasource
      :adapter mock-adapter
      :schema-calls-atom schema-calls  ; Store atom in context for test access
