@@ -3,11 +3,13 @@
    whatever filter the caller sends (BOU-568)."
   (:require [clojure.test :refer [deftest is testing use-fixtures]]
             [next.jdbc :as jdbc]
+            [wagoe.platform.shell.adapters.database.h2.core :as h2]
             [wagoe.search.ports :as ports]
             [wagoe.search.shell.http :as sut]
             [wagoe.search.shell.persistence :as persistence]
             [wagoe.search.shell.registry :as registry]
-            [wagoe.search.shell.service :as service])
+            [wagoe.search.shell.service :as service]
+            [wagoe.search.test.support :refer [create-search-documents-table!]])
   (:import [java.util UUID]))
 
 (def ^:private tenant-a #uuid "a0000000-0000-0000-0000-00000000000a")
@@ -21,20 +23,13 @@
 (defn- with-engine [f]
   (let [ds (jdbc/get-datasource
             {:jdbcUrl (str "jdbc:h2:mem:search-scope-" (UUID/randomUUID) ";DB_CLOSE_DELAY=-1")})]
-    (jdbc/execute! ds ["CREATE TABLE search_documents (
-                         id TEXT NOT NULL PRIMARY KEY, index_id TEXT NOT NULL,
-                         entity_type TEXT NOT NULL, entity_id TEXT NOT NULL,
-                         language TEXT NOT NULL DEFAULT 'english',
-                         weight_a TEXT NOT NULL DEFAULT '', weight_b TEXT NOT NULL DEFAULT '',
-                         weight_c TEXT NOT NULL DEFAULT '', weight_d TEXT NOT NULL DEFAULT '',
-                         content_all TEXT NOT NULL DEFAULT '', metadata TEXT, filters TEXT,
-                         updated_at TEXT NOT NULL, UNIQUE (index_id, entity_id))"])
+    (create-search-documents-table! ds)
     (registry/register-search! {:id :scoped-items :entity-type :item
                                 :fields [{:name :title :weight :a}]
                                 :filters [:tenant-id]})
     (registry/register-search! {:id :open-items :entity-type :item
                                 :fields [{:name :title :weight :a}]})
-    (let [engine (service/create-search-service (persistence/create-search-store ds :h2))]
+    (let [engine (service/create-search-service (persistence/create-search-store ds (h2/new-adapter)))]
       (ports/index-document! engine :scoped-items doc-a {:title "widget alpha"}
                              {:filter-values {:tenant-id tenant-a}})
       (ports/index-document! engine :scoped-items doc-b {:title "widget beta"}

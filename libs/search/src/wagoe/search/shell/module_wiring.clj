@@ -14,7 +14,6 @@
      Returns {:api [...] :web [...] :static []} for composition
      by the HTTP handler."
   (:require [integrant.core :as ig]
-            [wagoe.platform.ports.database :as db-protocols]
             [wagoe.search.shell.persistence :as persistence]
             [wagoe.search.shell.service :as service]
             [wagoe.search.shell.http :as search-http]
@@ -23,13 +22,9 @@
 (defmethod ig/init-key :wagoe/search
   [_ {:keys [db-ctx]}]
   (log/info "Initializing search component")
-  (let [datasource (:datasource db-ctx)
-        adapter    (:adapter db-ctx)
-        ;; PostgreSQL adapter's dialect returns nil — treat nil as :postgresql
-        db-type    (or (some-> adapter db-protocols/dialect) :postgresql)
-        store      (persistence/create-search-store datasource db-type)
-        engine     (service/create-search-service store)]
-    (log/info "Search component initialized" {:db-type db-type})
+  (let [store  (persistence/create-search-store (:datasource db-ctx) (:adapter db-ctx))
+        engine (service/create-search-service store)]
+    (log/info "Search component initialized" (select-keys store [:full-text? :on-conflict?]))
     {:store  store
      :engine engine}))
 
