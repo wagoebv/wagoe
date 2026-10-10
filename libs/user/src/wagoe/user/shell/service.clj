@@ -99,14 +99,20 @@
            :auth-service auth-service)))
 
 (defn- tenant-reference-violation?
+  "Whether `e`, or anything that caused it, is a refused foreign key. Read from
+   the platform's :constraint (BOU-590) or the SQLState, on every database: it
+   checked PostgreSQL's exception class, which the platform wraps (ADR-039)."
   [e]
-  (let [message (.getMessage e)]
-    (boolean
-     (or (and (= "org.postgresql.util.PSQLException" (.getName (class e)))
-              (= "23503" (.getSQLState ^java.sql.SQLException e)))
-         (and message
-              (or (str/includes? message "tenant_memberships")
-                  (str/includes? message "tenant_member_invites")))))))
+  (boolean
+   (some (fn [x]
+           (let [message (ex-message x)]
+             (or (= :foreign-key (:constraint (ex-data x)))
+                 (and (instance? java.sql.SQLException x)
+                      (= "23503" (.getSQLState ^java.sql.SQLException x)))
+                 (and message
+                      (or (str/includes? message "tenant_memberships")
+                          (str/includes? message "tenant_member_invites"))))))
+         (take-while some? (iterate ex-cause e)))))
 
 ;; =============================================================================
 ;; Database-Agnostic User Service (I/O Shell Layer)

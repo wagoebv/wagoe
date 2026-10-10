@@ -1,6 +1,8 @@
 (ns wagoe.user.shell.persistence-test
   (:require [wagoe.platform.database :as db-core]
             [wagoe.platform.ports.database :as protocols]
+            [wagoe.platform.shell.adapters.database.mysql.core :as mysql]
+            [wagoe.platform.shell.adapters.database.sqlite.core :as sqlite]
             [wagoe.user.shell.persistence :as sut]
             [cheshire.core :as json]
             [clojure.test :refer [deftest is testing]])
@@ -125,8 +127,7 @@
 (deftest ^:contract schema-upgrade-helpers-add-only-missing-columns
   (testing "auth_users audit columns use sqlite text columns when missing"
     (let [ddl-statements (atom [])
-          ctx {:adapter (adapter-stub {:dialect :sqlite
-                                       :jdbc-driver "org.sqlite.JDBC"})}]
+          ctx {:adapter (sqlite/new-adapter)}]
       (with-redefs [db-core/table-exists? (constantly true)
                     db-core/get-table-info
                     (fn [_ _] [{:name "created_at"}])
@@ -139,8 +140,7 @@
 
   (testing "users preference columns use mysql boolean representation when missing"
     (let [ddl-statements (atom [])
-          ctx {:adapter (adapter-stub {:dialect :mysql
-                                       :jdbc-driver "com.mysql.cj.jdbc.Driver"})}]
+          ctx {:adapter (mysql/new-adapter)}]
       (with-redefs [db-core/table-exists? (constantly true)
                     db-core/get-table-info
                     (fn [_ _] [{:name "notifications_email"} {:name "theme"}])
