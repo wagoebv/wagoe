@@ -111,7 +111,17 @@
    [:help-text     {:optional true} :string]
    [:placeholder   {:optional true} :string]
    [:width         {:optional true} [:int {:min 1}]]
-   [:rows          {:optional true} :any]])
+   [:rows          {:optional true} :any]
+   ;; The overview (ADR-040)
+   [:display       {:optional true} [:enum :boolean :count :date :datetime :email :enum :identifier
+                                     :money :number :percent :relation :text :title :url]]
+   [:tones         {:optional true} [:map-of :keyword [:enum :danger :info :neutral :success :warning]]]
+   [:currency      {:optional true} :string]
+   [:urgency       {:optional true} [:or :boolean
+                                     [:map {:closed true}
+                                      [:warn-days {:optional true} [:int {:min 0}]]
+                                      [:until {:optional true} [:map-of :keyword [:sequential :any]]]]]]
+   [:total         {:optional true} :boolean]])
 
 (def AdminHasMany
   [:map {:closed true}
@@ -154,7 +164,8 @@
    [:ui              {:optional true} [:map {:closed true}
                                        [:field-grouping {:optional true}
                                         [:map {:closed true}
-                                         [:other-label {:optional true} :string]]]]]
+                                         [:other-label {:optional true} :string]]]
+                                       [:currency {:optional true} :string]]]
    [:has-many        {:optional true} [:vector AdminHasMany]]
    [:sidebar-hidden  {:optional true} :boolean]
    [:parent-context  {:optional true} [:map {:closed true}
@@ -170,7 +181,16 @@
                                           [:secondary-table {:optional true} :any]
                                           [:secondary-fields {:optional true} :any]]]
    ;; The workflow is the entity's, not a field's: there is no :widget for it.
-   [:workflow        {:optional true} [:map {:closed true} [:entity-type :keyword]]]])
+   [:workflow        {:optional true} [:map {:closed true} [:entity-type :keyword]]]
+   ;; The overview (ADR-040)
+   [:title-field     {:optional true} :keyword]
+   [:facet           {:optional true} :keyword]
+   [:summary         {:optional true} [:sequential {:max 4}
+                                       [:map {:closed true}
+                                        [:label {:optional true} :any]
+                                        [:agg {:optional true} [:enum :count :sum :avg :min :max]]
+                                        [:field {:optional true} :keyword]
+                                        [:where {:optional true} [:map-of :keyword :any]]]]]])
 
 (def AdminEntityFile
   "One or more entity configs keyed by entity name."

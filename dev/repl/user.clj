@@ -21,6 +21,8 @@
             [wagoe.workflow.shell.module-wiring]
             [wagoe.search.shell.module-wiring]
             [wagoe.tenant.shell.module-wiring]
+            [wagoe.admin.core.display :as display]
+            [wagoe.admin.ports :as admin-ports]
             [wagoe.devtools.core.guidance :as guidance]
             [wagoe.devtools.core.project-repl :as project-repl]
             [wagoe.devtools.core.introspection :as introspection]
@@ -334,6 +336,16 @@
   [table]
   (when-let [ctx (db-context)]
     (devtools-repl/count-rows ctx table)))
+
+(defn explain-entity
+  "What the admin overview derives for an entity: each field's display role
+   and why, its title field, facet and list columns (ADR-040). Reads the
+   running system's schema provider, so Malli enums count.
+   (explain-entity :users)"
+  [entity]
+  (when-let [provider (get (system) :wagoe/admin-schema-provider)]
+    (println (display/format-explain
+              entity (display/explain (admin-ports/get-entity-config provider entity))))))
 
 (defn schema
   "Pretty-print a Malli schema.
