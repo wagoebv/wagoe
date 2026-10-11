@@ -4,8 +4,7 @@
 
    Pure Hiccup generators. Depends on `base` for URL helpers, field-value
    rendering, and column sizing, and on `filters` for the filter builder."
-  (:require [wagoe.admin.core.display :as display]
-            [wagoe.admin.core.schema-introspection :as introspection]
+  (:require [wagoe.admin.core.schema-introspection :as introspection]
             [wagoe.admin.core.ui.base :as base]
             [wagoe.admin.core.ui.cells :as cells]
             [wagoe.admin.core.ui.drawer :as drawer]
@@ -328,16 +327,16 @@
                    (if sortable?
                      (update-in
                       (table-ui/sortable-th {:label label
-                                            :field field
-                                            :current-sort sort
-                                            :current-dir dir
-                                            :base-url base-url
-                                            :push-url-base (str "/web/admin/" (name entity-name))
-                                            :page page
-                                            :page-size page-size
-                                            :hx-target hx-target
-                                            :hx-push-url? true
-                                            :extra-params filters})
+                                             :field field
+                                             :current-sort sort
+                                             :current-dir dir
+                                             :base-url base-url
+                                             :push-url-base (str "/web/admin/" (name entity-name))
+                                             :page page
+                                             :page-size page-size
+                                             :hx-target hx-target
+                                             :hx-push-url? true
+                                             :extra-params filters})
                       ;; The role aligns the header with its cells; the field
                       ;; class lets the column menu hide it
                       [1 :class] str " " role-class " field-" (name field))
@@ -387,8 +386,8 @@
   []
   [:p {:class "kbd-hints" :aria-hidden "true"}
    (for [[ks label] [[["/"] :admin/kbd-search] [["j" "k"] :admin/kbd-move] [["PgUp" "PgDn"] :admin/kbd-page]
-                       [["x"] :admin/kbd-select] [["f"] :admin/kbd-filter] [["↵"] :admin/kbd-open] [["e"] :admin/kbd-edit]
-                       [["q"] :admin/kbd-close]]]
+                     [["x"] :admin/kbd-select] [["f"] :admin/kbd-filter] [["↵"] :admin/kbd-open] [["e"] :admin/kbd-edit]
+                     [["q"] :admin/kbd-close]]]
      [:span (for [k ks] [:kbd k]) " " [:t label]])])
 
 (defn- bulk-bar

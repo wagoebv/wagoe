@@ -727,8 +727,8 @@
       (is (str/includes? (str page) "search-input"))
       (is (str/includes? (str page) "/web/admin/users/new"))
 
-      ;; Should show record count
-      (is (str/includes? (str page) "1 Users"))
+      ;; Should show record count; the topbar names the page, so no label
+      (is (str/includes? (str page) "[:span.record-count-badge \"1\"]"))
 
       ;; Should have the table
       (is (str/includes? (str page) "user@example.com")))))
@@ -763,12 +763,22 @@
                                   :create-redirect-url "/web/users/new")
           table-query {:page 3 :page-size 25}
           table (ui/entity-table :users [] delegated-config table-query 0
-                                 sample-permissions {:role "admin"})
+                                 sample-permissions {})
           table-str (str table)]
       (is (str/includes? table-str "/web/users/new?return-to=")
           "empty-state create button should include delegate URL with return-to")
       (is (str/includes? table-str "page%3D3")
-          "encoded caller URL must preserve pagination from table-query"))))
+          "encoded caller URL must preserve pagination from table-query")))
+
+  (testing "Filtered to nothing: offer clearing the filters, not creating a first record"
+    (let [delegated-config (assoc sample-entity-config
+                                  :create-redirect-url "/web/users/new")
+          table (ui/entity-table :users [] delegated-config {:page 3 :page-size 25} 0
+                                 sample-permissions {:role "admin"})
+          table-str (str table)]
+      (is (str/includes? table-str "empty-state-filtered"))
+      (is (str/includes? table-str ":admin/button-clear-filters-and-search"))
+      (is (not (str/includes? table-str "/web/users/new"))))))
 
 ;; =============================================================================
 ;; Column Width Tests

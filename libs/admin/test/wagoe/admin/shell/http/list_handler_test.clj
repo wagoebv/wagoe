@@ -31,13 +31,13 @@
   "The body `entity-table-fragment-handler` answers a request aimed at `target`."
   [target]
   (let [schema  #_{:clj-kondo/ignore [:missing-protocol-method]}
-                (reify ports/ISchemaProvider
-                  (validate-entity-exists [_ _] true)
-                  (get-entity-config [_ _] entity-config))
+        (reify ports/ISchemaProvider
+          (validate-entity-exists [_ _] true)
+          (get-entity-config [_ _] entity-config))
         service #_{:clj-kondo/ignore [:missing-protocol-method]}
-                (reify ports/IAdminService
-                  (list-entities [_ _ _]
-                    {:records [record] :total-count 100 :page-size 20 :page-number 2}))
+        (reify ports/IAdminService
+          (list-entities [_ _ _]
+            {:records [record] :total-count 100 :page-size 20 :page-number 2}))
         handler (list/entity-table-fragment-handler service schema {})]
     (:body (handler {:request-method :get
                      :uri            "/web/admin/users/table"
@@ -52,9 +52,12 @@
   ;; Search, refresh, sort, paging and filter controls fetched a fragment
   ;; rooted at their target's own id and swapped it innerHTML, nesting a copy
   ;; on every request (BOU-386).
+  ;; The filter form and clear-all live in the filter drawer, so the page is
+  ;; rendered with it open
   (let [page [:div
               (ui/entity-search-form :users entity-config "" filters)
-              (ui/entity-list-page :users [record] entity-config tq 100 permissions {:filters filters})]]
+              (ui/entity-list-page :users [record] entity-config tq 100 permissions {:filters filters})
+              (ui/filter-drawer :users entity-config filters)]]
     (testing "#entity-table-container"
       (let [results (htmx-swap/ids-after-swaps page "entity-table-container"
                                                (fragment "entity-table-container"))]
