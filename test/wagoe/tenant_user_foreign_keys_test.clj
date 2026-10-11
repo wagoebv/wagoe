@@ -1,16 +1,19 @@
 (ns wagoe.tenant-user-foreign-keys-test
   "A user still in a tenant cannot be hard-deleted once `migrate up` has run
-   (BOU-611): the tenant tables reference auth_users, and the refused delete
-   answers :hard-deletion-not-allowed."
+   (BOU-611) or the app has booted (BOU-612): the tenant tables reference
+   auth_users, and the refused delete answers :hard-deletion-not-allowed."
   (:require [clojure.test :refer [deftest is testing]]
+            [integrant.core :as ig]
             [next.jdbc :as jdbc]
             [support.embedded-pg :as epg]
             [wagoe.platform.shell.adapters.database.factory :as factory]
             [wagoe.platform.shell.database.migrations :as migrations]
             [wagoe.tenant.ports :as tenant-ports]
+            [wagoe.tenant.shell.module-wiring]
             [wagoe.tenant.shell.persistence :as tenant-persistence]
             [wagoe.tenant.shell.user-foreign-keys :as fks]
             [wagoe.user.ports :as ports]
+            [wagoe.user.shell.module-wiring]
             [wagoe.user.shell.persistence :as user-persistence]
             [wagoe.user.shell.service :as user-service]))
 
@@ -130,4 +133,41 @@
         (membership! ctx (:id user) (tenant! ctx "active") "suspended")
         (fks/ensure-foreign-keys! ctx)
         (is (= ["suspended"] (memberships-of ctx (:id user)))))
+      (finally (factory/close-db-context! ctx)))))
+
+(defn- boot-tenant-schema! [ctx]
+  (ig/init-key :wagoe/tenant-db-schema {:ctx ctx :allow-h2? true}))
+
+(deftest ^:integration boot-adds-the-keys-without-migrate-up
+  (let [ctx (h2-ctx "boot")]
+    (try
+      (testing "a database that only boots (BOU-612)"
+        (ig/init-key :wagoe/user-db-schema {:ctx ctx})
+        (boot-tenant-schema! ctx)
+        (let [user (new-user! ctx)]
+          (membership! ctx (:id user))
+          (is (= :hard-deletion-not-allowed
+                 (:type (ex-data (try (ports/permanently-delete-user (user-svc ctx) (:id user)) nil
+                                      (catch clojure.lang.ExceptionInfo e e))))))))
+      (finally (factory/close-db-context! ctx)))))
+
+(deftest ^:integration a-later-boot-adds-the-keys-once-auth-users-exists
+  (let [ctx (h2-ctx "late")]
+    (try
+      (boot-tenant-schema! ctx)
+      (is (some? (membership! ctx (random-uuid))) "no auth_users yet, so no key")
+      (jdbc/execute! (:datasource ctx) ["DELETE FROM tenant_memberships"])
+      (ig/init-key :wagoe/user-db-schema {:ctx ctx})
+      (boot-tenant-schema! ctx)
+      (is (thrown? Exception (membership! ctx (random-uuid))) "the next boot keyed it")
+      (finally (factory/close-db-context! ctx)))))
+
+(deftest ^:integration orphans-do-not-stop-a-boot
+  (let [ctx (h2-ctx "boot_orphan")]
+    (try
+      (ig/init-key :wagoe/user-db-schema {:ctx ctx})
+      (tenant-persistence/initialize-tenant-schema! ctx)
+      (membership! ctx (random-uuid))
+      (is (= {:status :initialized} (boot-tenant-schema! ctx)))
+      (is (some? (membership! ctx (random-uuid))) "left unkeyed until the orphan is dealt with")
       (finally (factory/close-db-context! ctx)))))

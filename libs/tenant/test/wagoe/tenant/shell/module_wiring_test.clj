@@ -31,6 +31,7 @@
                   wagoe.tenant.shell.persistence/initialize-tenant-schema! (fn [arg]
                                                                              (is (= ctx arg))
                                                                              :initialized)
+                  wagoe.tenant.shell.user-foreign-keys/ensure-foreign-keys! (fn [arg] (is (= ctx arg)))
                   wagoe.tenant.shell.persistence/create-tenant-repository (fn [arg log err]
                                                                             (is (= ctx arg))
                                                                             (is (= logger log))

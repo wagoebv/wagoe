@@ -52,6 +52,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **Hard-deleting a user still in a tenant succeeded and left orphaned memberships** (BOU-611). Revoking a member or deleting
   a tenant now deletes the membership rows. Run `bb migrate up`: it clears old ones, names orphans, then adds the keys.
+- **Apps that only boot, or migrated with the user module off, never got BOU-611's keys** (BOU-612). Boot adds them now;
+  orphaned memberships are logged and leave the key off until deleted.
 - **Tables built from Malli failed on MySQL, and `create-index-if-not-exists!` failed when run twice there** (BOU-607):
   `CREATE INDEX IF NOT EXISTS`. Where the adapter lacks it, an index already there counts as created.
 - **A hard delete refused by a foreign key answered 409 instead of `:hard-deletion-not-allowed`** (BOU-450), on every
