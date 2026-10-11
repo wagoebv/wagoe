@@ -56,3 +56,22 @@
                            (tree-seq #(or (vector? %) (seq? %)) seq [th pager]))]
     (is (< 3 (count requesting)))
     (is (every? #(= "innerHTML" (:hx-swap (second %))) requesting))))
+
+(deftest ^:unit filter-specs-survive-sort-and-paging-test
+  (let [filters {:status {:op :eq :value "paid"}
+                 :kind   {:op :in :values ["a" "b c"]}
+                 :role   "admin"}
+        th      (table-ui/sortable-th {:label "Email" :field :email :base-url "/t"
+                                       :page 1 :page-size 20 :hx-target "#t"
+                                       :extra-params filters})
+        url     (get-in th [1 :hx-get])]
+    (testing "a spec map goes back in the filter bar's format, URL-encoded"
+      (is (str/includes? url "filters%5Bstatus%5D%5Bop%5D=eq"))
+      (is (str/includes? url "filters%5Bstatus%5D%5Bvalue%5D=paid"))
+      (is (str/includes? url "filters%5Bkind%5D%5Bvalues%5D%5B%5D=a&filters%5Bkind%5D%5Bvalues%5D%5B%5D=b+c"))
+      (is (str/includes? url "role=admin"))
+      (is (not (str/includes? url "%7B")) "no printed map"))
+    (testing "search is kept"
+      (is (str/includes? (table-ui/encode-query-params
+                          (table-ui/table-query->params {:page 2 :page-size 20 :search "a&b"}))
+                         "search=a%26b")))))

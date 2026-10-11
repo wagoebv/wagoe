@@ -616,8 +616,8 @@
 
 (defn foreign-key-options
   "The choices for each editable foreign key of `entity-name`: the parent's
-   rows as [id label], where the label is the parent's first search or list
-   field. Only when every parent fits in the maximum page size: a select
+   rows as [id label], where the label is the parent's `:title-field` — what
+   its relation cells show. Only when every parent fits in the maximum page size: a select
    capped there would silently offer a subset, so past it the key stays a
    text input. An optional key can be left empty."
   [admin-service config entity-configs entity-name values]
@@ -628,8 +628,8 @@
                 :when (some #{field} (:editable-fields entity-config))
                 :let  [parent-cfg (get entity-configs parent)
                        pk         (:primary-key parent-cfg :id)
-                       label      (or (first (:search-fields parent-cfg))
-                                      (first (:list-fields parent-cfg))
+                       label      (or (:title-field parent-cfg)
+                                      (first (:search-fields parent-cfg))
                                       pk)
                        page       (try (ports/list-entities admin-service parent
                                                             {:limit page-size :sort label :sort-dir :asc})

@@ -427,3 +427,10 @@ ADR-039-database-adapter-contract.adoc
 The port answers which engine, which capabilities and which column type; code
 outside the adapter stops guessing. One suite runs every case on all four
 engines, and what an engine cannot pass yet is listed with its ticket.
+
+==== ADR-040: The Admin Overview Contract [Proposed]
+ADR-040-admin-overview-contract.adoc
+
+Every field gets a display role, derived from its type, name and relations and
+overridable. The shell enriches a list page in a bounded number of queries
+(titles, counts, facets, summaries); the core renders and the CSS styles by role.
