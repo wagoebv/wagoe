@@ -1,0 +1,6 @@
+;; Foreign keys from the tenant tables to auth_users, so a user still in a
+;; tenant cannot be hard-deleted (BOU-611). Refuses, naming them, rows that
+;; point at no user.
+{:ns      wagoe.tenant.shell.user-foreign-keys
+ :up-fn   "up"
+ :down-fn "down"}

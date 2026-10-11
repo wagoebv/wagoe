@@ -279,6 +279,14 @@
    (fn [ctx]
      (attempt #(db/execute-query! ctx {:raw "SELECT ts_rank(to_tsvector('simple', 'a b'), to_tsquery('simple', 'a')) AS r"})))
 
+   :alter-foreign-key
+   (fn [ctx]
+     (ddl! ctx "DROP TABLE IF EXISTS fk_child")
+     (ddl! ctx "DROP TABLE IF EXISTS fk_parent")
+     (ddl! ctx "CREATE TABLE fk_parent (id INTEGER NOT NULL PRIMARY KEY)")
+     (ddl! ctx "CREATE TABLE fk_child (id INTEGER NOT NULL PRIMARY KEY, parent_id INTEGER)")
+     (attempt #(ddl! ctx "ALTER TABLE fk_child ADD CONSTRAINT fk_child_parent FOREIGN KEY (parent_id) REFERENCES fk_parent (id)")))
+
    :schemas
    (fn [ctx]
      (let [schema (str "contract_" (System/nanoTime))]

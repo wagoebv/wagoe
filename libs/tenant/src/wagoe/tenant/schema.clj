@@ -76,7 +76,7 @@
   [:map {:title "Tenant Update"}
    [:name {:optional true} [:string {:min 1 :max 255}]]
    [:slug {:optional true} [:re {:error/message "Invalid slug"} slug-regex]]
-   [:status {:optional true} [:enum :active :suspended :deleted]]
+   [:status {:optional true} [:enum :active :suspended]]
    [:settings {:optional true} TenantSettings]])
 
 ;; =============================================================================
@@ -94,7 +94,7 @@
   "Schema for update tenant API requests."
   [:map {:title "Update Tenant Request"}
    [:name {:optional true} [:string {:min 1 :max 255}]]
-   [:status {:optional true} [:enum :active :suspended :deleted]]
+   [:status {:optional true} [:enum :active :suspended]]
    [:settings {:optional true} TenantSettings]])
 
 ;; =============================================================================

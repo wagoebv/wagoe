@@ -136,6 +136,16 @@
          membership-entity))
      ctx))
 
+  (delete-membership [_this membership-id]
+    (persistence-interceptors/execute-persistence-operation
+     :delete-membership
+     {:membership-id membership-id}
+     (fn [{:keys [params]}]
+       (db/execute-update! ctx {:delete-from :public.tenant_memberships
+                                :where       [:= :id (type-conversion/uuid->string (:membership-id params))]})
+       nil)
+     ctx))
+
   (membership-exists? [_this user-id tenant-id]
     (persistence-interceptors/execute-persistence-operation
      :membership-exists?

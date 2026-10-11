@@ -68,8 +68,12 @@
     {:valid? false
      :error "Tenant not found"}
 
+    (= :deleted (:status update-data))
+    {:valid? false
+     :error "Delete a tenant through delete, not an update"}
+
     (and (:status update-data)
-         (not (#{:active :suspended :deleted} (:status update-data))))
+         (not (#{:active :suspended} (:status update-data))))
     {:valid? false
      :error "Invalid status"}
 

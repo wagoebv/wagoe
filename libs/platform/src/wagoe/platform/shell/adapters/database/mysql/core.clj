@@ -23,7 +23,7 @@
    :booleans           :int
    :string-match       :like
    :engine             :mysql
-   :capabilities       #{:row-locks}
+   :capabilities       #{:row-locks :alter-foreign-key}
    ;; DATETIME(6), not the schema builder's DATETIME, which drops
    ;; fractional seconds (BOU-574).
    :column-types       {:uuid "CHAR(36)" :instant "DATETIME(6)" :json "JSON"

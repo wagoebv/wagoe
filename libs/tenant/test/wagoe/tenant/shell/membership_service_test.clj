@@ -88,6 +88,10 @@
     (swap! state assoc (:id membership-entity) membership-entity)
     membership-entity)
 
+  (delete-membership [_ membership-id]
+    (swap! state dissoc membership-id)
+    nil)
+
   (membership-exists? [_ user-id tenant-id]
     (boolean (some #(and (= user-id (:user-id %))
                          (= tenant-id (:tenant-id %)))
@@ -228,14 +232,14 @@
           result    (ports/suspend-member service (:id invited))]
       (is (= :suspended (:status result)))))
 
-  (testing "cannot suspend a revoked membership"
+  (testing "a revoked membership is gone, so there is nothing to suspend"
     (let [service   (make-service)
           tenant-id (UUID/randomUUID)
           user-id   (UUID/randomUUID)
           invited   (ports/invite-user service tenant-id user-id :member)
           _revoked  (ports/revoke-member service (:id invited))]
       (is (thrown-with-msg? clojure.lang.ExceptionInfo
-                            #"Cannot suspend a revoked"
+                            #"Membership not found"
                             (ports/suspend-member service (:id invited)))))))
 
 (deftest ^:unit revoke-member-test
@@ -245,7 +249,9 @@
           user-id   (UUID/randomUUID)
           invited   (ports/invite-user service tenant-id user-id :member)
           result    (ports/revoke-member service (:id invited))]
-      (is (= :revoked (:status result))))))
+      (is (= :revoked (:status result)))
+      (is (nil? (ports/find-membership-by-user-and-tenant (:membership-repository service) user-id tenant-id))
+          "the row is deleted, so it cannot block the user's hard delete (BOU-611)"))))
 
 (deftest ^:unit get-membership-test
   (testing "retrieves existing membership"

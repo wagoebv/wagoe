@@ -115,6 +115,10 @@
     (swap! state assoc (:id membership-entity) membership-entity)
     membership-entity)
 
+  (delete-membership [_ membership-id]
+    (swap! state dissoc membership-id)
+    nil)
+
   (membership-exists? [_ user-id tenant-id]
     (boolean (some #(and (= user-id (:user-id %))
                          (= tenant-id (:tenant-id %)))
