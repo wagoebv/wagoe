@@ -32,7 +32,7 @@ Bundle vars — each a vector of `/`-rooted asset paths, in load order:
 |-----|--------|-----------------------|
 | `base-css` | `:base` | pico → wagoe-tokens → tokens-openprops → app |
 | `pilot-css` | `:pilot` | wagoe-tokens → app → daisy-admin |
-| `admin-pilot-css` | `:admin-pilot` | fonts → wagoe-tokens → admin → app → daisy-admin |
+| `admin-pilot-css` | `:admin-pilot` | fonts → wagoe-tokens → admin → app → daisy-admin → wagoe-admin |
 | `base-js` / `pilot-js` | `:base` / `:pilot` | theme → components → alpine → htmx (`pilot-js` aliases `base-js`) |
 | `admin-pilot-js` | `:admin-pilot` | theme → components → admin-ux → alpine → htmx → forms → keyboard |
 
@@ -59,11 +59,12 @@ Recommended bundle per page type:
 
 - **CSS** (`css/`): `pico.min.css` (vendored), `wagoe-tokens.css` +
   `tokens-openprops.css` (design tokens), `app.css`, `admin.css`,
-  `daisy-admin.css` (Tailwind/daisyUI compiled output), `fonts.css`, and
+  `daisy-admin.css` (Tailwind/daisyUI compiled output), `wagoe-admin.css`
+  (wagoe.org tokens and the admin display-role styles, ADR-040), `fonts.css`, and
   `vendor/open-props/*`.
 - **JS** (`js/`): `theme.js`, `components.js`, `admin-ux.js`, `forms.js`,
   `keyboard.js`, `init.js`, plus vendored `alpine.min.js` and `htmx.min.js`.
-- **Fonts** (`fonts/`): DM Sans + JetBrains Mono woff2.
+- **Fonts** (`fonts/`): DM Sans, Inter, Space Grotesk + JetBrains Mono woff2.
 - **Assets** (`assets/`): Wagoe light/dark logo + icon PNGs.
 - **Tailwind source** (`resources/tailwind/admin-pilot.css`): input compiled to
   `css/daisy-admin.css`.

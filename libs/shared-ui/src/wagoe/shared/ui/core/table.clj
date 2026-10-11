@@ -8,26 +8,46 @@
 
 (defn table-query->params
   "Convert a TableQuery map into a string-keyed param map for query strings."
-  [{:keys [sort dir page page-size]}]
+  [{:keys [sort dir page page-size search]}]
   {"sort"      (when sort (name sort))
    "dir"       (when dir (name dir))
    "page"      (str page)
-   "page-size" (str page-size)})
+   "page-size" (str page-size)
+   "search"    (when-not (str/blank? search) search)})
+
+(defn- url-encode [s]
+  (java.net.URLEncoder/encode (str s) "UTF-8"))
+
+(defn- param-name [x]
+  (if (keyword? x) (name x) (str x)))
 
 (defn encode-query-params
-  "Turn a string-keyed map into a query string (nil values are omitted)."
+  "Turn a string-keyed map into a URL-encoded query string. Nil values are
+   omitted; a sequential value repeats its key."
   [m]
-  (->> m
-       (remove (comp nil? val))
-       (map (fn [[k v]] (str k "=" v)))
+  (->> (for [[k v] m
+             :when (some? v)
+             v     (if (sequential? v) v [v])]
+         (str (url-encode (param-name k)) "=" (url-encode (param-name v))))
        (str/join "&")))
 
 (defn search-filters->params
-  "Convert parsed search/filter map back into a string-keyed param map."
+  "Convert parsed search/filter map back into a string-keyed param map. A
+   filter spec map goes back in the filter bar's `filters[f][op]` format,
+   which is what the handlers parse."
   [filters]
   (into {}
-        (for [[k v] filters]
-          [(name k) (str v)])))
+        (mapcat (fn [[k v]]
+                  (let [f (param-name k)
+                        p #(str "filters[" f "][" % "]")]
+                    (if (map? v)
+                      (cond-> [[(p "op") (param-name (:op v :eq))]]
+                        (contains? v :value)  (conj [(p "value") (str (:value v))])
+                        (contains? v :min)    (conj [(p "min") (str (:min v))])
+                        (contains? v :max)    (conj [(p "max") (str (:max v))])
+                        (contains? v :values) (conj [(str "filters[" f "][values][]") (mapv str (:values v))]))
+                      [[f (str v)]]))))
+        filters))
 
 (defn sortable-th
   "Reusable sortable table header cell.
@@ -63,10 +83,7 @@
         page*    1
         base-q   (table-query->params
                   {:sort field :dir next-dir :page page* :page-size page-size})
-        extra-q  (into {}
-                       (for [[k v] extra-params]
-                         [(name k) (str v)]))
-        qs-map   (merge base-q extra-q)
+        qs-map   (merge base-q (search-filters->params extra-params))
         query-str (encode-query-params qs-map)
         url      (str base-url "?" query-str)
         push-url (when hx-push-url?
@@ -144,9 +161,7 @@
                        (min total-count (+ (* (dec page) page-size) page-size))
                        0)
         show-pages?  (> total-pages 1)
-        extra-q      (into {}
-                           (for [[k v] extra-params]
-                             [(name k) (str v)]))
+        extra-q      (search-filters->params extra-params)
         mk-url       (fn [page*]
                        (let [tq   (assoc table-query :page page*)
                              base (table-query->params tq)

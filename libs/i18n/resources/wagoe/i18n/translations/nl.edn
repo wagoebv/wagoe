@@ -442,6 +442,20 @@
  :admin/modal-button-cancel        "Annuleren"
  :admin/modal-button-delete        "Verwijderen"
 
+ ;; Overzicht (ADR-040)
+ :admin/relative-today             "vandaag"
+ :admin/relative-tomorrow          "morgen"
+ :admin/relative-yesterday         "gisteren"
+ :admin/relative-just-now          "zojuist"
+ :admin/relative-in-days           "over {n} d"
+ :admin/relative-days-ago          "{n} d geleden"
+ :admin/relative-in-hours          "over {n} u"
+ :admin/relative-hours-ago         "{n} u geleden"
+ :admin/relative-in-minutes        "over {n} min"
+ :admin/relative-minutes-ago       "{n} min geleden"
+ :admin/page-total                 "Paginatotaal"
+ :admin/facet-all                  "Alle"
+
  ;; =============================================================================
  ;; Zoekmodule
  ;; =============================================================================

@@ -156,6 +156,7 @@
    :data      [{:name "(query :table)"         :desc "Quick SELECT (limit 20)"}
                {:name "(query :t {:where ..})" :desc "With conditions"}
                {:name "(count-rows :table)"    :desc "Count rows in table"}
+               {:name "(explain-entity :e)"    :desc "Admin overview roles of an entity"}
                {:name "(schema s)"             :desc "Pretty-print Malli schema"}
                {:name "(schema-diff a b)"      :desc "Compare two schemas"}
                {:name "(validate s data)"      :desc "Validate against schema"}
