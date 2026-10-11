@@ -33,6 +33,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **`DBAdapter` answers `engine`, `capabilities`, `column-type` and `like`** (BOU-450, ADR-039). Ask these instead of
   parsing the product name or reading a nil dialect as PostgreSQL.
+- **`db/drop-index-if-exists!`, `db/add-column-if-not-exists!` and `db/drop-column-if-exists!`** (BOU-607): safe to run
+  twice on every engine, MySQL included. Use them instead of branching on the engine in a migration.
 - **`db/engine-of`** (BOU-450): which engine a datasource speaks, for code that holds no db-context.
 - **Admin list cells render by display role** (ADR-040). A relation shows its target's name, linked; an enum its
   `:options` label in a tone; money is formatted in its currency; dates are relative. Status tabs with counts, page
