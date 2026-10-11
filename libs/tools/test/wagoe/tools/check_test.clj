@@ -411,9 +411,13 @@
    service-catalogue gate — and excluding it meant the lockstep below could not
    notice that no CI job ran it. It did not, for as long as anyone had looked,
    and a pull request merged green while the service-catalogue gate was failing
-   (BOU-422)."
+   (BOU-422).
+
+   It is excluded again now that CI runs the root tree as `:app` and each
+   library in its own job (BOU-615); `unit-is-covered-piecewise-by-ci` keeps
+   the lockstep for it."
   []
-  (->> (:tests (tests-edn)) (map :id) (map name) set))
+  (->> (:tests (tests-edn)) (map :id) (map name) (remove #{"unit"}) set))
 
 (defn- ci-run-suites
   "{suite-name alias-string} for each `clojure -M:test… :<suite>` CI runs."
@@ -442,6 +446,20 @@
           (str "CI runs suites absent from tests.edn: "
                (pr-str (sort (remove declared (keys in-ci)))))))))
 
+(deftest ^:unit unit-is-covered-piecewise-by-ci
+  ;; CI runs the root tree as :app and each library as its own suite, not the
+  ;; :unit aggregate (BOU-615). So every :unit test path must belong to a suite
+  ;; CI runs; libs/config is a standalone lib with its own job.
+  (let [suites (:tests (tests-edn))
+        in-ci  (set (keys (ci-run-suites (ci-workflow))))
+        run    (into #{"libs/config/test"}
+                     (comp (filter #(in-ci (name (:id %)))) (mapcat :test-paths))
+                     suites)
+        unit   (:test-paths (first (filter #(= :unit (:id %)) suites)))]
+    (is (seq unit) "found no :unit suite; the assertion below would pass vacuously")
+    (is (empty? (remove run unit))
+        (str ":unit test paths no CI suite runs: " (pr-str (remove run unit))))))
+
 (deftest ^:unit suites-needing-heavy-deps-request-them
   ;; The heavy test dependencies moved out of the shared :test alias so 25
   ;; per-library jobs stop resolving ~106 MB they do not use (BOU-260). A suite
@@ -467,18 +485,18 @@
     (testing "clj-http-lite"
       (is (str/includes? (get in-ci "devtools" "") ":test/http")))
 
-    (testing "and the aggregate suite asks for all of them"
-      ;; `:unit` runs the root test/ tree *and* every library's, so it needs
-      ;; every heavy dep at once — `:test/all` is what composes them (BOU-422).
-      (is (= "-M:test:test/all" (get in-ci "unit"))
-          "the :unit suite spans every library and must request :test/all"))
+    (testing "and the app suite asks for all of them"
+      ;; The root test/ tree boots the whole system, embedded PostgreSQL
+      ;; included, so it needs every heavy dep (BOU-422, BOU-615).
+      (is (= "-M:test:test/all" (get in-ci "app"))
+          "the :app suite boots every library and must request :test/all"))
 
     (testing "and nothing else pays for them"
       ;; The whole point: a suite that does not need the heavy deps must not
       ;; resolve them.
       (doseq [[s alias] in-ci
               :when (not (#{"admin" "platform" "tenant" "scaffolder" "workflow" "observability"
-                            "devtools" "unit"} s))]
+                            "devtools" "app"} s))]
         (is (= "-M:test" alias)
             (str s " requests " alias " but needs nothing beyond :test"))))))
 
