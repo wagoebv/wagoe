@@ -288,6 +288,18 @@
       return;
     }
 
+    // ⌥↑ / ⌥↓: previous / next record, also from inside a field (the edit
+    // page starts there). Not in a textarea (paragraph jump) or a select
+    // (Alt+↓ opens it on Windows and Linux).
+    if (event.altKey && !event.metaKey && !event.ctrlKey && !event.shiftKey &&
+        (event.key === 'ArrowUp' || event.key === 'ArrowDown') &&
+        !(document.activeElement && /^(TEXTAREA|SELECT)$/.test(document.activeElement.tagName))) {
+      if (clickIfThere(event.key === 'ArrowUp' ? '[data-nav="prev"]' : '[data-nav="next"]')) {
+        event.preventDefault();
+        return;
+      }
+    }
+
     // Don't handle if in input (except Escape)
     if (isInputFocused() && event.key !== 'Escape') {
       if (window.stitch && window.stitch.debug) {

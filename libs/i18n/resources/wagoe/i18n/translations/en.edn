@@ -471,6 +471,8 @@
  :admin/kbd-edit                    "edit"
  :admin/kbd-close                   "close"
  :admin/kbd-filter                  "filters"
+ :admin/kbd-prev-next               "previous / next"
+ :admin/kbd-to-list                 "list"
  :admin/empty-state-no-matches           "No {label} match these filters"
  :admin/button-clear-filters-and-search  "Clear filters and search"
  :admin/user-menu                        "Account"

@@ -71,6 +71,7 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **`wagoe-admin` record navigation**: previous / next on the edit page now also work from the list's row chevron and a ⌘-clicked title (the links carry `return_to`), and from inside a field with ⌥↑ / ⌥↓ — the page opens with the cursor in the first field, where `[` and `]` are typed rather than obeyed.
 - **`wagoe-admin` tests**: running the admin suite without `:test/pg` (or, on a Mac, without `:test/pg-mac`) now fails with the command to use instead of a `ClassNotFoundException` at compile time.
 - **Hard-deleting a user still in a tenant succeeded and left orphaned memberships** (BOU-611, BOU-612). Membership rows
   now go with a revoke or tenant delete; boot and `bb migrate up` add the keys, not while orphans they name remain.

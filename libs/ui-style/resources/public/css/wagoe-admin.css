@@ -966,10 +966,15 @@ time.tone-danger  { color: var(--tone-danger-fg);  font-weight: 600; }
 .save-bar .save-hint {
   flex-basis: 100%;
   order: 3;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px 14px;
   font-size: 11px;
   color: var(--text-faint);
-  text-align: right;
 }
+.save-bar .save-hint kbd { margin: 0 3px 0 0; }
+.entity-detail-page:not(:has([data-nav])) .save-hint-nav { display: none; }
 @media (min-width: 900px) {
   .save-bar .save-hint { flex-basis: auto; order: 0; margin-left: auto; }
   .save-bar .save-actions { margin-left: 12px !important; }

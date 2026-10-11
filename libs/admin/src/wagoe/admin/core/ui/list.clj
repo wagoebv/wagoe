@@ -68,9 +68,14 @@
 
    Returns:
      Hiccup table row"
-  [entity-name record entity-config permissions & [display cols]]
+  [entity-name record entity-config permissions & [display cols return-to]]
   (let [primary-key (:primary-key entity-config :id)
         record-id (get record primary-key)
+        ;; Links carry the list they came from, so the record page can offer
+        ;; previous / next in it and the way back (data-href stays bare: the
+        ;; drawer and the keyboard add the live list URL themselves)
+        record-url (str "/web/admin/" (name entity-name) "/" record-id
+                        (when return-to (str "?return_to=" (base/url-encode return-to))))
         readonly-fields (set (:readonly-fields entity-config))
         ;; The detail/edit handler is guarded by assert-can-edit-entity!, so only
         ;; wire the row-click navigation when the current user actually has
@@ -91,8 +96,7 @@
                                   :entity-config entity-config
                                   :relation      relation
                                   :display       display
-                                  :href          (when can-open?
-                                                   (str "/web/admin/" (name entity-name) "/" record-id))})
+                                  :href          (when can-open? record-url)})
              classes (str "field-" (name field) " " (:class column))
              editable? (and (:can-edit permissions)
                             data?
@@ -118,7 +122,7 @@
      [:td.actions-cell
       (when can-open?
         [:a.row-nav-hint
-         {:href (str "/web/admin/" (name entity-name) "/" record-id)
+         {:href record-url
           :aria-label [:t :common/button-edit]
           :tabindex 0}
          (icons/icon :chevron-right {:size 14})])]]))
@@ -345,8 +349,9 @@
                  [:th [:t :admin/column-workflow]])
                [:th {:class "actions-header"} [:span.sr-only [:t :admin/column-actions]]]]]
              [:tbody
-              (for [record records]
-                (entity-table-row entity-name record entity-config permissions display cols))]
+              (let [return-to (base/current-list-url entity-name table-query filters)]
+                (for [record records]
+                  (entity-table-row entity-name record entity-config permissions display cols return-to)))]
              (totals-row records cols entity-config display)]]]
           pagination]))]))
 

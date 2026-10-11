@@ -407,8 +407,15 @@
     [:button.button.primary {:class "gap-2" :type "submit"}
      (if is-edit? [:t :admin/button-update] [:t :admin/button-create])
      [:kbd {:class "save-kbd"} "⌘S"]]]
-   (when is-edit?
-     [:span {:class "save-hint"} [:kbd "⌘↵"] " " [:t :admin/save-and-back]])])
+   ;; The keys that work with the cursor in a field, where the page starts
+   ;; (the bare [ ] u only once Esc has left it). The previous / next hint
+   ;; hides itself when there is no list to step through (CSS).
+   [:span {:class "save-hint" :aria-hidden "true"}
+    (when is-edit?
+      [:span {:class "save-hint-nav"} [:kbd "⌥↑"] [:kbd "⌥↓"] " " [:t :admin/kbd-prev-next]])
+    [:span [:kbd "Esc"] [:kbd "u"] " " [:t :admin/kbd-to-list]]
+    (when is-edit?
+      [:span [:kbd "⌘↵"] " " [:t :admin/save-and-back]])]])
 
 (defn entity-form
   "Render entity create/edit form.
@@ -722,14 +729,14 @@
         (when sibling-nav
           [:div.sibling-nav
            (if (:prev-url sibling-nav)
-             [:a.button.secondary {:href (:prev-url sibling-nav) :title "Previous  [" :data-nav "prev"}
+             [:a.button.secondary {:href (:prev-url sibling-nav) :title "Previous  [  ·  ⌥↑ in a field" :data-nav "prev"}
               (icons/icon :chevron-left {:size 14})]
              [:span.button.secondary.disabled {:aria-disabled "true"}
               (icons/icon :chevron-left {:size 14})])
            [:span.sibling-nav-count
             (:position sibling-nav) " / " (:total sibling-nav)]
            (if (:next-url sibling-nav)
-             [:a.button.secondary {:href (:next-url sibling-nav) :title "Next  ]" :data-nav "next"}
+             [:a.button.secondary {:href (:next-url sibling-nav) :title "Next  ]  ·  ⌥↓ in a field" :data-nav "next"}
               (icons/icon :chevron-right {:size 14})]
              [:span.button.secondary.disabled {:aria-disabled "true"}
               (icons/icon :chevron-right {:size 14})])])

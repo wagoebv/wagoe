@@ -650,7 +650,18 @@
       (is (not (str/includes? row-str "clickable-row")))
       (is (not (str/includes? row-str "data-href")))
       ;; Chevron nav hint is also hidden when the row isn't navigable
-      (is (not (str/includes? row-str "row-nav-hint"))))))
+      (is (not (str/includes? row-str "row-nav-hint")))))
+
+  (testing "Links carry the list they came from; data-href stays bare"
+    (let [row     (ui/entity-table-row :users sample-record sample-entity-config
+                                       {:can-edit true :can-delete false}
+                                       nil nil "/web/admin/users?page=2")
+          base    (str "/web/admin/users/" (:id sample-record))
+          hrefs   (->> (tree-seq coll? seq row)
+                       (filter #(and (vector? %) (map? (second %))))
+                       (keep #(get-in % [1 :href])))]
+      (is (= base (get-in row [1 :data-href])))
+      (is (some #{(str base "?return_to=%2Fweb%2Fadmin%2Fusers%3Fpage%3D2")} hrefs)))))
 
 (deftest ^:unit entity-edit-form-return-to-encoding-test
   (testing "return_to is URL-encoded on the edit form action"
