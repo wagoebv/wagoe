@@ -235,8 +235,8 @@ user still in a tenant cannot be hard-deleted; an accepted invite's key is
 revoking deletes it, and a tenant marked deleted loses its memberships. The
 migration first deletes such rows older versions kept, clears an accepted
 invite's user that no longer exists, and refuses, naming them, memberships that
-point at no user. Boot does the same (BOU-612), after the user tables, but
-logs orphans instead of refusing to start.
+point at no user. Boot (BOU-612), after the user tables, adds only the keys it
+can without changing a row; one that needs cleanup is logged for `migrate up`.
 
 ## Tenant migrations
 

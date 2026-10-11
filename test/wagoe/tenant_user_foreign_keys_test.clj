@@ -54,12 +54,19 @@
   (mapv :tenant_memberships/status
         (jdbc/execute! (:datasource ctx) ["SELECT status FROM tenant_memberships WHERE user_id = ?" user-id])))
 
-(deftest ^:integration a-member-cannot-be-hard-deleted-after-migrate-up
-  (doseq [[engine open] (engines)]
-    (testing (name engine)
+(defn- boot-tenant-schema! [ctx]
+  (ig/init-key :wagoe/tenant-db-schema {:ctx ctx :allow-h2? true}))
+
+(def ^:private setups
+  {"migrate up" #(migrations/migrate-datasource! (:datasource %))
+   "boot"       #(do (ig/init-key :wagoe/user-db-schema {:ctx %}) (boot-tenant-schema! %))})
+
+(deftest ^:integration a-member-cannot-be-hard-deleted-after-migrate-up-or-boot
+  (doseq [[engine open] (engines) [setup set-up!] setups]
+    (testing (str (name engine) ", " setup)
       (let [[ctx close!] (open)]
         (try
-          (migrations/migrate-datasource! (:datasource ctx))
+          (set-up! ctx)
           (let [user (new-user! ctx)
                 svc  (user-svc ctx)]
             (membership! ctx (:id user))
@@ -71,7 +78,7 @@
 (deftest ^:integration orphaned-memberships-are-named-not-keyed-over
   (let [ctx (h2-ctx "orphan")]
     (try
-      ;; What a database looks like that only ever booted: tables, no keys.
+      ;; What a database looks like that only booted before BOU-612: tables, no keys.
       (user-persistence/initialize-user-schema! ctx)
       (tenant-persistence/initialize-tenant-schema! ctx)
       (membership! ctx (random-uuid))
@@ -135,22 +142,6 @@
         (is (= ["suspended"] (memberships-of ctx (:id user)))))
       (finally (factory/close-db-context! ctx)))))
 
-(defn- boot-tenant-schema! [ctx]
-  (ig/init-key :wagoe/tenant-db-schema {:ctx ctx :allow-h2? true}))
-
-(deftest ^:integration boot-adds-the-keys-without-migrate-up
-  (let [ctx (h2-ctx "boot")]
-    (try
-      (testing "a database that only boots (BOU-612)"
-        (ig/init-key :wagoe/user-db-schema {:ctx ctx})
-        (boot-tenant-schema! ctx)
-        (let [user (new-user! ctx)]
-          (membership! ctx (:id user))
-          (is (= :hard-deletion-not-allowed
-                 (:type (ex-data (try (ports/permanently-delete-user (user-svc ctx) (:id user)) nil
-                                      (catch clojure.lang.ExceptionInfo e e))))))))
-      (finally (factory/close-db-context! ctx)))))
-
 (deftest ^:integration a-later-boot-adds-the-keys-once-auth-users-exists
   (let [ctx (h2-ctx "late")]
     (try
@@ -162,12 +153,32 @@
       (is (thrown? Exception (membership! ctx (random-uuid))) "the next boot keyed it")
       (finally (factory/close-db-context! ctx)))))
 
-(deftest ^:integration orphans-do-not-stop-a-boot
-  (let [ctx (h2-ctx "boot_orphan")]
+(defn- keyed? [ctx table column]
+  (some? (#'fks/foreign-key-name ctx table column)))
+
+(deftest ^:integration boot-adds-only-the-keys-it-can-without-changing-rows
+  (let [ctx (h2-ctx "boot_careful")]
     (try
       (ig/init-key :wagoe/user-db-schema {:ctx ctx})
       (tenant-persistence/initialize-tenant-schema! ctx)
       (membership! ctx (random-uuid))
-      (is (= {:status :initialized} (boot-tenant-schema! ctx)))
-      (is (some? (membership! ctx (random-uuid))) "left unkeyed until the orphan is dealt with")
+      (is (= {:status :initialized} (boot-tenant-schema! ctx)) "an orphan does not stop boot")
+      (is (not (keyed? ctx "tenant_memberships" "user_id")) "its table is left to migrate up")
+      (is (keyed? ctx "tenant_member_invites" "accepted_by_user_id") "the other table is keyed anyway")
+      (is (= 1 (count (jdbc/execute! (:datasource ctx) ["SELECT id FROM tenant_memberships"])))
+          "boot deletes nothing")
+      (finally (factory/close-db-context! ctx)))))
+
+(deftest ^:integration migrate-up-clears-departed-rows-a-boot-already-keyed
+  (let [ctx (h2-ctx "boot_departed")]
+    (try
+      (ig/init-key :wagoe/user-db-schema {:ctx ctx})
+      (tenant-persistence/initialize-tenant-schema! ctx)
+      (let [user (new-user! ctx)]
+        (membership! ctx (:id user) (tenant! ctx "active") "revoked")
+        (boot-tenant-schema! ctx)
+        (is (keyed? ctx "tenant_memberships" "user_id"))
+        (is (= ["revoked"] (memberships-of ctx (:id user))) "boot keeps it")
+        (fks/ensure-foreign-keys! ctx)
+        (is (empty? (memberships-of ctx (:id user))) "migrate up clears it, key or not"))
       (finally (factory/close-db-context! ctx)))))

@@ -38,15 +38,14 @@
 
 (defn- add-user-foreign-keys!
   "The keys `migrate up` adds, for a database that only boots or migrated
-   before auth_users existed (BOU-612). Orphans are logged, not fatal: boot
-   should not stop on rows only an operator can judge."
+   before auth_users existed (BOU-612). Boot changes no rows and never fails on
+   them: a key that needs cleanup first is logged and left to `migrate up`."
   [ctx]
   (try
-    (user-foreign-keys/ensure-foreign-keys! ctx)
-    (catch clojure.lang.ExceptionInfo e
-      (if (= :conflict (:type (ex-data e)))
-        (log/warn (ex-message e) (select-keys (ex-data e) [:table :column :orphans]))
-        (throw e)))))
+    (doseq [left-off (user-foreign-keys/add-clean-foreign-keys! ctx)]
+      (log/warn "Boot left a tenant→auth_users key off; run `bb migrate up`" left-off))
+    (catch Exception e
+      (log/error e "Adding tenant→auth_users keys failed on startup"))))
 
 (defmethod ig/init-key :wagoe/tenant-db-schema
   [_ {:keys [ctx allow-h2?]}]

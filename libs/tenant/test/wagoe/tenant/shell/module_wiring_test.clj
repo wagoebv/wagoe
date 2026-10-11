@@ -9,6 +9,7 @@
             [wagoe.tenant.shell.membership-service]
             [wagoe.tenant.shell.invite-persistence]
             [wagoe.tenant.shell.invite-service]
+            [wagoe.tenant.shell.user-foreign-keys]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [integrant.core :as ig]
@@ -31,7 +32,7 @@
                   wagoe.tenant.shell.persistence/initialize-tenant-schema! (fn [arg]
                                                                              (is (= ctx arg))
                                                                              :initialized)
-                  wagoe.tenant.shell.user-foreign-keys/ensure-foreign-keys! (fn [arg] (is (= ctx arg)))
+                  wagoe.tenant.shell.user-foreign-keys/add-clean-foreign-keys! (fn [arg] (is (= ctx arg)) [])
                   wagoe.tenant.shell.persistence/create-tenant-repository (fn [arg log err]
                                                                             (is (= ctx arg))
                                                                             (is (= logger log))
