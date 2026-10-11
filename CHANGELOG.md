@@ -71,6 +71,7 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **`wagoe-admin` tests**: running the admin suite without `:test/pg` (or, on a Mac, without `:test/pg-mac`) now fails with the command to use instead of a `ClassNotFoundException` at compile time.
 - **Hard-deleting a user still in a tenant succeeded and left orphaned memberships** (BOU-611, BOU-612). Membership rows
   now go with a revoke or tenant delete; boot and `bb migrate up` add the keys, not while orphans they name remain.
 - **Tables built from Malli failed on MySQL, and `create-index-if-not-exists!` failed when run twice there** (BOU-607):
