@@ -50,7 +50,10 @@
       :int     (when (percent-words word) (rule :percent))
       (:string :text)
       (cond
-        (some #(str/includes? % "mail") ws) [:email "name rule: mail"]
+        ;; email, contact-email, email-address — not email-subject
+        (or (str/includes? word "mail")
+            (and (= "address" word) (some #(str/includes? % "mail") (pop ws))))
+        [:email "name rule: mail"]
         (url-words word)                    (rule :url)
         (identifier-words word)             (rule :identifier))
       nil)))
@@ -194,11 +197,12 @@
     (cond
       (re-find technical-name (name field))    nil
       (= role :title)                          0
+      ;; Before relations: created-by and updated-by are belongs-to users
+      (audit-fields field)                     nil
       (= role :relation)                       1
       (= field facet)                          2
       (= role :enum)                           3
       (= role :money)                          4
-      (audit-fields field)                     nil
       (#{:date :datetime} role)                5
       ;; A UUID says nothing to a reader; a code or a SKU does
       (and (= role :identifier) (= :uuid type)) nil

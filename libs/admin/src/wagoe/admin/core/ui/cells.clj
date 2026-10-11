@@ -42,7 +42,7 @@
   "The label `:options` gives `value`, else the value humanized."
   [field-config value]
   (let [v (value-name value)]
-    (or (some (fn [[k label]] (when (= v (name k)) label)) (:options field-config))
+    (or (some (fn [[k label]] (when (= v (value-name k)) label)) (:options field-config))
         (base/format-field-label v))))
 
 (defn enum-tone
@@ -172,7 +172,11 @@
                           :days     #(some-> (base/instant-distance value now display) (Math/floorDiv 86400))})
 
           :boolean
-          (if (true? (if (string? value) (contains? #{"true" "1" "t"} value) (boolean value)))
+          (if (cond
+                (string? value) (contains? #{"true" "1" "t"} (str/lower-case value))
+                ;; SQLite stores a boolean as 0 or 1
+                (number? value) (not (zero? value))
+                :else           (boolean value))
             [:span {:class "c-check"}
              (icons/icon :check {:size 14})
              [:span {:class "sr-only"} [:t :common/option-yes]]]

@@ -315,7 +315,7 @@ A list cell renders by its field's **display role** ([ADR-040](../../dev-docs/ad
 | `:money` | `:decimal` named amount, price, total, cost, fee, bedrag, prijs, totaal | `€ 1.234,50` |
 | `:number` / `:percent` | `:int`, `:decimal` / name ends in `-pct`, `-percent`, `-rate` | locale-formatted |
 | `:date` / `:datetime` | `:date` / `:instant` | relative, absolute on hover |
-| `:email` / `:url` / `:identifier` | name contains mail / ends in url, website / a code, number, sku, UUID | link / host / monospace |
+| `:email` / `:url` / `:identifier` | name ends in mail or mail-address / ends in url, website / a code, number, sku, UUID | link / host / monospace |
 | `:boolean` | `:boolean` | check mark |
 | `:text` | anything else | one line, ellipsis |
 

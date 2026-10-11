@@ -194,7 +194,7 @@
             href     (fn [v]
                        (base/current-list-url entity-name (dissoc table-query :page)
                                               (cond-> others v (assoc facet v))))
-            known    (map (comp name first) (:options fc))
+            known    (map (comp cells/value-name first) (:options fc))
             values   (distinct (concat known (sort (remove nil? (keys counts)))))
             tab      (fn [v label n]
                        (let [active?   (= v current)
@@ -306,9 +306,10 @@
              :hx-target hx-target
              :hx-swap "outerHTML"}
             ;; Preserve table state
-            (for [[k v] table-params]
+            (for [[k v] table-params :when (some? v)]
               [:input {:type "hidden" :name k :value v}])
-            (for [[k v] filter-params]
+            (for [[k v] filter-params
+                  v (if (sequential? v) v [v])]
               [:input {:type "hidden" :name k :value v}])
 
             [:table.data-table {:class "data-table table"}

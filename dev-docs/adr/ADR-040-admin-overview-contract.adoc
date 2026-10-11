@@ -56,7 +56,7 @@ explicit `:display` wins. The set is closed:
 | `:datetime` | `:instant` | relative ("3 h ago"), absolute in `title` | left
 | `:boolean` | `:boolean` | check mark, empty when false | center
 | `:identifier` | `:uuid` not a relation, or a code name ² | monospace, copyable | left
-| `:email` | name contains `email`, `mail` | `mailto:` link | left
+| `:email` | name ends in `email`, `mail` (or `email-address`) | `mailto:` link | left
 | `:url` | name ends in `url`, `website` | link, host only | left
 | `:text` | anything else | one line, cut by CSS with an ellipsis | left
 |===

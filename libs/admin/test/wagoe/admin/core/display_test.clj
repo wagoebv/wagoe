@@ -69,6 +69,12 @@
       (is (= :text (display/display-role cfg :amount)))
       (is (= :number (display/display-role cfg :total-url)))))
 
+  (testing "the email rule reads the end of the name"
+    (let [cfg (entity {:id :uuid :contact-email :string :email-address :string :email-subject :string})]
+      (is (= :email (display/display-role cfg :contact-email)))
+      (is (= :email (display/display-role cfg :email-address)))
+      (is (= :text (display/display-role cfg :email-subject)))))
+
   (testing "name rules match whole words"
     (let [cfg (entity {:id :uuid :pricelist-name :decimal :unit-price :decimal})]
       (is (= :number (display/display-role cfg :pricelist-name)))

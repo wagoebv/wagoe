@@ -70,29 +70,11 @@
   (let [base (str "/web/admin/" (name entity-name))
         ;; Drop empty values so the default list view produces the bare
         ;; `/web/admin/<entity>` rather than `?page=&page-size=`.
-        ;; (`encode-query-params` already strips nils, so we only need to
-        ;; filter empty strings here.)
         params (into {}
                      (remove (fn [[_ v]] (= "" v)))
-                     (table-ui/table-query->params table-query))
-        search (:search table-query)
-        ;; A parsed filter is a spec map; it goes back in the filter bar's
-        ;; own format, which is what the handler parses.
-        filter-pairs (for [[field spec] filters
-                           :let [k #(url-encode (str "filters[" (name field) "][" % "]"))]
-                           pair (if (map? spec)
-                                  (concat [[(k "op") (name (:op spec :eq))]]
-                                          (for [x [:value :min :max] :when (contains? spec x)]
-                                            [(k (name x)) (get spec x)])
-                                          (for [v (:values spec)]
-                                            [(str (k "values") (url-encode "[]")) v]))
-                                  [[(url-encode (name field)) spec]])]
-                       (str (first pair) "=" (url-encode (str (second pair)))))
-        qs (str/join "&" (remove str/blank?
-                                 (concat [(table-ui/encode-query-params params)
-                                          (when-not (str/blank? search)
-                                            (str "search=" (url-encode search)))]
-                                         filter-pairs)))]
+                     (merge (table-ui/table-query->params table-query)
+                            (table-ui/search-filters->params filters)))
+        qs (table-ui/encode-query-params params)]
     (if (str/blank? qs)
       base
       (str base "?" qs))))

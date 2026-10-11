@@ -361,6 +361,20 @@
   (when (ports/validate-entity-exists schema-provider (:entity relationship))
     (ports/get-entity-config schema-provider (:entity relationship))))
 
+(defn- column-of
+  "field → its column in a query read through `qc`: its alias, else the
+   qualified column :select names for it, else the bare column. In a join a
+   bare column that both tables carry is ambiguous."
+  [{:keys [select-clause field-aliases]}]
+  (fn [field]
+    (let [col (case-conversion/kebab-case->snake-case-keyword field)]
+      (or (get field-aliases field)
+          (some #(when (and (keyword? %)
+                            (str/ends-with? (name %) (str "." (name col))))
+                   %)
+                select-clause)
+          col))))
+
 (defn- related-query
   "The children of `parent-id` in `relationship`, read the way the child's own
    list reads them: through its :query-overrides and, unless
@@ -368,20 +382,11 @@
    the child's id column."
   [schema-provider parent-id relationship & [include-deleted?]]
   (let [child-cfg (child-config schema-provider relationship)
-        {:keys [from-clause select-clause join-clause field-aliases]}
+        {:keys [from-clause select-clause join-clause] :as qc}
         (if child-cfg
           (resolve-query-config child-cfg)
           {:from-clause [(:table relationship)] :select-clause [:*] :field-aliases {}})
-        ;; Without an alias, qualify from :select: in a join a bare column
-        ;; that both tables carry is ambiguous.
-        qualify   (fn [field]
-                    (let [col (case-conversion/kebab-case->snake-case-keyword field)]
-                      (or (get field-aliases field)
-                          (some #(when (and (keyword? %)
-                                            (str/ends-with? (name %) (str "." (name col))))
-                                   %)
-                                select-clause)
-                          col)))
+        qualify   (column-of qc)
         fk-where  [:= (qualify (:foreign-key relationship)) (str parent-id)]]
     {:child-cfg     child-cfg
      :select-clause select-clause
@@ -735,7 +740,7 @@
             tpk   (:primary-key tcfg :id)
             title (:title-field tcfg)
             qc    (resolve-query-config tcfg)
-            col   #(get (:field-aliases qc) % %)]
+            col   (column-of qc)]
         (when (and title (not= title tpk))
           (into {}
                 ;; A blank title would render an empty, invisible link; the cell
@@ -772,7 +777,7 @@
    filter left out so every tab keeps its count. A nil value counts under nil."
   [db-ctx entity-config qc options]
   (when-let [facet (:facet entity-config)]
-    (let [col   (get (:field-aliases qc) facet facet)
+    (let [col   ((column-of qc) facet)
           where (list-where (:adapter db-ctx) entity-config (:field-aliases qc)
                             (update options :filters dissoc facet))]
       ;; `value` is reserved in H2, hence facet-value
@@ -788,7 +793,7 @@
    own `:where`."
   [db-ctx entity-name entity-config qc options]
   (let [aliases (:field-aliases qc)
-        col     #(get aliases % %)
+        col     (column-of qc)
         base    (list-where (:adapter db-ctx) entity-config aliases options)]
     (vec
      (for [{:keys [label agg field where] :or {agg :count}} (take 4 (:summary entity-config))
@@ -803,9 +808,9 @@
                                             (with-from {:select [[expr :v]]} qc
                                               (combine-where-clauses [base extra])))))]]
        {:label label
-        :value (or value (when (= agg :count) 0))
+        :value value
         :field field
-        :role  (if count? :number (get-in entity-config [:display-roles field]))}))))
+        :role  (if count? :number (get-in entity-config [:display-roles field] :number))}))))
 
 (defn- list-overview*
   [db-ctx schema-provider entity-name options records]
