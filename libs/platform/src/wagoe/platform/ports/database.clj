@@ -225,8 +225,8 @@
 
      :schemas               a schema per tenant, switched by search_path
      :transactional-ddl     DDL in a rolled-back transaction is undone
-     :index-if-not-exists   CREATE INDEX IF NOT EXISTS
-     :column-if-not-exists  ALTER TABLE … ADD COLUMN IF NOT EXISTS
+     :index-if-not-exists   CREATE INDEX IF NOT EXISTS, DROP INDEX IF EXISTS
+     :column-if-not-exists  ALTER TABLE … ADD COLUMN IF NOT EXISTS, … DROP COLUMN IF EXISTS
      :full-text             to_tsvector / ts_rank
      :on-conflict           INSERT … ON CONFLICT DO UPDATE
      :row-locks             SELECT … FOR UPDATE

@@ -22,16 +22,16 @@
   (let [hex "[0-9a-fA-F]"]
     (str/join "-" (for [n [8 4 4 4 12]] (apply str (repeat n hex))))))
 
-(def ^:private column-definition
-  {:postgresql (str "UUID GENERATED ALWAYS AS (CASE WHEN entity_id ~ '" uuid-regex "'"
+(def ^:private generated-as
+  "What follows the type: the expression is engine SQL no adapter method covers."
+  {:postgresql (str "GENERATED ALWAYS AS (CASE WHEN entity_id ~ '" uuid-regex "'"
                     " THEN entity_id::uuid END) STORED")
-   :h2         (str "UUID GENERATED ALWAYS AS (CASE WHEN REGEXP_LIKE(entity_id, '" uuid-regex "')"
+   :h2         (str "GENERATED ALWAYS AS (CASE WHEN REGEXP_LIKE(entity_id, '" uuid-regex "')"
                     " THEN CAST(entity_id AS UUID) END)")
-   ;; CHAR(36), as MySQL migrations store a UUID (BOU-544).
-   :mysql      (str "CHAR(36) GENERATED ALWAYS AS (CASE WHEN REGEXP_LIKE(entity_id, '" uuid-regex "')"
+   :mysql      (str "GENERATED ALWAYS AS (CASE WHEN REGEXP_LIKE(entity_id, '" uuid-regex "')"
                     " THEN entity_id END) STORED")
    ;; Only a virtual column may be added on SQLite.
-   :sqlite     (str "TEXT GENERATED ALWAYS AS (CASE WHEN entity_id GLOB '" uuid-glob "'"
+   :sqlite     (str "GENERATED ALWAYS AS (CASE WHEN entity_id GLOB '" uuid-glob "'"
                     " THEN entity_id END) VIRTUAL")})
 
 (defn present?
@@ -47,9 +47,11 @@
 (defn ensure-entity-uuid!
   "Add workflow_instances.entity_uuid and its index, unless they are there."
   [connectable]
-  (let [ctx (db/context-of connectable)]
+  (let [ctx     (db/context-of connectable)
+        adapter (:adapter ctx)]
     (db/add-column-if-not-exists! ctx :workflow_instances :entity_uuid
-                                  (column-definition (protocols/engine (:adapter ctx))))
+                                  (str (protocols/column-type adapter :uuid) " "
+                                       (generated-as (protocols/engine adapter))))
     (db/create-index-if-not-exists! ctx index-name :workflow_instances [:entity_uuid])))
 
 (defn up

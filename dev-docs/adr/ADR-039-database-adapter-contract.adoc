@@ -77,8 +77,8 @@ parsing product names, comparing drivers or reading nil as PostgreSQL.
 
 | `:schemas` | a schema per tenant, switched by `search_path` | PG
 | `:transactional-ddl` | DDL in a rolled-back transaction is undone | PG, SQLite
-| `:index-if-not-exists` | `CREATE INDEX IF NOT EXISTS` | PG, H2, SQLite
-| `:column-if-not-exists` | `ADD COLUMN IF NOT EXISTS` | PG, H2
+| `:index-if-not-exists` | `CREATE INDEX IF NOT EXISTS`, `DROP INDEX IF EXISTS` | PG, H2, SQLite
+| `:column-if-not-exists` | `ADD COLUMN IF NOT EXISTS`, `DROP COLUMN IF EXISTS` | PG, H2
 | `:full-text` | `to_tsvector` / `ts_rank` | PG
 | `:on-conflict` | `INSERT … ON CONFLICT DO UPDATE` | PG, SQLite
 | `:row-locks` | `SELECT … FOR UPDATE` | PG, H2, MySQL

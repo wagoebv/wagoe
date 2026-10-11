@@ -89,35 +89,23 @@
                     :exception-type (type e)})
         (throw (ddl-error ctx ddl-statement e))))))
 
-(defn- native?
-  [ctx capability]
-  (contains? (protocols/capabilities (:adapter ctx)) capability))
-
-(defn- execute-tolerating!
-  "Run `ddl`, counting a failure `done?` recognises as success. Not through
-   execute-ddl!, which logs every failure: an index already there would be an
-   ERROR line on each boot."
-  [ctx ddl done?]
-  (try
-    (jdbc/execute! (execution/current-datasource ctx) [ddl])
-    (catch java.sql.SQLException e
-      (when-not (done? (execution/reported e))
-        (throw (ddl-error ctx ddl e))))))
-
 (defn- if-exists-ddl!
-  "`with-clause` where the adapter claims `capability`, else `without` run
-   with the failure `done?` recognises counted as success."
+  "Run `with-clause` where the adapter claims `capability`, else `without`,
+   counting a failure `done?` recognises as success."
   [ctx capability with-clause without done?]
   (execution/validate-context ctx)
-  (if (native? ctx capability)
+  (if (contains? (protocols/capabilities (:adapter ctx)) capability)
     (execute-ddl! ctx with-clause)
-    (execute-tolerating! ctx without done?)))
+    ;; Not through execute-ddl!, which logs every failure as an ERROR.
+    (try
+      (jdbc/execute! (execution/current-datasource ctx) [without])
+      (catch java.sql.SQLException e
+        (when-not (done? (execution/reported e))
+          (throw (ddl-error ctx without e)))))))
 
 (defn create-index-if-not-exists!
-  "Create an index unless it is there. IF NOT EXISTS where the adapter claims
-   :index-if-not-exists; elsewhere (MySQL) the CREATE runs and \"already there\"
-   counts as done, so a second call does nothing (BOU-607). A unique index the
-   rows break is a :conflict naming the table and columns.
+  "Create an index unless it is there (BOU-607). A unique index the rows break
+   is a :conflict naming the table and columns.
 
    Example:
      (create-index-if-not-exists! ctx \"idx_users_email\" :users [:email])
@@ -140,8 +128,7 @@
                   e)))))))
 
 (defn drop-index-if-exists!
-  "Drop an index if it is there. DROP INDEX IF EXISTS where the adapter claims
-   :index-if-not-exists; MySQL, which has neither, names the table."
+  "Drop an index if it is there (BOU-607)."
   [ctx index-name table]
   (if-exists-ddl! ctx :index-if-not-exists
                   (str "DROP INDEX IF EXISTS " index-name)
@@ -155,14 +142,19 @@
    Example:
      (add-column-if-not-exists! ctx :users :nickname \"VARCHAR(50)\")"
   [ctx table column definition]
-  (let [add (fn [clause] (str "ALTER TABLE " (name table) " ADD COLUMN " clause
-                              (name column) " " definition))]
-    (if-exists-ddl! ctx :column-if-not-exists (add "IF NOT EXISTS ") (add "")
-                    constraint/already-exists?)))
+  (let [stmt (fn [clause] (str "ALTER TABLE " (name table) " ADD COLUMN " clause
+                               (name column) " " definition))]
+    ;; Read first where the ALTER would otherwise fail on every run: on MySQL a
+    ;; failed one still takes the table's metadata lock. SQLite lists no
+    ;; generated column here, which the tolerated failure then covers.
+    (when (or (contains? (protocols/capabilities (:adapter ctx)) :column-if-not-exists)
+              (not-any? #(= (str/lower-case (name column)) (:name %)) (get-table-info ctx table)))
+      (if-exists-ddl! ctx :column-if-not-exists (stmt "IF NOT EXISTS ") (stmt "")
+                      constraint/already-exists?))))
 
 (defn drop-column-if-exists!
   "Drop `column` from `table` if it is there."
   [ctx table column]
-  (let [drop (fn [clause] (str "ALTER TABLE " (name table) " DROP COLUMN " clause (name column)))]
-    (if-exists-ddl! ctx :column-if-not-exists (drop "IF EXISTS ") (drop "")
+  (let [stmt (fn [clause] (str "ALTER TABLE " (name table) " DROP COLUMN " clause (name column)))]
+    (if-exists-ddl! ctx :column-if-not-exists (stmt "IF EXISTS ") (stmt "")
                     constraint/already-gone?)))

@@ -12,7 +12,6 @@
    fails too, so the list only shrinks. MySQL needs a server:
    `bb test:services up`. Without one this fails rather than passing on three."
   (:require [cheshire.core :as json]
-            [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [next.jdbc :as jdbc]
             [support.embedded-pg :as epg]
@@ -203,7 +202,7 @@
               (db/create-index-if-not-exists! ctx "uk_idx_twice_code" :idx_twice [:code] {:unique? true}))))
 
 (defn- columns-of [ctx table]
-  (set (map #(-> % :name name str/lower-case) (db/get-table-info ctx table))))
+  (set (map :name (db/get-table-info ctx table))))
 
 (defn- ddl-twice
   "Each if-(not-)exists helper run twice does its work once, on every engine
@@ -267,13 +266,17 @@
    (fn [ctx]
      (ddl! ctx "DROP TABLE IF EXISTS ix_probe")
      (ddl! ctx "CREATE TABLE ix_probe (id INTEGER, c INTEGER)")
-     (attempt #(dotimes [_ 2] (ddl! ctx "CREATE INDEX IF NOT EXISTS ix_probe_c ON ix_probe (c)"))))
+     (attempt #(dotimes [_ 2]
+                 (ddl! ctx "CREATE INDEX IF NOT EXISTS ix_probe_c ON ix_probe (c)")
+                 (ddl! ctx "DROP INDEX IF EXISTS ix_probe_c"))))
 
    :column-if-not-exists
    (fn [ctx]
      (ddl! ctx "DROP TABLE IF EXISTS col_probe")
      (ddl! ctx "CREATE TABLE col_probe (id INTEGER)")
-     (attempt #(dotimes [_ 2] (ddl! ctx "ALTER TABLE col_probe ADD COLUMN IF NOT EXISTS c INTEGER"))))
+     (attempt #(dotimes [_ 2]
+                 (ddl! ctx "ALTER TABLE col_probe ADD COLUMN IF NOT EXISTS c INTEGER")
+                 (ddl! ctx "ALTER TABLE col_probe DROP COLUMN IF EXISTS c"))))
 
    :on-conflict
    (fn [ctx]

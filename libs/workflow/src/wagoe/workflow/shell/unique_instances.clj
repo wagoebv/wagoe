@@ -50,4 +50,5 @@
 (defn down
   "Migratus entry point."
   [config]
-  (db/drop-index-if-exists! (db/context-of (db/migration-connectable config)) index-name :workflow_instances))
+  (let [ctx (db/context-of (db/migration-connectable config))]
+    (db/drop-index-if-exists! ctx index-name :workflow_instances)))
