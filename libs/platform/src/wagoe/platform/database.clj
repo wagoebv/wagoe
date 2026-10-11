@@ -109,6 +109,18 @@
   "Create an index unless it is already there."
   schema/create-index-if-not-exists!)
 
+(def drop-index-if-exists!
+  "Drop an index if it is there."
+  schema/drop-index-if-exists!)
+
+(def add-column-if-not-exists!
+  "Add a column unless it is already there."
+  schema/add-column-if-not-exists!)
+
+(def drop-column-if-exists!
+  "Drop a column if it is there."
+  schema/drop-column-if-exists!)
+
 ;; =============================================================================
 ;; Query building
 ;;

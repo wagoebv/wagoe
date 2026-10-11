@@ -47,8 +47,17 @@
         field (assoc :field field)))))
 
 (defn already-exists?
-  "Whether the driver reports that what a CREATE names is already there.
-   Only MySQL is asked: it takes no IF NOT EXISTS on an index (ER_DUP_KEYNAME,
-   1061), and the other engines do (BOU-607)."
-  [{:keys [error-code]}]
-  (= 1061 error-code))
+  "Whether the driver reports that the index or column a statement adds is
+   already there (BOU-607)."
+  [{:keys [error-code message]}]
+  (boolean (or (#{1060 1061} error-code)
+               (re-find #"duplicate column name" (str message)))))
+
+(defn already-gone?
+  "Whether the driver reports that the index or column a statement drops is not
+   there (BOU-607)."
+  [{:keys [error-code message]}]
+  (boolean (or (= 1091 error-code)
+               ;; Anchored: a view or trigger that breaks on the drop reports
+               ;; "(error in view v after drop column: no such column: c)".
+               (re-find #"\(no such column: " (str message)))))
