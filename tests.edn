@@ -60,6 +60,13 @@
            :ns-patterns ["wagoe.*-test"]
            :randomize? true}
 
+         ;; The root test/ tree alone: what :unit adds over the per-library
+         ;; suites. CI runs this, since each library has its own job (BOU-615).
+          {:id :app
+           :test-paths ["test"]
+           :ns-patterns ["wagoe.*-test"]
+           :randomize? true}
+
          ;; Per-library test suites
          ;; Usage: clojure -M:test :core
           {:id :core

@@ -470,7 +470,7 @@ jobs:
         run: clojure -M:test
 
   test-app:
-    name: Test app (:unit suite)
+    name: Test app (:app suite)
     runs-on: ubuntu-latest
     needs: warm-deps
 
@@ -511,10 +511,9 @@ jobs:
     # those two gates were never executed in CI — a PR merged green while one of
     # them was failing (BOU-422).
     #
-    # `:unit` also lists every library's test path, so this repeats what the
-    # per-library jobs cover. Deliberate: narrowing the suite changes what
-    # `bb test:all` means locally. It is now the longest job, so it sets the
-    # run's wall-clock (BOU-527).
+    # `:app` is the root tree only. `:unit` added every library's tests again,
+    # which the per-library jobs already run, and made this the job the whole
+    # run waited on (BOU-615). `bb test:all` still runs `:unit` locally.
     steps:
       - uses: actions/checkout@v6
 
@@ -527,7 +526,7 @@ jobs:
         env:
           JWT_SECRET: "ci-test-secret-minimum-32-characters"
           WAG_ENV: test
-        run: clojure -M:test:test/all :unit
+        run: clojure -M:test:test/all :app
 
   test-core:
     name: Test wagoe/core
@@ -1475,7 +1474,7 @@ jobs:
       - name: Summary
         run: |
           echo "✅ All library tests passed!"
-          echo "  - the app itself (:unit suite — wiring + service-catalogue gates)"
+          echo "  - the app itself (:app suite — wiring + service-catalogue gates)"
           echo "Libraries tested:"
           echo "  - wagoe/core"
           echo "  - wagoe/observability"
