@@ -5,8 +5,19 @@
   (:require
    [wagoe.admin.ports :as ports]
    [wagoe.admin.core.ui :as admin-ui]
+   [wagoe.admin.core.ui.filters :as filters]
    [wagoe.admin.core.permissions :as permissions]
    [wagoe.admin.shell.http.support :as support]))
+
+(defn- list-options
+  "The list's options from the query string, without the filters that filter
+   nothing: the filter drawer sends every field, the untouched ones blank."
+  [request]
+  (let [options (support/parse-query-params (:query-params request))
+        active  (filters/active-filters (:filters options))]
+    (if (seq active)
+      (assoc options :filters active)
+      (dissoc options :filters))))
 
 ;; =============================================================================
 ;; List Overview (ADR-040)
@@ -65,7 +76,7 @@
                                :entity-name entity-name})))
 
           entity-config (ports/get-entity-config schema-provider entity-name)
-          options (support/parse-query-params (:query-params request))
+          options (list-options request)
 
           ; Get entity data
           result (ports/list-entities admin-service entity-name options)
@@ -133,7 +144,7 @@
                                :entity-name entity-name})))
 
           entity-config (ports/get-entity-config schema-provider entity-name)
-          options (support/parse-query-params (:query-params request))
+          options (list-options request)
 
           ; Get entity data
           result (ports/list-entities admin-service entity-name options)
@@ -166,3 +177,18 @@
         (support/htmx-fragment-response request
                                         (admin-ui/entity-table entity-name records entity-config table-query total-count permissions filters
                                                                display))))))
+
+(defn filter-drawer-handler
+  "GET /:entity/filters — the filter drawer for the filters in the query
+   string, blank ones kept: re-rendered when an operator changes, it keeps
+   the operator chosen for a field that has no value yet."
+  [_admin-service schema-provider _config]
+  (fn [request]
+    (let [_user         (support/require-admin-user! request)
+          entity-name   (support/get-entity-name request)
+          _             (when-not (ports/validate-entity-exists schema-provider entity-name)
+                          (throw (ex-info "Unknown entity" {:type :not-found :entity-name entity-name})))
+          entity-config (ports/get-entity-config schema-provider entity-name)
+          options       (support/parse-query-params (:query-params request))]
+      (support/html-response request
+                             (admin-ui/filter-drawer entity-name entity-config (:filters options))))))

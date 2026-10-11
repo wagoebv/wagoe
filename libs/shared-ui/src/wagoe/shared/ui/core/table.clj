@@ -204,7 +204,9 @@
                                :hx-params  "none"
                                :disabled   (<= page 1)
                                :aria-label [:t :admin/pagination-first-page]
-                               :title      [:t :admin/pagination-first-page]}
+                               :title      [:t :admin/pagination-first-page]
+                               ;; What the keyboard pages with (admin keyboard.js)
+                               :data-page  "first"}
          "«"]
         ;; Previous page
         [:button.page-nav-btn {:type       "button"
@@ -215,7 +217,8 @@
                                :hx-params  "none"
                                :disabled   (<= page 1)
                                :aria-label [:t :admin/pagination-previous-page]
-                               :title      [:t :admin/pagination-previous-page]}
+                               :title      [:t :admin/pagination-previous-page]
+                               :data-page  "prev"}
          "‹"]
         ;; Page number buttons with ellipsis
         [:div.page-numbers
@@ -232,7 +235,8 @@
                                :hx-params  "none"
                                :disabled   (>= page total-pages)
                                :aria-label [:t :admin/pagination-next-page]
-                               :title      [:t :admin/pagination-next-page]}
+                               :title      [:t :admin/pagination-next-page]
+                               :data-page  "next"}
          "›"]
         ;; Last page
         [:button.page-nav-btn {:type       "button"
@@ -243,5 +247,6 @@
                                :hx-params  "none"
                                :disabled   (>= page total-pages)
                                :aria-label [:t :admin/pagination-last-page]
-                               :title      [:t :admin/pagination-last-page]}
+                               :title      [:t :admin/pagination-last-page]
+                               :data-page  "last"}
          "»"]]])))

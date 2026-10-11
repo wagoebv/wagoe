@@ -8,6 +8,7 @@
    [wagoe.admin.core.forms :as forms]
    [wagoe.admin.core.ui :as admin-ui]
    [wagoe.admin.core.ui.base :as ui-base]
+   [wagoe.admin.core.ui.filters :as ui-filters]
    [wagoe.admin.ports :as ports]
    [wagoe.core.utils.redirect :as redirect]
    [wagoe.admin.shell.permissions :as shell-permissions]
@@ -16,6 +17,7 @@
    [wagoe.platform.core.http.problem-details :as problem-details]
    [clojure.string :as str]
    [clojure.tools.logging :as log]
+   [ring.util.codec :as codec]
    [ring.util.response :as ring-response])
   (:import [java.util UUID]))
 
@@ -677,6 +679,42 @@
 ;; Entity Detail Options (shared by detail + crud handlers)
 ;; =============================================================================
 
+(defn- list-nav
+  "Previous and next record in the list the page was opened from — its
+   filters, search, sort and page — across a page edge, or nil when the page
+   was not opened from this entity's list or the record is not on it. One list
+   query, two at a page edge."
+  [admin-service entity-name entity-config record return-to]
+  (let [list-path (str "/web/admin/" (name entity-name))
+        [path qs] (when return-to (str/split return-to #"\?" 2))]
+    (when (= path list-path)
+      (let [params   (if (str/blank? qs) {} (let [d (codec/form-decode qs)] (if (map? d) d {})))
+            options  (let [o (parse-query-params params)
+                           active (ui-filters/active-filters (:filters o))]
+                       (if (seq active) (assoc o :filters active) (dissoc o :filters)))
+            page-of  (fn [page] (ports/list-entities admin-service entity-name (assoc options :page page)))
+            current  (page-of (:page options 1))
+            pk       (:primary-key entity-config :id)
+            ids      (mapv #(str (get % pk)) (:records current))
+            idx      (.indexOf ^java.util.List ids (str (get record pk)))
+            page     (:page-number current 1)
+            size     (:page-size current)
+            url      (fn [id on-page]
+                       (str list-path "/" id "?return_to="
+                            (ui-base/url-encode
+                             (str list-path "?" (codec/form-encode (assoc params "page" (str on-page)))))))
+            edge     (fn [on-page pick]
+                       (some->> (:records (page-of on-page)) seq pick (#(get % pk)) str))]
+        (when (>= idx 0)
+          (let [prev (cond (pos? idx) [(nth ids (dec idx)) page]
+                           (> page 1) (some-> (edge (dec page) last) (vector (dec page))))
+                next (cond (< idx (dec (count ids))) [(nth ids (inc idx)) page]
+                           (< page (:total-pages current 1)) (some-> (edge (inc page) first) (vector (inc page))))]
+            (cond-> {:position (+ (* (dec page) (or size 0)) idx 1)
+                     :total    (:total-count current)}
+              prev (assoc :prev-url (apply url prev))
+              next (assoc :next-url (apply url next)))))))))
+
 (defn build-entity-detail-opts
   "Builds opts for entity-detail-page and the surrounding admin-layout.
    Shared between entity-detail-handler and update-entity-handler.
@@ -758,7 +796,12 @@
      :page-opts      {:related-records related-records
                       :return-to       return-to
                       :parent-context  parent-context
-                      :sibling-nav     sibling-nav
+                      ;; Within a parent's children, else within the list it came from
+                      :sibling-nav     (or sibling-nav
+                                           (try (list-nav admin-service entity-name entity-config record return-to)
+                                                (catch Exception e
+                                                  (log/warn e "admin list navigation failed" {:entity entity-name})
+                                                  nil)))
                       :display         (display-options config request)
                       :field-options   (foreign-key-options admin-service config entity-configs entity-name record)
                       :workflow        (:admin/workflow (first (with-workflow-states config entity-config [record])))}}))

@@ -8,6 +8,7 @@
    [wagoe.admin.core.permissions :as permissions]
    [wagoe.admin.shell.permissions :as shell-permissions]
    [wagoe.admin.shell.http.support :as support]
+   [wagoe.shared.ui.core.components :as ui]
    [clojure.tools.logging :as log]
    [ring.util.response :as ring-response]))
 
@@ -308,7 +309,10 @@
           ; Check permissions
           _ (shell-permissions/assert-can-edit-entity! user entity-name entity-config)
 
-          [zones params] (support/form-zone-options config request (submitted-params request))
+          ;; ⌘↵ in the form: save, then back to the list it came from
+          then-list?     (= "list" (get (submitted-params request) "__then"))
+          [zones params] (support/form-zone-options config request
+                                                    (dissoc (submitted-params request) "__then" :__then))
           [form-data parse-errors] (support/parse-form-params-checked params entity-config zones)
 
           ;; An update is validated as the entity it would leave behind, not as
@@ -336,8 +340,16 @@
         ; Update entity and re-render detail page with success flash
         (let [updated-record (ports/update-entity admin-service entity-name id form-data)
               permissions    (permissions/get-entity-permissions user entity-name entity-config)
-              ctx             (support/build-entity-detail-opts admin-service schema-provider config entity-name entity-config updated-record request)]
+              ctx             (when-not then-list?
+                                (support/build-entity-detail-opts admin-service schema-provider config entity-name entity-config updated-record request))]
 
+          (if then-list?
+            (let [message ((support/t-fn request) :admin/flash-updated
+                                                  {:label (introspection/singular-label entity-config entity-name)})]
+              (-> (ring-response/response "")
+                  (ring-response/header "X-Toast" (str "{\"type\":\"success\",\"message\":" (pr-str (str message)) "}"))
+                  (ring-response/header "HX-Redirect" (or (support/safe-return-to request)
+                                                          (str "/web/admin/" (name entity-name))))))
           (support/html-response request
                                  (admin-ui/admin-layout
                                   (admin-ui/entity-detail-page entity-name entity-config updated-record {} permissions
@@ -348,7 +360,7 @@
                                    :current-entity entity-name
                                    :entities (:entities ctx)
                                    :entity-configs (:entity-configs ctx)
-                                   :logo-url (:logo-url config)})))
+                                   :logo-url (:logo-url config)}))))
 
         ; Validation errors - re-render form with flash inside page content
         (let [permissions (permissions/get-entity-permissions user entity-name entity-config)
@@ -368,3 +380,33 @@
                                        :entity-configs (:entity-configs ctx)
                                        :logo-url (:logo-url config)}))
               (assoc :status 422)))))))
+
+(defn validate-field-handler
+  "POST /:entity/validate-field — one field's errors, as the form left it,
+   when the user leaves the field: the whole form is validated the way a save
+   would be (an edit as the record it would leave behind), and only the left
+   field's messages come back. Empty when it is fine. Nothing is written."
+  [admin-service schema-provider config]
+  (fn [request]
+    (let [user          (support/require-admin-user! request)
+          entity-name   (support/get-entity-name request)
+          _             (when-not (ports/validate-entity-exists schema-provider entity-name)
+                          (throw (ex-info "Unknown entity" {:type :not-found :entity-name entity-name})))
+          entity-config (ports/get-entity-config schema-provider entity-name)
+          submitted     (submitted-params request)
+          field         (some-> (get submitted "__field") keyword)
+          id            (not-empty (get submitted "__id"))
+          _             (if id
+                          (shell-permissions/assert-can-edit-entity! user entity-name entity-config)
+                          (shell-permissions/assert-can-create-entity! user entity-name entity-config))
+          [zones params] (support/form-zone-options config request
+                                                    (dissoc submitted "__field" "__id" "__then"))
+          form-cfg      (cond-> entity-config (nil? id) introspection/for-create)
+          [form-data parse-errors] (support/parse-form-params-checked params form-cfg zones)
+          existing      (when id (ports/get-entity admin-service entity-name id))
+          result        (ports/validate-entity-data admin-service entity-name (merge existing form-data))
+          errors        (get (merge (:errors result) parse-errors) field)]
+      (support/html-response request
+                             (if (and field (seq errors))
+                               (ui/field-errors (ui/field-error-id field) errors)
+                               "")))))

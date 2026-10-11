@@ -1,13 +1,14 @@
 /* =============================================================================
    wagoe-admin.css — the admin as the working sister of wagoe.org
 
-   Loads last in the :admin-pilot bundle. Three parts:
+   Loads last in the :admin-pilot bundle. In parts:
    1. Tokens: the wagoe.org palette and type, as daisyUI and Wagoe variables,
       for light and dark.
    2. Density: chrome, toolbar and table without the cards, gradients, pills
       and row animations of the earlier look.
    3. Display roles (ADR-040): every list cell carries `c-<role>`; this file
       styles roles, never fields, so a new entity looks right unstyled.
+   4–6. The record drawer, the bulk bar and the form's save bar.
 
    Colour rule: the dark green is chrome, not content. Bright teal (#5FD3B6)
    only on dark; on light the accent is the deeper teal (#0E7C66), which passes
@@ -157,6 +158,236 @@
   box-shadow: none !important;
   background: transparent !important;
 }
+
+/* -----------------------------------------------------------------------------
+   2a. The frame: the shell is exactly the window. Only the content scrolls,
+       and on a list only the table, between a fixed toolbar and pagination.
+   ----------------------------------------------------------------------------- */
+
+/* The page layout pads and the wrapper pulls back with negative margins; the
+   admin shell wants neither */
+.main-content:has(> .hiccup-fragment-wrapper > .admin-shell) { padding: 0 !important; }
+.main-content > .hiccup-fragment-wrapper:has(> .admin-shell) { margin: 0 !important; }
+
+.admin-content { padding: 16px 24px !important; }
+
+@media (min-width: 769px) {
+  .admin-content:has(> .entity-list-page) {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .entity-list-page,
+  .entity-list-page > #filter-table-container,
+  #filter-table-container > #entity-table-container,
+  #entity-table-container > .table-and-pagination {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .entity-list-page { gap: 12px; }
+  .entity-list-page > #filter-table-container { gap: 10px; }
+  .entity-list-page > *,
+  #filter-table-container > * { margin: 0 !important; flex: none; }
+  .entity-list-page > #filter-table-container,
+  #filter-table-container > #entity-table-container { flex: 1 1 auto; }
+  .table-and-pagination > .table-wrapper {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto !important;
+  }
+  .table-and-pagination > .table-pagination { position: static !important; flex: none; }
+}
+
+/* The list's blocks span the width (a flex parent may centre them) */
+#filter-table-container > *,
+.entity-list-page > * { align-self: stretch; }
+
+/* Toolbar, filters and pagination at table density */
+.record-count-badge {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-muted);
+  background: none !important;
+  border: 0 !important;
+  padding: 0 !important;
+}
+
+/* The filter line above the table: Filter (n), active filters as chips,
+   Clear all. Editing is in the filter drawer. */
+.filter-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.filter-summary .filter-open {
+  height: 28px !important;
+  min-height: 0 !important;
+  padding: 0 10px !important;
+  gap: 6px;
+  font-size: 12px;
+  background: var(--color-base-100) !important;
+  border: 1px solid var(--color-base-300) !important;
+  color: var(--text-muted) !important;
+  box-shadow: none !important;
+}
+.filter-summary .filter-open.has-filters {
+  color: var(--accent-primary) !important;
+  border-color: color-mix(in oklab, var(--accent-primary) 40%, transparent) !important;
+  background: var(--accent-primary-light) !important;
+}
+.filter-count {
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 2px 0 10px;
+  border: 1px solid var(--color-base-300);
+  border-radius: 4px;
+  background: var(--color-base-100);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.filter-chip button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 3px;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.filter-chip button:hover { background: var(--surface-2); color: var(--text-primary); }
+.filter-summary .filter-clear {
+  height: 28px;
+  padding: 0 6px;
+  border: 0;
+  background: none;
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.filter-summary .filter-clear:hover { color: var(--text-primary); }
+
+/* The filter drawer: every field under the other; the fields scroll, the
+   footer stays */
+.filter-drawer { overflow: hidden !important; }
+.filter-drawer-form { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+.filter-fields {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 8px 20px 16px;
+  display: flex;
+  flex-direction: column;
+}
+.filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.filter-field-name { font-size: 12px; font-weight: 500; color: var(--text-muted); }
+.filter-field.is-active .filter-field-name { color: var(--accent-primary); }
+.filter-field-inputs { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.filter-field-inputs select,
+.filter-field-inputs input {
+  height: 30px !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 8px !important;
+  font-size: 13px;
+  border: 1px solid var(--color-base-300) !important;
+  border-radius: 4px !important;
+  background: var(--color-base-100) !important;
+  box-shadow: none !important;
+}
+.filter-field-inputs select[multiple] { height: auto !important; padding: 4px !important; }
+.filter-field-inputs .filter-operator-select { flex: 0 0 auto; width: auto !important; color: var(--text-muted); }
+.filter-field-inputs .filter-value-input,
+.filter-field-inputs .filter-value-range { flex: 1 1 160px; min-width: 0; width: auto !important; }
+.filter-value-range { display: flex; align-items: center; gap: 6px; }
+.filter-value-range input { flex: 1 1 0; min-width: 0; }
+.filter-field-inputs :focus { border-color: var(--accent-primary) !important; outline: none; box-shadow: 0 0 0 3px var(--accent-primary-light) !important; }
+.drawer-footer {
+  display: flex;
+  gap: 8px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--color-base-300);
+  background: var(--color-base-100);
+}
+.drawer-footer kbd { font-family: var(--font-mono); font-size: 11px; opacity: 0.75; margin-left: 4px; }
+
+.admin-content .table-pagination {
+  padding: 8px 12px !important;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--color-base-100) !important;
+  box-shadow: none !important;
+}
+.admin-content .table-pagination .page-btn,
+.admin-content .table-pagination .page-nav-btn {
+  height: 28px !important;
+  min-width: 28px !important;
+  min-height: 0 !important;
+  padding: 0 8px !important;
+  font-size: 13px;
+  box-shadow: none !important;
+  transform: none !important;
+}
+.admin-content .table-pagination .page-btn.active {
+  border-color: var(--accent-primary) !important;
+  color: var(--accent-primary) !important;
+  background: var(--accent-primary-light) !important;
+}
+.admin-content .pagination-nav { gap: 4px; }
+
+/* The sidebar's brand row lines up with the topbar */
+.admin-sidebar-header {
+  min-height: var(--topbar-height) !important;
+  height: var(--topbar-height);
+  padding: 0 10px 0 12px !important;
+  border-bottom: 1px solid var(--wg-chrome-hover) !important;
+}
+.sidebar-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  text-decoration: none;
+}
+/* The sidebar is dark in both themes, so always the logo made for dark */
+.admin-sidebar .brand-logo-light { display: none !important; }
+.admin-sidebar .brand-logo-dark { display: inline-block !important; }
+/* The mark fills the row, less an 8px margin above and below */
+.sidebar-brand .brand-logo img,
+.sidebar-brand-mark img {
+  height: calc(var(--topbar-height) - 16px) !important;
+  width: auto !important;
+}
+.sidebar-brand .brand-logo { display: inline-flex; }
+.sidebar-wordmark {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 22px;
+  letter-spacing: -0.01em;
+  color: #F2F6F4;
+}
+.admin-sidebar .sidebar-controls button { color: var(--wg-chrome-muted); }
+.admin-sidebar .sidebar-controls button:hover { color: #F2F6F4; background: var(--wg-chrome-hover); }
+.admin-sidebar-nav { padding-top: 14px !important; }
+.admin-sidebar .entity-list a { padding: 7px 10px !important; font-size: 13px; gap: 10px; }
+.admin-sidebar .entity-list a svg,
+.admin-sidebar-footer a svg { width: 16px !important; height: 16px !important; }
+.admin-sidebar-footer { border-top: 1px solid var(--wg-chrome-hover) !important; }
 
 /* -----------------------------------------------------------------------------
    2b. The table
@@ -360,6 +591,622 @@ time.tone-danger  { color: var(--tone-danger-fg);  font-weight: 600; }
 .facet-tab.tone-warning .facet-count { color: var(--tone-warning-fg); }
 
 /* -----------------------------------------------------------------------------
+   4. Record drawer: one record beside its list
+   ----------------------------------------------------------------------------- */
+
+:root { --drawer-width: 420px; }
+
+.record-drawer {
+  position: fixed;
+  top: var(--topbar-height, 48px);
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  width: min(var(--drawer-width), 100vw);
+  overflow-y: auto;
+  background: var(--color-base-100);
+  border-left: 1px solid var(--color-base-300);
+  display: flex;
+  flex-direction: column;
+}
+
+/* On a wide screen the list makes room, so the drawer sits beside it */
+@media (min-width: 1100px) {
+  .admin-content:has(.record-drawer) { padding-right: calc(var(--drawer-width) + 16px); }
+}
+
+.drawer-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.drawer-nav { display: flex; gap: 2px; flex-shrink: 0; }
+.drawer-nav button:disabled { opacity: 0.35; cursor: default; }
+.drawer-heading { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; min-width: 0; }
+.drawer-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+}
+
+.drawer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.drawer-actions:empty { display: none; }
+
+.drawer-fields {
+  display: grid;
+  grid-template-columns: minmax(96px, auto) minmax(0, 1fr);
+  gap: 8px 16px;
+  margin: 0;
+  padding: 14px 20px;
+}
+.drawer-fields dt { color: var(--text-muted); }
+.drawer-fields dd { margin: 0; text-align: left !important; overflow-wrap: anywhere; }
+.drawer-fields dd.c-money,
+.drawer-fields dd.c-number,
+.drawer-fields dd.c-percent { font-variant-numeric: tabular-nums; }
+
+.drawer-empty { padding: 0 20px 14px; color: var(--text-muted); font-size: 12px; }
+.drawer-empty summary { cursor: pointer; width: fit-content; }
+.drawer-empty p { margin: 6px 0 0; line-height: 1.6; }
+.drawer-section { padding: 14px 20px; border-top: 1px solid var(--border-subtle); }
+.drawer-section-title { margin: 0 0 8px; font-size: 12px; font-weight: 600; color: var(--text-muted); }
+.drawer-related { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.drawer-related li { display: flex; justify-content: space-between; gap: 12px; }
+.drawer-related a { color: var(--accent-primary); text-decoration: none; }
+.drawer-related a:hover { text-decoration: underline; }
+
+.admin-content .data-table tbody tr.row-open,
+.admin-content .data-table tbody tr.row-open:hover { background: var(--row-selected) !important; }
+.admin-content .data-table tbody tr.row-open td:first-child,
+.admin-content .data-table tbody tr.row-cursor td:first-child { box-shadow: inset 2px 0 0 var(--accent-primary) !important; }
+
+.kbd-hints {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.kbd-hints kbd {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 1px 5px;
+  margin-right: 2px;
+  border: 1px solid var(--color-base-300);
+  border-bottom-width: 2px;
+  border-radius: 3px;
+  background: var(--color-base-100);
+  color: var(--text-muted);
+}
+@media (pointer: coarse) { .kbd-hints { display: none; } }
+
+/* -----------------------------------------------------------------------------
+   5. Bulk bar: what to do with the selected rows
+   ----------------------------------------------------------------------------- */
+
+.bulk-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px 4px 12px;
+  border-radius: var(--radius-box);
+  /* The selection's own colour, like the selected rows below it */
+  background: var(--row-selected);
+  border: 1px solid color-mix(in oklab, var(--accent-primary) 35%, transparent);
+  color: var(--text-primary);
+}
+.bulk-count { font-weight: 600; margin-right: 8px; color: var(--accent-primary); }
+.bulk-bar form { margin: 0; }
+.bulk-bar .button {
+  height: 28px;
+  min-height: 0;
+  padding: 0 10px;
+  gap: 6px;
+  font-size: 12px;
+  background: var(--color-base-100) !important;
+  border: 1px solid var(--color-base-300) !important;
+  color: var(--text-primary) !important;
+  box-shadow: none !important;
+}
+.bulk-bar .button:hover { border-color: var(--text-faint) !important; }
+.bulk-bar .bulk-danger { color: var(--tone-danger-fg) !important; }
+.bulk-bar .bulk-danger:hover { background: var(--tone-danger-bg) !important; border-color: var(--tone-danger-fg) !important; }
+.bulk-bar .bulk-clear {
+  margin-left: auto;
+  background: transparent !important;
+  border-color: transparent !important;
+  color: var(--text-muted) !important;
+}
+.bulk-bar .bulk-clear:hover { color: var(--text-primary) !important; }
+.bulk-bar kbd,
+.save-bar kbd {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  opacity: 0.75;
+  background: none;
+  border: 0;
+  padding: 0;
+}
+
+/* -----------------------------------------------------------------------------
+   6. Save bar: the form's foot, sticky while it scrolls
+   ----------------------------------------------------------------------------- */
+
+.admin-content .save-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 10px 16px;
+  background: var(--color-base-100);
+  border: 1px solid var(--color-base-300);
+  border-radius: var(--radius-box);
+}
+.save-state { display: inline-flex; align-items: center; gap: 8px; color: var(--text-muted); }
+.save-state > span:last-child { color: var(--text-primary); font-weight: 500; }
+.save-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--color-base-300); }
+.save-dot.is-dirty { background: var(--wg-copper); }
+.save-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; }
+.save-kbd { margin-left: 4px; }
+
+@media (max-width: 640px) {
+  .admin-content .save-bar { flex-direction: column; align-items: stretch; }
+  .save-actions { margin-left: 0; }
+  .save-actions .button { flex: 1; justify-content: center; }
+  .save-kbd, .bulk-bar kbd { display: none; }
+}
+
+/* -----------------------------------------------------------------------------
+   7. Detail / edit page: the record's name as heading, sections without
+      cards, labels above compact inputs, two columns where there is room.
+   ----------------------------------------------------------------------------- */
+
+.entity-detail-page { max-width: 1040px; }
+.entity-detail-page > * + * { margin-top: 16px !important; }
+
+.entity-detail-page .page-header { gap: 6px !important; margin: 0 !important; padding: 0 !important; }
+.entity-detail-page .page-header-row {
+  margin: 0 !important;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+}
+.entity-detail-page .page-breadcrumbs { font-size: 12px; color: var(--text-muted); }
+.entity-detail-page .page-breadcrumbs a { color: var(--text-muted); text-decoration: none; }
+.entity-detail-page .page-breadcrumbs a:hover { color: var(--accent-primary); text-decoration: underline; }
+.entity-detail-page .page-header-actions .button {
+  height: 30px !important;
+  min-height: 0 !important;
+  padding: 0 10px !important;
+  font-size: 12px;
+  box-shadow: none !important;
+}
+.entity-detail-page .sibling-nav { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--text-muted); }
+.entity-detail-page .sibling-nav .button { width: 30px; padding: 0 !important; justify-content: center; }
+.entity-detail-page .sibling-nav-count { font-family: var(--font-mono); font-size: 11px; padding: 0 4px; }
+.entity-detail-page .button-danger-text { color: var(--tone-danger-fg) !important; }
+.entity-detail-page .button-danger-text:hover { background: var(--tone-danger-bg) !important; }
+.entity-detail-page .page-heading { display: flex; flex-direction: column; gap: 2px; }
+.entity-detail-page .page-kicker { font-size: 12px; color: var(--text-muted); }
+.entity-detail-page .page-title {
+  margin: 0 !important;
+  font-family: var(--font-display);
+  font-size: 22px !important;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+
+/* The form: no card; sections separated by a hairline, their title beside
+   the fields on a wide screen */
+.entity-detail-page .form-card,
+.entity-detail-page .form-section {
+  background: none !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+.entity-detail-page .form-card-body { padding: 0 !important; }
+.entity-detail-page .form-card-body > * + * { margin-top: 0 !important; }
+.entity-detail-page .form-meta { display: none; }   /* the asterisks say it */
+.entity-detail-page .form-section {
+  margin: 0 !important;
+  padding: 14px 0 16px !important;
+  border-top: 1px solid var(--color-base-300) !important;
+  gap: 12px;
+}
+.entity-detail-page .form-section-title {
+  font-family: var(--font-display);
+  font-size: 14px !important;
+  font-weight: 600;
+  margin: 0 !important;
+}
+.entity-detail-page .form-section-description { font-size: 12px !important; color: var(--text-muted); margin: 2px 0 0 !important; }
+@media (min-width: 1100px) {
+  .entity-detail-page .form-section:not(details) {
+    display: grid !important;
+    grid-template-columns: 200px minmax(0, 1fr);
+    column-gap: 32px;
+    align-items: start;
+  }
+  .entity-detail-page details.form-section[open] {
+    display: grid !important;
+    grid-template-columns: 200px minmax(0, 1fr);
+    column-gap: 32px;
+    align-items: start;
+  }
+  /* Open or closed, the chevron stays beside the title */
+  .entity-detail-page details.form-section > .form-section-toggle {
+    width: 200px;
+    justify-content: space-between;
+  }
+}
+.entity-detail-page .form-section-toggle { cursor: pointer; list-style: none; align-items: flex-start; gap: 8px; }
+.entity-detail-page .form-section-toggle::-webkit-details-marker { display: none; }
+.entity-detail-page .form-section-toggle-icon {
+  width: 22px !important;
+  height: 22px !important;
+  border: 0 !important;
+  background: none !important;
+  color: var(--text-muted);
+}
+
+.entity-detail-page .form-fields { gap: 12px 16px !important; }
+/* Spacing between fields is the grid's gap alone; the field's own bottom
+   margin added 24px below the last row, above the next line */
+.entity-detail-page .form-field { padding-left: 0 !important; margin: 0 !important; }
+.entity-detail-page .form-field::before { display: none !important; }   /* no bar beside required fields */
+.entity-detail-page .form-field label {
+  display: block;
+  margin-bottom: 4px !important;
+  font-size: 12px !important;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+.entity-detail-page .form-field .required { color: var(--accent-primary); margin-left: 2px; }
+.entity-detail-page .form-field .form-control {
+  height: 32px !important;
+  min-height: 0 !important;
+  padding: 0 10px !important;
+  font-size: 13px !important;
+  border: 1px solid var(--color-base-300) !important;
+  border-radius: 4px !important;
+  background: var(--color-base-100) !important;
+  box-shadow: none !important;
+}
+.entity-detail-page .form-field textarea.form-control { height: auto !important; min-height: 72px !important; padding: 6px 10px !important; }
+.entity-detail-page .form-field .form-control:focus {
+  border-color: var(--accent-primary) !important;
+  box-shadow: 0 0 0 3px var(--accent-primary-light) !important;
+  outline: none;
+}
+.entity-detail-page .form-field .form-control[readonly],
+.entity-detail-page .form-field .form-control:disabled {
+  background: var(--surface-2) !important;
+  color: var(--text-muted);
+}
+.entity-detail-page .form-field.has-errors .form-control,
+.entity-detail-page .form-field .form-control[aria-invalid="true"] {
+  border-color: var(--tone-danger-fg) !important;
+  box-shadow: 0 0 0 3px var(--tone-danger-bg) !important;
+}
+.entity-detail-page .field-errors,
+.entity-detail-page .field-error { font-size: 12px; color: var(--tone-danger-fg); margin-top: 4px; }
+.entity-detail-page .field-zone,
+.entity-detail-page .form-field small { font-size: 11px; color: var(--text-faint); }
+.entity-detail-page .form-checkbox { accent-color: var(--accent-primary); width: 16px; height: 16px; margin-top: 8px; }
+
+/* The read-only side of the record beside the fields, and what this edit
+   changes; below the form on a narrower screen */
+.entity-detail-page:has(.record-summary) { max-width: 1320px; }
+@media (min-width: 1100px) {
+  .entity-detail-page .entity-form:has(> .record-summary) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 260px;
+    column-gap: 32px;
+    align-items: start;
+  }
+  .entity-detail-page .entity-form > .form-card { grid-column: 1; grid-row: 1; }
+  .entity-detail-page .entity-form > .record-summary { grid-column: 2; grid-row: 1; position: sticky; top: 0; }
+  .entity-detail-page .entity-form > .save-bar { grid-column: 1 / -1; }
+}
+.record-summary {
+  padding: 14px 0;
+  border-top: 1px solid var(--color-base-300);
+  font-size: 12px;
+}
+.record-summary-fields {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 6px 12px;
+  margin: 0;
+}
+.record-summary-fields dt { color: var(--text-muted); }
+.record-summary-fields dd { margin: 0; text-align: left !important; overflow-wrap: anywhere; }
+.record-summary-changes {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-subtle);
+}
+.record-summary-changes h3 { margin: 0 0 4px; font-size: 12px; font-weight: 600; color: var(--text-primary); }
+.record-summary-changes p { margin: 0; color: var(--text-muted); line-height: 1.5; }
+
+/* The save bar spans the form, flush with the content's edges */
+.entity-detail-page .save-bar { border-radius: var(--radius-box); padding: 8px 12px !important; }
+.save-bar .button {
+  height: 32px !important;
+  min-height: 0 !important;
+  padding: 0 12px !important;
+  font-size: 13px;
+  box-shadow: none !important;
+}
+
+.save-bar .save-hint {
+  flex-basis: 100%;
+  order: 3;
+  font-size: 11px;
+  color: var(--text-faint);
+  text-align: right;
+}
+@media (min-width: 900px) {
+  .save-bar .save-hint { flex-basis: auto; order: 0; margin-left: auto; }
+  .save-bar .save-actions { margin-left: 12px !important; }
+}
+
+/* A key hint inside a button is plain text, not daisyUI's keycap */
+.save-bar kbd,
+.save-hint kbd,
+.bulk-bar kbd,
+.drawer-footer kbd,
+.drawer-actions kbd {
+  all: unset;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  opacity: 0.7;
+  margin-left: 4px;
+}
+
+/* Related records below the form: the list's table, without its card */
+.entity-detail-page .related-records,
+.entity-detail-page .related-records-section {
+  background: none !important;
+  box-shadow: none !important;
+}
+
+/* -----------------------------------------------------------------------------
+   8. Topbar and list toolbar: the topbar names the page and holds the user
+      menu; the toolbar is search, count and actions at 32px.
+   ----------------------------------------------------------------------------- */
+
+:root { --topbar-height: 52px; }
+
+.admin-topbar {
+  height: var(--topbar-height) !important;
+  min-height: 0 !important;
+  padding: 0 16px 0 24px !important;
+  border-bottom: 1px solid var(--color-base-300) !important;
+}
+.admin-topbar-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.admin-topbar-actions { display: flex; align-items: center; gap: 6px; }
+.admin-topbar-actions > button,
+.admin-topbar-actions .theme-toggle {
+  width: 32px !important;
+  height: 32px !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+}
+
+.user-menu { position: relative; }
+.user-menu > summary { list-style: none; }
+.user-menu > summary::-webkit-details-marker { display: none; }
+.user-menu-button {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--wg-copper);
+  color: var(--wg-ink);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+}
+.user-menu[open] .user-menu-button { box-shadow: 0 0 0 3px var(--accent-primary-light); }
+.user-menu-panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 40;
+  min-width: 220px;
+  padding: 6px;
+  background: var(--color-base-100);
+  border: 1px solid var(--color-base-300);
+  border-radius: var(--radius-box);
+  box-shadow: 0 8px 24px rgba(15, 28, 24, 0.12);
+}
+.user-menu-who {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 8px 8px;
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: 4px;
+  font-size: 13px;
+}
+.user-menu-email { font-size: 12px; color: var(--text-muted); }
+.user-menu .logout-form { margin: 0; }
+.user-menu .logout-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+}
+.user-menu .logout-button:hover { background: var(--surface-2); }
+
+/* Search: the magnifier inside the field, `/` as its hint */
+.admin-content .toolbar-search { position: relative; display: flex; align-items: center; }
+.admin-content .toolbar-search .search-input {
+  width: 300px;
+  height: 32px !important;
+  min-height: 0 !important;
+  padding: 0 30px 0 32px !important;
+  font-size: 13px;
+  border: 1px solid var(--color-base-300) !important;
+  border-radius: 4px !important;
+  background: var(--color-base-100) !important;
+  box-shadow: none !important;
+}
+.admin-content .toolbar-search .search-input:focus {
+  border-color: var(--accent-primary) !important;
+  box-shadow: 0 0 0 3px var(--accent-primary-light) !important;
+  outline: none;
+}
+.admin-content .toolbar-search .icon-button {
+  position: absolute;
+  top: 4px;
+  width: 24px !important;
+  height: 24px !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: none !important;
+  box-shadow: none !important;
+  color: var(--text-muted);
+}
+.admin-content .toolbar-search .search-icon {
+  position: absolute;
+  left: 10px;
+  display: inline-flex;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+.admin-content .toolbar-search .icon-button.secondary { right: 4px; }
+.admin-content .toolbar-search .icon-button svg { width: 15px; height: 15px; }
+.admin-content .toolbar-search::after {
+  content: "/";
+  position: absolute;
+  right: 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-faint);
+  border: 1px solid var(--color-base-300);
+  border-radius: 3px;
+  padding: 0 5px;
+  pointer-events: none;
+}
+.admin-content .toolbar-search:has(.icon-button.secondary)::after,
+.admin-content .toolbar-search:focus-within::after { display: none; }
+
+.admin-content .table-toolbar-container { padding: 0 !important; min-height: 0 !important; }
+.admin-content .toolbar-row-actions { gap: 12px; align-items: center; }
+.admin-content .toolbar-actions .button,
+.admin-content .toolbar-actions .icon-button {
+  height: 32px !important;
+  min-height: 0 !important;
+  font-size: 13px;
+  box-shadow: none !important;
+}
+.admin-content .toolbar-actions .icon-button { width: 32px !important; padding: 0 !important; }
+
+/* View menu: density and columns */
+.view-menu { position: relative; }
+.view-menu > summary { list-style: none; }
+.view-menu > summary::-webkit-details-marker { display: none; }
+.admin-content .view-menu-button {
+  width: 32px !important;
+  height: 32px !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.view-menu-panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 40;
+  min-width: 220px;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 8px 10px;
+  background: var(--color-base-100);
+  border: 1px solid var(--color-base-300);
+  border-radius: var(--radius-box);
+  box-shadow: 0 8px 24px rgba(15, 28, 24, 0.12);
+}
+.view-menu-panel fieldset { border: 0; margin: 0; padding: 4px 0 8px; }
+.view-menu-panel fieldset + fieldset { border-top: 1px solid var(--border-subtle); padding-top: 8px; }
+.view-menu-panel legend { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); padding: 0 0 4px; }
+.view-menu-panel label { display: flex; align-items: center; gap: 8px; padding: 3px 0; font-size: 13px; cursor: pointer; white-space: nowrap; }
+.view-menu-panel input { accent-color: var(--accent-primary); margin: 0; }
+
+.record-summary .record-summary-blank { color: var(--text-faint); }
+
+/* Comfortable density: taller rows, same type size */
+.entity-list-page[data-density="comfortable"] {
+  --table-row-height: 44px;
+  --cell-pad-y: 10px;
+}
+
+/* Filtered to nothing: say so, offer the way back */
+.empty-state-filtered {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 48px 16px;
+  color: var(--text-muted);
+  text-align: center;
+}
+.empty-state-filtered .button { height: 32px !important; min-height: 0 !important; font-size: 13px; }
+
+.sr-only {
+  position: absolute !important;
+  width: 1px; height: 1px;
+  overflow: hidden; clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* -----------------------------------------------------------------------------
    Focus and touch
    ----------------------------------------------------------------------------- */
 
@@ -369,6 +1216,10 @@ time.tone-danger  { color: var(--tone-danger-fg);  font-weight: 600; }
   .facet-tab { min-height: 44px; }
   .admin-content .data-table th,
   .admin-content .data-table td { height: 44px; }
+}
+
+@media (pointer: coarse) {
+  .bulk-bar .button { min-height: 44px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

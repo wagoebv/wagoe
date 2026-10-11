@@ -32,10 +32,14 @@
    ;; Alpine.js sidebar - hover expand/collapse via $store.sidebar
    [:aside.admin-sidebar (alpine/sidebar-attrs)
     [:div.admin-sidebar-header
-     [:div.sidebar-brand
+     ;; One row the height of the topbar: the mark at full height and the
+     ;; wordmark. The text is nav-text, so a collapsed sidebar keeps the mark.
+     [:a {:class "sidebar-brand" :href "/web/admin/"}
       (if-let [logo-url (:logo-url opts)]
         [:img.sidebar-brand-logo {:src logo-url :alt ""}]
-        (icons/brand-logo {:size 120 :class "sidebar-brand-logo"}))]
+        (list
+         (icons/brand-logo {:size 48 :variant :icon :class "sidebar-brand-mark"})
+         [:span {:class "nav-text sidebar-wordmark"} "wagoe"]))]
      [:div.sidebar-controls
       [:button.sidebar-pin {:type "button"
                             :aria-label [:t :admin/sidebar-pin-button]
@@ -73,6 +77,19 @@
       (icons/icon :external-link {:size 20})
       [:span.nav-text [:t :admin/sidebar-main-site]]]]]))
 
+(defn- user-initials
+  "One or two letters for the user menu: from the display name's words, else
+   the email's local part."
+  [user]
+  (let [name-words (some-> (:display-name user) str/trim not-empty (str/split #"\s+"))
+        from-email (some-> (:email user) (str/split #"@") first)]
+    (str/upper-case
+     (cond
+       (< 1 (count name-words)) (str (ffirst name-words) (first (last name-words)))
+       (seq name-words)         (subs (first name-words) 0 (min 2 (count (first name-words))))
+       (seq from-email)         (subs from-email 0 (min 2 (count from-email)))
+       :else                    "?"))))
+
 (defn admin-shell
   "New admin shell layout with collapsible sidebar (Phase 2).
 
@@ -100,16 +117,25 @@
                                             :aria-label [:t :admin/menu-open-button]}
                                            (alpine/mobile-menu-toggle-attrs))
          (icons/icon :menu {:size 24})]
-        [:h1 {:class "text-lg font-semibold"} (or page-title [:t :admin/page-heading])]
+        [:h1 {:class "admin-topbar-title"} (or page-title [:t :admin/page-heading])]
         [:div.admin-topbar-actions
-         [:span {:class "badge badge-ghost"} [:t :admin/header-welcome {:name (:display-name user (:email user))}]]
          (icons/theme-toggle-button)
-         [:form {:method "POST" :action "/web/logout" :class "logout-form"}
-          (csrf/hidden-field)
-          [:button {:type "submit" :class "logout-button" :aria-label [:t :admin/button-logout]}
-           [:span.logout-icon
-            (icons/icon :log-out {:size 18 :aria-label [:t :admin/button-logout]})]
-           [:span.sr-only [:t :admin/button-logout]]]]]]
+         ;; Who is signed in, and signing out, behind the initials: the
+         ;; topbar keeps its room for the page
+         (let [who (:display-name user (:email user))]
+           [:details {:class "user-menu"}
+            [:summary {:class "user-menu-button" :aria-label [:t :admin/user-menu] :title (str who)}
+             (user-initials user)]
+            [:div {:class "user-menu-panel"}
+             [:div {:class "user-menu-who"}
+              [:span [:t :admin/header-welcome {:name who}]]
+              (when (and (:display-name user) (:email user))
+                [:span {:class "user-menu-email"} (:email user)])]
+             [:form {:method "POST" :action "/web/logout" :class "logout-form"}
+              (csrf/hidden-field)
+              [:button {:type "submit" :class "logout-button"}
+               (icons/icon :log-out {:size 14})
+               [:span [:t :admin/button-logout]]]]]])]]
        [:main.admin-content
         content]]]]))
 

@@ -1228,9 +1228,10 @@
       (let [page (ui/entity-list-page :users [sample-record] sample-entity-config
                                       {:page 1 :page-size 20} 1 sample-permissions nil)
             page-str (str page)]
-        ;; Search button should have aria-label (i18n key)
+        ;; Typing searches: no search button, the icon is decoration
         (is (str/includes? page-str "aria-label"))
-        (is (str/includes? page-str ":common/button-search"))))
+        (is (not (str/includes? page-str ":common/button-search")))
+        (is (str/includes? page-str "search-icon"))))
 
     (testing "Sidebar buttons have aria-label"
       (let [sidebar (ui/admin-sidebar [:users :orders] sample-entity-configs :users)
@@ -1369,6 +1370,42 @@
         (is (str/includes? form-str "role"))
         (is (str/includes? form-str "active"))
         (is (str/includes? form-str "bio"))))))
+
+(deftest ^:unit record-summary-shows-blank-read-only-fields-test
+  (testing "Every read-only field is in the summary, a blank one as a dash, timestamps last"
+    (let [cfg  (-> sample-entity-config
+                   (assoc :readonly-fields #{:id :created-at :tenant-id})
+                   (assoc-in [:fields :tenant-id] {:type :uuid :label "Tenant"}))
+          form (ui/entity-form :users cfg {:id (java.util.UUID/randomUUID) :email "a@b.c" :name "A"
+                                           :created-at (java.time.Instant/now)}
+                               nil sample-permissions)
+          aside (->> (tree-seq coll? seq form)
+                     (filter #(and (vector? %) (= :aside (first %))))
+                     first)
+          dts  (->> (tree-seq coll? seq aside)
+                    (filter #(and (vector? %) (= :dt (first %))))
+                    (map second))]
+      (is (= ["ID" "Tenant" "Created At"] dts))
+      (is (str/includes? (str aside) "record-summary-blank")))))
+
+(deftest ^:unit entity-form-optional-groups-fold-test
+  (testing "A group without required fields folds away unless it holds something"
+    (let [cfg      sample-grouped-entity-config
+          open-of  (fn [form id]
+                     (->> (tree-seq coll? seq form)
+                          (filter #(and (vector? %) (= :details (first %))
+                                        (= id (get-in % [1 :data-group-id]))))
+                          first
+                          second
+                          :open))
+          empty-f  (ui/entity-form :users cfg nil nil sample-permissions)
+          filled-f (ui/entity-form :users cfg {:id 1 :role "admin"} nil sample-permissions)]
+      (testing "Required group is not folded"
+        (is (nil? (open-of empty-f "identity"))))
+      (testing "Optional group starts closed when blank"
+        (is (false? (open-of empty-f "access"))))
+      (testing "Optional group opens when a field has a value"
+        (is (true? (open-of filled-f "access")))))))
 
 (deftest ^:unit entity-form-flat-rendering-test
   (testing "Entity form renders flat fields when no :field-groups configured"

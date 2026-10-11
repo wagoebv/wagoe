@@ -34,6 +34,17 @@ for what is public API, what is internal, and how deprecations are announced.
 - **`DBAdapter` answers `engine`, `capabilities`, `column-type` and `like`** (BOU-450, ADR-039). Ask these instead of
   parsing the product name or reading a nil dialect as PostgreSQL.
 - **`db/engine-of`** (BOU-450): which engine a datasource speaks, for code that holds no db-context.
+- **Admin record drawer, bulk bar and save bar.** Clicking a list row opens the record beside the list, read-only and
+  rendered by display role, with an Edit link back to the same list (a modified click still navigates). Selecting rows
+  shows a bar with the count, Delete and Clear (Esc). The edit form's actions are a sticky bar that counts unsaved
+  changes, offers Discard, saves on ⌘S / Ctrl+S and warns before leaving with changes. On a list, `j`/`k` move between
+  rows (an open drawer follows, as do its ↑/↓ buttons), `x` selects and `o`/Enter opens. Filters moved into a
+  drawer on the right, every field under the other (`f`); above the table, active filters show as chips that remove
+  themselves. The topbar names the page and holds a user menu; the list has a View menu (density, columns), an
+  empty state that says the filters found nothing, and dates past 60 days as the day alone. Edit pages show the
+  record's read-only fields and what the edit changes beside the form, step through the list with `[` / `]`, save and
+  return with ⌘↵, and check a field when you leave it (`POST /:entity/validate-field`). `IListOverview` takes
+  `:overview/fields` for one record's titles.
 - **Admin list cells render by display role** (ADR-040). A relation shows its target's name, linked; an enum its
   `:options` label in a tone; money is formatted in its currency; dates are relative. Status tabs with counts, page
   totals and a header summary come from the same contract. New config keys, all optional: per field `:display`,

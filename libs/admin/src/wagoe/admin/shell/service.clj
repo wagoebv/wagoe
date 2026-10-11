@@ -816,7 +816,10 @@
   [db-ctx schema-provider entity-name options records]
   (let [entity-config (ports/get-entity-config schema-provider entity-name)
         roles         (:display-roles entity-config)
-        columns       (:list-fields entity-config)
+        ;; One record's fields (the drawer) instead of the list's columns: then
+        ;; there is no list to count facets or summaries over
+        record?       (contains? options :overview/fields)
+        columns       (if record? (:overview/fields options) (:list-fields entity-config))
         of-role       (fn [role] (filter #(= role (get roles %)) columns))
         qc            (resolve-query-config entity-config)
         ;; {column result} for `columns`, leaving out a part that failed
@@ -831,10 +834,10 @@
                           #(relation-titles db-ctx schema-provider entity-config records %))
      :counts  (per-column :counts (of-role :count)
                           #(has-many-counts db-ctx schema-provider entity-config records %))
-     :facets  (when facet
+     :facets  (when (and facet (not record?))
                 {facet (overview-part entity-name [:facet facet]
                                       #(facet-counts db-ctx entity-config qc options))})
-     :summary (summary-values db-ctx entity-name entity-config qc options)}))
+     :summary (if record? [] (summary-values db-ctx entity-name entity-config qc options))}))
 
 (defrecord AdminService [db-ctx schema-provider logger error-reporter config workflows]
   ports/IListOverview
