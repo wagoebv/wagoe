@@ -16,6 +16,7 @@
              [wagoe.tools.ai          :as ai]
              [wagoe.tools.deps        :as deps]
              [wagoe.tools.test-all    :as test-all]
+             [wagoe.tools.ci-changes  :as ci-changes]
              [wagoe.tools.test-services :as test-services]
              [wagoe.tools.i18n        :as i18n]
              [wagoe.tools.admin       :as admin]
@@ -150,6 +151,8 @@
                     :task (check-doc-counts/-main)}
   check:jdk     {:doc "One JDK baseline — Dockerfiles, CI and the installer must agree with doctor-env/java-min (bb check:jdk)"
                  :task (check-jdk/-main)}
+  ci:changes {:doc "Whether a PR changes code or only docs no code test reads (bb ci:changes <base-ref>, BOU-615)"
+              :task (apply ci-changes/-main *command-line-args*)}
   check:roadmap {:doc "One roadmap, and it may not plan what scaling.adoc marks shipped (bb check:roadmap)"
                  :task (check-roadmap/-main)}
   check:changelog {:doc "A branch changing shipped src/ must add a CHANGELOG.md entry, every ^:deprecated var must be announced in one, and the stability page must count the unreleased breaks (bb check:changelog)"
