@@ -58,26 +58,55 @@
         (db/execute-query! ctx [(str "SELECT DISTINCT " column " FROM " table " t"
                                      (orphaned column) " LIMIT 5")])))
 
-(defn ensure-foreign-keys!
-  "Give each tenant table's user column a foreign key to auth_users, unless it
-   has one. Refuses, naming them, rows that point at no user, except where the
-   key would set the column NULL: those are set NULL, as the key would have."
+(defn- add-key!
+  [ctx {:keys [table column constraint on-delete]}]
+  (try
+    (db/execute-ddl! ctx (str "ALTER TABLE " table " ADD CONSTRAINT " constraint
+                              " FOREIGN KEY (" column ") REFERENCES auth_users (id)"
+                              (when on-delete (str " ON DELETE " on-delete))))
+    ;; Replicas boot together; one losing the race finds the key already there.
+    (catch Exception e
+      (when-not (foreign-key-name ctx table column) (throw e)))))
+
+(defn- missing-keys
+  "The references still without a key, or none where they do not apply."
   [ctx]
-  (when (and (db/table-exists? ctx :auth_users)
-             (contains? (protocols/capabilities (:adapter ctx)) :alter-foreign-key))
-    (doseq [{:keys [table column constraint on-delete]} references
-            :when (and (db/table-exists? ctx table) (not (foreign-key-name ctx table column)))]
-      (when (= "tenant_memberships" table) (db/execute-update! ctx [departed-memberships]))
-      (when (= "SET NULL" on-delete)
-        (db/execute-update! ctx [(str "UPDATE " table " t SET " column " = NULL" (orphaned column))]))
-      (when-let [found (not-empty (orphans ctx table column))]
-        (throw (ex-info (str table " has rows whose " column " names no user, so it cannot take a"
-                             " foreign key to auth_users. Delete them, then run again. The first: "
-                             (pr-str found))
-                        {:type :conflict :table table :column column :orphans found})))
-      (db/execute-ddl! ctx (str "ALTER TABLE " table " ADD CONSTRAINT " constraint
-                                " FOREIGN KEY (" column ") REFERENCES auth_users (id)"
-                                (when on-delete (str " ON DELETE " on-delete)))))))
+  (when (and (contains? (protocols/capabilities (:adapter ctx)) :alter-foreign-key)
+             (db/table-exists? ctx :auth_users))
+    (filterv (fn [{:keys [table column]}]
+               (and (db/table-exists? ctx table) (not (foreign-key-name ctx table column))))
+             references)))
+
+(defn ensure-foreign-keys!
+  "`migrate up`: clear departed memberships, set NULL what an ON DELETE SET NULL
+   key would have, refuse naming them any other rows that point at no user, and
+   add the missing keys."
+  [ctx]
+  (when (db/table-exists? ctx :tenant_memberships)
+    (db/execute-update! ctx [departed-memberships]))
+  (doseq [{:keys [table column on-delete] :as reference} (missing-keys ctx)]
+    (when (= "SET NULL" on-delete)
+      (db/execute-update! ctx [(str "UPDATE " table " t SET " column " = NULL" (orphaned column))]))
+    (when-let [found (not-empty (orphans ctx table column))]
+      (throw (ex-info (str table " has rows whose " column " names no user, so it cannot take a"
+                           " foreign key to auth_users. Delete them, then run again. The first: "
+                           (pr-str found))
+                      {:type :conflict :table table :column column :orphans found})))
+    (add-key! ctx reference)))
+
+(defn add-clean-foreign-keys!
+  "Boot: add each missing key whose table has no row pointing at no user, and
+   change no rows. Returns the keys left off, each naming why."
+  [ctx]
+  (into []
+        (keep (fn [{:keys [table column] :as reference}]
+                (try
+                  (if-let [found (not-empty (orphans ctx table column))]
+                    {:table table :column column :orphans found}
+                    (do (add-key! ctx reference) nil))
+                  (catch Exception e
+                    {:table table :column column :error (ex-message e)}))))
+        (missing-keys ctx)))
 
 (defn up
   "Migratus entry point."

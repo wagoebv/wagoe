@@ -10,6 +10,7 @@
             [wagoe.tenant.shell.provisioning :as provisioning]
             [wagoe.tenant.shell.service :as tenant-service]
             [wagoe.tenant.shell.tenant-migrations :as tenant-migrations]
+            [wagoe.tenant.shell.user-foreign-keys :as user-foreign-keys]
             [clojure.tools.logging :as log]
             [integrant.core :as ig]))
 
@@ -35,11 +36,23 @@
       ;; the failure so it can be alerted on and re-run.
       (log/error e "Tenant migration fan-out failed on startup"))))
 
+(defn- add-user-foreign-keys!
+  "The keys `migrate up` adds, for a database that only boots or migrated
+   before auth_users existed (BOU-612). Boot changes no rows and never fails on
+   them: a key that needs cleanup first is logged and left to `migrate up`."
+  [ctx]
+  (try
+    (doseq [left-off (user-foreign-keys/add-clean-foreign-keys! ctx)]
+      (log/warn "Boot left a tenant→auth_users key off; run `bb migrate up`" left-off))
+    (catch Exception e
+      (log/error e "Adding tenant→auth_users keys failed on startup"))))
+
 (defmethod ig/init-key :wagoe/tenant-db-schema
   [_ {:keys [ctx allow-h2?]}]
   (log/info "Initializing tenant module database schema")
   (provisioning/refuse-unsupported-database! ctx allow-h2?)
   (tenant-persistence/initialize-tenant-schema! ctx)
+  (add-user-foreign-keys! ctx)
   (fan-out-tenant-migrations! ctx)
   (log/info "Tenant module database schema initialized")
   {:status :initialized})
@@ -223,7 +236,10 @@
   (let [obs {:logger         (ig/ref :wagoe/logging)
              :error-reporter (ig/ref :wagoe/error-reporting)}]
     {:components
-     {:wagoe/tenant-db-schema      (cond-> {:ctx (ig/ref :wagoe/db-context)}
+     {:wagoe/tenant-db-schema      (cond-> {:ctx (ig/ref :wagoe/db-context)
+                                            ;; Only for order: auth_users must exist before
+                                            ;; the keys to it; empty when user is not run.
+                                            :user-db-schema (ig/refset :wagoe/user-db-schema)}
                                      ;; Only a test profile on H2 sets it.
                                      (:allow-h2? settings) (assoc :allow-h2? true))
       :wagoe/tenant-repository     (merge obs {:ctx (ig/ref :wagoe/db-context)})
