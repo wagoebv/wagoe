@@ -12,6 +12,7 @@
    fails too, so the list only shrinks. MySQL needs a server:
    `bb test:services up`. Without one this fails rather than passing on three."
   (:require [cheshire.core :as json]
+            [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [next.jdbc :as jdbc]
             [support.embedded-pg :as epg]
@@ -204,6 +205,17 @@
 (defn- columns-of [ctx table]
   (set (map :name (db/get-table-info ctx table))))
 
+(defn- has-index? [ctx table index]
+  (with-open [^java.sql.Connection c (jdbc/get-connection (:datasource ctx))]
+    (let [md (.getMetaData c)]
+      (boolean
+       (some (fn [t]
+               (with-open [rs (.getIndexInfo md nil nil t false false)]
+                 (loop []
+                   (when (.next rs)
+                     (or (= index (some-> (.getString rs "INDEX_NAME") str/lower-case)) (recur))))))
+             [table (str/upper-case table)])))))
+
 (defn- ddl-twice
   "Each if-(not-)exists helper run twice does its work once, on every engine
    (BOU-607): with the clause where the adapter claims it, without elsewhere."
@@ -213,7 +225,9 @@
   (or (attempt #(dotimes [_ 2] (db/add-column-if-not-exists! ctx :ddl_twice :note "VARCHAR(20)")))
       (when-not (contains? (columns-of ctx :ddl_twice) "note") "the added column is not there")
       (attempt #(dotimes [_ 2] (db/create-index-if-not-exists! ctx "ix_ddl_twice_note" :ddl_twice [:note])))
+      (when-not (has-index? ctx "ddl_twice" "ix_ddl_twice_note") "the created index is not there")
       (attempt #(dotimes [_ 2] (db/drop-index-if-exists! ctx "ix_ddl_twice_note" :ddl_twice)))
+      (when (has-index? ctx "ddl_twice" "ix_ddl_twice_note") "the dropped index is still there")
       (attempt #(dotimes [_ 2] (db/drop-column-if-exists! ctx :ddl_twice :note)))
       (when (contains? (columns-of ctx :ddl_twice) "note") "the dropped column is still there")))
 

@@ -6,7 +6,7 @@
      JOIN workflow_instances w ON w.entity_type = 'invoice' AND w.entity_uuid = i.id
 
    Idempotent. On PostgreSQL the column is stored, so adding it rewrites the
-   table once; on SQLite, which has no uuid type, it is virtual text."
+   table once; on SQLite, which has no uuid type, it is virtual and CHAR(36)."
   (:require [clojure.string :as str]
             [next.jdbc :as jdbc]
             [wagoe.platform.database :as db]

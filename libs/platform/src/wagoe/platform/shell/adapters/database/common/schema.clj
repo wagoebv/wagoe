@@ -89,12 +89,16 @@
                     :exception-type (type e)})
         (throw (ddl-error ctx ddl-statement e))))))
 
-(defn- if-exists-ddl!
-  "Run `with-clause` where the adapter claims `capability`, else `without`,
-   counting a failure `done?` recognises as success."
-  [ctx capability with-clause without done?]
+(defn- claims?
+  [ctx capability]
   (execution/validate-context ctx)
-  (if (contains? (protocols/capabilities (:adapter ctx)) capability)
+  (contains? (protocols/capabilities (:adapter ctx)) capability))
+
+(defn- if-exists-ddl!
+  "Run `with-clause` where `native?`, else `without`, counting a failure
+   `done?` recognises as success."
+  [ctx native? with-clause without done?]
+  (if native?
     (execute-ddl! ctx with-clause)
     ;; Not through execute-ddl!, which logs every failure as an ERROR.
     (try
@@ -117,7 +121,7 @@
          create (fn [clause] (str "CREATE " (when unique? "UNIQUE ") "INDEX " clause
                                   index-name " ON " (name table) " (" cols ")"))]
      (try
-       (if-exists-ddl! ctx :index-if-not-exists (create "IF NOT EXISTS ") (create "")
+       (if-exists-ddl! ctx (claims? ctx :index-if-not-exists) (create "IF NOT EXISTS ") (create "")
                        constraint/already-exists?)
        (catch Exception e
          (throw (if (and unique? (= :unique (some-> (execution/reported e) constraint/violation :kind)))
@@ -130,7 +134,7 @@
 (defn drop-index-if-exists!
   "Drop an index if it is there (BOU-607)."
   [ctx index-name table]
-  (if-exists-ddl! ctx :index-if-not-exists
+  (if-exists-ddl! ctx (claims? ctx :index-if-not-exists)
                   (str "DROP INDEX IF EXISTS " index-name)
                   (str "DROP INDEX " index-name " ON " (name table))
                   constraint/already-gone?))
@@ -142,19 +146,20 @@
    Example:
      (add-column-if-not-exists! ctx :users :nickname \"VARCHAR(50)\")"
   [ctx table column definition]
-  (let [stmt (fn [clause] (str "ALTER TABLE " (name table) " ADD COLUMN " clause
-                               (name column) " " definition))]
+  (let [native? (claims? ctx :column-if-not-exists)
+        stmt    (fn [clause] (str "ALTER TABLE " (name table) " ADD COLUMN " clause
+                                  (name column) " " definition))]
     ;; Read first where the ALTER would otherwise fail on every run: on MySQL a
     ;; failed one still takes the table's metadata lock. SQLite lists no
     ;; generated column here, which the tolerated failure then covers.
-    (when (or (contains? (protocols/capabilities (:adapter ctx)) :column-if-not-exists)
+    (when (or native?
               (not-any? #(= (str/lower-case (name column)) (:name %)) (get-table-info ctx table)))
-      (if-exists-ddl! ctx :column-if-not-exists (stmt "IF NOT EXISTS ") (stmt "")
-                      constraint/already-exists?))))
+      (if-exists-ddl! ctx native? (stmt "IF NOT EXISTS ") (stmt "") constraint/already-exists?))))
 
 (defn drop-column-if-exists!
-  "Drop `column` from `table` if it is there."
+  "Drop `column` from `table` if it is there. No read first, as add does: SQLite
+   would not list a generated column, so the drop would be skipped."
   [ctx table column]
   (let [stmt (fn [clause] (str "ALTER TABLE " (name table) " DROP COLUMN " clause (name column)))]
-    (if-exists-ddl! ctx :column-if-not-exists (stmt "IF EXISTS ") (stmt "")
+    (if-exists-ddl! ctx (claims? ctx :column-if-not-exists) (stmt "IF EXISTS ") (stmt "")
                     constraint/already-gone?)))

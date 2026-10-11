@@ -58,4 +58,6 @@
    there (BOU-607)."
   [{:keys [error-code message]}]
   (boolean (or (= 1091 error-code)
-               (re-find #"no such column" (str message)))))
+               ;; Anchored: a view or trigger that breaks on the drop reports
+               ;; "(error in view v after drop column: no such column: c)".
+               (re-find #"\(no such column: " (str message)))))
