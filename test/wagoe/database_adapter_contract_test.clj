@@ -12,6 +12,7 @@
    fails too, so the list only shrinks. MySQL needs a server:
    `bb test:services up`. Without one this fails rather than passing on three."
   (:require [cheshire.core :as json]
+            [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [next.jdbc :as jdbc]
             [support.embedded-pg :as epg]
@@ -201,6 +202,22 @@
   (attempt #(dotimes [_ 2]
               (db/create-index-if-not-exists! ctx "uk_idx_twice_code" :idx_twice [:code] {:unique? true}))))
 
+(defn- columns-of [ctx table]
+  (set (map #(-> % :name name str/lower-case) (db/get-table-info ctx table))))
+
+(defn- ddl-twice
+  "Each if-(not-)exists helper run twice does its work once, on every engine
+   (BOU-607): with the clause where the adapter claims it, without elsewhere."
+  [ctx]
+  (ddl! ctx "DROP TABLE IF EXISTS ddl_twice")
+  (ddl! ctx "CREATE TABLE ddl_twice (id INTEGER NOT NULL PRIMARY KEY, code VARCHAR(20))")
+  (or (attempt #(dotimes [_ 2] (db/add-column-if-not-exists! ctx :ddl_twice :note "VARCHAR(20)")))
+      (when-not (contains? (columns-of ctx :ddl_twice) "note") "the added column is not there")
+      (attempt #(dotimes [_ 2] (db/create-index-if-not-exists! ctx "ix_ddl_twice_note" :ddl_twice [:note])))
+      (attempt #(dotimes [_ 2] (db/drop-index-if-exists! ctx "ix_ddl_twice_note" :ddl_twice)))
+      (attempt #(dotimes [_ 2] (db/drop-column-if-exists! ctx :ddl_twice :note)))
+      (when (contains? (columns-of ctx :ddl_twice) "note") "the dropped column is still there")))
+
 (defn- unique-index-on-duplicates
   "A unique index the rows break is a :conflict naming the table, not a raw
    driver error."
@@ -305,6 +322,7 @@
     :strings/unicode           strings-ignore-unicode-case
     :connections/session       every-connection-is-set-up
     :ddl/index-twice           index-twice
+    :ddl/if-exists-twice       ddl-twice
     :ddl/unique-over-duplicates unique-index-on-duplicates
     :transactions/rollback     rollback-undoes
     :conflicts/unique-key      refused-key-is-a-conflict}))

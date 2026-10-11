@@ -16,14 +16,6 @@
                        " GROUP BY workflow_id, entity_type, entity_id HAVING COUNT(*) > 1")]
                  {:builder-fn rs/as-unqualified-lower-maps}))
 
-(defn- mysql? [connectable]
-  (= :mysql (db/engine-of connectable)))
-
-(defn- mysql-index? [connectable]
-  (seq (jdbc/execute! connectable
-                      [(str "SELECT 1 FROM information_schema.statistics WHERE table_schema = DATABASE()"
-                            " AND table_name = 'workflow_instances' AND index_name = ?") index-name])))
-
 (defn present?
   "Whether workflow_instances has the unique index."
   [datasource]
@@ -58,8 +50,4 @@
 (defn down
   "Migratus entry point."
   [config]
-  (let [db (db/migration-connectable config)]
-    (if (mysql? db)
-      (when (mysql-index? db)
-        (jdbc/execute! db [(str "DROP INDEX " index-name " ON workflow_instances")]))
-      (jdbc/execute! db [(str "DROP INDEX IF EXISTS " index-name)]))))
+  (db/drop-index-if-exists! (db/context-of (db/migration-connectable config)) index-name :workflow_instances))

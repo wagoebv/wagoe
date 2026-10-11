@@ -89,6 +89,30 @@
                     :exception-type (type e)})
         (throw (ddl-error ctx ddl-statement e))))))
 
+(defn- native?
+  [ctx capability]
+  (contains? (protocols/capabilities (:adapter ctx)) capability))
+
+(defn- execute-tolerating!
+  "Run `ddl`, counting a failure `done?` recognises as success. Not through
+   execute-ddl!, which logs every failure: an index already there would be an
+   ERROR line on each boot."
+  [ctx ddl done?]
+  (try
+    (jdbc/execute! (execution/current-datasource ctx) [ddl])
+    (catch java.sql.SQLException e
+      (when-not (done? (execution/reported e))
+        (throw (ddl-error ctx ddl e))))))
+
+(defn- if-exists-ddl!
+  "`with-clause` where the adapter claims `capability`, else `without` run
+   with the failure `done?` recognises counted as success."
+  [ctx capability with-clause without done?]
+  (execution/validate-context ctx)
+  (if (native? ctx capability)
+    (execute-ddl! ctx with-clause)
+    (execute-tolerating! ctx without done?)))
+
 (defn create-index-if-not-exists!
   "Create an index unless it is there. IF NOT EXISTS where the adapter claims
    :index-if-not-exists; elsewhere (MySQL) the CREATE runs and \"already there\"
@@ -101,21 +125,12 @@
   ([ctx index-name table columns]
    (create-index-if-not-exists! ctx index-name table columns {}))
   ([ctx index-name table columns {:keys [unique?]}]
-   (execution/validate-context ctx)
-   (let [native? (contains? (protocols/capabilities (:adapter ctx)) :index-if-not-exists)
-         cols    (str/join ", " (map name columns))
-         ddl     (str "CREATE " (when unique? "UNIQUE ") "INDEX " (when native? "IF NOT EXISTS ")
-                      index-name " ON " (name table) " (" cols ")")]
+   (let [cols   (str/join ", " (map name columns))
+         create (fn [clause] (str "CREATE " (when unique? "UNIQUE ") "INDEX " clause
+                                  index-name " ON " (name table) " (" cols ")"))]
      (try
-       (if native?
-         (execute-ddl! ctx ddl)
-         ;; Not through execute-ddl!, which logs every failure: an index that is
-         ;; already there would be an ERROR line on each boot.
-         (try
-           (jdbc/execute! (execution/current-datasource ctx) [ddl])
-           (catch java.sql.SQLException e
-             (when-not (constraint/already-exists? (execution/reported e))
-               (throw (ddl-error ctx ddl e))))))
+       (if-exists-ddl! ctx :index-if-not-exists (create "IF NOT EXISTS ") (create "")
+                       constraint/already-exists?)
        (catch Exception e
          (throw (if (and unique? (= :unique (some-> (execution/reported e) constraint/violation :kind)))
                   (ex-info (str "Cannot make " cols " unique on " (name table)
@@ -123,3 +138,31 @@
                            {:type :conflict :table (name table) :columns (mapv name columns)}
                            e)
                   e)))))))
+
+(defn drop-index-if-exists!
+  "Drop an index if it is there. DROP INDEX IF EXISTS where the adapter claims
+   :index-if-not-exists; MySQL, which has neither, names the table."
+  [ctx index-name table]
+  (if-exists-ddl! ctx :index-if-not-exists
+                  (str "DROP INDEX IF EXISTS " index-name)
+                  (str "DROP INDEX " index-name " ON " (name table))
+                  constraint/already-gone?))
+
+(defn add-column-if-not-exists!
+  "Add `column` to `table` unless it is there. `definition` is what follows the
+   column name: its type, and any default or generation clause.
+
+   Example:
+     (add-column-if-not-exists! ctx :users :nickname \"VARCHAR(50)\")"
+  [ctx table column definition]
+  (let [add (fn [clause] (str "ALTER TABLE " (name table) " ADD COLUMN " clause
+                              (name column) " " definition))]
+    (if-exists-ddl! ctx :column-if-not-exists (add "IF NOT EXISTS ") (add "")
+                    constraint/already-exists?)))
+
+(defn drop-column-if-exists!
+  "Drop `column` from `table` if it is there."
+  [ctx table column]
+  (let [drop (fn [clause] (str "ALTER TABLE " (name table) " DROP COLUMN " clause (name column)))]
+    (if-exists-ddl! ctx :column-if-not-exists (drop "IF EXISTS ") (drop "")
+                    constraint/already-gone?)))
