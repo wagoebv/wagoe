@@ -9,7 +9,9 @@
             [com.blockether.spel.page :as page]
             [com.blockether.spel.locator :as loc]
             [wagoe.e2e.fixtures :as fx]
-            [wagoe.e2e.helpers.reset :as reset]))
+            [wagoe.e2e.helpers.reset :as reset])
+  (:import [com.microsoft.playwright BrowserContext]
+           [com.microsoft.playwright.options Cookie]))
 
 (use-fixtures :each fx/with-fresh-seed)
 
@@ -155,16 +157,14 @@
 
 (deftest ^:integration ^:e2e remembered-email-prefills-form-via-http
   (testing "When remembered-email cookie is set, revisiting /web/login prefills the email field"
-    ;; Set the remembered-email cookie manually via JavaScript and verify
-    ;; the prefill behavior.
+    ;; Through the context, not document.cookie: Chromium stores a script-set
+    ;; cookie asynchronously, so the next request could go out without it and
+    ;; under CI load sometimes did (BOU-617). addCookies returns once stored.
     (spel/with-testing-page [pg]
-      ;; Navigate to login to establish the domain for cookies
-      (page/navigate pg (str base-url "/web/login"))
-      (page/wait-for-load-state pg)
-      ;; Set the remembered-email cookie manually
       (let [user-email (-> fx/*seed* :user :email)]
-        (page/evaluate pg (str "document.cookie = 'remembered-email=" user-email "; path=/'"))
-        ;; Reload the login page
+        (.addCookies ^BrowserContext (page/page-context pg)
+                     [(doto (Cookie. "remembered-email" user-email)
+                        (.setUrl base-url))])
         (page/navigate pg (str base-url "/web/login"))
         (page/wait-for-load-state pg)
         (let [email-val (loc/input-value (page/locator pg "input[name='email']"))]
