@@ -1,0 +1,95 @@
+name: Coverage
+
+# `bb coverage` on every push to main, reported without a threshold (BOU-451);
+# not on pull requests, where its run time would set CI's wall-clock.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  coverage:
+    name: Coverage report
+    runs-on: ubuntu-latest
+
+    # The adapter sweeps compare every backend they can reach and fail when one
+    # is missing, as in the CI test jobs.
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: probe
+          MYSQL_DATABASE: audience
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -uroot -pprobe --silent"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 30
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Clojure + warm deps
+        uses: ./.github/actions/clojure-deps
+        with:
+          aliases: -M:coverage:db:test/pg:test/otel:test/http
+
+      - name: Setup Babashka
+        uses: DeLaGuardo/setup-clojure@13.6.1
+        with:
+          bb: latest
+
+      - name: Run coverage
+        shell: bash
+        env:
+          JWT_SECRET: "ci-test-secret-minimum-32-characters"
+          WAG_ENV: test
+        run: |
+          status=0
+          bb coverage > coverage.log 2>&1 || status=$?
+          tail -40 coverage.log
+          {
+            echo "## Coverage"
+            echo
+            if [ "$status" -ne 0 ]; then
+              echo "> **The run failed** (exit $status); no report."
+            else
+              # The totals are only in the console table, coloured.
+              echo "| | % forms | % lines |"
+              echo "|---|---|---|"
+              sed -e $'s/\033\\[[0-9;]*m//g' coverage.log \
+                | awk -F'|' '/ALL FILES/ {gsub(/ /,"",$3); gsub(/ /,"",$4); print "| All files | " $3 " | " $4 " |"}'
+              echo
+              echo "Per-namespace and per-file numbers are in the \`coverage\` artifact."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
+
+      - name: Upload report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage
+          path: |
+            target/coverage
+            coverage.log
+          if-no-files-found: ignore

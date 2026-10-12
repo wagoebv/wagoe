@@ -74,6 +74,9 @@ runs:
     # exact hit and never saved — the expansion would have reached no other job
     # until some dependency happened to change. "Known-bad" was too narrow a
     # reason to bump, which is how that was missed in review.
+    #
+    # v4: warm-deps also resolves -M:coverage:db:test/pg:test/otel:test/http for coverage.yml
+    # (BOU-451), the same kind of change as v3.
     - name: Cache dependencies
       id: cache
       uses: actions/cache@v5
@@ -81,8 +84,8 @@ runs:
         path: |
           ~/.m2/repository
           ~/.gitlibs
-        key: ${{ runner.os }}-clojure-v3-${{ hashFiles('**/deps.edn') }}
-        restore-keys: ${{ runner.os }}-clojure-v3-
+        key: ${{ runner.os }}-clojure-v4-${{ hashFiles('**/deps.edn') }}
+        restore-keys: ${{ runner.os }}-clojure-v4-
 
     # Resolve deps single-threaded BEFORE any concurrent resolution. On a cold
     # ~/.m2, tools.deps parses many JDBC-driver POMs in parallel and intermittently

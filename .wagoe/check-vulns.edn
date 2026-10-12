@@ -1,0 +1,10 @@
+;; Exemptions for `bb check:vulns`. Every entry needs a :why; prefer :alias to
+;; :id, and tie it with :while to the tool version it excuses (see `allowed?`).
+
+{:allow
+ [{:alias ":build" :while [slipset/deps-deploy "0.2.5"]
+   :why   "Publishing only: deps-deploy's s3-wagon-private brings the old logback, aws-sdk and jetty, and it will not load without it."}
+  {:alias ":clj-kondo" :while [clj-kondo/clj-kondo "2026.08.04"]
+   :why   "Linting only: clj-kondo bundles jackson-core 2.17.0 and reads no untrusted input."}
+  {:alias ":outdated" :while [olical/depot "2.4.1"]
+   :why   "Dependency report only: depot brings plexus-utils 3.4.1."}]}

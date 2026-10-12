@@ -42,13 +42,16 @@
 
 (deftest ^:unit close-and-with-db-manage-lifecycle
   (testing "close-db-context! only closes valid contexts"
-    (let [closed (atom [])]
-      (with-redefs [db-core/db-context? (fn [ctx] (= ::valid ctx))
+    ;; A context with an adapter: close-db-context! logs its dialect, and at
+    ;; INFO (as cloverage runs) a bare keyword had none to log.
+    (let [closed (atom [])
+          valid  {:adapter (adapter-stub :h2 "org.h2.Driver") :datasource ::pool}]
+      (with-redefs [db-core/db-context? (fn [ctx] (= valid ctx))
                     db-core/close-connection-pool! (fn [datasource]
                                                       (swap! closed conj datasource))]
         (sut/close-db-context! ::invalid)
-        (sut/close-db-context! ::valid)
-        (is (= [nil] @closed)))))
+        (sut/close-db-context! valid)
+        (is (= [::pool] @closed)))))
 
   (testing "with-db always closes the created context"
     (let [closed (atom [])

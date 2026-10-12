@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **`bb check:vulns`** (BOU-451): known vulnerabilities in every `deps.edn`, aliases included, from GitHub's advisory
+  database. Runs weekly and on PRs that change a `deps.edn`; coverage now runs on every push to main.
 - **`DBAdapter` answers `engine`, `capabilities`, `column-type` and `like`** (BOU-450, ADR-039). Ask these instead of
   parsing the product name or reading a nil dialect as PostgreSQL.
 - **`db/drop-index-if-exists!`, `db/add-column-if-not-exists!` and `db/drop-column-if-exists!`** (BOU-607): safe to run
@@ -73,6 +75,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Dependencies with known vulnerabilities, two of them critical, are pinned to fixed releases** (BOU-618): BouncyCastle
+  1.86, Jetty 12.1.14, jackson 2.22.3, log4j-api 2.26.1, commons-lang3 3.21.0. Upgrade to pick them up.
 - **The Redis event bus could acknowledge an event no handler saw** (BOU-600) when `stop!` or the last `unsubscribe!` ran
   mid-poll. Such an event now stays pending for a live consumer to reclaim.
 - **`wagoe-admin` record navigation**: previous / next on the edit page now also work from the list's row chevron and a ⌘-clicked title (the links carry `return_to`), and from inside a field with ⌥↑ / ⌥↓ — the page opens with the cursor in the first field, where `[` and `]` are typed rather than obeyed.

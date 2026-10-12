@@ -69,6 +69,7 @@ existing-dir/
 !.wagoe/check-doc-counts.edn
 !.wagoe/check-isolation.edn
 !.wagoe/check-error-shape.edn
+!.wagoe/check-vulns.edn
 
 # Claude Code local settings
 .claude/settings.local.json

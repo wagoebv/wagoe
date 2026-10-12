@@ -17,6 +17,7 @@
              [wagoe.tools.deps        :as deps]
              [wagoe.tools.test-all    :as test-all]
              [wagoe.tools.ci-changes  :as ci-changes]
+             [wagoe.tools.check-vulns :as check-vulns]
              [wagoe.tools.test-services :as test-services]
              [wagoe.tools.i18n        :as i18n]
              [wagoe.tools.admin       :as admin]
@@ -91,7 +92,11 @@
   migrate       {:doc "Run database migrations via the standard Wagoe migrate CLI (bb migrate [up|status|rollback|create ...])"
                  :task (apply dev/migrate *command-line-args*)}
   coverage      {:doc "Run Cloverage coverage with the monorepo Wagoe test/classpath setup"
-                 :task (clojure "-M:coverage:db")}
+                 ;; Embedded PostgreSQL, OpenTelemetry and clj-http-lite left :test for
+                 ;; narrow aliases (BOU-260), and coverage runs them all.
+                 ;; Linux binaries only, as CI has them; the Mac one when run on a Mac.
+                 :task (clojure (str "-M:coverage:db:test/pg:test/otel:test/http"
+                                     (when (= "aarch64" (System/getProperty "os.arch")) ":test/pg-mac")))}
   create-admin  {:doc "Create the first admin user for a new Wagoe project (interactive wizard)"
                  :task (apply admin/-main *command-line-args*)}
   check:versions {:doc "Every hard-coded suite version must agree, in source and in docs (bb check:versions)"
@@ -151,6 +156,8 @@
                     :task (check-doc-counts/-main)}
   check:jdk     {:doc "One JDK baseline — Dockerfiles, CI and the installer must agree with doctor-env/java-min (bb check:jdk)"
                  :task (check-jdk/-main)}
+  check:vulns {:doc "Known vulnerabilities in every deps.edn, aliases included; needs GITHUB_TOKEN (bb check:vulns, BOU-451)"
+               :task (check-vulns/-main)}
   ci:changes {:doc "Whether a PR changes code or only docs no code test reads (bb ci:changes <base-ref>, BOU-615)"
               :task (apply ci-changes/-main *command-line-args*)}
   check:roadmap {:doc "One roadmap, and it may not plan what scaling.adoc marks shipped (bb check:roadmap)"
