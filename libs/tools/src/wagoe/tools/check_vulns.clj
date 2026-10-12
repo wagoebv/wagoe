@@ -1,10 +1,7 @@
 (ns wagoe.tools.check-vulns
-  "Known vulnerabilities in every dependency of every deps.edn, aliases
-   included (BOU-451). `bb check:vulns`; needs GITHUB_TOKEN.
-
-   Asks GitHub's advisory database directly. clj-watson read a rate-limited
-   reply as \"no vulnerabilities\" and went green while blind; here any reply
-   that is not an answer fails the run (BOU-618)."
+  "Known vulnerabilities in every deps.edn and alias, from GitHub's advisory
+   API with GITHUB_TOKEN. A reply that is not an answer fails the run rather
+   than reading as \"none\" (BOU-451, BOU-618)."
   (:require [babashka.fs :as fs]
             [babashka.http-client :as http]
             [babashka.process :as process]
@@ -49,19 +46,19 @@
                                                      :err :string :continue true}
                                     (cond-> ["clojure" "-Spath"] alias (conj (str "-A" alias))))]
     (when-not (zero? exit)
-      (throw (ex-info (str "cannot resolve " deps-file " " alias ": " (str/join " " (remove #(str/starts-with? % "Picked up") (str/split-lines err))))
-                      {:type :internal-error})))
+      (let [why (->> (str/split-lines err) (remove #(str/starts-with? % "Picked up")) (str/join " "))]
+        (throw (ex-info (str "cannot resolve " deps-file " " alias ": " why) {:type :internal-error}))))
     (filter #(str/ends-with? % ".jar") (str/split (str/trim out) #":"))))
 
 (defn- users
-  "{[lib version] #{\"libs/x :alias\"}} across every deps.edn and alias."
-  [m2]
+  "{[lib version] #{[\"libs/x\" \":alias\"]}} across `files` and their aliases;
+   the alias is nil for a file's base classpath."
+  [m2 files]
   (apply merge-with into
-         (for [f     (deps/find-deps-files)
+         (for [f     files
                alias (cons nil (keys (:aliases (edn/read-string (slurp f)))))
-               :let  [who (str (deps/relative-label f) (when alias (str " " alias)))]
                coord (keep #(jar-coord m2 %) (classpath-jars f alias))]
-           {coord #{who}})))
+           {coord #{[(deps/relative-label f) (some-> alias str)]}})))
 
 (defn- package [lib] (str (namespace lib) ":" (name lib)))
 
@@ -111,26 +108,27 @@
 
 (defn allowed?
   "Whether `entries` excuse `finding`: by advisory `:id`, or by `:alias` when
-   every use of that library version comes through allowlisted aliases. An id
-   alone would also hide the same advisory where the code ships."
+   every use of that library version comes through excused aliases. An alias
+   entry with `:while [lib version]` lapses once the alias stops using that
+   version, so upgrading the tool asks for the excuse again."
   [entries used {:keys [lib version id]}]
-  (let [ids      (set (keep :id entries))
-        aliases  (set (keep :alias entries))
-        alias-of #(second (str/split % #" " 2))]
-    (or (contains? ids id)
+  (let [current? (fn [{[wl wv] :while :keys [alias]}]
+                   (or (nil? wl) (some #(= alias (second %)) (used [wl wv]))))
+        aliases  (set (keep #(when (current? %) (:alias %)) entries))]
+    (or (contains? (set (keep :id entries)) id)
         (and (seq aliases)
-             (every? #(contains? aliases (alias-of %)) (used [lib version]))))))
+             (every? #(contains? aliases (second %)) (used [lib version]))))))
 
 (defn users-line
   "Who uses a library version, an alias shared by many files said once:
    `libs/admin, libs/ai :build (31 files)` rather than 31 entries."
   [who]
-  (->> (group-by #(second (str/split % #" " 2)) who)
+  (->> (group-by second who)
        (sort-by (comp str key))
        (map (fn [[alias ws]]
               (if (and alias (> (count ws) 3))
                 (str alias " (" (count ws) " files)")
-                (str/join ", " (sort ws)))))
+                (str/join ", " (sort (map (fn [[label a]] (str label (when a (str " " a)))) ws))))))
        (str/join "; ")))
 
 (def ^:private severity-order {:critical 0 :high 1 :medium 2 :low 3})
@@ -141,14 +139,17 @@
       (println "GITHUB_TOKEN is not set; GitHub's advisory API needs it.")
       (System/exit 2))
     (let [m2    (str (fs/path (System/getProperty "user.home") ".m2" "repository") "/")
-          used  (users m2)
+          files (deps/find-deps-files)
+          used  (users m2 files)
           allow (allowlist)
+          ;; A few requests, each paged: in parallel rather than one by one.
           rows  (->> (batches (keys used) batch-size)
-                     (mapcat #(findings % (advisories token %)))
+                     (pmap #(findings % (advisories token %)))
+                     (apply concat)
                      distinct
                      (remove #(allowed? allow used %))
                      (sort-by (juxt #(severity-order (:severity %) 9) (comp str :lib) :version :id)))]
-      (println (count used) "library versions checked across" (count (deps/find-deps-files)) "deps.edn files.")
+      (println (count used) "library versions checked across" (count files) "deps.edn files.")
       (doseq [{:keys [lib version id cve severity fixed]} rows]
         (println (format "%-8s %s %s  %s %s  fixed in %s\n         used by %s"
                          (name (or severity :unknown)) lib version id (or cve "") (or fixed "-")

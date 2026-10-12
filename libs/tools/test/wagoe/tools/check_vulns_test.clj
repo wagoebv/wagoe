@@ -36,17 +36,23 @@
 
 (deftest ^:unit many-files-sharing-an-alias-are-said-once
   (is (= ":build (4 files)"
-         (sut/users-line #{"libs/a :build" "libs/b :build" "libs/c :build" "libs/d :build"})))
+         (sut/users-line #{["libs/a" ":build"] ["libs/b" ":build"] ["libs/c" ":build"] ["libs/d" ":build"]})))
   (is (= "(root), libs/a; libs/b :test"
-         (sut/users-line #{"(root)" "libs/a" "libs/b :test"}))))
+         (sut/users-line #{["(root)" nil] ["libs/a" nil] ["libs/b" ":test"]}))))
 
 (deftest ^:unit an-alias-excuses-only-what-it-alone-uses
   (let [allow [{:alias ":build" :why "deploy tooling"}]
-        used  {['x/x "1"] #{"libs/a :build" "libs/b :build"}
-               ['y/y "1"] #{"libs/a :build" "(root)"}}]
+        used  {['x/x "1"] #{["libs/a" ":build"] ["libs/b" ":build"]}
+               ['y/y "1"] #{["libs/a" ":build"] ["(root)" nil]}}]
     (is (sut/allowed? allow used {:lib 'x/x :version "1" :id "GHSA-1"}))
     (is (not (sut/allowed? allow used {:lib 'y/y :version "1" :id "GHSA-1"}))
         "the same version also ships, so it is not excused"))
   (testing "an id excuses the advisory wherever it is"
-    (is (sut/allowed? [{:id "GHSA-1" :why "x"}] {['y/y "1"] #{"(root)"}}
-                      {:lib 'y/y :version "1" :id "GHSA-1"}))))
+    (is (sut/allowed? [{:id "GHSA-1" :why "x"}] {['y/y "1"] #{["(root)" nil]}}
+                      {:lib 'y/y :version "1" :id "GHSA-1"})))
+  (testing "an excuse tied to a tool version lapses when the alias moves off it"
+    (let [allow  [{:alias ":build" :while ['tool/t "1.0"] :why "x"}]
+          finding {:lib 'x/x :version "1" :id "GHSA-1"}
+          base   {['x/x "1"] #{["libs/a" ":build"]}}]
+      (is (sut/allowed? allow (assoc base ['tool/t "1.0"] #{["libs/a" ":build"]}) finding))
+      (is (not (sut/allowed? allow (assoc base ['tool/t "1.1"] #{["libs/a" ":build"]}) finding))))))

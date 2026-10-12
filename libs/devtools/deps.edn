@@ -17,26 +17,6 @@
          metosin/reitit-core {:mvn/version "0.10.1"}
          integrant/repl {:mvn/version "0.5.1"}
          hiccup/hiccup           {:mvn/version "2.0.0"}
-         ;; ring-jetty-adapter 1.15.5 (latest) brings Jetty 12.1.8: CVE-2026-10050. Every Jetty artifact moves together (BOU-618).
-         org.eclipse.jetty/jetty-http                                     {:mvn/version "12.1.14"}
-         org.eclipse.jetty/jetty-io                                       {:mvn/version "12.1.14"}
-         org.eclipse.jetty/jetty-security                                 {:mvn/version "12.1.14"}
-         org.eclipse.jetty/jetty-server                                   {:mvn/version "12.1.14"}
-         org.eclipse.jetty/jetty-session                                  {:mvn/version "12.1.14"}
-         org.eclipse.jetty/jetty-unixdomain-server                        {:mvn/version "12.1.14"}
-         org.eclipse.jetty/jetty-util                                     {:mvn/version "12.1.14"}
-         org.eclipse.jetty/jetty-xml                                      {:mvn/version "12.1.14"}
-         org.eclipse.jetty.ee/jetty-ee-webapp                             {:mvn/version "12.1.14"}
-         org.eclipse.jetty.ee9/jetty-ee9-nested                           {:mvn/version "12.1.14"}
-         org.eclipse.jetty.ee9/jetty-ee9-security                         {:mvn/version "12.1.14"}
-         org.eclipse.jetty.ee9/jetty-ee9-servlet                          {:mvn/version "12.1.14"}
-         org.eclipse.jetty.ee9/jetty-ee9-webapp                           {:mvn/version "12.1.14"}
-         org.eclipse.jetty.ee9.websocket/jetty-ee9-websocket-jetty-api    {:mvn/version "12.1.14"}
-         org.eclipse.jetty.ee9.websocket/jetty-ee9-websocket-jetty-common {:mvn/version "12.1.14"}
-         org.eclipse.jetty.ee9.websocket/jetty-ee9-websocket-jetty-server {:mvn/version "12.1.14"}
-         org.eclipse.jetty.ee9.websocket/jetty-ee9-websocket-servlet      {:mvn/version "12.1.14"}
-         org.eclipse.jetty.websocket/jetty-websocket-core-common          {:mvn/version "12.1.14"}
-         org.eclipse.jetty.websocket/jetty-websocket-core-server          {:mvn/version "12.1.14"}
          ring/ring-jetty-adapter {:mvn/version "1.15.5"}}
 
  :aliases

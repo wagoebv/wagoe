@@ -1,7 +1,5 @@
 {:paths ["src" "resources"]
  :deps  {org.clojure/clojure {:mvn/version "1.12.6"}
-         ;; cheshire brings jackson-core below 2.22.3: CVE-2026-89407, CVE-2026-89425 (BOU-618).
-         com.fasterxml.jackson.core/jackson-core {:mvn/version "2.22.3"}
          cheshire/cheshire {:mvn/version "6.2.0"}
                          ;; Built into Babashka, but a JVM consumer of the
                          ;; published artifact resolves through the POM (BOU-378).

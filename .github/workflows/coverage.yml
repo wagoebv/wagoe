@@ -1,9 +1,7 @@
 name: Coverage
 
-# `bb coverage` (Cloverage) over every library the :unit suite tests (BOU-451).
-# Reported, not gated: there is no threshold yet, so a number nobody has agreed
-# on cannot fail a build. On main rather than on pull requests, because the
-# instrumented run is slower than the whole CI and would set its wall-clock.
+# `bb coverage` on every push to main, reported without a threshold (BOU-451);
+# not on pull requests, where its run time would set CI's wall-clock.
 
 on:
   push:

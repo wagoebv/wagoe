@@ -1,19 +1,10 @@
-;; Exemptions for `bb check:vulns` (BOU-451, BOU-618).
-;;
-;; Every entry MUST carry a `:why`; the gate rejects one without it.
-;;
-;; `:alias` excuses a finding only when every use of that library version comes
-;; through the alias, so the same advisory on code that ships is still
-;; reported. Prefer it to `:id`, which excuses an advisory everywhere.
-;;
-;; These are tools that never reach a classpath an application runs on, each at
-;; its latest release, with nothing newer to move to. Look again when one
-;; publishes a new version.
+;; Exemptions for `bb check:vulns`. Every entry needs a :why; prefer :alias to
+;; :id, and tie it with :while to the tool version it excuses (see `allowed?`).
 
 {:allow
- [{:alias ":build"
-   :why   "Publishing only. slipset/deps-deploy 0.2.5 (latest) loads s3-wagon-private 1.3.5 at require time, which brings logback 1.0.12, aws-java-sdk-s3, jackson 2.12, jetty-http 9.4 and ion-java. Excluding it stops deps-deploy loading; we publish to Clojars, never S3."}
-  {:alias ":clj-kondo"
-   :why   "Linting only. clj-kondo 2026.08.04 (latest) bundles jackson-core 2.17.0 and reads no untrusted input."}
-  {:alias ":outdated"
-   :why   "Dependency report only. olical/depot 2.4.1 (latest) brings plexus-utils 3.4.1."}]}
+ [{:alias ":build" :while [slipset/deps-deploy "0.2.5"]
+   :why   "Publishing only: deps-deploy's s3-wagon-private brings the old logback, aws-sdk and jetty, and it will not load without it."}
+  {:alias ":clj-kondo" :while [clj-kondo/clj-kondo "2026.08.04"]
+   :why   "Linting only: clj-kondo bundles jackson-core 2.17.0 and reads no untrusted input."}
+  {:alias ":outdated" :while [olical/depot "2.4.1"]
+   :why   "Dependency report only: depot brings plexus-utils 3.4.1."}]}
