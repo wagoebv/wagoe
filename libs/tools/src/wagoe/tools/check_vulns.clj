@@ -40,15 +40,23 @@
       (into {} batch))))
 
 (defn- classpath-jars
-  "Jars on `deps-file`'s classpath under `alias` (nil for the base)."
+  "Jars on `deps-file`'s classpath under `alias` (nil for the base).
+
+   Serial (-Sthreads 1) and retried, as CI's prefetch is: on a cold ~/.m2,
+   parallel resolution trips a Maven HashMap crash, and Central answers 429
+   (BOU-250). Either would fail the scan as if a dependency could not exist."
   [deps-file alias]
-  (let [{:keys [exit out err]} (apply process/shell {:dir (str (fs/parent deps-file)) :out :string
-                                                     :err :string :continue true}
-                                      (cond-> ["clojure" "-Spath"] alias (conj (str "-A" alias))))]
-    (when-not (zero? exit)
-      (let [why (->> (str/split-lines err) (remove #(str/starts-with? % "Picked up")) (str/join " "))]
-        (throw (ex-info (str "cannot resolve " deps-file " " alias ": " why) {:type :internal-error}))))
-    (filter #(str/ends-with? % ".jar") (str/split (str/trim out) #":"))))
+  (loop [attempt 1]
+    (let [{:keys [exit out err]} (apply process/shell {:dir (str (fs/parent deps-file)) :out :string
+                                                       :err :string :continue true}
+                                        (cond-> ["clojure" "-Sthreads" "1" "-Spath"]
+                                          alias (conj (str "-A" alias))))]
+      (cond
+        (zero? exit) (filter #(str/ends-with? % ".jar") (str/split (str/trim out) #":"))
+        (< attempt 3) (do (Thread/sleep (* 5000 attempt)) (recur (inc attempt)))
+        :else
+        (let [why (->> (str/split-lines err) (remove #(str/starts-with? % "Picked up")) (str/join " "))]
+          (throw (ex-info (str "cannot resolve " deps-file " " alias ": " why) {:type :internal-error})))))))
 
 (defn- users
   "{[lib version] #{[\"libs/x\" \":alias\"]}} across `files` and their aliases;
