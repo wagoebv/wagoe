@@ -4,4 +4,10 @@
   :seed 42,
   :test-name email-validation-success,
   :test-ns wagoe.user.core.user-validation-snapshot-test},
- :result {:errors "clojure.lang.LazySeq", :valid? false}}
+ :result
+ {:data
+  {:email "valid@example.com",
+   :name "Test User",
+   :password "Correct-Horse-9-Battery",
+   :role :user},
+  :valid? true}}

@@ -30,8 +30,11 @@
   (Instant/parse "2025-01-01T00:00:00Z"))
 
 (def valid-user-request
+  ;; A password, as the creation schema requires: without one every "valid"
+  ;; case was rejected, and the snapshots recorded that as expected (BOU-619).
   {:email "test@example.com"
    :name "Test User"
+   :password "Correct-Horse-9-Battery"
    :role :user})
 
 ;; =============================================================================

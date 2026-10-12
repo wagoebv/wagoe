@@ -4,4 +4,18 @@
   :seed 48,
   :test-name multiple-validation-errors,
   :test-ns wagoe.user.core.user-validation-snapshot-test},
- :result {:errors "clojure.lang.LazySeq", :valid? false}}
+ :result
+ {:errors
+  ({:code :missing-required-field,
+    :field [:email],
+    :message "missing required key"}
+   {:code :missing-required-field,
+    :field [:name],
+    :message "missing required key"}
+   {:code :missing-required-field,
+    :field [:password],
+    :message "missing required key"}
+   {:code :too-short,
+    :field :name,
+    :message "Name must be at least 1 characters long"}),
+  :valid? false}}

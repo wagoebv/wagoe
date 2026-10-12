@@ -4,4 +4,9 @@
   :seed 46,
   :test-name name-validation-too-long,
   :test-ns wagoe.user.core.user-validation-snapshot-test},
- :result {:errors "clojure.lang.LazySeq", :valid? false}}
+ :result
+ {:errors
+  ({:code :schema-validation-failed,
+    :field [:name],
+    :message "should be at most 255 characters"}),
+  :valid? false}}

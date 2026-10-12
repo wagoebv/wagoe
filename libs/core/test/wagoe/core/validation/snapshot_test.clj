@@ -229,3 +229,9 @@
           result (snapshot/compare-snapshots snap1 snap2)]
       (is (false? (:equal? result)))
       (is (some? (first (:diff result))))))) ;; nil vs map difference
+
+(deftest ^:unit a-lazy-seq-is-recorded-by-its-contents
+  ;; It was recorded as "clojure.lang.LazySeq", so a snapshot of validation
+  ;; errors built with concat compared nothing (BOU-619).
+  (is (= {:errors [{:code :x} {:code :y}]}
+         (#'snapshot/sort-map-keys {:errors (concat [{:code :x}] (lazy-seq [{:code :y}]))}))))

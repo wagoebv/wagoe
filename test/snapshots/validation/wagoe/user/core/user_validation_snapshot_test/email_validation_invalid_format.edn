@@ -4,4 +4,9 @@
   :seed 43,
   :test-name email-validation-invalid-format,
   :test-ns wagoe.user.core.user-validation-snapshot-test},
- :result {:errors "clojure.lang.LazySeq", :valid? false}}
+ :result
+ {:errors
+  ({:code :schema-validation-failed,
+    :field [:email],
+    :message "Invalid email format"}),
+  :valid? false}}

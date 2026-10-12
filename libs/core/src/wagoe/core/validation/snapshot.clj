@@ -126,7 +126,7 @@
     (and (instance? Object x)
          (not (or (string? x) (number? x) (boolean? x) (nil? x)
                   (keyword? x) (symbol? x) (uuid? x)
-                  (map? x) (vector? x) (list? x) (set? x))))
+                  (map? x) (vector? x) (seq? x) (set? x))))
     (strip-memory-address (str x))
 
     ;; Recursively process collections
@@ -136,7 +136,9 @@
     (vector? x)
     (mapv sort-map-keys x)
 
-    (list? x)
+    ;; Any seq, not just a list: a lazy one (from concat, map) used to fall to
+    ;; the branch above and be recorded as "clojure.lang.LazySeq" (BOU-619).
+    (seq? x)
     (map sort-map-keys x)
 
     (set? x)

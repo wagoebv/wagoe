@@ -4,4 +4,9 @@
   :seed 44,
   :test-name email-validation-missing,
   :test-ns wagoe.user.core.user-validation-snapshot-test},
- :result {:errors "clojure.lang.LazySeq", :valid? false}}
+ :result
+ {:errors
+  ({:code :missing-required-field,
+    :field [:email],
+    :message "missing required key"}),
+  :valid? false}}

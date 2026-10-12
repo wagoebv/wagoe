@@ -114,7 +114,7 @@
   []
   (or (some-> (first t/*testing-vars*) meta :ns ns-name)
       (throw (ex-info "check-snapshot! outside a deftest needs an explicit :ns"
-                      {:type :validation-error}))))
+                      {:type :internal-error}))))
 
 (defn check-snapshot!
   "Check actual result against stored snapshot.
