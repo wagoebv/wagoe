@@ -1,0 +1,75 @@
+name: Security
+
+# Known vulnerabilities in every dependency of every deps.edn, aliases
+# included (BOU-451). `bb check:vulns` asks GitHub's advisory database through
+# clj-watson, with the workflow's own token.
+#
+# Weekly, because advisories are published against code nobody changed. On a
+# pull request only when it touches a deps.edn, because then the PR is the
+# cause. Not part of "All Tests Passed": an advisory published this morning is
+# not a reason to block an unrelated merge, as the dependency canary argues.
+# It does fail red, so the finding is seen.
+
+on:
+  schedule:
+    # Mondays, 07:00 UTC, after the dependency canary.
+    - cron: '0 7 * * 1'
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '**/deps.edn'
+      - '.wagoe/check-vulns.edn'
+      - 'libs/tools/src/wagoe/tools/check_vulns.clj'
+      - '.github/workflows/security.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  vulnerabilities:
+    name: Known vulnerabilities
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Clojure + Babashka
+        uses: DeLaGuardo/setup-clojure@13.6.1
+        with:
+          bb: latest
+          cli: latest
+
+      - name: Cache dependencies
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.m2/repository
+            ~/.gitlibs
+          key: vulns-${{ hashFiles('**/deps.edn') }}
+          restore-keys: vulns-
+
+      - name: Scan every deps.edn
+        shell: bash
+        env:
+          # github.token, not a repository secret: the run's own token, present
+          # in every run anyway and read-only here (`permissions` above). Any
+          # branch can start this workflow, so it must hold nothing more.
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          # `|| status=$?`: the step runs with -e, and the report has to be
+          # written whether or not the scan found something.
+          status=0
+          bb check:vulns > report.txt 2>&1 || status=$?
+          cat report.txt
+          {
+            echo "## Known vulnerabilities"
+            echo
+            echo '```'
+            cat report.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"

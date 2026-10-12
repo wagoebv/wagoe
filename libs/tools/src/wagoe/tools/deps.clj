@@ -27,7 +27,7 @@
 
 (def ^:private root-dir (io/file (System/getProperty "user.dir")))
 
-(defn- relative-label
+(defn relative-label
   "Human-readable label for a deps.edn file, e.g. '(root)' or 'libs/tenant'."
   [^java.io.File deps-file]
   (let [parent (.getParentFile deps-file)
@@ -55,7 +55,7 @@
            ;; skip scaffolder template dir
            (remove #(str/includes? (.getPath %) "existing-dir"))))))
 
-(defn- find-deps-files
+(defn find-deps-files
   "Returns all relevant deps.edn files: root + every lib + every example."
   ([] (find-deps-files nil))
   ([only-lib]

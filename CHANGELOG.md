@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **`bb check:vulns`** (BOU-451): known vulnerabilities in every `deps.edn`, aliases included, from GitHub's advisory
+  database. Runs weekly and on PRs that change a `deps.edn`; coverage now runs on every push to main.
 - **`DBAdapter` answers `engine`, `capabilities`, `column-type` and `like`** (BOU-450, ADR-039). Ask these instead of
   parsing the product name or reading a nil dialect as PostgreSQL.
 - **`db/drop-index-if-exists!`, `db/add-column-if-not-exists!` and `db/drop-column-if-exists!`** (BOU-607): safe to run

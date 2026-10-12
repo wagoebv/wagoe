@@ -153,10 +153,11 @@
                                  {:queue-name :default :poll-interval-ms 100}
                                  queue store *registry*)]
             (try
-              ;; Wait for job to be processed
-              (is (wait-for #(pos? @attempt-count) 5000))
+              ;; Wait for the failure to be recorded, not just for the handler
+              ;; to run: the worker writes it after the handler returns.
+              (is (wait-for #(= :failed (:status (ports/find-job store (:id test-job)))) 5000))
+              (is (pos? @attempt-count))
 
-              ;; Verify job failed
               (let [failed-job (ports/find-job store (:id test-job))]
                 (is (= :failed (:status failed-job)))
                 (is (= "Simulated failure" (get-in failed-job [:error :message]))))

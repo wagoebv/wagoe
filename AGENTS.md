@@ -145,6 +145,7 @@ bb check:deps                                      # Dependency direction + cycl
 bb check:ports                                     # Hexagonal: modules must define ports.clj; shell/web must not bypass protocols
 bb check:poms                                      # Published POMs must carry inter-Wagoe deps (build-shared rewrite + pom-basis)
 bb check:roadmap                                   # One roadmap, and it may not plan what scaling.adoc marks shipped
+bb check:vulns                                     # Known vulnerabilities in every deps.edn, aliases included (needs GITHUB_TOKEN; weekly in CI)
 bb check:error-shape                               # Errors carry the shape ADR-022/ADR-036 decided: :type on a thrown ex-info, {:error {:type <kw>}} on a {:success? false}
 clojure -M:test:test/all --focus-meta :security             # Security-focused tests (error mapping, CSRF, XSS, SQL)
 ```
