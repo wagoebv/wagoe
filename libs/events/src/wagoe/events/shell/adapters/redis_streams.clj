@@ -190,15 +190,15 @@
         ;; is decided entirely by where this line sits.
         (ack! pool stream group (.getID entry))
         (catch Throwable t
-          (if (= ::unheard (:type (ex-data t)))
-            ;; Read after its subscription ended: nobody handled it, so it
-            ;; stays pending for a live consumer to reclaim (BOU-600).
-            nil
-            (let [delivered (delivery-count pool stream group (.getID entry))]
+          ;; Nobody heard it (BOU-600): leave it pending for a live consumer,
+          ;; and end the cycle rather than read more for no one.
+          (when (= ::unheard (:type (ex-data t)))
+            (throw t))
+          (let [delivered (delivery-count pool stream group (.getID entry))]
             (if (and max-deliveries delivered (>= delivered max-deliveries))
               (dead-letter! pool stream group t entry parsed)
               (log/warn t "event handler threw; entry left for redelivery"
-                        {:stream stream :id (:id parsed) :delivered delivered})))))))))
+                        {:stream stream :id (:id parsed) :delivered delivered}))))))))
 
 (defn- read-entries
   "XREADGROUP for `from` — `>` for new entries, `0` for this consumer's
@@ -230,32 +230,22 @@
       nil)))
 
 (defn- fan-out
-  "Every handler subscribed to `stream` runs, then the first failure is
-   raised.
-
-   Throwing from inside the loop skipped the handlers after the failing one,
-   and redelivery did not save them: once the entry is dead-lettered they have
-   missed the event for good. The rethrow still matters: it is what leaves the
-   entry unacknowledged, and handlers that succeeded see the event again on
-   redelivery, which is what at-least-once means.
-
-   No handlers at all is not success. `stop!` and the last `unsubscribe!` clear
-   them while a poll may still be running, and returning would acknowledge an
-   event nobody handled (BOU-600)."
+  "Run every handler on `stream`, then rethrow the first failure so the entry
+   stays unacknowledged. With none left (the last `unsubscribe!` mid-poll) it
+   throws `::unheard`, so an event nobody handled is not acknowledged (BOU-600)."
   [subscriptions stream event]
   (let [handlers (:handlers (get @subscriptions stream))]
     (when (empty? handlers)
       (throw (ex-info "no handler is subscribed to this stream any more"
                       {:type ::unheard :stream stream})))
-    (let [failures (reduce (fn [acc [_ h]]
-                             (try (h event) acc
-                                  (catch Throwable t
-                                    (log/warn t "event handler threw" {:stream stream})
-                                    (conj acc t))))
-                           []
-                           handlers)]
-      (when-let [t (first failures)]
-        (throw t)))))
+    (when-let [t (reduce (fn [first-failure [_ h]]
+                           (try (h event) first-failure
+                                (catch Throwable t
+                                  (log/warn t "event handler threw" {:stream stream})
+                                  (or first-failure t))))
+                         nil
+                         handlers)]
+      (throw t))))
 
 (defn- poll-once!
   "One cycle: reclaim, retry, then wait for new.
@@ -264,7 +254,7 @@
    left unacknowledged by a throwing handler is never offered again, so the
    at-least-once this library promises was at-most-once in the one case that
    makes the difference."
-  [pool stream group consumer handler block-ms max-deliveries min-idle-ms]
+  [pool stream group consumer handler block-ms max-deliveries min-idle-ms running]
   (with-open [jedis (.getResource pool)]
     (doseq [^StreamEntry entry (reclaim-abandoned! jedis stream group consumer min-idle-ms)]
       (handle-entry! pool stream group handler entry max-deliveries))
@@ -275,10 +265,12 @@
                                              (StreamEntryID. "0-0") nil)]
       (handle-entry! pool stream group handler entry max-deliveries))
 
-    (doseq [^StreamEntry entry (read-entries jedis stream group consumer
-                                             StreamEntryID/XREADGROUP_UNDELIVERED_ENTRY
-                                             block-ms)]
-      (handle-entry! pool stream group handler entry max-deliveries))))
+    ;; Stopped: new entries read now would be pending on a consumer that is gone.
+    (when @running
+      (doseq [^StreamEntry entry (read-entries jedis stream group consumer
+                                               StreamEntryID/XREADGROUP_UNDELIVERED_ENTRY
+                                               block-ms)]
+        (handle-entry! pool stream group handler entry max-deliveries)))))
 
 ;; =============================================================================
 ;; Adapter
@@ -338,15 +330,15 @@
               first?  (nil? (get before stream))
               running (:running (get after stream))]
           (when first?
-            (let [consumer (str (name group) "-" (subs (str (random-uuid)) 0 8))
-                  handler  #(fan-out subscriptions stream %)]
+            (let [consumer (str (name group) "-" (subs (str (random-uuid)) 0 8))]
               (.submit executor
                        ^Runnable
                        (fn []
                          (while @running
                            (try
-                             (poll-once! pool stream group consumer handler 1000
-                                         max-deliveries min-idle-ms)
+                             (poll-once! pool stream group consumer
+                                         #(fan-out subscriptions stream %) 1000
+                                         max-deliveries min-idle-ms running)
                              (catch Exception e
                                (when @running
                                  ;; Keep polling. A Redis that is briefly
@@ -440,9 +432,13 @@
   [{:keys [^ExecutorService executor subscriptions]}]
   (when subscriptions
     (doseq [[_ {:keys [running]}] @subscriptions]
-      (reset! running false))
-    (reset! subscriptions {}))
+      (reset! running false)))
   (when executor
     (.shutdown executor)
     (when-not (.awaitTermination executor 3 TimeUnit/SECONDS)
-      (.shutdownNow executor))))
+      (.shutdownNow executor)))
+  ;; Only once the pollers are done, so the batch in hand is still handled
+  ;; rather than left pending until another consumer reclaims it.
+  (when subscriptions
+    (reset! subscriptions {}))
+  nil)

@@ -11,8 +11,7 @@
             [clojure.test :refer [deftest is testing]]
             [clojure.java.shell :as shell]
             [integrant.core])
-  (:import (redis.clients.jedis JedisPool JedisPoolConfig StreamEntryID)
-           (redis.clients.jedis.params XReadGroupParams)))
+  (:import (redis.clients.jedis JedisPool JedisPoolConfig StreamEntryID)))
 
 (defn- redis-available? []
   (try
@@ -235,29 +234,25 @@
        (finally (redis-streams/stop! bus) (.close p))))))
 
 (deftest ^:integration an-entry-read-after-its-subscription-ended-stays-pending
-  ;; stop! and the last unsubscribe! clear the handlers while a poll may still
-  ;; be running. Handled then, an entry met no handler, nothing threw, and it
-  ;; was acknowledged: an event nobody saw, gone. That race was the restarted-
-  ;; consumer test failing about once a hundred runs (BOU-600). Driven
-  ;; directly here, so it fails every time rather than once in a hundred.
+  ;; An entry read after its handlers were cleared used to be acknowledged
+  ;; unhandled (BOU-600); driven directly so the race fails every run.
   (when-redis
    (let [topic  (unique-topic)
          stream (str "wagoe:events:" (name topic))
          group  (str "g-" (name topic))
          p      (pool)]
      (try
-       (with-open [j (.getResource p)]
-         (.xgroupCreate j stream group (StreamEntryID. "0-0") true))
+       (#'redis-streams/ensure-group! p stream group)
        (publisher/emit! (redis-streams/create-redis-streams-bus p {:group group})
                         topic :a/b :test {:n 1})
        (let [entry (with-open [j (.getResource p)]
-                     (->> (.xreadGroup j group "gone" (XReadGroupParams/xReadGroupParams)
-                                       (java.util.HashMap. {stream StreamEntryID/XREADGROUP_UNDELIVERED_ENTRY}))
-                          (mapcat #(.getValue %))
-                          first))]
-         (#'redis-streams/handle-entry! p stream group
-                                        #(#'redis-streams/fan-out (atom {}) stream %)
-                                        entry 5)
+                     (first (#'redis-streams/read-entries j stream group "gone"
+                                                          StreamEntryID/XREADGROUP_UNDELIVERED_ENTRY nil)))]
+         (is (thrown? clojure.lang.ExceptionInfo
+                      (#'redis-streams/handle-entry! p stream group
+                                                     #(#'redis-streams/fan-out (atom {}) stream %)
+                                                     entry 5))
+             "and it ends the poll cycle")
          (with-open [j (.getResource p)]
            (is (= 1 (.getTotal (.xpending j stream group)))
                "acknowledged although no handler ran")
