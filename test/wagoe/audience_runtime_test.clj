@@ -86,10 +86,15 @@
           (let [result (audience-ports/resolve-audience
                         (:resolver (:wagoe/audience system))
                         :everyone
-                        {:force-refresh? true})]
-            (is (= #{alice bob} (set (:user-ids result)))
-                (str "expected both users, got " (pr-str (:user-ids result))))
-            (is (= 2 (:count result)))))))))
+                        {:force-refresh? true})
+                ;; Every user in the table, ours included. The test profile's
+                ;; H2 lives for the JVM, so other tests' users may be there too.
+                all    (set (map #(parse-uuid (str (val (first %))))
+                                 (jdbc/execute! ds ["SELECT id FROM users"])))]
+            (is (every? all [alice bob]) "the users this test inserted are in the table")
+            (is (= all (set (:user-ids result)))
+                (str "expected every user in the table, got " (pr-str (:user-ids result))))
+            (is (= (count all) (:count result)))))))))
 
 (deftest ^:security ^:integration anonymous-callers-cannot-manage-audiences
   ;; The routes carried no middleware of their own, and the global

@@ -4,6 +4,8 @@
          wagoe/core         {:local/root "../core"}
          metosin/malli {:mvn/version "0.20.1"}
          org.clojure/tools.logging {:mvn/version "1.3.1"}
+         ;; cheshire brings jackson-core below 2.22.3: CVE-2026-89407, CVE-2026-89425 (BOU-618).
+         com.fasterxml.jackson.core/jackson-core {:mvn/version "2.22.3"}
          cheshire/cheshire {:mvn/version "6.2.0"}
          org.clojure/tools.cli {:mvn/version "1.4.256"}
          ;; Schema editing parses the file instead of matching lines. The
@@ -43,6 +45,8 @@
               ;; PostgreSQL test would sit on the classpath and never run.
               :main-opts   ["-m" "kaocha.runner" "--config-file" "tests-pg.edn"]
               :extra-deps  {wagoe/platform {:local/root "../platform"}
+                            ;; embedded-postgres brings 42.7.10: CVE-2026-42198, CVE-2026-54291 (BOU-618).
+                            org.postgresql/postgresql {:mvn/version "42.7.13"}
                             io.zonky.test/embedded-postgres {:mvn/version "2.2.2"}
                             io.zonky.test.postgres/embedded-postgres-binaries-linux-amd64 {:mvn/version "18.6.0"}}}
   :test/pg-mac {:extra-deps {io.zonky.test.postgres/embedded-postgres-binaries-darwin-arm64v8 {:mvn/version "18.6.0"}}}

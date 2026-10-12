@@ -38,6 +38,9 @@
            "libs/audience/resources"]                      ;; Audience migrations
 
  :deps    {org.clojure/clojure                        {:mvn/version "1.12.6"}
+           ;; cheshire brings jackson-core and -databind below 2.22.3: CVE-2026-89407, CVE-2026-89425, CVE-2026-91776, CVE-2026-91777 (BOU-618).
+           com.fasterxml.jackson.core/jackson-core     {:mvn/version "2.22.3"}
+           com.fasterxml.jackson.core/jackson-databind {:mvn/version "2.22.3"}
            cheshire/cheshire                          {:mvn/version "6.2.0"} ;; process json
 
            ;; Environment / Setup
@@ -49,7 +52,31 @@
 
            ;; HTTP Server and Routing
            ring/ring-core                             {:mvn/version "1.15.5"}
+           ;; ring-jetty-adapter 1.15.5 (latest) brings Jetty 12.1.8: CVE-2026-10050. Every Jetty artifact moves together (BOU-618).
+           org.eclipse.jetty/jetty-http                                     {:mvn/version "12.1.14"}
+           org.eclipse.jetty/jetty-io                                       {:mvn/version "12.1.14"}
+           org.eclipse.jetty/jetty-security                                 {:mvn/version "12.1.14"}
+           org.eclipse.jetty/jetty-server                                   {:mvn/version "12.1.14"}
+           org.eclipse.jetty/jetty-session                                  {:mvn/version "12.1.14"}
+           org.eclipse.jetty/jetty-unixdomain-server                        {:mvn/version "12.1.14"}
+           org.eclipse.jetty/jetty-util                                     {:mvn/version "12.1.14"}
+           org.eclipse.jetty/jetty-xml                                      {:mvn/version "12.1.14"}
+           org.eclipse.jetty.ee/jetty-ee-webapp                             {:mvn/version "12.1.14"}
+           org.eclipse.jetty.ee9/jetty-ee9-nested                           {:mvn/version "12.1.14"}
+           org.eclipse.jetty.ee9/jetty-ee9-security                         {:mvn/version "12.1.14"}
+           org.eclipse.jetty.ee9/jetty-ee9-servlet                          {:mvn/version "12.1.14"}
+           org.eclipse.jetty.ee9/jetty-ee9-webapp                           {:mvn/version "12.1.14"}
+           org.eclipse.jetty.ee9.websocket/jetty-ee9-websocket-jetty-api    {:mvn/version "12.1.14"}
+           org.eclipse.jetty.ee9.websocket/jetty-ee9-websocket-jetty-common {:mvn/version "12.1.14"}
+           org.eclipse.jetty.ee9.websocket/jetty-ee9-websocket-jetty-server {:mvn/version "12.1.14"}
+           org.eclipse.jetty.ee9.websocket/jetty-ee9-websocket-servlet      {:mvn/version "12.1.14"}
+           org.eclipse.jetty.websocket/jetty-websocket-core-common          {:mvn/version "12.1.14"}
+           org.eclipse.jetty.websocket/jetty-websocket-core-server          {:mvn/version "12.1.14"}
            ring/ring-jetty-adapter                    {:mvn/version "1.15.5"}
+           ;; buddy-core 1.12.0-430 (latest) brings BouncyCastle 1.78.1: critical CVE-2025-14813, CVE-2026-8763 (BOU-618).
+           org.bouncycastle/bcprov-jdk18on {:mvn/version "1.86"}
+           org.bouncycastle/bcpkix-jdk18on {:mvn/version "1.86"}
+           org.bouncycastle/bcutil-jdk18on {:mvn/version "1.86"}
            buddy/buddy-core                           {:mvn/version "1.12.0-430"}
            metosin/reitit-ring                        {:mvn/version "0.10.1"}
            metosin/reitit-malli                       {:mvn/version "0.10.1"}
@@ -123,6 +150,9 @@
 
            ;; Reports - PDF and Excel generation
            com.openhtmltopdf/openhtmltopdf-pdfbox     {:mvn/version "1.0.10"}
+           ;; docjure brings log4j-api 2.24.3 (CVE-2026-49844) and commons-lang3 3.16.0 (CVE-2025-48924) (BOU-618).
+           org.apache.logging.log4j/log4j-api {:mvn/version "2.26.1"}
+           org.apache.commons/commons-lang3   {:mvn/version "3.21.0"}
            dk.ative/docjure                           {:mvn/version "1.22.0"}
 
            ;; Calendar - iCal generation and parsing
@@ -234,7 +264,9 @@
            ;; Split out of :test because the two platform binaries are ~90 MB —
            ;; a third of that alias's entire download volume — and only one
            ;; library uses them (BOU-260).
-           :test/pg   {:extra-deps {io.zonky.test/embedded-postgres {:mvn/version "2.2.2"}
+           :test/pg   {:extra-deps {io.zonky.test/embedded-postgres {:mvn/version "2.2.2"
+                                                                     ;; Its driver is 42.7.10 (CVE-2026-42198, -54291); :test brings 42.7.13 (BOU-618).
+                                                                     :exclusions [org.postgresql/postgresql]}
                                     io.zonky.test.postgres/embedded-postgres-binaries-linux-amd64 {:mvn/version "18.6.0"}}}
 
            ;; The macOS binary, for local runs on Apple Silicon. Deliberately
@@ -260,7 +292,9 @@
            ;; the download happens once into ~/.m2. CI never uses it — the
            ;; per-library jobs request only what they need, which is the whole
            ;; point of the split (BOU-260).
-           :test/all  {:extra-deps {io.zonky.test/embedded-postgres {:mvn/version "2.2.2"}
+           :test/all  {:extra-deps {io.zonky.test/embedded-postgres {:mvn/version "2.2.2"
+                                                                     ;; Its driver is 42.7.10 (CVE-2026-42198, -54291); :test brings 42.7.13 (BOU-618).
+                                                                     :exclusions [org.postgresql/postgresql]}
                                     io.zonky.test.postgres/embedded-postgres-binaries-linux-amd64 {:mvn/version "18.6.0"}
                                     io.zonky.test.postgres/embedded-postgres-binaries-darwin-arm64v8 {:mvn/version "18.6.0"}
                                     io.opentelemetry/opentelemetry-sdk-testing {:mvn/version "1.66.0"}
