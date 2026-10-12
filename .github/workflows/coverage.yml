@@ -51,7 +51,12 @@ jobs:
       - name: Setup Clojure + warm deps
         uses: ./.github/actions/clojure-deps
         with:
-          aliases: -M:coverage:db:test/all
+          aliases: -M:coverage:db:test/pg:test/otel:test/http
+
+      - name: Setup Babashka
+        uses: DeLaGuardo/setup-clojure@13.6.1
+        with:
+          bb: latest
 
       - name: Run coverage
         shell: bash

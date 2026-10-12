@@ -75,7 +75,7 @@ runs:
     # until some dependency happened to change. "Known-bad" was too narrow a
     # reason to bump, which is how that was missed in review.
     #
-    # v4: warm-deps also resolves -M:coverage:db:test/all for coverage.yml
+    # v4: warm-deps also resolves -M:coverage:db:test/pg:test/otel:test/http for coverage.yml
     # (BOU-451), the same kind of change as v3.
     - name: Cache dependencies
       id: cache

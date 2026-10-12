@@ -528,7 +528,7 @@
       (is (and (contains? paths t) (contains? paths src))
           (str t " and " src " must be on :coverage :extra-paths"))
       (let [res (str/replace t #"/test$" "/resources")
-            dir (io/file (.getParentFile (io/file (System/getProperty "user.dir") "x")) res)]
+            dir (io/file (System/getProperty "user.dir") res)]
         (when (or (.isDirectory dir) (.isDirectory (io/file "../.." res)))
           (is (contains? paths res) (str res " must be on the coverage classpath too")))))))
 

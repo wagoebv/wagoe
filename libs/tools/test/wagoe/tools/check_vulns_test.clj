@@ -34,6 +34,13 @@
            (sut/findings batch reply))
         "a withdrawn advisory is not a finding")))
 
+(deftest ^:unit an-advisory-naming-several-asked-packages-is-ambiguous
+  ;; GitHub returns the whole advisory when any one package@version matches.
+  (let [batch {'a/a "1.0" 'b/b "9.0"}
+        reply [{:ghsa_id "GHSA-1" :severity "high"
+                :vulnerabilities [{:package {:name "a:a"}} {:package {:name "b:b"}}]}]]
+    (is (every? :ambiguous? (sut/findings batch reply)))))
+
 (deftest ^:unit many-files-sharing-an-alias-are-said-once
   (is (= ":build (4 files)"
          (sut/users-line #{["libs/a" ":build"] ["libs/b" ":build"] ["libs/c" ":build"] ["libs/d" ":build"]})))
@@ -55,4 +62,9 @@
           finding {:lib 'x/x :version "1" :id "GHSA-1"}
           base   {['x/x "1"] #{["libs/a" ":build"]}}]
       (is (sut/allowed? allow (assoc base ['tool/t "1.0"] #{["libs/a" ":build"]}) finding))
-      (is (not (sut/allowed? allow (assoc base ['tool/t "1.1"] #{["libs/a" ":build"]}) finding))))))
+      (is (not (sut/allowed? allow (assoc base ['tool/t "1.1"] #{["libs/a" ":build"]}) finding)))
+      (testing "and is judged per file"
+        (is (not (sut/allowed? allow {['x/x "1"]      #{["libs/b" ":build"]}
+                                      ['tool/t "1.0"] #{["libs/a" ":build"]}}
+                               finding))
+            "libs/a still on the old tool does not excuse libs/b")))))

@@ -44,7 +44,7 @@
   [deps-file alias]
   (let [{:keys [exit out err]} (apply process/shell {:dir (str (fs/parent deps-file)) :out :string
                                                      :err :string :continue true}
-                                    (cond-> ["clojure" "-Spath"] alias (conj (str "-A" alias))))]
+                                      (cond-> ["clojure" "-Spath"] alias (conj (str "-A" alias))))]
     (when-not (zero? exit)
       (let [why (->> (str/split-lines err) (remove #(str/starts-with? % "Picked up")) (str/join " "))]
         (throw (ex-info (str "cannot resolve " deps-file " " alias ": " why) {:type :internal-error}))))
@@ -71,7 +71,9 @@
   "Every advisory affecting a package@version in `batch`, all pages."
   [token batch]
   (loop [url  (str advisories-url "?ecosystem=maven&per_page=100&affects="
-                   (str/join "," (for [[lib v] batch] (str (package lib) "@" v))))
+                   ;; Each encoded on its own: a `+` in a version would read as a space.
+                   (str/join "," (for [[lib v] batch]
+                                   (java.net.URLEncoder/encode (str (package lib) "@" v) "UTF-8"))))
          acc []]
     (let [{:keys [status body headers]} (http/get url {:headers {"Authorization" (str "Bearer " token)
                                                                  "Accept" "application/vnd.github+json"}
@@ -87,21 +89,25 @@
 
 (defn findings
   "Rows {:lib :version :id :cve :severity :fixed} for `advisories` returned for
-   `batch`; withdrawn ones are not findings."
+   `batch`; withdrawn ones are not findings. An advisory naming several packages
+   of the batch may affect only one of them, so those rows carry `:ambiguous?`."
   [batch advisories]
   (let [by-package (into {} (for [[lib v] batch] [(package lib) [lib v]]))]
     (for [{:keys [ghsa_id cve_id severity withdrawn_at vulnerabilities]} advisories
           :when (nil? withdrawn_at)
-          :let  [hits (filter #(by-package (get-in % [:package :name])) vulnerabilities)]
-          [pkg vs] (group-by #(get-in % [:package :name]) hits)
+          :let  [hits    (group-by #(get-in % [:package :name])
+                                   (filter #(by-package (get-in % [:package :name])) vulnerabilities))
+                 several (> (count hits) 1)]
+          [pkg vs] hits
           :let  [[lib v] (by-package pkg)]]
-      {:lib lib :version v :id ghsa_id :cve cve_id
-       :severity (some-> severity keyword)
-       :fixed    (some->> (keep :first_patched_version vs) distinct seq (str/join " or "))})))
+      (cond-> {:lib lib :version v :id ghsa_id :cve cve_id
+               :severity (some-> severity keyword)
+               :fixed    (some->> (keep :first_patched_version vs) distinct seq (str/join " or "))}
+        several (assoc :ambiguous? true)))))
 
 (defn- allowlist []
   (let [entries (:allow (when (fs/exists? allowlist-file) (edn/read-string (slurp allowlist-file))))]
-    (doseq [e entries :when (str/blank? (:why e))]
+    (doseq [e entries :when (not (and (string? (:why e)) (not (str/blank? (:why e)))))]
       (throw (ex-info (str allowlist-file ": " (or (:id e) (:alias e)) " has no :why")
                       {:type :validation-error})))
     entries))
@@ -112,12 +118,15 @@
    entry with `:while [lib version]` lapses once the alias stops using that
    version, so upgrading the tool asks for the excuse again."
   [entries used {:keys [lib version id]}]
-  (let [current? (fn [{[wl wv] :while :keys [alias]}]
-                   (or (nil? wl) (some #(= alias (second %)) (used [wl wv]))))
-        aliases  (set (keep #(when (current? %) (:alias %)) entries))]
+  ;; Per file: one library still on the old tool version must not excuse
+  ;; another that has moved on.
+  (let [excused? (fn [[_ alias :as who]]
+                   (some (fn [{[wl wv] :while :as e}]
+                           (and alias (= alias (:alias e))
+                                (or (nil? wl) (contains? (used [wl wv]) who))))
+                         entries))]
     (or (contains? (set (keep :id entries)) id)
-        (and (seq aliases)
-             (every? #(contains? aliases (second %)) (used [lib version]))))))
+        (every? excused? (used [lib version])))))
 
 (defn users-line
   "Who uses a library version, an alias shared by many files said once:
@@ -141,11 +150,19 @@
     (let [m2    (str (fs/path (System/getProperty "user.home") ".m2" "repository") "/")
           files (deps/find-deps-files)
           used  (users m2 files)
+          _     (when (empty? used)
+                  (println "No jars found under" m2 "- nothing was checked.")
+                  (System/exit 2))
           allow (allowlist)
+          ;; Asked alone, the reply names the advisory only if this version is affected.
+          confirmed? (fn [{:keys [lib version id]}]
+                       (some #(= id (:ghsa_id %)) (advisories token {lib version})))
           ;; A few requests, each paged: in parallel rather than one by one.
           rows  (->> (batches (keys used) batch-size)
                      (pmap #(findings % (advisories token %)))
                      (apply concat)
+                     (filter #(or (not (:ambiguous? %)) (confirmed? %)))
+                     (map #(dissoc % :ambiguous?))
                      distinct
                      (remove #(allowed? allow used %))
                      (sort-by (juxt #(severity-order (:severity %) 9) (comp str :lib) :version :id)))]
