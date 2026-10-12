@@ -19,11 +19,6 @@
 ;; Tag for Phase 3
 (alter-meta! *ns* assoc :kaocha/tags [:phase3 :snapshot])
 
-;; Fixed when this file loads. Read inside a test, *ns* is whatever the runner
-;; has bound (`user` under kaocha, another namespace under cloverage), so each
-;; runner compared against, or silently wrote, its own baselines (BOU-619).
-(def ^:private snapshot-ns (ns-name *ns*))
-
 ;; =============================================================================
 ;; Test Fixtures
 ;; =============================================================================
@@ -49,8 +44,7 @@
           result (user-core/validate-user-creation-request request vh/test-validation-config)]
       (snapshot-io/check-snapshot!
        result
-       {:ns snapshot-ns
-        :test 'email-validation-success
+       {:test 'email-validation-success
         :seed 42}))))
 
 (deftest ^:unit email-validation-invalid-format-snapshot
@@ -59,8 +53,7 @@
           result (user-core/validate-user-creation-request request vh/test-validation-config)]
       (snapshot-io/check-snapshot!
        result
-       {:ns snapshot-ns
-        :test 'email-validation-invalid-format
+       {:test 'email-validation-invalid-format
         :seed 43}))))
 
 (deftest ^:unit email-validation-missing-snapshot
@@ -69,8 +62,7 @@
           result (user-core/validate-user-creation-request request vh/test-validation-config)]
       (snapshot-io/check-snapshot!
        result
-       {:ns snapshot-ns
-        :test 'email-validation-missing
+       {:test 'email-validation-missing
         :seed 44}))))
 
 ;; =============================================================================
@@ -83,8 +75,7 @@
           result (user-core/validate-user-creation-request request vh/test-validation-config)]
       (snapshot-io/check-snapshot!
        result
-       {:ns snapshot-ns
-        :test 'name-validation-too-short
+       {:test 'name-validation-too-short
         :seed 45}))))
 
 (deftest ^:unit name-validation-too-long-snapshot
@@ -94,8 +85,7 @@
           result (user-core/validate-user-creation-request request vh/test-validation-config)]
       (snapshot-io/check-snapshot!
        result
-       {:ns snapshot-ns
-        :test 'name-validation-too-long
+       {:test 'name-validation-too-long
         :seed 46}))))
 
 (deftest ^:unit name-validation-boundary-snapshot
@@ -105,8 +95,7 @@
           result (user-core/validate-user-creation-request request vh/test-validation-config)]
       (snapshot-io/check-snapshot!
        result
-       {:ns snapshot-ns
-        :test 'name-validation-boundary
+       {:test 'name-validation-boundary
         :seed 47}))))
 
 ;; =============================================================================
@@ -119,8 +108,7 @@
           result (user-core/validate-user-creation-request request vh/test-validation-config)]
       (snapshot-io/check-snapshot!
        result
-       {:ns snapshot-ns
-        :test 'multiple-validation-errors
+       {:test 'multiple-validation-errors
         :seed 48}))))
 
 (deftest ^:unit complete-valid-user-snapshot
@@ -128,8 +116,7 @@
     (let [result (user-core/validate-user-creation-request valid-user-request vh/test-validation-config)]
       (snapshot-io/check-snapshot!
        result
-       {:ns snapshot-ns
-        :test 'complete-valid-user
+       {:test 'complete-valid-user
         :seed 49}))))
 
 ;; =============================================================================
@@ -151,8 +138,7 @@
           result (user-core/validate-user-business-rules updated-user changes)]
       (snapshot-io/check-snapshot!
        result
-       {:ns snapshot-ns
-        :test 'email-change-forbidden
+       {:test 'email-change-forbidden
         :seed 51}))))
 
 ;; =============================================================================
@@ -167,8 +153,7 @@
                   fixed-user-id)]
       (snapshot-io/check-snapshot!
        result
-       {:ns snapshot-ns
-        :test 'prepare-user-for-creation
+       {:test 'prepare-user-for-creation
         :seed 52}))))
 
 (deftest ^:unit prepare-user-for-soft-deletion-snapshot
@@ -184,6 +169,5 @@
           result (user-core/prepare-user-for-soft-deletion user fixed-timestamp)]
       (snapshot-io/check-snapshot!
        result
-       {:ns snapshot-ns
-        :test 'prepare-user-for-soft-deletion
+       {:test 'prepare-user-for-soft-deletion
         :seed 53}))))
