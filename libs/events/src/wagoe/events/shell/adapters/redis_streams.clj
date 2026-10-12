@@ -190,11 +190,15 @@
         ;; is decided entirely by where this line sits.
         (ack! pool stream group (.getID entry))
         (catch Throwable t
-          (let [delivered (delivery-count pool stream group (.getID entry))]
+          (if (= ::unheard (:type (ex-data t)))
+            ;; Read after its subscription ended: nobody handled it, so it
+            ;; stays pending for a live consumer to reclaim (BOU-600).
+            nil
+            (let [delivered (delivery-count pool stream group (.getID entry))]
             (if (and max-deliveries delivered (>= delivered max-deliveries))
               (dead-letter! pool stream group t entry parsed)
               (log/warn t "event handler threw; entry left for redelivery"
-                        {:stream stream :id (:id parsed) :delivered delivered}))))))))
+                        {:stream stream :id (:id parsed) :delivered delivered})))))))))
 
 (defn- read-entries
   "XREADGROUP for `from` — `>` for new entries, `0` for this consumer's
@@ -224,6 +228,34 @@
       ;; NOGROUP while a stream is being set up, or a Redis too old for
       ;; XAUTOCLAIM. Neither is worth ending the subscription over.
       nil)))
+
+(defn- fan-out
+  "Every handler subscribed to `stream` runs, then the first failure is
+   raised.
+
+   Throwing from inside the loop skipped the handlers after the failing one,
+   and redelivery did not save them: once the entry is dead-lettered they have
+   missed the event for good. The rethrow still matters: it is what leaves the
+   entry unacknowledged, and handlers that succeeded see the event again on
+   redelivery, which is what at-least-once means.
+
+   No handlers at all is not success. `stop!` and the last `unsubscribe!` clear
+   them while a poll may still be running, and returning would acknowledge an
+   event nobody handled (BOU-600)."
+  [subscriptions stream event]
+  (let [handlers (:handlers (get @subscriptions stream))]
+    (when (empty? handlers)
+      (throw (ex-info "no handler is subscribed to this stream any more"
+                      {:type ::unheard :stream stream})))
+    (let [failures (reduce (fn [acc [_ h]]
+                             (try (h event) acc
+                                  (catch Throwable t
+                                    (log/warn t "event handler threw" {:stream stream})
+                                    (conj acc t))))
+                           []
+                           handlers)]
+      (when-let [t (first failures)]
+        (throw t)))))
 
 (defn- poll-once!
   "One cycle: reclaim, retry, then wait for new.
@@ -307,38 +339,13 @@
               running (:running (get after stream))]
           (when first?
             (let [consumer (str (name group) "-" (subs (str (random-uuid)) 0 8))
-                  fan-out  (fn [event]
-                             ;; Every handler runs, then the first failure is
-                             ;; raised. Throwing from inside the loop — which
-                             ;; is what this did — skipped the handlers after
-                             ;; the failing one, and the redelivery did not
-                             ;; save them: once the entry is dead-lettered they
-                             ;; have missed the event for good. A handler
-                             ;; failing is not a reason to deafen its
-                             ;; neighbours.
-                             ;;
-                             ;; The rethrow still matters: it is what leaves
-                             ;; the entry unacknowledged. Handlers that already
-                             ;; succeeded will see the event again on
-                             ;; redelivery, which is what at-least-once means
-                             ;; and why consumers are told to be idempotent.
-                             (let [failures (reduce
-                                             (fn [acc [_ h]]
-                                               (try (h event) acc
-                                                    (catch Throwable t
-                                                      (log/warn t "event handler threw"
-                                                                {:stream stream})
-                                                      (conj acc t))))
-                                             []
-                                             (:handlers (get @subscriptions stream)))]
-                               (when-let [t (first failures)]
-                                 (throw t))))]
+                  handler  #(fan-out subscriptions stream %)]
               (.submit executor
                        ^Runnable
                        (fn []
                          (while @running
                            (try
-                             (poll-once! pool stream group consumer fan-out 1000
+                             (poll-once! pool stream group consumer handler 1000
                                          max-deliveries min-idle-ms)
                              (catch Exception e
                                (when @running

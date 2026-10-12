@@ -11,7 +11,8 @@
             [clojure.test :refer [deftest is testing]]
             [clojure.java.shell :as shell]
             [integrant.core])
-  (:import (redis.clients.jedis JedisPool JedisPoolConfig)))
+  (:import (redis.clients.jedis JedisPool JedisPoolConfig StreamEntryID)
+           (redis.clients.jedis.params XReadGroupParams)))
 
 (defn- redis-available? []
   (try
@@ -215,7 +216,8 @@
                            (if (= 1 (swap! attempts inc))
                              (throw (ex-info "first attempt fails" {}))
                              (deliver handled event))))
-       (Thread/sleep 300)
+       ;; No pause first: subscribe! creates the group from 0-0, so an event
+       ;; published before the poller reads is still delivered.
        (publisher/emit! bus topic :order/placed :orders {:order-id 1})
 
        (testing "the second attempt receives the same event"
@@ -231,6 +233,37 @@
            (Thread/sleep 2500)
            (is (= settled @attempts) "an acknowledged entry came back")))
        (finally (redis-streams/stop! bus) (.close p))))))
+
+(deftest ^:integration an-entry-read-after-its-subscription-ended-stays-pending
+  ;; stop! and the last unsubscribe! clear the handlers while a poll may still
+  ;; be running. Handled then, an entry met no handler, nothing threw, and it
+  ;; was acknowledged: an event nobody saw, gone. That race was the restarted-
+  ;; consumer test failing about once a hundred runs (BOU-600). Driven
+  ;; directly here, so it fails every time rather than once in a hundred.
+  (when-redis
+   (let [topic  (unique-topic)
+         stream (str "wagoe:events:" (name topic))
+         group  (str "g-" (name topic))
+         p      (pool)]
+     (try
+       (with-open [j (.getResource p)]
+         (.xgroupCreate j stream group (StreamEntryID. "0-0") true))
+       (publisher/emit! (redis-streams/create-redis-streams-bus p {:group group})
+                        topic :a/b :test {:n 1})
+       (let [entry (with-open [j (.getResource p)]
+                     (->> (.xreadGroup j group "gone" (XReadGroupParams/xReadGroupParams)
+                                       (java.util.HashMap. {stream StreamEntryID/XREADGROUP_UNDELIVERED_ENTRY}))
+                          (mapcat #(.getValue %))
+                          first))]
+         (#'redis-streams/handle-entry! p stream group
+                                        #(#'redis-streams/fan-out (atom {}) stream %)
+                                        entry 5)
+         (with-open [j (.getResource p)]
+           (is (= 1 (.getTotal (.xpending j stream group)))
+               "acknowledged although no handler ran")
+           (is (empty? (.xrange j (str stream ":dead") "-" "+"))
+               "and not dead-lettered either: nothing failed")))
+       (finally (.close p))))))
 
 (deftest ^:integration a-restarted-consumer-picks-up-what-its-predecessor-dropped
   ;; A consumer name is unique per subscription, so a process that restarts
@@ -251,7 +284,6 @@
        ;; First consumer takes the event and never acknowledges it.
        (ports/subscribe! first-bus topic
                          (fn [_] (swap! saw-it inc) (throw (ex-info "crash" {}))))
-       (Thread/sleep 300)
        (publisher/emit! first-bus topic :a/b :test {:n 1})
        (is (wait-for #(pos? @saw-it)) "the first consumer received it")
        (redis-streams/stop! first-bus)
@@ -261,7 +293,6 @@
                          p {:group group :min-idle-ms 100})
              recovered  (promise)]
          (try
-           (Thread/sleep 300)
            (ports/subscribe! second-bus topic #(deliver recovered %))
            (testing "the new consumer reclaims the abandoned entry"
              (let [event (deref recovered 15000 ::timeout)]
