@@ -243,15 +243,18 @@
          p      (pool)]
      (try
        (#'redis-streams/ensure-group! p stream group)
-       (publisher/emit! (redis-streams/create-redis-streams-bus p {:group group})
-                        topic :a/b :test {:n 1})
+       (let [bus (redis-streams/create-redis-streams-bus p {:group group})]
+         (publisher/emit! bus topic :a/b :test {:n 1})
+         (redis-streams/stop! bus))
        (let [entry (with-open [j (.getResource p)]
                      (first (#'redis-streams/read-entries j stream group "gone"
                                                           StreamEntryID/XREADGROUP_UNDELIVERED_ENTRY nil)))]
-         (is (thrown? clojure.lang.ExceptionInfo
-                      (#'redis-streams/handle-entry! p stream group
-                                                     #(#'redis-streams/fan-out (atom {}) stream %)
-                                                     entry 5))
+         (is (= :wagoe.events.shell.adapters.redis-streams/unheard
+                (try (#'redis-streams/handle-entry! p stream group
+                                                    #(#'redis-streams/fan-out (atom {}) stream %)
+                                                    entry 5)
+                     nil
+                     (catch clojure.lang.ExceptionInfo e (:type (ex-data e)))))
              "and it ends the poll cycle")
          (with-open [j (.getResource p)]
            (is (= 1 (.getTotal (.xpending j stream group)))

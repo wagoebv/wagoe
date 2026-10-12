@@ -193,6 +193,7 @@
           ;; Nobody heard it (BOU-600): leave it pending for a live consumer,
           ;; and end the cycle rather than read more for no one.
           (when (= ::unheard (:type (ex-data t)))
+            (log/debug "event left pending: its subscription ended" {:stream stream :id (:id parsed)})
             (throw t))
           (let [delivered (delivery-count pool stream group (.getID entry))]
             (if (and max-deliveries delivered (>= delivered max-deliveries))
@@ -256,8 +257,11 @@
    makes the difference."
   [pool stream group consumer handler block-ms max-deliveries min-idle-ms running]
   (with-open [jedis (.getResource pool)]
-    (doseq [^StreamEntry entry (reclaim-abandoned! jedis stream group consumer min-idle-ms)]
-      (handle-entry! pool stream group handler entry max-deliveries))
+    ;; Stopped: claiming another consumer's entries now would move them onto
+    ;; one that is gone and restart their idle clock.
+    (when @running
+      (doseq [^StreamEntry entry (reclaim-abandoned! jedis stream group consumer min-idle-ms)]
+        (handle-entry! pool stream group handler entry max-deliveries)))
 
     ;; This consumer's own unacknowledged entries: a handler that threw on the
     ;; previous cycle gets another go.
@@ -340,7 +344,9 @@
                                          #(fan-out subscriptions stream %) 1000
                                          max-deliveries min-idle-ms running)
                              (catch Exception e
-                               (when @running
+                               ;; ::unheard ends a cycle the last unsubscribe!
+                               ;; is stopping anyway: not a failure.
+                               (when (and @running (not= ::unheard (:type (ex-data e))))
                                  ;; Keep polling. A Redis that is briefly
                                  ;; unreachable must not end the subscription —
                                  ;; it would come back and deliver to nobody.
@@ -350,15 +356,24 @@
         id)))
 
   (unsubscribe! [_ subscription]
-    (doseq [[stream {:keys [running handlers]}] @subscriptions]
-      (when (contains? handlers subscription)
-        (let [remaining (dissoc handlers subscription)]
-          (if (seq remaining)
-            (swap! subscriptions assoc-in [stream :handlers] remaining)
-            (do
-              ;; Last handler for this topic: stop polling it.
-              (reset! running false)
-              (swap! subscriptions dissoc stream))))))
+    ;; One atomic update, as subscribe! does: read then write separately, a
+    ;; subscribe! in between joined an entry about to be dropped and never heard
+    ;; anything.
+    (let [[before after]
+          (swap-vals! subscriptions
+                      (fn [subs]
+                        (reduce-kv (fn [m stream {:keys [handlers]}]
+                                     (if-not (contains? handlers subscription)
+                                       m
+                                       (let [remaining (dissoc handlers subscription)]
+                                         (if (seq remaining)
+                                           (assoc-in m [stream :handlers] remaining)
+                                           (dissoc m stream)))))
+                                   subs subs)))]
+      ;; Last handler for a topic: stop polling it.
+      (doseq [[stream {:keys [running]}] before
+              :when (not (contains? after stream))]
+        (reset! running false)))
     nil)
 
   ports/IEventHistory
