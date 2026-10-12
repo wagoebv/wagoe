@@ -111,7 +111,7 @@
 
   Behavior depends on environment:
   - UPDATE_SNAPSHOTS=true: Always writes new snapshot (pass)
-  - File missing: Writes snapshot and passes
+  - File missing: fails, naming the path (create it with UPDATE_SNAPSHOTS=true)
   - File exists: Compares and fails with diff if mismatch
   - WAG_DEVEX_VALIDATION=false: Pass-through (always passes)
 
@@ -162,12 +162,13 @@
           ^:wagoe/allow-placeholder (t/is true (str "Snapshot updated: " file-path))
           true)
 
-        ;; File doesn't exist - write it
+        ;; No baseline is a failure: writing one and passing let a test
+        ;; whose path drifted compare against nothing, forever (BOU-619).
         (not (.exists (io/file file-path)))
         (do
-          (write-snapshot! actual-snap file-path)
-          ^:wagoe/allow-placeholder (t/is true (str "Snapshot created: " file-path))
-          true)
+          (t/is false (str "No snapshot at " file-path ". Create it with:\n"
+                           "  UPDATE_SNAPSHOTS=true clojure -M:test"))
+          false)
 
         ;; File exists - compare
         :else

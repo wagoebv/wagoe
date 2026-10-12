@@ -3,5 +3,5 @@
   :schema-version "1.0",
   :seed 42,
   :test-name email-validation-success,
-  :test-ns user},
+  :test-ns wagoe.user.core.user-validation-snapshot-test},
  :result {:errors "clojure.lang.LazySeq", :valid? false}}

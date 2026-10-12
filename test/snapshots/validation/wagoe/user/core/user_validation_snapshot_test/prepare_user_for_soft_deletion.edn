@@ -3,7 +3,7 @@
   :schema-version "1.0",
   :seed 53,
   :test-name prepare-user-for-soft-deletion,
-  :test-ns user},
+  :test-ns wagoe.user.core.user-validation-snapshot-test},
  :result
  {:active false,
   :created-at "2025-01-01T00:00:00Z",
