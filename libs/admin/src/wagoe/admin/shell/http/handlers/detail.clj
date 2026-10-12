@@ -3,11 +3,29 @@
   (:require
    [wagoe.admin.ports :as ports]
    [wagoe.admin.core.ui :as admin-ui]
+   [wagoe.admin.core.ui.drawer :as drawer]
    [wagoe.admin.core.permissions :as permissions]
    [wagoe.admin.shell.permissions :as shell-permissions]
    [wagoe.admin.shell.http.support :as support]
    [clojure.string :as str]
    [ring.util.response :as ring-response]))
+
+(defn- peek-request?
+  "An HTMX request for the record drawer rather than the detail page: a row
+   click on a list asks for `?peek=1`."
+  [request]
+  (and (get-in request [:headers "hx-request"])
+       (= "1" (get-in request [:query-params "peek"]))))
+
+(defn- drawer-display
+  "The display options for the drawer, with the overview of its one record —
+   relation titles — when the service provides one (ADR-040)."
+  [admin-service config request entity-name entity-config record]
+  (cond-> (support/display-options config request)
+    (satisfies? ports/IListOverview admin-service)
+    (assoc :overview (ports/list-overview admin-service entity-name
+                                          {:overview/fields (drawer/fields entity-config)}
+                                          [record]))))
 
 (defn entity-detail-handler
   "Handler for entity detail/edit page.
@@ -43,6 +61,14 @@
           permissions (permissions/get-entity-permissions user entity-name entity-config)
           ctx         (support/build-entity-detail-opts admin-service schema-provider config entity-name entity-config record request)]
 
+      (if (peek-request? request)
+        (support/html-response request
+                               (admin-ui/record-drawer entity-name entity-config record
+                                                       {:display         (drawer-display admin-service config request
+                                                                                         entity-name entity-config record)
+                                                        :related-records (get-in ctx [:page-opts :related-records])
+                                                        :return-to       (support/safe-return-to request)
+                                                        :permissions     permissions}))
       (support/html-response request
                              (admin-ui/admin-layout
                               (admin-ui/entity-detail-page entity-name entity-config record {} permissions (:page-opts ctx))
@@ -50,7 +76,7 @@
                                :current-entity entity-name
                                :entities (:entities ctx)
                                :entity-configs (:entity-configs ctx)
-                               :logo-url (:logo-url config)})))))
+                               :logo-url (:logo-url config)}))))))
 
 (defn new-entity-handler
   "Handler for new entity creation form.

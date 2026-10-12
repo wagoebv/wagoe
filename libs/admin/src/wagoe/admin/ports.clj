@@ -478,5 +478,7 @@
         :summary [{:label … :value … :role … :field …}]}
 
      `options` are the list's: search and filters narrow facets and summary
-     the way they narrow the rows. A part whose query fails is left out; the
+     the way they narrow the rows. With `:overview/fields`, the titles and
+     counts are for those fields of `records` instead of the list columns, and
+     there are no facets or summary: the record drawer asks this way. A part whose query fails is left out; the
      page still renders."))

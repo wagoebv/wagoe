@@ -4,9 +4,10 @@
 
    Pure Hiccup generators. Depends on `base` for URL helpers, field-value
    rendering, and column sizing, and on `filters` for the filter builder."
-  (:require [wagoe.admin.core.display :as display]
+  (:require [wagoe.admin.core.schema-introspection :as introspection]
             [wagoe.admin.core.ui.base :as base]
             [wagoe.admin.core.ui.cells :as cells]
+            [wagoe.admin.core.ui.drawer :as drawer]
             [wagoe.admin.core.ui.filters :as filters]
             [wagoe.shared.ui.core.icons :as icons]
             [wagoe.shared.ui.core.table :as table-ui]
@@ -54,37 +55,6 @@
   [entity-config]
   (some? (:workflow entity-config)))
 
-;; A list column, described once per table so a row does not re-derive its
-;; role, label and relation for every cell (ADR-040).
-
-(defn- humanize-column
-  "The humanized key — without its `-id` for a relation, which shows a name."
-  [field relation?]
-  (base/format-field-label (cond-> (name field) relation? (str/replace #"[-_]id$" ""))))
-
-(defn- columns
-  "`fields` as list columns: {:field :config :role :class :label :relation :data?}.
-   `:data?` is a column of the table, not a computed one: only those sort,
-   filter and edit. The role comes with the config, or is derived now for a
-   config built without it."
-  [entity-config fields]
-  (let [belongs-to (display/belongs-to-fields entity-config)
-        has-many   (display/has-many-columns entity-config)]
-    (mapv (fn [field]
-            (let [config (get-in entity-config [:fields field])
-                  role   (or (get-in entity-config [:display-roles field])
-                             (display/display-role entity-config field))]
-              {:field    field
-               :config   config
-               :role     role
-               :class    (cells/cell-class role)
-               :label    (or (:label config)
-                             (:label (get has-many field))
-                             (humanize-column field (contains? belongs-to field)))
-               :relation (or (get belongs-to field) (get has-many field))
-               :data?    (contains? (:fields entity-config) field)}))
-          fields)))
-
 (defn entity-table-row
   "Generate entity table row.
 
@@ -98,9 +68,14 @@
 
    Returns:
      Hiccup table row"
-  [entity-name record entity-config permissions & [display cols]]
+  [entity-name record entity-config permissions & [display cols return-to]]
   (let [primary-key (:primary-key entity-config :id)
         record-id (get record primary-key)
+        ;; Links carry the list they came from, so the record page can offer
+        ;; previous / next in it and the way back (data-href stays bare: the
+        ;; drawer and the keyboard add the live list URL themselves)
+        record-url (str "/web/admin/" (name entity-name) "/" record-id
+                        (when return-to (str "?return_to=" (base/url-encode return-to))))
         readonly-fields (set (:readonly-fields entity-config))
         ;; The detail/edit handler is guarded by assert-can-edit-entity!, so only
         ;; wire the row-click navigation when the current user actually has
@@ -114,15 +89,14 @@
        ;; Alpine.js row checkbox with x-model binding to selectedIds array
       [:input (alpine/row-checkbox-attrs record-id)]]
      (for [{:keys [field config role label relation data?] :as column}
-           (or cols (columns entity-config (:list-fields entity-config)))]
+           (or cols (cells/columns entity-config (:list-fields entity-config)))]
        (let [content (cells/cell field record
                                  {:role          role
                                   :field-config  config
                                   :entity-config entity-config
                                   :relation      relation
                                   :display       display
-                                  :href          (when can-open?
-                                                   (str "/web/admin/" (name entity-name) "/" record-id))})
+                                  :href          (when can-open? record-url)})
              classes (str "field-" (name field) " " (:class column))
              editable? (and (:can-edit permissions)
                             data?
@@ -148,7 +122,7 @@
      [:td.actions-cell
       (when can-open?
         [:a.row-nav-hint
-         {:href (str "/web/admin/" (name entity-name) "/" record-id)
+         {:href record-url
           :aria-label [:t :common/button-edit]
           :tabindex 0}
          (icons/icon :chevron-right {:size 14})])]]))
@@ -213,7 +187,7 @@
                               :hx-push-url  page-url}
                           label
                           [:span {:class "facet-count"} (str n)]]))]
-        [:nav {:class "facet-tabs" :aria-label (:label (first (columns entity-config [facet])))}
+        [:nav {:class "facet-tabs" :aria-label (:label (first (cells/columns entity-config [facet])))}
          (tab nil [:t :admin/facet-all] (reduce + 0 (vals counts)))
          (for [v values
                :let [n (get counts v 0)]
@@ -265,17 +239,39 @@
         qs-map (merge table-params filter-params)
         hx-url (str base-url "?" (table-ui/encode-query-params qs-map))
         list-fields (:list-fields entity-config)
-        cols (columns entity-config list-fields)]
+        cols (cells/columns entity-config list-fields)]
     ;; Table container - Alpine.js scope is at parent entity-list-page level
     ;; MutationObserver automatically handles HTMX DOM updates (no afterSwap needed)
     [:div#entity-table-container
      {:hx-get hx-url
+      ;; The toolbar count sits outside this swap; admin-ux.js copies it over
+      :data-total-count total-count
       :hx-trigger "entityCreated from:body, entityUpdated from:body, entityDeleted from:body"
       :hx-target hx-target
       :hx-swap "outerHTML"}
      ;; Inside the swap target, so search, sort and paging keep them current
      (overview-strip entity-name entity-config table-query filters display)
-     (if (empty? records)
+     (cond
+       ;; Filtered or searched to nothing: say so, and offer the way back,
+       ;; not "create the first record" — there are records
+       (and (empty? records) (or (seq filters) (not (str/blank? (:search table-query)))))
+       [:div.empty-state {:class "empty-state-filtered"}
+        [:div.empty-state-icon (icons/icon :filter {:size 32})]
+        [:p [:t :admin/empty-state-no-matches {:label (:label entity-config)}]]
+        [:button {:type        "button"
+                  :class       "button secondary"
+                  :hx-get      (str "/web/admin/" (name entity-name) "/table?"
+                                    (table-ui/encode-query-params
+                                     (table-ui/table-query->params (assoc table-query :page 1 :search nil))))
+                  :hx-target   "#filter-table-container"
+                  :hx-swap     "outerHTML"
+                  :hx-push-url "true"
+                  ;; The search box keeps what was typed; clearing it is the
+                  ;; user's call, so this clears the filters and the search
+                  "hx-on::before-request" "var s=document.querySelector('.toolbar-search .search-input'); if (s) s.value='';"}
+         [:t :admin/button-clear-filters-and-search]]]
+
+       (empty? records)
        [:div.empty-state {:class "p-10 text-center"}
         [:div.empty-state-icon
          (icons/icon :inbox {:size 48})]
@@ -290,6 +286,8 @@
                                           (when (:create-redirect-url entity-config)
                                             (base/current-list-url entity-name table-query filters)))}
            [:t :admin/button-create-first-record]])]
+
+       :else
        (let [pagination (table-ui/pagination {:table-query table-query
                                               :total-count total-count
                                               :base-url base-url
@@ -333,25 +331,27 @@
                    (if sortable?
                      (update-in
                       (table-ui/sortable-th {:label label
-                                            :field field
-                                            :current-sort sort
-                                            :current-dir dir
-                                            :base-url base-url
-                                            :push-url-base (str "/web/admin/" (name entity-name))
-                                            :page page
-                                            :page-size page-size
-                                            :hx-target hx-target
-                                            :hx-push-url? true
-                                            :extra-params filters})
-                      ;; The role aligns the header with its cells
-                      [1 :class] str " " role-class)
-                     [:th {:class role-class} label])))
+                                             :field field
+                                             :current-sort sort
+                                             :current-dir dir
+                                             :base-url base-url
+                                             :push-url-base (str "/web/admin/" (name entity-name))
+                                             :page page
+                                             :page-size page-size
+                                             :hx-target hx-target
+                                             :hx-push-url? true
+                                             :extra-params filters})
+                      ;; The role aligns the header with its cells; the field
+                      ;; class lets the column menu hide it
+                      [1 :class] str " " role-class " field-" (name field))
+                     [:th {:class (str role-class " field-" (name field))} label])))
                (when (workflow-column? entity-config)
                  [:th [:t :admin/column-workflow]])
-               [:th {:class "actions-header"} [:t :admin/column-actions]]]]
+               [:th {:class "actions-header"} [:span.sr-only [:t :admin/column-actions]]]]]
              [:tbody
-              (for [record records]
-                (entity-table-row entity-name record entity-config permissions display cols))]
+              (let [return-to (base/current-list-url entity-name table-query filters)]
+                (for [record records]
+                  (entity-table-row entity-name record entity-config permissions display cols return-to)))]
              (totals-row records cols entity-config display)]]]
           pagination]))]))
 
@@ -360,8 +360,77 @@
    on the page and in the fragment that replaces it."
   [entity-name records entity-config table-query total-count permissions filters display]
   [:div#filter-table-container {:class "space-y-3"}
-   (filters/render-filter-builder entity-name entity-config filters)
+   ;; Active filters as chips; editing is in the filter drawer
+   (filters/filter-summary entity-name entity-config table-query filters)
    (entity-table entity-name records entity-config table-query total-count permissions filters display)])
+
+(defn- view-menu
+  "Density and which columns show, per entity and per browser (admin-ux.js
+   keeps the choice in localStorage and applies it)."
+  [entity-name entity-config]
+  [:details {:class "view-menu" :data-view-entity (name entity-name)}
+   [:summary {:class "button ghost view-menu-button" :title [:t :admin/view-menu]}
+    (icons/icon :layout-list {:size 16})
+    [:span.sr-only [:t :admin/view-menu]]]
+   [:div {:class "view-menu-panel"}
+    [:fieldset
+     [:legend [:t :admin/view-density]]
+     (for [[v label] [["compact" :admin/view-density-compact] ["comfortable" :admin/view-density-comfortable]]]
+       [:label
+        [:input {:type "radio" :name "view-density" :value v :data-view "density"}]
+        " " [:t label]])]
+    [:fieldset
+     [:legend [:t :admin/view-columns]]
+     (for [{:keys [field label]} (cells/columns entity-config (:list-fields entity-config))]
+       [:label
+        [:input {:type "checkbox" :value (name field) :data-view "column" :checked true}]
+        " " label])]]])
+
+(defn- keyboard-hints
+  "The list's keys (keyboard.js), shown once below the table."
+  []
+  [:p {:class "kbd-hints" :aria-hidden "true"}
+   (for [[ks label] [[["/"] :admin/kbd-search] [["j" "k"] :admin/kbd-move] [["PgUp" "PgDn"] :admin/kbd-page]
+                     [["x"] :admin/kbd-select] [["f"] :admin/kbd-filter] [["↵"] :admin/kbd-open] [["e"] :admin/kbd-edit]
+                     [["q"] :admin/kbd-close]]]
+     [:span (for [k ks] [:kbd k]) " " [:t label]])])
+
+(defn- bulk-bar
+  "The bar that appears once rows are selected: how many,
+   what to do with them, and how to stop. Inside the Alpine bulk-selection
+   scope of the list page."
+  [entity-name]
+  [:div {:class      "bulk-bar"
+         :role       "region"
+         :aria-label [:t :admin/bulk-bar-label]
+         :x-show     "selectedIds.length > 0"
+         :x-cloak    true}
+   [:span {:class "bulk-count"}
+    [:span {:x-text "selectedIds.length"}] " " [:t :admin/bulk-selected]]
+   [:form#bulk-action-form
+    {:hx-post    (str "/web/admin/" (name entity-name) "/bulk-delete")
+     :hx-target  "#entity-table-container"
+     :hx-swap    "outerHTML"
+     :hx-include "[name='ids[]']"}
+    [:button.button
+     (merge (alpine/delete-button-attrs)
+            {:type                "submit"
+             :class               "bulk-danger"
+             :name                "action"
+             :value               "delete"
+             :id                  "bulk-delete-btn"
+             :form                "bulk-action-form"
+             :hx-confirm          [:t :admin/confirm-delete-selected]
+             :data-confirm-title  [:t :admin/modal-confirm-delete-title]
+             :data-confirm-cancel [:t :admin/modal-button-cancel]
+             :data-confirm-label  [:t :admin/modal-button-delete]})
+     (icons/icon :trash {:size 14})
+     [:t :admin/button-delete-selected]]]
+   [:button {:type         "button"
+             :class        "button bulk-clear"
+             :x-on:click   "clearSelection()"}
+    [:t :admin/bulk-clear]
+    [:kbd "q"]]])
 
 (defn entity-list-page
   "Complete entity list page with search, table, and actions.
@@ -379,14 +448,15 @@
      Hiccup page structure"
   [entity-name records entity-config table-query total-count permissions & [opts]]
   (let [{:keys [search filters flash display]} opts
-        label (:label entity-config)
         search-fields (:search-fields entity-config)
         has-search? (seq search-fields)
         search-value (:search search)]
     ;; Alpine.js bulk selection scope - wraps toolbar and table
     ;; selectedIds array is shared between delete button and checkboxes
     [:div.entity-list-page (merge (alpine/bulk-selection-attrs)
-                                  {:class "space-y-4"})
+                                  {:class "space-y-4"
+                                   ;; Escape clears the selection (keyboard.js)
+                                   :x-on:bulk-clear.window "clearSelection()"})
      (when flash
        (for [[type message] flash]
          [:div {:class (str "alert alert-" (name type) " mb-2")} message]))
@@ -394,13 +464,9 @@
        ;; Compact toolbar: title + search + actions in one bar
      [:div.table-toolbar-container
       [:div.toolbar-row-actions
+       ;; The topbar names the page; here only the count
        [:div.record-meta
-        [:h1.entity-list-title label]
-        [:span.record-count-badge
-         (str total-count " " label)]
-        [:span.selection-count
-         {:x-show "selectedIds.length > 0"
-          :x-text "selectedIds.length + ' selected'"}]]
+        [:span.record-count-badge (str total-count)]]
 
        (when has-search?
          [:div.toolbar-search
@@ -415,14 +481,8 @@
                                 :hx-push-url "true"
                                 :hx-trigger "keyup changed delay:300ms, search"
                                 :hx-include "this"}]
-          [:button.icon-button {:type "button"
-                                :aria-label [:t :common/button-search]
-                                :hx-get (str "/web/admin/" (name entity-name) "/table")
-                                :hx-target "#entity-table-container"
-                                :hx-swap "outerHTML"
-                                :hx-push-url "true"
-                                :hx-include "previous .search-input"}
-           (icons/icon :search {:size 18})]
+          ;; Typing searches; the icon only says what the field is
+          [:span {:class "search-icon" :aria-hidden "true"} (icons/icon :search {:size 15})]
           (when (seq search-value)
             [:button.icon-button.secondary {:type "button"
                                             :aria-label [:t :admin/button-clear-search]
@@ -430,25 +490,7 @@
              (icons/icon :x {:size 18})])])
 
        [:div.toolbar-actions
-         ;; Delete button - Alpine.js reactively disables when nothing selected
-        [:form#bulk-action-form
-         {:hx-post (str "/web/admin/" (name entity-name) "/bulk-delete")
-          :hx-target "#entity-table-container"
-          :hx-swap "outerHTML"
-          :hx-include "[name='ids[]']"}
-         [:button.icon-button.danger
-          (merge (alpine/delete-button-attrs)
-                 {:type "submit"
-                  :name "action"
-                  :value "delete"
-                  :id "bulk-delete-btn"
-                  :form "bulk-action-form"
-                  :aria-label [:t :admin/button-delete-selected]
-                  :hx-confirm [:t :admin/confirm-delete-selected]
-                  :data-confirm-title [:t :admin/modal-confirm-delete-title]
-                  :data-confirm-cancel [:t :admin/modal-button-cancel]
-                  :data-confirm-label [:t :admin/modal-button-delete]})
-          (icons/icon :trash {:size 18})]]
+        (view-menu entity-name entity-config)
         [:button.icon-button.ghost {:type "button"
                                     :aria-label [:t :admin/button-refresh]
                                     :hx-get (str "/web/admin/" (name entity-name) "/table")
@@ -464,8 +506,13 @@
                                             (base/current-list-url entity-name table-query filters)))
             :aria-label (str "Create new " (name entity-name))}
            (icons/icon :plus {:size 18})
-           [:t :admin/button-new {:entity (str/capitalize (name entity-name))}]])]]]
+           [:t :admin/button-new {:entity (introspection/singular-label entity-config entity-name)}]])]]]
+
+     (bulk-bar entity-name)
 
        ;; Filter builder + Table wrapper (THIS is the HTMX target for filter updates)
      (filter-table-container entity-name records entity-config table-query total-count
-                             permissions filters display)]))
+                             permissions filters display)
+     (keyboard-hints)
+     ;; A row click opens its record here (admin-ux.js), beside the list
+     [:div {:id drawer/slot-id}]]))

@@ -4,6 +4,8 @@
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest is testing use-fixtures]]
             [wagoe.admin.ports :as ports]
+            [wagoe.admin.shell.http.handlers.crud :as crud]
+            [wagoe.admin.shell.http.handlers.detail :as detail]
             [wagoe.admin.shell.http.handlers.list :as list]
             [wagoe.admin.shell.schema-repository :as schema-repo]
             [wagoe.admin.shell.service :as service]
@@ -163,4 +165,133 @@
     (is (str/includes? body "c-money"))
     (is (str/includes? body "facet-tab"))
     (is (str/includes? body "Outstanding"))
-    (is (str/includes? body "totals-row"))))
+    (is (str/includes? body "totals-row"))
+    (is (str/includes? body "record-drawer-slot") "a row click has a drawer to open into")
+    (is (str/includes? body "bulk-bar"))))
+
+(deftest ^:contract one-record-gets-its-titles-and-nothing-list-wide
+  (let [{:keys [a]} (reset-data! 3)
+        record      (first (filter #(= (str a) (str (:ov-client-id %))) (page {})))
+        n           (atom 0)
+        q           db/execute-query!
+        one         db/execute-one!
+        ov          (with-redefs [db/execute-query! (fn [& args] (swap! n inc) (apply q args))
+                                  db/execute-one!   (fn [& args] (swap! n inc) (apply one args))]
+                      (ports/list-overview (:svc @sys) :ov-invoices
+                                           {:overview/fields [:number :ov-client-id :status]}
+                                           [record]))]
+    (is (= {(str a) "Veldhuis"} (get-in ov [:titles :ov-client-id])))
+    (is (nil? (:facets ov)) "no list to count a facet over")
+    (is (= [] (:summary ov)))
+    (is (= 1 @n) "only the relation's title")))
+
+(defn- detail-request [id headers query]
+  {:request-method :get
+   :uri            (str "/web/admin/ov-invoices/" id)
+   :headers        headers
+   :user           admin
+   :session        {:user admin}
+   :path-params    {:entity "ov-invoices" :id (str id)}
+   :query-params   query})
+
+(deftest ^:contract a-peek-renders-the-drawer-not-the-page
+  (let [{:keys [a]} (reset-data! 3)
+        record      (first (filter #(= (str a) (str (:ov-client-id %))) (page {})))
+        handler     (detail/entity-detail-handler (:svc @sys) (:sp @sys) config)
+        peek        (:body (handler (detail-request (:id record) {"hx-request" "true"}
+                                                    {"peek" "1" "return_to" "/web/admin/ov-invoices?page=2"})))
+        page-body   (:body (handler (detail-request (:id record) {} {})))]
+    (testing "the drawer"
+      (is (str/includes? peek "record-drawer"))
+      (is (str/includes? peek (:number record)) "the title field is its heading")
+      (is (str/includes? peek ">Veldhuis</a>") "a relation by its title")
+      (is (str/includes? peek "return_to=%2Fweb%2Fadmin%2Fov-invoices%3Fpage%3D2")
+          "Edit returns to the list it came from")
+      (is (not (str/includes? peek "admin-shell")) "a fragment, not a page"))
+    (testing "without peek it is still the detail page, with the save bar"
+      (is (str/includes? page-body "admin-shell"))
+      (is (str/includes? page-body "save-bar"))
+      (is (not (str/includes? page-body "record-drawer\""))))))
+
+(defn- list-body [query]
+  (:body ((list/entity-list-handler (:svc @sys) (:sp @sys) config)
+          {:request-method :get
+           :uri            "/web/admin/ov-invoices"
+           :headers        {}
+           :user           admin
+           :session        {:user admin}
+           :path-params    {:entity "ov-invoices"}
+           :query-params   query})))
+
+(deftest ^:contract the-filter-drawer-sends-every-field-and-blank-ones-filter-nothing
+  (reset-data! 9)
+  (testing "a filter with a value narrows the list and shows as a chip"
+    (let [body (list-body {"filters[status][op]" "eq" "filters[status][value]" "sent"})]
+      (is (str/includes? body "filter-chip"))
+      (is (str/includes? body "INV-001"))
+      (is (not (str/includes? body "INV-000")) "a draft is filtered out")))
+  (testing "the untouched fields the drawer also sends are no filter"
+    (let [body (list-body {"filters[status][op]" "eq" "filters[status][value]" ""
+                           "filters[number][op]" "contains" "filters[number][value]" ""})]
+      (is (str/includes? body "INV-000"))
+      (is (str/includes? body "INV-008"))
+      (is (not (str/includes? body "filter-chip")))))
+  (testing "the drawer lists every filterable field, an operator kept without a value"
+    (let [body (:body ((list/filter-drawer-handler (:svc @sys) (:sp @sys) config)
+                       {:request-method :get
+                        :uri            "/web/admin/ov-invoices/filters"
+                        :headers        {"hx-request" "true"}
+                        :user           admin
+                        :session        {:user admin}
+                        :path-params    {:entity "ov-invoices"}
+                        :query-params   {"filters[number][op]" "starts-with"}}))]
+      (is (str/includes? body "filter-drawer"))
+      (is (str/includes? body "name=\"filters[status][op]\""))
+      (is (str/includes? body "name=\"filters[amount][op]\""))
+      (is (re-find #"<option[^>]*selected[^>]*value=\"starts-with\"|<option[^>]*value=\"starts-with\"[^>]*selected" body)
+          "the operator just chosen survives the re-render"))))
+
+(deftest ^:contract a-record-opened-from-the-list-knows-its-neighbours
+  (reset-data! 9)
+  (let [records (page {:sort :number :sort-dir :asc})
+        middle  (nth records 4)
+        list-to "/web/admin/ov-invoices?sort=number&dir=asc&page=1&page-size=20"
+        body    (:body ((detail/entity-detail-handler (:svc @sys) (:sp @sys) config)
+                        (detail-request (:id middle) {} {"return_to" list-to})))]
+    (is (str/includes? body "data-nav=\"prev\""))
+    (is (str/includes? body "data-nav=\"next\""))
+    (is (str/includes? body (str (:id (nth records 3)))) "previous is the row above")
+    (is (str/includes? body (str (:id (nth records 5)))) "next is the row below")
+    (is (str/includes? body "5 / 9") "its position in the list")))
+
+(deftest ^:contract save-and-back-returns-to-the-list
+  (reset-data! 3)
+  (let [record  (first (page {}))
+        list-to "/web/admin/ov-invoices?page=1"
+        resp    ((crud/update-entity-handler (:svc @sys) (:sp @sys) config)
+                 {:request-method :put
+                  :uri            (str "/web/admin/ov-invoices/" (:id record))
+                  :headers        {"hx-request" "true"}
+                  :user           admin
+                  :session        {:user admin}
+                  :path-params    {:entity "ov-invoices" :id (str (:id record))}
+                  :query-params   {"return_to" list-to}
+                  :form-params    {"number" "INV-999" "__then" "list"}})]
+    (is (= list-to (get-in resp [:headers "HX-Redirect"])))
+    (is (some? (get-in resp [:headers "X-Toast"])))
+    (is (= "INV-999" (:number (ports/get-entity (:svc @sys) :ov-invoices (:id record))))
+        "saved before going back")))
+
+(deftest ^:contract leaving-a-valid-field-reports-nothing
+  (reset-data! 1)
+  (let [record (first (page {}))
+        resp   ((crud/validate-field-handler (:svc @sys) (:sp @sys) config)
+                {:request-method :post
+                 :uri            "/web/admin/ov-invoices/validate-field"
+                 :headers        {"hx-request" "true"}
+                 :user           admin
+                 :session        {:user admin}
+                 :path-params    {:entity "ov-invoices"}
+                 :form-params    {"number" "INV-123" "__field" "number" "__id" (str (:id record))}})]
+    (is (= 200 (:status resp 200)))
+    (is (str/blank? (:body resp)))))

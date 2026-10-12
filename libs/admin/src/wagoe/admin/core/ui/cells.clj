@@ -104,6 +104,37 @@
 (defn- url-host [url]
   (or (second (re-find #"(?i)^https?://([^/?#]+)" url)) url))
 
+;; A column — of the list, or a field in the record drawer — described once,
+;; so a row does not re-derive its role, label and relation for every cell.
+
+(defn- humanize-column
+  "The humanized key — without its `-id` for a relation, which shows a name."
+  [field relation?]
+  (base/format-field-label (cond-> (name field) relation? (str/replace #"[-_]id$" ""))))
+
+(defn columns
+  "`fields` as list columns: {:field :config :role :class :label :relation :data?}.
+   `:data?` is a column of the table, not a computed one: only those sort,
+   filter and edit. The role comes with the config, or is derived now for a
+   config built without it."
+  [entity-config fields]
+  (let [belongs-to (display/belongs-to-fields entity-config)
+        has-many   (display/has-many-columns entity-config)]
+    (mapv (fn [field]
+            (let [config (get-in entity-config [:fields field])
+                  role   (or (get-in entity-config [:display-roles field])
+                             (display/display-role entity-config field))]
+              {:field    field
+               :config   config
+               :role     role
+               :class    (cell-class role)
+               :label    (or (:label config)
+                             (:label (get has-many field))
+                             (humanize-column field (contains? belongs-to field)))
+               :relation (or (get belongs-to field) (get has-many field))
+               :data?    (contains? (:fields entity-config) field)}))
+          fields)))
+
 ;; -----------------------------------------------------------------------------
 ;; Public API
 ;; -----------------------------------------------------------------------------

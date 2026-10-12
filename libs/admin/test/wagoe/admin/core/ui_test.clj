@@ -650,7 +650,18 @@
       (is (not (str/includes? row-str "clickable-row")))
       (is (not (str/includes? row-str "data-href")))
       ;; Chevron nav hint is also hidden when the row isn't navigable
-      (is (not (str/includes? row-str "row-nav-hint"))))))
+      (is (not (str/includes? row-str "row-nav-hint")))))
+
+  (testing "Links carry the list they came from; data-href stays bare"
+    (let [row     (ui/entity-table-row :users sample-record sample-entity-config
+                                       {:can-edit true :can-delete false}
+                                       nil nil "/web/admin/users?page=2")
+          base    (str "/web/admin/users/" (:id sample-record))
+          hrefs   (->> (tree-seq coll? seq row)
+                       (filter #(and (vector? %) (map? (second %))))
+                       (keep #(get-in % [1 :href])))]
+      (is (= base (get-in row [1 :data-href])))
+      (is (some #{(str base "?return_to=%2Fweb%2Fadmin%2Fusers%3Fpage%3D2")} hrefs)))))
 
 (deftest ^:unit entity-edit-form-return-to-encoding-test
   (testing "return_to is URL-encoded on the edit form action"
@@ -727,8 +738,8 @@
       (is (str/includes? (str page) "search-input"))
       (is (str/includes? (str page) "/web/admin/users/new"))
 
-      ;; Should show record count
-      (is (str/includes? (str page) "1 Users"))
+      ;; Should show record count; the topbar names the page, so no label
+      (is (str/includes? (str page) "[:span.record-count-badge \"1\"]"))
 
       ;; Should have the table
       (is (str/includes? (str page) "user@example.com")))))
@@ -763,12 +774,22 @@
                                   :create-redirect-url "/web/users/new")
           table-query {:page 3 :page-size 25}
           table (ui/entity-table :users [] delegated-config table-query 0
-                                 sample-permissions {:role "admin"})
+                                 sample-permissions {})
           table-str (str table)]
       (is (str/includes? table-str "/web/users/new?return-to=")
           "empty-state create button should include delegate URL with return-to")
       (is (str/includes? table-str "page%3D3")
-          "encoded caller URL must preserve pagination from table-query"))))
+          "encoded caller URL must preserve pagination from table-query")))
+
+  (testing "Filtered to nothing: offer clearing the filters, not creating a first record"
+    (let [delegated-config (assoc sample-entity-config
+                                  :create-redirect-url "/web/users/new")
+          table (ui/entity-table :users [] delegated-config {:page 3 :page-size 25} 0
+                                 sample-permissions {:role "admin"})
+          table-str (str table)]
+      (is (str/includes? table-str "empty-state-filtered"))
+      (is (str/includes? table-str ":admin/button-clear-filters-and-search"))
+      (is (not (str/includes? table-str "/web/users/new"))))))
 
 ;; =============================================================================
 ;; Column Width Tests
@@ -1228,9 +1249,10 @@
       (let [page (ui/entity-list-page :users [sample-record] sample-entity-config
                                       {:page 1 :page-size 20} 1 sample-permissions nil)
             page-str (str page)]
-        ;; Search button should have aria-label (i18n key)
+        ;; Typing searches: no search button, the icon is decoration
         (is (str/includes? page-str "aria-label"))
-        (is (str/includes? page-str ":common/button-search"))))
+        (is (not (str/includes? page-str ":common/button-search")))
+        (is (str/includes? page-str "search-icon"))))
 
     (testing "Sidebar buttons have aria-label"
       (let [sidebar (ui/admin-sidebar [:users :orders] sample-entity-configs :users)
@@ -1369,6 +1391,42 @@
         (is (str/includes? form-str "role"))
         (is (str/includes? form-str "active"))
         (is (str/includes? form-str "bio"))))))
+
+(deftest ^:unit record-summary-shows-blank-read-only-fields-test
+  (testing "Every read-only field is in the summary, a blank one as a dash, timestamps last"
+    (let [cfg  (-> sample-entity-config
+                   (assoc :readonly-fields #{:id :created-at :tenant-id})
+                   (assoc-in [:fields :tenant-id] {:type :uuid :label "Tenant"}))
+          form (ui/entity-form :users cfg {:id (java.util.UUID/randomUUID) :email "a@b.c" :name "A"
+                                           :created-at (java.time.Instant/now)}
+                               nil sample-permissions)
+          aside (->> (tree-seq coll? seq form)
+                     (filter #(and (vector? %) (= :aside (first %))))
+                     first)
+          dts  (->> (tree-seq coll? seq aside)
+                    (filter #(and (vector? %) (= :dt (first %))))
+                    (map second))]
+      (is (= ["ID" "Tenant" "Created At"] dts))
+      (is (str/includes? (str aside) "record-summary-blank")))))
+
+(deftest ^:unit entity-form-optional-groups-fold-test
+  (testing "A group without required fields folds away unless it holds something"
+    (let [cfg      sample-grouped-entity-config
+          open-of  (fn [form id]
+                     (->> (tree-seq coll? seq form)
+                          (filter #(and (vector? %) (= :details (first %))
+                                        (= id (get-in % [1 :data-group-id]))))
+                          first
+                          second
+                          :open))
+          empty-f  (ui/entity-form :users cfg nil nil sample-permissions)
+          filled-f (ui/entity-form :users cfg {:id 1 :role "admin"} nil sample-permissions)]
+      (testing "Required group is not folded"
+        (is (nil? (open-of empty-f "identity"))))
+      (testing "Optional group starts closed when blank"
+        (is (false? (open-of empty-f "access"))))
+      (testing "Optional group opens when a field has a value"
+        (is (true? (open-of filled-f "access")))))))
 
 (deftest ^:unit entity-form-flat-rendering-test
   (testing "Entity form renders flat fields when no :field-groups configured"

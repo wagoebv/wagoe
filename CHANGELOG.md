@@ -36,6 +36,17 @@ for what is public API, what is internal, and how deprecations are announced.
 - **`db/drop-index-if-exists!`, `db/add-column-if-not-exists!` and `db/drop-column-if-exists!`** (BOU-607): safe to run
   twice on every engine, MySQL included. Use them instead of branching on the engine in a migration.
 - **`db/engine-of`** (BOU-450): which engine a datasource speaks, for code that holds no db-context.
+- **Admin record drawer, bulk bar and save bar.** Clicking a list row opens the record beside the list, read-only and
+  rendered by display role, with an Edit link back to the same list (a modified click still navigates). Selecting rows
+  shows a bar with the count, Delete and Clear (Esc). The edit form's actions are a sticky bar that counts unsaved
+  changes, offers Discard, saves on ⌘S / Ctrl+S and warns before leaving with changes. On a list, `j`/`k` move between
+  rows (an open drawer follows, as do its ↑/↓ buttons), `x` selects and `o`/Enter opens. Filters moved into a
+  drawer on the right, every field under the other (`f`); above the table, active filters show as chips that remove
+  themselves. The topbar names the page and holds a user menu; the list has a View menu (density, columns), an
+  empty state that says the filters found nothing, and dates past 60 days as the day alone. Edit pages show the
+  record's read-only fields and what the edit changes beside the form, step through the list with `[` / `]`, save and
+  return with ⌘↵, and check a field when you leave it (`POST /:entity/validate-field`). `IListOverview` takes
+  `:overview/fields` for one record's titles.
 - **Admin list cells render by display role** (ADR-040). A relation shows its target's name, linked; an enum its
   `:options` label in a tone; money is formatted in its currency; dates are relative. Status tabs with counts, page
   totals and a header summary come from the same contract. New config keys, all optional: per field `:display`,
@@ -62,6 +73,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **`wagoe-admin` record navigation**: previous / next on the edit page now also work from the list's row chevron and a ⌘-clicked title (the links carry `return_to`), and from inside a field with ⌥↑ / ⌥↓ — the page opens with the cursor in the first field, where `[` and `]` are typed rather than obeyed.
+- **`wagoe-admin` tests**: running the admin suite without `:test/pg` (or, on a Mac, without `:test/pg-mac`) now fails with the command to use instead of a `ClassNotFoundException` at compile time.
 - **Hard-deleting a user still in a tenant succeeded and left orphaned memberships** (BOU-611, BOU-612). Membership rows
   now go with a revoke or tenant delete; boot and `bb migrate up` add the keys, not while orphans they name remain.
 - **Tables built from Malli failed on MySQL, and `create-index-if-not-exists!` failed when run twice there** (BOU-607):

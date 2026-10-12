@@ -4,6 +4,7 @@
 
    Pure Hiccup generators. Depends on `base` for URL and field helpers."
   (:require [wagoe.admin.core.ui.base :as base]
+            [wagoe.admin.core.ui.cells :as cells]
             [wagoe.admin.core.forms :as forms]
             [wagoe.admin.core.schema-introspection :as introspection]
             [wagoe.shared.ui.core.components :as ui]
@@ -259,8 +260,17 @@
         ;; All fields are grouped
         (vec groups-with-editable)))))
 
+(defn- blank-value?
+  "Nothing to show: nil, an empty string, or an unset flag."
+  [v]
+  (or (nil? v) (false? v) (and (string? v) (str/blank? v))))
+
 (defn- render-field-group
-  "Render a single field group with heading and fields.
+  "Render a single field group: its title beside its fields.
+
+   A group without required fields is optional and folds away (`details`);
+   it opens by itself when one of its fields holds a value or an error, so
+   nothing filled in or wrong is hidden.
 
    Args:
      group: Group map with :id, :label, :fields
@@ -269,17 +279,30 @@
      errors: Validation errors map
 
    Returns:
-     Hiccup fieldset/group structure"
+     Hiccup group structure"
   [group entity-config record errors & [display]]
-  [:div.form-field-group {:class "form-field-group"
-                          :data-group-id (name (:id group))}
-   [:h3.form-section-title (:label group)]
-   [:div.form-fields
-    (for [field-name (:fields group)]
-      (let [field-config (get-in entity-config [:fields field-name])
-            field-value (get record field-name)
-            field-errors (get errors field-name)]
-        (render-field-widget field-name field-value field-config field-errors display)))]])
+  (let [fields    (:fields group)
+        optional? (not-any? #(true? (get-in entity-config [:fields % :required])) fields)
+        open?     (some #(or (seq (get errors %)) (not (blank-value? (get record %)))) fields)
+        body      [:div.form-fields
+                   (for [field-name fields]
+                     (render-field-widget field-name (get record field-name)
+                                          (get-in entity-config [:fields field-name])
+                                          (get errors field-name) display))]
+        group-id  (name (:id group))]
+    (if optional?
+      [:details {:class         "form-section form-field-group form-section-optional"
+                 :data-group-id group-id
+                 :open          (boolean open?)}
+       [:summary {:class "form-section-toggle"}
+        [:div.form-section-header
+         [:h3.form-section-title (:label group)]
+         [:p.form-section-description [:t :admin/form-section-optional-short]]]
+        [:span.form-section-toggle-icon (icons/icon :chevron-down {:size 16})]]
+       body]
+      [:div {:class "form-section form-field-group" :data-group-id group-id}
+       [:div.form-section-header [:h3.form-section-title (:label group)]]
+       body])))
 
 ;; =============================================================================
 ;; Child rows of a create form (BOU-570)
@@ -327,6 +350,72 @@
                                 :hx-swap   "beforeend"}
       (icons/icon :plus {:size 16})
       [:t :admin/button-add-row {:entity (or (get-in rel [:entity-config :label]) (:label rel))}]]]))
+
+(defn- record-summary
+  "The read-only side of a record — its id, timestamps and other read-only
+   fields, rendered by display role — and, filled in by the form as you type,
+   what this edit changes. Blank fields show as a dash: that a user has no
+   tenant is worth seeing too. Order: the key, the other values, then the
+   timestamps."
+  [entity-config record display]
+  (let [pk       (:primary-key entity-config :id)
+        hidden   (set (:hide-fields entity-config))
+        order    (or (seq (:field-order entity-config)) (sort (keys (:fields entity-config))))
+        fields   (->> (cons pk (filter (set (:readonly-fields entity-config)) order))
+                      (filter #(contains? (:fields entity-config) %))
+                      (remove hidden)
+                      distinct)
+        temporal? (fn [{:keys [field role]}] (and (not= field pk) (contains? #{:date :datetime} role)))
+        columns  (let [cols (cells/columns entity-config fields)]
+                   (concat (remove temporal? cols) (filter temporal? cols)))
+        ctx      {:entity-config entity-config :display display :overview (:overview display)}]
+    [:aside {:class "record-summary" :aria-label [:t :admin/record-summary]}
+     (when (seq columns)
+       [:dl {:class "record-summary-fields"}
+        (for [{:keys [field config role label relation] :as column} columns
+              :let [v (get record field)]]
+          (list
+           [:dt label]
+           (if (or (nil? v) (and (string? v) (str/blank? v)))
+             [:dd {:class "record-summary-blank"} "—"]
+             [:dd {:class (:class column)}
+              (cells/cell field record (assoc ctx :role role :field-config config :relation relation))])))])
+     [:div {:class "record-summary-changes" :x-show "dirty > 0" :x-cloak true}
+      [:h3 [:t :admin/changed-in-this-edit]]
+      [:p {:x-text "changedText"}]]]))
+
+(defn- save-bar
+  "The bar at the foot of the form, sticky while the form scrolls: whether
+   there are unsaved changes, and the actions. `dirty` is the form's count of
+   changed fields (the dirtyForm component)."
+  [entity-name is-edit? cancel-url]
+  [:div {:class "form-actions save-bar" :role "region" :aria-label [:t :admin/save-bar-label]}
+   [:span {:class "save-state" :aria-live "polite"}
+    [:span {:class "save-dot" :aria-hidden "true" :x-bind:class "dirty > 0 ? 'is-dirty' : ''"}]
+    [:span {:x-show "dirty === 0"} [:t :admin/save-bar-clean]]
+    [:span {:x-show "dirty > 0" :x-cloak true}
+     [:span {:x-text "dirty"}] " " [:t :admin/save-bar-unsaved]]]
+   [:div {:class "save-actions"}
+    [:button {:type "button" :class "button ghost" :x-show "dirty > 0" :x-cloak true
+              :x-on:click "discard()"}
+     [:t :admin/save-bar-discard]]
+    [:a.button.secondary
+     {:class "gap-2"
+      :href (or cancel-url (str "/web/admin/" (name entity-name)))}
+     [:t :common/button-cancel]
+     [:kbd "u"]]
+    [:button.button.primary {:class "gap-2" :type "submit"}
+     (if is-edit? [:t :admin/button-update] [:t :admin/button-create])
+     [:kbd {:class "save-kbd"} "⌘S"]]]
+   ;; The keys that work with the cursor in a field, where the page starts
+   ;; (the bare [ ] u only once Esc has left it). The previous / next hint
+   ;; hides itself when there is no list to step through (CSS).
+   [:span {:class "save-hint" :aria-hidden "true"}
+    (when is-edit?
+      [:span {:class "save-hint-nav"} [:kbd "⌥↑"] [:kbd "⌥↓"] " " [:t :admin/kbd-prev-next]])
+    [:span [:kbd "Esc"] [:kbd "u"] " " [:t :admin/kbd-to-list]]
+    (when is-edit?
+      [:span [:kbd "⌘↵"] " " [:t :admin/save-and-back]])]])
 
 (defn entity-form
   "Render entity create/edit form.
@@ -377,13 +466,25 @@
      (merge {hx-attr form-action
              :hx-target "body"
              :hx-swap "outerHTML"
+             ;; A field is checked when it is left (admin-ux.js)
+             :data-validate-url (str "/web/admin/" (name entity-name) "/validate-field")
+             :data-record-id (when is-edit? (str record-id))
+             ;; Dirty tracking and ⌘S / Ctrl+S for the save bar (admin-ux.js)
+             :x-data "dirtyForm"
+             :x-on:input "track()"
+             :x-on:change "track()"
+             :x-on:keydown.meta.s.window.prevent "save()"
+             :x-on:keydown.ctrl.s.window.prevent "save()"
              "hx-on::afterRequest" (str "if (event.detail.successful) { localStorage.setItem('"
                                         optional-details-key
                                         "', 'false'); }")}
             ;; After a successful edit, push the same URL (including return_to) so the
             ;; browser stays on the detail page with context intact
             (when is-edit?
-              {:hx-push-url form-action}))
+              {:hx-push-url form-action
+               ;; ⌘↵ / Ctrl+↵: save, then back to the list
+               :x-on:keydown.meta.enter.window.prevent "saveAndBack()"
+               :x-on:keydown.ctrl.enter.window.prevent "saveAndBack()"}))
      ;; No longer need hidden _method field since HTMX sends proper HTTP method
      ;; The zone the :instant fields above were rendered in. The handler parses
      ;; them back in exactly this zone; reading it from the cookie instead would
@@ -443,14 +544,11 @@
               (render-field-widget field-name field-value field-config field-errors display)))])
        (when-not is-edit?
          (for [section nested]
-           (child-rows-section entity-name section display)))]
-      [:div.form-actions {:class "form-actions justify-end border-t border-base-300 pt-4 mt-4"}
-       [:button.button.primary {:class "gap-2" :type "submit"}
-        (if is-edit? [:t :admin/button-update] [:t :admin/button-create])]
-       [:a.button.secondary
-        {:class "gap-2"
-         :href (or cancel-url (str "/web/admin/" (name entity-name)))}
-        [:t :common/button-cancel]]]]]))
+           (child-rows-section entity-name section display)))]]
+     ;; Beside the fields: what the record is, that the form cannot change
+     (when is-edit? (record-summary entity-config record display))
+     ;; Outside the card: its overflow-hidden would stop the bar sticking
+     (save-bar entity-name is-edit? cancel-url)]))
 
 (defn parent-context-banner
   "Renders a read-only info strip showing key fields from a parent record.
@@ -602,8 +700,13 @@
   (let [{:keys [flash return-to sibling-nav]} opts
         entity-config (with-field-options entity-config (:field-options opts))
         label      (:label entity-config)
+        singular   (introspection/singular-label entity-config entity-name)
         is-edit?   (some? record)
-        page-title (if is-edit? [:t :admin/page-edit-title {:label label}] [:t :admin/page-create-title {:label label}])
+        page-title (if is-edit? [:t :admin/page-edit-title {:label singular}] [:t :admin/page-create-title {:label singular}])
+        ;; What the record is called: the heading of an edit page
+        pk         (:primary-key entity-config :id)
+        title-f    (:title-field entity-config pk)
+        heading    (when is-edit? (str (get record title-f (get record pk))))
         list-url   (or return-to (str "/web/admin/" (name entity-name)))]
     [:div.entity-detail-page {:class "space-y-4"}
      (when flash
@@ -615,42 +718,38 @@
           flash-msg]))
      [:div.page-header {:class "space-y-3"}
       [:div.page-header-row
+       ;; The list is the way back: the breadcrumb, Cancel and the save bar
        [:div.page-breadcrumbs
         [:a {:href "/web/admin"} [:t :admin/breadcrumb-admin]]
         " / "
-        [:a {:href list-url} label]
+        [:a {:href list-url :data-action "list"} label]
         " / "
-        [:span page-title]]
+        [:span (if is-edit? heading page-title)]]
        [:div.page-header-actions {:class "flex flex-wrap items-center gap-2"}
-        [:a.button.secondary
-         {:class "gap-2"
-          :href list-url}
-         (icons/icon :chevron-left {:size 16})
-         [:t :admin/button-back-to-list]]
         (when sibling-nav
           [:div.sibling-nav
            (if (:prev-url sibling-nav)
-             [:a.button.secondary {:href (:prev-url sibling-nav) :title "Previous"}
+             [:a.button.secondary {:href (:prev-url sibling-nav) :title "Previous  [  ·  ⌥↑ in a field" :data-nav "prev"}
               (icons/icon :chevron-left {:size 14})]
              [:span.button.secondary.disabled {:aria-disabled "true"}
               (icons/icon :chevron-left {:size 14})])
            [:span.sibling-nav-count
             (:position sibling-nav) " / " (:total sibling-nav)]
            (if (:next-url sibling-nav)
-             [:a.button.secondary {:href (:next-url sibling-nav) :title "Next"}
+             [:a.button.secondary {:href (:next-url sibling-nav) :title "Next  ]  ·  ⌥↓ in a field" :data-nav "next"}
               (icons/icon :chevron-right {:size 14})]
              [:span.button.secondary.disabled {:aria-disabled "true"}
               (icons/icon :chevron-right {:size 14})])])
         (when (and is-edit? (:can-create permissions))
-          [:a.button.primary
+          [:a.button.secondary
            {:class "gap-2"
             ;; `list-url` is the caller context (either return-to from the
             ;; query string or the plain list URL). Threading it through
             ;; ensures the delegated create flow lands the user back on
             ;; their filtered/paginated list on cancel or success.
             :href (base/entity-create-url entity-name entity-config list-url)}
-           (icons/icon :plus {:size 16})
-           [:t :admin/form-create-heading {:label label}]])
+           (icons/icon :plus {:size 14})
+           [:t :admin/form-create-heading {:label singular}]])
         (when (and is-edit? (:can-delete permissions))
           ;; URL-encode return-to because contextual list URLs may already
           ;; carry their own query string (filters, pagination). Without
@@ -659,9 +758,9 @@
           ;; original list state when redirecting back.
           (let [delete-url (cond-> (str "/web/admin/" (name entity-name) "/" (get record (:primary-key entity-config :id)))
                              return-to (str "?return_to=" (base/url-encode return-to)))]
-            [:button.button.danger
+            [:button.button.ghost
              {:type "button"
-              :class "gap-2"
+              :class "gap-2 button-danger-text"
               :hx-delete delete-url
               :hx-target "body"
               :hx-swap "outerHTML"
@@ -669,9 +768,15 @@
               :data-confirm-title [:t :admin/modal-confirm-delete-title]
               :data-confirm-cancel [:t :admin/modal-button-cancel]
               :data-confirm-label [:t :admin/modal-button-delete]}
-             (icons/icon :trash {:size 16})
+             (icons/icon :trash {:size 14})
              [:t :common/button-delete]]))]]
-      [:h1.page-title page-title]
+      ;; Edit: the record's name, with what this page is above it.
+      ;; New: what this page is.
+      (if is-edit?
+        [:div.page-heading
+         [:span.page-kicker page-title]
+         [:h1.page-title heading]]
+        [:h1.page-title page-title])
       (when-let [workflow (:workflow opts)]
         [:div.workflow-state-row
          [:span.workflow-state-label [:t :admin/column-workflow]] " "

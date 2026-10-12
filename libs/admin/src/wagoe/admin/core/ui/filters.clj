@@ -4,6 +4,7 @@
    Pure Hiccup generators for the filter UI: operator selection per field
    type, value inputs, filter rows, and the overall filter builder."
   (:require [wagoe.shared.ui.core.icons :as icons]
+            [wagoe.shared.ui.core.table :as table-ui]
             [clojure.string :as str]))
 
 (defn get-operators-for-field-type
@@ -57,6 +58,13 @@
      [:is-null [:t :admin/filter-op-is-empty]]
      [:is-not-null [:t :admin/filter-op-is-not-empty]]]))
 
+(defn- same-value?
+  "Whether a filter's value is this option. The value arrives from the query
+   string as a string; the config names options as keywords."
+  [filter-value option]
+  (let [as-str #(if (keyword? %) (name %) (str %))]
+    (and (some? filter-value) (= (as-str filter-value) (as-str option)))))
+
 (defn render-filter-value-inputs
   "Render value input(s) for a filter based on operator and field type.
 
@@ -101,7 +109,7 @@
           :size (min 5 (count options))}
          (for [[value label] options]
            [:option {:value (name value)
-                     :selected (some #{value} (:values filter-value))}
+                     :selected (boolean (some #(same-value? % value) (:values filter-value)))}
             label])]
         ;; Free-form multi-value input (comma-separated)
         [:input.filter-value-input
@@ -115,8 +123,8 @@
       [:select.filter-value-input
        {:name (str "filters[" (name field-name) "][value]")}
        [:option {:value ""} [:t :admin/select-placeholder]]
-       [:option {:value "true" :selected (= (:value filter-value) true)} [:t :common/option-yes]]
-       [:option {:value "false" :selected (= (:value filter-value) false)} [:t :common/option-no]]]
+       [:option {:value "true" :selected (same-value? (:value filter-value) true)} [:t :common/option-yes]]
+       [:option {:value "false" :selected (same-value? (:value filter-value) false)} [:t :common/option-no]]]
 
       ;; Enum field with options - dropdown
       (and (= field-type :enum) options)
@@ -125,7 +133,7 @@
        [:option {:value ""} [:t :admin/select-placeholder]]
        (for [[value label] options]
          [:option {:value (name value)
-                   :selected (= (:value filter-value) value)}
+                   :selected (same-value? (:value filter-value) value)}
           label])]
 
       ;; Date/instant fields - date input
@@ -270,3 +278,180 @@
       ;; Apply button (for manual submission if auto-trigger doesn't work)
         (when has-active-filters?
           [:button.button.primary {:type "submit"} [:t :admin/button-apply-filters]])]])))
+
+;; =============================================================================
+;; Filter summary and filter drawer
+;; =============================================================================
+
+;; Above the table, one line: a Filter button with the number of active
+;; filters, each active filter as a chip that removes itself, and Clear all.
+;; The editing happens in a drawer on the right, every field under the other,
+;; in the slot the record drawer uses — one panel at a time.
+
+(defn blank-filter?
+  "A filter spec that filters nothing: no value, no values, no bounds, and not
+   an is-empty check. The drawer sends every field; these are the untouched
+   ones."
+  [{:keys [op value values min max] :as spec}]
+  (and (map? spec)
+       (not (#{:is-null :is-not-null} op))
+       (str/blank? (str value))
+       (not-any? #(not (str/blank? (str %))) (if (sequential? values) values [values]))
+       (str/blank? (str min))
+       (str/blank? (str max))))
+
+(defn active-filters
+  "`filters` without the blank ones."
+  [filters]
+  (into {} (remove (comp blank-filter? val)) filters))
+
+(defn filterable-fields
+  "The fields a list can filter on: its columns (all fields without
+   :list-fields) that are columns of the table and not :filterable false."
+  [entity-config]
+  (filter #(and (contains? (:fields entity-config) %)
+                (get-in entity-config [:fields % :filterable] true))
+          (or (seq (:list-fields entity-config))
+              (keys (:fields entity-config)))))
+
+(def ^:private op-symbols
+  {:eq "=" :ne "≠" :gt ">" :gte "≥" :lt "<" :lte "≤"
+   :contains "∋" :starts-with "^" :ends-with "$"})
+
+(defn- value-label
+  "How a filter value reads in a chip: an enum's option label, yes/no for a
+   boolean, else the value."
+  [field-config v]
+  (let [s (if (keyword? v) (name v) (str v))]
+    (or (some (fn [[k label]] (when (= s (name k)) label)) (:options field-config))
+        (when (= :boolean (:type field-config))
+          (if (= "true" s) [:t :common/option-yes] [:t :common/option-no]))
+        s)))
+
+(defn- chip-text
+  "`Role = Admin`, `Amount 10 – 100`, `Status any of Sent, Paid`, `Notes is empty`."
+  [field-config label {:keys [op value values min max] :or {op :eq}}]
+  (let [ops (into {} (get-operators-for-field-type (:type field-config :string)))]
+    (case op
+      (:is-null :is-not-null) (list label " " (ops op))
+      :between                (list label " " (str min) " – " (str max))
+      (:in :not-in)           (list label " " (ops op) " "
+                                    (interpose ", " (map #(value-label field-config %) values)))
+      (list label " " (get op-symbols op (ops op)) " " (value-label field-config value)))))
+
+(defn- table-url
+  "The table fragment for `filters`, from page one, sorted as now. The search
+   box is included by the caller (hx-include), so a chip keeps the search."
+  [entity-name table-query filters]
+  (str "/web/admin/" (name entity-name) "/table?"
+       (table-ui/encode-query-params
+        (merge (table-ui/table-query->params (assoc table-query :page 1 :search nil))
+               (table-ui/search-filters->params filters)))))
+
+(defn filter-summary
+  "The line above the table: Filter (n), a chip per active filter, Clear all."
+  [entity-name entity-config table-query current-filters]
+  (let [current (active-filters current-filters)
+        fields  (filterable-fields entity-config)
+        swap    {:hx-target  "#filter-table-container"
+                 :hx-swap    "outerHTML"
+                 :hx-push-url "true"
+                 :hx-include ".toolbar-search .search-input"}]
+    (when (or (seq fields) (seq current))
+      [:div {:class "filter-summary"}
+       [:button {:type        "button"
+                 :class       (str "button filter-open" (when (seq current) " has-filters"))
+                 :data-filter-open "true"
+                 :hx-get      (str "/web/admin/" (name entity-name) "/filters?"
+                                   (table-ui/encode-query-params (table-ui/search-filters->params current)))
+                 :hx-target   "#record-drawer-slot"
+                 :hx-swap     "innerHTML"
+                 :title       "f"}
+        (icons/icon :filter {:size 14})
+        [:t :admin/filters-title]
+        (when (seq current) [:span {:class "filter-count"} (str (count current))])]
+       (for [[field spec] current
+             :let [fc (get-in entity-config [:fields field])
+                   label (:label fc (str/capitalize (str/replace (name field) #"[-_]" " ")))]]
+         [:span {:class "filter-chip"}
+          [:span (chip-text fc label spec)]
+          [:button (merge swap {:type       "button"
+                                :aria-label [:t :admin/button-remove-filter]
+                                :hx-get     (table-url entity-name table-query (dissoc current field))})
+           (icons/icon :x {:size 12})]])
+       (when (seq current)
+         [:button (merge swap {:type  "button"
+                               :class "text-button filter-clear"
+                               :hx-get (table-url entity-name table-query {})})
+          [:t :admin/button-clear-all-filters]])])))
+
+(defn- drawer-field
+  "One field in the filter drawer: its label, then operator and value."
+  [entity-name field field-config spec]
+  (let [operators (get-operators-for-field-type (:type field-config :string))
+        op        (:op spec :eq)
+        label     (:label field-config (str/capitalize (str/replace (name field) #"[-_]" " ")))]
+    [:div {:class (str "filter-field" (when (and spec (not (blank-filter? spec))) " is-active"))}
+     [:label {:class "filter-field-name" :for (str "filter-" (name field))} label]
+     [:div {:class "filter-field-inputs"}
+      (when (< 1 (count operators))
+        [:select {:class      "filter-operator-select"
+                  :name       (str "filters[" (name field) "][op]")
+                  :aria-label [:t :admin/filter-operator {:field label}]
+                  ;; A different operator may need different inputs (between,
+                  ;; any of): the drawer re-renders with what is filled in
+                  :hx-get     (str "/web/admin/" (name entity-name) "/filters")
+                  :hx-include "closest form"
+                  :hx-target  "#record-drawer-slot"
+                  :hx-swap    "innerHTML"
+                  :hx-trigger "change"}
+         (for [[o l] operators]
+           [:option {:value (name o) :selected (= o op)} l])])
+      (when (= 1 (count operators))
+        [:input {:type "hidden" :name (str "filters[" (name field) "][op]") :value (name op)}])
+      (let [inputs (render-filter-value-inputs field field-config op spec)]
+        ;; The first value input carries the label's id
+        (if (and (vector? inputs) (map? (second inputs)))
+          (update inputs 1 assoc :id (str "filter-" (name field)))
+          inputs))]]))
+
+(defn filter-drawer
+  "The filter drawer: every filterable field, active ones first, each with
+   operator and value. Apply sends them all; empty ones are no filter."
+  [entity-name entity-config current-filters]
+  (let [current (or current-filters {})          ; blank ones too: an operator just chosen
+        active? #(not (blank-filter? (get current %)))
+        fields  (filterable-fields entity-config)
+        ordered (concat (filter #(and (current %) (active? %)) fields)
+                        (remove #(and (current %) (active? %)) fields))]
+    [:aside {:class           "record-drawer filter-drawer"
+             :id              "record-drawer"
+             :aria-labelledby "filter-drawer-title"}
+     [:header {:class "drawer-header"}
+      [:div {:class "drawer-heading"}
+       [:h2 {:id "filter-drawer-title" :class "drawer-title"} [:t :admin/filters-title]]]
+      [:div {:class "drawer-nav"}
+       [:button {:type "button" :class "icon-button ghost drawer-close" :data-drawer "close"
+                 :aria-label [:t :admin/drawer-close] :title "q"}
+        (icons/icon :x {:size 16})]]]
+     [:form {:class      "filter-drawer-form"
+             :hx-get     (str "/web/admin/" (name entity-name) "/table")
+             :hx-target  "#filter-table-container"
+             :hx-swap    "outerHTML"
+             :hx-push-url "true"
+             :hx-include ".toolbar-search .search-input"
+             "hx-on::after-request" "if (event.detail.successful && event.detail.elt === this) window.AdminUX.closeDrawer()"}
+      [:div {:class "filter-fields"}
+       (for [field ordered]
+         (drawer-field entity-name field (get-in entity-config [:fields field]) (get current field)))]
+      [:div {:class "drawer-footer"}
+       [:button {:type "submit" :class "button primary"} [:t :admin/button-apply-filters] [:kbd "↵"]]
+       [:button {:type      "button"
+                 :class     "button ghost"
+                 :hx-get    (str "/web/admin/" (name entity-name) "/table")
+                 :hx-target "#filter-table-container"
+                 :hx-swap   "outerHTML"
+                 :hx-push-url "true"
+                 :hx-include ".toolbar-search .search-input"
+                 "hx-on::after-request" "if (event.detail.successful) window.AdminUX.closeDrawer()"}
+        [:t :admin/button-clear-all-filters]]]]]))

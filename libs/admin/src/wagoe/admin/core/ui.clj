@@ -13,6 +13,7 @@
    - `wagoe.admin.core.ui.filters`        — advanced filter builder
    - `wagoe.admin.core.ui.inline-editing` — inline (double-click) cell editing
    - `wagoe.admin.core.ui.detail`         — detail/edit page, form, field grouping
+   - `wagoe.admin.core.ui.drawer`         — the record drawer beside the list
 
    See each impl namespace for the original docstrings on these functions."
   (:require [wagoe.admin.core.ui.base :as base]
@@ -20,7 +21,8 @@
             [wagoe.admin.core.ui.list :as list]
             [wagoe.admin.core.ui.filters :as filters]
             [wagoe.admin.core.ui.inline-editing :as inline-editing]
-            [wagoe.admin.core.ui.detail :as detail]))
+            [wagoe.admin.core.ui.detail :as detail]
+            [wagoe.admin.core.ui.drawer :as drawer]))
 
 ;; =============================================================================
 ;; Re-exports (facade). Each `def` points at its focused implementation so
@@ -65,6 +67,8 @@
 (def render-filter-value-inputs filters/render-filter-value-inputs)
 (def render-filter-row filters/render-filter-row)
 (def render-filter-builder filters/render-filter-builder)
+(def filter-summary filters/filter-summary)
+(def filter-drawer filters/filter-drawer)
 
 ;; --- inline-editing: double-click cell editing ---
 (def render-inline-edit-cell inline-editing/render-inline-edit-cell)
@@ -79,3 +83,6 @@
 (def related-records-table detail/related-records-table)
 (def entity-detail-page detail/entity-detail-page)
 (def entity-new-page detail/entity-new-page)
+
+;; --- drawer: one record beside its list ---
+(def record-drawer drawer/record-drawer)

@@ -499,8 +499,9 @@
                   (let [head (pop rounded)]
                     (conj head (- 100.0 (reduce + 0.0 head))))
                   rounded)]
-    (for [p pcts]
-      [:col {:style (str "width:" (format-pct p) "%")}])))
+    (for [[field p] (map vector list-fields pcts)]
+      ;; The field class lets the column menu hide the whole column
+      [:col {:class (str "field-" (name field)) :style (str "width:" (format-pct p) "%")}])))
 
 ;; =============================================================================
 ;; Utility Functions
@@ -598,7 +599,7 @@
 
 (defn relative-instant
   "A stored timestamp as \"just now\", \"5 min ago\", \"in 3 h\", \"2 d ago\" —
-   or the formatted timestamp beyond the horizon. Days count calendar days in
+   or the date alone beyond the horizon. Days count calendar days in
    the display zone, so yesterday 23:00 is \"yesterday\", not \"1 h ago\" at
    midnight. Nil when `value` is not a timestamp."
   [value ^Instant now display]
@@ -618,8 +619,11 @@
         (if future?
           [:t :admin/relative-in-hours {:n (n 3600)} (n 3600)]
           [:t :admin/relative-hours-ago {:n (n 3600)} (n 3600)])
+        ;; Beyond the horizon the day says enough; the time is on hover
         (> (Math/abs (long days)) relative-horizon-days)
-        (format-instant value display)
+        (or (some #(safe-format % (.atZone inst zone))
+                  (formatters display :date-format default-date-formatter))
+            (format-instant value display))
         :else
         (relative-days days)))))
 

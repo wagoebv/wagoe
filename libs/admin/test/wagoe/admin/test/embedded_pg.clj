@@ -13,24 +13,60 @@
 
    Or use the `with-embedded-pg` fixture:
      (use-fixtures :once (with-embedded-pg (fn [ctx] (reset! my-ctx ctx))))"
-  (:require [wagoe.platform.shell.adapters.database.factory :as db-factory])
-  (:import [io.zonky.test.db.postgres.embedded EmbeddedPostgres]))
+  (:require [clojure.string :as str]
+            [wagoe.platform.shell.adapters.database.factory :as db-factory]))
+
+;; Embedded Postgres is not in :test but in :test/pg (plus :test/pg-mac on
+;; Apple Silicon), BOU-260. Loaded by name rather than imported, so a run
+;; without those aliases says which command to use instead of failing to
+;; compile with a bare ClassNotFoundException.
+
+(def ^:private class-name "io.zonky.test.db.postgres.embedded.EmbeddedPostgres")
+
+(defn- mac? []
+  (str/includes? (str/lower-case (System/getProperty "os.name" "")) "mac"))
+
+(defn- command-hint []
+  (str "Run with the embedded Postgres aliases: clojure -M:test:test/pg"
+       (when (mac?) ":test/pg-mac")
+       " <suite>"))
+
+(defn- embedded-postgres-class
+  ^Class []
+  (try
+    (Class/forName class-name)
+    (catch ClassNotFoundException e
+      (throw (ex-info (str "Embedded PostgreSQL is not on the classpath. " (command-hint))
+                      {:missing class-name} e)))))
 
 (defn start!
   "Start an embedded PostgreSQL instance. Returns the EmbeddedPostgres object."
   []
-  (.start (EmbeddedPostgres/builder)))
+  (let [builder (clojure.lang.Reflector/invokeStaticMethod
+                 (embedded-postgres-class) "builder" (object-array 0))]
+    (try
+      (clojure.lang.Reflector/invokeInstanceMethod builder "start" (object-array 0))
+      (catch Exception e
+        ;; The library is there but no binary for this platform (on a Mac:
+        ;; :test/pg without :test/pg-mac). Anything else is not ours to explain.
+        (if (re-find #"(?i)binar" (str (ex-message e)))
+          (throw (ex-info (str "No embedded PostgreSQL binary for "
+                               (System/getProperty "os.name") "/" (System/getProperty "os.arch")
+                               ". " (command-hint))
+                          {:os (System/getProperty "os.name") :arch (System/getProperty "os.arch")}
+                          e))
+          (throw e))))))
 
 (defn stop!
   "Stop an embedded PostgreSQL instance."
-  [^EmbeddedPostgres pg]
+  [^java.io.Closeable pg]
   (when pg
     (.close pg)))
 
 (defn pg-port
   "Get the port of a running embedded PostgreSQL instance."
-  [^EmbeddedPostgres pg]
-  (.getPort pg))
+  [pg]
+  (clojure.lang.Reflector/invokeInstanceMethod pg "getPort" (object-array 0)))
 
 (defn db-context
   "Create a wagoe-compatible db-context from an embedded PG instance.
@@ -39,7 +75,7 @@
    wagoe.platform.database functions."
   ([pg] (db-context pg {}))
   ([pg opts]
-   (let [port (.getPort ^EmbeddedPostgres pg)
+   (let [port (pg-port pg)
          config (merge {:adapter  :postgresql
                         :host     "localhost"
                         :port     port

@@ -138,16 +138,17 @@
   "Fill the search input, trigger the HTMX request, and wait for the table to
    be replaced.
 
-   The button rather than the input, because the input is
-   `hx-trigger=\"keyup changed delay:300ms\"` and waiting out a debounce is
-   waiting on a clock. The wait is for the swap itself: both `search!` calls in
-   a test hit the same container, and asserting on the second before its swap
+   By dispatching the input's `search` event, one of its `hx-trigger`s: the
+   other is `keyup changed delay:300ms`, and waiting out a debounce is waiting
+   on a clock. There is no search button to click any more; the icon only
+   labels the field. The wait is for the swap itself: both `search!` calls in a
+   test hit the same container, and asserting on the second before its swap
    landed read the first search's rows."
   [pg query]
   (let [input (page/locator pg "input.search-input")]
     (loc/fill input query)
     (let [marked (mark-stale! pg "#entity-table-container")]
-      (loc/click (page/locator pg ".toolbar-search button[aria-label]"))
+      (loc/dispatch-event input "search")
       (await-swap! pg marked "#entity-table-container"))))
 
 (defn submit-entity-form!

@@ -61,6 +61,16 @@
        :get {:handler (list-handlers/entity-table-fragment-handler admin-service schema-provider config)
              :summary "HTMX table fragment"}}]
 
+     ["/:entity/validate-field"
+      {:middleware [auth-middleware]
+       :post {:handler (crud/validate-field-handler admin-service schema-provider config)
+              :summary "One field's errors, on leaving it"}}]
+
+     ["/:entity/filters"
+      {:middleware [auth-middleware]
+       :get {:handler (list-handlers/filter-drawer-handler admin-service schema-provider config)
+             :summary "HTMX filter drawer"}}]
+
      ["/:entity/bulk-delete"
       {:middleware [auth-middleware]
        :post {:handler (delete/bulk-delete-handler admin-service schema-provider config)
