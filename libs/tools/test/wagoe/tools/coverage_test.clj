@@ -11,7 +11,6 @@
       (is (= ["src" "libs/core/src" "libs/config/src"] (sut/src-paths tests dirs))))))
 
 (deftest ^:unit the-command-passes-each-path
-  (is (= ["clojure" "-M:test:db:test/pg:test/otel:test/http:coverage" ":unit" "--plugin" "cloverage"
+  (is (= ["clojure" "-M:test:test/all:coverage" ":unit" "--plugin" "cloverage"
           "--no-cov-html" "--cov-text" "--cov-src-ns-path" "src" "--cov-src-ns-path" "libs/core/src"]
-         (sut/command ["src" "libs/core/src"] false)))
-  (is (some #{"-M:test:db:test/pg:test/otel:test/http:test/pg-mac:coverage"} (sut/command [] true))))
+         (sut/command ["src" "libs/core/src"]))))

@@ -320,14 +320,13 @@
            :bench     {:extra-paths ["dev"]
                        :extra-deps  {criterium/criterium {:mvn/version "0.4.6"}}
                        :main-opts   ["-m" "wagoe.bench.core"]}
-           :coverage  {;; With :test and the narrow test aliases, through kaocha's :unit suite.
+           :coverage  {;; With :test and :test/all, through kaocha's :unit suite.
                        ;; `bb coverage` passes the paths to measure, read from tests.edn,
                        ;; so no list here can fall behind it (BOU-620).
                        :extra-deps  {lambdaisland/kaocha-cloverage {:mvn/version "1.1.89"}}
                        ;; INFO, as the application logs: under logback-test.xml the
                        ;; arguments of log calls never run and read as uncovered.
-                       :jvm-opts    ["-Denv=test" "--enable-native-access=ALL-UNNAMED" "-Duser.timezone=UTC"
-                                     "-Dlogback.configurationFile=resources/logback.xml"]}
+                       :jvm-opts    ["-Dlogback.configurationFile=resources/logback.xml"]}
 
            ;; =============================================================================
            ;; End-to-end test suite (spel / Playwright Java via Clojure)

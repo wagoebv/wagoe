@@ -84,8 +84,8 @@ runs:
         path: |
           ~/.m2/repository
           ~/.gitlibs
-        key: ${{ runner.os }}-clojure-v5-${{ hashFiles('**/deps.edn') }}
-        restore-keys: ${{ runner.os }}-clojure-v5-
+        key: ${{ runner.os }}-clojure-v6-${{ hashFiles('**/deps.edn') }}
+        restore-keys: ${{ runner.os }}-clojure-v6-
 
     # Resolve deps single-threaded BEFORE any concurrent resolution. On a cold
     # ~/.m2, tools.deps parses many JDBC-driver POMs in parallel and intermittently

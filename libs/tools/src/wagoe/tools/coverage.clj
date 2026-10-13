@@ -18,14 +18,13 @@
                    (:test-paths unit))))))
 
 (defn command
-  "The clojure invocation for `src` paths; the Mac PostgreSQL binary on a Mac."
-  [src mac?]
-  (concat ["clojure" (str "-M:test:db:test/pg:test/otel:test/http" (when mac? ":test/pg-mac") ":coverage")
-           ":unit" "--plugin" "cloverage" "--no-cov-html" "--cov-text"]
+  "The clojure invocation for `src` paths. :test/all brings what every suite
+   needs, on any platform, so no alias list is kept here."
+  [src]
+  (concat ["clojure" "-M:test:test/all:coverage" ":unit" "--plugin" "cloverage" "--no-cov-html" "--cov-text"]
           (mapcat (fn [p] ["--cov-src-ns-path" p]) src)))
 
 (defn -main [& _]
-  (let [tests (edn/read-string {:readers {'kaocha/v1 identity}} (slurp "tests.edn"))
-        cmd   (command (src-paths tests fs/directory?)
-                       (= "aarch64" (System/getProperty "os.arch")))]
+  (let [tests (edn/read-string {:default (fn [_ v] v)} (slurp "tests.edn"))
+        cmd   (command (src-paths tests fs/directory?))]
     (System/exit (:exit (apply process/shell {:continue true} cmd)))))
