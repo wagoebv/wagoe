@@ -40,9 +40,14 @@
   "Where-clause placing a row's table in this engine's schema. `:search-path`
    means the table an unqualified name resolves to, so a tenant schema's table
    is read rather than the public one it shadows (BOU-616)."
-  [schema schema-col table-col]
+  [schema schema-col table]
   (if (= :search-path schema)
-    [:pg_table_is_visible [:cast [:format "%I.%I" schema-col table-col] :regclass]]
+    ;; Resolved once, not cast per row: a per-row cast throws on a schema
+    ;; dropped while the catalog is read.
+    [:= schema-col {:select [:n.nspname]
+                    :from   [[:pg_class :c]]
+                    :join   [[:pg_namespace :n] [:= :n.oid :c.relnamespace]]
+                    :where  [:= :c.oid [:to_regclass [:quote_ident table]]]}]
     [:= schema-col schema]))
 
 (defn information-schema-table-exists?
@@ -57,7 +62,7 @@
   (let [query  {:select [[[:count :*] :table_count]]
                 :from   [:information_schema.tables]
                 :where  [:and
-                         (in-schema schema :table_schema :table_name)
+                         (in-schema schema :table_schema (table-key spec table-name))
                          [:= :table_name (table-key spec table-name)]]}
         result (first (rows datasource query honey))]
     (> (get result :table_count 0) 0)))
@@ -83,7 +88,7 @@
                                        generated-columns)
                        :from     [:information_schema.columns]
                        :where    [:and
-                                  (in-schema schema :table_schema :table_name)
+                                  (in-schema schema :table_schema table-str)
                                   [:= :table_name table-str]]
                        :order-by [:ordinal_position]}
         pk-query      {:select [:kcu.column_name]
@@ -93,7 +98,7 @@
                                  [:= :tc.constraint_name :kcu.constraint_name]
                                  [:= :tc.table_schema :kcu.table_schema]]]
                        :where  [:and
-                                (in-schema schema :tc.table_schema :tc.table_name)
+                                (in-schema schema :tc.table_schema table-str)
                                 [:= :tc.table_name table-str]
                                 [:= :tc.constraint_type "PRIMARY KEY"]]}
         columns       (rows datasource columns-query honey)

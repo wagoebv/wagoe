@@ -254,16 +254,21 @@
       (ddl! ctx "DROP TABLE IF EXISTS only_public")
       (ddl! ctx "CREATE TABLE in_path (id INTEGER, note VARCHAR(20))")
       (ddl! ctx "CREATE TABLE only_public (id INTEGER)")
-      (db/with-transaction [tx ctx]
-        (ddl! tx (str "CREATE SCHEMA " schema))
-        (ddl! tx (str "SET LOCAL search_path TO " schema ", public"))
-        (ddl! tx "CREATE TABLE in_path (id INTEGER)")
-        (db/add-column-if-not-exists! tx :in_path :note "VARCHAR(20)")
-        ;; Selected, not introspected: the read under test would agree with itself.
-        (or (when (attempt #(db/execute-query! tx {:raw (str "SELECT note FROM " schema ".in_path")}))
-              (str schema ".in_path did not get the column public.in_path has"))
-            (when-not (db/table-exists? tx :only_public)
-              "a public table is not found under a search_path that includes public"))))))
+      (try
+        (db/with-transaction [tx ctx]
+          (ddl! tx (str "CREATE SCHEMA " schema))
+          (ddl! tx (str "SET LOCAL search_path TO " schema ", public"))
+          (ddl! tx "CREATE TABLE in_path (id INTEGER)")
+          (db/add-column-if-not-exists! tx :in_path :note "VARCHAR(20)")
+          ;; Selected, not introspected: the read under test would agree with itself.
+          (or (when (attempt #(db/execute-query! tx {:raw (str "SELECT note FROM " schema ".in_path")}))
+                (str schema ".in_path did not get the column public.in_path has"))
+              (when-not (db/table-exists? tx :only_public)
+                "a public table is not found under a search_path that includes public")))
+        (finally
+          (ddl! ctx (str "DROP SCHEMA IF EXISTS " schema " CASCADE"))
+          (ddl! ctx "DROP TABLE IF EXISTS in_path")
+          (ddl! ctx "DROP TABLE IF EXISTS only_public"))))))
 
 (defn- unique-index-on-duplicates
   "A unique index the rows break is a :conflict naming the table, not a raw
