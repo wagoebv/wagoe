@@ -56,6 +56,11 @@
         (= :database-error (:type data))
         {:code "WGE-304" :category :persistence :data data :source :ex-data-pattern}
 
+        ;; A refused unique or foreign key (BOU-590). Unmatched, it fell through
+        ;; to its SQLException cause and read as WGE-303, a connection failure.
+        (and (= :conflict (:type data)) (:constraint data))
+        {:code "WGE-304" :category :persistence :data data :source :ex-data-pattern}
+
         ;; Both spellings: :auth/required is what the auth lib throws,
         ;; :unauthorized what the HTTP error mapping expects.
         (contains? #{:auth/required :unauthorized :auth-failed} (:type data))

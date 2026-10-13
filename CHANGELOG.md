@@ -75,6 +75,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **A 409 for a constraint violation logged the submitted value, and a delete of a still-referenced row got the wrong message**
+  (BOU-623). Devtools no longer reports these as a connection failure; nothing to do on upgrade.
 - **Adding the tenant→`auth_users` keys on PostgreSQL blocked writes to `auth_users` while it checked the table**
   (BOU-614). It is now added `NOT VALID`, waiting at most 5s for its lock, then validated; nothing to do on upgrade.
 - **Validation snapshots recorded a lazy sequence as `"clojure.lang.LazySeq"`, so its contents were never compared**

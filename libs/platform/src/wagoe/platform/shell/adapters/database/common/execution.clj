@@ -124,14 +124,16 @@
   "A refused unique or foreign key as a :conflict, which HTTP answers 409
    (BOU-590). Its data reaches the client, so it names at most a field: the
    driver's text holds the SQL and the values sent."
-  [{:keys [kind field]} operation-type e]
-  (let [delete? (= "delete" operation-type)
-        field   (when-not delete? field)]
+  [{:keys [kind field referenced?]} operation-type e]
+  ;; The driver says which way a foreign key was refused, except SQLite: there
+  ;; a delete is the only case the statement itself tells apart.
+  (let [referenced? (or referenced? (= "delete" operation-type))
+        field       (when-not referenced? field)]
     (ex-info (case kind
                :unique      (if field
                               (str "Another record already has this " (name field))
                               "Another record already has these values")
-               :foreign-key (if delete?
+               :foreign-key (if referenced?
                               "The record is still referenced by another record"
                               "A referenced record does not exist"))
              (cond-> {:type :conflict :constraint kind}
@@ -216,7 +218,7 @@
         ;; This prevents protocol errors when called from contexts without proper error reporting setup
 
         (when-let [v (constraint-violation e)]
-          (log/info "Query refused by a constraint" {:adapter adapter-dialect :sql (first sql-query) :error (.getMessage e)})
+          (log/info "Query refused by a constraint" {:adapter adapter-dialect :sql (first sql-query) :violation v})
           (throw (conflict v (when (and (map? query) (contains? query :delete-from)) "delete") e)))
         ;; Side effect: error logging
         (log/error "Query failed"
@@ -321,7 +323,7 @@
         ;; This prevents protocol errors when called from contexts without proper error reporting setup
 
         (when-let [v (constraint-violation e)]
-          (log/info "Update refused by a constraint" {:adapter adapter-dialect :sql (first sql-query) :error (.getMessage e)})
+          (log/info "Update refused by a constraint" {:adapter adapter-dialect :sql (first sql-query) :violation v})
           (throw (conflict v operation-type e)))
         ;; Side effect: error logging
         (log/error "Update failed"

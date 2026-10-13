@@ -36,15 +36,25 @@
     (when (and (not (str/includes? s ",")) (re-matches #"[a-z][a-z0-9_]*" col))
       (keyword (str/replace col "_" "-")))))
 
+(defn- still-referenced?
+  "Whether a foreign key refused removing or re-keying a row another row
+   references, rather than a reference to a missing row: H2's 23503 vendor code,
+   MySQL's 1451, PostgreSQL's message. SQLite does not say."
+  [{:keys [error-code message]}]
+  (boolean (or (#{23503 1451} error-code)
+               (re-find #"update or delete on table" (str message)))))
+
 (defn violation
   "`{:kind :unique|:foreign-key :field kw}` for a unique or foreign-key
-   violation, `:field` only when the driver names one column; nil for any
-   other failure."
+   violation, `:field` only when the driver names one column, and
+   `:referenced? true` when the refused row is one another still references;
+   nil for any other failure."
   [{:keys [message] :as reported}]
   (when-let [k (kind reported)]
     (let [field (some #(some-> (re-find % (str message)) second column->field) column-patterns)]
       (cond-> {:kind k}
-        field (assoc :field field)))))
+        field (assoc :field field)
+        (and (= :foreign-key k) (still-referenced? reported)) (assoc :referenced? true)))))
 
 (defn already-exists?
   "Whether the driver reports that the index or column a statement adds is
