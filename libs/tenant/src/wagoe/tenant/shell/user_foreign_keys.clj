@@ -60,47 +60,46 @@
 
 (defn- postgresql? [ctx] (= :postgresql (protocols/engine (:adapter ctx))))
 
-(defn- validate!
-  "PostgreSQL: check a NOT VALID key against the rows already there."
-  [ctx table constraint]
-  (db/execute-ddl! ctx (str "ALTER TABLE " table " VALIDATE CONSTRAINT " constraint)))
-
 (defn- add-key!
-  "Add the key. On PostgreSQL in two steps: a plain ADD scans the table holding
-   a lock that also blocks writes to auth_users, which at a live replica's boot
-   stalls logins (BOU-614); NOT VALID then VALIDATE takes a weaker one."
-  [ctx {:keys [table column constraint on-delete]}]
-  (try
-    (db/execute-ddl! ctx (str "ALTER TABLE " table " ADD CONSTRAINT " constraint
-                              " FOREIGN KEY (" column ") REFERENCES auth_users (id)"
-                              (when on-delete (str " ON DELETE " on-delete))
-                              (when (postgresql? ctx) " NOT VALID")))
-    ;; Replicas boot together; one losing the race finds the key already there.
-    (catch Exception e
-      (when-not (foreign-key-name ctx table column) (throw e))))
-  (when (postgresql? ctx)
-    (validate! ctx table (foreign-key-name ctx table column))))
+  "Add the key, or finish one `missing-keys` found unvalidated. On PostgreSQL
+   NOT VALID then VALIDATE: a plain ADD scans under a lock that blocks writes to
+   auth_users, stalling logins at a live replica's boot (BOU-614)."
+  [ctx {:keys [table column constraint on-delete existing]}]
+  (let [pg? (postgresql? ctx)
+        k   (or existing
+                 (try
+                   (db/execute-ddl! ctx (str "ALTER TABLE " table " ADD CONSTRAINT " constraint
+                                             " FOREIGN KEY (" column ") REFERENCES auth_users (id)"
+                                             (when on-delete (str " ON DELETE " on-delete))
+                                             (when pg? " NOT VALID")))
+                   constraint
+                   ;; Replicas boot together; one losing the race finds the key there.
+                   (catch Exception e
+                     (or (foreign-key-name ctx table column) (throw e)))))]
+    (when pg?
+      (db/execute-ddl! ctx (str "ALTER TABLE " table " VALIDATE CONSTRAINT " k)))))
 
 (defn- unvalidated?
-  "PostgreSQL: whether `table`'s key named `constraint` was added NOT VALID and
-   never validated, as an interrupted add leaves it."
+  "PostgreSQL: whether the key named `constraint` on `table` was never validated."
   [ctx table constraint]
-  (boolean (some-> (db/execute-one! ctx [(str "SELECT NOT convalidated AS pending FROM pg_constraint"
-                                              " WHERE conname = ? AND conrelid = ?::regclass")
-                                         (str/lower-case constraint) table])
-                   vals first)))
+  (boolean (:pending (db/execute-one! ctx [(str "SELECT NOT convalidated AS pending FROM pg_constraint"
+                                                " WHERE conname = ? AND conrelid = ?::regclass")
+                                           (str/lower-case constraint) table]))))
 
 (defn- missing-keys
-  "The references still to key: no key, or on PostgreSQL one never validated.
-   None where they do not apply."
+  "The references still to key, a PostgreSQL key never validated carrying its
+   name as `:existing`. None where they do not apply."
   [ctx]
   (when (and (contains? (protocols/capabilities (:adapter ctx)) :alter-foreign-key)
              (db/table-exists? ctx :auth_users))
-    (filterv (fn [{:keys [table column]}]
-               (and (db/table-exists? ctx table)
-                    (let [k (foreign-key-name ctx table column)]
-                      (or (nil? k) (and (postgresql? ctx) (unvalidated? ctx table k))))))
-             references)))
+    (let [pg? (postgresql? ctx)]
+      (into []
+            (keep (fn [{:keys [table column] :as reference}]
+                    (when (db/table-exists? ctx table)
+                      (let [k (foreign-key-name ctx table column)]
+                        (cond (nil? k)                             reference
+                              (and pg? (unvalidated? ctx table k)) (assoc reference :existing k))))))
+            references))))
 
 (defn ensure-foreign-keys!
   "`migrate up`: clear departed memberships, set NULL what an ON DELETE SET NULL

@@ -194,8 +194,7 @@
                        {:builder-fn rs/as-unqualified-lower-maps})))
 
 (deftest ^:integration postgresql-keys-end-validated-and-a-half-added-one-is-finished
-  ;; Added NOT VALID, then validated, so no full-table lock blocks auth_users
-  ;; writes at a live replica's boot (BOU-614).
+  ;; BOU-614
   (let [pg  (epg/start!)
         ctx (epg/db-context pg)]
     (try
