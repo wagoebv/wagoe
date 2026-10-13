@@ -5,6 +5,7 @@
   (:require [clojure.test :refer [deftest is testing]]
             [integrant.core :as ig]
             [next.jdbc :as jdbc]
+            [next.jdbc.result-set :as rs]
             [support.embedded-pg :as epg]
             [wagoe.platform.shell.adapters.database.factory :as factory]
             [wagoe.platform.shell.database.migrations :as migrations]
@@ -182,3 +183,32 @@
         (fks/ensure-foreign-keys! ctx)
         (is (empty? (memberships-of ctx (:id user))) "migrate up clears it, key or not"))
       (finally (factory/close-db-context! ctx)))))
+
+(defn- validated
+  "{constraint convalidated} for the tenant tables' keys to auth_users."
+  [ctx]
+  (into {} (map (juxt :conname :convalidated))
+        (jdbc/execute! (:datasource ctx)
+                       [(str "SELECT conname, convalidated FROM pg_constraint"
+                             " WHERE contype = 'f' AND confrelid = 'auth_users'::regclass")]
+                       {:builder-fn rs/as-unqualified-lower-maps})))
+
+(deftest ^:integration postgresql-keys-end-validated-and-a-half-added-one-is-finished
+  ;; Added NOT VALID, then validated, so no full-table lock blocks auth_users
+  ;; writes at a live replica's boot (BOU-614).
+  (let [pg  (epg/start!)
+        ctx (epg/db-context pg)]
+    (try
+      (ig/init-key :wagoe/user-db-schema {:ctx ctx})
+      (tenant-persistence/initialize-tenant-schema! ctx)
+      (testing "an add interrupted between its two steps"
+        (jdbc/execute! (:datasource ctx)
+                       [(str "ALTER TABLE tenant_memberships ADD CONSTRAINT fk_tenant_memberships_user"
+                             " FOREIGN KEY (user_id) REFERENCES auth_users (id) NOT VALID")])
+        (is (= {"fk_tenant_memberships_user" false} (validated ctx))))
+      (boot-tenant-schema! ctx)
+      (is (= {"fk_tenant_memberships_user"    true
+              "fk_tenant_member_invites_user" true}
+             (validated ctx))
+          "boot finishes the half-added key and adds the other validated")
+      (finally (factory/close-db-context! ctx) (epg/stop! pg)))))
