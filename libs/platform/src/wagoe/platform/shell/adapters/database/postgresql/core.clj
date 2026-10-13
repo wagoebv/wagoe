@@ -9,7 +9,7 @@
             [wagoe.platform.shell.adapters.database.postgresql.connection :as connection]))
 
 (def ^:private introspection-spec
-  {:schema "public" :honey nil :fold-table-name? true
+  {:schema :search-path :honey nil :fold-table-name? true
    :generated-columns [:is_identity :is_generated]})
 
 (def spec

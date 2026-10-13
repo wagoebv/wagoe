@@ -232,12 +232,38 @@
                       (fn [& _] (swap! ddl inc))]
           (db/add-column-if-not-exists! ctx :ddl_twice :note "VARCHAR(20)"))
         (when (pos? @ddl) (str "a present column was altered " @ddl " time(s)")))
+      ;; A column the read misses (SQLite's generated ones, a replica racing
+      ;; this one) is altered anyway, and its duplicate counts as done.
+      (with-redefs [wagoe.platform.shell.adapters.database.common.schema/get-table-info (constantly [])]
+        (attempt #(db/add-column-if-not-exists! ctx :ddl_twice :note "VARCHAR(20)")))
       (attempt #(dotimes [_ 2] (db/create-index-if-not-exists! ctx "ix_ddl_twice_note" :ddl_twice [:note])))
       (when-not (has-index? ctx "ddl_twice" "ix_ddl_twice_note") "the created index is not there")
       (attempt #(dotimes [_ 2] (db/drop-index-if-exists! ctx "ix_ddl_twice_note" :ddl_twice)))
       (when (has-index? ctx "ddl_twice" "ix_ddl_twice_note") "the dropped index is still there")
       (attempt #(dotimes [_ 2] (db/drop-column-if-exists! ctx :ddl_twice :note)))
       (when (contains? (columns-of ctx :ddl_twice) "note") "the dropped column is still there")))
+
+(defn- columns-follow-search-path
+  "Introspection reads the table an unqualified name resolves to (BOU-616): a
+   tenant schema's table gets the column public's already has, and a table only
+   public has is still found."
+  [ctx]
+  (when ((protocols/capabilities (adapter ctx)) :schemas)
+    (let [schema (str "contract_" (System/nanoTime))]
+      (ddl! ctx "DROP TABLE IF EXISTS in_path")
+      (ddl! ctx "DROP TABLE IF EXISTS only_public")
+      (ddl! ctx "CREATE TABLE in_path (id INTEGER, note VARCHAR(20))")
+      (ddl! ctx "CREATE TABLE only_public (id INTEGER)")
+      (db/with-transaction [tx ctx]
+        (ddl! tx (str "CREATE SCHEMA " schema))
+        (ddl! tx (str "SET LOCAL search_path TO " schema ", public"))
+        (ddl! tx "CREATE TABLE in_path (id INTEGER)")
+        (db/add-column-if-not-exists! tx :in_path :note "VARCHAR(20)")
+        ;; Selected, not introspected: the read under test would agree with itself.
+        (or (when (attempt #(db/execute-query! tx {:raw (str "SELECT note FROM " schema ".in_path")}))
+              (str schema ".in_path did not get the column public.in_path has"))
+            (when-not (db/table-exists? tx :only_public)
+              "a public table is not found under a search_path that includes public"))))))
 
 (defn- unique-index-on-duplicates
   "A unique index the rows break is a :conflict naming the table, not a raw
@@ -348,6 +374,7 @@
     :connections/session       every-connection-is-set-up
     :ddl/index-twice           index-twice
     :ddl/if-exists-twice       ddl-twice
+    :ddl/search-path           columns-follow-search-path
     :ddl/unique-over-duplicates unique-index-on-duplicates
     :transactions/rollback     rollback-undoes
     :conflicts/unique-key      refused-key-is-a-conflict}))
