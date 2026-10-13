@@ -19,6 +19,7 @@
             [wagoe.core.utils.type-conversion :as tc]
             [wagoe.platform.database :as db]
             [wagoe.platform.ports.database :as protocols]
+            [wagoe.platform.shell.adapters.database.common.schema]
             [wagoe.platform.shell.adapters.database.factory :as factory])
   (:import [java.time Instant]
            [java.util Locale UUID]))
@@ -222,8 +223,15 @@
   [ctx]
   (ddl! ctx "DROP TABLE IF EXISTS ddl_twice")
   (ddl! ctx "CREATE TABLE ddl_twice (id INTEGER NOT NULL PRIMARY KEY, code VARCHAR(20))")
-  (or (attempt #(dotimes [_ 2] (db/add-column-if-not-exists! ctx :ddl_twice :note "VARCHAR(20)")))
+  (or (attempt #(db/add-column-if-not-exists! ctx :ddl_twice :note "VARCHAR(20)"))
       (when-not (contains? (columns-of ctx :ddl_twice) "note") "the added column is not there")
+      ;; Present means no ALTER at all: on PostgreSQL even an IF NOT EXISTS one
+      ;; locks the table (BOU-616).
+      (let [ddl (atom 0)]
+        (with-redefs [wagoe.platform.shell.adapters.database.common.schema/if-exists-ddl!
+                      (fn [& _] (swap! ddl inc))]
+          (db/add-column-if-not-exists! ctx :ddl_twice :note "VARCHAR(20)"))
+        (when (pos? @ddl) (str "a present column was altered " @ddl " time(s)")))
       (attempt #(dotimes [_ 2] (db/create-index-if-not-exists! ctx "ix_ddl_twice_note" :ddl_twice [:note])))
       (when-not (has-index? ctx "ddl_twice" "ix_ddl_twice_note") "the created index is not there")
       (attempt #(dotimes [_ 2] (db/drop-index-if-exists! ctx "ix_ddl_twice_note" :ddl_twice)))

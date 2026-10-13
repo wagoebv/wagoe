@@ -46,8 +46,7 @@
    an existing database only this way."
   [ctx table columns]
   (when (db/table-exists? ctx table)
-    (doseq [[column type] columns]
-      (db/add-column-if-not-exists! ctx table column type))))
+    (db/add-columns-if-not-exist! ctx table columns)))
 
 (defn- ensure-auth-users-audit-columns!
   [ctx]

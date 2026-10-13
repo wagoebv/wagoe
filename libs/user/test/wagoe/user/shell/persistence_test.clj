@@ -106,9 +106,9 @@
 (deftest ^:integration an-existing-table-gains-the-missing-columns
   ;; A table from before a column was added to the schema: boot's CREATE TABLE
   ;; IF NOT EXISTS leaves it alone, so only the upgrade adds the column.
-  (doseq [[engine open] [[:sqlite #(factory/db-context
-                                    (factory/sqlite-config (str (System/getProperty "java.io.tmpdir")
-                                                                "/user-cols-" (System/nanoTime) ".db")))]
+  (doseq [[engine open] [[:sqlite #(let [f (java.io.File/createTempFile "user-cols-" ".db")]
+                                    (.deleteOnExit f)
+                                    (factory/db-context (factory/sqlite-config (str f))))]
                          [:h2 #(factory/db-context
                                 (factory/h2-config (str "mem:user_cols_" (System/nanoTime) ";DB_CLOSE_DELAY=-1")))]]]
     (testing (name engine)

@@ -35,8 +35,8 @@ for what is public API, what is internal, and how deprecations are announced.
   database. Runs weekly and on PRs that change a `deps.edn`; coverage now runs on every push to main.
 - **`DBAdapter` answers `engine`, `capabilities`, `column-type` and `like`** (BOU-450, ADR-039). Ask these instead of
   parsing the product name or reading a nil dialect as PostgreSQL.
-- **`db/drop-index-if-exists!`, `db/add-column-if-not-exists!` and `db/drop-column-if-exists!`** (BOU-607): safe to run
-  twice on every engine, MySQL included. Use them instead of branching on the engine in a migration.
+- **`db/drop-index-if-exists!`, `db/add-column(s)-if-not-exist(s)!` and `db/drop-column-if-exists!`** (BOU-607, BOU-616): safe
+  to run twice on every engine, and a column already there costs one read, no lock. Use them instead of engine branches.
 - **`db/engine-of`** (BOU-450): which engine a datasource speaks, for code that holds no db-context.
 - **Admin record drawer, bulk bar and save bar.** Clicking a list row opens the record beside the list, read-only and
   rendered by display role, with an Edit link back to the same list (a modified click still navigates). Selecting rows
