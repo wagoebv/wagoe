@@ -117,6 +117,10 @@
   "Drop an index if it is there."
   schema/drop-index-if-exists!)
 
+(def add-columns-if-not-exist!
+  "Add the columns a table lacks, reading it once."
+  schema/add-columns-if-not-exist!)
+
 (def add-column-if-not-exists!
   "Add a column unless it is already there."
   schema/add-column-if-not-exists!)

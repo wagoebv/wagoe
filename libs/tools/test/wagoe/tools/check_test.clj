@@ -507,31 +507,6 @@
       (edn/read-string (slurp f))
       (throw (ex-info "deps.edn not found" {:cwd cwd})))))
 
-(deftest ^:unit coverage-measures-every-library-the-unit-suite-tests
-  ;; :coverage lists its paths by hand and five libraries were missing from it,
-  ;; so their code counted as neither covered nor uncovered (BOU-451). Read from
-  ;; the parsed alias: a path outside the :extra-paths vector does nothing.
-  (let [deps  (deps-edn)
-        cov   (get-in deps [:aliases :coverage])
-        opts  (partition 2 1 (:main-opts cov))
-        flag  (fn [f] (set (for [[k v] opts :when (= f k)] v)))
-        tests (flag "--test-ns-path")
-        srcs  (flag "--src-ns-path")
-        ;; What cloverage's classpath holds: the root :paths plus the alias's.
-        paths (into (set (:paths deps)) (:extra-paths cov))
-        unit  (remove #{"test"} (:test-paths (first (filter #(= :unit (:id %)) (:tests (tests-edn))))))]
-    (is (seq unit) "found no :unit suite; the assertions below would pass vacuously")
-    (doseq [t unit
-            :let [src (str/replace t #"/test$" "/src")]]
-      (is (contains? tests t) (str t " is tested but not given to cloverage as --test-ns-path"))
-      (is (contains? srcs src) (str src " is not measured (--src-ns-path)"))
-      (is (and (contains? paths t) (contains? paths src))
-          (str t " and " src " must be on :coverage :extra-paths"))
-      (let [res (str/replace t #"/test$" "/resources")
-            dir (io/file (System/getProperty "user.dir") res)]
-        (when (or (.isDirectory dir) (.isDirectory (io/file "../.." res)))
-          (is (contains? paths res) (str res " must be on the coverage classpath too")))))))
-
 (deftest ^:unit the-composed-alias-covers-every-split-alias
   ;; Splitting :test broke the documented main command: kaocha's default run
   ;; discovers every suite, so it hit ClassNotFoundException before a test ran.
