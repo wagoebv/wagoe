@@ -17,7 +17,7 @@
             [clojure.tools.logging :as log]
             [wagoe.platform.core.http.errors :as errors]
             [wagoe.tenant.ports :as tenant-ports]
-            [wagoe.platform.database :as db]))
+            [wagoe.tenant.shell.provisioning :as provisioning]))
 
 (defn- error-response
   "The one error body, encoded here: this middleware may sit outside content
@@ -212,26 +212,6 @@
             :timestamp (System/currentTimeMillis)})))
 
 ;; =============================================================================
-;; Schema Switching
-;; =============================================================================
-
-(defn- set-tenant-schema
-  "Set database search_path to tenant schema.
-   
-   Executes SET search_path SQL command to switch to tenant schema.
-   The search_path includes the tenant schema and public schema (for shared tables).
-   
-   Args:
-     db-ctx: Database context with connection or transaction
-     schema-name: Tenant schema name (e.g., 'tenant_acme_corp')
-     
-   Throws:
-     Exception if schema switching fails"
-  [db-ctx schema-name]
-  (db/execute-ddl! db-ctx
-                   (str "SET search_path TO " schema-name ", public")))
-
-;; =============================================================================
 ;; Middleware - Tenant Resolution
 ;; =============================================================================
 
@@ -350,12 +330,9 @@
                     :schema-name schema-name})
 
         (try
-          (db/with-transaction* db-context
-            (fn [tx]
-              ;; Keep the same JDBC connection for the full request so the
-              ;; tenant search_path actually applies to all downstream queries.
-              (set-tenant-schema tx schema-name)
-              (handler request)))
+          ;; One connection for the full request, so the tenant search_path
+          ;; applies to every query downstream.
+          (provisioning/call-in-schema db-context schema-name (fn [_] (handler request)))
 
           (catch Exception e
             (log/error "Failed to execute request in tenant schema"

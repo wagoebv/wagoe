@@ -75,6 +75,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **A connection that served a tenant kept that tenant's `search_path` for whoever used it next** (BOU-624). Upgrade if
+  you use `:wagoe/tenant` on PostgreSQL; a transaction opened inside a tenant scope now joins it rather than committing.
 - **A 409 for a constraint violation logged the submitted value, and a raw-SQL delete or re-key of a still-referenced row
   said the reference was missing** (BOU-623). Devtools no longer calls a refused statement a connection failure.
 - **Adding the tenant→`auth_users` keys on PostgreSQL blocked writes to `auth_users` while it checked the table**

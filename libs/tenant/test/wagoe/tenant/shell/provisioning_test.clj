@@ -6,7 +6,9 @@
    - Integration tests: Test with real H2/PostgreSQL database
    - Contract tests: Verify PostgreSQL-specific behavior"
   (:require [clojure.test :refer [deftest is testing]]
+            [support.embedded-pg :as epg]
             [wagoe.tenant.shell.provisioning :as sut]
+            [wagoe.tenant.shell.tenant-middleware :as tenant-mw]
             [wagoe.platform.shell.adapters.database.factory :as db-factory]
             [wagoe.platform.database :as db]
             [wagoe.platform.ports.database :as protocols])
@@ -336,9 +338,9 @@
                       (is (= ::ds (:datasource tx-ctx)))
                       (f {:adapter (:adapter tx-ctx)
                           :datasource ::tx}))
-                    wagoe.platform.database/execute-query!
-                    (fn [tx query]
-                      (swap! queries conj [tx query])
+                    wagoe.platform.database/execute-ddl!
+                    (fn [tx sql]
+                      (swap! queries conj [tx sql])
                       nil)]
         (is (= :done
                (sut/with-tenant-schema {:adapter adapter
@@ -352,7 +354,7 @@
         (let [[tx query] (first @queries)]
           (is (= adapter (:adapter tx)))
           (is (= ::tx (:datasource tx)))
-          (is (= ["SET search_path TO tenant_alpha, public"] query))))))
+          (is (= "SET LOCAL search_path TO tenant_alpha, public" query))))))
 
   (testing "wraps callback failures as tenant-context errors"
     (let [adapter (postgres-adapter-stub)]
@@ -360,7 +362,7 @@
                     (fn [tx-ctx f]
                       (f {:adapter (:adapter tx-ctx)
                           :datasource ::tx}))
-                    wagoe.platform.database/execute-query!
+                    wagoe.platform.database/execute-ddl!
                     (fn [_ _] nil)]
         (let [ex (is (thrown? clojure.lang.ExceptionInfo
                               (sut/with-tenant-schema {:adapter adapter
@@ -614,3 +616,28 @@
                         (catch clojure.lang.ExceptionInfo e e))]
         (is (= :tenant-context-error (:type (ex-data caught))))
         (is (identical? raw (.getCause caught)))))))
+
+(deftest ^:integration the-tenant-search-path-lasts-exactly-as-long-as-its-transaction
+  ;; One connection, so each read after is on the one the tenant used (BOU-624).
+  (let [pg   (epg/start!)
+        ctx  (epg/db-context pg {:pool {:minimum-idle 1 :maximum-pool-size 1}})
+        path #(:search-path (db/execute-one! % ["SHOW search_path"]))]
+    (try
+      (db/execute-ddl! ctx "CREATE SCHEMA tenant_x")
+      (let [before (path ctx)]
+        (testing "with-tenant-schema leaves the pooled connection as it found it"
+          (is (= "tenant_x, public" (sut/with-tenant-schema ctx "tenant_x" path)))
+          (is (= before (path ctx))))
+        (testing "a transaction opened inside joins it rather than ending it"
+          (is (= "tenant_x, public"
+                 (sut/with-tenant-schema ctx "tenant_x"
+                   (fn [tx]
+                     (db/with-transaction [inner tx] (path inner))
+                     (path tx))))))
+        (testing "so does the middleware"
+          (let [handler (tenant-mw/wrap-tenant-schema (fn [_] {:status 200 :body (path ctx)}) ctx)]
+            (is (= "tenant_x, public" (:body (handler {:tenant {:id "t" :schema-name "tenant_x"}}))))
+            (is (= before (path ctx))))))
+      (finally
+        (db-factory/close-db-context! ctx)
+        (epg/stop! pg)))))

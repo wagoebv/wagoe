@@ -19,7 +19,8 @@
    - Schema names must be valid PostgreSQL identifiers
    - Provisioning is idempotent (safe to call multiple times)
    - Does not copy data from public schema (only structure)"
-  (:require [wagoe.platform.database :as db]
+  (:require [next.jdbc.transaction :as jdbc-tx]
+            [wagoe.platform.database :as db]
             [wagoe.platform.ports.database :as protocols]
             [wagoe.tenant.core.tenant :as tenant-core]
             [wagoe.tenant.ports :as ports]
@@ -508,11 +509,25 @@
                      :cause (.getMessage e)}
                     e))))
 
+(defn call-in-schema
+  "Call (f tx) in one transaction whose search_path is `schema-name`, then
+   public. LOCAL, so it ends with the transaction rather than staying on the
+   pooled connection; and a transaction opened inside f joins this one, since
+   next.jdbc would otherwise commit it and end the search_path early (BOU-624)."
+  [ctx schema-name f]
+  (assert-safe-schema-name! schema-name)
+  (db/with-transaction* ctx
+    (fn [tx]
+      (db/execute-ddl! tx (str "SET LOCAL search_path TO " schema-name ", public"))
+      (binding [jdbc-tx/*nested-tx* :ignore]
+        (f tx)))))
+
 (defn with-tenant-schema
   "Execute function f with database search_path set to tenant schema.
    
    This ensures all database operations within f execute in the tenant's
-   schema context. The search_path is restored after execution.
+   schema context, transactions opened inside f included. The search_path
+   ends with the transaction (see `call-in-schema`).
    
    Usage:
      (with-tenant-schema ctx \"tenant_acme\"
@@ -530,7 +545,7 @@
    
    Notes:
      - Only works with PostgreSQL
-     - search_path is transaction-scoped (isolated per connection)
+     - search_path is transaction-scoped; nested transactions join it
      - Falls back to public schema if error
      - Schema must exist before calling this function"
   [ctx tenant-schema-name f]
@@ -539,21 +554,10 @@
     (throw (ex-info "Tenant schema context only supported for PostgreSQL"
                     {:type :unsupported-database
                      :engine (engine ctx)})))
-
-  (db/with-transaction [tx ctx]
-    (try
-      ;; Set search_path for this transaction
-      ;; Format: "SET search_path TO tenant_schema, public"
-      ;; This ensures tenant tables are found first, with public as fallback
-      (db/execute-query! tx [(str "SET search_path TO " tenant-schema-name ", public")])
-      (log/debug "Set search_path for transaction"
-                 {:schema tenant-schema-name})
-
-      ;; Execute function in tenant context
-      (f tx)
-
-      (catch Exception e
-        (rethrow-tenant-body-error! e tenant-schema-name)))))
+  (try
+    (call-in-schema ctx tenant-schema-name f)
+    (catch Exception e
+      (rethrow-tenant-body-error! e tenant-schema-name))))
 
 ;; =============================================================================
 ;; Tenant Schema Provider (Protocol Implementation)
