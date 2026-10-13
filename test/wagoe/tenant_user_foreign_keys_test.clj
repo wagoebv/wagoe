@@ -58,6 +58,25 @@
 (defn- boot-tenant-schema! [ctx]
   (ig/init-key :wagoe/tenant-db-schema {:ctx ctx :allow-h2? true}))
 
+(defn- validated
+  "{constraint convalidated} for the tenant tables' keys to auth_users."
+  [ctx]
+  (into {} (map (juxt :conname :convalidated))
+        (jdbc/execute! (:datasource ctx)
+                       [(str "SELECT conname, convalidated FROM pg_constraint"
+                             " WHERE contype = 'f' AND confrelid = 'auth_users'::regclass")]
+                       {:builder-fn rs/as-unqualified-lower-maps})))
+
+(def ^:private all-valid
+  {"fk_tenant_memberships_user" true "fk_tenant_member_invites_user" true})
+
+(defn- with-pg
+  "Call `f` with a db-context on a fresh embedded PostgreSQL."
+  [f]
+  (let [pg  (epg/start!)
+        ctx (epg/db-context pg)]
+    (try (f ctx) (finally (factory/close-db-context! ctx) (epg/stop! pg)))))
+
 (def ^:private setups
   {"migrate up" #(migrations/migrate-datasource! (:datasource %))
    "boot"       #(do (ig/init-key :wagoe/user-db-schema {:ctx %}) (boot-tenant-schema! %))})
@@ -73,7 +92,10 @@
             (membership! ctx (:id user))
             (let [e (try (ports/permanently-delete-user svc (:id user)) nil
                          (catch clojure.lang.ExceptionInfo e e))]
-              (is (= :hard-deletion-not-allowed (:type (ex-data e))))))
+              (is (= :hard-deletion-not-allowed (:type (ex-data e)))))
+            ;; A NOT VALID key refuses the delete too, so check it was finished.
+            (when (= :postgresql engine)
+              (is (= all-valid (validated ctx)))))
           (finally (close!)))))))
 
 (deftest ^:integration orphaned-memberships-are-named-not-keyed-over
@@ -184,30 +206,32 @@
         (is (empty? (memberships-of ctx (:id user))) "migrate up clears it, key or not"))
       (finally (factory/close-db-context! ctx)))))
 
-(defn- validated
-  "{constraint convalidated} for the tenant tables' keys to auth_users."
-  [ctx]
-  (into {} (map (juxt :conname :convalidated))
-        (jdbc/execute! (:datasource ctx)
-                       [(str "SELECT conname, convalidated FROM pg_constraint"
-                             " WHERE contype = 'f' AND confrelid = 'auth_users'::regclass")]
-                       {:builder-fn rs/as-unqualified-lower-maps})))
-
-(deftest ^:integration postgresql-keys-end-validated-and-a-half-added-one-is-finished
+(deftest ^:integration postgresql-finishes-a-half-added-key
   ;; BOU-614
-  (let [pg  (epg/start!)
-        ctx (epg/db-context pg)]
-    (try
+  (with-pg
+    (fn [ctx]
       (ig/init-key :wagoe/user-db-schema {:ctx ctx})
       (tenant-persistence/initialize-tenant-schema! ctx)
-      (testing "an add interrupted between its two steps"
-        (jdbc/execute! (:datasource ctx)
-                       [(str "ALTER TABLE tenant_memberships ADD CONSTRAINT fk_tenant_memberships_user"
-                             " FOREIGN KEY (user_id) REFERENCES auth_users (id) NOT VALID")])
-        (is (= {"fk_tenant_memberships_user" false} (validated ctx))))
+      (jdbc/execute! (:datasource ctx)
+                     [(str "ALTER TABLE tenant_memberships ADD CONSTRAINT fk_tenant_memberships_user"
+                           " FOREIGN KEY (user_id) REFERENCES auth_users (id) NOT VALID")])
+      (is (= {"fk_tenant_memberships_user" false} (validated ctx)))
       (boot-tenant-schema! ctx)
-      (is (= {"fk_tenant_memberships_user"    true
-              "fk_tenant_member_invites_user" true}
-             (validated ctx))
-          "boot finishes the half-added key and adds the other validated")
-      (finally (factory/close-db-context! ctx) (epg/stop! pg)))))
+      (is (= all-valid (validated ctx))))))
+
+(deftest ^:integration a-busy-auth-users-leaves-the-key-for-the-next-boot
+  ;; Boot gives up on a held lock rather than queue logins behind it (BOU-614).
+  (with-pg
+    (fn [ctx]
+      (ig/init-key :wagoe/user-db-schema {:ctx ctx})
+      (tenant-persistence/initialize-tenant-schema! ctx)
+      (with-redefs [fks/lock-timeout "100ms"]
+        (with-open [^java.sql.Connection writer (jdbc/get-connection (:datasource ctx))]
+          (.setAutoCommit writer false)
+          (jdbc/execute! writer ["LOCK TABLE auth_users IN ROW EXCLUSIVE MODE"])
+          (let [left-off (deref (future (fks/add-clean-foreign-keys! ctx)) 20000 ::hung)]
+            (is (not= ::hung left-off) "boot waited on the lock instead of giving up")
+            (is (= #{"tenant_memberships" "tenant_member_invites"} (set (map :table left-off)))))
+          (.rollback writer)))
+      (is (empty? (fks/add-clean-foreign-keys! ctx)) "the next boot adds them")
+      (is (= all-valid (validated ctx))))))

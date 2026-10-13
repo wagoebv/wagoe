@@ -8,6 +8,7 @@
    when anything else depends on what would go, nothing is dropped (BOU-585)."
   (:require [wagoe.platform.shell.adapters.database.config :as db-config]
             [wagoe.platform.shell.adapters.database.factory :as db-factory]
+            [wagoe.platform.shell.adapters.database.common.schema :as schema]
             [wagoe.platform.shell.database.migrations :as migrations]
             [migratus.core :as migratus]
             [migratus.migrations :as migratus-migrations]
@@ -324,18 +325,13 @@
            :tenant-schemas tenants
            :config         config})))))
 
-(defn- quote-ident [engine ^String ident]
-  (if (= :mysql engine)
-    (str "`" (str/replace ident "`" "``") "`")
-    (str "\"" (str/replace ident "\"" "\"\"") "\"")))
-
 (defn drop-table-sql [q t] (str "DROP TABLE IF EXISTS " (q t)))
 
 (defn- drop-owned!
   "Drop the tenant schemas, then the tables, in one transaction where DDL is
    transactional (PostgreSQL, SQLite): a failure leaves all of them."
   [^javax.sql.DataSource ds engine tx? tables tenant-schemas]
-  (let [q #(quote-ident engine %)]
+  (let [q #(schema/quote-identifier engine %)]
     (with-open [c (.getConnection ds)]
       (when tx? (.setAutoCommit c false))
       (try
