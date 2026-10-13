@@ -40,57 +40,29 @@
   [ctx n]
   (if (= :sqlite (protocols/engine (:adapter ctx))) "TEXT" (str "VARCHAR(" n ")")))
 
+(defn- ensure-columns!
+  "Add `columns` ([name type] pairs) missing from `table`, if it exists. Boot
+   creates tables IF NOT EXISTS, so a column added to the schema later reaches
+   an existing database only this way."
+  [ctx table columns]
+  (when (db/table-exists? ctx table)
+    (db/add-columns-if-not-exist! ctx table columns)))
+
 (defn- ensure-auth-users-audit-columns!
-  "Ensure the auth_users table has audit timestamp columns.
-
-  The persistence layer expects these columns for soft deletion and ordering.
-  Schema initialization is CREATE TABLE IF NOT EXISTS, so we need this to upgrade
-  existing dev/test databases.
-
-  Columns ensured:
-  - created_at (required)
-  - updated_at (optional)
-  - deleted_at (optional)"
   [ctx]
-  (when (db/table-exists? ctx :auth_users)
-    (let [existing-cols (->> (db/get-table-info ctx :auth_users)
-                             (map :name)
-                             set)
-          ;; inst? is stored as string in this project.
-          ts-type (string-type ctx 255)
-          columns [{:name "created_at" :type ts-type}
-                   {:name "updated_at" :type ts-type}
-                   {:name "deleted_at" :type ts-type}]]
-      (doseq [{:keys [name type]} columns]
-        (when-not (contains? existing-cols name)
-          (log/info "Adding missing auth_users audit column" {:column name :type type})
-          (db/execute-ddl! ctx
-                           (str "ALTER TABLE auth_users ADD COLUMN " name " " type)))))))
+  ;; inst? is stored as a string in this project.
+  (let [ts (string-type ctx 255)]
+    (ensure-columns! ctx :auth_users [[:created_at ts] [:updated_at ts] [:deleted_at ts]])))
 
 (defn- ensure-users-preference-columns!
-  "Ensure the users table has all preference-related columns.
-
-   This project uses schema-based initialization (CREATE TABLE IF NOT EXISTS),
-   but we also need to support adding new columns to existing dev/test databases
-   without requiring a manual migration step in every workflow."
   [ctx]
-  (when (db/table-exists? ctx :users)
-    (let [existing-cols (->> (db/get-table-info ctx :users)
-                             (map :name)
-                             set)
-          bool-type (protocols/column-type (:adapter ctx) :boolean)
-          varchar-255 (string-type ctx 255)
-          varchar-50 (string-type ctx 50)
-          columns [{:name "notifications_email" :type bool-type}
-                   {:name "notifications_push" :type bool-type}
-                   {:name "notifications_sms" :type bool-type}
-                   {:name "theme" :type varchar-50}
-                   {:name "language" :type varchar-255}
-                   {:name "timezone" :type varchar-255}]]
-      (doseq [{:keys [name type]} columns]
-        (when-not (contains? existing-cols name)
-          (log/info "Adding missing users preference column" {:column name :type type})
-          (db/execute-ddl! ctx (str "ALTER TABLE users ADD COLUMN " name " " type)))))))
+  (let [bool (protocols/column-type (:adapter ctx) :boolean)]
+    (ensure-columns! ctx :users [[:notifications_email bool]
+                                 [:notifications_push bool]
+                                 [:notifications_sms bool]
+                                 [:theme (string-type ctx 50)]
+                                 [:language (string-type ctx 255)]
+                                 [:timezone (string-type ctx 255)]])))
 
 (defn- invalidate-legacy-plaintext-mfa!
   "One-time, idempotent security upgrade: clear MFA on any auth_users row whose
@@ -142,7 +114,8 @@
   [ctx]
   (log/info "Initializing user schema from Malli definitions (split-table architecture)")
 
-  ;; Pre-upgrade existing tables before we try to create indexes that depend on new columns.
+  ;; Existing tables first, before indexes are built on the new columns. A
+  ;; table created below has them from its schema.
   (ensure-auth-users-audit-columns! ctx)
   (ensure-users-preference-columns! ctx)
   ;; Retire any MFA rows still holding a pre-encryption plaintext secret.
@@ -154,15 +127,12 @@
                                        "user_sessions" user-schema/UserSession
                                        "user_audit_log" user-schema/UserAuditLog})
 
-  ;; Post-upgrade as a safety net (no-op for fresh databases).
-  (ensure-auth-users-audit-columns! ctx)
-  (ensure-users-preference-columns! ctx)
-
   ;; Full-text search vector, where the database has it (ADR-039)
   (when (contains? (protocols/capabilities (:adapter ctx)) :full-text)
     (log/info "Adding full-text search vector to users table")
-    (db/execute-ddl! ctx
-                     "ALTER TABLE users ADD COLUMN IF NOT EXISTS search_vector tsvector GENERATED ALWAYS AS (setweight(to_tsvector('english', coalesce(name, '')), 'A')) STORED")
+    (db/add-column-if-not-exists! ctx :users :search_vector
+                                  (str "tsvector GENERATED ALWAYS AS"
+                                       " (setweight(to_tsvector('english', coalesce(name, '')), 'A')) STORED"))
     (db/execute-ddl! ctx
                      "CREATE INDEX IF NOT EXISTS users_search_vector_idx ON users USING GIN(search_vector)")))
 

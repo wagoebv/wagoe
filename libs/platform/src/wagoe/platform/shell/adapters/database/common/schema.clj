@@ -147,22 +147,30 @@
                   (str "DROP INDEX " index-name " ON " (name table))
                   constraint/already-gone?))
 
+(defn add-columns-if-not-exist!
+  "Add each [column definition] in `columns` that `table` lacks, `definition`
+   being what follows the name. Read first because any ALTER locks, even one IF
+   NOT EXISTS makes a no-op; a duplicate the read missed counts as done (BOU-616).
+
+   Example:
+     (add-columns-if-not-exist! ctx :users [[:nickname \"VARCHAR(50)\"]])"
+  [ctx table columns]
+  (let [native? (claims? ctx :column-if-not-exists)
+        present (set (map :name (get-table-info ctx table)))]
+    (doseq [[column definition] columns
+            :when (not (present (str/lower-case (name column))))
+            :let  [stmt (fn [clause] (str "ALTER TABLE " (name table) " ADD COLUMN " clause
+                                          (name column) " " definition))]]
+      (log/info "Adding missing column" {:table (name table) :column (name column)})
+      (if-exists-ddl! ctx native? (stmt "IF NOT EXISTS ") (stmt "") constraint/already-exists?))))
+
 (defn add-column-if-not-exists!
-  "Add `column` to `table` unless it is there. `definition` is what follows the
-   column name: its type, and any default or generation clause.
+  "Add `column` to `table` unless it is there.
 
    Example:
      (add-column-if-not-exists! ctx :users :nickname \"VARCHAR(50)\")"
   [ctx table column definition]
-  (let [native? (claims? ctx :column-if-not-exists)
-        stmt    (fn [clause] (str "ALTER TABLE " (name table) " ADD COLUMN " clause
-                                  (name column) " " definition))]
-    ;; Read first where the ALTER would otherwise fail on every run: on MySQL a
-    ;; failed one still takes the table's metadata lock. SQLite lists no
-    ;; generated column here, which the tolerated failure then covers.
-    (when (or native?
-              (not-any? #(= (str/lower-case (name column)) (:name %)) (get-table-info ctx table)))
-      (if-exists-ddl! ctx native? (stmt "IF NOT EXISTS ") (stmt "") constraint/already-exists?))))
+  (add-columns-if-not-exist! ctx table [[column definition]]))
 
 (defn drop-column-if-exists!
   "Drop `column` from `table` if it is there. No read first, as add does: SQLite
