@@ -8,7 +8,8 @@
    3. Message pattern — regex on .getMessage()
    4. Exception type — SQLException, ConnectException, etc.
    5. Unclassified — nil code"
-  (:require [wagoe.devtools.error-codes :as codes]))
+  (:require [clojure.string :as str]
+            [wagoe.devtools.error-codes :as codes]))
 
 (defn- root-cause
   "Walk the cause chain to find the root cause."
@@ -113,8 +114,12 @@
   "Classify by Java exception class."
   [ex]
   (cond
+    ;; A statement the database refused is not a lost connection: only SQLState
+    ;; class 08 is, or no state at all, which is all SQLite gives.
     (instance? java.sql.SQLException ex)
-    {:code "WGE-303" :category :persistence :data {} :source :exception-type}
+    (let [state (.getSQLState ^java.sql.SQLException ex)]
+      {:code     (if (and state (not (str/starts-with? state "08"))) "WGE-304" "WGE-303")
+       :category :persistence :data {} :source :exception-type})
 
     (instance? java.net.ConnectException ex)
     {:code "WGE-303" :category :persistence :data {} :source :exception-type}

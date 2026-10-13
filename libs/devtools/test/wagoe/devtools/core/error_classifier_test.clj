@@ -28,6 +28,10 @@
     (let [ex (java.sql.SQLException. "connection refused")]
       (is (= "WGE-303" (:code (classifier/classify ex))))))
 
+  (testing "by SQLState: class 08 is the connection, anything else the statement"
+    (is (= "WGE-303" (:code (classifier/classify (java.sql.SQLException. "refused" "08001")))))
+    (is (= "WGE-304" (:code (classifier/classify (java.sql.SQLException. "duplicate" "23505"))))))
+
   (testing "ConnectException → WGE-303"
     (let [ex (java.net.ConnectException. "Connection refused")]
       (is (= "WGE-303" (:code (classifier/classify ex)))))))

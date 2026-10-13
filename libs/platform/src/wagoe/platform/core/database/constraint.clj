@@ -44,6 +44,18 @@
   (boolean (or (#{23503 1451} error-code)
                (re-find #"update or delete on table" (str message)))))
 
+(def ^:private name-patterns
+  [#"constraint \"([\w$.]+)\""              ; PostgreSQL
+   #"CONSTRAINT `([\w$.]+)`"                ; MySQL foreign key
+   #"for key '([\w$.]+)'"                   ; MySQL unique
+   #"violation: \"(?:\w+\.)?(\w+)[: ]"])    ; H2
+
+(defn constraint-name
+  "The constraint or index the driver says refused the write, or nil. The name
+   only, never the values beside it, so it can be logged."
+  [{:keys [message]}]
+  (some #(second (re-find % (str message))) name-patterns))
+
 (defn violation
   "`{:kind :unique|:foreign-key :field kw}` for a unique or foreign-key
    violation, `:field` only when the driver names one column, and
