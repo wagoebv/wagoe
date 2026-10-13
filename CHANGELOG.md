@@ -35,8 +35,8 @@ for what is public API, what is internal, and how deprecations are announced.
   database. Runs weekly and on PRs that change a `deps.edn`; coverage now runs on every push to main.
 - **`DBAdapter` answers `engine`, `capabilities`, `column-type` and `like`** (BOU-450, ADR-039). Ask these instead of
   parsing the product name or reading a nil dialect as PostgreSQL.
-- **`db/drop-index-if-exists!`, `db/add-column-if-not-exists!` and `db/drop-column-if-exists!`** (BOU-607): safe to run
-  twice on every engine, MySQL included. Use them instead of branching on the engine in a migration.
+- **`db/drop-index-if-exists!`, `db/add-column-if-not-exists!`, `db/add-columns-if-not-exist!` and `db/drop-column-if-exists!`**
+  (BOU-607, BOU-616): safe to run twice on every engine; a column already there costs a read, no lock.
 - **`db/engine-of`** (BOU-450): which engine a datasource speaks, for code that holds no db-context.
 - **Admin record drawer, bulk bar and save bar.** Clicking a list row opens the record beside the list, read-only and
   rendered by display role, with an Edit link back to the same list (a modified click still navigates). Selecting rows
@@ -75,8 +75,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
-- **A connection that served a tenant kept that tenant's `search_path` for whoever used it next** (BOU-624).
-  Upgrade if you use `:wagoe/tenant` on PostgreSQL.
+- **A connection that served a tenant kept that tenant's `search_path` for whoever used it next** (BOU-624). Upgrade if
+  you use `:wagoe/tenant` on PostgreSQL; a transaction opened inside a tenant scope now joins it rather than committing.
+- **A 409 for a constraint violation logged the submitted value, and a raw-SQL delete or re-key of a still-referenced row
+  said the reference was missing** (BOU-623). Devtools no longer calls a refused statement a connection failure.
 - **Adding the tenant→`auth_users` keys on PostgreSQL blocked writes to `auth_users` while it checked the table**
   (BOU-614). It is now added `NOT VALID`, waiting at most 5s for its lock, then validated; nothing to do on upgrade.
 - **Validation snapshots recorded a lazy sequence as `"clojure.lang.LazySeq"`, so its contents were never compared**

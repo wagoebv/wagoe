@@ -71,7 +71,7 @@
             :category    :persistence
             :title       "Database Query Failed"
             :description "A query, update or DDL statement was rejected by the database."
-            :fix         "Read the cause: a constraint violation, a syntax error or a missing column. The failing SQL is in the exception data."}
+            :fix         "Read the cause: a constraint violation, a syntax error or a missing column. The failing SQL is in the exception data or, for a refused key, in the log."}
 
  "WGE-305" {:code        "WGE-305"
             :category    :persistence
