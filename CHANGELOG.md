@@ -75,6 +75,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Adding the tenant→`auth_users` keys on PostgreSQL blocked writes to `auth_users` while it checked the table**
+  (BOU-614). It is now added `NOT VALID`, waiting at most 5s for its lock, then validated; nothing to do on upgrade.
 - **Validation snapshots recorded a lazy sequence as `"clojure.lang.LazySeq"`, so its contents were never compared**
   (BOU-619). Re-record affected baselines with `UPDATE_SNAPSHOTS=true`; a missing baseline now fails.
 - **Dependencies with known vulnerabilities, two of them critical, are pinned to fixed releases** (BOU-618): BouncyCastle

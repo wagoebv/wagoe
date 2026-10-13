@@ -45,6 +45,30 @@
       (probe ds)
       (with-open [c (.getConnection ^DataSource ds)] (probe c)))))
 
+(defn- postgresql? [ctx] (= :postgresql (protocols/engine (:adapter ctx))))
+
+(defn- quoted [ctx ident] (db/quote-identifier (protocols/engine (:adapter ctx)) ident))
+
+(defn- existing-key
+  "{:name :valid?} of the key from `table`'s `column` to auth_users, or nil; a
+   key outside PostgreSQL is always valid."
+  [ctx table column]
+  (if (postgresql? ctx)
+    (when-let [{conname :name valid :valid} (db/execute-one!
+                                     ctx [(str "SELECT c.conname AS name, c.convalidated AS valid"
+                                               " FROM pg_constraint c JOIN pg_attribute a"
+                                               " ON a.attrelid = c.conrelid AND a.attnum = ANY (c.conkey)"
+                                               " WHERE c.contype = 'f' AND c.confrelid = to_regclass('auth_users')"
+                                               " AND c.conrelid = to_regclass(?) AND a.attname = ?")
+                                          table column])]
+      {:name conname :valid? valid})
+    (when-let [n (foreign-key-name ctx table column)]
+      {:name n :valid? true})))
+
+(def ^:private lock-timeout
+  "The ADD's wait for its lock; longer would queue later auth_users writes."
+  "5s")
+
 (defn- orphaned
   "WHERE clause matching `column` values that name no user."
   [column]
@@ -59,23 +83,42 @@
                                      (orphaned column) " LIMIT 5")])))
 
 (defn- add-key!
-  [ctx {:keys [table column constraint on-delete]}]
-  (try
-    (db/execute-ddl! ctx (str "ALTER TABLE " table " ADD CONSTRAINT " constraint
-                              " FOREIGN KEY (" column ") REFERENCES auth_users (id)"
-                              (when on-delete (str " ON DELETE " on-delete))))
-    ;; Replicas boot together; one losing the race finds the key already there.
-    (catch Exception e
-      (when-not (foreign-key-name ctx table column) (throw e)))))
+  "Add the key, or finish one `missing-keys` found unvalidated. On PostgreSQL
+   NOT VALID, in a transaction of its own with a lock timeout, then VALIDATE: a
+   plain ADD scans under a lock that blocks writes to auth_users (BOU-614)."
+  [ctx {:keys [table column constraint on-delete existing]}]
+  (let [pg? (postgresql? ctx)
+        add (str "ALTER TABLE " table " ADD CONSTRAINT " constraint
+                 " FOREIGN KEY (" column ") REFERENCES auth_users (id)"
+                 (when on-delete (str " ON DELETE " on-delete))
+                 (when pg? " NOT VALID"))
+        k   (or existing
+                (try
+                  (if pg?
+                    (db/with-transaction [tx ctx]
+                      (db/execute-ddl! tx (str "SET LOCAL lock_timeout = '" lock-timeout "'"))
+                      (db/execute-ddl! tx add))
+                    (db/execute-ddl! ctx add))
+                  constraint
+                  ;; Replicas boot together; one losing the race finds the key there.
+                  (catch Exception e
+                    (or (:name (existing-key ctx table column)) (throw e)))))]
+    (when pg?
+      (db/execute-ddl! ctx (str "ALTER TABLE " table " VALIDATE CONSTRAINT " (quoted ctx k))))))
 
 (defn- missing-keys
-  "The references still without a key, or none where they do not apply."
+  "The references still to key, a PostgreSQL key never validated carrying its
+   name as `:existing`. None where they do not apply."
   [ctx]
   (when (and (contains? (protocols/capabilities (:adapter ctx)) :alter-foreign-key)
              (db/table-exists? ctx :auth_users))
-    (filterv (fn [{:keys [table column]}]
-               (and (db/table-exists? ctx table) (not (foreign-key-name ctx table column))))
-             references)))
+    (into []
+          (keep (fn [{:keys [table column] :as reference}]
+                  (when (db/table-exists? ctx table)
+                    (let [{k :name valid? :valid?} (existing-key ctx table column)]
+                      (cond (nil? k)     reference
+                            (not valid?) (assoc reference :existing k))))))
+          references)))
 
 (defn ensure-foreign-keys!
   "`migrate up`: clear departed memberships, set NULL what an ON DELETE SET NULL
@@ -121,6 +164,6 @@
     ;; The name found, not the one `up` would give: a key made before up ran
     ;; may carry another, and dropping a name that is not there fails.
     (doseq [{:keys [table column]} references
-            :let [constraint (foreign-key-name ctx table column)]
-            :when constraint]
-      (db/execute-ddl! ctx (str "ALTER TABLE " table " DROP " drop-kw " " constraint)))))
+            :let [k (:name (existing-key ctx table column))]
+            :when k]
+      (db/execute-ddl! ctx (str "ALTER TABLE " table " DROP " drop-kw " " (quoted ctx k))))))

@@ -105,6 +105,10 @@
   "Run a DDL statement."
   schema/execute-ddl!)
 
+(def quote-identifier
+  "An identifier quoted for the engine, as stored."
+  schema/quote-identifier)
+
 (def create-index-if-not-exists!
   "Create an index unless it is already there."
   schema/create-index-if-not-exists!)

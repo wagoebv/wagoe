@@ -94,6 +94,14 @@
   (execution/validate-context ctx)
   (contains? (protocols/capabilities (:adapter ctx)) capability))
 
+(defn quote-identifier
+  "`ident` quoted for `engine`, as stored: backticks on MySQL, double quotes
+   elsewhere, so a name with capitals or a reserved word survives."
+  [engine ident]
+  (if (= :mysql engine)
+    (str "`" (str/replace ident "`" "``") "`")
+    (str "\"" (str/replace ident "\"" "\"\"") "\"")))
+
 (defn- if-exists-ddl!
   "Run `with-clause` where `native?`, else `without`, counting a failure
    `done?` recognises as success."
