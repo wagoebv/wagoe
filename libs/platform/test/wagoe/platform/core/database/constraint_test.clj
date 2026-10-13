@@ -46,6 +46,44 @@
          (constraint/violation {:sql-state "23000" :error-code 1452
                                 :message "Cannot add or update a child row: a foreign key constraint fails (`app`.`lines`, CONSTRAINT `fk` FOREIGN KEY (`invoice_id`) REFERENCES `invoices` (`id`))"}))))
 
+(deftest ^:unit a-row-still-referenced-is-told-apart-from-a-missing-one
+  ;; Read from the driver, so an UPDATE of a referenced key or a raw-SQL DELETE
+  ;; does not answer "A referenced record does not exist".
+  (is (:referenced? (constraint/violation
+                     {:sql-state "23503"
+                      :message "ERROR: update or delete on table \"invoices\" violates foreign key constraint \"lines_invoice_id_fkey\" on table \"lines\"\n  Detail: Key (id)=(abc) is still referenced from table \"lines\"."}))
+      "PostgreSQL")
+  (is (:referenced? (constraint/violation {:sql-state "23503" :error-code 23503
+                                           :message "Referential integrity constraint violation: \"CONSTRAINT_4: PUBLIC.LINES FOREIGN KEY(INVOICE_ID) REFERENCES PUBLIC.INVOICES(ID) ('abc')\""}))
+      "H2")
+  (is (:referenced? (constraint/violation {:sql-state "23000" :error-code 1451
+                                           :message "Cannot delete or update a parent row: a foreign key constraint fails"}))
+      "MySQL")
+  (is (not (:referenced? (constraint/violation {:sql-state "23506" :error-code 23506
+                                                :message "Referential integrity constraint violation"})))
+      "H2's missing parent"))
+
+(deftest ^:unit the-constraint-is-named-without-the-values
+  (is (= "lines_invoice_id_fkey"
+         (constraint/constraint-name
+          {:message "ERROR: insert or update on table \"lines\" violates foreign key constraint \"lines_invoice_id_fkey\"\n  Detail: Key (invoice_id)=(abc) is not present in table \"invoices\"."}))
+      "PostgreSQL")
+  (is (= "CONSTRAINT_4"
+         (constraint/constraint-name
+          {:message "Referential integrity constraint violation: \"CONSTRAINT_4: PUBLIC.LINES FOREIGN KEY(INVOICE_ID) REFERENCES PUBLIC.INVOICES(ID) ('abc')\""}))
+      "H2 foreign key")
+  (is (= "CONSTRAINT_INDEX_9"
+         (constraint/constraint-name
+          {:message "Unique index or primary key violation: \"PUBLIC.CONSTRAINT_INDEX_9 ON PUBLIC.INVOICES(NUMBER NULLS FIRST) VALUES ( /* 1 */ 'A-1' )\""}))
+      "H2 unique")
+  (is (= "fk" (constraint/constraint-name
+               {:message "Cannot add or update a child row: a foreign key constraint fails (`app`.`lines`, CONSTRAINT `fk` FOREIGN KEY (`invoice_id`) REFERENCES `invoices` (`id`))"}))
+      "MySQL foreign key")
+  (is (= "invoices.number" (constraint/constraint-name {:message "Duplicate entry 'A-1' for key 'invoices.number'"}))
+      "MySQL unique")
+  (is (nil? (constraint/constraint-name {:message "[SQLITE_CONSTRAINT_UNIQUE] A UNIQUE constraint failed (UNIQUE constraint failed: invoices.number)"}))
+      "SQLite names none"))
+
 (deftest ^:unit other-failures-are-not-violations
   (is (nil? (constraint/violation {:sql-state "23502" :message "null value in column \"number\" violates not-null constraint"})))
   (is (nil? (constraint/violation {:error-code 19 :message "[SQLITE_CONSTRAINT_NOTNULL] A NOT NULL constraint failed (NOT NULL constraint failed: invoices.number)"})))

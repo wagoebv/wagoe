@@ -28,6 +28,10 @@
     (let [ex (java.sql.SQLException. "connection refused")]
       (is (= "WGE-303" (:code (classifier/classify ex))))))
 
+  (testing "by SQLState: class 08 is the connection, anything else the statement"
+    (is (= "WGE-303" (:code (classifier/classify (java.sql.SQLException. "refused" "08001")))))
+    (is (= "WGE-304" (:code (classifier/classify (java.sql.SQLException. "duplicate" "23505"))))))
+
   (testing "ConnectException → WGE-303"
     (let [ex (java.net.ConnectException. "Connection refused")]
       (is (= "WGE-303" (:code (classifier/classify ex)))))))
@@ -109,7 +113,12 @@
                     "duplicate key value violates unique constraint \"users_email_key\"")]
     (is (= "WGE-304" (:code (classifier/classify
                              (ex-info "Database update failed"
-                                      {:type :database-error} constraint))))))
+                                      {:type :database-error} constraint)))))
+    (testing "and so is the :conflict the platform throws for it (BOU-590)"
+      (is (= "WGE-304" (:code (classifier/classify
+                               (ex-info "Another record already has this email"
+                                        {:type :conflict :constraint :unique :field :email}
+                                        constraint)))))))
 
   (testing "a connection failure still reads as one"
     (is (= "WGE-303" (:code (classifier/classify

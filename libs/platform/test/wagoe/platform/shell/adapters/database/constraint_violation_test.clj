@@ -99,7 +99,19 @@
           (db/execute-update! ctx {:insert-into :invoices :values [{:id invoice :number (str "R-" (name backend))}]})
           (db/execute-update! ctx {:insert-into :lines :values [{:id (str (random-uuid)) :invoice-id invoice}]})
           (is (= {:type :conflict :constraint :foreign-key}
-                 (ex-data (thrown #(db/execute-update! ctx {:delete-from :invoices :where [:= :id invoice]}))))))))))
+                 (ex-data (thrown #(db/execute-update! ctx {:delete-from :invoices :where [:= :id invoice]})))))
+          (testing "through raw SQL too"
+            (let [ex (thrown #(db/execute-update! ctx ["DELETE FROM invoices WHERE id = ?" invoice]))]
+              (is (= {:type :conflict :constraint :foreign-key} (ex-data ex)))
+              (is (= "The record is still referenced by another record" (ex-message ex)))))
+          ;; Read from the driver: SQLite does not say which way a key was
+          ;; refused, and an UPDATE may be either.
+          (when-not (= :sqlite backend)
+            (testing "and re-keying it"
+              (let [ex (thrown #(db/execute-update! ctx {:update :invoices :set {:id (str (random-uuid))}
+                                                         :where [:= :id invoice]}))]
+                (is (= {:type :conflict :constraint :foreign-key} (ex-data ex)))
+                (is (= "The record is still referenced by another record" (ex-message ex)))))))))))
 
 (deftest ^:integration other-failures-stay-database-errors
   (doseq [[backend ctx] @backends]

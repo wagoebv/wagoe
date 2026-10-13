@@ -8,7 +8,8 @@
    3. Message pattern — regex on .getMessage()
    4. Exception type — SQLException, ConnectException, etc.
    5. Unclassified — nil code"
-  (:require [wagoe.devtools.error-codes :as codes]))
+  (:require [clojure.string :as str]
+            [wagoe.devtools.error-codes :as codes]))
 
 (defn- root-cause
   "Walk the cause chain to find the root cause."
@@ -54,6 +55,11 @@
         ;; A query, update or DDL that failed — not a connection problem, which
         ;; is what WGE-303's fix line tells you to go and check.
         (= :database-error (:type data))
+        {:code "WGE-304" :category :persistence :data data :source :ex-data-pattern}
+
+        ;; A refused unique or foreign key (BOU-590). Unmatched, it fell through
+        ;; to its SQLException cause and read as WGE-303, a connection failure.
+        (and (= :conflict (:type data)) (:constraint data))
         {:code "WGE-304" :category :persistence :data data :source :ex-data-pattern}
 
         ;; Both spellings: :auth/required is what the auth lib throws,
@@ -108,8 +114,12 @@
   "Classify by Java exception class."
   [ex]
   (cond
+    ;; A statement the database refused is not a lost connection: only SQLState
+    ;; class 08 is, or no state at all, which is all SQLite gives.
     (instance? java.sql.SQLException ex)
-    {:code "WGE-303" :category :persistence :data {} :source :exception-type}
+    (let [state (.getSQLState ^java.sql.SQLException ex)]
+      {:code     (if (and state (not (str/starts-with? state "08"))) "WGE-304" "WGE-303")
+       :category :persistence :data {} :source :exception-type})
 
     (instance? java.net.ConnectException ex)
     {:code "WGE-303" :category :persistence :data {} :source :exception-type}
