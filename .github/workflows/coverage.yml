@@ -51,7 +51,7 @@ jobs:
       - name: Setup Clojure + warm deps
         uses: ./.github/actions/clojure-deps
         with:
-          aliases: -M:coverage:db:test/pg:test/otel:test/http
+          aliases: -M:test:db:test/pg:test/otel:test/http:coverage
 
       - name: Setup Babashka
         uses: DeLaGuardo/setup-clojure@13.6.1
@@ -77,7 +77,7 @@ jobs:
               echo "| | % forms | % lines |"
               echo "|---|---|---|"
               sed -e $'s/\033\\[[0-9;]*m//g' coverage.log \
-                | awk -F'|' '/ALL FILES/ {gsub(/ /,"",$3); gsub(/ /,"",$4); print "| All files | " $3 " | " $4 " |"}'
+                | awk -F'|' '/ALL FILES/ {gsub(/ /,"",$3); gsub(/ /,"",$4); print "| All files | " $3 " | " $4 " |"; exit}'
               echo
               echo "Per-namespace and per-file numbers are in the \`coverage\` artifact."
             fi

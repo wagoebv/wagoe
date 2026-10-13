@@ -320,114 +320,14 @@
            :bench     {:extra-paths ["dev"]
                        :extra-deps  {criterium/criterium {:mvn/version "0.4.6"}}
                        :main-opts   ["-m" "wagoe.bench.core"]}
-           :coverage  {:extra-deps  {cloverage/cloverage         {:mvn/version "1.2.4"}
-                                     ;; What :test brings that the tests need; kaocha excepted.
-                                     org.clojure/test.check {:mvn/version "1.1.3"}
-                                     com.gfredericks/test.chuck {:mvn/version "0.2.15"}
-                                     org.xerial/sqlite-jdbc {:mvn/version "3.53.4.0"}
-                                     org.postgresql/postgresql {:mvn/version "42.7.13"}
-                                     com.h2database/h2 {:mvn/version "2.5.250"}
-                                     com.mysql/mysql-connector-j {:mvn/version "26.7.0"}}
-                       :main-opts   ["-m" "cloverage.coverage"
-                                     "--src-ns-path" "src"
-                                     "--src-ns-path" "libs/core/src"
-                                     "--src-ns-path" "libs/observability/src"
-                                     "--src-ns-path" "libs/platform/src"
-                                     "--src-ns-path" "libs/user/src"
-                                     "--src-ns-path" "libs/admin/src"
-                                     "--src-ns-path" "libs/storage/src"
-                                     "--src-ns-path" "libs/scaffolder/src"
-                                     "--src-ns-path" "libs/cache/src"
-                                     "--src-ns-path" "libs/jobs/src"
-                                     "--src-ns-path" "libs/email/src"
-                                     "--src-ns-path" "libs/tenant/src"
-                                     "--src-ns-path" "libs/realtime/src"
-                                     "--src-ns-path" "libs/workflow/src"
-                                     "--src-ns-path" "libs/search/src"
-                                     "--src-ns-path" "libs/payments/src"
-                                     "--src-ns-path" "libs/external/src"
-                                     "--src-ns-path" "libs/reports/src"
-                                     "--src-ns-path" "libs/calendar/src"
-                                     "--src-ns-path" "libs/geo/src"
-                                     "--src-ns-path" "libs/ai/src"
-                                     "--src-ns-path" "libs/ui-style/src"
-                                     "--src-ns-path" "libs/i18n/src"
-                                     "--src-ns-path" "libs/audience/src"
-                                     "--src-ns-path" "libs/config/src"
-                                     "--src-ns-path" "libs/devtools/src"
-                                     "--src-ns-path" "libs/push/src"
-                                     "--src-ns-path" "libs/shared-ui/src"
-                                     "--test-ns-path" "test"
-                                     "--test-ns-path" "libs/core/test"
-                                     "--test-ns-path" "libs/observability/test"
-                                     "--test-ns-path" "libs/platform/test"
-                                     "--test-ns-path" "libs/user/test"
-                                     "--test-ns-path" "libs/admin/test"
-                                     "--test-ns-path" "libs/storage/test"
-                                     "--test-ns-path" "libs/scaffolder/test"
-                                     "--test-ns-path" "libs/cache/test"
-                                     "--test-ns-path" "libs/jobs/test"
-                                     "--test-ns-path" "libs/email/test"
-                                     "--test-ns-path" "libs/tenant/test"
-                                     "--test-ns-path" "libs/realtime/test"
-                                     "--test-ns-path" "libs/workflow/test"
-                                     "--test-ns-path" "libs/search/test"
-                                     "--test-ns-path" "libs/payments/test"
-                                     "--test-ns-path" "libs/external/test"
-                                     "--test-ns-path" "libs/reports/test"
-                                     "--test-ns-path" "libs/calendar/test"
-                                     "--test-ns-path" "libs/geo/test"
-                                     "--test-ns-path" "libs/ai/test"
-                                     "--test-ns-path" "libs/ui-style/test"
-                                     "--test-ns-path" "libs/i18n/test"
-                                     "--test-ns-path" "libs/audience/test"
-                                     "--test-ns-path" "libs/config/test"
-                                     "--test-ns-path" "libs/devtools/test"
-                                     "--test-ns-path" "libs/push/test"
-                                     "--test-ns-path" "libs/shared-ui/test"
-                                     "--no-html"
-                                     "--text"]
-                       :extra-paths ["test" "dev"
-                                     "libs/core/src" "libs/core/test"
-                                     "libs/observability/src" "libs/observability/test"
-                                     "libs/platform/src" "libs/platform/test"
-                                     "libs/user/src" "libs/user/test"
-                                     "libs/admin/src" "libs/admin/test"
-                                     "libs/storage/src" "libs/storage/test"
-                                     "libs/scaffolder/src" "libs/scaffolder/test"
-                                     "libs/cache/src" "libs/cache/test"
-                                     "libs/jobs/src" "libs/jobs/test"
-                                     "libs/email/src" "libs/email/test"
-                                     "libs/tenant/src" "libs/tenant/test"
-                                     "libs/realtime/src" "libs/realtime/test"
-                                     "libs/workflow/src" "libs/workflow/test" "libs/workflow/resources"
-                                     "libs/search/src" "libs/search/test"
-                                     "libs/payments/src" "libs/payments/test"
-                                     "libs/external/src" "libs/external/test"
-                                     "libs/reports/src" "libs/reports/test"
-                                     "libs/calendar/src" "libs/calendar/test"
-                                     "libs/geo/src" "libs/geo/test" "libs/geo/resources"
-                                     "libs/ai/src" "libs/ai/test"
-                                     "libs/ui-style/src" "libs/ui-style/test"
-                                     "libs/i18n/src" "libs/i18n/test"
-                                     "libs/audience/src" "libs/audience/test"
-                                     "libs/config/src" "libs/config/test"
-                                     "libs/devtools/src" "libs/devtools/test"
-                                     "libs/push/src" "libs/push/test"
-                                     "libs/shared-ui/src" "libs/shared-ui/test"
-                                     ;; Kaocha adds a suite's paths itself; cloverage does not.
-                                     "libs/admin/resources"
-                                     "libs/calendar/resources"
-                                     "libs/core/resources"
-                                     "libs/devtools/resources"
-                                     "libs/external/resources"
-                                     "libs/observability/resources"
-                                     "libs/platform/resources"
-                                     "libs/reports/resources"
-                                     "libs/scaffolder/resources"
-                                     "libs/search/resources"
-                                     "libs/storage/resources"]
-                       :jvm-opts    ["-Denv=test" "--enable-native-access=ALL-UNNAMED" "-Duser.timezone=UTC"]}
+           :coverage  {;; With :test and the narrow test aliases, through kaocha's :unit suite.
+                       ;; `bb coverage` passes the paths to measure, read from tests.edn,
+                       ;; so no list here can fall behind it (BOU-620).
+                       :extra-deps  {lambdaisland/kaocha-cloverage {:mvn/version "1.1.89"}}
+                       ;; INFO, as the application logs: under logback-test.xml the
+                       ;; arguments of log calls never run and read as uncovered.
+                       :jvm-opts    ["-Denv=test" "--enable-native-access=ALL-UNNAMED" "-Duser.timezone=UTC"
+                                     "-Dlogback.configurationFile=resources/logback.xml"]}
 
            ;; =============================================================================
            ;; End-to-end test suite (spel / Playwright Java via Clojure)

@@ -76,7 +76,7 @@ jobs:
       - name: Setup Clojure + warm deps
         uses: ./.github/actions/clojure-deps
         with:
-          aliases: -M:clj-kondo -M:docs-lint -M:migrate -M:test -M:coverage:db:test/pg:test/otel:test/http
+          aliases: -M:clj-kondo -M:docs-lint -M:migrate -M:test -M:test:db:test/pg:test/otel:test/http:coverage
           # Each library's own deps.edn too. A library pins its own versions, so
           # the root closures miss artifacts the 30 isolation cells need — and
           # every cell then fetched them from Central concurrently with nothing
