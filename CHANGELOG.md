@@ -75,6 +75,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Validation snapshots recorded a lazy sequence as `"clojure.lang.LazySeq"`, so its contents were never compared**
+  (BOU-619). Re-record affected baselines with `UPDATE_SNAPSHOTS=true`; a missing baseline now fails.
 - **Dependencies with known vulnerabilities, two of them critical, are pinned to fixed releases** (BOU-618): BouncyCastle
   1.86, Jetty 12.1.14, jackson 2.22.3, log4j-api 2.26.1, commons-lang3 3.21.0. Upgrade to pick them up.
 - **The Redis event bus could acknowledge an event no handler saw** (BOU-600) when `stop!` or the last `unsubscribe!` ran

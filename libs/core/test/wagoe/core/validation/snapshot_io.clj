@@ -8,7 +8,7 @@
 
   Usage:
     ;; In tests - check snapshot matches
-    (check-snapshot! actual {:ns *ns* :test 'email-required :case 'missing})
+    (check-snapshot! actual {:test 'email-required :case 'missing})
 
     ;; Update snapshots mode
     UPDATE_SNAPSHOTS=true clojure -M:test
@@ -106,19 +106,29 @@
 ;; Assertion Helper
 ;; -----------------------------------------------------------------------------
 
+(def ^:private update-hint "  UPDATE_SNAPSHOTS=true clojure -M:test")
+
+(defn- test-ns
+  "The namespace of the deftest running now, not *ns*: inside a test that is
+   whatever the runner bound, so baselines drifted between runners (BOU-619)."
+  []
+  (or (some-> (first t/*testing-vars*) meta :ns ns-name)
+      (throw (ex-info "check-snapshot! outside a deftest needs an explicit :ns"
+                      {:type :internal-error}))))
+
 (defn check-snapshot!
   "Check actual result against stored snapshot.
 
   Behavior depends on environment:
   - UPDATE_SNAPSHOTS=true: Always writes new snapshot (pass)
-  - File missing: Writes snapshot and passes
+  - File missing: fails, naming the path (create it with UPDATE_SNAPSHOTS=true)
   - File exists: Compares and fails with diff if mismatch
   - WAG_DEVEX_VALIDATION=false: Pass-through (always passes)
 
   Args:
     actual - Actual validation result or data to snapshot
     opts   - Options map:
-             :ns   - Test namespace (*ns* in tests)
+             :ns   - Namespace symbol (optional; defaults to the running test's)
              :test - Test name
              :case - Test case name (optional)
              :seed - Seed used for generation (optional, for metadata)
@@ -134,59 +144,55 @@
   Example:
     (deftest email-required-missing-test
       (let [result (validate-user {:name \"Test\"})]
-        (check-snapshot! result {:ns *ns* 
-                                :test 'email-required 
-                                :case 'missing
-                                :seed 42})))"
+        (check-snapshot! result {:test 'email-required :case 'missing :seed 42})))"
   [actual opts]
-  (if-not (devex-enabled?)
-    ;; Pass-through mode when devex disabled
-    (do
-      ^:wagoe/allow-placeholder (t/is true "Snapshot check skipped (WAG_DEVEX_VALIDATION=false)")
-      true)
+  (let [opts (update opts :ns #(or % (test-ns)))]
+    (if-not (devex-enabled?)
+      ;; Pass-through mode when devex disabled
+      (do
+        ^:wagoe/allow-placeholder (t/is true "Snapshot check skipped (WAG_DEVEX_VALIDATION=false)")
+        true)
 
-    ;; Normal snapshot checking
-    (let [file-path (snapshot/path-for opts)
-          snapshot-opts {:seed (:seed opts)
-                         :meta (merge (:meta opts)
-                                      {:test-ns (:ns opts)
-                                       :test-name (:test opts)
-                                       :case-name (:case opts)})}
-          actual-snap (snapshot/capture actual snapshot-opts)]
+      ;; Normal snapshot checking
+      (let [file-path (snapshot/path-for opts)
+            snapshot-opts {:seed (:seed opts)
+                           :meta (merge (:meta opts)
+                                        {:test-ns (:ns opts)
+                                         :test-name (:test opts)
+                                         :case-name (:case opts)})}
+            actual-snap (snapshot/capture actual snapshot-opts)]
 
-      (cond
-        ;; Force update mode
-        (update-snapshots?)
-        (do
-          (write-snapshot! actual-snap file-path)
-          ^:wagoe/allow-placeholder (t/is true (str "Snapshot updated: " file-path))
-          true)
+        (cond
+          ;; Force update mode
+          (update-snapshots?)
+          (do
+            (write-snapshot! actual-snap file-path)
+            ^:wagoe/allow-placeholder (t/is true (str "Snapshot updated: " file-path))
+            true)
 
-        ;; File doesn't exist - write it
-        (not (.exists (io/file file-path)))
-        (do
-          (write-snapshot! actual-snap file-path)
-          ^:wagoe/allow-placeholder (t/is true (str "Snapshot created: " file-path))
-          true)
+          ;; A missing baseline fails, so a drifted path cannot pass (BOU-619).
+          (not (.exists (io/file file-path)))
+          (do
+            (t/is false (str "No snapshot at " file-path ". Create it with:\n" update-hint))
+            false)
 
-        ;; File exists - compare
-        :else
-        (let [expected-snap (read-snapshot! file-path)
-              ;; Normalize both snapshots to ensure consistent data types (strings, not objects)
-              ;; This is done by serializing and deserializing both
-              normalized-expected (snapshot/parse-snapshot (snapshot/stable-serialize expected-snap))
-              normalized-actual (snapshot/parse-snapshot (snapshot/stable-serialize actual-snap))
-              comparison (snapshot/compare-snapshots normalized-expected normalized-actual)]
-          (if (:equal? comparison)
-            (do
-              ^:wagoe/allow-placeholder (t/is true "Snapshot matches")
-              true)
-            (let [diff-msg (format-unified-diff comparison)]
-              (t/is false (str "Snapshot mismatch for " file-path "\n"
-                               diff-msg
-                               "\n\nTo update snapshots, run:\n"
-                               "  UPDATE_SNAPSHOTS=true clojure -M:test"))
-              false)))))))
+          ;; File exists - compare
+          :else
+          (let [expected-snap (read-snapshot! file-path)
+                ;; Normalize both snapshots to ensure consistent data types (strings, not objects)
+                ;; This is done by serializing and deserializing both
+                normalized-expected (snapshot/parse-snapshot (snapshot/stable-serialize expected-snap))
+                normalized-actual (snapshot/parse-snapshot (snapshot/stable-serialize actual-snap))
+                comparison (snapshot/compare-snapshots normalized-expected normalized-actual)]
+            (if (:equal? comparison)
+              (do
+                ^:wagoe/allow-placeholder (t/is true "Snapshot matches")
+                true)
+              (let [diff-msg (format-unified-diff comparison)]
+                (t/is false (str "Snapshot mismatch for " file-path "\n"
+                                 diff-msg
+                                 "\n\nTo update snapshots, run:\n" update-hint))
+                false))))))))
 
 ;; -----------------------------------------------------------------------------
 ;; Utilities

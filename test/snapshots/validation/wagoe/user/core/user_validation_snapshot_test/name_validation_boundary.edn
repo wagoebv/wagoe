@@ -1,0 +1,14 @@
+{:meta
+ {:case-name nil,
+  :schema-version "1.0",
+  :seed 47,
+  :test-name name-validation-boundary,
+  :test-ns wagoe.user.core.user-validation-snapshot-test},
+ :result
+ {:data
+  {:email "test@example.com",
+   :name
+   "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   :password "Correct-Horse-9-Battery",
+   :role :user},
+  :valid? true}}

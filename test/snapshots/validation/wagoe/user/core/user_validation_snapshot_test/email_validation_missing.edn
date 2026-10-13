@@ -1,0 +1,12 @@
+{:meta
+ {:case-name nil,
+  :schema-version "1.0",
+  :seed 44,
+  :test-name email-validation-missing,
+  :test-ns wagoe.user.core.user-validation-snapshot-test},
+ :result
+ {:errors
+  ({:code :missing-required-field,
+    :field [:email],
+    :message "missing required key"}),
+  :valid? false}}

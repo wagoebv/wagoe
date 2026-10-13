@@ -1,0 +1,12 @@
+{:meta
+ {:case-name nil,
+  :schema-version "1.0",
+  :seed 43,
+  :test-name email-validation-invalid-format,
+  :test-ns wagoe.user.core.user-validation-snapshot-test},
+ :result
+ {:errors
+  ({:code :schema-validation-failed,
+    :field [:email],
+    :message "Invalid email format"}),
+  :valid? false}}
