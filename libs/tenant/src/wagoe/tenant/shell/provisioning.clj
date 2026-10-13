@@ -542,10 +542,9 @@
 
   (db/with-transaction [tx ctx]
     (try
-      ;; Set search_path for this transaction
-      ;; Format: "SET search_path TO tenant_schema, public"
-      ;; This ensures tenant tables are found first, with public as fallback
-      (db/execute-query! tx [(str "SET search_path TO " tenant-schema-name ", public")])
+      ;; Tenant tables first, public as fallback. LOCAL: a plain SET outlives
+      ;; the commit and stays on the pooled connection (BOU-624).
+      (db/execute-query! tx [(str "SET LOCAL search_path TO " tenant-schema-name ", public")])
       (log/debug "Set search_path for transaction"
                  {:schema tenant-schema-name})
 

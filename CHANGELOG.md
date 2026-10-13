@@ -75,6 +75,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **A connection that served a tenant kept that tenant's `search_path` for whoever used it next** (BOU-624).
+  Upgrade if you use `:wagoe/tenant` on PostgreSQL.
 - **Adding the tenant→`auth_users` keys on PostgreSQL blocked writes to `auth_users` while it checked the table**
   (BOU-614). It is now added `NOT VALID`, waiting at most 5s for its lock, then validated; nothing to do on upgrade.
 - **Validation snapshots recorded a lazy sequence as `"clojure.lang.LazySeq"`, so its contents were never compared**
