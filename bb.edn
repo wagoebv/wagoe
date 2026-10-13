@@ -18,6 +18,7 @@
              [wagoe.tools.test-all    :as test-all]
              [wagoe.tools.ci-changes  :as ci-changes]
              [wagoe.tools.check-vulns :as check-vulns]
+             [wagoe.tools.coverage    :as coverage]
              [wagoe.tools.test-services :as test-services]
              [wagoe.tools.i18n        :as i18n]
              [wagoe.tools.admin       :as admin]
@@ -91,12 +92,8 @@
                  :task (apply relocate/-main *command-line-args*)}
   migrate       {:doc "Run database migrations via the standard Wagoe migrate CLI (bb migrate [up|status|rollback|create ...])"
                  :task (apply dev/migrate *command-line-args*)}
-  coverage      {:doc "Run Cloverage coverage with the monorepo Wagoe test/classpath setup"
-                 ;; Embedded PostgreSQL, OpenTelemetry and clj-http-lite left :test for
-                 ;; narrow aliases (BOU-260), and coverage runs them all.
-                 ;; Linux binaries only, as CI has them; the Mac one when run on a Mac.
-                 :task (clojure (str "-M:coverage:db:test/pg:test/otel:test/http"
-                                     (when (= "aarch64" (System/getProperty "os.arch")) ":test/pg-mac")))}
+  coverage      {:doc "Cloverage through kaocha's :unit suite, measuring what tests.edn names (bb coverage)"
+                 :task (coverage/-main)}
   create-admin  {:doc "Create the first admin user for a new Wagoe project (interactive wizard)"
                  :task (apply admin/-main *command-line-args*)}
   check:versions {:doc "Every hard-coded suite version must agree, in source and in docs (bb check:versions)"
