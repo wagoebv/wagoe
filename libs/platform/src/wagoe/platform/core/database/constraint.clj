@@ -36,25 +36,34 @@
     (when (and (not (str/includes? s ",")) (re-matches #"[a-z][a-z0-9_]*" col))
       (keyword (str/replace col "_" "-")))))
 
+(def ^:private statement-table-pattern
+  (let [id "(?:\"[^\"]+\"|`[^`]+`|[\\p{L}_][\\p{L}\\p{N}_$]*)"]
+    (re-pattern (str "(?i)^\\s*(?:insert\\s+into|update(?:\\s+only)?|delete\\s+from(?:\\s+only)?)\\s+"
+                     "(?:" id "\\.)?(" id ")"))))
+
 (defn statement-table
   "The table an INSERT, UPDATE or DELETE in `sql` writes, lower case, or nil."
   [sql]
-  (some-> (re-find #"(?i)^\s*(?:insert\s+into|update|delete\s+from)\s+[\"`]?(?:\w+[\"`]?\.[\"`]?)?(\w+)" (str sql))
+  (some-> (re-find statement-table-pattern (str sql))
           second
+          (str/replace #"[\"`]" "")
           str/lower-case))
 
 (defn- still-referenced?
   "Whether a foreign key refused removing or re-keying a row another row
-   references, rather than a reference to a missing row: H2's 23503 vendor code,
-   MySQL's 1451. PostgreSQL reports the referencing `:table` either way, so a
-   statement on another table (`:target`) is the referenced side, in any
-   language; its English message when either is unknown (BOU-627). SQLite does
-   not say."
+   references, rather than a reference to a missing row. Read from H2's and
+   MySQL's codes, PostgreSQL's English message, or else, in any language, its
+   referencing `:table` against the statement's `:target` (BOU-627)."
   [{:keys [error-code message table target]}]
-  (boolean (or (#{23503 1451} error-code)
-               (if (and table target)
-                 (not= (str/lower-case table) target)
-                 (re-find #"update or delete on table" (str message))))))
+  (let [message (str message)]
+    ;; The message wins when it is English: a trigger, partition or view writes
+    ;; another table than the statement names. A self-referencing key in another
+    ;; language reads as a missing reference.
+    (boolean (cond
+               (#{23503 1451} error-code)                     true
+               (re-find #"update or delete on table" message) true
+               (re-find #"insert or update on table" message) false
+               :else (and table target (not= (str/lower-case table) target))))))
 
 (def ^:private not-null-patterns
   [#"NOT NULL constraint failed: (?:[^.\s()]+\.)?([^\s()]+)" ; SQLite
@@ -66,10 +75,12 @@
 (defn not-null-field
   "The field a refused NOT NULL names, as a kebab keyword, or nil when
    `reported` is not one. Read only when the state or code says NOT NULL, or
-   there is no state (SQLite): other messages quote values a pattern could match."
-  [{:keys [sql-state error-code message]}]
+   there is no state (SQLite): other messages quote values a pattern could match.
+   PostgreSQL's `:column`, in any language, before its message."
+  [{:keys [sql-state error-code message column]}]
   (when (or (nil? sql-state) (= "23502" sql-state) (#{1048 1364} error-code))
-    (some #(some-> (re-find % (str message)) second column->field) not-null-patterns)))
+    (or (some-> column column->field)
+        (some #(some-> (re-find % (str message)) second column->field) not-null-patterns))))
 
 (def ^:private name-patterns
   [#"constraint \"([\w$.]+)\""              ; PostgreSQL
@@ -79,9 +90,10 @@
 
 (defn constraint-name
   "The constraint or index the driver says refused the write, or nil. The name
-   only, never the values beside it, so it can be logged."
-  [{:keys [message]}]
-  (some #(second (re-find % (str message))) name-patterns))
+   only, never the values beside it, so it can be logged. PostgreSQL's
+   `:constraint`, in any language, before its message."
+  [{:keys [message constraint]}]
+  (or constraint (some #(second (re-find % (str message))) name-patterns)))
 
 (defn redacted-message
   "What to log in place of the driver's message, or nil when that can be

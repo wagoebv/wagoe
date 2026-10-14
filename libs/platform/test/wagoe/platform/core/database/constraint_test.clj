@@ -129,11 +129,32 @@
     (is (:referenced? (constraint/violation (assoc german :target "invoices"))) "re-keying the parent")
     (is (not (:referenced? (constraint/violation (assoc german :target "lines")))) "a child with a missing parent")))
 
+(deftest ^:unit a-self-referencing-key-is-read-from-its-message
+  ;; Same table on both sides: only the message says which way.
+  (is (:referenced? (constraint/violation
+                     {:sql-state "23503" :error-code 0 :table "categories" :target "categories"
+                      :message "ERROR: update or delete on table \"categories\" violates foreign key constraint \"categories_parent_id_fkey\" on table \"categories\""}))))
+
+(deftest ^:unit postgresql-names-are-read-in-any-language
+  (let [german {:sql-state "23502" :column "email" :constraint "users_email_not_null"
+                :message "FEHLER: NULL-Wert in Spalte »email« von Relation »users« verletzt Not-Null-Constraint"}]
+    (is (= :email (constraint/not-null-field german)))
+    (is (= "users_email_not_null" (constraint/constraint-name german)))))
+
 (deftest ^:unit the-statement-names-its-table
   (is (= "invoices" (constraint/statement-table "UPDATE invoices SET id = ? WHERE id = ?")))
   (is (= "invoices" (constraint/statement-table "  delete from \"public\".\"invoices\" where id = ?")))
   (is (= "lines" (constraint/statement-table "INSERT INTO lines (id) VALUES (?)")))
+  (is (= "invoices" (constraint/statement-table "UPDATE ONLY invoices SET id = ?")))
+  (is (= "order-lines" (constraint/statement-table "INSERT INTO \"Order-Lines\" (id) VALUES (?)")))
+  (is (= "rechnungsposten_ä" (constraint/statement-table "INSERT INTO rechnungsposten_ä (id) VALUES (?)")))
   (is (nil? (constraint/statement-table "SELECT * FROM lines"))))
+
+(deftest ^:unit an-english-message-wins-over-the-tables
+  ;; A partition, view or trigger writes another table than the statement names.
+  (is (not (:referenced? (constraint/violation
+                          {:sql-state "23503" :error-code 0 :table "lines_2026" :target "lines"
+                           :message "ERROR: insert or update on table \"lines_2026\" violates foreign key constraint \"lines_invoice_id_fkey\""})))))
 
 (deftest ^:unit other-failures-are-not-violations
   (is (nil? (constraint/violation {:sql-state "23502" :message "null value in column \"number\" violates not-null constraint"})))

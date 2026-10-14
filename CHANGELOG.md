@@ -76,7 +76,7 @@ for what is public API, what is internal, and how deprecations are announced.
 ### Fixed
 
 - **On a PostgreSQL in another language, re-keying a referenced row answered "A referenced record does not exist"**
-  (BOU-627). It is read from the tables involved now, not the message; nothing to do on upgrade.
+  (BOU-627), and a refused NOT NULL named no field. Both are read from the server's fields now; nothing to do on upgrade.
 - **An error reporter or stack trace could still show a refused value from the driver's exception** (BOU-628). The
   platform now attaches a cause without the values; nothing to do on upgrade.
 - **A refused write could log the values it carried: PostgreSQL's whole row on a CHECK or NOT NULL** (BOU-626). Data

@@ -108,14 +108,18 @@
 
 (defn- server-error
   "PostgreSQL's Detail, which logServerErrorDetail=false keeps out of the
-   message, and the table it names, as {:detail :table}. By reflection: the
-   driver is loaded at runtime, not compiled against."
+   message, and the names it reports in any language, as {:detail :table
+   :constraint :column}. By reflection: the driver is loaded at runtime, not
+   compiled against."
   [^SQLException se]
   (when (= "org.postgresql.util.PSQLException" (.getName (class se)))
     (try
       (when-let [m (Reflector/invokeInstanceMethod se "getServerErrorMessage" (object-array 0))]
-        {:detail (Reflector/invokeInstanceMethod m "getDetail" (object-array 0))
-         :table  (Reflector/invokeInstanceMethod m "getTable" (object-array 0))})
+        (into {} (for [[k getter] {:detail "getDetail" :table "getTable"
+                                   :constraint "getConstraint" :column "getColumn"}
+                       :let [v (Reflector/invokeInstanceMethod m getter (object-array 0))]
+                       :when v]
+                   [k v])))
       (catch Exception _ nil))))
 
 (defn reported
@@ -124,12 +128,10 @@
   [e]
   (when-let [^SQLException se (some #(when (instance? SQLException %) %)
                                     (take-while some? (iterate ex-cause e)))]
-    (let [{:keys [detail table]} (server-error se)]
-      (cond-> {:sql-state  (.getSQLState se)
-               :error-code (.getErrorCode se)
-               :message    (.getMessage se)}
-        detail (assoc :detail detail)
-        table  (assoc :table table)))))
+    (merge {:sql-state  (.getSQLState se)
+            :error-code (.getErrorCode se)
+            :message    (.getMessage se)}
+           (server-error se))))
 
 (defn redacted-cause
   "`e`, or when the driver's message quotes the values sent, a SQLException in
