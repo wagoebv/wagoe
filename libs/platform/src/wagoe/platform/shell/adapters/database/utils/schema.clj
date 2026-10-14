@@ -207,6 +207,20 @@
   [table-name column-name]
   (str "chk_" table-name "_" column-name))
 
+(defn- column-type
+  "The SQL type of a field: its :db-type, or the one its Malli type maps to."
+  [ctx {:keys [type properties]}]
+  (or (:db-type properties) (malli-type->column-type ctx type)))
+
+(defn- column-default
+  "The DEFAULT clause of a field: only a required `active` boolean has one."
+  [ctx {:keys [name type optional?]}]
+  (if (and (= type :boolean) (= name "active") (not optional?))
+    (case (or (protocols/dialect (:adapter ctx)) :postgresql)
+      :sqlite " DEFAULT 1"
+      " DEFAULT true")
+    ""))
+
 (defn- generate-column-definition
   "Generate SQL column definition from field info and context.
 
@@ -220,19 +234,12 @@
 
    Returns:
      String column definition"
-  [ctx {:keys [name type optional? properties]}]
+  [ctx {:keys [name optional?] :as field-info}]
   (let [column-name (col-name name) ; Convert kebab-case to snake_case
-        column-type (or (:db-type properties)
-                        (malli-type->column-type ctx type))
         not-null (if optional? "" " NOT NULL")
-        primary-key (if (= name "id") " PRIMARY KEY" "")
-        ; Handle boolean defaults for active fields
-        boolean-default (if (and (= type :boolean) (= name "active") (not optional?))
-                          (case (or (protocols/dialect (:adapter ctx)) :postgresql)
-                            :sqlite " DEFAULT 1"
-                            " DEFAULT true")
-                          "")]
-    (str column-name " " column-type not-null primary-key boolean-default)))
+        primary-key (if (= name "id") " PRIMARY KEY" "")]
+    (str column-name " " (column-type ctx field-info) not-null primary-key
+         (column-default ctx field-info))))
 
 (defn- generate-enum-constraints
   "Generate named table-level CHECK constraint definitions for enum fields.
@@ -421,6 +428,27 @@
           (db-core/execute-ddl! ctx ddl))))))
 
 ;; =============================================================================
+;; Missing Columns
+;; =============================================================================
+
+(defn- add-missing-columns!
+  "Add the fields of `malli-schema` an existing table lacks (BOU-622), nullable:
+   a NOT NULL column cannot join a table with rows, so a migration backfills it."
+  [ctx table-name malli-schema]
+  (let [present (set (map :name (db-core/get-table-info ctx table-name)))]
+    (when-let [missing (and (seq present)
+                            (seq (remove #(present (str/lower-case (col-name (:name %))))
+                                         (keep extract-field-info (rest malli-schema)))))]
+      (doseq [{:keys [name optional?]} missing :when (not optional?)]
+        (log/warn "Added a required field as nullable: backfill it and add NOT NULL in a migration"
+                  {:table table-name :column (col-name name)}))
+      (db-core/add-columns-if-not-exist! ctx table-name
+                                         (mapv (fn [f] [(col-name (:name f))
+                                                        (str (column-type ctx f) (column-default ctx f))])
+                                               missing)
+                                         present))))
+
+;; =============================================================================
 ;; Schema Initialization
 ;; =============================================================================
 
@@ -448,14 +476,16 @@
 
   (try
     ; Create tables. For tables that already exist, CREATE TABLE IF NOT EXISTS is
-    ; a no-op, so re-apply named enum CHECK constraints to keep initialization
-    ; idempotent (and to heal H2's in-memory reconnect corruption).
+    ; a no-op, so add the fields the schema gained since, and re-apply named enum
+    ; CHECK constraints to keep initialization idempotent (and to heal H2's
+    ; in-memory reconnect corruption).
     (doseq [[table-name malli-schema] schema-definitions]
       (let [existed? (db-core/table-exists? ctx table-name)
             ddl (generate-table-ddl ctx table-name malli-schema)]
         (log/debug "Creating table" {:table table-name :ddl ddl :existed? existed?})
         (db-core/execute-ddl! ctx ddl)
         (when existed?
+          (add-missing-columns! ctx table-name malli-schema)
           (repair-enum-constraints! ctx table-name malli-schema))))
 
     ; Create indexes

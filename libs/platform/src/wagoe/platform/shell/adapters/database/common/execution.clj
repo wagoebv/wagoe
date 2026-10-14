@@ -106,27 +106,43 @@
             (str "Unsupported query input. Expected HoneySQL map, SQL string, or JDBC vector. Got: "
                  (type query))))))
 
-(defn- server-detail
+(defn- server-error
   "PostgreSQL's Detail, which logServerErrorDetail=false keeps out of the
-   message. By reflection: the driver is loaded at runtime, not compiled against."
+   message, and the names it reports in any language, as {:detail :table
+   :constraint :column}. By reflection: the driver is loaded at runtime, not
+   compiled against."
   [^SQLException se]
   (when (= "org.postgresql.util.PSQLException" (.getName (class se)))
     (try
-      (some-> (Reflector/invokeInstanceMethod se "getServerErrorMessage" (object-array 0))
-              (Reflector/invokeInstanceMethod "getDetail" (object-array 0)))
+      (when-let [m (Reflector/invokeInstanceMethod se "getServerErrorMessage" (object-array 0))]
+        (into {} (for [[k getter] {:detail "getDetail" :table "getTable"
+                                   :constraint "getConstraint" :column "getColumn"}
+                       :let [v (Reflector/invokeInstanceMethod m getter (object-array 0))]
+                       :when v]
+                   [k v])))
       (catch Exception _ nil))))
+
+(defn- causes
+  "`e` and its causes, outermost first. Stops at a repeat: a cyclic chain would
+   otherwise never end."
+  [e]
+  (loop [x e acc []]
+    (if (or (nil? x) (some #(identical? x %) acc))
+      acc
+      (recur (ex-cause x) (conj acc x)))))
+
+(defn- first-sql-exception [e]
+  (some #(when (instance? SQLException %) %) (causes e)))
 
 (defn reported
   "What the driver said, from the first SQLException in `e`'s causes, or nil.
    `:message` and `:detail` may quote the values sent: parse them, do not log them."
   [e]
-  (when-let [^SQLException se (some #(when (instance? SQLException %) %)
-                                    (take-while some? (iterate ex-cause e)))]
-    (let [detail (server-detail se)]
-      (cond-> {:sql-state  (.getSQLState se)
-               :error-code (.getErrorCode se)
-               :message    (.getMessage se)}
-        detail (assoc :detail detail)))))
+  (when-let [^SQLException se (first-sql-exception e)]
+    (merge {:sql-state  (.getSQLState se)
+            :error-code (.getErrorCode se)
+            :message    (.getMessage se)}
+           (server-error se))))
 
 (defn redacted-cause
   "`e`, or when the driver's message quotes the values sent, a SQLException in
@@ -140,10 +156,59 @@
        (.setStackTrace (.getStackTrace e)))
      e)))
 
+(defn- summary
+  "What `constraint/redacted-message` says for `se`, or nil. Without
+   `reported`'s reflection, which reads a Detail redaction does not need."
+  [^SQLException se]
+  (constraint/redacted-message {:sql-state  (.getSQLState se)
+                                :error-code (.getErrorCode se)
+                                :message    (.getMessage se)}))
+
+(defn- quoted-summary
+  "The redacted summary for the first SQLException in `e`'s causes when its
+   message quotes values, or nil."
+  [e]
+  (some-> (first-sql-exception e) summary))
+
+(defn redacted-exception
+  "`t`, or a copy of its cause chain in which each SQLException that quotes the
+   values sent says what `constraint/redacted-message` says instead, for an
+   error reporter or log. Covers what the platform did not throw itself: a
+   library calling next.jdbc directly (BOU-630). Same messages, data and stack
+   otherwise; a cause that is neither SQLException nor ex-info becomes a
+   RuntimeException naming its class."
+  [^Throwable t]
+  (let [chain    (causes t)
+        redacted (into {} (keep #(when (instance? SQLException %)
+                                   (some->> (summary %) (vector %))))
+                       chain)
+        ;; A wrapper's message can carry the driver's: RuntimeException(cause)
+        ;; and ExecutionException use cause.toString().
+        scrub    (fn [msg]
+                   (when msg
+                     (reduce-kv (fn [m ^SQLException se s]
+                                  (if-let [quoted (.getMessage se)] (str/replace m quoted s) m))
+                                msg redacted)))]
+    (if (empty? redacted)
+      t
+      ;; Innermost first, so each copy is built around its copied cause.
+      (reduce (fn [cause ^Throwable x]
+                (doto ^Throwable
+                 (cond
+                   (instance? SQLException x)
+                   (let [^SQLException se x]
+                     (SQLException. ^String (get redacted x (scrub (.getMessage se)))
+                                    (.getSQLState se) (.getErrorCode se) ^Throwable cause))
+                   (instance? clojure.lang.ExceptionInfo x) (ex-info (scrub (ex-message x)) (ex-data x) cause)
+                   :else (RuntimeException. (str (.getName (class x)) ": " (scrub (.getMessage x))) ^Throwable cause))
+                  (.setStackTrace (.getStackTrace x))))
+              nil
+              (reverse chain)))))
+
 (defn loggable-message
   "`e`'s message, or a summary without the values when the driver's quotes them."
   [e]
-  (or (some-> (reported e) constraint/redacted-message) (ex-message e)))
+  (or (quoted-summary e) (ex-message e)))
 
 (defn- deletes?
   "Whether `sql` is a DELETE, read from its text so raw SQL counts too."
@@ -177,7 +242,7 @@
   (let [r     (reported e)
         sql   (first sql-query)
         cause (redacted-cause e r)]
-    (when-let [v (some-> r constraint/violation)]
+    (when-let [v (some-> r (assoc :target (constraint/statement-table sql)) constraint/violation)]
       (log/info (str what " refused by a constraint")
                 {:adapter adapter-dialect :sql sql :violation v :constraint-name (constraint/constraint-name r)})
       (throw (conflict v sql cause)))

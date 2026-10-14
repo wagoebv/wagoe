@@ -40,6 +40,12 @@
 ;; DbGeoCache record
 ;; =============================================================================
 
+;; Without the exception's message: a driver's quotes the values sent, and geo
+;; does not depend on the platform that redacts them (BOU-630).
+(defn- failure [^Throwable e data]
+  (cond-> (assoc data :error (.getName (class e)))
+    (instance? java.sql.SQLException e) (assoc :sql-state (.getSQLState ^java.sql.SQLException e))))
+
 (defrecord DbGeoCache [ds cache-ttl])
 
 (extend-protocol ports/GeoCacheProtocol
@@ -56,7 +62,7 @@
                                    {:builder-fn rs/as-unqualified-lower-maps}))]
         (row->geo-result row))
       (catch Exception e
-        (log/warn e "geo cache lookup failed" {:hash query-hash})
+        (log/warn "geo cache lookup failed" (failure e {:hash query-hash}))
         nil)))
 
   (cache-store! [this query-hash result]
@@ -77,10 +83,10 @@
       (catch Exception e
         ;; INSERT may fail on duplicate key (race condition) — treat as non-fatal.
         ;; Other failures (DB down, connection lost) are logged at warn level.
-        (if (or (re-find #"(?i)unique|duplicate|constraint" (.getMessage e))
-                (re-find #"(?i)primary key" (.getMessage e)))
-          (log/debug e "geo cache duplicate key (concurrent insert)" {:hash query-hash})
-          (log/warn e "geo cache store failed (DB issue?)" {:hash query-hash}))
+        (if (or (re-find #"(?i)unique|duplicate|constraint" (str (.getMessage e)))
+                (re-find #"(?i)primary key" (str (.getMessage e))))
+          (log/debug "geo cache duplicate key (concurrent insert)" {:hash query-hash})
+          (log/warn "geo cache store failed (DB issue?)" (failure e {:hash query-hash})))
         nil))))
 
 ;; =============================================================================

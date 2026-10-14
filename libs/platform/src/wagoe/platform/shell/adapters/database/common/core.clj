@@ -78,6 +78,7 @@
 (def get-table-info schema/get-table-info)
 (def execute-ddl! schema/execute-ddl!)
 (def create-index-if-not-exists! schema/create-index-if-not-exists!)
+(def add-columns-if-not-exist! schema/add-columns-if-not-exist!)
 
 ;; =============================================================================
 ;; Query Building and Formatting (Re-exported from utils)
