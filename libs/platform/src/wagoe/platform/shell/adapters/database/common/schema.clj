@@ -153,18 +153,20 @@
   "Add each [column definition] in `columns` that `table` lacks, `definition`
    being what follows the name. Read first because any ALTER locks, even one IF
    NOT EXISTS makes a no-op; a duplicate the read missed counts as done (BOU-616).
+   `present`, the lower-case column names a caller already read, skips the read.
 
    Example:
      (add-columns-if-not-exist! ctx :users [[:nickname \"VARCHAR(50)\"]])"
-  [ctx table columns]
-  (let [native? (claims? ctx :column-if-not-exists)
-        present (set (map :name (get-table-info ctx table)))]
-    (doseq [[column definition] columns
-            :when (not (present (str/lower-case (name column))))
-            :let  [stmt (fn [clause] (str "ALTER TABLE " (name table) " ADD COLUMN " clause
-                                          (name column) " " definition))]]
-      (log/info "Adding missing column" {:table (name table) :column (name column)})
-      (if-exists-ddl! ctx native? (stmt "IF NOT EXISTS ") (stmt "") constraint/already-exists?))))
+  ([ctx table columns]
+   (add-columns-if-not-exist! ctx table columns (set (map :name (get-table-info ctx table)))))
+  ([ctx table columns present]
+   (let [native? (claims? ctx :column-if-not-exists)]
+     (doseq [[column definition] columns
+             :when (not (present (str/lower-case (name column))))
+             :let  [stmt (fn [clause] (str "ALTER TABLE " (name table) " ADD COLUMN " clause
+                                           (name column) " " definition))]]
+       (log/info "Adding missing column" {:table (name table) :column (name column)})
+       (if-exists-ddl! ctx native? (stmt "IF NOT EXISTS ") (stmt "") constraint/already-exists?)))))
 
 (defn add-column-if-not-exists!
   "Add `column` to `table` unless it is there.

@@ -58,6 +58,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Changed
 
+- **Tables from Malli schemas gain the fields added since they were created** (BOU-622): boot adds them, a required one as
+  nullable with a warning to backfill it in a migration.
 - **The tenant tables ship as a library migration** (BOU-551), built from the same definition boot uses. Run
   `bb migrate up`; existing tables are left as they are.
 - **`build-where` string filters ignore case on every database** (BOU-450). They were case-sensitive on H2.
@@ -77,6 +79,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **A library calling next.jdbc directly could still report a refused value to the error reporter** (BOU-630). The
   platform redacts every exception it reports; nothing to do on upgrade.
+- **An RPC request body the service could not decode escaped as a 500** (BOU-625). It is a 400 naming the problem, and
+  the client logs what answered when a reply is not an envelope.
 - **An error reporter or stack trace could still show a refused value from the driver's exception** (BOU-628). The
   platform now attaches a cause without the values; nothing to do on upgrade.
 - **A refused write could log the values it carried: PostgreSQL's whole row on a CHECK or NOT NULL** (BOU-626). Data
