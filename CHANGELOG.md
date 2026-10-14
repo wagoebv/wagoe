@@ -77,6 +77,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **An RPC request body the service could not decode escaped as a 500** (BOU-625). It is a 400 naming the problem, and
+  the client logs what answered when a reply is not an envelope.
+- **An error reporter or stack trace could still show a refused value from the driver's exception** (BOU-628). The
+  platform now attaches a cause without the values; nothing to do on upgrade.
 - **A refused write could log the values it carried: PostgreSQL's whole row on a CHECK or NOT NULL** (BOU-626). Data
   and integrity errors now log their SQLState and constraint; PostgreSQL connections set `logServerErrorDetail=false`.
 - **A connection that served a tenant kept that tenant's `search_path` for whoever used it next** (BOU-624). Upgrade if
