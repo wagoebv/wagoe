@@ -62,8 +62,10 @@
    values sent: MySQL's duplicate entry, H2's VALUES, PostgreSQL's bad input
    (BOU-626)."
   [{:keys [sql-state] :as reported}]
-  (when-let [what ({"22" "Invalid data" "23" "Integrity constraint violated"}
-                   (some-> sql-state (subs 0 (min 2 (count sql-state)))))]
+  (when-let [what (condp re-find (str sql-state)
+                    #"^22" "Invalid data"
+                    #"^23" "Integrity constraint violated"
+                    nil)]
     (str what " (SQLState " sql-state (some->> (constraint-name reported) (str ", constraint ")) ")")))
 
 (defn violation
@@ -71,9 +73,11 @@
    violation, `:field` only when the driver names one column, and
    `:referenced? true` when the refused row is one another still references;
    nil for any other failure."
-  [{:keys [message] :as reported}]
+  [{:keys [message detail] :as reported}]
   (when-let [k (kind reported)]
-    (let [field (some #(some-> (re-find % (str message)) second column->field) column-patterns)]
+    ;; PostgreSQL names the column in its Detail, which `reported` keeps apart.
+    (let [text  (str message "\n" detail)
+          field (some #(some-> (re-find % text) second column->field) column-patterns)]
       (cond-> {:kind k}
         field (assoc :field field)
         (and (= :foreign-key k) (still-referenced? reported)) (assoc :referenced? true)))))
