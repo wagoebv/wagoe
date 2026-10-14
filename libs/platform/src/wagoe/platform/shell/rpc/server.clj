@@ -12,6 +12,7 @@
             [wagoe.platform.core.rpc :as rpc]
             [clojure.string]
             [clojure.tools.logging :as log]
+            [muuntaja.core :as m]
             [muuntaja.middleware :as muuntaja-middleware]))
 
 (defn- resolve-operation
@@ -231,7 +232,18 @@
      (fn [request]
        (if (and (= :post (:request-method request))
                 (= path (:uri request)))
-         (handler request)
+         (try
+           (handler request)
+           ;; A body muuntaja cannot decode is the caller's error, so a 400 that
+           ;; says so in an envelope, not an exception escaping as a 500 (BOU-625).
+           (catch clojure.lang.ExceptionInfo e
+             (if (= :muuntaja/decode (:type (ex-data e)))
+               (do (log/warn "rpc request body could not be decoded" {:message (ex-message e)})
+                   {:status  400
+                    :headers {"Content-Type" "application/transit+json"}
+                    :body    (m/encode m/instance "application/transit+json"
+                                       (rpc/transport-error :rpc/protocol nil (ex-message e)))})
+               (throw e))))
          ;; Anything else, including a GET on the right path: this listener
          ;; serves one endpoint and should not look like it serves more.
          {:status 404 :headers {} :body ""})))))

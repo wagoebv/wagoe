@@ -104,7 +104,7 @@
   [url envelope opts]
   (let [operation (:operation envelope)]
     (try
-      (let [{:keys [status body]}
+      (let [{:keys [status] raw :body}
             (http/post url
                        {:body               (m/encode m/instance content-type envelope)
                         :content-type       content-type
@@ -132,7 +132,7 @@
                         ;; here — a 500 from the far side is a result to
                         ;; inspect, not a stack trace to unwind.
                         :throw-exceptions   false})
-            body (decode-body body)]
+            body (decode-body raw)]
         (cond
           (<= 200 status 299)
           [:answered (rpc/response->result operation body)]
@@ -151,9 +151,18 @@
           ;; retry can help — but only if asked for, since it may equally have
           ;; run and had its response lost.
           :else
-          [:transport (rpc/transport-error :rpc/remote-error operation
-                                           (str "Remote returned status " status)
-                                           status)]))
+          (do
+            ;; What answered, when it was not the service: a proxy's page, or
+            ;; the server refusing the request before the handler (BOU-625).
+            (log/warn "rpc answer is not an envelope"
+                      {:operation  operation
+                       :status     status
+                       :body-start (when raw
+                                     (let [s (String. ^bytes raw "UTF-8")]
+                                       (subs s 0 (min 200 (count s)))))})
+            [:transport (rpc/transport-error :rpc/remote-error operation
+                                             (str "Remote returned status " status)
+                                             status)])))
       (catch Exception e
         [:transport (rpc/transport-error (rpc/classify-exception e) operation
                                          (.getMessage e))]))))
