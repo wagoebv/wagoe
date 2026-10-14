@@ -13,7 +13,8 @@
             [clojure.walk :as walk]
             [next.jdbc :as jdbc]
             [next.jdbc.result-set :as rs])
-  (:import [java.sql SQLException]))
+  (:import [clojure.lang Reflector]
+           [java.sql SQLException]))
 
 ;; =============================================================================
 ;; Context Validation (Re-exported from core)
@@ -105,14 +106,31 @@
             (str "Unsupported query input. Expected HoneySQL map, SQL string, or JDBC vector. Got: "
                  (type query))))))
 
+(defn- server-detail
+  "PostgreSQL's Detail, which logServerErrorDetail=false keeps out of the
+   message. By reflection: the driver is loaded at runtime, not compiled against."
+  [^SQLException se]
+  (when (= "org.postgresql.util.PSQLException" (.getName (class se)))
+    (try
+      (some-> (Reflector/invokeInstanceMethod se "getServerErrorMessage" (object-array 0))
+              (Reflector/invokeInstanceMethod "getDetail" (object-array 0)))
+      (catch Exception _ nil))))
+
 (defn reported
-  "What the driver said, from the first SQLException in `e`'s causes, or nil."
+  "What the driver said, from the first SQLException in `e`'s causes, or nil.
+   `:message` may quote the values sent: parse it, do not log it."
   [e]
   (when-let [^SQLException se (some #(when (instance? SQLException %) %)
                                     (take-while some? (iterate ex-cause e)))]
     {:sql-state  (.getSQLState se)
      :error-code (.getErrorCode se)
-     :message    (.getMessage se)}))
+     :message    (cond-> (str (.getMessage se))
+                   (server-detail se) (str "\n  Detail: " (server-detail se)))}))
+
+(defn loggable-message
+  "`e`'s message, or a summary without the values when the driver's quotes them."
+  [^Throwable e]
+  (or (some-> (reported e) constraint/redacted-message) (.getMessage e)))
 
 (defn- constraint-violation
   "The unique or foreign key `e` says the database enforced, as
@@ -214,7 +232,7 @@
       (catch Exception e
         ;; Add breadcrumb for error
         (let [error-details (merge operation-details
-                                   {:error (.getMessage e)
+                                   {:error (loggable-message e)
                                     :sql (first sql-query)
                                     :param-count (count (rest sql-query))})]
           (add-database-breadcrumb "query" :error error-details))
@@ -230,13 +248,13 @@
         (log/error "Query failed"
                    {:adapter adapter-dialect
                     :sql (first sql-query)
-                    :error (.getMessage e)})
+                    :error (loggable-message e)})
         (throw (ex-info "Database query failed"
                         {:type :database-error
                          :adapter adapter-dialect
                          :sql (first sql-query)
                          :param-count (count (rest sql-query))
-                         :original-error (.getMessage e)}
+                         :original-error (loggable-message e)}
                         e))))))
 
 (defn execute-one!
@@ -320,7 +338,7 @@
       (catch Exception e
         ;; Add breadcrumb for error
         (let [error-details (merge operation-details
-                                   {:error (.getMessage e)
+                                   {:error (loggable-message e)
                                     :sql (first sql-query)
                                     :param-count (count (rest sql-query))})]
           (add-database-breadcrumb operation-type :error error-details))
@@ -336,13 +354,13 @@
         (log/error "Update failed"
                    {:adapter adapter-dialect
                     :sql (first sql-query)
-                    :error (.getMessage e)})
+                    :error (loggable-message e)})
         (throw (ex-info "Database update failed"
                         {:type :database-error
                          :adapter adapter-dialect
                          :sql (first sql-query)
                          :param-count (count (rest sql-query))
-                         :original-error (.getMessage e)}
+                         :original-error (loggable-message e)}
                         e))))))
 
 (defn execute-batch!
@@ -398,7 +416,7 @@
       (catch Exception e
         ;; Add breadcrumb for error
         (let [error-details (merge operation-details
-                                   {:error (.getMessage e)})]
+                                   {:error (loggable-message e)})]
           (add-database-breadcrumb "batch" :error error-details))
 
 ;; Skip error reporting since database layer doesn't have error context
@@ -448,7 +466,7 @@
           (catch Exception e
             ;; Add breadcrumb for transaction error
             (let [error-details (merge operation-details
-                                       {:error (.getMessage e)
+                                       {:error (loggable-message e)
                                         :status "rolled-back"})]
               (add-database-breadcrumb "transaction" :error error-details))
 
@@ -457,5 +475,5 @@
 
             (log/error "Transaction failed, rolling back"
                        {:adapter (protocols/dialect (:adapter ctx))
-                        :error (.getMessage e)})
+                        :error (loggable-message e)})
             (throw e)))))))

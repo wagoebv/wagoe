@@ -329,15 +329,21 @@
    that does not exist: on its field where the driver names the column, and
    without one where it does not (SQLite). Nil otherwise (BOU-540)."
   [e]
-  (when-let [{:keys [column]} (some (comp db-errors/foreign-key-violation ex-message)
-                                    (take-while some? (iterate ex-cause e)))]
-    (let [field (some-> column case-conversion/snake-case->kebab-case-string keyword)]
-      (ex-info (if field
-                 (str "No such record: " (name field))
-                 "A referenced record does not exist")
-               (cond-> {:type :validation-error :errors {}}
-                 field (assoc :field field :errors {field ["No such record"]}))
-               e))))
+  (let [{:keys [type constraint] named :field} (ex-data e)
+        conflict? (and (= :conflict type) (= :foreign-key constraint))
+        parsed    (some (comp db-errors/foreign-key-violation ex-message)
+                        (take-while some? (iterate ex-cause e)))]
+    (when (or conflict? parsed)
+      ;; The platform's field first: PostgreSQL names the column only in a
+      ;; Detail its message no longer carries (BOU-626).
+      (let [field (or (when conflict? named)
+                      (some-> (:column parsed) case-conversion/snake-case->kebab-case-string keyword))]
+        (ex-info (if field
+                   (str "No such record: " (name field))
+                   "A referenced record does not exist")
+                 (cond-> {:type :validation-error :errors {}}
+                   field (assoc :field field :errors {field ["No such record"]}))
+                 e)))))
 
 (defn- unique-violation
   "`e` as a :validation-error on the field whose unique key the database

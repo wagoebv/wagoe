@@ -84,6 +84,23 @@
   (is (nil? (constraint/constraint-name {:message "[SQLITE_CONSTRAINT_UNIQUE] A UNIQUE constraint failed (UNIQUE constraint failed: invoices.number)"}))
       "SQLite names none"))
 
+(deftest ^:unit data-and-integrity-errors-are-logged-without-their-values
+  (is (= "Integrity constraint violated (SQLState 23514, constraint users_age_check)"
+         (constraint/redacted-message
+          {:sql-state "23514"
+           :message "ERROR: new row for relation \"users\" violates check constraint \"users_age_check\"\n  Detail: Failing row contains (1, -1, alice@example.com)."}))
+      "PostgreSQL's whole row")
+  (is (= "Integrity constraint violated (SQLState 23000, constraint invoices.number)"
+         (constraint/redacted-message {:sql-state "23000" :error-code 1062
+                                       :message "Duplicate entry 'alice@example.com' for key 'invoices.number'"}))
+      "MySQL's duplicate")
+  (is (= "Invalid data (SQLState 22P02)"
+         (constraint/redacted-message {:sql-state "22P02" :message "ERROR: invalid input syntax for type uuid: \"alice\""})))
+  (is (nil? (constraint/redacted-message {:sql-state "42P01" :message "ERROR: relation \"users\" does not exist"}))
+      "anything else is logged as the driver said it")
+  (is (nil? (constraint/redacted-message {:message "[SQLITE_CONSTRAINT_NOTNULL] NOT NULL constraint failed: users.email"}))
+      "SQLite gives no state, and quotes no values"))
+
 (deftest ^:unit other-failures-are-not-violations
   (is (nil? (constraint/violation {:sql-state "23502" :message "null value in column \"number\" violates not-null constraint"})))
   (is (nil? (constraint/violation {:error-code 19 :message "[SQLITE_CONSTRAINT_NOTNULL] A NOT NULL constraint failed (NOT NULL constraint failed: invoices.number)"})))

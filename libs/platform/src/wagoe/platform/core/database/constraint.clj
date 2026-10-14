@@ -56,6 +56,16 @@
   [{:keys [message]}]
   (some #(second (re-find % (str message))) name-patterns))
 
+(defn redacted-message
+  "What to log in place of the driver's message, or nil when that can be
+   logged as is. Data and integrity errors (SQLState class 22, 23) quote the
+   values sent: MySQL's duplicate entry, H2's VALUES, PostgreSQL's bad input
+   (BOU-626)."
+  [{:keys [sql-state] :as reported}]
+  (when-let [what ({"22" "Invalid data" "23" "Integrity constraint violated"}
+                   (some-> sql-state (subs 0 (min 2 (count sql-state)))))]
+    (str what " (SQLState " sql-state (some->> (constraint-name reported) (str ", constraint ")) ")")))
+
 (defn violation
   "`{:kind :unique|:foreign-key :field kw}` for a unique or foreign-key
    violation, `:field` only when the driver names one column, and
