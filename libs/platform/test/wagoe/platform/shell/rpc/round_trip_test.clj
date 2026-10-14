@@ -594,6 +594,21 @@
       ;; a browsable API.
       (is (= 404 (:status (req :get "/rpc")))))))
 
+(deftest ^:integration a-body-that-cannot-be-decoded-is-a-400-envelope
+  ;; It escaped as a 500 with nothing saying why (BOU-625).
+  (let [app  (server/rpc-app pay-ports/IPaymentProvider (mock/make-mock-provider)
+                             {:service-key service-key})
+        resp (app {:request-method :post :uri "/rpc"
+                   :headers {"content-type"      content-type
+                             "accept"            content-type
+                             "x-rpc-service-key" service-key
+                             "x-correlation-id"  "corr-625"}
+                   :body (java.io.ByteArrayInputStream. (.getBytes "not transit at all {" "UTF-8"))})
+        body (decode-body (:body resp))]
+    (is (= 400 (:status resp)))
+    (is (= :rpc/protocol (get-in body [:error :type])))
+    (is (= "corr-625" (:correlation-id body)))))
+
 (deftest ^:integration rpc-app-carries-its-own-format-middleware
   ;; A handler that needed the app's muuntaja stack could not be served on a
   ;; listener of its own, which is the only place this endpoint belongs.
@@ -794,8 +809,8 @@
   ;; explicitly turned off.
   (let [sent (atom nil)]
     (with-redefs [http/post (fn [_url opts]
-                                         (reset! sent opts)
-                                         {:status 200 :body nil})]
+                              (reset! sent opts)
+                              {:status 200 :body nil})]
       (client/call! "http://example.invalid" :get-payment-status ["id"]
                     {:retries 0 :service-key service-key}))
 
