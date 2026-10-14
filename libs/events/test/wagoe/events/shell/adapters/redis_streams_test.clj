@@ -173,18 +173,25 @@
                (import '(redis.clients.jedis JedisPool JedisPoolConfig))
                (let [pool (JedisPool. (JedisPoolConfig.) \"localhost\" 6379 2000)
                      bus  (rs/create-redis-streams-bus pool {:group \"%s\"})]
-                 (println :published (ports/publish! bus %s
-                                                     (pub/build :order/placed :orders
-                                                                {:from :another-process}
-                                                                {:correlation-id \"corr-x\"})))
-                 (rs/stop! bus)
-                 (.close pool))"
+                 (let [r (ports/publish! bus %s
+                                         (pub/build :order/placed :orders
+                                                    {:from :another-process}
+                                                    {:correlation-id \"corr-x\"}))]
+                   (println :published r)
+                   (rs/stop! bus)
+                   (.close pool)
+                   ;; publish! returns its failure, so exit on it ourselves.
+                   (when (:error r) (System/exit 1))))"
               group (str topic))
-             result (shell/sh "clojure" "-M" "-e" publisher-code)]
+             ;; This JVM's classpath, not `clojure`: a child that resolves deps
+             ;; can hit Maven's parallel-resolution crash on a cold cache (BOU-631).
+             result (shell/sh (str (System/getProperty "java.home") "/bin/java")
+                              "-cp" (System/getProperty "java.class.path")
+                              "clojure.main" "-e" publisher-code)]
 
          (testing "the other process published successfully"
            (is (zero? (:exit result))
-               (str "publisher process failed:\n" (:err result))))
+               (str "publisher process failed:\n" (:out result) (:err result))))
 
          (testing "and this process received what it sent"
            (is (wait-for #(seq @seen) 20000)
