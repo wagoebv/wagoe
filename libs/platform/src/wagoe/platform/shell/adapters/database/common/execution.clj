@@ -140,6 +140,32 @@
        (.setStackTrace (.getStackTrace e)))
      e)))
 
+(defn redacted-exception
+  "`t`, or a copy of its cause chain in which each SQLException that quotes the
+   values sent says what `constraint/redacted-message` says instead, for an
+   error reporter or log. Covers what the platform did not throw itself: a
+   library calling next.jdbc directly (BOU-630). Same messages, data and stack
+   otherwise; a cause that is neither SQLException nor ex-info becomes a
+   RuntimeException naming its class."
+  [^Throwable t]
+  (letfn [(redacted [x] (when (instance? SQLException x)
+                          (some-> (reported x) constraint/redacted-message)))
+          (rebuild [^Throwable x]
+            (when x
+              (let [cause (rebuild (ex-cause x))
+                    ^Throwable copy
+                    (cond
+                      (instance? SQLException x)
+                      (let [^SQLException se x]
+                        (SQLException. ^String (or (redacted se) (.getMessage se))
+                                       (.getSQLState se) (.getErrorCode se) ^Throwable cause))
+                      (instance? clojure.lang.ExceptionInfo x) (ex-info (ex-message x) (ex-data x) cause)
+                      :else (RuntimeException. (str (.getName (class x)) ": " (.getMessage x)) ^Throwable cause))]
+                (doto copy (.setStackTrace (.getStackTrace x))))))]
+    (if (some redacted (take-while some? (iterate ex-cause t)))
+      (rebuild t)
+      t)))
+
 (defn loggable-message
   "`e`'s message, or a summary without the values when the driver's quotes them."
   [e]

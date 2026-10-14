@@ -176,6 +176,15 @@
 ;; Schema creation from Malli
 ;; =============================================================================
 
+(def redacted-exception
+  "An exception fit to report or log: no SQLException in its chain quotes the
+   values sent (BOU-630)."
+  execution/redacted-exception)
+
+(def loggable-message
+  "An exception's message, or a summary when the driver's quotes the values sent."
+  execution/loggable-message)
+
 (def initialize-tables-from-schemas!
   "Create the tables described by a collection of Malli schemas, if absent."
   schema-utils/initialize-tables-from-schemas!)

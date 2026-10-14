@@ -27,7 +27,8 @@
             [wagoe.observability.logging.core :as logging]
             [wagoe.observability.logging.ports :as log-ports]
             [wagoe.observability.metrics.core :as metrics]
-            [wagoe.observability.errors.core :as error-reporting])
+            [wagoe.observability.errors.core :as error-reporting]
+            [wagoe.platform.database :as db])
   (:import [java.time Instant]
            [java.util UUID]))
 
@@ -153,12 +154,12 @@
                  (str "Service operation failed: " operation-name)
                  "service.error"
                  :error
-                 (pii/redact-for-log (merge context params {:error-message (.getMessage ^Throwable error)})))
+                 (pii/redact-for-log (merge context params {:error-message (db/loggable-message error)})))
 
                 ;; Report application error
                 (error-reporting/report-application-error
                  error-reporter
-                 error
+                 (db/redacted-exception error)
                  (str "Service operation failed: " operation-name)
                  {:extra (pii/redact-for-log (merge {:operation operation-name} params context))
                   :tags {:component "service"

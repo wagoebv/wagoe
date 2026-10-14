@@ -75,6 +75,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **A library calling next.jdbc directly could still report a refused value to the error reporter** (BOU-630). The
+  platform redacts every exception it reports; nothing to do on upgrade.
 - **An error reporter or stack trace could still show a refused value from the driver's exception** (BOU-628). The
   platform now attaches a cause without the values; nothing to do on upgrade.
 - **A refused write could log the values it carried: PostgreSQL's whole row on a CHECK or NOT NULL** (BOU-626). Data
