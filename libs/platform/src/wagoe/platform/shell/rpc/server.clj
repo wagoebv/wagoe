@@ -12,6 +12,7 @@
             [wagoe.platform.core.rpc :as rpc]
             [clojure.string]
             [clojure.tools.logging :as log]
+            [muuntaja.core :as m]
             [muuntaja.middleware :as muuntaja-middleware]))
 
 (defn- resolve-operation
@@ -227,7 +228,21 @@
                       {:port 3001 :join? false})"
   ([protocol implementation opts] (rpc-app protocol implementation opts default-path))
   ([protocol implementation opts path]
-   (let [handler (muuntaja-middleware/wrap-format (rpc-handler protocol implementation opts))]
+   ;; wrap-format, split so a body muuntaja cannot decode is answered as a 400
+   ;; envelope, negotiated like any reply, not an exception escaping as a 500
+   ;; (BOU-625).
+   (let [handler (-> (rpc-handler protocol implementation opts)
+                     (muuntaja-middleware/wrap-format-request m/instance)
+                     (muuntaja-middleware/wrap-exception
+                      (fn [e _format request]
+                        (let [correlation-id (:correlation-id (rpc/headers->context (:headers request)))]
+                          (log/warn "rpc request body could not be decoded"
+                                    {:message (ex-message e) :correlation-id correlation-id})
+                          {:status (error->status :rpc/protocol)
+                           :body   (cond-> (rpc/transport-error :rpc/protocol nil "The request body could not be decoded")
+                                     correlation-id (assoc :correlation-id correlation-id))})))
+                     (muuntaja-middleware/wrap-format-response m/instance)
+                     (muuntaja-middleware/wrap-format-negotiate m/instance))]
      (fn [request]
        (if (and (= :post (:request-method request))
                 (= path (:uri request)))

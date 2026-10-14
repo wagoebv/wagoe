@@ -135,10 +135,10 @@
           result (db/execute-one! ctx query)]
       (and result (> (:count result) 0)))
     (catch Exception e
-      (log/error e "Failed to check schema existence"
+      (log/error (db/redacted-exception e) "Failed to check schema existence"
                  {:schema-name schema-name
                   :error-type (type e)
-                  :error-message (.getMessage e)})
+                  :error-message (db/loggable-message e)})
       false)))
 
 (defn- schemas?
@@ -358,7 +358,7 @@
                              :validation validation}))))
 
         (catch Exception e
-          (log/error e "Tenant provisioning failed" {:schema-name schema-name})
+          (log/error (db/redacted-exception e) "Tenant provisioning failed" {:schema-name schema-name})
           ;; Attempt cleanup on failure
           (try
             (db/execute-ddl! ctx (str "DROP SCHEMA IF EXISTS " schema-name " CASCADE"))
@@ -370,7 +370,7 @@
           (throw (ex-info "Tenant provisioning failed"
                           {:type :provisioning-error
                            :schema-name schema-name
-                           :cause (.getMessage e)}
+                           :cause (db/loggable-message e)}
                           e)))))))
 
 (defn tenant-provisioned?
@@ -471,11 +471,11 @@
          :message "Tenant schema deprovisioned successfully"}
 
         (catch Exception e
-          (log/error e "Tenant deprovisioning failed" {:schema-name schema-name})
+          (log/error (db/redacted-exception e) "Tenant deprovisioning failed" {:schema-name schema-name})
           (throw (ex-info "Tenant deprovisioning failed"
                           {:type :deprovisioning-error
                            :schema-name schema-name
-                           :cause (.getMessage e)}
+                           :cause (db/loggable-message e)}
                           e)))))))
 
 ;; =============================================================================
@@ -499,14 +499,14 @@
   ;; and then BOU-323 typed the database adapters, so a SQL failure inside a
   ;; tenant schema started taking the rethrow branch and lost the one line that
   ;; said which schema it happened in.
-  (log/error e "Error executing in tenant schema context"
-             {:schema tenant-schema-name :error (.getMessage e)})
+  (log/error (db/redacted-exception e) "Error executing in tenant schema context"
+             {:schema tenant-schema-name :error (db/loggable-message e)})
   (if (and (instance? clojure.lang.ExceptionInfo e) (:type (ex-data e)))
     (throw e)
     (throw (ex-info "Tenant context execution failed"
                     {:type :tenant-context-error
                      :schema-name tenant-schema-name
-                     :cause (.getMessage e)}
+                     :cause (db/loggable-message e)}
                     e))))
 
 (defn call-in-schema
