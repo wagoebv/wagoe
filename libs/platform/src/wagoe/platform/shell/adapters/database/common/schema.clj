@@ -48,12 +48,13 @@
 ;; =============================================================================
 
 (defn- ddl-error [ctx statement ^Exception e]
-  (ex-info "DDL execution failed"
-           {:type           :database-error
-            :adapter        (protocols/dialect (:adapter ctx))
-            :statement      statement
-            :original-error (execution/loggable-message e)}
-           (execution/redacted-cause e)))
+  (let [cause (execution/redacted-cause e)]
+    (ex-info "DDL execution failed"
+             {:type           :database-error
+              :adapter        (protocols/dialect (:adapter ctx))
+              :statement      statement
+              :original-error (ex-message cause)}
+             cause)))
 
 (defn execute-ddl!
   "Execute DDL statement with logging.

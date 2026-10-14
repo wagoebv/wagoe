@@ -122,17 +122,28 @@
   [e]
   (when-let [^SQLException se (some #(when (instance? SQLException %) %)
                                     (take-while some? (iterate ex-cause e)))]
-    (cond-> {:sql-state  (.getSQLState se)
-             :error-code (.getErrorCode se)
-             :message    (.getMessage se)}
-      (server-detail se) (assoc :detail (server-detail se)))))
+    (let [detail (server-detail se)]
+      (cond-> {:sql-state  (.getSQLState se)
+               :error-code (.getErrorCode se)
+               :message    (.getMessage se)}
+        detail (assoc :detail detail)))))
+
+(defn redacted-cause
+  "`e`, or when the driver's message quotes the values sent, a SQLException in
+   its place saying what `constraint/redacted-message` says, with the same
+   state, code and stack. Whatever logs or reports the cause chain then reads
+   no values (BOU-628)."
+  ([e] (redacted-cause e (reported e)))
+  ([^Throwable e {:keys [sql-state error-code] :as reported}]
+   (if-let [msg (some-> reported constraint/redacted-message)]
+     (doto (SQLException. ^String msg ^String sql-state (int error-code))
+       (.setStackTrace (.getStackTrace e)))
+     e)))
 
 (defn loggable-message
-  "`e`'s message, or a summary without the values when the driver's quotes them.
-   Pass `reported` when it is already at hand."
-  ([e] (loggable-message e (reported e)))
-  ([^Throwable e reported]
-   (or (some-> reported constraint/redacted-message) (.getMessage e))))
+  "`e`'s message, or a summary without the values when the driver's quotes them."
+  [e]
+  (ex-message (redacted-cause e)))
 
 (defn- deletes?
   "Whether `sql` is a DELETE, read from its text so raw SQL counts too."
@@ -159,18 +170,6 @@
                field (assoc :field field))
              e)))
 
-(defn redacted-cause
-  "`e`, or when the driver's message quotes the values sent, a SQLException in
-   its place that says what `loggable-message` says, with the same state, code
-   and stack. Whatever logs or reports the cause chain then reads no values
-   (BOU-628)."
-  ([e] (redacted-cause e (reported e)))
-  ([^Throwable e {:keys [sql-state error-code] :as reported}]
-   (if-let [msg (some-> reported constraint/redacted-message)]
-     (doto (SQLException. ^String msg ^String sql-state (int error-code))
-       (.setStackTrace (.getStackTrace e)))
-     e)))
-
 (defn- fail!
   "Log `sql-query`'s failure `e` and throw it on: a :conflict for a refused key,
    a :database-error for anything else. `what` is \"Query\" or \"Update\"."
@@ -182,14 +181,17 @@
       (log/info (str what " refused by a constraint")
                 {:adapter adapter-dialect :sql sql :violation v :constraint-name (constraint/constraint-name r)})
       (throw (conflict v sql cause)))
-    (let [msg (loggable-message e r)]
+    (let [msg      (ex-message cause)
+          required (some-> r constraint/not-null-field)]
       (log/error (str what " failed") {:adapter adapter-dialect :sql sql :error msg})
       (throw (ex-info (str "Database " (str/lower-case what) " failed")
-                      {:type           :database-error
-                       :adapter        adapter-dialect
-                       :sql            sql
-                       :param-count    (count (rest sql-query))
-                       :original-error msg}
+                      (cond-> {:type           :database-error
+                               :adapter        adapter-dialect
+                               :sql            sql
+                               :param-count    (count (rest sql-query))
+                               :original-error msg}
+                        ;; Which field, so no caller has to read the driver's text.
+                        required (assoc :constraint :not-null :field required))
                       cause)))))
 
 (defn execute-query!

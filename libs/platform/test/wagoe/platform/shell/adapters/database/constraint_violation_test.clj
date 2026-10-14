@@ -121,47 +121,34 @@
                                                                :values [{:id (str (random-uuid)) :number nil}]})))))
           "a NOT NULL is not a conflict"))))
 
-(defn- chain-messages
-  "Every message in `e`'s cause chain: what a logger or error reporter prints."
-  [e]
-  (map ex-message (take-while some? (iterate ex-cause e))))
+(defn- quoted?
+  "Whether any message in `e`'s cause chain, which a logger or error reporter
+   prints, or its :original-error contains `secret`."
+  [e secret]
+  (some #(str/includes? (str %) secret)
+        (cons (:original-error (ex-data e)) (map ex-message (take-while some? (iterate ex-cause e))))))
 
-(deftest ^:integration a-refused-value-is-not-in-the-cause-chain
-  ;; Reporters print every cause, so the driver's own exception may not carry
-  ;; the value either (BOU-628).
+(deftest ^:integration a-refused-value-is-not-quoted-back
+  ;; Not in the log line, the ex-data or any cause (BOU-626, BOU-628).
   (doseq [[backend ctx] @backends]
     (testing (name backend)
+      (testing "a NOT NULL, which names its field instead"
+        ;; Within VARCHAR(36), so NOT NULL is what refuses it. PostgreSQL's
+        ;; Detail would quote the whole row.
+        (let [secret (str "secret-" (subs (str (random-uuid)) 0 8))
+              ex     (thrown #(db/execute-update! ctx {:insert-into :invoices :values [{:id secret :number nil}]}))]
+          (is (= {:type :database-error :constraint :not-null :field :number}
+                 (select-keys (ex-data ex) [:type :constraint :field])))
+          (is (not (quoted? ex secret)))))
       (testing "a duplicate key"
-        (let [secret (str "dup-" (subs (str (random-uuid)) 0 8))
+        (let [secret (str "secret-" (random-uuid))
               _      (db/execute-update! ctx {:insert-into :invoices :values [{:id (str (random-uuid)) :number secret}]})
               ex     (thrown #(db/execute-update! ctx {:insert-into :invoices :values [{:id (str (random-uuid)) :number secret}]}))]
           (is (= :conflict (:type (ex-data ex))))
-          (doseq [m (chain-messages ex)]
-            (is (not (str/includes? (str m) secret)) m))))
+          (is (not (quoted? ex secret)))))
       (when-not (= :sqlite backend)
-        (testing "a bad cast"
+        (testing "a bad cast, which quotes its input whatever the URL says"
           (let [secret (str "secret-" (random-uuid))
                 ex     (thrown #(db/execute-query! ctx {:select [[[:cast secret :uuid] :x]]}))]
             (is (some? ex))
-            (doseq [m (chain-messages ex)]
-              (is (not (str/includes? (str m) secret)) m))))))))
-
-(deftest ^:integration a-refused-row-is-not-quoted-back
-  ;; PostgreSQL's NOT NULL and CHECK quote the whole row (BOU-626).
-  (doseq [[backend ctx] @backends]
-    (testing (name backend)
-      (let [secret (str "secret-" (subs (str (random-uuid)) 0 8)) ; within VARCHAR(36), so NOT NULL is what refuses it
-            ex     (thrown #(db/execute-update! ctx {:insert-into :invoices :values [{:id secret :number nil}]}))
-            texts  (cond-> [(ex-message ex) (str (:original-error (ex-data ex)))]
-                     ;; The driver's own message too, where the URL can keep values out of it.
-                     (= :postgresql backend) (conj (ex-message (ex-cause ex))))]
-        (is (some? ex))
-        (doseq [t texts]
-          (is (not (str/includes? t secret)) t)))
-      ;; A bad cast quotes its input on PostgreSQL and H2 whatever the URL says.
-      (when-not (= :sqlite backend)
-        (let [secret (str "secret-" (random-uuid))
-              ex     (thrown #(db/execute-query! ctx {:select [[[:cast secret :uuid] :x]]}))]
-          (is (some? ex))
-          (is (not (str/includes? (str (:original-error (ex-data ex))) secret))
-              (:original-error (ex-data ex))))))))
+            (is (not (quoted? ex secret)))))))))

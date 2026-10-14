@@ -657,3 +657,11 @@
         e      (ex-info "A referenced record does not exist" {:type :conflict :constraint :foreign-key :field :invoice-id} driver)]
     (is (= {:type :validation-error :field :invoice-id :errors {:invoice-id ["No such record"]}}
            (ex-data (#'service/foreign-key-violation e))))))
+
+(deftest ^:unit a-not-null-names-the-field-the-platform-found
+  ;; The driver's text may be redacted out of the chain (BOU-628); the
+  ;; platform's :field is what names the field.
+  (let [driver (java.sql.SQLException. "Integrity constraint violated (SQLState 23502, field number)" "23502")
+        e      (ex-info "Database update failed" {:type :database-error :constraint :not-null :field :number} driver)]
+    (is (= {:type :validation-error :field :number :errors {:number ["Field is required"]}}
+           (ex-data (#'service/not-null-violation e))))))
