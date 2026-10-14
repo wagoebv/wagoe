@@ -83,8 +83,8 @@
       (catch Exception e
         ;; INSERT may fail on duplicate key (race condition) — treat as non-fatal.
         ;; Other failures (DB down, connection lost) are logged at warn level.
-        (if (or (re-find #"(?i)unique|duplicate|constraint" (.getMessage e))
-                (re-find #"(?i)primary key" (.getMessage e)))
+        (if (or (re-find #"(?i)unique|duplicate|constraint" (str (.getMessage e)))
+                (re-find #"(?i)primary key" (str (.getMessage e))))
           (log/debug "geo cache duplicate key (concurrent insert)" {:hash query-hash})
           (log/warn "geo cache store failed (DB issue?)" (failure e {:hash query-hash})))
         nil))))

@@ -21,6 +21,17 @@
         (is (= ["23505" 23505] [(.getSQLState ^SQLException sql) (.getErrorCode ^SQLException sql)]))
         (is (= (seq (.getStackTrace driver)) (seq (.getStackTrace ^Throwable sql))))))))
 
+(deftest ^:unit a-wrapper-quoting-the-driver-is-redacted-too
+  (let [driver   (SQLException. "Duplicate entry 'alice@example.com' for key 'users.email'" "23000" 1062)
+        redacted (execution/redacted-exception (RuntimeException. driver))]
+    (is (not-any? #(str/includes? (str (ex-message %)) "alice@example.com") (chain redacted)))))
+
+(deftest ^:unit a-cyclic-chain-ends
+  (let [inner (SQLException. "Duplicate entry 'alice@example.com' for key 'users.email'" "23000" 1062)
+        outer (RuntimeException. "outer" inner)]
+    (.initCause inner outer)
+    (is (= 2 (count (chain (execution/redacted-exception outer)))))))
+
 (deftest ^:unit nothing-to-redact-is-the-same-exception
   (let [e (ex-info "not found" {:type :not-found} (SQLException. "relation \"users\" does not exist" "42P01"))]
     (is (identical? e (execution/redacted-exception e)))))

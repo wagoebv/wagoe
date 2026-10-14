@@ -116,12 +116,23 @@
               (Reflector/invokeInstanceMethod "getDetail" (object-array 0)))
       (catch Exception _ nil))))
 
+(defn- causes
+  "`e` and its causes, outermost first. Stops at a repeat: a cyclic chain would
+   otherwise never end."
+  [e]
+  (loop [x e acc []]
+    (if (or (nil? x) (some #(identical? x %) acc))
+      acc
+      (recur (ex-cause x) (conj acc x)))))
+
+(defn- first-sql-exception [e]
+  (some #(when (instance? SQLException %) %) (causes e)))
+
 (defn reported
   "What the driver said, from the first SQLException in `e`'s causes, or nil.
    `:message` and `:detail` may quote the values sent: parse them, do not log them."
   [e]
-  (when-let [^SQLException se (some #(when (instance? SQLException %) %)
-                                    (take-while some? (iterate ex-cause e)))]
+  (when-let [^SQLException se (first-sql-exception e)]
     (let [detail (server-detail se)]
       (cond-> {:sql-state  (.getSQLState se)
                :error-code (.getErrorCode se)
@@ -140,6 +151,20 @@
        (.setStackTrace (.getStackTrace e)))
      e)))
 
+(defn- summary
+  "What `constraint/redacted-message` says for `se`, or nil. Without
+   `reported`'s reflection, which reads a Detail redaction does not need."
+  [^SQLException se]
+  (constraint/redacted-message {:sql-state  (.getSQLState se)
+                                :error-code (.getErrorCode se)
+                                :message    (.getMessage se)}))
+
+(defn- quoted-summary
+  "The redacted summary for the first SQLException in `e`'s causes when its
+   message quotes values, or nil."
+  [e]
+  (some-> (first-sql-exception e) summary))
+
 (defn redacted-exception
   "`t`, or a copy of its cause chain in which each SQLException that quotes the
    values sent says what `constraint/redacted-message` says instead, for an
@@ -148,28 +173,37 @@
    otherwise; a cause that is neither SQLException nor ex-info becomes a
    RuntimeException naming its class."
   [^Throwable t]
-  (letfn [(redacted [x] (when (instance? SQLException x)
-                          (some-> (reported x) constraint/redacted-message)))
-          (rebuild [^Throwable x]
-            (when x
-              (let [cause (rebuild (ex-cause x))
-                    ^Throwable copy
-                    (cond
-                      (instance? SQLException x)
-                      (let [^SQLException se x]
-                        (SQLException. ^String (or (redacted se) (.getMessage se))
-                                       (.getSQLState se) (.getErrorCode se) ^Throwable cause))
-                      (instance? clojure.lang.ExceptionInfo x) (ex-info (ex-message x) (ex-data x) cause)
-                      :else (RuntimeException. (str (.getName (class x)) ": " (.getMessage x)) ^Throwable cause))]
-                (doto copy (.setStackTrace (.getStackTrace x))))))]
-    (if (some redacted (take-while some? (iterate ex-cause t)))
-      (rebuild t)
-      t)))
+  (let [chain    (causes t)
+        redacted (into {} (keep #(when (instance? SQLException %)
+                                   (some->> (summary %) (vector %))))
+                       chain)
+        ;; A wrapper's message can carry the driver's: RuntimeException(cause)
+        ;; and ExecutionException use cause.toString().
+        scrub    (fn [msg]
+                   (when msg
+                     (reduce-kv (fn [m ^SQLException se s]
+                                  (if-let [quoted (.getMessage se)] (str/replace m quoted s) m))
+                                msg redacted)))]
+    (if (empty? redacted)
+      t
+      ;; Innermost first, so each copy is built around its copied cause.
+      (reduce (fn [cause ^Throwable x]
+                (doto ^Throwable
+                 (cond
+                   (instance? SQLException x)
+                   (let [^SQLException se x]
+                     (SQLException. ^String (get redacted x (scrub (.getMessage se)))
+                                    (.getSQLState se) (.getErrorCode se) ^Throwable cause))
+                   (instance? clojure.lang.ExceptionInfo x) (ex-info (scrub (ex-message x)) (ex-data x) cause)
+                   :else (RuntimeException. (str (.getName (class x)) ": " (scrub (.getMessage x))) ^Throwable cause))
+                  (.setStackTrace (.getStackTrace x))))
+              nil
+              (reverse chain)))))
 
 (defn loggable-message
   "`e`'s message, or a summary without the values when the driver's quotes them."
   [e]
-  (or (some-> (reported e) constraint/redacted-message) (ex-message e)))
+  (or (quoted-summary e) (ex-message e)))
 
 (defn- deletes?
   "Whether `sql` is a DELETE, read from its text so raw SQL counts too."

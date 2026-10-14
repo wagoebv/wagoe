@@ -451,7 +451,7 @@
             (when-let [tracer (:tracer system)]
               (when-let [span (get-in ctx [:tracing :span])]
                 (when exception
-                  (tracing-ports/record-exception! tracer span exception))
+                  (tracing-ports/record-exception! tracer span (db/redacted-exception exception)))
                 (tracing-ports/end-span! tracer span)))
             ctx)})
 
