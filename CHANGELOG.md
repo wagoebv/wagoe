@@ -77,6 +77,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **A library calling next.jdbc directly could still report a refused value to the error reporter** (BOU-630). The
+  platform redacts every exception it reports; nothing to do on upgrade.
 - **An RPC request body the service could not decode escaped as a 500** (BOU-625). It is a 400 naming the problem, and
   the client logs what answered when a reply is not an envelope.
 - **An error reporter or stack trace could still show a refused value from the driver's exception** (BOU-628). The
