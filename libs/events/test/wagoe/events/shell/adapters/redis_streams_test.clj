@@ -180,7 +180,9 @@
                  (rs/stop! bus)
                  (.close pool))"
               group (str topic))
-             result (shell/sh "clojure" "-M" "-e" publisher-code)]
+             ;; Serial resolution: on a cold cache the parallel one trips a
+             ;; Maven HashMap crash and fails this for no events reason (BOU-631).
+             result (shell/sh "clojure" "-Sthreads" "1" "-M" "-e" publisher-code)]
 
          (testing "the other process published successfully"
            (is (zero? (:exit result))
