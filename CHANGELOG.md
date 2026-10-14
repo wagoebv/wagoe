@@ -77,6 +77,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **On a PostgreSQL in another language, re-keying a referenced row answered "A referenced record does not exist"**
+  (BOU-627), and a refused NOT NULL named no field. Both are read from the server's fields now; nothing to do on upgrade.
 - **A library calling next.jdbc directly could still report a refused value to the error reporter** (BOU-630). The
   platform redacts every exception it reports; nothing to do on upgrade.
 - **An RPC request body the service could not decode escaped as a 500** (BOU-625). It is a 400 naming the problem, and

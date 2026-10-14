@@ -106,14 +106,20 @@
             (str "Unsupported query input. Expected HoneySQL map, SQL string, or JDBC vector. Got: "
                  (type query))))))
 
-(defn- server-detail
+(defn- server-error
   "PostgreSQL's Detail, which logServerErrorDetail=false keeps out of the
-   message. By reflection: the driver is loaded at runtime, not compiled against."
+   message, and the names it reports in any language, as {:detail :table
+   :constraint :column}. By reflection: the driver is loaded at runtime, not
+   compiled against."
   [^SQLException se]
   (when (= "org.postgresql.util.PSQLException" (.getName (class se)))
     (try
-      (some-> (Reflector/invokeInstanceMethod se "getServerErrorMessage" (object-array 0))
-              (Reflector/invokeInstanceMethod "getDetail" (object-array 0)))
+      (when-let [m (Reflector/invokeInstanceMethod se "getServerErrorMessage" (object-array 0))]
+        (into {} (for [[k getter] {:detail "getDetail" :table "getTable"
+                                   :constraint "getConstraint" :column "getColumn"}
+                       :let [v (Reflector/invokeInstanceMethod m getter (object-array 0))]
+                       :when v]
+                   [k v])))
       (catch Exception _ nil))))
 
 (defn- causes
@@ -133,11 +139,10 @@
    `:message` and `:detail` may quote the values sent: parse them, do not log them."
   [e]
   (when-let [^SQLException se (first-sql-exception e)]
-    (let [detail (server-detail se)]
-      (cond-> {:sql-state  (.getSQLState se)
-               :error-code (.getErrorCode se)
-               :message    (.getMessage se)}
-        detail (assoc :detail detail)))))
+    (merge {:sql-state  (.getSQLState se)
+            :error-code (.getErrorCode se)
+            :message    (.getMessage se)}
+           (server-error se))))
 
 (defn redacted-cause
   "`e`, or when the driver's message quotes the values sent, a SQLException in
@@ -237,7 +242,7 @@
   (let [r     (reported e)
         sql   (first sql-query)
         cause (redacted-cause e r)]
-    (when-let [v (some-> r constraint/violation)]
+    (when-let [v (some-> r (assoc :target (constraint/statement-table sql)) constraint/violation)]
       (log/info (str what " refused by a constraint")
                 {:adapter adapter-dialect :sql sql :violation v :constraint-name (constraint/constraint-name r)})
       (throw (conflict v sql cause)))
