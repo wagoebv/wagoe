@@ -313,11 +313,16 @@
 
 (defn- not-null-violation
   "`e` as a :validation-error on the field whose NOT NULL constraint the
-   database enforced, or nil when it is not such a violation (BOU-494)."
+   database enforced, or nil when it is not such a violation (BOU-494). The
+   platform's :field first, the message for writes that bypass it (BOU-628)."
   [e]
-  (when-let [column (some (comp db-errors/not-null-violation-column ex-message)
-                          (take-while some? (iterate ex-cause e)))]
-    (let [field (keyword (case-conversion/snake-case->kebab-case-string column))]
+  (let [chain (take-while some? (iterate ex-cause e))]
+    (when-let [field (or (some #(let [{:keys [constraint field]} (ex-data %)]
+                                  (when (= :not-null constraint) field))
+                               chain)
+                         (some-> (some (comp db-errors/not-null-violation-column ex-message) chain)
+                                 case-conversion/snake-case->kebab-case-string
+                                 keyword))]
       (ex-info (str "Field is required: " (name field))
                {:type   :validation-error
                 :field  field

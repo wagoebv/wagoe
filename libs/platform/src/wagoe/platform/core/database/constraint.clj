@@ -44,6 +44,21 @@
   (boolean (or (#{23503 1451} error-code)
                (re-find #"update or delete on table" (str message)))))
 
+(def ^:private not-null-patterns
+  [#"NOT NULL constraint failed: (?:[^.\s()]+\.)?([^\s()]+)" ; SQLite
+   #"null value in column \"([^\"]+)\""                      ; PostgreSQL
+   #"NULL not allowed for column \"([^\"]+)\""               ; H2
+   #"Column '([^']+)' cannot be null"                        ; MySQL, explicit NULL
+   #"Field '([^']+)' doesn't have a default value"])         ; MySQL, column left out
+
+(defn not-null-field
+  "The field a refused NOT NULL names, as a kebab keyword, or nil when
+   `reported` is not one. Read only when the state or code says NOT NULL, or
+   there is no state (SQLite): other messages quote values a pattern could match."
+  [{:keys [sql-state error-code message]}]
+  (when (or (nil? sql-state) (= "23502" sql-state) (#{1048 1364} error-code))
+    (some #(some-> (re-find % (str message)) second column->field) not-null-patterns)))
+
 (def ^:private name-patterns
   [#"constraint \"([\w$.]+)\""              ; PostgreSQL
    #"CONSTRAINT `([\w$.]+)`"                ; MySQL foreign key
@@ -60,13 +75,20 @@
   "What to log in place of the driver's message, or nil when that can be
    logged as is. Data and integrity errors (SQLState class 22, 23) quote the
    values sent: MySQL's duplicate entry, H2's VALUES, PostgreSQL's bad input
-   (BOU-626)."
-  [{:keys [sql-state] :as reported}]
+   (BOU-626). Names, which hold no values, are kept."
+  [{:keys [sql-state message] :as reported}]
   (when-let [what (condp re-find (str sql-state)
                     #"^22" "Invalid data"
                     #"^23" "Integrity constraint violated"
                     nil)]
-    (str what " (SQLState " sql-state (some->> (constraint-name reported) (str ", constraint ")) ")")))
+    ;; A message this already redacted is kept, so the names it holds survive
+    ;; a second pass over the same cause chain.
+    (if (re-find #"^(?:Invalid data|Integrity constraint violated) \(SQLState " (str message))
+      message
+      (str what " (SQLState " sql-state
+           (some->> (constraint-name reported) (str ", constraint "))
+           (some->> (not-null-field reported) name (str ", field "))
+           ")"))))
 
 (defn violation
   "`{:kind :unique|:foreign-key :field kw}` for a unique or foreign-key

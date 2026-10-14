@@ -96,10 +96,30 @@
       "MySQL's duplicate")
   (is (= "Invalid data (SQLState 22P02)"
          (constraint/redacted-message {:sql-state "22P02" :message "ERROR: invalid input syntax for type uuid: \"alice\""})))
+  (is (= "Integrity constraint violated (SQLState 23502, field email)"
+         (constraint/redacted-message {:sql-state "23502" :message "ERROR: null value in column \"email\" of relation \"users\" violates not-null constraint"}))
+      "a NOT NULL keeps its field")
   (is (nil? (constraint/redacted-message {:sql-state "42P01" :message "ERROR: relation \"users\" does not exist"}))
       "anything else is logged as the driver said it")
   (is (nil? (constraint/redacted-message {:message "[SQLITE_CONSTRAINT_NOTNULL] NOT NULL constraint failed: users.email"}))
       "SQLite gives no state, and quotes no values"))
+
+(deftest ^:unit a-not-null-names-its-field
+  (is (= :email (constraint/not-null-field {:sql-state "23502" :message "ERROR: null value in column \"email\" of relation \"users\" violates not-null constraint"}))
+      "PostgreSQL")
+  (is (= :invoice-number (constraint/not-null-field {:sql-state "23502" :message "NULL not allowed for column \"INVOICE_NUMBER\"; SQL statement:"}))
+      "H2")
+  (is (= :email (constraint/not-null-field {:message "[SQLITE_CONSTRAINT_NOTNULL] A NOT NULL constraint failed (NOT NULL constraint failed: users.email)"}))
+      "SQLite")
+  (is (= :email (constraint/not-null-field {:sql-state "23000" :error-code 1048 :message "Column 'email' cannot be null"})) "MySQL")
+  (is (nil? (constraint/not-null-field {:message "Duplicate entry 'a' for key 'users.email'"})))
+  (is (nil? (constraint/not-null-field {:sql-state "22P02" :message "ERROR: invalid input syntax for type uuid: \"Column 'email' cannot be null\""}))
+      "a value that reads like one is not"))
+
+(deftest ^:unit a-redacted-message-is-kept
+  (let [once (constraint/redacted-message {:sql-state "23505" :message "ERROR: duplicate key value violates unique constraint \"users_email_key\""})]
+    (is (= "Integrity constraint violated (SQLState 23505, constraint users_email_key)" once))
+    (is (= once (constraint/redacted-message {:sql-state "23505" :message once})))))
 
 (deftest ^:unit other-failures-are-not-violations
   (is (nil? (constraint/violation {:sql-state "23502" :message "null value in column \"number\" violates not-null constraint"})))
