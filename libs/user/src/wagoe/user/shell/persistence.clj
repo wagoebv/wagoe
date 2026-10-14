@@ -996,9 +996,6 @@
    Example:
      (create-user-repository ctx)"
   [ctx]
-  ;; The columns a users table made before a field was added lacks, even where
-  ;; :wagoe/user-db-schema did not run.
-  (db/add-missing-columns! ctx "users" user-schema/TenantUser)
   (->DatabaseUserRepository ctx))
 
 (defn create-session-repository

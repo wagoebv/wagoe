@@ -212,6 +212,15 @@
   [ctx {:keys [type properties]}]
   (or (:db-type properties) (malli-type->column-type ctx type)))
 
+(defn- column-default
+  "The DEFAULT clause of a field: only a required `active` boolean has one."
+  [ctx {:keys [name type optional?]}]
+  (if (and (= type :boolean) (= name "active") (not optional?))
+    (case (or (protocols/dialect (:adapter ctx)) :postgresql)
+      :sqlite " DEFAULT 1"
+      " DEFAULT true")
+    ""))
+
 (defn- generate-column-definition
   "Generate SQL column definition from field info and context.
 
@@ -225,18 +234,12 @@
 
    Returns:
      String column definition"
-  [ctx {:keys [name type optional?] :as field-info}]
+  [ctx {:keys [name optional?] :as field-info}]
   (let [column-name (col-name name) ; Convert kebab-case to snake_case
-        column-type (column-type ctx field-info)
         not-null (if optional? "" " NOT NULL")
-        primary-key (if (= name "id") " PRIMARY KEY" "")
-        ; Handle boolean defaults for active fields
-        boolean-default (if (and (= type :boolean) (= name "active") (not optional?))
-                          (case (or (protocols/dialect (:adapter ctx)) :postgresql)
-                            :sqlite " DEFAULT 1"
-                            " DEFAULT true")
-                          "")]
-    (str column-name " " column-type not-null primary-key boolean-default)))
+        primary-key (if (= name "id") " PRIMARY KEY" "")]
+    (str column-name " " (column-type ctx field-info) not-null primary-key
+         (column-default ctx field-info))))
 
 (defn- generate-enum-constraints
   "Generate named table-level CHECK constraint definitions for enum fields.
@@ -428,23 +431,22 @@
 ;; Missing Columns
 ;; =============================================================================
 
-(defn add-missing-columns!
-  "Add each field of `malli-schema` that the existing table `table-name` lacks,
-   nullable. Tables are created IF NOT EXISTS, so a field added to a schema
-   later reaches an existing database only this way (BOU-622). A NOT NULL
-   column cannot be added to a table with rows, so a required field is added
-   nullable and logged, for a migration to backfill and constrain. One read
-   when nothing is missing; nothing at all when the table is absent."
+(defn- add-missing-columns!
+  "Add the fields of `malli-schema` an existing table lacks (BOU-622), nullable:
+   a NOT NULL column cannot join a table with rows, so a migration backfills it."
   [ctx table-name malli-schema]
   (let [present (set (map :name (db-core/get-table-info ctx table-name)))]
     (when-let [missing (and (seq present)
-                            (seq (remove #(present (col-name (:name %)))
+                            (seq (remove #(present (str/lower-case (col-name (:name %))))
                                          (keep extract-field-info (rest malli-schema)))))]
       (doseq [{:keys [name optional?]} missing :when (not optional?)]
         (log/warn "Added a required field as nullable: backfill it and add NOT NULL in a migration"
                   {:table table-name :column (col-name name)}))
       (db-core/add-columns-if-not-exist! ctx table-name
-                                         (mapv (fn [f] [(col-name (:name f)) (column-type ctx f)]) missing)))))
+                                         (mapv (fn [f] [(col-name (:name f))
+                                                        (str (column-type ctx f) (column-default ctx f))])
+                                               missing)
+                                         present))))
 
 ;; =============================================================================
 ;; Schema Initialization

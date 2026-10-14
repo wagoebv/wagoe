@@ -181,10 +181,6 @@
    add the fields an existing one lacks."
   schema-utils/initialize-tables-from-schemas!)
 
-(def add-missing-columns!
-  "Add the fields of a Malli schema an existing table lacks (BOU-622)."
-  schema-utils/add-missing-columns!)
-
 ;; =============================================================================
 ;; Migrations
 ;; =============================================================================

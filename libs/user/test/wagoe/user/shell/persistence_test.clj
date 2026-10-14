@@ -1,7 +1,6 @@
 (ns wagoe.user.shell.persistence-test
   (:require [wagoe.platform.database :as db-core]
             [wagoe.platform.shell.adapters.database.factory :as factory]
-            [wagoe.platform.shell.adapters.database.postgresql.core :as postgresql]
             [wagoe.platform.shell.adapters.database.sqlite.core :as sqlite]
             [wagoe.user.shell.persistence :as sut]
             [cheshire.core :as json]
@@ -123,15 +122,3 @@
                                             "language" "timezone" "date_format"])
               "added once, and a second run changes nothing")
           (finally (factory/close-db-context! ctx)))))))
-
-(deftest ^:contract create-user-repository-runs-preference-upgrade
-  (let [ctx {:adapter (postgresql/new-adapter)}
-        called? (atom false)
-        repo (with-redefs [wagoe.platform.database/add-missing-columns!
-                           (fn [arg table _schema]
-                             (reset! called? true)
-                             (is (= ctx arg))
-                             (is (= "users" table)))]
-               (sut/create-user-repository ctx))]
-    (is @called?)
-    (is (= ctx (:ctx repo)))))
