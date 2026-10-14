@@ -143,7 +143,7 @@
 (defn loggable-message
   "`e`'s message, or a summary without the values when the driver's quotes them."
   [e]
-  (ex-message (redacted-cause e)))
+  (or (some-> (reported e) constraint/redacted-message) (ex-message e)))
 
 (defn- deletes?
   "Whether `sql` is a DELETE, read from its text so raw SQL counts too."
