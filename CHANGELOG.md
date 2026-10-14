@@ -75,6 +75,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **A refused write could log the values it carried: PostgreSQL's whole row on a CHECK or NOT NULL** (BOU-626). Data
+  and integrity errors now log their SQLState and constraint; PostgreSQL connections set `logServerErrorDetail=false`.
 - **A connection that served a tenant kept that tenant's `search_path` for whoever used it next** (BOU-624). Upgrade if
   you use `:wagoe/tenant` on PostgreSQL; a transaction opened inside a tenant scope now joins it rather than committing.
 - **A 409 for a constraint violation logged the submitted value, and a raw-SQL delete or re-key of a still-referenced row

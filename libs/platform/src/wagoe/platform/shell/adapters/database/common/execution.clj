@@ -13,7 +13,8 @@
             [clojure.walk :as walk]
             [next.jdbc :as jdbc]
             [next.jdbc.result-set :as rs])
-  (:import [java.sql SQLException]))
+  (:import [clojure.lang Reflector]
+           [java.sql SQLException]))
 
 ;; =============================================================================
 ;; Context Validation (Re-exported from core)
@@ -105,20 +106,33 @@
             (str "Unsupported query input. Expected HoneySQL map, SQL string, or JDBC vector. Got: "
                  (type query))))))
 
+(defn- server-detail
+  "PostgreSQL's Detail, which logServerErrorDetail=false keeps out of the
+   message. By reflection: the driver is loaded at runtime, not compiled against."
+  [^SQLException se]
+  (when (= "org.postgresql.util.PSQLException" (.getName (class se)))
+    (try
+      (some-> (Reflector/invokeInstanceMethod se "getServerErrorMessage" (object-array 0))
+              (Reflector/invokeInstanceMethod "getDetail" (object-array 0)))
+      (catch Exception _ nil))))
+
 (defn reported
-  "What the driver said, from the first SQLException in `e`'s causes, or nil."
+  "What the driver said, from the first SQLException in `e`'s causes, or nil.
+   `:message` and `:detail` may quote the values sent: parse them, do not log them."
   [e]
   (when-let [^SQLException se (some #(when (instance? SQLException %) %)
                                     (take-while some? (iterate ex-cause e)))]
-    {:sql-state  (.getSQLState se)
-     :error-code (.getErrorCode se)
-     :message    (.getMessage se)}))
+    (cond-> {:sql-state  (.getSQLState se)
+             :error-code (.getErrorCode se)
+             :message    (.getMessage se)}
+      (server-detail se) (assoc :detail (server-detail se)))))
 
-(defn- constraint-violation
-  "The unique or foreign key `e` says the database enforced, as
-   `wagoe.platform.core.database.constraint/violation` reads it, or nil."
-  [e]
-  (some-> (reported e) constraint/violation))
+(defn loggable-message
+  "`e`'s message, or a summary without the values when the driver's quotes them.
+   Pass `reported` when it is already at hand."
+  ([e] (loggable-message e (reported e)))
+  ([^Throwable e reported]
+   (or (some-> reported constraint/redacted-message) (.getMessage e))))
 
 (defn- deletes?
   "Whether `sql` is a DELETE, read from its text so raw SQL counts too."
@@ -144,6 +158,26 @@
              (cond-> {:type :conflict :constraint kind}
                field (assoc :field field))
              e)))
+
+(defn- fail!
+  "Log `sql-query`'s failure `e` and throw it on: a :conflict for a refused key,
+   a :database-error for anything else. `what` is \"Query\" or \"Update\"."
+  [what adapter-dialect sql-query e]
+  (let [r   (reported e)
+        sql (first sql-query)]
+    (when-let [v (some-> r constraint/violation)]
+      (log/info (str what " refused by a constraint")
+                {:adapter adapter-dialect :sql sql :violation v :constraint-name (constraint/constraint-name r)})
+      (throw (conflict v sql e)))
+    (let [msg (loggable-message e r)]
+      (log/error (str what " failed") {:adapter adapter-dialect :sql sql :error msg})
+      (throw (ex-info (str "Database " (str/lower-case what) " failed")
+                      {:type           :database-error
+                       :adapter        adapter-dialect
+                       :sql            sql
+                       :param-count    (count (rest sql-query))
+                       :original-error msg}
+                      e)))))
 
 (defn execute-query!
   "Execute SELECT query and return results.
@@ -212,32 +246,7 @@
         result)
 
       (catch Exception e
-        ;; Add breadcrumb for error
-        (let [error-details (merge operation-details
-                                   {:error (.getMessage e)
-                                    :sql (first sql-query)
-                                    :param-count (count (rest sql-query))})]
-          (add-database-breadcrumb "query" :error error-details))
-
-;; Skip error reporting since database layer doesn't have error context
-        ;; This prevents protocol errors when called from contexts without proper error reporting setup
-
-        (when-let [v (constraint-violation e)]
-          (log/info "Query refused by a constraint" {:adapter adapter-dialect :sql (first sql-query) :violation v
-                                                     :constraint-name (constraint/constraint-name (reported e))})
-          (throw (conflict v (first sql-query) e)))
-        ;; Side effect: error logging
-        (log/error "Query failed"
-                   {:adapter adapter-dialect
-                    :sql (first sql-query)
-                    :error (.getMessage e)})
-        (throw (ex-info "Database query failed"
-                        {:type :database-error
-                         :adapter adapter-dialect
-                         :sql (first sql-query)
-                         :param-count (count (rest sql-query))
-                         :original-error (.getMessage e)}
-                        e))))))
+        (fail! "Query" adapter-dialect sql-query e)))))
 
 (defn execute-one!
   "Execute query expecting single result.
@@ -318,32 +327,7 @@
         affected-rows)
 
       (catch Exception e
-        ;; Add breadcrumb for error
-        (let [error-details (merge operation-details
-                                   {:error (.getMessage e)
-                                    :sql (first sql-query)
-                                    :param-count (count (rest sql-query))})]
-          (add-database-breadcrumb operation-type :error error-details))
-
-;; Skip error reporting since database layer doesn't have error context
-        ;; This prevents protocol errors when called from contexts without proper error reporting setup
-
-        (when-let [v (constraint-violation e)]
-          (log/info "Update refused by a constraint" {:adapter adapter-dialect :sql (first sql-query) :violation v
-                                                      :constraint-name (constraint/constraint-name (reported e))})
-          (throw (conflict v (first sql-query) e)))
-        ;; Side effect: error logging
-        (log/error "Update failed"
-                   {:adapter adapter-dialect
-                    :sql (first sql-query)
-                    :error (.getMessage e)})
-        (throw (ex-info "Database update failed"
-                        {:type :database-error
-                         :adapter adapter-dialect
-                         :sql (first sql-query)
-                         :param-count (count (rest sql-query))
-                         :original-error (.getMessage e)}
-                        e))))))
+        (fail! "Update" adapter-dialect sql-query e)))))
 
 (defn execute-batch!
   "Execute multiple queries in a single transaction.
@@ -396,14 +380,6 @@
             results)))
 
       (catch Exception e
-        ;; Add breadcrumb for error
-        (let [error-details (merge operation-details
-                                   {:error (.getMessage e)})]
-          (add-database-breadcrumb "batch" :error error-details))
-
-;; Skip error reporting since database layer doesn't have error context
-        ;; This prevents protocol errors when called from contexts without proper error reporting setup
-
         ;; Re-throw to preserve error chain
         (throw e)))))
 
@@ -446,16 +422,7 @@
             result)
 
           (catch Exception e
-            ;; Add breadcrumb for transaction error
-            (let [error-details (merge operation-details
-                                       {:error (.getMessage e)
-                                        :status "rolled-back"})]
-              (add-database-breadcrumb "transaction" :error error-details))
-
-;; Skip error reporting since database layer doesn't have error context
-            ;; This prevents protocol errors when called from contexts without proper error reporting setup
-
             (log/error "Transaction failed, rolling back"
                        {:adapter (protocols/dialect (:adapter ctx))
-                        :error (.getMessage e)})
+                        :error (loggable-message e)})
             (throw e)))))))

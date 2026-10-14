@@ -52,7 +52,7 @@
            {:type           :database-error
             :adapter        (protocols/dialect (:adapter ctx))
             :statement      statement
-            :original-error (.getMessage e)}
+            :original-error (execution/loggable-message e)}
            e))
 
 (defn execute-ddl!
@@ -82,12 +82,13 @@
                     :statement-preview statement-preview})
         result)
       (catch Exception e
-        (log/error "DDL execution failed"
-                   {:adapter (protocols/dialect (:adapter ctx))
-                    :statement ddl-statement
-                    :error (.getMessage e)
-                    :exception-type (type e)})
-        (throw (ddl-error ctx ddl-statement e))))))
+        (let [error (ddl-error ctx ddl-statement e)]
+          (log/error "DDL execution failed"
+                     {:adapter (protocols/dialect (:adapter ctx))
+                      :statement ddl-statement
+                      :error (:original-error (ex-data error))
+                      :exception-type (type e)})
+          (throw error))))))
 
 (defn- claims?
   [ctx capability]

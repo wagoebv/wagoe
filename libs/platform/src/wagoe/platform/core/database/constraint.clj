@@ -56,14 +56,28 @@
   [{:keys [message]}]
   (some #(second (re-find % (str message))) name-patterns))
 
+(defn redacted-message
+  "What to log in place of the driver's message, or nil when that can be
+   logged as is. Data and integrity errors (SQLState class 22, 23) quote the
+   values sent: MySQL's duplicate entry, H2's VALUES, PostgreSQL's bad input
+   (BOU-626)."
+  [{:keys [sql-state] :as reported}]
+  (when-let [what (condp re-find (str sql-state)
+                    #"^22" "Invalid data"
+                    #"^23" "Integrity constraint violated"
+                    nil)]
+    (str what " (SQLState " sql-state (some->> (constraint-name reported) (str ", constraint ")) ")")))
+
 (defn violation
   "`{:kind :unique|:foreign-key :field kw}` for a unique or foreign-key
    violation, `:field` only when the driver names one column, and
    `:referenced? true` when the refused row is one another still references;
    nil for any other failure."
-  [{:keys [message] :as reported}]
+  [{:keys [message detail] :as reported}]
   (when-let [k (kind reported)]
-    (let [field (some #(some-> (re-find % (str message)) second column->field) column-patterns)]
+    ;; PostgreSQL names the column in its Detail, which `reported` keeps apart.
+    (let [text  (str message "\n" detail)
+          field (some #(some-> (re-find % text) second column->field) column-patterns)]
       (cond-> {:kind k}
         field (assoc :field field)
         (and (= :foreign-key k) (still-referenced? reported)) (assoc :referenced? true)))))

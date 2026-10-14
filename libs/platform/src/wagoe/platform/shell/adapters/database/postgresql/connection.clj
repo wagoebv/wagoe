@@ -19,7 +19,10 @@
    - options: statement_timeout guard, and a TimeZone that does not take —
      pgjdbc sends the JVM's timezone in the startup packet after `options`,
      so sessions run in local time (BOU-431)
-   - reWriteBatchedInserts: batches multi-row INSERTs into single statements"
+   - reWriteBatchedInserts: batches multi-row INSERTs into single statements
+   - logServerErrorDetail=false: keeps the server's Detail (the row, the key's
+     value) out of exception messages and so out of logs; `reported` reads it
+     from the exception for parsing (BOU-626)"
   [{:keys [host port name application-name statement-timeout-ms]}]
   (let [timeout (or statement-timeout-ms default-statement-timeout-ms)
         options (cond-> "-c%20TimeZone=UTC"
@@ -28,6 +31,7 @@
          "?stringtype=unspecified"
          "&ApplicationName=" (or application-name default-application-name)
          "&reWriteBatchedInserts=true"
+         "&logServerErrorDetail=false"
          "&options=" options)))
 
 (defn session-statements

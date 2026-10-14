@@ -649,3 +649,11 @@
       (is (= 1 (count (filter #(= :bio (keyword (last (str/split (name %) #"\."))))
                               (:select-clause result))))
           "bio should appear exactly once in select"))))
+
+(deftest ^:unit a-missing-reference-names-the-field-the-platform-found
+  ;; PostgreSQL names the column only in a Detail its message no longer carries
+  ;; (BOU-626); the platform still read it, and says so in :field.
+  (let [driver (java.sql.SQLException. "ERROR: insert or update on table \"lines\" violates foreign key constraint \"lines_invoice_id_fkey\"" "23503")
+        e      (ex-info "A referenced record does not exist" {:type :conflict :constraint :foreign-key :field :invoice-id} driver)]
+    (is (= {:type :validation-error :field :invoice-id :errors {:invoice-id ["No such record"]}}
+           (ex-data (#'service/foreign-key-violation e))))))

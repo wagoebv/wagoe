@@ -324,20 +324,29 @@
                 :errors {field ["Field is required"]}}
                e))))
 
+(defn- no-such-record
+  "The :validation-error for a reference to a missing row, on `field` if known."
+  [field e]
+  (ex-info (if field (str "No such record: " (name field)) "A referenced record does not exist")
+           (cond-> {:type :validation-error :errors {}}
+             field (assoc :field field :errors {field ["No such record"]}))
+           e))
+
 (defn- foreign-key-violation
   "`e` as a :validation-error when the database refused a reference to a row
    that does not exist: on its field where the driver names the column, and
-   without one where it does not (SQLite). Nil otherwise (BOU-540)."
+   without one where it does not (SQLite). Nil otherwise (BOU-540).
+
+   The platform's :conflict first: PostgreSQL names the column only in a Detail
+   its message no longer carries (BOU-626). The message is read for writes
+   that did not go through the platform's execute functions."
   [e]
-  (when-let [{:keys [column]} (some (comp db-errors/foreign-key-violation ex-message)
-                                    (take-while some? (iterate ex-cause e)))]
-    (let [field (some-> column case-conversion/snake-case->kebab-case-string keyword)]
-      (ex-info (if field
-                 (str "No such record: " (name field))
-                 "A referenced record does not exist")
-               (cond-> {:type :validation-error :errors {}}
-                 field (assoc :field field :errors {field ["No such record"]}))
-               e))))
+  (let [{:keys [type constraint field]} (ex-data e)]
+    (if (and (= :conflict type) (= :foreign-key constraint))
+      (no-such-record field e)
+      (when-let [{:keys [column]} (some (comp db-errors/foreign-key-violation ex-message)
+                                        (take-while some? (iterate ex-cause e)))]
+        (no-such-record (some-> column case-conversion/snake-case->kebab-case-string keyword) e)))))
 
 (defn- unique-violation
   "`e` as a :validation-error on the field whose unique key the database

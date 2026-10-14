@@ -120,3 +120,23 @@
              (:type (ex-data (thrown #(db/execute-update! ctx {:insert-into :invoices
                                                                :values [{:id (str (random-uuid)) :number nil}]})))))
           "a NOT NULL is not a conflict"))))
+
+(deftest ^:integration a-refused-row-is-not-quoted-back
+  ;; PostgreSQL's NOT NULL and CHECK quote the whole row (BOU-626).
+  (doseq [[backend ctx] @backends]
+    (testing (name backend)
+      (let [secret (str "secret-" (subs (str (random-uuid)) 0 8)) ; within VARCHAR(36), so NOT NULL is what refuses it
+            ex     (thrown #(db/execute-update! ctx {:insert-into :invoices :values [{:id secret :number nil}]}))
+            texts  (cond-> [(ex-message ex) (str (:original-error (ex-data ex)))]
+                     ;; The driver's own message too, where the URL can keep values out of it.
+                     (= :postgresql backend) (conj (ex-message (ex-cause ex))))]
+        (is (some? ex))
+        (doseq [t texts]
+          (is (not (str/includes? t secret)) t)))
+      ;; A bad cast quotes its input on PostgreSQL and H2 whatever the URL says.
+      (when-not (= :sqlite backend)
+        (let [secret (str "secret-" (random-uuid))
+              ex     (thrown #(db/execute-query! ctx {:select [[[:cast secret :uuid] :x]]}))]
+          (is (some? ex))
+          (is (not (str/includes? (str (:original-error (ex-data ex))) secret))
+              (:original-error (ex-data ex))))))))
