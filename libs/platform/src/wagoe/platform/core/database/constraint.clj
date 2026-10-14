@@ -36,13 +36,25 @@
     (when (and (not (str/includes? s ",")) (re-matches #"[a-z][a-z0-9_]*" col))
       (keyword (str/replace col "_" "-")))))
 
+(defn statement-table
+  "The table an INSERT, UPDATE or DELETE in `sql` writes, lower case, or nil."
+  [sql]
+  (some-> (re-find #"(?i)^\s*(?:insert\s+into|update|delete\s+from)\s+[\"`]?(?:\w+[\"`]?\.[\"`]?)?(\w+)" (str sql))
+          second
+          str/lower-case))
+
 (defn- still-referenced?
   "Whether a foreign key refused removing or re-keying a row another row
    references, rather than a reference to a missing row: H2's 23503 vendor code,
-   MySQL's 1451, PostgreSQL's message. SQLite does not say."
-  [{:keys [error-code message]}]
+   MySQL's 1451. PostgreSQL reports the referencing `:table` either way, so a
+   statement on another table (`:target`) is the referenced side, in any
+   language; its English message when either is unknown (BOU-627). SQLite does
+   not say."
+  [{:keys [error-code message table target]}]
   (boolean (or (#{23503 1451} error-code)
-               (re-find #"update or delete on table" (str message)))))
+               (if (and table target)
+                 (not= (str/lower-case table) target)
+                 (re-find #"update or delete on table" (str message))))))
 
 (def ^:private not-null-patterns
   [#"NOT NULL constraint failed: (?:[^.\s()]+\.)?([^\s()]+)" ; SQLite

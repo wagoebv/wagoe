@@ -121,6 +121,20 @@
     (is (= "Integrity constraint violated (SQLState 23505, constraint users_email_key)" once))
     (is (= once (constraint/redacted-message {:sql-state "23505" :message once})))))
 
+(deftest ^:unit the-referenced-side-is-read-from-the-tables-not-the-language
+  ;; PostgreSQL names the referencing table either way; a statement on another
+  ;; one refused because its row is still referenced (BOU-627).
+  (let [german {:sql-state "23503" :error-code 0 :table "lines"
+                :message "FEHLER: Aktualisieren oder Löschen in Tabelle »invoices« verletzt Fremdschlüssel-Constraint »lines_invoice_id_fkey« von Tabelle »lines«"}]
+    (is (:referenced? (constraint/violation (assoc german :target "invoices"))) "re-keying the parent")
+    (is (not (:referenced? (constraint/violation (assoc german :target "lines")))) "a child with a missing parent")))
+
+(deftest ^:unit the-statement-names-its-table
+  (is (= "invoices" (constraint/statement-table "UPDATE invoices SET id = ? WHERE id = ?")))
+  (is (= "invoices" (constraint/statement-table "  delete from \"public\".\"invoices\" where id = ?")))
+  (is (= "lines" (constraint/statement-table "INSERT INTO lines (id) VALUES (?)")))
+  (is (nil? (constraint/statement-table "SELECT * FROM lines"))))
+
 (deftest ^:unit other-failures-are-not-violations
   (is (nil? (constraint/violation {:sql-state "23502" :message "null value in column \"number\" violates not-null constraint"})))
   (is (nil? (constraint/violation {:error-code 19 :message "[SQLITE_CONSTRAINT_NOTNULL] A NOT NULL constraint failed (NOT NULL constraint failed: invoices.number)"})))

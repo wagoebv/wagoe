@@ -106,14 +106,16 @@
             (str "Unsupported query input. Expected HoneySQL map, SQL string, or JDBC vector. Got: "
                  (type query))))))
 
-(defn- server-detail
+(defn- server-error
   "PostgreSQL's Detail, which logServerErrorDetail=false keeps out of the
-   message. By reflection: the driver is loaded at runtime, not compiled against."
+   message, and the table it names, as {:detail :table}. By reflection: the
+   driver is loaded at runtime, not compiled against."
   [^SQLException se]
   (when (= "org.postgresql.util.PSQLException" (.getName (class se)))
     (try
-      (some-> (Reflector/invokeInstanceMethod se "getServerErrorMessage" (object-array 0))
-              (Reflector/invokeInstanceMethod "getDetail" (object-array 0)))
+      (when-let [m (Reflector/invokeInstanceMethod se "getServerErrorMessage" (object-array 0))]
+        {:detail (Reflector/invokeInstanceMethod m "getDetail" (object-array 0))
+         :table  (Reflector/invokeInstanceMethod m "getTable" (object-array 0))})
       (catch Exception _ nil))))
 
 (defn reported
@@ -122,11 +124,12 @@
   [e]
   (when-let [^SQLException se (some #(when (instance? SQLException %) %)
                                     (take-while some? (iterate ex-cause e)))]
-    (let [detail (server-detail se)]
+    (let [{:keys [detail table]} (server-error se)]
       (cond-> {:sql-state  (.getSQLState se)
                :error-code (.getErrorCode se)
                :message    (.getMessage se)}
-        detail (assoc :detail detail)))))
+        detail (assoc :detail detail)
+        table  (assoc :table table)))))
 
 (defn redacted-cause
   "`e`, or when the driver's message quotes the values sent, a SQLException in
@@ -177,7 +180,7 @@
   (let [r     (reported e)
         sql   (first sql-query)
         cause (redacted-cause e r)]
-    (when-let [v (some-> r constraint/violation)]
+    (when-let [v (some-> r (assoc :target (constraint/statement-table sql)) constraint/violation)]
       (log/info (str what " refused by a constraint")
                 {:adapter adapter-dialect :sql sql :violation v :constraint-name (constraint/constraint-name r)})
       (throw (conflict v sql cause)))
