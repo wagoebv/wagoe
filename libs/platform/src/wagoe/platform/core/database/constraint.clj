@@ -60,12 +60,14 @@
   "What to log in place of the driver's message, or nil when that can be
    logged as is. Data and integrity errors (SQLState class 22, 23) quote the
    values sent: MySQL's duplicate entry, H2's VALUES, PostgreSQL's bad input
-   (BOU-626)."
-  [{:keys [sql-state] :as reported}]
-  (when-let [what (condp re-find (str sql-state)
-                    #"^22" "Invalid data"
-                    #"^23" "Integrity constraint violated"
-                    nil)]
+   (BOU-626). Not a NOT NULL, which names only its column, and that the admin
+   reads to say which field is required."
+  [{:keys [sql-state error-code] :as reported}]
+  (when-let [what (when-not (or (= "23502" sql-state) (= 1048 error-code))
+                    (condp re-find (str sql-state)
+                      #"^22" "Invalid data"
+                      #"^23" "Integrity constraint violated"
+                      nil))]
     (str what " (SQLState " sql-state (some->> (constraint-name reported) (str ", constraint ")) ")")))
 
 (defn violation

@@ -121,6 +121,31 @@
                                                                :values [{:id (str (random-uuid)) :number nil}]})))))
           "a NOT NULL is not a conflict"))))
 
+(defn- chain-messages
+  "Every message in `e`'s cause chain: what a logger or error reporter prints."
+  [e]
+  (map ex-message (take-while some? (iterate ex-cause e))))
+
+(deftest ^:integration a-refused-value-is-not-in-the-cause-chain
+  ;; Reporters print every cause, so the driver's own exception may not carry
+  ;; the value either (BOU-628).
+  (doseq [[backend ctx] @backends]
+    (testing (name backend)
+      (testing "a duplicate key"
+        (let [secret (str "dup-" (subs (str (random-uuid)) 0 8))
+              _      (db/execute-update! ctx {:insert-into :invoices :values [{:id (str (random-uuid)) :number secret}]})
+              ex     (thrown #(db/execute-update! ctx {:insert-into :invoices :values [{:id (str (random-uuid)) :number secret}]}))]
+          (is (= :conflict (:type (ex-data ex))))
+          (doseq [m (chain-messages ex)]
+            (is (not (str/includes? (str m) secret)) m))))
+      (when-not (= :sqlite backend)
+        (testing "a bad cast"
+          (let [secret (str "secret-" (random-uuid))
+                ex     (thrown #(db/execute-query! ctx {:select [[[:cast secret :uuid] :x]]}))]
+            (is (some? ex))
+            (doseq [m (chain-messages ex)]
+              (is (not (str/includes? (str m) secret)) m))))))))
+
 (deftest ^:integration a-refused-row-is-not-quoted-back
   ;; PostgreSQL's NOT NULL and CHECK quote the whole row (BOU-626).
   (doseq [[backend ctx] @backends]

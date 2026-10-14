@@ -53,7 +53,7 @@
             :adapter        (protocols/dialect (:adapter ctx))
             :statement      statement
             :original-error (execution/loggable-message e)}
-           e))
+           (execution/redacted-cause e)))
 
 (defn execute-ddl!
   "Execute DDL statement with logging.

@@ -96,6 +96,9 @@
       "MySQL's duplicate")
   (is (= "Invalid data (SQLState 22P02)"
          (constraint/redacted-message {:sql-state "22P02" :message "ERROR: invalid input syntax for type uuid: \"alice\""})))
+  (is (nil? (constraint/redacted-message {:sql-state "23502" :message "ERROR: null value in column \"email\" of relation \"users\" violates not-null constraint"})))
+  (is (nil? (constraint/redacted-message {:sql-state "23000" :error-code 1048 :message "Column 'email' cannot be null"}))
+      "a NOT NULL names its column, not a value")
   (is (nil? (constraint/redacted-message {:sql-state "42P01" :message "ERROR: relation \"users\" does not exist"}))
       "anything else is logged as the driver said it")
   (is (nil? (constraint/redacted-message {:message "[SQLITE_CONSTRAINT_NOTNULL] NOT NULL constraint failed: users.email"}))

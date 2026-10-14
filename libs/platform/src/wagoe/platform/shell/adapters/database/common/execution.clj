@@ -159,16 +159,29 @@
                field (assoc :field field))
              e)))
 
+(defn redacted-cause
+  "`e`, or when the driver's message quotes the values sent, a SQLException in
+   its place that says what `loggable-message` says, with the same state, code
+   and stack. Whatever logs or reports the cause chain then reads no values
+   (BOU-628)."
+  ([e] (redacted-cause e (reported e)))
+  ([^Throwable e {:keys [sql-state error-code] :as reported}]
+   (if-let [msg (some-> reported constraint/redacted-message)]
+     (doto (SQLException. ^String msg ^String sql-state (int error-code))
+       (.setStackTrace (.getStackTrace e)))
+     e)))
+
 (defn- fail!
   "Log `sql-query`'s failure `e` and throw it on: a :conflict for a refused key,
    a :database-error for anything else. `what` is \"Query\" or \"Update\"."
   [what adapter-dialect sql-query e]
-  (let [r   (reported e)
-        sql (first sql-query)]
+  (let [r     (reported e)
+        sql   (first sql-query)
+        cause (redacted-cause e r)]
     (when-let [v (some-> r constraint/violation)]
       (log/info (str what " refused by a constraint")
                 {:adapter adapter-dialect :sql sql :violation v :constraint-name (constraint/constraint-name r)})
-      (throw (conflict v sql e)))
+      (throw (conflict v sql cause)))
     (let [msg (loggable-message e r)]
       (log/error (str what " failed") {:adapter adapter-dialect :sql sql :error msg})
       (throw (ex-info (str "Database " (str/lower-case what) " failed")
@@ -177,7 +190,7 @@
                        :sql            sql
                        :param-count    (count (rest sql-query))
                        :original-error msg}
-                      e)))))
+                      cause)))))
 
 (defn execute-query!
   "Execute SELECT query and return results.
