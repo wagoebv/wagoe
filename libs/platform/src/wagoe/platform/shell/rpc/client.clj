@@ -157,9 +157,11 @@
             (log/warn "rpc answer is not an envelope"
                       {:operation  operation
                        :status     status
+                       ;; pr-str: the body is remote-controlled, and a raw
+                       ;; newline in it would forge a log line.
                        :body-start (when raw
-                                     (let [s (String. ^bytes raw "UTF-8")]
-                                       (subs s 0 (min 200 (count s)))))})
+                                     (pr-str (String. ^bytes raw 0 (min 200 (alength ^bytes raw))
+                                                      java.nio.charset.StandardCharsets/UTF_8)))})
             [:transport (rpc/transport-error :rpc/remote-error operation
                                              (str "Remote returned status " status)
                                              status)])))

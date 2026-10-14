@@ -601,10 +601,13 @@
         resp (app {:request-method :post :uri "/rpc"
                    :headers {"content-type"      content-type
                              "accept"            content-type
-                             "x-rpc-service-key" service-key}
-                   :body (java.io.ByteArrayInputStream. (.getBytes "not transit at all {" "UTF-8"))})]
+                             "x-rpc-service-key" service-key
+                             "x-correlation-id"  "corr-625"}
+                   :body (java.io.ByteArrayInputStream. (.getBytes "not transit at all {" "UTF-8"))})
+        body (decode-body (:body resp))]
     (is (= 400 (:status resp)))
-    (is (= :rpc/protocol (get-in (decode-body (:body resp)) [:error :type])))))
+    (is (= :rpc/protocol (get-in body [:error :type])))
+    (is (= "corr-625" (:correlation-id body)))))
 
 (deftest ^:integration rpc-app-carries-its-own-format-middleware
   ;; A handler that needed the app's muuntaja stack could not be served on a
@@ -806,8 +809,8 @@
   ;; explicitly turned off.
   (let [sent (atom nil)]
     (with-redefs [http/post (fn [_url opts]
-                                         (reset! sent opts)
-                                         {:status 200 :body nil})]
+                              (reset! sent opts)
+                              {:status 200 :body nil})]
       (client/call! "http://example.invalid" :get-payment-status ["id"]
                     {:retries 0 :service-key service-key}))
 
