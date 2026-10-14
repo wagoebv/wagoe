@@ -177,7 +177,8 @@
 ;; =============================================================================
 
 (def initialize-tables-from-schemas!
-  "Create the tables described by a collection of Malli schemas, if absent."
+  "Create the tables described by a collection of Malli schemas, if absent, and
+   add the fields an existing one lacks."
   schema-utils/initialize-tables-from-schemas!)
 
 ;; =============================================================================

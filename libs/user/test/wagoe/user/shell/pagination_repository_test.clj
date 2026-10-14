@@ -55,6 +55,8 @@
                        FOREIGN KEY (id) REFERENCES auth_users(id)
                      )"])
 
+    ;; What boot does: the columns the hand-made tables lack (BOU-622).
+    (user-persistence/initialize-user-schema! db-ctx)
     (reset! test-repository (user-persistence/create-user-repository db-ctx))))
 
 (defn teardown-test-db []

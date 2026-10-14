@@ -1,7 +1,6 @@
 (ns wagoe.user.shell.persistence-test
   (:require [wagoe.platform.database :as db-core]
             [wagoe.platform.shell.adapters.database.factory :as factory]
-            [wagoe.platform.shell.adapters.database.postgresql.core :as postgresql]
             [wagoe.platform.shell.adapters.database.sqlite.core :as sqlite]
             [wagoe.user.shell.persistence :as sut]
             [cheshire.core :as json]
@@ -104,8 +103,8 @@
 (defn- columns [ctx table] (set (map :name (db-core/get-table-info ctx table))))
 
 (deftest ^:integration an-existing-table-gains-the-missing-columns
-  ;; A table from before a column was added to the schema: boot's CREATE TABLE
-  ;; IF NOT EXISTS leaves it alone, so only the upgrade adds the column.
+  ;; A table from before a field was added to the schema: CREATE TABLE IF NOT
+  ;; EXISTS leaves it alone, so the builder adds the column (BOU-622).
   (doseq [[engine open] [[:sqlite #(let [f (java.io.File/createTempFile "user-cols-" ".db")]
                                     (.deleteOnExit f)
                                     (factory/db-context (factory/sqlite-config (str f))))]
@@ -114,25 +113,12 @@
     (testing (name engine)
       (let [ctx (open)]
         (try
-          (db-core/execute-ddl! ctx "CREATE TABLE auth_users (id VARCHAR(36) PRIMARY KEY, created_at VARCHAR(255))")
+          (db-core/execute-ddl! ctx "CREATE TABLE auth_users (id VARCHAR(36) PRIMARY KEY, email VARCHAR(255))")
           (db-core/execute-ddl! ctx "CREATE TABLE users (id VARCHAR(36) PRIMARY KEY, theme VARCHAR(50))")
-          (dotimes [_ 2]
-            (#'sut/ensure-auth-users-audit-columns! ctx)
-            (#'sut/ensure-users-preference-columns! ctx))
-          (is (= #{"id" "created_at" "updated_at" "deleted_at"} (columns ctx :auth_users)))
-          (is (= #{"id" "theme" "notifications_email" "notifications_push" "notifications_sms"
-                   "language" "timezone"}
-                 (columns ctx :users))
+          (dotimes [_ 2] (sut/initialize-user-schema! ctx))
+          (is (every? (columns ctx :auth_users) ["created_at" "updated_at" "deleted_at" "mfa_secret"])
+              "created_at too, though required: added nullable")
+          (is (every? (columns ctx :users) ["theme" "notifications_email" "notifications_push" "notifications_sms"
+                                            "language" "timezone" "date_format"])
               "added once, and a second run changes nothing")
           (finally (factory/close-db-context! ctx)))))))
-
-(deftest ^:contract create-user-repository-runs-preference-upgrade
-  (let [ctx {:adapter (postgresql/new-adapter)}
-        called? (atom false)
-        repo (with-redefs [wagoe.user.shell.persistence/ensure-users-preference-columns!
-                           (fn [arg]
-                             (reset! called? true)
-                             (is (= ctx arg)))]
-               (sut/create-user-repository ctx))]
-    (is @called?)
-    (is (= ctx (:ctx repo)))))
