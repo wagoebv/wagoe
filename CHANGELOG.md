@@ -58,6 +58,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Changed
 
+- **Tables from Malli schemas gain the fields added since they were created** (BOU-622): boot adds them, a required one as
+  nullable with a warning to backfill it in a migration.
 - **The tenant tables ship as a library migration** (BOU-551), built from the same definition boot uses. Run
   `bb migrate up`; existing tables are left as they are.
 - **`build-where` string filters ignore case on every database** (BOU-450). They were case-sensitive on H2.

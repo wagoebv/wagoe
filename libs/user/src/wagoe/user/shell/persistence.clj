@@ -35,35 +35,6 @@
 ;; Schema Initialization
 ;; =============================================================================
 
-(defn- string-type
-  "A string column of length `n`: TEXT on SQLite, which ignores the length."
-  [ctx n]
-  (if (= :sqlite (protocols/engine (:adapter ctx))) "TEXT" (str "VARCHAR(" n ")")))
-
-(defn- ensure-columns!
-  "Add `columns` ([name type] pairs) missing from `table`, if it exists. Boot
-   creates tables IF NOT EXISTS, so a column added to the schema later reaches
-   an existing database only this way."
-  [ctx table columns]
-  (when (db/table-exists? ctx table)
-    (db/add-columns-if-not-exist! ctx table columns)))
-
-(defn- ensure-auth-users-audit-columns!
-  [ctx]
-  ;; inst? is stored as a string in this project.
-  (let [ts (string-type ctx 255)]
-    (ensure-columns! ctx :auth_users [[:created_at ts] [:updated_at ts] [:deleted_at ts]])))
-
-(defn- ensure-users-preference-columns!
-  [ctx]
-  (let [bool (protocols/column-type (:adapter ctx) :boolean)]
-    (ensure-columns! ctx :users [[:notifications_email bool]
-                                 [:notifications_push bool]
-                                 [:notifications_sms bool]
-                                 [:theme (string-type ctx 50)]
-                                 [:language (string-type ctx 255)]
-                                 [:timezone (string-type ctx 255)]])))
-
 (defn- invalidate-legacy-plaintext-mfa!
   "One-time, idempotent security upgrade: clear MFA on any auth_users row whose
    mfa_secret is a pre-encryption *plaintext* value (i.e. not prefixed with the
@@ -114,18 +85,15 @@
   [ctx]
   (log/info "Initializing user schema from Malli definitions (split-table architecture)")
 
-  ;; Existing tables first, before indexes are built on the new columns. A
-  ;; table created below has them from its schema.
-  (ensure-auth-users-audit-columns! ctx)
-  (ensure-users-preference-columns! ctx)
-  ;; Retire any MFA rows still holding a pre-encryption plaintext secret.
-  (invalidate-legacy-plaintext-mfa! ctx)
-
   (db/initialize-tables-from-schemas! ctx
                                       {"auth_users" user-schema/AuthUser
                                        "users" user-schema/TenantUser
                                        "user_sessions" user-schema/UserSession
                                        "user_audit_log" user-schema/UserAuditLog})
+
+  ;; Retire any MFA rows still holding a pre-encryption plaintext secret. After
+  ;; the tables, which add the mfa columns an older auth_users lacks.
+  (invalidate-legacy-plaintext-mfa! ctx)
 
   ;; Full-text search vector, where the database has it (ADR-039)
   (when (contains? (protocols/capabilities (:adapter ctx)) :full-text)
@@ -1028,9 +996,9 @@
    Example:
      (create-user-repository ctx)"
   [ctx]
-  ;; Ensure preference columns exist even in test setups that create the users
-  ;; table without running :wagoe/user-db-schema.
-  (ensure-users-preference-columns! ctx)
+  ;; The columns a users table made before a field was added lacks, even where
+  ;; :wagoe/user-db-schema did not run.
+  (db/add-missing-columns! ctx "users" user-schema/TenantUser)
   (->DatabaseUserRepository ctx))
 
 (defn create-session-repository

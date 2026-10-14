@@ -270,6 +270,21 @@
           (ddl! ctx "DROP TABLE IF EXISTS in_path")
           (ddl! ctx "DROP TABLE IF EXISTS only_public"))))))
 
+(defn- schema-fields-reach-an-existing-table
+  "A field added to a Malli schema later is added to the table it describes,
+   with its rows kept; a required one nullable (BOU-622)."
+  [ctx]
+  (ddl! ctx "DROP TABLE IF EXISTS grown")
+  (db/initialize-tables-from-schemas! ctx {"grown" [:map [:id :uuid] [:name :string]]})
+  (db/execute-update! ctx {:insert-into :grown :values [{:id (str (UUID/randomUUID)) :name "kept"}]})
+  (let [later {"grown" [:map [:id :uuid] [:name :string]
+                        [:note {:optional true} :string] [:flag {:optional true} :boolean] [:code :string]]}]
+    (or (attempt #(dotimes [_ 2] (db/initialize-tables-from-schemas! ctx later)))
+        (let [cols (columns-of ctx :grown)]
+          (when-not (every? cols ["note" "flag" "code"]) (str "columns after: " (pr-str cols))))
+        (let [n (count (db/execute-query! ctx {:select [:id] :from [:grown]}))]
+          (when-not (= 1 n) (str n " rows after"))))))
+
 (defn- unique-index-on-duplicates
   "A unique index the rows break is a :conflict naming the table, not a raw
    driver error."
@@ -379,6 +394,7 @@
     :connections/session       every-connection-is-set-up
     :ddl/index-twice           index-twice
     :ddl/if-exists-twice       ddl-twice
+    :ddl/schema-fields-added   schema-fields-reach-an-existing-table
     :ddl/search-path           columns-follow-search-path
     :ddl/unique-over-duplicates unique-index-on-duplicates
     :transactions/rollback     rollback-undoes
