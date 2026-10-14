@@ -167,4 +167,3 @@
                 ex     (thrown #(db/execute-update! ctx {:raw (str "DO $$ BEGIN RAISE EXCEPTION '" secret "'; END $$")}))]
             (is (= "Database error (SQLState P0001)" (:original-error (ex-data ex))))
             (is (not (quoted? ex secret)))))))))
-

@@ -74,9 +74,14 @@
 (def ^:private value-free-classes
   "SQLState classes whose messages name things, never the values sent:
    connection, authorization, catalog, rollback (deadlock, serialization),
-   syntax and access rules, resources, operator intervention (timeouts),
-   unsupported features, transaction state (BOU-629)."
-  #{"08" "28" "3D" "40" "42" "53" "57" "0A" "25"})
+   resources, operator intervention (timeouts), unsupported features,
+   transaction state (BOU-629)."
+  #{"08" "28" "3D" "40" "53" "57" "0A" "25"})
+
+(def ^:private value-free-states
+  "Class 42 states that name an object only. Not the class: a syntax error
+   quotes the SQL near it, and MySQL's has the parameters filled in."
+  #{"42P01" "42S02" "42703" "42S22" "42883" "42P07" "42S01" "42704"})
 
 (defn redacted-message
   "What to log in place of the driver's message, or nil when that can be
@@ -85,17 +90,21 @@
    errors quote what was sent (BOU-626), and so may MySQL's HY000 or a
    PostgreSQL trigger's RAISE (BOU-629). Names, which hold no values, are kept."
   [{:keys [sql-state error-code message] :as reported}]
-  (let [class (some-> sql-state (subs 0 (min 2 (count sql-state))))]
-    (when (and class (not (value-free-classes class)))
+  (let [state-class (some-> sql-state (subs 0 (min 2 (count sql-state))))
+        what        (case state-class "22" "Invalid data" "23" "Integrity constraint violated" "Database error")
+        prefix      (str what " (SQLState " sql-state)]
+    (when (and state-class (not (value-free-classes state-class)) (not (value-free-states sql-state)))
       ;; A message this already redacted is kept, so the names it holds survive
       ;; a second pass over the same cause chain.
-      (if (re-find #"^(?:Invalid data|Integrity constraint violated|Database error) \(SQLState " (str message))
+      (if (str/starts-with? (str message) prefix)
         message
-        (str (case class "22" "Invalid data" "23" "Integrity constraint violated" "Database error")
-             " (SQLState " sql-state
-             (when (and (not (#{"22" "23"} class)) error-code (not (zero? error-code)))
-               (str ", code " error-code))
-             (some->> (constraint-name reported) (str ", constraint "))
+        (str prefix
+             (if (= "Database error" what)
+               (when (and error-code (not (zero? error-code)))
+                 (str ", code " error-code))
+               ;; Only a data or integrity error's text is the driver's own: a
+               ;; RAISE or SIGNAL could put a value where a name would be.
+               (some->> (constraint-name reported) (str ", constraint ")))
              (some->> (not-null-field reported) name (str ", field "))
              ")")))))
 

@@ -121,12 +121,19 @@
   (testing "PostgreSQL"
     (is (= "Database error (SQLState P0001)"
            (constraint/redacted-message {:sql-state "P0001" :error-code 0 :message "ERROR: card 4111111111111111 refused"})))
-    (is (nil? (constraint/redacted-message {:sql-state "42P01" :message "ERROR: relation \"users\" does not exist"}))))
+    (is (nil? (constraint/redacted-message {:sql-state "42P01" :message "ERROR: relation \"users\" does not exist"})))
+    (is (= "Database error (SQLState P0001)"
+           (constraint/redacted-message {:sql-state "P0001" :error-code 0 :message "ERROR: violates constraint \"4111111111111111\""}))
+        "a RAISE's text is not read for a name"))
   (testing "MySQL"
     (is (= "Database error (SQLState HY000, code 1366)"
            (constraint/redacted-message {:sql-state "HY000" :error-code 1366
                                          :message "Incorrect integer value: 'alice' for column 'age' at row 1"})))
-    (is (nil? (constraint/redacted-message {:sql-state "42S02" :error-code 1146 :message "Table 'app.users' doesn't exist"}))))
+    (is (nil? (constraint/redacted-message {:sql-state "42S02" :error-code 1146 :message "Table 'app.users' doesn't exist"})))
+    (is (= "Database error (SQLState 42000, code 1064)"
+           (constraint/redacted-message {:sql-state "42000" :error-code 1064
+                                         :message "You have an error in your SQL syntax; check the manual near ''alice@example.com', 3)' at line 1"}))
+        "a syntax error quotes the statement, parameters filled in"))
   (testing "H2"
     (is (= "Invalid data (SQLState 22018)"
            (constraint/redacted-message {:sql-state "22018" :error-code 22018 :message "Data conversion error converting \"alice\""})))
