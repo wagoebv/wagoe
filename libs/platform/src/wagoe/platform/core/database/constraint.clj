@@ -95,24 +95,42 @@
   [{:keys [message constraint]}]
   (or constraint (some #(second (re-find % (str message))) name-patterns)))
 
+(def ^:private value-free-classes
+  "SQLState classes whose messages name things, never the values sent:
+   connection, authorization, catalog, rollback (deadlock, serialization),
+   resources, operator intervention (timeouts), unsupported features,
+   transaction state (BOU-629)."
+  #{"08" "28" "3D" "40" "53" "57" "0A" "25"})
+
+(def ^:private value-free-states
+  "Class 42 states that name an object only. Not the class: a syntax error
+   quotes the SQL near it, and MySQL's has the parameters filled in."
+  #{"42P01" "42S02" "42703" "42S22" "42883" "42P07" "42S01" "42704"})
+
 (defn redacted-message
   "What to log in place of the driver's message, or nil when that can be
-   logged as is. Data and integrity errors (SQLState class 22, 23) quote the
-   values sent: MySQL's duplicate entry, H2's VALUES, PostgreSQL's bad input
-   (BOU-626). Names, which hold no values, are kept."
-  [{:keys [sql-state message] :as reported}]
-  (when-let [what (condp re-find (str sql-state)
-                    #"^22" "Invalid data"
-                    #"^23" "Integrity constraint violated"
-                    nil)]
-    ;; A message this already redacted is kept, so the names it holds survive
-    ;; a second pass over the same cause chain.
-    (if (re-find #"^(?:Invalid data|Integrity constraint violated) \(SQLState " (str message))
-      message
-      (str what " (SQLState " sql-state
-           (some->> (constraint-name reported) (str ", constraint "))
-           (some->> (not-null-field reported) name (str ", field "))
-           ")"))))
+   logged as is. Redacted unless its SQLState is known to quote no values, or
+   it has none (SQLite, whose messages name only columns): data and integrity
+   errors quote what was sent (BOU-626), and so may MySQL's HY000 or a
+   PostgreSQL trigger's RAISE (BOU-629). Names, which hold no values, are kept."
+  [{:keys [sql-state error-code message] :as reported}]
+  (let [state-class (some-> sql-state (subs 0 (min 2 (count sql-state))))
+        what        (case state-class "22" "Invalid data" "23" "Integrity constraint violated" "Database error")
+        prefix      (str what " (SQLState " sql-state)]
+    (when (and state-class (not (value-free-classes state-class)) (not (value-free-states sql-state)))
+      ;; A message this already redacted is kept, so the names it holds survive
+      ;; a second pass over the same cause chain.
+      (if (str/starts-with? (str message) prefix)
+        message
+        (str prefix
+             (if (= "Database error" what)
+               (when (and error-code (not (zero? error-code)))
+                 (str ", code " error-code))
+               ;; Only a data or integrity error's text is the driver's own: a
+               ;; RAISE or SIGNAL could put a value where a name would be.
+               (some->> (constraint-name reported) (str ", constraint ")))
+             (some->> (not-null-field reported) name (str ", field "))
+             ")")))))
 
 (defn violation
   "`{:kind :unique|:foreign-key :field kw}` for a unique or foreign-key

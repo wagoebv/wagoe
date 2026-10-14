@@ -58,6 +58,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Changed
 
+- **Database errors are logged redacted unless their SQLState is known to quote no values** (BOU-629): the summary
+  names SQLState, code and constraint. Read the driver's text in a debugger if you need it.
 - **Tables from Malli schemas gain the fields added since they were created** (BOU-622): boot adds them, a required one as
   nullable with a warning to backfill it in a migration.
 - **The tenant tables ship as a library migration** (BOU-551), built from the same definition boot uses. Run
