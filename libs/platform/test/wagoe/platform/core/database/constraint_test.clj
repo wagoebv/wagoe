@@ -116,6 +116,24 @@
   (is (nil? (constraint/not-null-field {:sql-state "22P02" :message "ERROR: invalid input syntax for type uuid: \"Column 'email' cannot be null\""}))
       "a value that reads like one is not"))
 
+(deftest ^:unit redacted-unless-known-to-quote-no-values
+  ;; One redacted and one kept state per engine (BOU-629).
+  (testing "PostgreSQL"
+    (is (= "Database error (SQLState P0001)"
+           (constraint/redacted-message {:sql-state "P0001" :error-code 0 :message "ERROR: card 4111111111111111 refused"})))
+    (is (nil? (constraint/redacted-message {:sql-state "42P01" :message "ERROR: relation \"users\" does not exist"}))))
+  (testing "MySQL"
+    (is (= "Database error (SQLState HY000, code 1366)"
+           (constraint/redacted-message {:sql-state "HY000" :error-code 1366
+                                         :message "Incorrect integer value: 'alice' for column 'age' at row 1"})))
+    (is (nil? (constraint/redacted-message {:sql-state "42S02" :error-code 1146 :message "Table 'app.users' doesn't exist"}))))
+  (testing "H2"
+    (is (= "Invalid data (SQLState 22018)"
+           (constraint/redacted-message {:sql-state "22018" :error-code 22018 :message "Data conversion error converting \"alice\""})))
+    (is (nil? (constraint/redacted-message {:sql-state "42S02" :error-code 42102 :message "Table \"USERS\" not found"}))))
+  (testing "SQLite gives no state and quotes no values"
+    (is (nil? (constraint/redacted-message {:error-code 1 :message "[SQLITE_ERROR] SQL error or missing database (no such table: users)"})))))
+
 (deftest ^:unit a-redacted-message-is-kept
   (let [once (constraint/redacted-message {:sql-state "23505" :message "ERROR: duplicate key value violates unique constraint \"users_email_key\""})]
     (is (= "Integrity constraint violated (SQLState 23505, constraint users_email_key)" once))

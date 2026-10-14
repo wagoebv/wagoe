@@ -152,3 +152,19 @@
                 ex     (thrown #(db/execute-query! ctx {:select [[[:cast secret :uuid] :x]]}))]
             (is (some? ex))
             (is (not (quoted? ex secret)))))))))
+
+(deftest ^:integration only-a-value-free-message-is-logged-as-is
+  ;; Redacted by default, kept where the state names things only (BOU-629).
+  (doseq [[backend ctx] @backends]
+    (testing (name backend)
+      (testing "a missing table keeps its name"
+        (let [ex (thrown #(db/execute-query! ctx {:raw "SELECT * FROM no_such_table_629"}))]
+          (is (str/includes? (str/lower-case (str (:original-error (ex-data ex)))) "no_such_table_629")
+              (:original-error (ex-data ex)))))
+      (when (= :postgresql backend)
+        (testing "a trigger's RAISE does not"
+          (let [secret (str "secret-" (random-uuid))
+                ex     (thrown #(db/execute-update! ctx {:raw (str "DO $$ BEGIN RAISE EXCEPTION '" secret "'; END $$")}))]
+            (is (= "Database error (SQLState P0001)" (:original-error (ex-data ex))))
+            (is (not (quoted? ex secret)))))))))
+

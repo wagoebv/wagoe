@@ -58,6 +58,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Changed
 
+- **Database errors are logged redacted unless their SQLState is known to quote no values** (BOU-629): the summary
+  names SQLState, code and constraint. Read the driver's text in a debugger if you need it.
 - **The tenant tables ship as a library migration** (BOU-551), built from the same definition boot uses. Run
   `bb migrate up`; existing tables are left as they are.
 - **`build-where` string filters ignore case on every database** (BOU-450). They were case-sensitive on H2.
