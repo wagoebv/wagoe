@@ -117,8 +117,10 @@
 
          ;; Built before the refs, so they can be filtered against what exists:
          ;; a discovered module with a graph of its own need not have routes.
-         discovered (modules/discover-module-config
-                     active known base-ns modules/require-wiring! requiring-resolve)]
+         {discovered          :components
+          discovered-handlers :job-handlers}
+         (modules/discover-module-config
+          active known base-ns modules/require-wiring! requiring-resolve)]
      (warn-code-enabled-migrations! active extra-modules)
      ;; Said once, so nobody looks for it on :9999 in prod (BOU-588).
      (when-let [profile (:wagoe/profile config)]
@@ -137,7 +139,7 @@
        ;; config that has no registry, and a module that contributes handlers
        ;; without jobs enabled would fail the boot on a dangling ref.
        (contains? components :wagoe/job-registry)
-       (assoc-in [:wagoe/job-registry :handler-maps] (vec job-handlers))
+       (assoc-in [:wagoe/job-registry :handler-maps] (into (vec job-handlers) discovered-handlers))
 
        ;; A boot migration applies the migrations of the modules :active
        ;; switches on, the set `migrate up` reads, so the two agree (BOU-579).

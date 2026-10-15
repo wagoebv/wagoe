@@ -13,11 +13,11 @@
   ;; nothing: ig-config built from a fixed list of known keys, so the key was
   ;; skipped without an init-key, a route, or a word about it. Quickstart
   ;; reported 8/8 and left dead code behind.
-  (let [entries (sut/discover-module-config
-                 {:wagoe/tasks {:enabled? true}}
-                 #{}
-                 "acme"
-                 (constantly true))]
+  (let [entries (:components (sut/discover-module-config
+                              {:wagoe/tasks {:enabled? true}}
+                              #{}
+                              "acme"
+                              (constantly true)))]
 
     (testing "the four keys the scaffolder generates are emitted"
       (is (= #{:wagoe/tasks-repository :wagoe/tasks-service
@@ -35,25 +35,25 @@
   ;; the convention — :wagoe/payment-provider, :wagoe.external/smtp. Discovery
   ;; must not try to wire them a second time.
   (testing "a key the fixed list already handles is skipped"
-    (is (empty? (sut/discover-module-config
+    (is (empty? (:components (sut/discover-module-config
                  {:wagoe/cache {:provider :in-memory}}
                  #{:wagoe/cache}
                  "acme"
-                 (constantly true)))))
+                 (constantly true))))))
 
   (testing "a namespaced key that is not :wagoe/<module> is not a module"
-    (is (empty? (sut/discover-module-config
+    (is (empty? (:components (sut/discover-module-config
                  {:wagoe.external/smtp {:host "x"}}
                  #{}
                  "acme"
-                 (constantly true)))))
+                 (constantly true))))))
 
   (testing "settings and profile are configuration, not modules"
-    (is (empty? (sut/discover-module-config
+    (is (empty? (:components (sut/discover-module-config
                  {:wagoe/settings {:name "app"} :wagoe/profile :dev}
                  #{}
                  "acme"
-                 (constantly true))))))
+                 (constantly true)))))))
 
 (deftest ^:unit an-active-key-with-no-wiring-fails-loudly
   ;; The silent skip is the defect. A typo in a key name has to be visible —
@@ -89,11 +89,11 @@
   ;; Discovery falls back to that, so upgrading the framework does not require
   ;; moving files.
   (let [legacy-only (fn [ns] (= (str ns) "wagoe.product.shell.module-wiring"))
-        entries     (sut/discover-module-config
-                     {:wagoe/product {:enabled? true}}
-                     #{}
-                     "shop"
-                     legacy-only)]
+        entries     (:components (sut/discover-module-config
+                                  {:wagoe/product {:enabled? true}}
+                                  #{}
+                                  "shop"
+                                  legacy-only))]
     (is (contains? entries :wagoe/product)
         "a module still under wagoe.* must be wired, not reported missing")))
 
@@ -119,11 +119,25 @@
 
 (deftest ^:unit a-disabled-module-is-not-wired
   ;; :enabled? false is how you turn a module off without deleting its config.
-  (is (empty? (sut/discover-module-config
-               {:wagoe/tasks {:enabled? false}}
+  (is (empty? (:components (sut/discover-module-config
+                            {:wagoe/tasks {:enabled? false}}
+                            #{}
+                            "acme"
+                            (constantly true))))))
+
+(deftest ^:unit a-discovered-module-contributes-its-job-handlers
+  ;; Only `:components` was kept, so an application module could register no
+  ;; job handlers and every job of its type was re-queued (BOU-636).
+  (let [graph {:components   {:wagoe/visits-job-handlers {}}
+               :job-handlers [(ig/ref :wagoe/visits-job-handlers)]}
+        found (sut/discover-module-config
+               {:wagoe/visits {:enabled? true}}
                #{}
                "acme"
-               (constantly true)))))
+               (constantly true)
+               (fn [sym] (when (= "ig-config" (name sym)) (constantly graph))))]
+    (is (= [(ig/ref :wagoe/visits-job-handlers)] (:job-handlers found)))
+    (is (contains? (:components found) :wagoe/visits-job-handlers))))
 
 (deftest ^:unit discovered-routes-reach-the-handler
   ;; Emitting the keys is half the job. :wagoe/http-handler destructures a fixed

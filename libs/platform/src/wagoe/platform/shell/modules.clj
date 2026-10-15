@@ -228,7 +228,10 @@
        (mapv #(symbol (str % "." module ".shell.module-wiring")))))
 
 (defn discover-module-config
-  "Integrant entries for scaffolded modules named under `:active`.
+  "Integrant entries for scaffolded modules named under `:active`, as
+   `{:components {…} :job-handlers [..]}`. `:job-handlers` are the refs a
+   module's own `ig-config` contributes, as for a framework module; dropping
+   them left an application module unable to register any (BOU-636).
 
    `wiring-loadable?` is injected so this stays testable without a module on the
    classpath; `-main` passes a function that requires the namespace.
@@ -277,27 +280,29 @@
 
           own-graph
           (do (log/info "Discovered module with its own graph" {:module module})
-              (merge acc (:components own-graph)))
+              (-> acc
+                  (update :components merge (:components own-graph))
+                  (update :job-handlers into (:job-handlers own-graph))))
 
           :else
           (do
             (log/info "Discovered scaffolded module" {:module module})
-            (assoc acc
-                   (keyword "wagoe" (str module "-repository"))
-                   {:ctx (ig/ref :wagoe/db-context)}
+            (update acc :components assoc
+                    (keyword "wagoe" (str module "-repository"))
+                    {:ctx (ig/ref :wagoe/db-context)}
 
-                   (keyword "wagoe" (str module "-service"))
-                   {:repository (ig/ref (keyword "wagoe" (str module "-repository")))}
+                    (keyword "wagoe" (str module "-service"))
+                    {:repository (ig/ref (keyword "wagoe" (str module "-repository")))}
 
-                   (keyword "wagoe" (str module "-routes"))
-                   {:service (ig/ref (keyword "wagoe" (str module "-service")))
-                    :config  settings}
+                    (keyword "wagoe" (str module "-routes"))
+                    {:service (ig/ref (keyword "wagoe" (str module "-service")))
+                     :config  settings}
 
-                   k
-                   {:enabled? true
-                    :service  (ig/ref (keyword "wagoe" (str module "-service")))
-                    :routes   (ig/ref (keyword "wagoe" (str module "-routes")))})))))
-    {}
+                    k
+                    {:enabled? true
+                     :service  (ig/ref (keyword "wagoe" (str module "-service")))
+                     :routes   (ig/ref (keyword "wagoe" (str module "-routes")))})))))
+    {:components {} :job-handlers []}
     (scaffolded-module-keys active known-keys))))
 
 (defn require-wiring!
