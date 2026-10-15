@@ -20,6 +20,7 @@
             [reitit.swagger :as swagger]
             [reitit.swagger-ui :as swagger-ui]
             [ring.middleware.cookies :refer [wrap-cookies]]
+            [ring.middleware.multipart-params :refer [wrap-multipart-params]]
             [ring.middleware.not-modified :refer [not-modified-response]]
             [ring.middleware.resource :refer [resource-request]]
             [ring.util.codec :as codec]
@@ -264,6 +265,17 @@
                        "Authentication required" request
                        (access/correlation-id request (str (random-uuid)))))))))})
 
+(def ^:private multipart-params
+  "Decodes a multipart/form-data body into `:multipart-params`. Reitit's own
+   multipart middleware compiles to nothing without `:parameters :multipart`,
+   so the storage upload handlers, and the CSRF token of a file-upload form,
+   read an empty map (BOU-638). Skipped where the route declares it: Reitit
+   decodes those itself, and need not parse the body a second time."
+  {:name    ::multipart-params
+   :compile (fn [data _opts]
+              (when-not (get-in data [:parameters :multipart])
+                wrap-multipart-params))})
+
 (defn- create-default-middleware
   "Create default middleware stack for Reitit router.
 
@@ -288,7 +300,9 @@
          (create-exception-middleware config)]
         (into (:middleware authentication))
         (into (when authentication [require-authentication]))
-        (into [;; Decoding request body
+        (into [;; Decoding request body — multipart after authentication, so
+               ;; an anonymous caller cannot make the server spool an upload
+               multipart-params
                muuntaja/format-request-middleware
                ;; Coercing request parameters
                coercion/coerce-request-middleware

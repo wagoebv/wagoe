@@ -79,6 +79,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Multipart bodies were not decoded unless a route declared `:parameters :multipart`** (BOU-638): storage uploads and the CSRF
+  token of a file-upload form read nothing. Route-level `wrap-multipart-params` added as a workaround can go.
 - **A column the builder added to an existing table had no CHECK or UNIQUE** (BOU-632): an added enum gets its CHECK
   (not on SQLite, which cannot), an added `email` or `session_token` its unique key.
 - **A PostgreSQL RAISE could log a value or pass for a key conflict, a suppressed exception log one** (BOU-635): a RAISE
