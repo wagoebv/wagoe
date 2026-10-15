@@ -1,6 +1,7 @@
 (ns wagoe.storage.shell.service-test
   (:require [clojure.test :refer [deftest is testing use-fixtures]]
             [clojure.java.io :as io]
+            [wagoe.storage.ports :as ports]
             [wagoe.storage.shell.service :as sut]
             [wagoe.storage.shell.adapters.local :as local]
             [wagoe.storage.shell.adapters.image-processor :as img]))
@@ -67,6 +68,18 @@
                                     {:allowed-extensions ["jpg" "png"]})]
         (is (not (:success result)))
         (is (some #(= :invalid-extension (:code %)) (:errors result)))))))
+
+(deftest ^:unit every-adapter-receives-a-normalized-path
+  ;; S3 and GCS use `:path` as a key prefix as given, so it is normalized once
+  ;; here rather than in each adapter (BOU-639).
+  (let [seen    (atom nil)
+        storage #_{:clj-kondo/ignore [:missing-protocol-method]}
+                (reify ports/IFileStorage
+                  (store-file [_ _ metadata] (reset! seen metadata) {:key "k"}))
+        service (sut/create-storage-service {:storage storage})]
+    (sut/upload-file service {:bytes (.getBytes "x") :content-type "text/plain" :size 1}
+                     {:filename "a.txt" :path "../work-visits/./42//"} {})
+    (is (= "work-visits/42" (:path @seen)))))
 
 (deftest ^:integration download-file-test
   (let [service (create-test-service)
