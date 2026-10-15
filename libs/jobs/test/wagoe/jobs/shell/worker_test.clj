@@ -465,3 +465,14 @@
           (is (wait-for #(>= @calls 2) 5000)
               (str "the failed job was never retried — handler ran " @calls " time(s)"))
           (finally (ports/stop-worker! w (:id (:state w)))))))))
+
+(deftest ^:unit a-failure-stores-a-trace-and-no-quoted-value
+  ;; BOU-633: the jobs table gets the redacted message; the trace was always
+  ;; empty, printed to System.err instead of the captured writer.
+  (let [driver  (java.sql.SQLException. "Duplicate entry 'alice@example.com' for key 'users.email'" "23000" 1062)
+        failure (worker/failure (ex-info "save failed" {} driver))]
+    (is (= :handler-error (:type failure)))
+    (is (= "clojure.lang.ExceptionInfo" (:exception-class failure)))
+    (is (seq (:stacktrace failure)))
+    (is (not (.contains (pr-str failure) "alice@example.com")))))
+

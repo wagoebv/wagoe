@@ -35,6 +35,7 @@
   (:require
    [wagoe.observability.logging.shell.time :as time]
    [wagoe.observability.logging.ports :as ports]
+   [wagoe.observability.core.sql-redaction :as redaction]
    [cheshire.core :as json]
    [clojure.string :as str]
    [clojure.tools.logging :as log])
@@ -103,12 +104,13 @@
         with-tags (if-let [tags (:tags config)]
                     (assoc with-context :ddtags (str/join "," tags))
                     with-context)
-        with-exception (if exception
+        shown          (some-> exception redaction/redacted-exception)
+        with-exception (if shown
                          (assoc with-tags
                                 :error.kind (str (class exception))
-                                :error.message (.getMessage exception)
+                                :error.message (.getMessage ^Throwable shown)
                                 :error.stack (str/join "\n"
-                                                       (map str (.getStackTrace exception))))
+                                                       (map str (.getStackTrace ^Throwable shown))))
                          with-tags)]
     with-exception))
 

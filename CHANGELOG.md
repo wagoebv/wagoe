@@ -79,6 +79,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **A value a database driver quoted could still reach Sentry, a trace or a failed job** (BOU-633). Observability now
+  redacts it wherever it reports, traces or logs an exception; nothing to do on upgrade.
 - **On a PostgreSQL in another language, re-keying a referenced row answered "A referenced record does not exist"**
   (BOU-627), and a refused NOT NULL named no field. Both are read from the server's fields now; nothing to do on upgrade.
 - **A library calling next.jdbc directly could still report a refused value to the error reporter** (BOU-630). The

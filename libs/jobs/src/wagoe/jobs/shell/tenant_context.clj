@@ -26,6 +26,8 @@
   (:require [wagoe.jobs.ports :as ports]
             [wagoe.platform.ports.database :as db-ports]
             [wagoe.tenant.ports :as tenant-ports]
+            [wagoe.jobs.shell.worker :as worker]
+            [wagoe.observability.core.sql-redaction :as redaction]
             [clojure.tools.logging :as log]))
 
 ;; =============================================================================
@@ -240,15 +242,14 @@
           (handler-fn (:args job) db-ctx)))
 
       (catch Exception e
-        (log/error e "Error processing tenant job"
-                   {:job-id job-id
-                    :job-type job-type
-                    :tenant-id tenant-id
-                    :error (.getMessage e)})
-        {:success? false
-         :error {:message (.getMessage e)
-                 :type (-> e class .getName)
-                 :stacktrace (with-out-str (.printStackTrace e))}}))))
+        (let [failure (worker/failure e)]
+          (log/error (redaction/redacted-exception e) "Error processing tenant job"
+                     {:job-id job-id
+                      :job-type job-type
+                      :tenant-id tenant-id
+                      :error (:message failure)})
+          {:success? false
+           :error failure})))))
 
 ;; =============================================================================
 ;; Handler Wrapper for Existing Workers

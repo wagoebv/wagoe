@@ -16,6 +16,7 @@
    - Command timing and error reporting with enhanced context
    - Error reporting breadcrumb integration"
   (:require [wagoe.observability.logging.core :as logging]
+            [wagoe.observability.core.sql-redaction :as redaction]
             [wagoe.platform.shell.utils.error-handling :as error-handling]
             [clojure.tools.logging :as log])
   (:import (java.util UUID)))
@@ -188,12 +189,12 @@
                   error-context (assoc context
                                        :duration-ms duration
                                        :outcome :error
-                                       :error (.getMessage ex)
+                                       :error (redaction/loggable-message ex)
                                        :event :cli-command-error)
                   _error-details (merge command-details
                                         {:duration-ms duration
                                          :outcome "error"
-                                         :error (.getMessage ex)
+                                         :error (redaction/loggable-message ex)
                                          :exception-type (.getSimpleName (class ex))})]
 
 ;; Note: breadcrumb tracking removed - should be handled by error reporting services

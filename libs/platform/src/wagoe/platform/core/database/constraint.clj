@@ -2,7 +2,8 @@
   "Which integrity constraint a database refused a write on, read from what the
    driver reports: SQLState, vendor code and message. H2, PostgreSQL, SQLite
    and MySQL."
-  (:require [clojure.string :as str]))
+  (:require [clojure.string :as str]
+            [wagoe.observability.core.sql-redaction :as redaction]))
 
 (defn- kind
   [{:keys [sql-state error-code message]}]
@@ -21,20 +22,6 @@
    #"Key \(([^)]+)\)="                            ; PostgreSQL Detail
    #"FOREIGN KEY ?\(([^)]+)\)"                    ; H2, MySQL
    #"ON [^\s(]+\(([^)]+)\)"])                     ; H2 unique index
-
-(defn- column->field
-  "The one column `s` names as a kebab keyword, or nil for several columns or
-   anything that is not a plain identifier: the rest may be SQL or a value."
-  [s]
-  (let [col (-> s
-                str/trim
-                (str/replace #"(?i)\s+(NULLS\s+(FIRST|LAST)|ASC|DESC)\b" "")
-                (str/replace #"[`\"]" "")
-                (str/split #"\.")
-                last
-                str/lower-case)]
-    (when (and (not (str/includes? s ",")) (re-matches #"[a-z][a-z0-9_]*" col))
-      (keyword (str/replace col "_" "-")))))
 
 (def ^:private statement-table-pattern
   (let [id "(?:\"[^\"]+\"|`[^`]+`|[\\p{L}_][\\p{L}\\p{N}_$]*)"]
@@ -65,73 +52,6 @@
                (re-find #"insert or update on table" message) false
                :else (and table target (not= (str/lower-case table) target))))))
 
-(def ^:private not-null-patterns
-  [#"NOT NULL constraint failed: (?:[^.\s()]+\.)?([^\s()]+)" ; SQLite
-   #"null value in column \"([^\"]+)\""                      ; PostgreSQL
-   #"NULL not allowed for column \"([^\"]+)\""               ; H2
-   #"Column '([^']+)' cannot be null"                        ; MySQL, explicit NULL
-   #"Field '([^']+)' doesn't have a default value"])         ; MySQL, column left out
-
-(defn not-null-field
-  "The field a refused NOT NULL names, as a kebab keyword, or nil when
-   `reported` is not one. Read only when the state or code says NOT NULL, or
-   there is no state (SQLite): other messages quote values a pattern could match.
-   PostgreSQL's `:column`, in any language, before its message."
-  [{:keys [sql-state error-code message column]}]
-  (when (or (nil? sql-state) (= "23502" sql-state) (#{1048 1364} error-code))
-    (or (some-> column column->field)
-        (some #(some-> (re-find % (str message)) second column->field) not-null-patterns))))
-
-(def ^:private name-patterns
-  [#"constraint \"([\w$.]+)\""              ; PostgreSQL
-   #"CONSTRAINT `([\w$.]+)`"                ; MySQL foreign key
-   #"for key '([\w$.]+)'"                   ; MySQL unique
-   #"violation: \"(?:\w+\.)?(\w+)[: ]"])    ; H2
-
-(defn constraint-name
-  "The constraint or index the driver says refused the write, or nil. The name
-   only, never the values beside it, so it can be logged. PostgreSQL's
-   `:constraint`, in any language, before its message."
-  [{:keys [message constraint]}]
-  (or constraint (some #(second (re-find % (str message))) name-patterns)))
-
-(def ^:private value-free-classes
-  "SQLState classes whose messages name things, never the values sent:
-   connection, authorization, catalog, rollback (deadlock, serialization),
-   resources, operator intervention (timeouts), unsupported features,
-   transaction state (BOU-629)."
-  #{"08" "28" "3D" "40" "53" "57" "0A" "25"})
-
-(def ^:private value-free-states
-  "Class 42 states that name an object only. Not the class: a syntax error
-   quotes the SQL near it, and MySQL's has the parameters filled in."
-  #{"42P01" "42S02" "42703" "42S22" "42883" "42P07" "42S01" "42704"})
-
-(defn redacted-message
-  "What to log in place of the driver's message, or nil when that can be
-   logged as is. Redacted unless its SQLState is known to quote no values, or
-   it has none (SQLite, whose messages name only columns): data and integrity
-   errors quote what was sent (BOU-626), and so may MySQL's HY000 or a
-   PostgreSQL trigger's RAISE (BOU-629). Names, which hold no values, are kept."
-  [{:keys [sql-state error-code message] :as reported}]
-  (let [state-class (some-> sql-state (subs 0 (min 2 (count sql-state))))
-        what        (case state-class "22" "Invalid data" "23" "Integrity constraint violated" "Database error")
-        prefix      (str what " (SQLState " sql-state)]
-    (when (and state-class (not (value-free-classes state-class)) (not (value-free-states sql-state)))
-      ;; A message this already redacted is kept, so the names it holds survive
-      ;; a second pass over the same cause chain.
-      (if (str/starts-with? (str message) prefix)
-        message
-        (str prefix
-             (if (= "Database error" what)
-               (when (and error-code (not (zero? error-code)))
-                 (str ", code " error-code))
-               ;; Only a data or integrity error's text is the driver's own: a
-               ;; RAISE or SIGNAL could put a value where a name would be.
-               (some->> (constraint-name reported) (str ", constraint ")))
-             (some->> (not-null-field reported) name (str ", field "))
-             ")")))))
-
 (defn violation
   "`{:kind :unique|:foreign-key :field kw}` for a unique or foreign-key
    violation, `:field` only when the driver names one column, and
@@ -141,7 +61,7 @@
   (when-let [k (kind reported)]
     ;; PostgreSQL names the column in its Detail, which `reported` keeps apart.
     (let [text  (str message "\n" detail)
-          field (some #(some-> (re-find % text) second column->field) column-patterns)]
+          field (some #(some-> (re-find % text) second redaction/column->field) column-patterns)]
       (cond-> {:kind k}
         field (assoc :field field)
         (and (= :foreign-key k) (still-referenced? reported)) (assoc :referenced? true)))))

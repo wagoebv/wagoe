@@ -5,7 +5,8 @@
    the logging protocols, making it easier for feature modules to perform
    common logging operations without dealing with protocol details directly."
   (:require
-   [wagoe.observability.logging.ports :as ports]))
+   [wagoe.observability.logging.ports :as ports]
+   [wagoe.observability.core.sql-redaction :as redaction]))
 
 ;; =============================================================================
 ;; Context Management Utilities
@@ -182,8 +183,12 @@
    Returns:
      nil"
   [logger level message exception context]
-  (let [error-context (assoc context
-                             :exception-type (-> exception class .getSimpleName)
+  ;; No value a database driver quoted reaches the log (BOU-633). The type is
+  ;; the thrown one: the redacted copy may be a plain RuntimeException.
+  (let [thrown        exception
+        exception     (redaction/redacted-exception exception)
+        error-context (assoc context
+                             :exception-type (-> thrown class .getSimpleName)
                              :exception-message (.getMessage exception)
                              :stack-trace (mapv str (.getStackTrace exception)))]
     (ports/log* logger level message error-context exception)))

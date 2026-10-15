@@ -7,6 +7,7 @@
   (:require
    [wagoe.observability.logging.shell.time :as time]
    [wagoe.observability.logging.ports :as ports]
+   [wagoe.observability.core.sql-redaction :as redaction]
    [clojure.string :as str]
    [cheshire.core :as json]))
 
@@ -79,11 +80,11 @@
    
    Pure: Yes"
   [exception max-elements]
-  (when exception
+  (when-let [^Throwable shown (some-> exception redaction/redacted-exception)]
     {:exception-type (-> exception class .getSimpleName)
-     :exception-message (.getMessage exception)
+     :exception-message (.getMessage shown)
      :stack-trace (vec (take max-elements
-                             (map str (.getStackTrace exception))))}))
+                             (map str (.getStackTrace shown))))}))
 
 (defn- sanitize-context
   "Remove or redact sensitive information from context.

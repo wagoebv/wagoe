@@ -45,8 +45,8 @@
             [wagoe.observability.metrics.ports :as metrics-ports]
             [wagoe.observability.tracing.ports :as tracing-ports]
             [wagoe.observability.errors.core :as error-reporting]
+            [wagoe.observability.core.sql-redaction :as redaction]
             [wagoe.platform.core.csrf :as csrf]
-            [wagoe.platform.database :as db]
             [wagoe.platform.core.http.errors :as errors]
             [wagoe.platform.core.http.problem-details :as problem-details]
             [buddy.core.nonce :as nonce]
@@ -451,7 +451,7 @@
             (when-let [tracer (:tracer system)]
               (when-let [span (get-in ctx [:tracing :span])]
                 (when exception
-                  (tracing-ports/record-exception! tracer span (db/redacted-exception exception)))
+                  (tracing-ports/record-exception! tracer span (redaction/redacted-exception exception)))
                 (tracing-ports/end-span! tracer span)))
             ctx)})
 
@@ -471,9 +471,11 @@
             ctx)
    :error (fn [{:keys [request exception system correlation-id] :as ctx}]
             (when-let [error-reporter (:error-reporter system)]
+              ;; Redacted here too, for a reporter or tracer that is not
+              ;; observability's own: those redact themselves (BOU-633).
               (error-reporting/report-application-error
                error-reporter
-               (db/redacted-exception exception)
+               (redaction/redacted-exception exception)
                "HTTP request failed"
                {:context "http-request"
                 :method (name (:request-method request))

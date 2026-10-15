@@ -1,7 +1,8 @@
 (ns wagoe.observability.logging.core-test
   "Unit tests for wagoe.observability.logging.core namespace."
   (:require [clojure.test :refer [deftest is testing]]
-            [wagoe.observability.logging.core :as logging-core]))
+            [wagoe.observability.logging.core :as logging-core]
+            [wagoe.observability.logging.ports :as ports]))
 
 (deftest ^:unit merge-contexts-test
   (testing "merges multiple context maps"
@@ -59,3 +60,28 @@
   (testing "preserves other keys"
     (is (= {:foo "bar" :trace-id "t-2" :span-id "s-2"}
            (logging-core/with-trace-info {:foo "bar"} "t-2" "s-2")))))
+
+(deftest ^:unit log-exception-logs-no-quoted-value
+  ;; BOU-633: the logger gets neither the value nor an exception carrying it.
+  (let [logged (atom nil)
+        ;; Only log* is called; the level methods are not.
+        logger #_{:clj-kondo/ignore [:missing-protocol-method]}
+               (reify ports/ILogger
+                  (log* [_ level message context exception]
+                    (reset! logged [level message context exception])))
+        driver (java.sql.SQLException. "Duplicate entry 'alice@example.com' for key 'users.email'" "23000" 1062)]
+    (logging-core/log-exception logger :error "save failed" (ex-info "save failed" {} driver) {})
+    (let [[_ _ context exception] @logged]
+      (is (not (.contains (pr-str context) "alice@example.com")))
+      (is (not-any? #(.contains (str (ex-message %)) "alice@example.com")
+                    (take-while some? (iterate ex-cause exception)))))))
+
+(deftest ^:unit log-exception-names-the-thrown-type
+  ;; The redacted copy of an IllegalStateException is a RuntimeException.
+  (let [logged (atom nil)
+        logger #_{:clj-kondo/ignore [:missing-protocol-method]}
+               (reify ports/ILogger
+                 (log* [_ _ _ context _] (reset! logged context)))
+        driver (java.sql.SQLException. "Duplicate entry 'alice@example.com' for key 'users.email'" "23000" 1062)]
+    (logging-core/log-exception logger :error "save failed" (IllegalStateException. "save failed" driver) {})
+    (is (= "IllegalStateException" (:exception-type @logged)))))

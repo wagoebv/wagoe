@@ -13,6 +13,7 @@
    spans started on the current thread become parent/child automatically. The
    span handle returned by `start-span!` is the OpenTelemetry `Span`."
   (:require [wagoe.observability.tracing.ports :as ports]
+            [wagoe.observability.core.sql-redaction :as redaction]
             [wagoe.observability.tracing.schema :as schema]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
@@ -87,7 +88,7 @@
 
   (record-exception! [_ span throwable]
     (when span
-      (.recordException ^Span span throwable)
+      (.recordException ^Span span ^Throwable (redaction/redacted-exception throwable))
       (.setStatus ^Span span StatusCode/ERROR))
     nil)
 

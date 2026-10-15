@@ -1,7 +1,6 @@
 (ns wagoe.platform.shell.interceptors-test
   "Tests for platform shell interceptors (context, logging, metrics, effects, response shaping)."
-  (:require [clojure.string :as str]
-            [clojure.test :refer [deftest is testing]]
+  (:require [clojure.test :refer [deftest is testing]]
             [wagoe.platform.shell.interceptors :as interceptors]
             [wagoe.core.interceptor :as ic]
             [wagoe.user.ports]
@@ -226,7 +225,7 @@
         (is (= "test/operation" (get-in (first errors) [:context :operation])))
         (is (= "test-correlation-id" (get-in (first errors) [:context :correlation-id]))))))
 
-  (testing "error-capture reports no value a driver quoted (BOU-630)"
+  (testing "error-capture reports no value a driver quoted, to any reporter (BOU-630, BOU-633)"
     (let [error-reporter (mock-error-reporter)
           driver (java.sql.SQLException. "Duplicate entry 'alice@example.com' for key 'users.email'" "23000" 1062)
           ctx {:op :test/operation :system {:error-reporter error-reporter}
@@ -234,7 +233,7 @@
       ((:error interceptors/error-capture) ctx)
       (let [reported (:exception (first (get-captured-errors error-reporter)))]
         (is (= {:type :conflict} (ex-data reported)))
-        (is (not-any? #(str/includes? (str (ex-message %)) "alice@example.com")
+        (is (not-any? #(.contains (str (ex-message %)) "alice@example.com")
                       (take-while some? (iterate ex-cause reported)))))))
 
   (testing "error-normalize creates standard error response"

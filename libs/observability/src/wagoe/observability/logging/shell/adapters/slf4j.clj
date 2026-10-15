@@ -13,7 +13,8 @@
    actual log routing, formatting, and output, eliminating duplication
    with clojure.tools.logging infrastructure."
   (:require
-   [wagoe.observability.logging.ports :as ports])
+   [wagoe.observability.logging.ports :as ports]
+   [wagoe.observability.core.sql-redaction :as redaction])
   (:import
    [clojure.lang Reflector]
    [org.slf4j Logger LoggerFactory MDC]))
@@ -171,25 +172,26 @@
    
    Pure: No (writes to SLF4J backend)"
   [slf4j-logger level message exception]
-  (case level
-    :trace (if exception
-             (.trace slf4j-logger message exception)
-             (.trace slf4j-logger message))
-    :debug (if exception
-             (.debug slf4j-logger message exception)
-             (.debug slf4j-logger message))
-    :info (if exception
-            (.info slf4j-logger message exception)
-            (.info slf4j-logger message))
-    :warn (if exception
-            (.warn slf4j-logger message exception)
-            (.warn slf4j-logger message))
-    :error (if exception
-             (.error slf4j-logger message exception)
-             (.error slf4j-logger message))
-    :fatal (if exception
-             (.error slf4j-logger (str "[FATAL] " message) exception)
-             (.error slf4j-logger (str "[FATAL] " message)))))
+  (let [exception (some-> exception redaction/redacted-exception)]
+    (case level
+      :trace (if exception
+               (.trace slf4j-logger message exception)
+               (.trace slf4j-logger message))
+      :debug (if exception
+               (.debug slf4j-logger message exception)
+               (.debug slf4j-logger message))
+      :info (if exception
+              (.info slf4j-logger message exception)
+              (.info slf4j-logger message))
+      :warn (if exception
+              (.warn slf4j-logger message exception)
+              (.warn slf4j-logger message))
+      :error (if exception
+               (.error slf4j-logger message exception)
+               (.error slf4j-logger message))
+      :fatal (if exception
+               (.error slf4j-logger (str "[FATAL] " message) exception)
+               (.error slf4j-logger (str "[FATAL] " message))))))
 
 (defn- write-log
   "Write a log entry via SLF4J with MDC context.

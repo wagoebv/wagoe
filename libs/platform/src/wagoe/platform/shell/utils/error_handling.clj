@@ -4,6 +4,7 @@
    This namespace provides middleware and utilities for capturing rich error context
    across HTTP and CLI interfaces, enabling better debugging and observability."
 (:require [wagoe.platform.shell.utils.time :as time]
+            [wagoe.observability.core.sql-redaction :as redaction]
             [wagoe.platform.core.http.problem-details :as problem]
             [clojure.pprint :as pprint]
             [clojure.string :as str]
@@ -106,7 +107,7 @@
                enriched-context (problem/enrich-context
                                  context
                                  {:exception-type (.getSimpleName (class ex))
-                                  :exception-message (.getMessage ex)
+                                  :exception-message (redaction/loggable-message ex)
                                   :request-method (name (or request-method :unknown))
                                   :request-uri uri})]
 
@@ -116,7 +117,7 @@
                        :uri uri
                        :method (name (or request-method :unknown))
                        :exception {:type (.getSimpleName (class ex))
-                                   :message (.getMessage ex)
+                                   :message (redaction/loggable-message ex)
                                    :data (ex-data ex)}
                        :context enriched-context})
 
@@ -187,7 +188,7 @@
                    {:command (:command context)
                     :user-id (:user-id context)
                     :exception {:type (.getSimpleName (class ex))
-                                :message (.getMessage ex)
+                                :message (redaction/loggable-message ex)
                                 :data (if existing-cli-context
                                         (:original-data original-data)
                                         original-data)}

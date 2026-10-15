@@ -6,6 +6,7 @@
    report errors without dealing with protocol details directly."
   (:require
    [wagoe.observability.errors.ports :as ports]
+   [wagoe.observability.core.sql-redaction :as redaction]
    [clojure.string :as str]))
 
 ;; =============================================================================
@@ -218,15 +219,18 @@
      exception - Exception instance
      
    Returns:
-     Nested map representing the cause chain, or nil if no cause"
+     Nested map representing the cause chain, or nil if no cause. Messages a
+     database driver quoted values in are redacted (BOU-633)."
   [exception]
-  (when-let [cause (.getCause exception)]
-    (let [cause-info {:message (.getMessage cause)
-                      :data (when (instance? clojure.lang.ExceptionInfo cause)
-                              (ex-data cause))}]
-      (if-let [nested-cause (extract-cause-chain cause)]
-        (assoc cause-info :cause nested-cause)
-        cause-info))))
+  (letfn [(chain [^Throwable e]
+            (when-let [cause (.getCause e)]
+              (let [cause-info {:message (.getMessage cause)
+                                :data (when (instance? clojure.lang.ExceptionInfo cause)
+                                        (ex-data cause))}]
+                (if-let [nested-cause (chain cause)]
+                  (assoc cause-info :cause nested-cause)
+                  cause-info))))]
+    (chain (redaction/redacted-exception exception))))
 
 (defn report-enhanced-application-error
   "Reports an application error with enhanced context from Problem Details.
