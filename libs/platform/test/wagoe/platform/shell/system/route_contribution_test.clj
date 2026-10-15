@@ -183,3 +183,14 @@
                      (get-in m [:wagoe/http-handler :module-routes])))
           "the handler would fail to build: no such key in the config")
       (is (not (contains? m :wagoe/gadgets-routes))))))
+
+(deftest ^:integration a-discovered-modules-job-handlers-reach-the-registry
+  ;; An application module's `:job-handlers` were dropped, so the worker
+  ;; registered none and re-queued each of its jobs (BOU-636).
+  (let [m (sys/system-config {:wagoe/profile :test
+                              :active {:wagoe/settings {}
+                                       :wagoe/h2       {:memory true}
+                                       :wagoe/jobs     {:provider :memory}
+                                       :wagoe/gadgets  {:enabled? true}}})]
+    (is (some #{(integrant.core/ref :wagoe/gadgets-job-handlers)}
+              (get-in m [:wagoe/job-registry :handler-maps])))))
