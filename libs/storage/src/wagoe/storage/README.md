@@ -460,9 +460,9 @@ The router refuses uploads over 10 MB per file or 100 parts per form with a
 ```
 
 Storage's own check, an upload's `:max-size` (default 10 MB), runs after this
-one, so the router's limit must be at least as large. A route declaring `:parameters :multipart` is decoded
-by Reitit's middleware instead; pass the limits to
-`(reitit.ring.middleware.multipart/create-multipart-middleware {...})`.
+one, so the router's limit must be at least as large. A route declaring
+`:parameters :multipart` is decoded by Reitit's middleware instead; pass the
+limits to `(reitit.ring.middleware.multipart/create-multipart-middleware {...})`.
 
 ### S3 Access Denied
 

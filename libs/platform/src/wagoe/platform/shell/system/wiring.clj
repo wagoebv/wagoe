@@ -580,23 +580,22 @@
         ;; system; tests hand this key a placeholder, and `contains?` on a
         ;; keyword throws.
         settings      (if (map? router) router {})
-        router-config (-> {;; The application's own global middleware runs
-                           ;; after the framework's pipeline, so it sees a
-                           ;; request the framework has already prepared.
-                           :middleware (into (vec (request-middleware
-                                                   {:extra-middleware extra-middleware
-                                                    :i18n             i18n
-                                                    :i18n-middleware  i18n-middleware}))
-                                             (:middleware settings))
-                           :system system
-                           ;; Every route requires a signed-in user unless
-                           ;; it is `:public true` (BOU-568). Installed
-                           ;; here, not per module, so none can forget it.
-                           :authentication {:middleware (vec auth-middleware)}}
-                          ;; select-keys, not get: a key set to nil is passed
-                          ;; on, and Reitit reads `:conflicts nil` as "do not
-                          ;; check" (BOU-356).
-                          (merge (select-keys settings [:coercion :muuntaja :multipart :conflicts])))
+        router-config (merge {;; The application's own global middleware runs
+                              ;; after the framework's pipeline, so it sees a
+                              ;; request the framework has already prepared.
+                              :middleware (into (vec (request-middleware
+                                                      {:extra-middleware extra-middleware
+                                                       :i18n             i18n
+                                                       :i18n-middleware  i18n-middleware}))
+                                                (:middleware settings))
+                              :system system
+                              ;; Every route requires a signed-in user unless
+                              ;; it is `:public true` (BOU-568). Installed
+                              ;; here, not per module, so none can forget it.
+                              :authentication {:middleware (vec auth-middleware)}}
+                             ;; select-keys keeps a key set to nil: Reitit reads `:conflicts nil` as
+                             ;; "do not check" (BOU-356).
+                             (select-keys settings [:coercion :muuntaja :multipart :conflicts]))
         handler (reitit-router/compile-routes all-routes router-config)
 
         ;; Wrap handler with version headers middleware
