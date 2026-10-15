@@ -267,10 +267,13 @@
 
 (def ^:private multipart-params
   "Decodes multipart bodies, which Reitit does only for routes declaring
-   `:parameters :multipart` (BOU-638). Those are skipped, not parsed twice."
+   `:parameters :multipart` (BOU-638). Those are skipped, not parsed twice.
+   So are `:public` routes: the authentication guard does not cover them, and
+   with no size limit anyone could spool uploads to disk."
   {:name    ::multipart-params
    :compile (fn [data _opts]
-              (when-not (get-in data [:parameters :multipart])
+              (when-not (or (access/public? data)
+                            (get-in data [:parameters :multipart]))
                 wrap-multipart-params))})
 
 (defn- create-default-middleware

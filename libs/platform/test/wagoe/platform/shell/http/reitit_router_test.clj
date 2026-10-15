@@ -1086,7 +1086,11 @@
                                                      (reset! seen (get-in req [:parameters :multipart]))
                                                      {:status 200 :body {:ok true}})
                                        :parameters {:multipart [:map [:path :string]]}
-                                       :middleware [multipart/multipart-middleware]}}]]
+                                       :middleware [multipart/multipart-middleware]}}]
+                  ["/public" {:post {:handler (fn [req]
+                                                (reset! seen (:multipart-params req))
+                                                {:status 200 :body {:ok true}})
+                                     :public  true}}]]
                  {:system {}})]
     (testing "a route that declares nothing gets the fields and the file"
       (is (= 200 (:status (handler (multipart-request "/upload")))))
@@ -1095,4 +1099,8 @@
 
     (testing "a route that declares it is decoded by Reitit, once"
       (is (= 200 (:status (handler (multipart-request "/declared")))))
-      (is (= "products/42" (:path @seen))))))
+      (is (= "products/42" (:path @seen))))
+
+    (testing "a public route is not decoded: no guard stops an anonymous upload"
+      (is (= 200 (:status (handler (multipart-request "/public")))))
+      (is (empty? @seen)))))
