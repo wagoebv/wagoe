@@ -31,6 +31,7 @@
         :debug false}))"
   (:require
    [wagoe.observability.errors.ports :as ports]
+   [wagoe.observability.core.sql-redaction :as redaction]
    [wagoe.core.utils.pii-redaction :as pii]
    [clojure.tools.logging :as log]
    [sentry-clj.core :as sentry])
@@ -143,7 +144,7 @@
 
         (sentry/send-event
          (merge sentry-context
-                {:throwable exception
+                {:throwable (redaction/redacted-exception exception)
                  :event-id event-id
                  :timestamp (current-timestamp)}))
 
@@ -201,7 +202,7 @@
           :exception
           (sentry/send-event
            (merge sentry-context
-                  {:throwable exception
+                  {:throwable (redaction/redacted-exception exception)
                    :event-id event-id
                    :timestamp (current-timestamp)}))
 

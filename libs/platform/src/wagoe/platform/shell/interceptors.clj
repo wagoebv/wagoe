@@ -7,7 +7,7 @@
             [wagoe.observability.metrics.ports :as metrics]
             [wagoe.observability.errors.ports :as error-reporting]
             [wagoe.platform.core.http.errors :as errors]
-            [wagoe.platform.database :as db]
+            [wagoe.observability.core.sql-redaction :as redaction]
             [clojure.string :as str])
   (:import [java.util UUID]
            [java.time Instant]))
@@ -69,7 +69,7 @@
               (logging/error logger "operation-error"
                              {:op op
                               :correlation-id correlation-id
-                              :error-message (db/loggable-message exception)
+                              :error-message (redaction/loggable-message exception)
                               :error-type (type exception)}))
             ctx)})
 
@@ -121,7 +121,7 @@
             (when-let [error-reporter (:error-reporter system)]
               (error-reporting/capture-exception
                error-reporter
-               (db/redacted-exception exception)
+               exception
                {:operation (subs (str op) 1) ; Remove the leading colon 
                 :correlation-id correlation-id
                 :context-keys (keys (dissoc ctx :system :exception))}))

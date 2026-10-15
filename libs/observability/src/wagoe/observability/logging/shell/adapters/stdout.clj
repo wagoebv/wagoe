@@ -7,6 +7,7 @@
   (:require
    [wagoe.observability.logging.shell.time :as time]
    [wagoe.observability.logging.ports :as ports]
+   [wagoe.observability.core.sql-redaction :as redaction]
    [clojure.string :as str]
    [cheshire.core :as json]))
 
@@ -79,7 +80,7 @@
    
    Pure: Yes"
   [exception max-elements]
-  (when exception
+  (when-let [exception (some-> exception redaction/redacted-exception)]
     {:exception-type (-> exception class .getSimpleName)
      :exception-message (.getMessage exception)
      :stack-trace (vec (take max-elements

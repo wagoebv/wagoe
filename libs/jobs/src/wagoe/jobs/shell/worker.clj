@@ -12,6 +12,7 @@
   (:require [wagoe.jobs.core.job :as job]
             [wagoe.jobs.ports :as ports]
             [wagoe.jobs.shell.adapters.redis :as redis-adapter]
+            [wagoe.observability.core.sql-redaction :as redaction]
             [wagoe.observability.tracing.ports :as tracing-ports]
             [clojure.tools.logging :as log])
   (:import [java.util UUID]
@@ -81,6 +82,17 @@
 ;; Job Execution
 ;; =============================================================================
 
+(defn- failure
+  "What a job failure stores and logs: no value a database driver quoted, since
+   it lands in the jobs table (BOU-633). :type names the kind of failure, the
+   thrown class has its own key (BOU-323)."
+  [^Throwable e]
+  (let [^Throwable shown (redaction/redacted-exception e)]
+    {:message         (.getMessage shown)
+     :type            :handler-error
+     :exception-class (-> e class .getName)
+     :stacktrace      (with-out-str (.printStackTrace shown))}))
+
 (defn- execute-job-handler
   "Execute job handler function with error handling.
 
@@ -98,14 +110,7 @@
         (assoc result :success? false)))
     (catch Exception e
       {:success? false
-       ;; :type is a keyword naming the *kind* of failure; the Java class of
-       ;; what was thrown is a separate fact and gets its own key. They shared
-       ;; one field, so :error :type held :no-handler in one branch and
-       ;; "java.lang.RuntimeException" in the next (BOU-323).
-       :error {:message         (.getMessage e)
-               :type            :handler-error
-               :exception-class (-> e class .getName)
-               :stacktrace      (with-out-str (.printStackTrace e))}})))
+       :error    (failure e)})))
 
 (defn- handle-missing-handler!
   "Handle a dequeued job whose type has no handler registered on THIS instance.
@@ -255,12 +260,8 @@
 
               (catch Exception e
                 ;; Unexpected error during processing
-                (let [error {:message         (.getMessage e)
-                             :type            :handler-error
-                             :exception-class (-> e class .getName)
-                             :stacktrace      (with-out-str (.printStackTrace e))}]
-                  (fail! error)
-                  (log/error e "Unexpected error processing job" {:job-id job-id})))
+                (fail! (failure e))
+                (log/error (redaction/redacted-exception e) "Unexpected error processing job" {:job-id job-id}))
 
               (finally
                 ;; The replacement goes back on the queue BEFORE the claim is
@@ -306,7 +307,7 @@
   (try
     (ports/process-scheduled-jobs! queue)
     (catch Exception e
-      (log/error e "Error processing scheduled jobs")
+      (log/error (redaction/redacted-exception e) "Error processing scheduled jobs")
       0)))
 
 ;; =============================================================================
@@ -358,7 +359,7 @@
                 (when (and reclaimed (pos? reclaimed))
                   (log/warn "Reclaimed abandoned jobs onto the ready queue" {:count reclaimed})))
               (catch Exception e
-                (log/error e "Error reclaiming abandoned jobs")))
+                (log/error (redaction/redacted-exception e) "Error reclaiming abandoned jobs")))
             (reset! last-scheduled-check now)))
 
         ;; Process next job from queue; apply exponential backoff on empty queue
@@ -376,7 +377,7 @@
           (reset! (:running? worker-state) false))
 
         (catch Exception e
-          (log/error e "Unexpected error in worker loop" {:worker-id (:id worker-state)})
+          (log/error (redaction/redacted-exception e) "Unexpected error in worker loop" {:worker-id (:id worker-state)})
           (Thread/sleep @current-poll-ms)
           (swap! current-poll-ms #(min max-poll-ms (* 2 %)))))))
 

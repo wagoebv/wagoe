@@ -46,7 +46,6 @@
             [wagoe.observability.tracing.ports :as tracing-ports]
             [wagoe.observability.errors.core :as error-reporting]
             [wagoe.platform.core.csrf :as csrf]
-            [wagoe.platform.database :as db]
             [wagoe.platform.core.http.errors :as errors]
             [wagoe.platform.core.http.problem-details :as problem-details]
             [buddy.core.nonce :as nonce]
@@ -451,7 +450,7 @@
             (when-let [tracer (:tracer system)]
               (when-let [span (get-in ctx [:tracing :span])]
                 (when exception
-                  (tracing-ports/record-exception! tracer span (db/redacted-exception exception)))
+                  (tracing-ports/record-exception! tracer span exception))
                 (tracing-ports/end-span! tracer span)))
             ctx)})
 
@@ -473,7 +472,7 @@
             (when-let [error-reporter (:error-reporter system)]
               (error-reporting/report-application-error
                error-reporter
-               (db/redacted-exception exception)
+               exception
                "HTTP request failed"
                {:context "http-request"
                 :method (name (:request-method request))

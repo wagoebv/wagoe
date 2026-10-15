@@ -350,3 +350,12 @@
         (is (thrown? RuntimeException
                      (ports/with-context context {:test "context"}
                        (fn [] (throw (RuntimeException. "Test error"))))))))))
+
+(deftest ^:unit a-quoted-value-does-not-reach-sentry
+  ;; Whoever reports, through whatever path (BOU-633).
+  (let [driver (java.sql.SQLException. "Duplicate entry 'alice@example.com' for key 'users.email'" "23000" 1062)
+        event  (with-captured-event test-config
+                 #(ports/capture-exception % (ex-info "save failed" {:type :conflict} driver) {}))]
+    (is (some? (:throwable event)))
+    (is (not-any? #(.contains (str (ex-message %)) "alice@example.com")
+                  (take-while some? (iterate ex-cause (:throwable event)))))))
