@@ -79,8 +79,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
-- **A PostgreSQL trigger's RAISE, or a suppressed exception, could log a value** (BOU-635): a RAISE is redacted whatever
-  SQLState it claims, suppressed exceptions are redacted too, and a redacted copy names the driver's class.
+- **A PostgreSQL RAISE could log a value or pass for a key conflict, a suppressed exception log one** (BOU-635): a RAISE
+  is redacted and never a conflict whatever it claims, suppressed exceptions are redacted, the driver's class named.
 - **A value a database driver quoted could still reach Sentry, a trace or a failed job** (BOU-633). Observability now
   redacts it wherever it reports, traces or logs an exception; nothing to do on upgrade.
 - **On a PostgreSQL in another language, re-keying a referenced row answered "A referenced record does not exist"**

@@ -171,4 +171,10 @@
           (let [secret (str "secret-" (random-uuid))
                 ex     (thrown #(db/execute-update! ctx {:raw (str "DO $$ BEGIN RAISE EXCEPTION '" secret "' USING ERRCODE = '42P01'; END $$")}))]
             (is (= "Database error (SQLState 42P01)" (:original-error (ex-data ex))))
+            (is (not (quoted? ex secret)))))
+        (testing "nor a RAISE that claims a key, which is no conflict"
+          (let [secret (str "secret-" (subs (str (random-uuid)) 0 8))
+                ex     (thrown #(db/execute-update! ctx {:raw (str "DO $$ BEGIN RAISE EXCEPTION 'dup' USING ERRCODE = '23505', CONSTRAINT = '"
+                                                                 secret "'; END $$")}))]
+            (is (= :database-error (:type (ex-data ex))))
             (is (not (quoted? ex secret)))))))))

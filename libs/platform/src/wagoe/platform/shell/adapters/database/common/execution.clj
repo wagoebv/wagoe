@@ -14,8 +14,7 @@
             [clojure.walk :as walk]
             [next.jdbc :as jdbc]
             [next.jdbc.result-set :as rs])
-  (:import [clojure.lang Reflector]
-           [java.sql SQLException]))
+  (:import [java.sql SQLException]))
 
 ;; =============================================================================
 ;; Context Validation (Re-exported from core)
@@ -107,32 +106,9 @@
             (str "Unsupported query input. Expected HoneySQL map, SQL string, or JDBC vector. Got: "
                  (type query))))))
 
-(defn- server-error
-  "PostgreSQL's Detail, which logServerErrorDetail=false keeps out of the
-   message, and the names it reports in any language, as {:detail :table
-   :constraint :column}. By reflection: the driver is loaded at runtime, not
-   compiled against."
-  [^SQLException se]
-  (when (= "org.postgresql.util.PSQLException" (.getName (class se)))
-    (try
-      (when-let [m (Reflector/invokeInstanceMethod se "getServerErrorMessage" (object-array 0))]
-        (into {} (for [[k getter] {:detail "getDetail" :table "getTable"
-                                   :constraint "getConstraint" :column "getColumn"
-                                   :routine "getRoutine"}
-                       :let [v (Reflector/invokeInstanceMethod m getter (object-array 0))]
-                       :when v]
-                   [k v])))
-      (catch Exception _ nil))))
-
-(defn reported
-  "What the driver said, from the first SQLException in `e`'s causes, or nil.
-   `:message` and `:detail` may quote the values sent: parse them, do not log them."
-  [e]
-  (when-let [^SQLException se (redaction/first-sql-exception e)]
-    (merge {:sql-state  (.getSQLState se)
-            :error-code (.getErrorCode se)
-            :message    (.getMessage se)}
-           (server-error se))))
+(def reported
+  "What the driver said. See `redaction/reported`."
+  redaction/reported)
 
 (defn redacted-cause
   "`e`, or when the driver's message quotes the values sent, a SQLException in
