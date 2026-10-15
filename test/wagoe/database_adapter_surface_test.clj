@@ -132,7 +132,7 @@
     (let [ddl-for (fn [make]
                     (schema-utils/generate-table-ddl
                      {:adapter (make)} "probe"
-                     [:map [:id :uuid] [:label :string] [:flag :boolean]]))]
+                     [:map [:id :uuid] [:label :string] [:flag :boolean] [:at inst?]]))]
 
       (testing "sqlite"
         (let [ddl (ddl-for sqlite/new-adapter)]
@@ -150,7 +150,8 @@
       (testing "mysql"
         (let [ddl (ddl-for mysql/new-adapter)]
           (is (str/includes? ddl "CHAR(36)"))
-          (is (str/includes? ddl "TINYINT(1)"))))
+          (is (str/includes? ddl "TINYINT(1)"))
+          (is (str/includes? ddl "DATETIME(6)") "DATETIME alone drops fractional seconds (BOU-648)")))
 
       (testing "h2"
         (let [ddl (ddl-for h2/new-adapter)]

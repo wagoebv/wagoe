@@ -86,6 +86,11 @@
                      value))
                  query-map))
 
+(defn- encode-params
+  "`[sql & params]` with each param as the engine takes it (BOU-648)."
+  [adapter [sql & params]]
+  (into [sql] (map #(protocols/param->db adapter %)) params))
+
 (defn- prepare-sql-query
   "Normalize supported query inputs into a JDBC-ready `[sql & params]` vector."
   [ctx query]
@@ -94,7 +99,8 @@
     (let [adapter-dialect (protocols/dialect (:adapter ctx))
           normalized-query (normalize-query-params query)]
       {:query normalized-query
-       :sql-query (core-query/format-sql adapter-dialect normalized-query)})
+       :sql-query (encode-params (:adapter ctx)
+                                 (core-query/format-sql adapter-dialect normalized-query))})
 
     (string? query)
     {:query query
@@ -102,7 +108,7 @@
 
     (vector? query)
     {:query query
-     :sql-query query}
+     :sql-query (encode-params (:adapter ctx) query)}
 
     :else
     (throw (IllegalArgumentException.

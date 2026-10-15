@@ -91,14 +91,14 @@
 
       inst? (case dialect
               :sqlite "TEXT"
-              :mysql "DATETIME"
+              :mysql "DATETIME(6)"
               :postgresql "TIMESTAMPTZ"
               (:h2 :ansi) "TIMESTAMP WITH TIME ZONE"
               "TIMESTAMP")
 
       'inst? (case dialect
                :sqlite "TEXT"
-               :mysql "DATETIME"
+               :mysql "DATETIME(6)"
                :postgresql "TIMESTAMPTZ"
                (:h2 :ansi) "TIMESTAMP WITH TIME ZONE"
                "TIMESTAMP")

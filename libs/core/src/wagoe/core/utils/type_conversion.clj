@@ -48,6 +48,10 @@
       (instance? java.sql.Timestamp s)
       (.toInstant ^java.sql.Timestamp s)  ; Convert Timestamp to Instant
 
+      ;; MySQL's DATETIME. Written in UTC, so read as UTC (BOU-648).
+      (instance? java.time.LocalDateTime s)
+      (.toInstant ^java.time.LocalDateTime s java.time.ZoneOffset/UTC)
+
       (string? s)
       (try
         (Instant/parse s)
@@ -74,9 +78,10 @@
   (if b 1 0))
 
 (defn int->boolean
-  "Convert integer to boolean from storage."
+  "Convert integer to boolean from storage. MySQL's driver already reads a
+   TINYINT(1) as a Boolean, which compared unequal to 1 (BOU-648)."
   [i]
-  (= i 1))
+  (if (boolean? i) i (and (number? i) (== 1 i))))
 
 (defn snake-case->kebab-case
   "Convert snake_case keys to kebab-case keys in a map (nil-safe).

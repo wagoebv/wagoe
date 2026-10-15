@@ -74,13 +74,7 @@
 ;; =============================================================================
 
 (def ^:private known-divergences
-  {[:mysql :round-trip/uuid]
-   {:ticket "BOU-574" :reason "a UUID parameter is Java-serialised, not written as text"}
-   [:mysql :round-trip/instant]
-   {:ticket "BOU-574" :reason "instants are written as ISO strings, which strict mode refuses"}
-   [:mysql :round-trip/true]
-   {:ticket "BOU-574" :reason "TINYINT(1) reads back as a Boolean, and db->boolean expects an int"}
-   [:mysql :conflicts/unique-key]
+  {[:mysql :conflicts/unique-key]
    {:ticket "BOU-574" :reason "the constraint reader finds no field in MySQL's message"}})
 
 ;; =============================================================================
@@ -118,6 +112,9 @@
 (def ^:private round-trips
   {:uuid      [:uuid (UUID/randomUUID) identity tc/string->uuid]
    :instant   [:instant (Instant/ofEpochMilli 1767225600123) identity tc/string->instant]
+   ;; Microseconds, and the ISO string the user and admin modules write.
+   :instant-us  [:instant (Instant/parse "2026-10-15T14:16:48.890413Z") identity tc/string->instant]
+   :instant-iso [:instant (Instant/parse "2026-10-15T14:16:48.890413Z") tc/instant->string tc/string->instant]
    :true      [:boolean true ::adapter-boolean ::adapter-boolean]
    :false     [:boolean false ::adapter-boolean ::adapter-boolean]
    :unicode   [:text "Zoë — 東京 🚀" identity identity]
@@ -133,6 +130,17 @@
                             [#(protocols/boolean->db a %) #(protocols/db->boolean a %)]
                             [encode decode])]
       (round-trip ctx logical value encode decode))))
+
+(defn- found-by-uuid
+  "A WHERE on a UUID object finds a row whose id was written as text. MySQL
+   matched nothing: it serialised the UUID as a Java object (BOU-648)."
+  [ctx]
+  (let [id (UUID/randomUUID)]
+    (ddl! ctx "DROP TABLE IF EXISTS by_uuid")
+    (ddl! ctx (str "CREATE TABLE by_uuid (id " (protocols/column-type (adapter ctx) :uuid) " NOT NULL PRIMARY KEY)"))
+    (db/execute-update! ctx {:insert-into :by_uuid :values [{:id (str id)}]})
+    (when (empty? (db/execute-query! ctx {:select [:id] :from [:by_uuid] :where [:= :id id]}))
+      "no row for the UUID it was written with")))
 
 (defn- strings-ignore-case [ctx]
   (ddl! ctx "DROP TABLE IF EXISTS people")
@@ -402,7 +410,8 @@
   "Case name -> (fn [ctx]) returning nil when the engine conforms."
   (merge
    (into {} (for [k (keys round-trips)] [(keyword "round-trip" (name k)) (round-trip-case k)]))
-   {:strings/ignore-case       strings-ignore-case
+   {:lookup/uuid               found-by-uuid
+    :strings/ignore-case       strings-ignore-case
     :strings/any-locale        strings-ignore-case-in-any-locale
     :strings/unicode           strings-ignore-unicode-case
     :connections/session       every-connection-is-set-up

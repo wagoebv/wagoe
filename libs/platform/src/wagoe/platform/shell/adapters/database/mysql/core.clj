@@ -20,6 +20,7 @@
    :jdbc-url           connection/build-jdbc-url
    :pool               connection/pool-defaults
    :session-statements connection/session-statements
+   :param->db          connection/param->db
    :booleans           :int
    :string-match       :like
    :engine             :mysql

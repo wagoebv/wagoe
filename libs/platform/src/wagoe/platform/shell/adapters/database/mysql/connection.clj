@@ -1,6 +1,7 @@
 (ns wagoe.platform.shell.adapters.database.mysql.connection
   "MySQL connection settings and JDBC URL."
-  (:require [clojure.string :as str]))
+  (:require [clojure.string :as str])
+  (:import [java.time Instant LocalDateTime ZoneOffset]))
 
 (def ^:private default-sql-mode
   "Strict SQL mode.
@@ -28,6 +29,23 @@
         all-params     (merge default-params (or connection-params {}))
         param-str      (str/join "&" (map (fn [[k v]] (str (name k) "=" v)) all-params))]
     (str base-url "?" param-str)))
+
+(def ^:private utc-instant
+  "What `Instant/toString` writes, and so what persistence code stores."
+  #"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,9})?Z")
+
+(defn param->db
+  "MySQL serialises a UUID parameter as a Java object, so a WHERE on it matches
+   nothing, and strict mode rejects an ISO instant string. Persistence code
+   writes instants as such strings, so one that is exactly an instant is sent
+   as the UTC DATETIME it names; the session runs in UTC (BOU-648)."
+  [value]
+  (cond
+    (uuid? value)                    (str value)
+    (instance? Instant value)        (LocalDateTime/ofInstant value ZoneOffset/UTC)
+    (and (string? value)
+         (re-matches utc-instant value)) (LocalDateTime/ofInstant (Instant/parse value) ZoneOffset/UTC)
+    :else                            value))
 
 (defn session-statements
   "Strict mode, UTC, and UTF-8. Each runs on its own — see

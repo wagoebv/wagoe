@@ -79,6 +79,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **MySQL refused instants, lost UUID lookups and read every boolean as false** (BOU-648): they now round-trip,
+  and the schema builder keeps microseconds (`DATETIME(6)`). MySQL support is still incomplete (BOU-574).
 - **No request body was size-limited** (BOU-644): a body over 32 MB is now a 413, before any handler reads it.
   Raise or lift it with `:wagoe/http {:max-request-body <bytes or nil>}`.
 - **Multipart uploads had no size limit** (BOU-641): over 10 MB per file or 100 parts is now a 413.
