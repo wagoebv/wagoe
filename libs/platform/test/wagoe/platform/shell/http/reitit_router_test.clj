@@ -1104,3 +1104,35 @@
     (testing "a public route is not decoded: no guard stops an anonymous upload"
       (is (= 200 (:status (handler (multipart-request "/public")))))
       (is (empty? @seen)))))
+
+(deftest ^:unit ^:security an-upload-over-the-limits-is-a-413
+  ;; The test file is 5 bytes; the form has two parts (BOU-641).
+  (let [post (fn [limits]
+               ((reitit/compile-routes
+                 [["/upload" {:post {:handler (fn [_] {:status 200 :body {:ok true}})}}]]
+                 {:system {} :multipart limits})
+                (multipart-request "/upload")))]
+    (testing "within the defaults it is decoded"
+      (is (= 200 (:status (post nil)))))
+
+    (testing "a file over :max-file-size is refused, in the one error shape"
+      (let [resp (post {:max-file-size 4})]
+        (is (= 413 (:status resp)))
+        (is (= {:max-file-size 4 :max-file-count 100}
+               (:details (error-body resp))))
+        (is (some? (get-in resp [:headers "X-Correlation-ID"])))))
+
+    (testing "so is a form with more parts than :max-file-count"
+      (is (= 413 (:status (post {:max-file-count 1})))))
+
+    (testing "a malformed body is a 400, not a 413"
+      (is (= 400 (:status ((reitit/compile-routes
+                            [["/upload" {:post {:handler (fn [_] {:status 200 :body {:ok true}})}}]]
+                            {:system {}})
+                           (assoc (multipart-request "/upload")
+                                  :body (java.io.ByteArrayInputStream.
+                                         (.getBytes "--XyZ\r\nno headers" "UTF-8"))))))))
+
+    (testing "nil lifts a limit rather than falling back to the default"
+      (is (= {:max-file-size nil :max-file-count 1}
+             (:details (error-body (post {:max-file-size nil :max-file-count 1}))))))))
