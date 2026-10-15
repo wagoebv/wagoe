@@ -57,8 +57,9 @@
    violation, `:field` only when the driver names one column, and
    `:referenced? true` when the refused row is one another still references;
    nil for any other failure."
-  [{:keys [message detail] :as reported}]
-  (when-let [k (kind reported)]
+  [{:keys [message detail authored?] :as reported}]
+  ;; A RAISE claiming a key's state is not one: its author wrote it (BOU-635).
+  (when-let [k (when-not authored? (kind reported))]
     ;; PostgreSQL names the column in its Detail, which `reported` keeps apart.
     (let [text  (str message "\n" detail)
           field (some #(some-> (re-find % text) second redaction/column->field) column-patterns)]
