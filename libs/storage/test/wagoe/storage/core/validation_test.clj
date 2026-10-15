@@ -131,6 +131,18 @@
       (is (< (count result) 256))
       (is (re-find #"\.txt$" result)))))
 
+(deftest ^:unit normalize-path-test
+  (testing "keeps each directory (BOU-639)"
+    (is (= "products/42" (sut/normalize-path "products/42"))))
+
+  (testing "drops `..`, `.` and empty segments, on either separator"
+    (is (= "a/b/c" (sut/normalize-path "../a/./b//c")))
+    (is (= "a/b" (sut/normalize-path "a\\..\\b"))))
+
+  (testing "nil when nothing is left"
+    (is (nil? (sut/normalize-path "/..")))
+    (is (nil? (sut/normalize-path nil)))))
+
 (deftest ^:unit generate-unique-filename-test
   (testing "generates unique filename with explicit suffix"
     (let [result (sut/generate-unique-filename* "photo.jpg" "1712745600000-abc12345")]

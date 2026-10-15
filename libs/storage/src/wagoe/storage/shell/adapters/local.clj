@@ -160,14 +160,6 @@
                  (not (.equals (.normalize target) (.normalize root))))
         (.toString target)))))
 
-(defn- sanitize-path
-  "Sanitize a path segment to prevent directory traversal."
-  [segment]
-  (when segment
-    (-> segment
-        (str/replace #"\.\." "")
-        (str/replace #"[/\\]" ""))))
-
 ;; ============================================================================
 ;; Storage Key Generation
 ;; ============================================================================
@@ -203,7 +195,7 @@
 
             ;; Generate storage key
             storage-key (if path
-                          (path-join (sanitize-path path)
+                          (path-join (or (validation/normalize-path path) "")
                                      (validation/sanitize-filename filename))
                           (generate-storage-key bytes filename))
 

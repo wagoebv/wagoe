@@ -115,10 +115,20 @@
         metadata {:filename "custom.txt"
                   :path "custom/path"}]
 
-    (testing "stores file in custom path"
+    (testing "stores file in custom path, one directory per segment (BOU-639)"
       (let [result (ports/store-file storage file-data metadata)]
-        (is (some? result))
-        (is (re-find #"custom" (:key result)))))))
+        (is (= "custom/path/custom.txt" (sut/canonical-key (:key result))))
+        (is (.isFile (io/file test-dir "custom" "path" "custom.txt")))))
+
+    (testing "drops `..`, `.` and empty segments instead of joining them"
+      (doseq [[path expected] [["../a/./b//c" "a/b/c/custom.txt"]
+                               ["a\\..\\b"    "a/b/custom.txt"]
+                               ["/.."          "custom.txt"]]]
+        (is (= expected
+               (sut/canonical-key
+                (:key (ports/store-file storage file-data
+                                        (assoc metadata :path path)))))
+            path)))))
 
 (deftest ^:integration concurrent-uploads-test
   (let [storage (sut/create-local-storage {:base-path test-dir})
@@ -276,8 +286,6 @@
       (.mkdirs (java.io.File. (str root "/up")))
       (.mkdirs (java.io.File. outside))
       (link (str root "/up/pwned.txt") (str outside "/pwned.txt"))   ; dangling file
-      ;; One segment: `sanitize-path` strips separators, so a nested `:path`
-      ;; never reaches a link deeper than the first level.
       (link (str root "/gone")         (str outside "/gone"))        ; dangling directory
 
       (testing "a write onto a dangling link is refused, and creates nothing outside"
