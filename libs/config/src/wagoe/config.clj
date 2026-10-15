@@ -131,14 +131,7 @@
       (throw (ex-info "No active database adapter found in configuration"
                       {:active-keys (keys (:active config))}))))
 
-(defn mysql-driver-settings
-  "The MySQL settings the connection reads beyond host and credentials. Both
-   db config conversions dropped them, so neither took effect (BOU-647).
-   select-keys keeps a key set to nil: `:sql-mode nil` turns strict mode off."
-  [adapter-config]
-  (select-keys adapter-config [:connection-params :sql-mode]))
-
-(defn- db-spec-for-adapter
+(defn db-spec-for-adapter
   "The adapter-specific half of `db-spec`.
 
    Above its caller: Clojure compiles top to bottom, so a private helper
@@ -175,7 +168,9 @@
             :username (:user adapter-config)
             :password (:password adapter-config)
             :pool (:pool adapter-config)}
-           (mysql-driver-settings adapter-config))
+           ;; select-keys keeps a key set to nil: `:sql-mode nil` turns
+           ;; strict mode off.
+           (select-keys adapter-config [:connection-params :sql-mode]))
 
     (throw (ex-info "Unsupported database adapter"
                     {:adapter adapter

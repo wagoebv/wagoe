@@ -248,16 +248,10 @@
    :pool (:pool config {})})
 
 (defn- mysql-config->db-config
-  "Convert MySQL configuration to database adapter config"
+  "Convert MySQL configuration to database adapter config: the boot path's
+   conversion, so the two cannot drift apart again (BOU-647)."
   [config]
-  (merge {:adapter :mysql
-          :host (:host config)
-          :port (:port config)
-          :name (:dbname config)
-          :username (:user config)
-          :password (:password config)
-          :pool (:pool config {})}
-         (config/mysql-driver-settings config)))
+  (update (config/db-spec-for-adapter :mysql config) :pool #(or % {})))
 
 (defn- h2-config->db-config
   "Convert H2 configuration to database adapter config"
