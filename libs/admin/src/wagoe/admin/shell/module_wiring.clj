@@ -117,7 +117,10 @@
    `:pagination` keeps the other key. `wagoe add admin` writes no
    `:entity-discovery`, and its nil mode 500ed every admin page (BOU-637)."
   [settings]
-  (merge-with (fn [default v] (if (and (map? default) (map? v)) (merge default v) v))
+  (merge-with (fn [default v]
+                (cond (nil? v)                         default
+                      (and (map? default) (map? v))    (merge default v)
+                      :else                            v))
               admin-schema/default-admin-config
               settings))
 

@@ -60,7 +60,15 @@
                                 :pagination       {:default-page-size 20}}
                                nil)]
         (is (= {:mode :allowlist :allowlist #{:users}} (:entity-discovery cfg)))
-        (is (= {:default-page-size 20 :max-page-size 200} (:pagination cfg)))))))
+        (is (= {:default-page-size 20 :max-page-size 200} (:pagination cfg)))))
+
+    (testing "a setting left nil gets its default, and paging stays at 20"
+      (let [cfg (routes-config {:entity-discovery nil} nil)]
+        (is (= :allowlist (get-in cfg [:entity-discovery :mode])))
+        (is (= 20 (get-in cfg [:pagination :default-page-size])))))
+
+    (testing "no default \"Other\" label displaces the translated one"
+      (is (nil? (get-in (routes-config {} nil) [:ui :field-grouping :other-label]))))))
 
 (deftest ^:unit bad-date-patterns-are-dropped-at-boot
   ;; Checked once here rather than per request: a misconfigured application

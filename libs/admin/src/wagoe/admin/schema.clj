@@ -536,9 +536,10 @@
    :require-role :admin
    :entity-discovery {:mode :allowlist
                       :allowlist #{}}
-   :pagination {:default-page-size 50
+   :pagination {:default-page-size 20
                 :max-page-size 200}
-   :ui {:field-grouping {:other-label "Other"}}
+   ;; No `:ui :field-grouping :other-label`: absent, the detail view uses the
+   ;; translated `:admin/fieldgroup-other`; a string here would override it.
    :features {:bulk-actions true
               :export-csv false
               :import-csv false
