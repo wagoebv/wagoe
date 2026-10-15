@@ -213,9 +213,7 @@
        (column-type mysql-adapter :uuid) ;; => \"CHAR(36)\"")
 
   (param->db [this value]
-    "`value` as this engine takes it as a query parameter. MySQL refuses a UUID
-     object and an ISO instant string (BOU-648); the others take both as they
-     are.")
+    "`value` as this engine takes it as a query parameter.")
 
   (like [this field pattern]
     "A HoneySQL condition matching `field` against the LIKE `pattern`

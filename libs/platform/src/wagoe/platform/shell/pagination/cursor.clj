@@ -15,7 +15,8 @@
    Format: Base64(JSON({:id ... :sort-value ... :sort-field ... :sort-direction ...}))"
   (:require
    [cheshire.core :as json]
-   [clojure.tools.logging :as log])
+   [clojure.tools.logging :as log]
+   [wagoe.core.utils.type-conversion :as tc])
   (:import
    [java.time Instant]
    [java.util UUID]))
@@ -219,12 +220,7 @@
         ;; Parse sort-value based on type
         (string? sort-value)
         (assoc :sort-value
-               ;; Try to parse as Instant if it looks like ISO 8601
-               (if (re-matches #"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z" sort-value)
-                 (try
-                   (Instant/parse sort-value)
-                   (catch Exception _ sort-value))  ; If parsing fails, keep as string
-                 sort-value))
+               (or (tc/iso-instant sort-value) sort-value))
 
         (not (string? sort-value))
         (assoc :sort-value sort-value)

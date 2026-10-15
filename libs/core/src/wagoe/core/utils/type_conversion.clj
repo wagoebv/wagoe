@@ -28,6 +28,13 @@
   [instant]
   (when instant (.toString instant)))
 
+(defn iso-instant
+  "The Instant `s` names when it is exactly what `Instant/toString` writes,
+   else nil."
+  [s]
+  (when (and (string? s) (re-matches #"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,9})?Z" s))
+    (try (Instant/parse s) (catch Exception _ nil))))
+
 (defn string->instant
   "Convert ISO 8601 string to Instant from storage (nil-safe).
 
@@ -79,9 +86,9 @@
 
 (defn int->boolean
   "Convert integer to boolean from storage. MySQL's driver already reads a
-   TINYINT(1) as a Boolean, which compared unequal to 1 (BOU-648)."
+   TINYINT(1) as a Boolean (BOU-648)."
   [i]
-  (if (boolean? i) i (and (number? i) (== 1 i))))
+  (or (true? i) (= 1 i)))
 
 (defn snake-case->kebab-case
   "Convert snake_case keys to kebab-case keys in a map (nil-safe).

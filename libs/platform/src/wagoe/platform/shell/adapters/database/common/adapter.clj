@@ -159,8 +159,7 @@
 
   (like [_ field pattern] (case-insensitive-like (:string-match spec) field pattern))
 
-  (param->db [_ value]
-    (if-let [encode (:param->db spec)] (encode value) value)))
+  (param->db [_ value] ((:param->db spec identity) value)))
 
 (defn new-adapter
   "Build the adapter described by `spec`. See this namespace's docstring."
