@@ -274,8 +274,7 @@
 (defn- multipart-params
   "Decodes multipart bodies, which Reitit does only for routes declaring
    `:parameters :multipart` (BOU-638). Those are skipped, not parsed twice.
-   So are `:public` routes: the authentication guard does not cover them.
-   `limits` is `:wagoe/router :multipart` over `default-multipart-limits`."
+   So are `:public` routes: the authentication guard does not cover them."
   [limits]
   (let [limits  (merge default-multipart-limits limits)
         options (assoc limits :error-handler

@@ -1106,13 +1106,12 @@
       (is (empty? @seen)))))
 
 (deftest ^:unit ^:security an-upload-over-the-limits-is-a-413
-  ;; Decoding had no limit, so any signed-in caller could spool files of any
-  ;; size to disk (BOU-641). The test file is 5 bytes; the form has two parts.
-  (let [handler (fn [limits]
-                  (reitit/compile-routes
-                   [["/upload" {:post {:handler (fn [_] {:status 200 :body {:ok true}})}}]]
-                   {:system {} :multipart limits}))
-        post    (fn [limits] ((handler limits) (multipart-request "/upload")))]
+  ;; The test file is 5 bytes; the form has two parts (BOU-641).
+  (let [post (fn [limits]
+               ((reitit/compile-routes
+                 [["/upload" {:post {:handler (fn [_] {:status 200 :body {:ok true}})}}]]
+                 {:system {} :multipart limits})
+                (multipart-request "/upload")))]
     (testing "within the defaults it is decoded"
       (is (= 200 (:status (post nil)))))
 

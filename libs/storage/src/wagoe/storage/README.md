@@ -456,8 +456,7 @@ The router refuses uploads over 10 MB per file or 10 parts per form with a
 413. Raise the limits under `:wagoe/router` (`nil` lifts one):
 
 ```clojure
-:wagoe/router {:multipart {:max-file-size (* 100 1024 1024)   ; 100 MB
-                           :max-file-count 10}}
+:wagoe/router {:multipart {:max-file-size (* 100 1024 1024)}}  ; 100 MB
 ```
 
 Storage's own `:max-file-size` is checked after this one, so the router's limit
