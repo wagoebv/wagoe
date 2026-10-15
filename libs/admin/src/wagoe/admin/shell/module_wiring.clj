@@ -12,6 +12,7 @@
   (:require
    [clojure.tools.logging :as log]
    [integrant.core :as ig]
+   [wagoe.admin.schema :as admin-schema]
    [wagoe.admin.shell.schema-repository :as schema-repo]
    [wagoe.admin.shell.service :as service]
    [wagoe.admin.shell.http :as http]
@@ -111,6 +112,18 @@
                            {:type :configuration-error :time-zone tz}))))
     config))
 
+(defn- with-defaults
+  "`settings` over `default-admin-config`, one level deep so a partial
+   `:pagination` keeps the other key. `wagoe add admin` writes no
+   `:entity-discovery`, and its nil mode 500ed every admin page (BOU-637)."
+  [settings]
+  (merge-with (fn [default v]
+                (cond (nil? v)                         default
+                      (and (map? default) (map? v))    (merge default v)
+                      :else                            v))
+              admin-schema/default-admin-config
+              settings))
+
 (defn ig-config
   "This module's Integrant entries, for `wagoe.platform.shell.system.config`.
 
@@ -126,7 +139,8 @@
   ;; rendered raw database timestamps (BOU-382). Copied in rather than handing
   ;; the whole application config to the routes, which would let any handler
   ;; reach anything.
-  (let [;; Optional and one-way: wagoe.workflow depends on the admin, and
+  (let [settings      (with-defaults settings)
+        ;; Optional and one-way: wagoe.workflow depends on the admin, and
         ;; builds the port only when both are on (BOU-563).
         workflows?    (contains? (:enabled ctx) :wagoe/workflow)
         app-settings  (get-in ctx [:config :active :wagoe/settings])
