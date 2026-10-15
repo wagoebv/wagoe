@@ -181,6 +181,17 @@ WAGOE_TAG=$(grep -oE "Installing wagoe CLI @ .*" /tmp/install.log \
               | sed -E "s/.*@ //; s/\x1B\[[0-9;]*[a-zA-Z]//g; s/[.[:space:]]+$//" || true)
 ok "installed; java, clojure, bb, wagoe all resolve (published tag: ${WAGOE_TAG:-unknown})"
 
+# Parallel Maven reads in tools.deps intermittently die with a HashMap cast
+# error (BOU-643). The CLI takes no env var for -Sthreads, so a wrapper first on
+# PATH adds it, as scripts/ci-resolve-deps.sh does for the other CI jobs.
+REAL_CLOJURE=$(bash -ic "command -v clojure")
+mkdir -p /root/.smoke-bin
+printf "#!/usr/bin/env bash\nexec %q -Sthreads 1 \"\$@\"\n" "$REAL_CLOJURE" >/root/.smoke-bin/clojure
+chmod +x /root/.smoke-bin/clojure
+echo "export PATH=/root/.smoke-bin:\$PATH" >>/root/.bashrc
+[ "$(bash -ic "command -v clojure")" = /root/.smoke-bin/clojure ] \
+  || fail "the serial-resolution clojure wrapper is not first on PATH"
+
 # ── 3. generate a project ───────────────────────────────────────────────────
 # worktree: drive the CLI out of the copied checkout, so the generator under
 #           test is this branch.
