@@ -118,6 +118,13 @@
     (is (= 4100 (get-in c [:wagoe/http-server :config :port])))
     (is (= (ig/ref :wagoe/http-handler) (:handler (:wagoe/http-server c))))))
 
+(deftest ^:unit the-request-body-limit-reaches-the-server
+  ;; Absent, the server applies its default; nil lifts it (BOU-644).
+  (let [server #(:wagoe/http-server (sut/system-config (config :wagoe/http %)))]
+    (is (= 1024 (:max-request-body (server {:max-request-body 1024}))))
+    (is (contains? (server {:max-request-body nil}) :max-request-body))
+    (is (not (contains? (server {}) :max-request-body)))))
+
 (deftest ^:unit the-server-knows-the-boot-profile
   ;; The port strategy decides by profile; without it a :prod boot searched
   ;; ports like dev (BOU-566).
