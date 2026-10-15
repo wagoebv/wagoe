@@ -229,6 +229,16 @@
 
 (def ^:private no-graph {:components {} :http {} :routes [] :job-handlers []})
 
+(defn merge-http
+  "`http` over `acc`, refusing a key both set. Each is one slot on the handler:
+   a second `:extra-middleware` would silently drop tenant's."
+  [acc k http]
+  (when-let [clash (some (set (keys acc)) (keys http))]
+    (throw (ex-info (str "Two modules both contribute " clash " to :wagoe/http-handler."
+                         " The later one would silently replace the earlier.")
+                    {:type :wagoe/module-key-conflict :key clash :module k})))
+  (merge acc http))
+
 (defn- add-graph
   "Fold module `k`'s graph into `acc`. One step for framework and discovered
    modules alike: a discovered module kept only `:components` and lost its
@@ -240,7 +250,7 @@
                     {:type :wagoe/module-key-conflict :key clash :module k})))
   (-> acc
       (update :components merge components)
-      (update :http merge http)
+      (update :http merge-http k http)
       (update :routes into routes)
       (update :job-handlers into job-handlers)))
 
@@ -272,9 +282,8 @@
            ;; writes — so a 31st library with a graph of its own still needed an
            ;; entry in a platform table, which is the coupling BOU-330 removes.
            ;;
-           ;; Its routes need no special case: `discovered-route-refs` refs
-           ;; `:wagoe/<name>-routes` by convention, and a module that has routes
-           ;; names its component that.
+           ;; Its routes come from its `:routes`, and `discovered-route-refs`
+           ;; also refs a `:wagoe/<name>-routes` component by convention.
             own-graph (when loadable?
                         (when-let [build (resolve-var (symbol (str wiring) "ig-config"))]
                           (build settings {:config {:active active}})))]

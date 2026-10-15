@@ -150,7 +150,13 @@
                            (discover {:wagoe/visits {:enabled? true} :wagoe/trips {:enabled? true}}
                                      {"acme.visits.shell.module-wiring" (constantly graph)
                                       "acme.trips.shell.module-wiring"  (constantly graph)})))]
-        (is (= :wagoe/module-key-conflict (:type (ex-data e))))))))
+        (is (= :wagoe/module-key-conflict (:type (ex-data e))))))
+
+    (testing "and an :http slot a framework module fills is refused, not replaced"
+      ;; tenant's `:extra-middleware` would otherwise be dropped silently
+      (let [e (is (thrown? clojure.lang.ExceptionInfo
+                           (sut/merge-http {:extra-middleware :tenant} :discovered (:http found))))]
+        (is (= :extra-middleware (:key (ex-data e))))))))
 
 (deftest ^:unit discovered-routes-reach-the-handler
   ;; Emitting the keys is half the job. :wagoe/http-handler destructures a fixed

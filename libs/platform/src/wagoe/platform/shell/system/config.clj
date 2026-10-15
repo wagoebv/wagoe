@@ -131,7 +131,8 @@
                         (name profile) "."))))
      ;; Framework modules first, then the scaffolded ones — the order routes are
      ;; concatenated in and mounted.
-     (cond-> (merge (core-components config (merge http discovered-http)
+     (cond-> (merge (core-components config
+                                     (modules/merge-http http :discovered discovered-http)
                                      ;; distinct: a module may name its
                                      ;; `-routes` ref and match the convention
                                      (into [] (distinct)
