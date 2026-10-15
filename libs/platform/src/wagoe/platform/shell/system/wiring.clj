@@ -797,6 +797,21 @@
       (.setHandler graceful existing)
       (.setHandler s graceful))))
 
+(def ^:private default-max-request-body
+  "Bytes. Above a 10 MB upload plus its fields, below what a decoded JSON body
+   should hold in memory (BOU-644)."
+  (* 32 1024 1024))
+
+(defn- limit-request-body!
+  "Answer 413 to a request body over `max-bytes`, whatever its content type.
+   Nothing bounded a JSON, EDN or form body before, on public routes too
+   (BOU-644). nil lifts the limit."
+  [^org.eclipse.jetty.server.Server s max-bytes]
+  (when max-bytes
+    (let [limiter (org.eclipse.jetty.server.handler.SizeLimitHandler. (long max-bytes) -1)]
+      (.setHandler limiter (.getHandler s))
+      (.setHandler s limiter))))
+
 ;; A listener serving one module's protocol to the rest of the deployment.
 ;;
 ;; Its own port, not the application's. The endpoint invokes port methods
@@ -830,7 +845,7 @@
     (.stop server)))
 
 (defmethod ig/init-key :wagoe/http-server
-  [_ {:keys [handler port host join? config drain-timeout-ms]}]
+  [_ {:keys [handler port host join? config drain-timeout-ms] :as opts}]
   (let [http-config (or config {})
         port-allocation (port-manager/allocate-port port http-config)
         allocated-port (:port port-allocation)]
@@ -848,6 +863,8 @@
                                    ;; enable graceful connection draining.
                                    :configurator (fn [s]
                                                    (.setAttribute s "handler-atom" ha)
+                                                   (limit-request-body! s (get opts :max-request-body
+                                                                               default-max-request-body))
                                                    (configure-graceful-shutdown! s drain-timeout-ms))})]
       (log/info "HTTP server started successfully"
                 {:requested-port port
