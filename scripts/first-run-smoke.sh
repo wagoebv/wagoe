@@ -181,6 +181,20 @@ WAGOE_TAG=$(grep -oE "Installing wagoe CLI @ .*" /tmp/install.log \
               | sed -E "s/.*@ //; s/\x1B\[[0-9;]*[a-zA-Z]//g; s/[.[:space:]]+$//" || true)
 ok "installed; java, clojure, bb, wagoe all resolve (published tag: ${WAGOE_TAG:-unknown})"
 
+# tools.deps reads Maven descriptors on parallel threads, and the Maven model
+# builder intermittently dies there with a HashMap cast error: "Error building
+# classpath", nothing of ours, fixed by a rerun (BOU-643). The CLI takes no
+# environment variable for it, so a wrapper first on PATH adds -Sthreads 1.
+# Serial resolution changes no classpath; every documented command still runs
+# as written.
+REAL_CLOJURE=$(bash -ic "command -v clojure")
+mkdir -p /root/.smoke-bin
+printf "#!/usr/bin/env bash\nexec %q -Sthreads 1 \"\$@\"\n" "$REAL_CLOJURE" >/root/.smoke-bin/clojure
+chmod +x /root/.smoke-bin/clojure
+echo "export PATH=/root/.smoke-bin:\$PATH" >>/root/.bashrc
+[ "$(bash -ic "command -v clojure")" = /root/.smoke-bin/clojure ] \
+  || fail "the serial-resolution clojure wrapper is not first on PATH"
+
 # ── 3. generate a project ───────────────────────────────────────────────────
 # worktree: drive the CLI out of the copied checkout, so the generator under
 #           test is this branch.
