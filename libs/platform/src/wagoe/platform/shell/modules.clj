@@ -227,11 +227,26 @@
        distinct
        (mapv #(symbol (str % "." module ".shell.module-wiring")))))
 
+(def ^:private no-graph {:components {} :http {} :routes [] :job-handlers []})
+
+(defn- add-graph
+  "Fold module `k`'s graph into `acc`. One step for framework and discovered
+   modules alike: a discovered module kept only `:components` and lost its
+   `:job-handlers` (BOU-636)."
+  [acc k {:keys [components http routes job-handlers]}]
+  (when-let [clash (some (set (keys (:components acc))) (keys components))]
+    (throw (ex-info (str "Two modules both wire " clash
+                         ". The later one would silently replace the earlier.")
+                    {:type :wagoe/module-key-conflict :key clash :module k})))
+  (-> acc
+      (update :components merge components)
+      (update :http merge http)
+      (update :routes into routes)
+      (update :job-handlers into job-handlers)))
+
 (defn discover-module-config
-  "Integrant entries for scaffolded modules named under `:active`, as
-   `{:components {…} :job-handlers [..]}`. `:job-handlers` are the refs a
-   module's own `ig-config` contributes, as for a framework module; dropping
-   them left an application module unable to register any (BOU-636).
+  "Integrant entries for scaffolded modules named under `:active`, in the shape
+   `framework-module-config` returns.
 
    `wiring-loadable?` is injected so this stays testable without a module on the
    classpath; `-main` passes a function that requires the namespace.
@@ -280,9 +295,7 @@
 
           own-graph
           (do (log/info "Discovered module with its own graph" {:module module})
-              (-> acc
-                  (update :components merge (:components own-graph))
-                  (update :job-handlers into (:job-handlers own-graph))))
+              (add-graph acc k own-graph))
 
           :else
           (do
@@ -302,7 +315,7 @@
                     {:enabled? true
                      :service  (ig/ref (keyword "wagoe" (str module "-service")))
                      :routes   (ig/ref (keyword "wagoe" (str module "-routes")))})))))
-    {:components {} :job-handlers []}
+    no-graph
     (scaffolded-module-keys active known-keys))))
 
 (defn require-wiring!
@@ -536,18 +549,7 @@
          (assert-redis-host! k (get active k) (:wagoe/profile (:config ctx)))
          (cond
            (load-wiring! wiring)
-           (let [{:keys [components http routes job-handlers]}
-                 (module-graph resolve-var k lib (get active k) ctx)
-                 clash (some (set (keys (:components acc))) (keys components))]
-             (when clash
-               (throw (ex-info (str "Two modules both wire " clash
-                                    ". The later one would silently replace the earlier.")
-                               {:type :wagoe/module-key-conflict :key clash :module k})))
-             (-> acc
-                 (update :components merge components)
-                 (update :http merge http)
-                 (update :routes into (or routes []))
-                 (update :job-handlers into (or job-handlers []))))
+           (add-graph acc k (module-graph resolve-var k lib (get active k) ctx))
 
            (contains? optional-modules k)
            (do (log/info (str "Skipping " k ": " wiring " is not on this classpath.")
@@ -560,5 +562,5 @@
                         "  Add the library to deps.edn, or remove " k
                         " from :active in resources/conf/<env>/config.edn.")
                    {:type :wagoe/module-library-missing :module-key k :namespace (str wiring)})))))
-     {:components {} :http {} :routes [] :job-handlers []}
+     no-graph
      (module-entries active extra-modules))))

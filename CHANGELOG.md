@@ -79,7 +79,7 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
-- **An application module's `:job-handlers` were dropped** (BOU-636): they now reach the job registry like a framework module's.
+- **An application module's `:job-handlers`, `:http` and `:routes` were dropped** (BOU-636): its graph is now taken whole, like a framework module's.
   Refs added to `[:wagoe/job-registry :handler-maps]` as a workaround can go.
 - **A column the builder added to an existing table had no CHECK or UNIQUE** (BOU-632): an added enum gets its CHECK
   (not on SQLite, which cannot), an added `email` or `session_token` its unique key.

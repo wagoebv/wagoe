@@ -118,6 +118,8 @@
          ;; Built before the refs, so they can be filtered against what exists:
          ;; a discovered module with a graph of its own need not have routes.
          {discovered          :components
+          discovered-http     :http
+          discovered-routes   :routes
           discovered-handlers :job-handlers}
          (modules/discover-module-config
           active known base-ns modules/require-wiring! requiring-resolve)]
@@ -129,9 +131,12 @@
                         (name profile) "."))))
      ;; Framework modules first, then the scaffolded ones — the order routes are
      ;; concatenated in and mounted.
-     (cond-> (merge (core-components config http
-                                     (into (vec routes)
-                                           (modules/discovered-route-refs active known discovered)))
+     (cond-> (merge (core-components config (merge http discovered-http)
+                                     ;; distinct: a module may name its
+                                     ;; `-routes` ref and match the convention
+                                     (into [] (distinct)
+                                           (concat routes discovered-routes
+                                                   (modules/discovered-route-refs active known discovered))))
                     components
                     discovered)
        ;; Handlers reach the registry only when the jobs module is on. Assoc'ing
