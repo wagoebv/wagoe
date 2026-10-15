@@ -36,6 +36,9 @@
             [wagoe.observability.tracing.shell.adapters.otlp :as tracing-otlp]
             [wagoe.observability.logging.shell.adapters.stdout :as logging-stdout]
             [wagoe.observability.logging.shell.adapters.slf4j :as logging-slf4j]
+            ;; Loaded for its effect: every clojure.tools.logging call writes
+            ;; its throwable redacted (BOU-634).
+            [wagoe.observability.logging.shell.redacting-factory]
             [wagoe.observability.errors.shell.adapters.no-op :as error-reporting-no-op]
             [wagoe.observability.errors.shell.adapters.sentry :as error-reporting-sentry]
             [wagoe.platform.shell.http.reitit-router :as reitit-router]

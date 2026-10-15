@@ -13,6 +13,8 @@
             [wagoe.jobs.ports :as ports]
             [wagoe.jobs.shell.adapters.redis :as redis-adapter]
             [wagoe.observability.core.sql-redaction :as redaction]
+            ;; Loaded for its effect: `log/error e` below is written redacted.
+            [wagoe.observability.logging.shell.redacting-factory]
             [wagoe.observability.tracing.ports :as tracing-ports]
             [clojure.tools.logging :as log])
   (:import [java.util UUID]
@@ -265,7 +267,7 @@
               (catch Exception e
                 ;; Unexpected error during processing
                 (fail! (failure e))
-                (log/error (redaction/redacted-exception e) "Unexpected error processing job" {:job-id job-id}))
+                (log/error e "Unexpected error processing job" {:job-id job-id}))
 
               (finally
                 ;; The replacement goes back on the queue BEFORE the claim is
@@ -311,7 +313,7 @@
   (try
     (ports/process-scheduled-jobs! queue)
     (catch Exception e
-      (log/error (redaction/redacted-exception e) "Error processing scheduled jobs")
+      (log/error e "Error processing scheduled jobs")
       0)))
 
 ;; =============================================================================
@@ -363,7 +365,7 @@
                 (when (and reclaimed (pos? reclaimed))
                   (log/warn "Reclaimed abandoned jobs onto the ready queue" {:count reclaimed})))
               (catch Exception e
-                (log/error (redaction/redacted-exception e) "Error reclaiming abandoned jobs")))
+                (log/error e "Error reclaiming abandoned jobs")))
             (reset! last-scheduled-check now)))
 
         ;; Process next job from queue; apply exponential backoff on empty queue
@@ -381,7 +383,7 @@
           (reset! (:running? worker-state) false))
 
         (catch Exception e
-          (log/error (redaction/redacted-exception e) "Unexpected error in worker loop" {:worker-id (:id worker-state)})
+          (log/error e "Unexpected error in worker loop" {:worker-id (:id worker-state)})
           (Thread/sleep @current-poll-ms)
           (swap! current-poll-ms #(min max-poll-ms (* 2 %)))))))
 
