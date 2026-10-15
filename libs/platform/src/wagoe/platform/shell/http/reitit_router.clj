@@ -20,7 +20,7 @@
             [reitit.swagger :as swagger]
             [reitit.swagger-ui :as swagger-ui]
             [ring.middleware.cookies :refer [wrap-cookies]]
-            [ring.middleware.multipart-params :refer [wrap-multipart-params]]
+            [ring.middleware.multipart-params :refer [multipart-params-request]]
             [ring.middleware.not-modified :refer [not-modified-response]]
             [ring.middleware.resource :refer [resource-request]]
             [ring.util.codec :as codec]
@@ -30,6 +30,7 @@
             [wagoe.platform.core.http.errors :as errors]
             [wagoe.platform.shell.http.interceptors :as http-interceptors])
   (:import [java.io ByteArrayInputStream ByteArrayOutputStream]
+           [org.apache.commons.fileupload2.core FileUploadException FileUploadSizeException]
            [java.security MessageDigest]
            [java.util.zip GZIPOutputStream]))
 
@@ -266,27 +267,46 @@
                        (access/correlation-id request (str (random-uuid)))))))))})
 
 (def ^:private default-multipart-limits
-  "Per request. Without them any signed-in caller could spool files of any
-   size to disk (BOU-641); `nil` lifts a limit, as in Ring."
+  "Without them any signed-in caller could spool files of any size to disk
+   (BOU-641). Size is per part, count is of all parts, fields included;
+   `nil` lifts a limit, as in Ring."
   {:max-file-size  (* 10 1024 1024)
-   :max-file-count 10})
+   :max-file-count 100})
+
+(defn- limit-exceeded?
+  "Whether a failed decode hit a limit rather than a malformed body; Ring's
+   own error handler answers 413 for both."
+  [e]
+  (some #(or (instance? FileUploadSizeException %)
+             (contains? (ex-data %) :max-file-count))
+        (take-while some? (iterate ex-cause e))))
 
 (defn- multipart-params
   "Decodes multipart bodies, which Reitit does only for routes declaring
    `:parameters :multipart` (BOU-638). Those are skipped, not parsed twice.
    So are `:public` routes: the authentication guard does not cover them."
   [limits]
-  (let [limits  (merge default-multipart-limits limits)
-        options (assoc limits :error-handler
-                       (fn [_request]
-                         (errors/response 413 (errors/status->type 413)
-                                          "Upload exceeds the multipart limits"
-                                          {:details (select-keys limits [:max-file-size :max-file-count])})))]
+  (let [limits (merge default-multipart-limits limits)
+        refuse (fn [request e]
+                 (let [id (access/correlation-id request (str (random-uuid)))]
+                   (if (limit-exceeded? e)
+                     (errors/response 413 :validation-error "Upload exceeds the multipart limits"
+                                      {:details        (select-keys limits [:max-file-size :max-file-count])
+                                       :correlation-id id})
+                     (errors/response 400 :validation-error "Malformed multipart body"
+                                      {:correlation-id id}))))]
     {:name    ::multipart-params
      :compile (fn [data _opts]
                 (when-not (or (access/public? data)
                               (get-in data [:parameters :multipart]))
-                  #(wrap-multipart-params % options)))}))
+                  (fn [handler]
+                    (fn [request]
+                      (let [decoded (try (multipart-params-request request limits)
+                                         (catch FileUploadException e e)
+                                         (catch clojure.lang.ExceptionInfo e e))]
+                        (if (instance? Throwable decoded)
+                          (refuse request decoded)
+                          (handler decoded)))))))}))
 
 (defn- create-default-middleware
   "Create default middleware stack for Reitit router.

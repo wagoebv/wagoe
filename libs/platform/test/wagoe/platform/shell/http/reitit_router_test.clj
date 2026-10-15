@@ -1118,11 +1118,21 @@
     (testing "a file over :max-file-size is refused, in the one error shape"
       (let [resp (post {:max-file-size 4})]
         (is (= 413 (:status resp)))
-        (is (= {:max-file-size 4 :max-file-count 10}
-               (:details (error-body resp))))))
+        (is (= {:max-file-size 4 :max-file-count 100}
+               (:details (error-body resp))))
+        (is (some? (get-in resp [:headers "X-Correlation-ID"])))))
 
     (testing "so is a form with more parts than :max-file-count"
       (is (= 413 (:status (post {:max-file-count 1})))))
 
-    (testing "nil lifts a limit"
-      (is (= 200 (:status (post {:max-file-size nil})))))))
+    (testing "a malformed body is a 400, not a 413"
+      (is (= 400 (:status ((reitit/compile-routes
+                            [["/upload" {:post {:handler (fn [_] {:status 200 :body {:ok true}})}}]]
+                            {:system {}})
+                           (assoc (multipart-request "/upload")
+                                  :body (java.io.ByteArrayInputStream.
+                                         (.getBytes "--XyZ\r\nno headers" "UTF-8"))))))))
+
+    (testing "nil lifts a limit rather than falling back to the default"
+      (is (= {:max-file-size nil :max-file-count 1}
+             (:details (error-body (post {:max-file-size nil :max-file-count 1}))))))))
