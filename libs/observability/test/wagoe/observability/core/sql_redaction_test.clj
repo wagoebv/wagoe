@@ -145,3 +145,46 @@
                   (ex-info "Migration failed" {:type :migration-failed :error (.getMessage driver)} driver))]
     (is (= :migration-failed (:type (ex-data redacted))))
     (is (not (str/includes? (pr-str (ex-data redacted)) "alice@example.com")))))
+
+(deftest ^:unit a-raise-is-redacted-whatever-state-it-claims
+  ;; BOU-635: a RAISE's author picks the state, names included.
+  (is (= "Database error (SQLState 42501)"
+         (redaction/redacted-message {:sql-state "42501" :authored? true
+                                      :message "ERROR: card 4111111111111111 refused"})))
+  (is (= "Database error (SQLState 23505)"
+         (redaction/redacted-message {:sql-state "23505" :authored? true
+                                      :message "ERROR: violates constraint \"4111111111111111\""})))
+  (is (= "Database error (SQLState 42P01)"
+         (redaction/redacted-message {:sql-state "42P01" :authored? true
+                                      :message "ERROR: card 4111111111111111 refused"}))
+      "even a state whose own messages are kept")
+  (is (nil? (redaction/redacted-message {:sql-state "42P01"
+                                         :message "ERROR: relation \"users\" does not exist"}))
+      "the server's own 42P01 keeps its text"))
+
+(deftest ^:unit a-suppressed-exception-is-redacted-too
+  (let [outer    (doto (RuntimeException. "close failed") (.addSuppressed quoting))
+        redacted (redaction/redacted-exception outer)
+        [s]      (.getSuppressed ^Throwable redacted)]
+    (is (some? s))
+    (is (not (.contains (str (ex-message s)) "alice@example.com")))
+    (is (= "java.lang.RuntimeException: close failed" (ex-message redacted)))))
+
+(deftest ^:unit a-driver-subclass-is-named
+  (let [driver   (java.sql.SQLIntegrityConstraintViolationException.
+                  "Duplicate entry 'alice@example.com' for key 'users.email'" "23000" 1062)
+        redacted (redaction/redacted-exception (ex-info "save failed" {} driver))]
+    (is (= "Integrity constraint violated (SQLState 23000, constraint users.email) (java.sql.SQLIntegrityConstraintViolationException)"
+           (ex-message (ex-cause redacted))))
+    (is (identical? redacted (redaction/redacted-exception redacted)) "and a second pass changes nothing")))
+
+(deftest ^:unit a-redacted-raise-stays-as-it-is
+  ;; The copy no longer says it was a RAISE; a second pass must not relabel it.
+  (let [once (redaction/redacted-message {:sql-state "23505" :authored? true :message "card 4111"})]
+    (is (= "Database error (SQLState 23505)" once))
+    (is (= once (redaction/redacted-message {:sql-state "23505" :message once})))))
+
+(deftest ^:unit a-raise-names-no-constraint-or-field
+  (is (nil? (redaction/constraint-name {:authored? true :constraint "4111111111111111"})))
+  (is (nil? (redaction/not-null-field {:authored? true :sql-state "23502" :column "4111111111111111"}))))
+
