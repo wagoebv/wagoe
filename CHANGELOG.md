@@ -79,6 +79,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **MySQL refused instants, lost UUID lookups and read every boolean as false** (BOU-648): they now round-trip.
+  New tables get `DATETIME(6)`; existing `DATETIME` columns still round to whole seconds.
 - **MySQL `:connection-params` and `:sql-mode` were ignored** (BOU-647): both config paths dropped them.
   They now reach the connection; check any you set, since they take effect now.
 - **No request body was size-limited** (BOU-644): a body over 32 MB is now a 413, before any handler reads it.

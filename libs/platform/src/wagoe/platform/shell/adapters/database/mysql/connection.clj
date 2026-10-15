@@ -1,6 +1,8 @@
 (ns wagoe.platform.shell.adapters.database.mysql.connection
   "MySQL connection settings and JDBC URL."
-  (:require [clojure.string :as str]))
+  (:require [clojure.string :as str]
+            [wagoe.core.utils.type-conversion :as tc])
+  (:import [java.time Instant LocalDateTime ZoneOffset]))
 
 (def ^:private default-sql-mode
   "Strict SQL mode.
@@ -28,6 +30,16 @@
         all-params     (merge default-params (or connection-params {}))
         param-str      (str/join "&" (map (fn [[k v]] (str (name k) "=" v)) all-params))]
     (str base-url "?" param-str)))
+
+(defn param->db
+  "MySQL Java-serialises a UUID and strict mode rejects an ISO instant string,
+   which persistence writes; send text and a UTC DATETIME (BOU-648)."
+  [value]
+  (let [v (or (tc/iso-instant value) value)]
+    (cond
+      (uuid? v)              (str v)
+      (instance? Instant v)  (LocalDateTime/ofInstant v ZoneOffset/UTC)
+      :else                  v)))
 
 (defn session-statements
   "Strict mode, UTC, and UTF-8. Each runs on its own — see

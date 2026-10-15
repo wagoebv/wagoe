@@ -23,7 +23,8 @@
      :capabilities       a subset of protocols/capability-keywords
      :column-types       {logical-type DDL-type} for protocols/logical-column-types
      :on-connect         optional (fn [java.sql.Connection]), run on each new
-                         connection after the session statements"
+                         connection after the session statements
+     :param->db          optional (fn [value] -> value) for each query parameter"
   (:require [wagoe.core.utils.type-conversion :as tc]
             [wagoe.platform.ports.database :as protocols]
             [clojure.tools.logging :as log]
@@ -156,7 +157,10 @@
         (throw (ex-info (str "No column type for " logical)
                         {:type :validation-error :logical logical}))))
 
-  (like [_ field pattern] (case-insensitive-like (:string-match spec) field pattern)))
+  (like [_ field pattern] (case-insensitive-like (:string-match spec) field pattern))
+
+  protocols/ParamEncoder
+  (param->db [_ value] ((:param->db spec identity) value)))
 
 (defn new-adapter
   "Build the adapter described by `spec`. See this namespace's docstring."
