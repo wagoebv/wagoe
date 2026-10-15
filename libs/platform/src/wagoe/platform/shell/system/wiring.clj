@@ -36,6 +36,7 @@
             [wagoe.observability.tracing.shell.adapters.otlp :as tracing-otlp]
             [wagoe.observability.logging.shell.adapters.stdout :as logging-stdout]
             [wagoe.observability.logging.shell.adapters.slf4j :as logging-slf4j]
+            [wagoe.observability.logging.shell.redacting-factory :as redacting-factory]
             [wagoe.observability.errors.shell.adapters.no-op :as error-reporting-no-op]
             [wagoe.observability.errors.shell.adapters.sentry :as error-reporting-sentry]
             [wagoe.platform.shell.http.reitit-router :as reitit-router]
@@ -644,6 +645,9 @@
 
 (defmethod ig/init-key :wagoe/logging
   [_ config]
+  ;; Every clojure.tools.logging call, not only this component's, writes its
+  ;; throwable without the values a database driver quoted (BOU-634).
+  (redacting-factory/install!)
   (log/info "Initializing logging component" {:provider (:provider config)})
   (let [logger (case (:provider config)
                  :no-op (logging-no-op/create-logging-component config)
