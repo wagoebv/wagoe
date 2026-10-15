@@ -599,6 +599,9 @@
                         (contains? settings :muuntaja)
                         (assoc :muuntaja (:muuntaja settings))
 
+                        (contains? settings :multipart)
+                        (assoc :multipart (:multipart settings))
+
                         ;; nil is meaningful here — Reitit reads it as "do not
                         ;; check" — so the key's presence is what matters
                         ;; (BOU-356).

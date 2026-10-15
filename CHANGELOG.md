@@ -81,6 +81,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **No request body was size-limited** (BOU-644): a body over 32 MB is now a 413, before any handler reads it.
   Raise or lift it with `:wagoe/http {:max-request-body <bytes or nil>}`.
+- **Multipart uploads had no size limit** (BOU-641): over 10 MB per file or 100 parts is now a 413.
+  Raise it with `:wagoe/router {:multipart {:max-file-size … :max-file-count …}}`.
 - **Multipart bodies were not decoded unless a route declared `:parameters :multipart`** (BOU-638): storage uploads and the CSRF
   token of a file-upload form read nothing. `:public` routes are not decoded; a workaround elsewhere can go.
 - **An application module's `:job-handlers`, `:http` and `:routes` were dropped** (BOU-636): its graph is now taken whole, like a framework module's.
