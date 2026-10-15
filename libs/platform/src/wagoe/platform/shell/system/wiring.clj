@@ -806,9 +806,8 @@
   (* 32 1024 1024))
 
 (defn- limit-request-body!
-  "Answer 413 to a request body over `max-bytes`, whatever its content type.
-   Nothing bounded a JSON, EDN or form body before, on public routes too
-   (BOU-644). nil lifts the limit."
+  "Answer 413 to a body over `max-bytes`, any content type, before a decoder
+   reads it. nil lifts the limit."
   [^org.eclipse.jetty.server.Server s max-bytes]
   (when max-bytes
     (let [limiter (org.eclipse.jetty.server.handler.SizeLimitHandler. (long max-bytes) -1)]
@@ -826,7 +825,8 @@
 ;; resolved here, where a name that no longer exists fails the boot rather than
 ;; the first call.
 (defmethod ig/init-key :wagoe/rpc-server
-  [_ {:keys [protocol implementation port host service-key auth]}]
+  [_ {:keys [protocol implementation port host service-key auth max-request-body]
+       :or   {max-request-body default-max-request-body}}]
   (let [protocol-var (or (requiring-resolve protocol)
                          (throw (ex-info (str "RPC protocol not found: " protocol)
                                          {:type :configuration-error})))
@@ -834,9 +834,11 @@
                                          (cond-> {}
                                            service-key (assoc :service-key service-key)
                                            auth        (assoc :auth auth)))
-        server       (jetty/run-jetty app {:port  port
-                                           :host  (or host "0.0.0.0")
-                                           :join? false})]
+        ;; Limited too: the body is decoded before the service key is checked.
+        server       (jetty/run-jetty app {:port         port
+                                           :host         (or host "0.0.0.0")
+                                           :join?        false
+                                           :configurator #(limit-request-body! % max-request-body)})]
     (log/info "RPC endpoint started"
               {:protocol (str protocol) :port port :path rpc-server/default-path})
     server))
@@ -848,7 +850,8 @@
     (.stop server)))
 
 (defmethod ig/init-key :wagoe/http-server
-  [_ {:keys [handler port host join? config drain-timeout-ms] :as opts}]
+  [_ {:keys [handler port host join? config drain-timeout-ms max-request-body]
+       :or   {max-request-body default-max-request-body}}]
   (let [http-config (or config {})
         port-allocation (port-manager/allocate-port port http-config)
         allocated-port (:port port-allocation)]
@@ -866,8 +869,7 @@
                                    ;; enable graceful connection draining.
                                    :configurator (fn [s]
                                                    (.setAttribute s "handler-atom" ha)
-                                                   (limit-request-body! s (get opts :max-request-body
-                                                                               default-max-request-body))
+                                                   (limit-request-body! s max-request-body)
                                                    (configure-graceful-shutdown! s drain-timeout-ms))})]
       (log/info "HTTP server started successfully"
                 {:requested-port port
