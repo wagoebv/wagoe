@@ -104,13 +104,13 @@
         with-tags (if-let [tags (:tags config)]
                     (assoc with-context :ddtags (str/join "," tags))
                     with-context)
-        exception      (some-> exception redaction/redacted-exception)
-        with-exception (if exception
+        shown          (some-> exception redaction/redacted-exception)
+        with-exception (if shown
                          (assoc with-tags
                                 :error.kind (str (class exception))
-                                :error.message (.getMessage exception)
+                                :error.message (.getMessage ^Throwable shown)
                                 :error.stack (str/join "\n"
-                                                       (map str (.getStackTrace exception))))
+                                                       (map str (.getStackTrace ^Throwable shown))))
                          with-tags)]
     with-exception))
 

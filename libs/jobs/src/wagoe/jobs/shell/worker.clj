@@ -82,16 +82,20 @@
 ;; Job Execution
 ;; =============================================================================
 
-(defn- failure
+(defn failure
   "What a job failure stores and logs: no value a database driver quoted, since
    it lands in the jobs table (BOU-633). :type names the kind of failure, the
    thrown class has its own key (BOU-323)."
   [^Throwable e]
-  (let [^Throwable shown (redaction/redacted-exception e)]
+  (let [^Throwable shown (redaction/redacted-exception e)
+        trace            (java.io.StringWriter.)]
+    ;; Into a writer: plain .printStackTrace goes to System.err, and the stored
+    ;; trace was always empty.
+    (.printStackTrace shown (java.io.PrintWriter. trace))
     {:message         (.getMessage shown)
      :type            :handler-error
      :exception-class (-> e class .getName)
-     :stacktrace      (with-out-str (.printStackTrace shown))}))
+     :stacktrace      (str trace)}))
 
 (defn- execute-job-handler
   "Execute job handler function with error handling.
@@ -252,7 +256,7 @@
                         (log/info "Job completed successfully" {:job-id job-id}))
                       (do
                         (fail! (:error result))
-                        (log/warn "Job failed" {:job-id job-id :error (:error result)})))))
+                        (log/warn "Job failed" {:job-id job-id :error (dissoc (:error result) :stacktrace)})))))
 
                 ;; No handler on this instance — re-enqueue (bounded), never silent DLQ.
                 (reset! requeue

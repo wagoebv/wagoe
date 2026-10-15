@@ -3,7 +3,8 @@
    and reported (BOU-626, BOU-628, BOU-629). Pure, on the driver's SQLState,
    vendor code and message: every library reporting through observability gets
    it, whatever threw (BOU-633)."
-  (:require [clojure.string :as str])
+  (:require [clojure.string :as str]
+            [clojure.walk :as walk])
   (:import [java.sql SQLException]))
 
 (defn column->field
@@ -105,14 +106,8 @@
   "What `redacted-message` says for `se`, or nil."
   [^SQLException se]
   (redacted-message {:sql-state  (.getSQLState se)
-                                :error-code (.getErrorCode se)
-                                :message    (.getMessage se)}))
-
-(defn- quoted-summary
-  "The redacted summary for the first SQLException in `e`'s causes when its
-   message quotes values, or nil."
-  [e]
-  (some-> (first-sql-exception e) summary))
+                     :error-code (.getErrorCode se)
+                     :message    (.getMessage se)}))
 
 (defn redacted-exception
   "`t`, or a copy of its cause chain in which each SQLException that quotes the
@@ -123,8 +118,10 @@
    RuntimeException naming its class."
   [^Throwable t]
   (let [chain    (causes t)
+        ;; Only what would change: an already-redacted chain comes back as is.
         redacted (into {} (keep #(when (instance? SQLException %)
-                                   (some->> (summary %) (vector %))))
+                                   (let [s (summary %)]
+                                     (when (and s (not= s (.getMessage ^SQLException %))) [% s]))))
                        chain)
         ;; A wrapper's message can carry the driver's: RuntimeException(cause)
         ;; and ExecutionException use cause.toString().
@@ -143,7 +140,11 @@
                    (let [^SQLException se x]
                      (SQLException. ^String (get redacted x (scrub (.getMessage se)))
                                     (.getSQLState se) (.getErrorCode se) ^Throwable cause))
-                   (instance? clojure.lang.ExceptionInfo x) (ex-info (scrub (ex-message x)) (ex-data x) cause)
+                   ;; ex-data too: `{:error (.getMessage e)}` is a common shape.
+                   (instance? clojure.lang.ExceptionInfo x)
+                   (ex-info (scrub (ex-message x))
+                            (walk/postwalk #(if (string? %) (scrub %) %) (ex-data x))
+                            cause)
                    :else (RuntimeException. (str (.getName (class x)) ": " (scrub (.getMessage x))) ^Throwable cause))
                   (.setStackTrace (.getStackTrace x))))
               nil
@@ -152,4 +153,4 @@
 (defn loggable-message
   "`e`'s message, or a summary without the values when the driver's quotes them."
   [e]
-  (or (quoted-summary e) (ex-message e)))
+  (or (some-> (first-sql-exception e) summary) (ex-message e)))

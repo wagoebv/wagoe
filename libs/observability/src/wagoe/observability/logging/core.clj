@@ -183,10 +183,12 @@
    Returns:
      nil"
   [logger level message exception context]
-  ;; No value a database driver quoted reaches the log (BOU-633).
-  (let [exception     (redaction/redacted-exception exception)
+  ;; No value a database driver quoted reaches the log (BOU-633). The type is
+  ;; the thrown one: the redacted copy may be a plain RuntimeException.
+  (let [thrown        exception
+        exception     (redaction/redacted-exception exception)
         error-context (assoc context
-                             :exception-type (-> exception class .getSimpleName)
+                             :exception-type (-> thrown class .getSimpleName)
                              :exception-message (.getMessage exception)
                              :stack-trace (mapv str (.getStackTrace exception)))]
     (ports/log* logger level message error-context exception)))

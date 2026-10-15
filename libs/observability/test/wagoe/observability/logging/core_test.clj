@@ -75,3 +75,13 @@
       (is (not (.contains (pr-str context) "alice@example.com")))
       (is (not-any? #(.contains (str (ex-message %)) "alice@example.com")
                     (take-while some? (iterate ex-cause exception)))))))
+
+(deftest ^:unit log-exception-names-the-thrown-type
+  ;; The redacted copy of an IllegalStateException is a RuntimeException.
+  (let [logged (atom nil)
+        logger #_{:clj-kondo/ignore [:missing-protocol-method]}
+               (reify ports/ILogger
+                 (log* [_ _ _ context _] (reset! logged context)))
+        driver (java.sql.SQLException. "Duplicate entry 'alice@example.com' for key 'users.email'" "23000" 1062)]
+    (logging-core/log-exception logger :error "save failed" (IllegalStateException. "save failed" driver) {})
+    (is (= "IllegalStateException" (:exception-type @logged)))))

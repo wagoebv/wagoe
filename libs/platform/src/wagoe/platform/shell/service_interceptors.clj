@@ -159,7 +159,7 @@
                 ;; Report application error
                 (error-reporting/report-application-error
                  error-reporter
-                 error
+                 (redaction/redacted-exception error)
                  (str "Service operation failed: " operation-name)
                  {:extra (pii/redact-for-log (merge {:operation operation-name} params context))
                   :tags {:component "service"

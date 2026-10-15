@@ -52,18 +52,6 @@
                (re-find #"insert or update on table" message) false
                :else (and table target (not= (str/lower-case table) target))))))
 
-(def not-null-field
-  "The field a refused NOT NULL names. See `redaction/not-null-field`."
-  redaction/not-null-field)
-
-(def constraint-name
-  "The constraint that refused the write. See `redaction/constraint-name`."
-  redaction/constraint-name)
-
-(def redacted-message
-  "What to log in place of the driver's message. See `redaction/redacted-message`."
-  redaction/redacted-message)
-
 (defn violation
   "`{:kind :unique|:foreign-key :field kw}` for a unique or foreign-key
    violation, `:field` only when the driver names one column, and

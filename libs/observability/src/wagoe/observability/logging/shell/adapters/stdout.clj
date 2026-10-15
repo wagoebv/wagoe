@@ -80,11 +80,11 @@
    
    Pure: Yes"
   [exception max-elements]
-  (when-let [exception (some-> exception redaction/redacted-exception)]
+  (when-let [^Throwable shown (some-> exception redaction/redacted-exception)]
     {:exception-type (-> exception class .getSimpleName)
-     :exception-message (.getMessage exception)
+     :exception-message (.getMessage shown)
      :stack-trace (vec (take max-elements
-                             (map str (.getStackTrace exception))))}))
+                             (map str (.getStackTrace shown))))}))
 
 (defn- sanitize-context
   "Remove or redact sensitive information from context.

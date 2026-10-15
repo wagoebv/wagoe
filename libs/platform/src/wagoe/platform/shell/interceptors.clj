@@ -121,7 +121,7 @@
             (when-let [error-reporter (:error-reporter system)]
               (error-reporting/capture-exception
                error-reporter
-               exception
+               (redaction/redacted-exception exception)
                {:operation (subs (str op) 1) ; Remove the leading colon 
                 :correlation-id correlation-id
                 :context-keys (keys (dissoc ctx :system :exception))}))

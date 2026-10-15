@@ -17,6 +17,7 @@
    live behind the `DBAdapter` port. A second protocol here would name a seam
    nothing implements — the mistake ADR-037 removed."
   (:require [wagoe.platform.shell.adapters.database.common.execution :as execution]
+            [wagoe.observability.core.sql-redaction :as redaction]
             [wagoe.platform.shell.adapters.database.common.schema :as schema]
             [wagoe.platform.shell.adapters.database.common.utils :as utils]
             [wagoe.platform.shell.adapters.database.config :as config]
@@ -179,11 +180,11 @@
 (def redacted-exception
   "An exception fit to report or log: no SQLException in its chain quotes the
    values sent (BOU-630)."
-  execution/redacted-exception)
+  redaction/redacted-exception)
 
 (def loggable-message
   "An exception's message, or a summary when the driver's quotes the values sent."
-  execution/loggable-message)
+  redaction/loggable-message)
 
 (def initialize-tables-from-schemas!
   "Create the tables described by a collection of Malli schemas, if absent, and

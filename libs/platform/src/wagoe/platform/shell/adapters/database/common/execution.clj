@@ -135,23 +135,15 @@
 
 (defn redacted-cause
   "`e`, or when the driver's message quotes the values sent, a SQLException in
-   its place saying what `constraint/redacted-message` says, with the same
+   its place saying what `redaction/redacted-message` says, with the same
    state, code and stack. Whatever logs or reports the cause chain then reads
    no values (BOU-628)."
   ([e] (redacted-cause e (reported e)))
   ([^Throwable e {:keys [sql-state error-code] :as reported}]
-   (if-let [msg (some-> reported constraint/redacted-message)]
+   (if-let [msg (some-> reported redaction/redacted-message)]
      (doto (SQLException. ^String msg ^String sql-state (int error-code))
        (.setStackTrace (.getStackTrace e)))
      e)))
-
-(def redacted-exception
-  "An exception fit to report or log. See `redaction/redacted-exception`."
-  redaction/redacted-exception)
-
-(def loggable-message
-  "An exception's message without quoted values. See `redaction/loggable-message`."
-  redaction/loggable-message)
 
 (defn- deletes?
   "Whether `sql` is a DELETE, read from its text so raw SQL counts too."
@@ -187,10 +179,10 @@
         cause (redacted-cause e r)]
     (when-let [v (some-> r (assoc :target (constraint/statement-table sql)) constraint/violation)]
       (log/info (str what " refused by a constraint")
-                {:adapter adapter-dialect :sql sql :violation v :constraint-name (constraint/constraint-name r)})
+                {:adapter adapter-dialect :sql sql :violation v :constraint-name (redaction/constraint-name r)})
       (throw (conflict v sql cause)))
     (let [msg      (ex-message cause)
-          required (some-> r constraint/not-null-field)]
+          required (some-> r redaction/not-null-field)]
       (log/error (str what " failed") {:adapter adapter-dialect :sql sql :error msg})
       (throw (ex-info (str "Database " (str/lower-case what) " failed")
                       (cond-> {:type           :database-error
@@ -447,5 +439,5 @@
           (catch Exception e
             (log/error "Transaction failed, rolling back"
                        {:adapter (protocols/dialect (:adapter ctx))
-                        :error (loggable-message e)})
+                        :error (redaction/loggable-message e)})
             (throw e)))))))
