@@ -8,12 +8,17 @@
 ;; Scaffolded module discovery (BOU-311)
 ;; =============================================================================
 
+(defn- discovered
+  "The components `discover-module-config` builds."
+  [& args]
+  (:components (apply sut/discover-module-config args)))
+
 (deftest ^:unit discovery-wires-a-module-the-fixed-list-never-heard-of
   ;; `bb scaffold generate tasks` then adding :wagoe/tasks to config produced
   ;; nothing: ig-config built from a fixed list of known keys, so the key was
   ;; skipped without an init-key, a route, or a word about it. Quickstart
   ;; reported 8/8 and left dead code behind.
-  (let [entries (sut/discover-module-config
+  (let [entries (discovered
                  {:wagoe/tasks {:enabled? true}}
                  #{}
                  "acme"
@@ -35,21 +40,21 @@
   ;; the convention — :wagoe/payment-provider, :wagoe.external/smtp. Discovery
   ;; must not try to wire them a second time.
   (testing "a key the fixed list already handles is skipped"
-    (is (empty? (sut/discover-module-config
+    (is (empty? (discovered
                  {:wagoe/cache {:provider :in-memory}}
                  #{:wagoe/cache}
                  "acme"
                  (constantly true)))))
 
   (testing "a namespaced key that is not :wagoe/<module> is not a module"
-    (is (empty? (sut/discover-module-config
+    (is (empty? (discovered
                  {:wagoe.external/smtp {:host "x"}}
                  #{}
                  "acme"
                  (constantly true)))))
 
   (testing "settings and profile are configuration, not modules"
-    (is (empty? (sut/discover-module-config
+    (is (empty? (discovered
                  {:wagoe/settings {:name "app"} :wagoe/profile :dev}
                  #{}
                  "acme"
@@ -58,7 +63,7 @@
 (deftest ^:unit an-active-key-with-no-wiring-fails-loudly
   ;; The silent skip is the defect. A typo in a key name has to be visible —
   ;; :active/:inactive is easy to get wrong and produced no signal at all.
-  (let [e (try (sut/discover-module-config
+  (let [e (try (discovered
                 {:wagoe/tsaks {:enabled? true}}
                 #{}
                 "acme"
@@ -77,7 +82,7 @@
   ;; `shop.product.shell.module-wiring` is where bb scaffold writes them and
   ;; where discovery looks first (BOU-360).
   (let [asked (atom [])]
-    (sut/discover-module-config
+    (discovered
      {:wagoe/product {:enabled? true}}
      #{}
      "shop"
@@ -89,7 +94,7 @@
   ;; Discovery falls back to that, so upgrading the framework does not require
   ;; moving files.
   (let [legacy-only (fn [ns] (= (str ns) "wagoe.product.shell.module-wiring"))
-        entries     (sut/discover-module-config
+        entries     (discovered
                      {:wagoe/product {:enabled? true}}
                      #{}
                      "shop"
@@ -100,7 +105,7 @@
 (deftest ^:unit a-missing-module-names-both-places-it-was-sought
   ;; With two candidates, naming only one sends the reader to look in the
   ;; wrong directory for a file that is in neither.
-  (let [e (try (sut/discover-module-config
+  (let [e (try (discovered
                 {:wagoe/product {:enabled? true}}
                 #{}
                 "shop"
@@ -119,11 +124,39 @@
 
 (deftest ^:unit a-disabled-module-is-not-wired
   ;; :enabled? false is how you turn a module off without deleting its config.
-  (is (empty? (sut/discover-module-config
+  (is (empty? (discovered
                {:wagoe/tasks {:enabled? false}}
                #{}
                "acme"
                (constantly true)))))
+
+(deftest ^:unit a-discovered-module-contributes-its-whole-graph
+  ;; Only `:components` was kept, so an application module could register no
+  ;; job handlers and every job of its type was re-queued (BOU-636).
+  (let [graph    {:components   {:wagoe/visits-job-handlers {}}
+                  :http         {:extra-middleware [:visits]}
+                  :routes       [(ig/ref :wagoe/visits-api)]
+                  :job-handlers [(ig/ref :wagoe/visits-job-handlers)]}
+        discover (fn [active graphs]
+                   (sut/discover-module-config
+                    active #{} "acme" (constantly true)
+                    (fn [sym] (get graphs (namespace sym)))))
+        found    (discover {:wagoe/visits {:enabled? true}}
+                           {"acme.visits.shell.module-wiring" (constantly graph)})]
+    (is (= graph found))
+
+    (testing "and two modules wiring one key fail rather than overwrite"
+      (let [e (is (thrown? clojure.lang.ExceptionInfo
+                           (discover {:wagoe/visits {:enabled? true} :wagoe/trips {:enabled? true}}
+                                     {"acme.visits.shell.module-wiring" (constantly graph)
+                                      "acme.trips.shell.module-wiring"  (constantly graph)})))]
+        (is (= :wagoe/module-key-conflict (:type (ex-data e))))))
+
+    (testing "and an :http slot a framework module fills is refused, not replaced"
+      ;; tenant's `:extra-middleware` would otherwise be dropped silently
+      (let [e (is (thrown? clojure.lang.ExceptionInfo
+                           (sut/merge-http {:extra-middleware :tenant} :discovered (:http found))))]
+        (is (= :extra-middleware (:key (ex-data e))))))))
 
 (deftest ^:unit discovered-routes-reach-the-handler
   ;; Emitting the keys is half the job. :wagoe/http-handler destructures a fixed

@@ -117,8 +117,12 @@
 
          ;; Built before the refs, so they can be filtered against what exists:
          ;; a discovered module with a graph of its own need not have routes.
-         discovered (modules/discover-module-config
-                     active known base-ns modules/require-wiring! requiring-resolve)]
+         {discovered          :components
+          discovered-http     :http
+          discovered-routes   :routes
+          discovered-handlers :job-handlers}
+         (modules/discover-module-config
+          active known base-ns modules/require-wiring! requiring-resolve)]
      (warn-code-enabled-migrations! active extra-modules)
      ;; Said once, so nobody looks for it on :9999 in prod (BOU-588).
      (when-let [profile (:wagoe/profile config)]
@@ -127,9 +131,13 @@
                         (name profile) "."))))
      ;; Framework modules first, then the scaffolded ones — the order routes are
      ;; concatenated in and mounted.
-     (cond-> (merge (core-components config http
-                                     (into (vec routes)
-                                           (modules/discovered-route-refs active known discovered)))
+     (cond-> (merge (core-components config
+                                     (modules/merge-http http :discovered discovered-http)
+                                     ;; distinct: a module may name its
+                                     ;; `-routes` ref and match the convention
+                                     (into [] (distinct)
+                                           (concat routes discovered-routes
+                                                   (modules/discovered-route-refs active known discovered))))
                     components
                     discovered)
        ;; Handlers reach the registry only when the jobs module is on. Assoc'ing
@@ -137,7 +145,7 @@
        ;; config that has no registry, and a module that contributes handlers
        ;; without jobs enabled would fail the boot on a dangling ref.
        (contains? components :wagoe/job-registry)
-       (assoc-in [:wagoe/job-registry :handler-maps] (vec job-handlers))
+       (assoc-in [:wagoe/job-registry :handler-maps] (into (vec job-handlers) discovered-handlers))
 
        ;; A boot migration applies the migrations of the modules :active
        ;; switches on, the set `migrate up` reads, so the two agree (BOU-579).
