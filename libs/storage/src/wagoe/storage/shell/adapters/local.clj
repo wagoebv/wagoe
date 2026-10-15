@@ -160,13 +160,6 @@
                  (not (.equals (.normalize target) (.normalize root))))
         (.toString target)))))
 
-(defn- path-segments
-  "The segments of a caller's `:path`, without `.`, `..` or empty ones.
-   Stripping every separator from the whole path turned `products/42` into
-   `products42` (BOU-639)."
-  [path]
-  (remove #{"" "." ".."} (str/split path #"[/\\]+")))
-
 ;; ============================================================================
 ;; Storage Key Generation
 ;; ============================================================================
@@ -202,8 +195,8 @@
 
             ;; Generate storage key
             storage-key (if path
-                          (apply path-join (concat (path-segments path)
-                                                   [(validation/sanitize-filename filename)]))
+                          (path-join (or (validation/normalize-path path) "")
+                                     (validation/sanitize-filename filename))
                           (generate-storage-key bytes filename))
 
             ;; Full filesystem path — through the same containment check the

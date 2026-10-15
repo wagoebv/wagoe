@@ -75,7 +75,9 @@
 
     (try
       ;; Sanitize filename
-      (let [sanitized-metadata (update metadata :filename validation/sanitize-filename)
+      (let [sanitized-metadata (-> metadata
+                                   (update :filename validation/sanitize-filename)
+                                   (update :path validation/normalize-path))
 
             ;; Validate file
             validation-result (validation/validate-file file-data sanitized-metadata options)]
