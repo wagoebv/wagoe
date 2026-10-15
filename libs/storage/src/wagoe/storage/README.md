@@ -130,8 +130,7 @@ File upload and storage functionality for the Wagoe framework. Supports local fi
  :local {:base-path "/var/app/uploads"
          :url-base "https://myapp.com/files"
          :create-directories? true}
- :default-visibility :private
- :max-file-size (* 10 1024 1024)}  ; 10 MB
+ :default-visibility :private}
 ```
 
 ### S3 Storage Configuration
@@ -144,8 +143,7 @@ File upload and storage functionality for the Wagoe framework. Supports local fi
       :secret-key "AWS_SECRET_KEY"
       :prefix "uploads/"
       :public-read? false}
- :default-visibility :private
- :max-file-size (* 50 1024 1024)}  ; 50 MB
+ :default-visibility :private}
 ```
 
 ### S3-Compatible Services (MinIO, DigitalOcean Spaces)
