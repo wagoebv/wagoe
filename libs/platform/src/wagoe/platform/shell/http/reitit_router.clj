@@ -20,6 +20,7 @@
             [reitit.swagger :as swagger]
             [reitit.swagger-ui :as swagger-ui]
             [ring.middleware.cookies :refer [wrap-cookies]]
+            [ring.middleware.multipart-params :refer [wrap-multipart-params]]
             [ring.middleware.not-modified :refer [not-modified-response]]
             [ring.middleware.resource :refer [resource-request]]
             [ring.util.codec :as codec]
@@ -264,6 +265,17 @@
                        "Authentication required" request
                        (access/correlation-id request (str (random-uuid)))))))))})
 
+(def ^:private multipart-params
+  "Decodes multipart bodies, which Reitit does only for routes declaring
+   `:parameters :multipart` (BOU-638). Those are skipped, not parsed twice.
+   So are `:public` routes: the authentication guard does not cover them, and
+   with no size limit anyone could spool uploads to disk."
+  {:name    ::multipart-params
+   :compile (fn [data _opts]
+              (when-not (or (access/public? data)
+                            (get-in data [:parameters :multipart]))
+                wrap-multipart-params))})
+
 (defn- create-default-middleware
   "Create default middleware stack for Reitit router.
 
@@ -288,7 +300,9 @@
          (create-exception-middleware config)]
         (into (:middleware authentication))
         (into (when authentication [require-authentication]))
-        (into [;; Decoding request body
+        (into [;; Decoding request body — multipart after authentication, so
+               ;; an anonymous caller cannot make the server spool an upload
+               multipart-params
                muuntaja/format-request-middleware
                ;; Coercing request parameters
                coercion/coerce-request-middleware

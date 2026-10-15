@@ -4,6 +4,7 @@
             [cheshire.core :as json]
             [clojure.string :as str]
             [clojure.test :refer [deftest testing is]]
+            [reitit.ring.middleware.multipart :as multipart]
             [ring.util.codec :as codec]
             [ring.util.request :as ring-request]))
 
@@ -1052,3 +1053,54 @@
         handler (guarded-handler [(fn [h] (fn [req] (reset! seen (:user req)) (h req)))])]
     (handler {:request-method :get :uri "/api/v1/open" :signed-in true})
     (is (= {:id 1} @seen))))
+
+(defn- multipart-request
+  "A POST carrying a text field `path` and a file `file`, encoded as a browser
+   would."
+  [uri]
+  (let [body (str "--XyZ\r\n"
+                  "Content-Disposition: form-data; name=\"path\"\r\n\r\n"
+                  "products/42\r\n"
+                  "--XyZ\r\n"
+                  "Content-Disposition: form-data; name=\"file\"; filename=\"a.txt\"\r\n"
+                  "Content-Type: text/plain\r\n\r\n"
+                  "hello\r\n"
+                  "--XyZ--\r\n")
+        bytes (.getBytes body "UTF-8")]
+    {:request-method :post
+     :uri            uri
+     :headers        {"content-type"   "multipart/form-data; boundary=XyZ"
+                      "content-length" (str (count bytes))}
+     :body           (java.io.ByteArrayInputStream. bytes)}))
+
+(deftest ^:unit a-multipart-body-is-decoded-without-declaring-it
+  ;; Reitit's multipart middleware compiles to nothing without
+  ;; `:parameters :multipart`, so the storage upload handlers read an empty
+  ;; `:multipart-params` (BOU-638).
+  (let [seen    (atom nil)
+        handler (reitit/compile-routes
+                 [["/upload" {:post {:handler (fn [req]
+                                                (reset! seen (:multipart-params req))
+                                                {:status 200 :body {:ok true}})}}]
+                  ["/declared" {:post {:handler    (fn [req]
+                                                     (reset! seen (get-in req [:parameters :multipart]))
+                                                     {:status 200 :body {:ok true}})
+                                       :parameters {:multipart [:map [:path :string]]}
+                                       :middleware [multipart/multipart-middleware]}}]
+                  ["/public" {:post {:handler (fn [req]
+                                                (reset! seen (:multipart-params req))
+                                                {:status 200 :body {:ok true}})
+                                     :public  true}}]]
+                 {:system {}})]
+    (testing "a route that declares nothing gets the fields and the file"
+      (is (= 200 (:status (handler (multipart-request "/upload")))))
+      (is (= "products/42" (get @seen "path")))
+      (is (= "a.txt" (:filename (get @seen "file")))))
+
+    (testing "a route that declares it is decoded by Reitit, once"
+      (is (= 200 (:status (handler (multipart-request "/declared")))))
+      (is (= "products/42" (:path @seen))))
+
+    (testing "a public route is not decoded: no guard stops an anonymous upload"
+      (is (= 200 (:status (handler (multipart-request "/public")))))
+      (is (empty? @seen)))))
