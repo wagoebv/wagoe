@@ -81,6 +81,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **MySQL refused instants, lost UUID lookups and read every boolean as false** (BOU-648): they now round-trip.
   New tables get `DATETIME(6)`; existing `DATETIME` columns still round to whole seconds.
+- **MySQL `:connection-params` and `:sql-mode` were ignored** (BOU-647): both config paths dropped them.
+  They now reach the connection; check any you set, since they take effect now.
 - **No request body was size-limited** (BOU-644): a body over 32 MB is now a 413, before any handler reads it.
   Raise or lift it with `:wagoe/http {:max-request-body <bytes or nil>}`.
 - **Multipart uploads had no size limit** (BOU-641): over 10 MB per file or 100 parts is now a 413.
