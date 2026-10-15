@@ -117,7 +117,8 @@
     (try
       (when-let [m (Reflector/invokeInstanceMethod se "getServerErrorMessage" (object-array 0))]
         (into {} (for [[k getter] {:detail "getDetail" :table "getTable"
-                                   :constraint "getConstraint" :column "getColumn"}
+                                   :constraint "getConstraint" :column "getColumn"
+                                   :routine "getRoutine"}
                        :let [v (Reflector/invokeInstanceMethod m getter (object-array 0))]
                        :when v]
                    [k v])))

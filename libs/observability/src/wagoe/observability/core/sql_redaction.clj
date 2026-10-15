@@ -5,7 +5,8 @@
    it, whatever threw (BOU-633)."
   (:require [clojure.string :as str]
             [clojure.walk :as walk])
-  (:import [java.sql SQLException]))
+  (:import [clojure.lang Reflector]
+           [java.sql SQLException]))
 
 (defn column->field
   "The one column `s` names as a kebab keyword, or nil for several columns or
@@ -68,12 +69,19 @@
    logged as is. Redacted unless its SQLState is known to quote no values, or
    it has none (SQLite, whose messages name only columns): data and integrity
    errors quote what was sent (BOU-626), and so may MySQL's HY000 or a
-   PostgreSQL trigger's RAISE (BOU-629). Names, which hold no values, are kept."
-  [{:keys [sql-state error-code message] :as reported}]
-  (let [state-class (some-> sql-state (subs 0 (min 2 (count sql-state))))
-        what        (case state-class "22" "Invalid data" "23" "Integrity constraint violated" "Database error")
+   PostgreSQL trigger's RAISE (BOU-629). Names, which hold no values, are kept.
+   A RAISE, which PostgreSQL reports from `exec_stmt_raise`, is redacted
+   whatever SQLState it claims, names and all: they are its author's text
+   (BOU-635)."
+  [{:keys [sql-state error-code message routine] :as reported}]
+  (let [raise?      (= "exec_stmt_raise" routine)
+        state-class (some-> sql-state (subs 0 (min 2 (count sql-state))))
+        what        (if raise?
+                      "Database error"
+                      (case state-class "22" "Invalid data" "23" "Integrity constraint violated" "Database error"))
         prefix      (str what " (SQLState " sql-state)]
-    (when (and state-class (not (value-free-classes state-class)) (not (value-free-states sql-state)))
+    (when (and state-class
+               (or raise? (and (not (value-free-classes state-class)) (not (value-free-states sql-state)))))
       ;; A message this already redacted is kept, so the names it holds survive
       ;; a second pass over the same cause chain.
       (if (str/starts-with? (str message) prefix)
@@ -85,7 +93,7 @@
                ;; Only a data or integrity error's text is the driver's own: a
                ;; RAISE or SIGNAL could put a value where a name would be.
                (some->> (constraint-name reported) (str ", constraint ")))
-             (some->> (not-null-field reported) name (str ", field "))
+             (when-not raise? (some->> (not-null-field reported) name (str ", field ")))
              ")")))))
 
 (defn- causes
@@ -102,53 +110,84 @@
   [e]
   (some #(when (instance? SQLException %) %) (causes e)))
 
+(defn- pg-routine
+  "The server routine a PostgreSQL error came from, or nil. By reflection: the
+   driver is loaded at runtime, not compiled against."
+  [^SQLException se]
+  (when (= "org.postgresql.util.PSQLException" (.getName (class se)))
+    (try
+      (some-> (Reflector/invokeInstanceMethod se "getServerErrorMessage" (object-array 0))
+              (Reflector/invokeInstanceMethod "getRoutine" (object-array 0)))
+      (catch Exception _ nil))))
+
 (defn- summary
   "What `redacted-message` says for `se`, or nil."
   [^SQLException se]
   (redacted-message {:sql-state  (.getSQLState se)
                      :error-code (.getErrorCode se)
-                     :message    (.getMessage se)}))
+                     :message    (.getMessage se)
+                     :routine    (pg-routine se)}))
+
+(defn- reachable
+  "`t`, its causes and what is suppressed on any of them, each once."
+  [^Throwable t]
+  (loop [todo [t] seen []]
+    (if-let [^Throwable x (first todo)]
+      (if (some #(identical? x %) seen)
+        (recur (rest todo) seen)
+        (recur (concat (rest todo) (keep identity [(ex-cause x)]) (seq (.getSuppressed x)))
+               (conj seen x)))
+      seen)))
 
 (defn redacted-exception
-  "`t`, or a copy of its cause chain in which each SQLException that quotes the
-   values sent says what `redacted-message` says instead, for an
-   error reporter or log. Covers what the platform did not throw itself: a
-   library calling next.jdbc directly (BOU-630). Same messages, data and stack
-   otherwise; a cause that is neither SQLException nor ex-info becomes a
+  "`t`, or a copy in which each SQLException that quotes the values sent says
+   what `redacted-message` says instead, for an error reporter or log: its
+   causes and what is suppressed on them alike (BOU-630, BOU-635). Same
+   messages, data and stack otherwise. A driver subclass becomes a
+   SQLException naming it; a cause that is neither that nor ex-info, a
    RuntimeException naming its class."
   [^Throwable t]
-  (let [chain    (causes t)
-        ;; Only what would change: an already-redacted chain comes back as is.
+  (let [;; Only what would change: an already-redacted copy comes back as is.
         redacted (into {} (keep #(when (instance? SQLException %)
                                    (let [s (summary %)]
                                      (when (and s (not= s (.getMessage ^SQLException %))) [% s]))))
-                       chain)
+                       (reachable t))
         ;; A wrapper's message can carry the driver's: RuntimeException(cause)
         ;; and ExecutionException use cause.toString().
         scrub    (fn [msg]
                    (when msg
                      (reduce-kv (fn [m ^SQLException se s]
                                   (if-let [quoted (.getMessage se)] (str/replace m quoted s) m))
-                                msg redacted)))]
-    (if (empty? redacted)
-      t
-      ;; Innermost first, so each copy is built around its copied cause.
-      (reduce (fn [cause ^Throwable x]
-                (doto ^Throwable
-                 (cond
-                   (instance? SQLException x)
-                   (let [^SQLException se x]
-                     (SQLException. ^String (get redacted x (scrub (.getMessage se)))
-                                    (.getSQLState se) (.getErrorCode se) ^Throwable cause))
-                   ;; ex-data too: `{:error (.getMessage e)}` is a common shape.
-                   (instance? clojure.lang.ExceptionInfo x)
-                   (ex-info (scrub (ex-message x))
-                            (walk/postwalk #(if (string? %) (scrub %) %) (ex-data x))
-                            cause)
-                   :else (RuntimeException. (str (.getName (class x)) ": " (scrub (.getMessage x))) ^Throwable cause))
-                  (.setStackTrace (.getStackTrace x))))
-              nil
-              (reverse chain)))))
+                                msg redacted)))
+        one      (fn [^Throwable x ^Throwable cause]
+                   (cond
+                     (instance? SQLException x)
+                     (let [^SQLException se x
+                           named (if (and (contains? redacted x) (not= SQLException (class x)))
+                                   (str (get redacted x) " (" (.getName (class x)) ")")
+                                   (get redacted x (scrub (.getMessage se))))]
+                       (SQLException. ^String named (.getSQLState se) (.getErrorCode se) cause))
+                     ;; ex-data too: `{:error (.getMessage e)}` is a common shape.
+                     (instance? clojure.lang.ExceptionInfo x)
+                     (ex-info (scrub (ex-message x))
+                              (walk/postwalk #(if (string? %) (scrub %) %) (ex-data x))
+                              cause)
+                     :else (RuntimeException. (str (.getName (class x)) ": " (scrub (.getMessage x))) cause)))
+        copy     (fn copy [^Throwable x seen]
+                   ;; Innermost first, so each copy is built around its copied
+                   ;; cause; `seen` keeps a suppressed cycle from recurring.
+                   (let [chain (causes x)
+                         seen  (into seen chain)]
+                     (reduce (fn [cause ^Throwable e]
+                               (let [^Throwable c (doto ^Throwable (one e cause)
+                                                    (.setStackTrace (.getStackTrace e)))]
+                                 (doseq [^Throwable s (.getSuppressed e)
+                                         :when (not-any? #(identical? s %) seen)]
+                                   (.addSuppressed c (copy s seen)))
+                                 c))
+                             nil
+                             (reverse chain))))]
+    (if (empty? redacted) t (copy t []))))
 
 (defn loggable-message
   "`e`'s message, or a summary without the values when the driver's quotes them."

@@ -166,4 +166,9 @@
           (let [secret (str "secret-" (random-uuid))
                 ex     (thrown #(db/execute-update! ctx {:raw (str "DO $$ BEGIN RAISE EXCEPTION '" secret "'; END $$")}))]
             (is (= "Database error (SQLState P0001)" (:original-error (ex-data ex))))
+            (is (not (quoted? ex secret)))))
+        (testing "nor a RAISE that claims a value-free state (BOU-635)"
+          (let [secret (str "secret-" (random-uuid))
+                ex     (thrown #(db/execute-update! ctx {:raw (str "DO $$ BEGIN RAISE EXCEPTION '" secret "' USING ERRCODE = '42P01'; END $$")}))]
+            (is (= "Database error (SQLState 42P01)" (:original-error (ex-data ex))))
             (is (not (quoted? ex secret)))))))))
