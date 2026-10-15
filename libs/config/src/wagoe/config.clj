@@ -132,11 +132,8 @@
                       {:active-keys (keys (:active config))}))))
 
 (defn db-spec-for-adapter
-  "The adapter-specific half of `db-spec`.
-
-   Above its caller: Clojure compiles top to bottom, so a private helper
-   placed below the function that calls it does not resolve (AGENTS.md
-   pitfall 10)."
+  "The adapter-specific half of `db-spec`. Public so the migration path's
+   conversion reuses it (BOU-647)."
   [adapter adapter-config]
   (case adapter
     :sqlite
@@ -161,16 +158,19 @@
      :pool (:pool adapter-config)}
 
     :mysql
-    (merge {:adapter :mysql
-            :host (:host adapter-config)
-            :port (:port adapter-config)
-            :name (:dbname adapter-config)
-            :username (:user adapter-config)
-            :password (:password adapter-config)
-            :pool (:pool adapter-config)}
-           ;; select-keys keeps a key set to nil: `:sql-mode nil` turns
-           ;; strict mode off.
-           (select-keys adapter-config [:connection-params :sql-mode]))
+    (cond-> {:adapter :mysql
+             :host (:host adapter-config)
+             :port (:port adapter-config)
+             :name (:dbname adapter-config)
+             :username (:user adapter-config)
+             :password (:password adapter-config)
+             :pool (:pool adapter-config)}
+      ;; A nil here would fail the db-config schema's map? check at boot.
+      (some? (:connection-params adapter-config))
+      (assoc :connection-params (:connection-params adapter-config))
+      ;; Kept when nil: `:sql-mode nil` turns strict mode off.
+      (contains? adapter-config :sql-mode)
+      (assoc :sql-mode (:sql-mode adapter-config)))
 
     (throw (ex-info "Unsupported database adapter"
                     {:adapter adapter
