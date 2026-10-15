@@ -266,11 +266,8 @@
                        (access/correlation-id request (str (random-uuid)))))))))})
 
 (def ^:private multipart-params
-  "Decodes a multipart/form-data body into `:multipart-params`. Reitit's own
-   multipart middleware compiles to nothing without `:parameters :multipart`,
-   so the storage upload handlers, and the CSRF token of a file-upload form,
-   read an empty map (BOU-638). Skipped where the route declares it: Reitit
-   decodes those itself, and need not parse the body a second time."
+  "Decodes multipart bodies, which Reitit does only for routes declaring
+   `:parameters :multipart` (BOU-638). Those are skipped, not parsed twice."
   {:name    ::multipart-params
    :compile (fn [data _opts]
               (when-not (get-in data [:parameters :multipart])
