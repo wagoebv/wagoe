@@ -130,8 +130,7 @@ File upload and storage functionality for the Wagoe framework. Supports local fi
  :local {:base-path "/var/app/uploads"
          :url-base "https://myapp.com/files"
          :create-directories? true}
- :default-visibility :private
- :max-file-size (* 10 1024 1024)}  ; 10 MB
+ :default-visibility :private}
 ```
 
 ### S3 Storage Configuration
@@ -144,8 +143,7 @@ File upload and storage functionality for the Wagoe framework. Supports local fi
       :secret-key "AWS_SECRET_KEY"
       :prefix "uploads/"
       :public-read? false}
- :default-visibility :private
- :max-file-size (* 50 1024 1024)}  ; 50 MB
+ :default-visibility :private}
 ```
 
 ### S3-Compatible Services (MinIO, DigitalOcean Spaces)
@@ -461,10 +459,10 @@ The router refuses uploads over 10 MB per file or 100 parts per form with a
 :wagoe/http   {:max-request-body (* 110 1024 1024)}            ; the whole body
 ```
 
-Storage's own `:max-file-size` is checked after this one, so the router's limit
-must be at least as large. A route declaring `:parameters :multipart` is decoded
-by Reitit's middleware instead; pass the limits to
-`(reitit.ring.middleware.multipart/create-multipart-middleware {...})`.
+Storage's own check, an upload's `:max-size` (default 10 MB), runs after this
+one, so the router's limit must be at least as large. A route declaring
+`:parameters :multipart` is decoded by Reitit's middleware instead; pass the
+limits to `(reitit.ring.middleware.multipart/create-multipart-middleware {...})`.
 
 ### S3 Access Denied
 
