@@ -285,6 +285,20 @@
         (let [n (count (db/execute-query! ctx {:select [:id] :from [:grown]}))]
           (when-not (= 1 n) (str n " rows after"))))))
 
+(defn- an-added-enum-is-enforced
+  "An enum field added later gets the CHECK a fresh table has, where the engine
+   can add one to an existing table (BOU-632). SQLite cannot."
+  [ctx]
+  (ddl! ctx "DROP TABLE IF EXISTS grown_enum")
+  (db/initialize-tables-from-schemas! ctx {"grown_enum" [:map [:id :uuid]]})
+  (let [later {"grown_enum" [:map [:id :uuid] [:tone {:optional true} [:enum :light :dark]]]}]
+    (or (attempt #(dotimes [_ 2] (db/initialize-tables-from-schemas! ctx later)))
+        (attempt #(db/execute-update! ctx {:insert-into :grown_enum :values [{:id (str (UUID/randomUUID)) :tone "dark"}]}))
+        (when (and (not= :sqlite (protocols/engine (adapter ctx)))
+                   (nil? (attempt #(db/execute-update! ctx {:insert-into :grown_enum
+                                                            :values [{:id (str (UUID/randomUUID)) :tone "neon"}]}))))
+          "a value outside the enum was accepted"))))
+
 (defn- unique-index-on-duplicates
   "A unique index the rows break is a :conflict naming the table, not a raw
    driver error."
@@ -395,6 +409,7 @@
     :ddl/index-twice           index-twice
     :ddl/if-exists-twice       ddl-twice
     :ddl/schema-fields-added   schema-fields-reach-an-existing-table
+    :ddl/added-enum-enforced   an-added-enum-is-enforced
     :ddl/search-path           columns-follow-search-path
     :ddl/unique-over-duplicates unique-index-on-duplicates
     :transactions/rollback     rollback-undoes

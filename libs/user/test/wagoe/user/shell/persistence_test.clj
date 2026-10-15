@@ -115,10 +115,17 @@
         (try
           (db-core/execute-ddl! ctx "CREATE TABLE auth_users (id VARCHAR(36) PRIMARY KEY, email VARCHAR(255))")
           (db-core/execute-ddl! ctx "CREATE TABLE users (id VARCHAR(36) PRIMARY KEY, theme VARCHAR(50))")
+          (db-core/execute-ddl! ctx "CREATE TABLE user_sessions (id VARCHAR(36) PRIMARY KEY)")
           (dotimes [_ 2] (sut/initialize-user-schema! ctx))
           (is (every? (columns ctx :auth_users) ["created_at" "updated_at" "deleted_at" "mfa_secret"])
               "created_at too, though required: added nullable")
           (is (every? (columns ctx :users) ["theme" "notifications_email" "notifications_push" "notifications_sms"
                                             "language" "timezone" "date_format"])
               "added once, and a second run changes nothing")
+          (testing "an added session_token is unique, as in a fresh table (BOU-632)"
+            (is (contains? (columns ctx :user_sessions) "session_token"))
+            (db-core/execute-update! ctx {:insert-into :user_sessions :values [{:id (str (UUID/randomUUID)) :session_token "t1"}]})
+            (is (thrown? Exception
+                         (db-core/execute-update! ctx {:insert-into :user_sessions
+                                                       :values [{:id (str (UUID/randomUUID)) :session_token "t1"}]}))))
           (finally (factory/close-db-context! ctx)))))))
