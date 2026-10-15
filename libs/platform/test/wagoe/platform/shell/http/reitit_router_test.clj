@@ -1104,3 +1104,26 @@
     (testing "a public route is not decoded: no guard stops an anonymous upload"
       (is (= 200 (:status (handler (multipart-request "/public")))))
       (is (empty? @seen)))))
+
+(deftest ^:unit ^:security an-upload-over-the-limits-is-a-413
+  ;; Decoding had no limit, so any signed-in caller could spool files of any
+  ;; size to disk (BOU-641). The test file is 5 bytes; the form has two parts.
+  (let [handler (fn [limits]
+                  (reitit/compile-routes
+                   [["/upload" {:post {:handler (fn [_] {:status 200 :body {:ok true}})}}]]
+                   {:system {} :multipart limits}))
+        post    (fn [limits] ((handler limits) (multipart-request "/upload")))]
+    (testing "within the defaults it is decoded"
+      (is (= 200 (:status (post nil)))))
+
+    (testing "a file over :max-file-size is refused, in the one error shape"
+      (let [resp (post {:max-file-size 4})]
+        (is (= 413 (:status resp)))
+        (is (= {:max-file-size 4 :max-file-count 10}
+               (:details (error-body resp))))))
+
+    (testing "so is a form with more parts than :max-file-count"
+      (is (= 413 (:status (post {:max-file-count 1})))))
+
+    (testing "nil lifts a limit"
+      (is (= 200 (:status (post {:max-file-size nil})))))))

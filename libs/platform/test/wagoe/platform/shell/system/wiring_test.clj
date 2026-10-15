@@ -567,6 +567,7 @@
     (doseq [[k v present?] [[:coercion :malli   #(= :malli (:coercion %))]
                             [:muuntaja muuntaja #(identical? muuntaja (:muuntaja %))]
                             [:conflicts nil     #(contains? % :conflicts)]
+                            [:multipart {:max-file-size 1} #(= {:max-file-size 1} (:multipart %))]
                             [:middleware [mine] #(= mine (last (:middleware %)))]]]
       (testing (str k " set in config reaches the router")
         (is (present? (router-config-for {k v}))))

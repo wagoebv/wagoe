@@ -452,11 +452,16 @@ Implement the `IFileStorage` protocol:
 
 ### Large File Uploads Failing
 
-Increase Ring's multipart configuration:
+The router refuses uploads over 10 MB per file or 10 parts per form with a
+413. Raise the limits under `:wagoe/router` (`nil` lifts one):
 
 ```clojure
-{:ring {:multipart {:max-file-size (* 100 1024 1024)}}}  ; 100 MB
+:wagoe/router {:multipart {:max-file-size (* 100 1024 1024)   ; 100 MB
+                           :max-file-count 10}}
 ```
+
+Storage's own `:max-file-size` is checked after this one, so the router's limit
+must be at least as large.
 
 ### S3 Access Denied
 

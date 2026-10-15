@@ -265,16 +265,29 @@
                        "Authentication required" request
                        (access/correlation-id request (str (random-uuid)))))))))})
 
-(def ^:private multipart-params
+(def ^:private default-multipart-limits
+  "Per request. Without them any signed-in caller could spool files of any
+   size to disk (BOU-641); `nil` lifts a limit, as in Ring."
+  {:max-file-size  (* 10 1024 1024)
+   :max-file-count 10})
+
+(defn- multipart-params
   "Decodes multipart bodies, which Reitit does only for routes declaring
    `:parameters :multipart` (BOU-638). Those are skipped, not parsed twice.
-   So are `:public` routes: the authentication guard does not cover them, and
-   with no size limit anyone could spool uploads to disk."
-  {:name    ::multipart-params
-   :compile (fn [data _opts]
-              (when-not (or (access/public? data)
-                            (get-in data [:parameters :multipart]))
-                wrap-multipart-params))})
+   So are `:public` routes: the authentication guard does not cover them.
+   `limits` is `:wagoe/router :multipart` over `default-multipart-limits`."
+  [limits]
+  (let [limits  (merge default-multipart-limits limits)
+        options (assoc limits :error-handler
+                       (fn [_request]
+                         (errors/response 413 (errors/status->type 413)
+                                          "Upload exceeds the multipart limits"
+                                          {:details (select-keys limits [:max-file-size :max-file-count])})))]
+    {:name    ::multipart-params
+     :compile (fn [data _opts]
+                (when-not (or (access/public? data)
+                              (get-in data [:parameters :multipart]))
+                  #(wrap-multipart-params % options)))}))
 
 (defn- create-default-middleware
   "Create default middleware stack for Reitit router.
@@ -302,7 +315,7 @@
         (into (when authentication [require-authentication]))
         (into [;; Decoding request body — multipart after authentication, so
                ;; an anonymous caller cannot make the server spool an upload
-               multipart-params
+               (multipart-params (:multipart config))
                muuntaja/format-request-middleware
                ;; Coercing request parameters
                coercion/coerce-request-middleware
@@ -422,6 +435,7 @@
               :coercion - Coercion configuration (defaults to Malli)
               :muuntaja - Muuntaja configuration (defaults to json/edn/transit)
               :conflicts - Conflict handler (defaults to report-ambiguous-routes)
+              :multipart - Upload limits, see `default-multipart-limits`
               
    Returns:
      Map of Reitit router options"
