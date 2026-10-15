@@ -218,6 +218,16 @@
 ;; Sanitization
 ;; ============================================================================
 
+(defn normalize-path
+  "`path` as `/`-joined segments without `.`, `..` or empty ones, or nil when
+   none remain. Per segment, so `products/42` keeps its directory (BOU-639)."
+  [path]
+  (when path
+    (some->> (str/split path #"[/\\]+")
+             (remove #{"" "." ".."})
+             seq
+             (str/join "/"))))
+
 (defn sanitize-filename
   "Sanitize filename to remove potentially dangerous characters.
 
