@@ -3,6 +3,8 @@
   (:require [clojure.test :refer [deftest testing is]]
             [clojure.tools.logging.test :as log-test]
             [integrant.core :as ig]
+            [wagoe.admin.ports :as ports]
+            [wagoe.admin.shell.schema-repository :as schema-repo]
             [wagoe.admin.shell.http.support :as support]
             [wagoe.admin.shell.module-wiring :as wiring]))
 
@@ -41,6 +43,24 @@
       (is (= #{:wagoe/admin-schema-provider :wagoe/admin-service :wagoe/admin-routes}
              (set (keys (:components graph)))))
       (is (= 1 (count (:routes graph)))))))
+
+(deftest ^:unit settings-without-defaults-still-list-entities
+  ;; `wagoe add admin` writes three keys and no `:entity-discovery`; the nil
+  ;; mode threw and every admin page answered 500 (BOU-637).
+  (let [provider (fn [settings]
+                   (let [{:keys [config]} (get-in (wiring/ig-config settings {})
+                                                  [:components :wagoe/admin-schema-provider])]
+                     (schema-repo/create-schema-repository nil config)))]
+    (testing "the settings `wagoe add admin` writes boot an admin with no entities"
+      (is (= [] (ports/list-available-entities
+                 (provider {:enabled? true :base-path "/web/admin" :require-role :admin})))))
+
+    (testing "configured values win, and a partial map keeps the other defaults"
+      (let [cfg (routes-config {:entity-discovery {:allowlist #{:users}}
+                                :pagination       {:default-page-size 20}}
+                               nil)]
+        (is (= {:mode :allowlist :allowlist #{:users}} (:entity-discovery cfg)))
+        (is (= {:default-page-size 20 :max-page-size 200} (:pagination cfg)))))))
 
 (deftest ^:unit bad-date-patterns-are-dropped-at-boot
   ;; Checked once here rather than per request: a misconfigured application

@@ -79,6 +79,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Every admin page answered 500 after `wagoe add admin`** (BOU-637): the admin now fills unset settings from its defaults.
+  No action needed; an empty allowlist shows no entities until you add some.
 - **A column the builder added to an existing table had no CHECK or UNIQUE** (BOU-632): an added enum gets its CHECK
   (not on SQLite, which cannot), an added `email` or `session_token` its unique key.
 - **A PostgreSQL RAISE could log a value or pass for a key conflict, a suppressed exception log one** (BOU-635): a RAISE
