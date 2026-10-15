@@ -212,9 +212,6 @@
      Example:
        (column-type mysql-adapter :uuid) ;; => \"CHAR(36)\"")
 
-  (param->db [this value]
-    "`value` as this engine takes it as a query parameter.")
-
   (like [this field pattern]
     "A HoneySQL condition matching `field` against the LIKE `pattern`
      regardless of case, on every engine.
@@ -222,6 +219,12 @@
      Example:
        (like h2-adapter :email \"%john%\")
        ;; => [:like [:lower :email] [:lower \"%john%\"]]"))
+
+(defprotocol ParamEncoder
+  "Optional: an adapter that encodes query parameters for its engine. Its own
+   protocol, so an adapter that predates it keeps working (BOU-648)."
+  (param->db [this value]
+    "`value` as this engine takes it as a query parameter."))
 
 (def capability-keywords
   "What a database may honour, each consumed somewhere (ADR-039):

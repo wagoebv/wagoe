@@ -16,6 +16,7 @@
             [next.jdbc.result-set :as rs]
             [support.embedded-pg :as epg]
             [wagoe.platform.shell.adapters.database.common.adapter :as adapter]
+            [wagoe.platform.shell.adapters.database.common.execution :as execution]
             [wagoe.platform.ports.database :as protocols]
             [wagoe.platform.shell.adapters.database.factory :as factory]
             [wagoe.platform.shell.adapters.database.h2.core :as h2]
@@ -365,3 +366,11 @@
     (when-not (contains? reached "mysql")
       (println "  note: MySQL not reachable on port" mysql-port
                "— three of four engines swept. Set WAGOE_TEST_MYSQL_PORT."))))
+
+(deftest ^:unit an-adapter-without-a-param-encoder-still-runs-queries
+  ;; ParamEncoder is its own protocol so an adapter written before it keeps
+  ;; working; its parameters pass through as they are (BOU-648).
+  (let [encode #'execution/encode-params
+        id     (java.util.UUID/randomUUID)]
+    (is (= ["SELECT ?" id] (encode (reify protocols/DBAdapter) ["SELECT ?" id])))
+    (is (= ["SELECT ?" (str id)] (encode (mysql/new-adapter) ["SELECT ?" id])))))

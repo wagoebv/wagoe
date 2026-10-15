@@ -159,6 +159,7 @@
 
   (like [_ field pattern] (case-insensitive-like (:string-match spec) field pattern))
 
+  protocols/ParamEncoder
   (param->db [_ value] ((:param->db spec identity) value)))
 
 (defn new-adapter

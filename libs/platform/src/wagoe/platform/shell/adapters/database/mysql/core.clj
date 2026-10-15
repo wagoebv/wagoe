@@ -25,8 +25,7 @@
    :string-match       :like
    :engine             :mysql
    :capabilities       #{:row-locks :alter-foreign-key}
-   ;; DATETIME(6), not the schema builder's DATETIME, which drops
-   ;; fractional seconds (BOU-574).
+   ;; DATETIME(6): plain DATETIME drops fractional seconds (BOU-574).
    :column-types       {:uuid "CHAR(36)" :instant "DATETIME(6)" :json "JSON"
                         :boolean "TINYINT(1)" :text "LONGTEXT"}
    :table-exists?      (partial introspection/information-schema-table-exists?

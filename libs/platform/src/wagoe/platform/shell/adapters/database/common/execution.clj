@@ -88,8 +88,10 @@
 
 (defn- encode-params
   "`[sql & params]` with each param as the engine takes it (BOU-648)."
-  [adapter [sql & params]]
-  (into [sql] (map #(protocols/param->db adapter %)) params))
+  [adapter [sql & params :as query]]
+  (if (instance? wagoe.platform.ports.database.ParamEncoder adapter)
+    (into [sql] (map #(protocols/param->db adapter %)) params)
+    query))
 
 (defn- prepare-sql-query
   "Normalize supported query inputs into a JDBC-ready `[sql & params]` vector."
