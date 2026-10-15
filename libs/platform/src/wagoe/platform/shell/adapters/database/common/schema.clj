@@ -117,6 +117,15 @@
         (when-not (done? (execution/reported e))
           (throw (ddl-error ctx without e)))))))
 
+(defn add-check-if-not-exists!
+  "Add the named CHECK `clause` to `table` unless a constraint of that name is
+   there. No engine takes IF NOT EXISTS here, so its duplicate counts as done
+   (BOU-632)."
+  [ctx table constraint-name clause]
+  (if-exists-ddl! ctx false nil
+                  (str "ALTER TABLE " (name table) " ADD CONSTRAINT " constraint-name " CHECK(" clause ")")
+                  constraint/already-exists?))
+
 (defn create-index-if-not-exists!
   "Create an index unless it is there (BOU-607). A unique index the rows break
    is a :conflict naming the table and columns.

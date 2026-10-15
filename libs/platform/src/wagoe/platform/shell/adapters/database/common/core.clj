@@ -79,6 +79,7 @@
 (def execute-ddl! schema/execute-ddl!)
 (def create-index-if-not-exists! schema/create-index-if-not-exists!)
 (def add-columns-if-not-exist! schema/add-columns-if-not-exist!)
+(def add-check-if-not-exists! schema/add-check-if-not-exists!)
 
 ;; =============================================================================
 ;; Query Building and Formatting (Re-exported from utils)

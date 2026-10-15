@@ -67,10 +67,11 @@
         (and (= :foreign-key k) (still-referenced? reported)) (assoc :referenced? true)))))
 
 (defn already-exists?
-  "Whether the driver reports that the index or column a statement adds is
-   already there (BOU-607)."
-  [{:keys [error-code message]}]
-  (boolean (or (#{1060 1061} error-code)
+  "Whether the driver reports that the index, column or constraint a statement
+   adds is already there (BOU-607, BOU-632)."
+  [{:keys [sql-state error-code message]}]
+  (boolean (or (#{1060 1061 3822 90045} error-code)
+               (= "42710" sql-state)
                (re-find #"duplicate column name" (str message)))))
 
 (defn already-gone?

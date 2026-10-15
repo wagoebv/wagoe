@@ -259,6 +259,11 @@
                         " CHECK(" (enum-check-clause column-name values) ")")))))
        (into [])))
 
+(def ^:private table-unique-keys
+  "Table-level unique keys a schema does not express, as [name [column ...]]."
+  {"auth_users"    [["uk_auth_users_email" ["email"]]]
+   "user_sessions" [["uk_user_sessions_token" ["session_token"]]]})
+
 (defn- generate-table-constraints
   "Generate table-level constraints (unique, foreign keys) based on table name and fields.
    
@@ -286,10 +291,8 @@
           []
 
           ; Table-specific unique constraints
-          (case table-name
-            "auth_users" ["CONSTRAINT uk_auth_users_email UNIQUE(email)"]
-            "user_sessions" ["CONSTRAINT uk_user_sessions_token UNIQUE(session_token)"]
-            [])))))
+          (for [[constraint-name columns] (table-unique-keys table-name)]
+            (str "CONSTRAINT " constraint-name " UNIQUE(" (str/join ", " columns) ")"))))))
 
 (defn generate-table-ddl
   "Generate CREATE TABLE DDL from Malli schema definition.
@@ -446,7 +449,22 @@
                                          (mapv (fn [f] [(col-name (:name f))
                                                         (str (column-type ctx f) (column-default ctx f))])
                                                missing)
-                                         present))))
+                                         present)
+      ;; The constraints CREATE TABLE gives them, so an upgraded database
+      ;; enforces what a fresh one does (BOU-632).
+      (let [added (set (map #(col-name (:name %)) missing))]
+        (doseq [{:keys [name] :as f} missing
+                :let [values (enum-field-values f)]
+                :when values]
+          (if (= :sqlite (protocols/dialect (:adapter ctx)))
+            (log/info "SQLite cannot add a CHECK to an existing table; the enum is not enforced"
+                      {:table table-name :column (col-name name)})
+            (db-core/add-check-if-not-exists! ctx table-name
+                                              (enum-constraint-name table-name (col-name name))
+                                              (enum-check-clause (col-name name) values))))
+        (doseq [[constraint-name columns] (table-unique-keys table-name)
+                :when (some added columns)]
+          (db-core/create-index-if-not-exists! ctx constraint-name table-name columns {:unique? true}))))))
 
 ;; =============================================================================
 ;; Schema Initialization
