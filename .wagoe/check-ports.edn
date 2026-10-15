@@ -24,6 +24,8 @@
   ;; service layers. Reaching for them is not reaching into platform's business
   ;; logic — platform has none. The honest fix is that they do not belong under
   ;; `shell/`, which is a rename, not a redesign.
+  {:target-prefix "wagoe.observability.logging.shell.redacting-factory"
+   :why "Loaded for its effect, never called: every clojure.tools.logging call in the process writes its throwable redacted (BOU-634). Required where a database exception can be logged, so it holds whatever starts first."}
   {:target-prefix "wagoe.platform.shell.persistence-interceptors"
    :why "BOU-307 follow-up. 6 sites. An interceptor pipeline every module's
          persistence composes; not an implementation of platform's own. Wrongly

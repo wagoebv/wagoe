@@ -27,7 +27,6 @@
             [wagoe.platform.ports.database :as db-ports]
             [wagoe.tenant.ports :as tenant-ports]
             [wagoe.jobs.shell.worker :as worker]
-            [wagoe.observability.core.sql-redaction :as redaction]
             [clojure.tools.logging :as log]))
 
 ;; =============================================================================
@@ -243,7 +242,7 @@
 
       (catch Exception e
         (let [failure (worker/failure e)]
-          (log/error (redaction/redacted-exception e) "Error processing tenant job"
+          (log/error e "Error processing tenant job"
                      {:job-id job-id
                       :job-type job-type
                       :tenant-id tenant-id

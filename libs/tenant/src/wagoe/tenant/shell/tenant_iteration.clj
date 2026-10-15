@@ -9,7 +9,6 @@
    Without this, a job calling a repo with the pooled context runs under the
    default `search_path = public` and only sees the (now empty) public tables."
   (:require [wagoe.tenant.ports :as ports]
-            [wagoe.platform.database :as db]
             [clojure.tools.logging :as log]))
 
 (defn for-each-tenant-schema
@@ -38,7 +37,7 @@
                (update :processed inc)
                (update :results conj r)))
          (catch Exception e
-           (log/error (db/redacted-exception e) "Tenant-schema job step failed" {:schema schema})
+           (log/error e "Tenant-schema job step failed" {:schema schema})
            (update acc :failed inc))))
      {:processed 0 :failed 0 :results []}
      schemas)))

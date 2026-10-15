@@ -79,6 +79,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **A direct `(log/error e …)` printed the values a database driver quoted** (BOU-634). Any process that loads the
+  database layer now writes every clojure.tools.logging throwable redacted; nothing to do on upgrade.
 - **A value a database driver quoted could still reach Sentry, a trace or a failed job** (BOU-633). Observability now
   redacts it wherever it reports, traces or logs an exception; nothing to do on upgrade.
 - **On a PostgreSQL in another language, re-keying a referenced row answered "A referenced record does not exist"**
