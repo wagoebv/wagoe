@@ -9,6 +9,9 @@
             [wagoe.core.utils.type-conversion :as type-conversion]
             [wagoe.platform.ports.database :as protocols]
             [wagoe.observability.core.sql-redaction :as redaction]
+            ;; Loaded for its effect: every log call writes its throwable
+            ;; redacted, in any process that reaches a database (BOU-634).
+            [wagoe.observability.logging.shell.redacting-factory]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
             [clojure.walk :as walk]

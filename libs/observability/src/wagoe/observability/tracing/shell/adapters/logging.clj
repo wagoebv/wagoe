@@ -9,7 +9,8 @@
    in and appear on the final `span.end` line (matching how a real backend
    mutates its span object)."
   (:require [wagoe.observability.tracing.ports :as ports]
-            [wagoe.observability.core.sql-redaction :as redaction]
+            ;; Loaded for its effect: the throwable below is written redacted.
+            [wagoe.observability.logging.shell.redacting-factory]
             [clojure.string :as str]
             [clojure.tools.logging :as log])
   (:import [java.util UUID]))
@@ -53,7 +54,7 @@
     nil)
 
   (record-exception! [_ span throwable]
-    (log/warn (redaction/redacted-exception throwable) "span.exception" {:span-id (:span-id span)})
+    (log/warn throwable "span.exception" {:span-id (:span-id span)})
     nil)
 
   (span-context [_ span]
