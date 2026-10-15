@@ -3,6 +3,7 @@
    (BOU-644)."
   (:require [clojure.test :refer [deftest is testing]]
             [integrant.core :as ig]
+            [wagoe.platform.shell.http.reitit-router :as reitit]
             [wagoe.platform.shell.system.wiring])
   (:import [java.io ByteArrayInputStream]
            [org.eclipse.jetty.server ServerConnector]
@@ -18,18 +19,19 @@
 (defn- post
   "Status of a POST of `body` to `port`; chunked when `chunked?`, so the
    server learns the size only by reading."
-  ([port body chunked?] (post port "/" body chunked?))
-  ([port path ^String body chunked?]
-  (let [bytes     (.getBytes body "UTF-8")
-        publisher (if chunked?
-                    (HttpRequest$BodyPublishers/ofInputStream
-                     (reify java.util.function.Supplier
-                       (get [_] (ByteArrayInputStream. bytes))))
-                    (HttpRequest$BodyPublishers/ofByteArray bytes))
-        request   (-> (HttpRequest/newBuilder (URI. (str "http://127.0.0.1:" port path)))
-                      (.POST publisher)
-                      (.build))]
-    (.statusCode (.send client request (HttpResponse$BodyHandlers/discarding))))))
+  ([port body chunked?] (post port "/" body chunked? "text/plain"))
+  ([port path ^String body chunked? content-type]
+   (let [bytes     (.getBytes body "UTF-8")
+         publisher (if chunked?
+                     (HttpRequest$BodyPublishers/ofInputStream
+                      (reify java.util.function.Supplier
+                        (get [_] (ByteArrayInputStream. bytes))))
+                     (HttpRequest$BodyPublishers/ofByteArray bytes))
+         request   (-> (HttpRequest/newBuilder (URI. (str "http://127.0.0.1:" port path)))
+                       (.header "Content-Type" content-type)
+                       (.POST publisher)
+                       (.build))]
+     (.statusCode (.send client request (HttpResponse$BodyHandlers/discarding))))))
 
 (defn- with-server [opts f]
   (let [port   (free-port)
@@ -38,7 +40,9 @@
                                     :port    port
                                     :host    "127.0.0.1"}
                                    opts))]
-    (try (f port) (finally (ig/halt-key! :wagoe/http-server server)))))
+    ;; The port the server bound: allocation moves on if `port` was taken.
+    (try (f (.getLocalPort ^ServerConnector (first (.getConnectors server))))
+         (finally (ig/halt-key! :wagoe/http-server server)))))
 
 (deftest ^:integration an-oversized-body-is-a-413
   (with-server {:max-request-body 16}
@@ -69,5 +73,24 @@
                              :max-request-body 16})]
     (try
       (is (= 413 (post (.getLocalPort ^ServerConnector (first (.getConnectors server)))
-                       "/rpc" (apply str (repeat 64 "x")) false)))
+                       "/rpc" (apply str (repeat 64 "x")) false "application/transit+json")))
       (finally (ig/halt-key! :wagoe/rpc-server server)))))
+
+(deftest ^:integration a-chunked-body-over-the-limit-is-a-413-through-the-router
+  ;; Jetty finds it out mid-read, inside a decoder, which answered 400
+  ;; "Malformed … body" for it.
+  (with-server {:max-request-body 16
+                :handler (reitit/compile-routes
+                          [["/" {:post {:handler (fn [_] {:status 200 :body {:ok true}})
+                                        :public  true}}]
+                           ["/upload" {:post {:handler (fn [_] {:status 200 :body {:ok true}})}}]]
+                          {:system {}})}
+    (fn [port]
+      (testing "a JSON body"
+        (is (= 413 (post port "/" (str "{\"a\":\"" (apply str (repeat 64 "x")) "\"}")
+                         true "application/json"))))
+      (testing "a multipart body"
+        (is (= 413 (post port "/upload"
+                         (str "--XyZ\r\nContent-Disposition: form-data; name=\"f\"; filename=\"a.txt\"\r\n\r\n"
+                              (apply str (repeat 64 "x")) "\r\n--XyZ--\r\n")
+                         true "multipart/form-data; boundary=XyZ")))))))

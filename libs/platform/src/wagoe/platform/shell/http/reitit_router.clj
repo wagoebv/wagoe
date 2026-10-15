@@ -31,6 +31,7 @@
             [wagoe.platform.shell.http.interceptors :as http-interceptors])
   (:import [java.io ByteArrayInputStream ByteArrayOutputStream]
            [org.apache.commons.fileupload2.core FileUploadException FileUploadSizeException]
+           [org.eclipse.jetty.http HttpException]
            [java.security MessageDigest]
            [java.util.zip GZIPOutputStream]))
 
@@ -185,13 +186,24 @@
     (errors/response 400 :validation-error "Request validation failed"
                      {:details details :correlation-id cid :dev dev})))
 
+(defn- body-too-large?
+  "Whether reading the body hit the server's size limit. Jetty finds a chunked
+   body too large only mid-read, inside a decoder (BOU-644)."
+  [e]
+  (some #(and (instance? HttpException %) (= 413 (.getCode ^HttpException %)))
+        (take-while some? (iterate ex-cause e))))
+
 (defn- malformed-body-response
-  "400 for a body that does not parse as the Content-Type it claims."
+  "400 for a body that does not parse as the Content-Type it claims, 413 for
+   one the server stopped reading."
   [e request]
-  (errors/response 400 :malformed-request
-                   (str "Malformed " (or (:format (ex-data e)) "request") " body")
-                   {:correlation-id (or (get-in request [:headers "x-correlation-id"])
-                                        (str (java.util.UUID/randomUUID)))}))
+  (let [cid (or (get-in request [:headers "x-correlation-id"])
+                (str (java.util.UUID/randomUUID)))]
+    (if (body-too-large? e)
+      (errors/response 413 :validation-error "Request body too large" {:correlation-id cid})
+      (errors/response 400 :malformed-request
+                       (str "Malformed " (or (:format (ex-data e)) "request") " body")
+                       {:correlation-id cid}))))
 
 (defn- server-error-response
   "A 500 that says nothing. What went wrong goes to the log."
@@ -277,9 +289,10 @@
   "Whether a failed decode hit a limit rather than a malformed body; Ring's
    own error handler answers 413 for both."
   [e]
-  (some #(or (instance? FileUploadSizeException %)
-             (contains? (ex-data %) :max-file-count))
-        (take-while some? (iterate ex-cause e))))
+  (or (body-too-large? e)
+      (some #(or (instance? FileUploadSizeException %)
+                 (contains? (ex-data %) :max-file-count))
+            (take-while some? (iterate ex-cause e)))))
 
 (defn- multipart-params
   "Decodes multipart bodies, which Reitit does only for routes declaring
@@ -303,7 +316,9 @@
                     (fn [request]
                       (let [decoded (try (multipart-params-request request limits)
                                          (catch FileUploadException e e)
-                                         (catch clojure.lang.ExceptionInfo e e))]
+                                         (catch clojure.lang.ExceptionInfo e e)
+                                         (catch RuntimeException e
+                                           (if (body-too-large? e) e (throw e))))]
                         (if (instance? Throwable decoded)
                           (refuse request decoded)
                           (handler decoded)))))))}))

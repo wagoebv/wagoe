@@ -177,7 +177,7 @@
       (let [[_ protocol component] (first offered)
             rpc (when (and rpc-cfg protocol)
                   {:wagoe/rpc-server
-                   (merge (select-keys rpc-cfg [:port :host :service-key :auth])
+                   (merge (select-keys rpc-cfg [:port :host :service-key :auth :max-request-body])
                           {:protocol       protocol
                            :implementation (ig/ref component)})})]
         [(merge selected rpc)

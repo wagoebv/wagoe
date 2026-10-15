@@ -161,15 +161,18 @@
                    ;; failure looks like the RPC layer being broken rather than
                    ;; the port being taken. (Reintroduced here after being
                    ;; fixed in BOU-90's own tests; same mistake, same fix.)
-                   (assoc-in [:active :wagoe/rpc] {:port 0
-                                                   :service-key service-key}))
+                   (assoc-in [:active :wagoe/rpc] {:port             0
+                                                   :service-key      service-key
+                                                   :max-request-body (* 1024 1024)}))
         [ig-config summary] (main/service-ig-config config #{:payments})]
 
     (testing "the RPC endpoint is part of the service"
       (is (true? (:rpc summary)))
       (is (contains? ig-config :wagoe/rpc-server))
       (is (= (ig/ref :wagoe/payment-provider)
-             (get-in ig-config [:wagoe/rpc-server :implementation]))))
+             (get-in ig-config [:wagoe/rpc-server :implementation])))
+      (is (= (* 1024 1024) (get-in ig-config [:wagoe/rpc-server :max-request-body]))
+          "its body limit is configurable (BOU-644)"))
 
     (testing "and a caller with only the protocol gets an answer from it"
       ;; Without :wagoe/http-server. This test is about the RPC listener, and

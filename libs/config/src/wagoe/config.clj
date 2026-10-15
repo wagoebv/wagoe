@@ -212,19 +212,23 @@
      config: Configuration map from load-config
    
    Returns:
-     Map with :port, :host, :join?, :port-range, and :drain-timeout-ms keys
+     Map with :port, :host, :join?, :port-range, and :drain-timeout-ms keys,
+     plus :max-request-body when the config sets it
 
    :drain-timeout-ms controls graceful shutdown: on stop the server stops
    accepting new connections, lets in-flight requests finish (bounded by this
    timeout, in milliseconds), then halts. 0 or nil disables graceful draining."
   [config]
   (let [http-cfg (get-in config [:active :wagoe/http])]
-    {:port (or (:port http-cfg) 3000)
-     :host (or (:host http-cfg) "0.0.0.0")
-     :join? (or (:join? http-cfg) false)
-     :port-range (:port-range http-cfg)
-     ;; default only when the key is absent — an explicit nil disables draining
-     :drain-timeout-ms (get http-cfg :drain-timeout-ms 30000)}))
+    (cond-> {:port (or (:port http-cfg) 3000)
+             :host (or (:host http-cfg) "0.0.0.0")
+             :join? (or (:join? http-cfg) false)
+             :port-range (:port-range http-cfg)
+             ;; default only when the key is absent — an explicit nil disables draining
+             :drain-timeout-ms (get http-cfg :drain-timeout-ms 30000)}
+      ;; Absent leaves the server's default; nil lifts the limit (BOU-644).
+      (contains? http-cfg :max-request-body)
+      (assoc :max-request-body (:max-request-body http-cfg)))))
 
 (defn app-config
   "Extract application-level configuration.

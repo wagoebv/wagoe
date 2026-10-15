@@ -453,10 +453,12 @@ Implement the `IFileStorage` protocol:
 ### Large File Uploads Failing
 
 The router refuses uploads over 10 MB per file or 100 parts per form with a
-413. Raise the limits under `:wagoe/router` (`nil` lifts one):
+413, and the server any request body over 32 MB. Raise the limits under
+`:wagoe/router` and `:wagoe/http` (`nil` lifts one):
 
 ```clojure
 :wagoe/router {:multipart {:max-file-size (* 100 1024 1024)}}  ; 100 MB
+:wagoe/http   {:max-request-body (* 110 1024 1024)}            ; the whole body
 ```
 
 Storage's own `:max-file-size` is checked after this one, so the router's limit
