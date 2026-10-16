@@ -96,7 +96,7 @@ Component key: **`:wagoe/cache`**. Config is passed straight to the adapter.
 (closes the Jedis pool; no-op for in-memory). In the sample configs
 `:wagoe/cache` ships under `:inactive` — move it to `:active` to enable it.
 Downstream components reference it with `(ig/ref :wagoe/cache)` (e.g. HTTP
-rate-limiting and the user service session/user caches).
+rate-limiting and audience).
 
 ## Usage
 

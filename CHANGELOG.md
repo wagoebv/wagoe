@@ -83,6 +83,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **The admin users page bypassed the user service** (BOU-665): no audit, no session end, no last-admin guard.
   Add `:writer :user`, and `:tenant-id :login-count :last-login` to `:readonly-fields`, in your `admin/users.edn`.
+- **Revoked sessions and deactivated users stayed signed in**: until the cache expired with `:wagoe/cache` on, and for good when made inactive without a soft delete (BOU-663).
+  Upgrade if you use session authentication.
+- **`bb scaffold field` enums read back as strings** (BOU-656): the field now joins the repository's `enum-fields`.
+  For an enum added before, add it to `enum-fields` in the entity's persistence namespace.
 - **A typed `ex-info` thrown from route `:middleware` answered 500** (BOU-659); it now answers its `:type`'s status.
   Upgrade if your route middleware throws typed errors.
 - **MySQL timestamps read back without a zone, so APIs sent UTC as local time** (BOU-653).

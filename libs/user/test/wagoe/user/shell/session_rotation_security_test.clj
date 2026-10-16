@@ -29,7 +29,7 @@
 
 (defn- service [state calls]
   (sut/->UserService (user-repo state) (session-repo calls) (audit-repo)
-                     {:password-policy {:min-length 8}} nil nil))
+                     {:password-policy {:min-length 8}} nil))
 
 (def ^:private uid (UUID/randomUUID))
 (def ^:private hash-60 (apply str (repeat 60 "x"))) ; schema requires a 60-char hash

@@ -95,8 +95,8 @@
 ;; =============================================================================
 
 (defprotocol IUserService
-  "User domain service — orchestrates the repositories, the auth shell, the
-   cache and the audit trail. Every method may throw an ex-info carrying
+  "User domain service — orchestrates the repositories, the auth shell and
+   the audit trail. Every method may throw an ex-info carrying
    :type (ADR-022); the listed types are the ones callers branch on."
 
   (register-user [this user-data])
@@ -120,7 +120,7 @@
   ;;          :auth-result …}.
 
   (get-user-by-id [this user-id])
-  ;; Returns the user without :password-hash, or nil. Cached for 300s.
+  ;; Returns the user without :password-hash, or nil. Not cached.
 
   (get-user-by-email [this email])
   ;; Returns the user without :password-hash, or nil.
