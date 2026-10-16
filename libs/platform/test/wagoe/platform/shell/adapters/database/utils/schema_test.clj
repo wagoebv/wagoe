@@ -7,7 +7,6 @@
    - DDL generation from Malli schemas
    - Index generation from schema analysis"
   (:require [wagoe.platform.shell.adapters.database.utils.schema :as schema]
-            [wagoe.platform.ports.database :as protocols]
             [wagoe.platform.shell.adapters.database.h2.core :as h2]
             [wagoe.platform.shell.adapters.database.mysql.core :as mysql]
             [wagoe.platform.shell.adapters.database.postgresql.core :as postgresql]
@@ -62,20 +61,32 @@
     (testing "Unknown type falls back to VARCHAR(255)"
       (is (= "VARCHAR(255)" (malli-type->column-type h2-ctx :unknown-type))))))
 
-(def ^:private malli->logical
-  {:uuid :uuid :string :string :re :string :int :int :bigint :bigint :double :double
-   :boolean :boolean :text :text :enum :enum :map :json inst? :instant 'inst? :instant
-   :unknown-type :string})
+(def ^:private expected-types
+  "Malli type -> [H2 SQLite PostgreSQL MySQL]. What the builder made before
+   BOU-610, but CLOB on H2, which reads back as a JdbcClob."
+  (let [ts "TIMESTAMP WITH TIME ZONE"]
+    {:uuid         ["UUID" "CHAR(36)" "UUID" "CHAR(36)"]
+     :string       ["VARCHAR(255)" "TEXT" "VARCHAR(255)" "VARCHAR(255)"]
+     :re           ["VARCHAR(255)" "TEXT" "VARCHAR(255)" "VARCHAR(255)"]
+     :unknown-type ["VARCHAR(255)" "TEXT" "VARCHAR(255)" "VARCHAR(255)"]
+     :int          ["INTEGER" "INTEGER" "INTEGER" "INT"]
+     :bigint       ["BIGINT" "INTEGER" "BIGINT" "BIGINT"]
+     :double       ["DOUBLE PRECISION" "REAL" "DOUBLE PRECISION" "DOUBLE"]
+     :boolean      ["BOOLEAN" "INTEGER" "BOOLEAN" "TINYINT(1)"]
+     :text         ["VARCHAR" "TEXT" "TEXT" "LONGTEXT"]
+     :enum         ["VARCHAR(50)" "TEXT" "VARCHAR(50)" "VARCHAR(50)"]
+     :map          ["VARCHAR" "TEXT" "JSONB" "JSON"]
+     inst?         [ts "TEXT" ts "DATETIME(6)"]
+     'inst?        [ts "TEXT" ts "DATETIME(6)"]}))
 
 (deftest ^:unit the-builder-asks-the-adapter-for-every-type
   ;; One table answers, so a fresh table and an added column agree (BOU-610).
-  (doseq [[engine make] [[:h2 h2/new-adapter] [:sqlite sqlite/new-adapter]
-                         [:postgresql postgresql/new-adapter] [:mysql mysql/new-adapter]]
-          [malli-type logical] malli->logical]
-    (let [adapter (make)]
-      (is (= (protocols/column-type adapter logical)
-             (malli-type->column-type {:adapter adapter} malli-type))
-          (str engine " " malli-type)))))
+  (doseq [[malli-type types] expected-types
+          [engine make expected] (map vector [:h2 :sqlite :postgresql :mysql]
+                                      [h2/new-adapter sqlite/new-adapter postgresql/new-adapter mysql/new-adapter]
+                                      types)]
+    (is (= expected (malli-type->column-type {:adapter (make)} malli-type))
+        (str engine " " malli-type))))
 
 ;; =============================================================================
 ;; Field Extraction Tests ([:maybe ...] unwrapping)

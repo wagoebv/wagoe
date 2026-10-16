@@ -22,7 +22,7 @@
      :engine             :postgresql, :mysql, :sqlite or :h2
      :capabilities       a subset of protocols/capability-keywords
      :column-types       {logical-type DDL-type} for protocols/logical-column-types;
-                         :string's is (fn [length] -> DDL-type)
+                         a string is VARCHAR(length) unless :string names one type for all
      :now-ms-sql         SQL for the database clock in epoch millis
      :on-connect         optional (fn [java.sql.Connection]), run on each new
                          connection after the session statements
@@ -166,13 +166,14 @@
   (capabilities [_] (:capabilities spec))
 
   (column-type [_ logical]
-    (let [[k length] (if (vector? logical) logical [logical 255])
-          t (get (:column-types spec) k)]
-      (cond
-        (and (= :string k) (pos-int? length)) (t length)
-        (and t (keyword? logical))             t
-        :else (throw (ex-info (str "No column type for " (pr-str logical))
-                              {:type :validation-error :logical logical})))))
+    (let [types  (:column-types spec)
+          length (cond (= :string logical) 255
+                       (and (vector? logical) (= :string (first logical))) (second logical))]
+      (or (if length
+            (when (pos-int? length) (get types :string (str "VARCHAR(" length ")")))
+            (get types logical))
+          (throw (ex-info (str "No column type for " (pr-str logical))
+                          {:type :validation-error :logical logical})))))
 
   (like [_ field pattern] (like-ignoring-case (:string-match spec) field pattern))
   (like [_ field mode value] (case-insensitive-like (:string-match spec) field mode value))

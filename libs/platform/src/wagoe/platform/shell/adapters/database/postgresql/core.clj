@@ -29,7 +29,7 @@
    :capabilities       #{:schemas :transactional-ddl :index-if-not-exists :column-if-not-exists
                          :full-text :on-conflict :row-locks :alter-foreign-key}
    :column-types       {:uuid "UUID" :instant "TIMESTAMP WITH TIME ZONE" :json "JSONB"
-                        :boolean "BOOLEAN" :text "TEXT" :string #(str "VARCHAR(" % ")")
+                        :boolean "BOOLEAN" :text "TEXT"
                         :int "INTEGER" :bigint "BIGINT" :double "DOUBLE PRECISION" :enum "VARCHAR(50)"}
    :table-exists?      (partial introspection/information-schema-table-exists?
                                 introspection-spec)

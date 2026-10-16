@@ -3,7 +3,6 @@
             [wagoe.platform.shell.adapters.database.factory :as factory]
             [wagoe.platform.shell.adapters.database.sqlite.core :as sqlite]
             [wagoe.platform.shell.adapters.database.utils.schema :as schema-utils]
-            [wagoe.user.schema :as user-schema]
             [wagoe.user.shell.persistence :as sut]
             [support.test-db :as test-db]
             [cheshire.core :as json]
@@ -103,14 +102,17 @@
       (is (= "Unexpected JSON field type" (ex-message ex)))
       (is (= java.lang.Long (type (:value (ex-data ex))))))))
 
-(defn- columns [ctx table] (set (map :name (db-core/get-table-info ctx table))))
+(defn- column-types [ctx table]
+  (into {} (map (juxt :name :type)) (db-core/get-table-info ctx table)))
+
+(defn- columns [ctx table] (set (keys (column-types ctx table))))
 
 (deftest ^:integration an-existing-table-gains-the-missing-columns
   ;; A table from before a field was added to the schema: CREATE TABLE IF NOT
   ;; EXISTS leaves it alone, so the builder adds the column (BOU-622).
   (doseq [[engine open] [[:sqlite #(let [f (java.io.File/createTempFile "user-cols-" ".db")]
-                                     (.deleteOnExit f)
-                                     (factory/db-context (factory/sqlite-config (str f))))]
+                                    (.deleteOnExit f)
+                                    (factory/db-context (factory/sqlite-config (str f))))]
                          [:h2 #(factory/db-context
                                 (factory/h2-config (str "mem:user_cols_" (System/nanoTime) ";DB_CLOSE_DELAY=-1")))]]]
     (testing (name engine)
@@ -133,16 +135,6 @@
                                                        :values [{:id (str (UUID/randomUUID)) :session_token "t1"}]}))))
           (finally (factory/close-db-context! ctx)))))))
 
-(defn- column-types [ctx table]
-  (into {} (map (juxt :name :type)) (db-core/get-table-info ctx table)))
-
-(def ^:private user-tables
-  {"auth_users"      user-schema/AuthUser
-   "users"           user-schema/TenantUser
-   "user_sessions"   user-schema/UserSession
-   "user_audit_log"  user-schema/UserAuditLog
-   "user_identities" user-schema/UserIdentity})
-
 (deftest ^:integration an-upgraded-database-has-the-column-types-of-a-fresh-one
   ;; The upgrades once picked their own types: created_at came out VARCHAR(255)
   ;; where a fresh PostgreSQL has TIMESTAMPTZ (BOU-610). WAGOE_TEST_DB picks the engine.
@@ -152,9 +144,9 @@
       (test-db/with-db "user_upgraded"
         (fn [upgraded]
           ;; Each table as an older release left it: its first three fields.
-          (doseq [[table schema] user-tables]
+          (doseq [[table schema] sut/tables]
             (db-core/execute-ddl! upgraded (schema-utils/generate-table-ddl
                                             upgraded table (into [:map] (take 3 (filter vector? (rest schema)))))))
           (sut/initialize-user-schema! upgraded)
-          (doseq [table (keys user-tables)]
+          (doseq [table (keys sut/tables)]
             (is (= (column-types fresh table) (column-types upgraded table)) table)))))))
