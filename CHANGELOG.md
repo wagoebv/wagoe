@@ -72,6 +72,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Changed
 
+- **API login records the connection's address** (BOU-670), not the body's `deviceInfo.ipAddress`, which is ignored.
+  Behind a proxy, set `:remote-addr` from `X-Forwarded-For` in your own middleware.
 - **Database errors are logged redacted unless their SQLState is known to quote no values** (BOU-629): the summary
   names SQLState, code and constraint. Read the driver's text in a debugger if you need it.
 - **Tables from Malli schemas gain the fields added since they were created** (BOU-622): boot adds them, a required one as

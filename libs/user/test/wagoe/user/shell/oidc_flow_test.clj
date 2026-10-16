@@ -406,3 +406,12 @@
       (is (= 403 (:status resp)))
       (is (nil? (session-token resp)))
       (is (empty? (ports/find-sessions-by-user (:sessions a) (:id ada)))))))
+
+(deftest ^:integration ^:security an-account-refused-for-enrolment-is-still-linked
+  (let [require? (atom true)
+        a        (app :auto-create? true :link-by-email? false
+                      :auth-config {:mfa-required? (fn [_ _] @require?)})]
+    (is (= 403 (:status (sign-in! a))) "created, then refused")
+    (reset! require? false)
+    (is (= "ada@example.com" (authenticated-as a (session-token (sign-in! a))))
+        "the provider's link finds it once MFA is waived")))

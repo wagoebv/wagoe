@@ -901,7 +901,10 @@
                                          (:password body) (assoc :password (:password body))
                                          (:mfaCode body) (assoc :mfa-code (:mfaCode body))
                                          true (assoc :user-agent (get-in body [:deviceInfo :userAgent] "Unknown")
-                                                     :ip-address (get-in body [:deviceInfo :ipAddress] "Unknown")))
+                                                     ;; The connection's, not deviceInfo.ipAddress: a
+                                                     ;; client-supplied address could steer the
+                                                     ;; :mfa-required? hook.
+                                                     :ip-address (get-in context [:request :remote-addr] "Unknown")))
 
                                  :cli (cond-> {}
                                         (:user-id body) (assoc :user-id (:user-id body))

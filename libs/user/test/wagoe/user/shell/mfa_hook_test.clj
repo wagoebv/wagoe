@@ -6,6 +6,7 @@
             [wagoe.user.ports :as ports]
             [wagoe.user.shell.auth :as auth]
             [wagoe.user.shell.in-memory-repository-test :as mem]
+            [wagoe.user.shell.interceptors :as interceptors]
             [wagoe.user.shell.mfa :as mfa]))
 
 (use-fixtures :each
@@ -61,12 +62,23 @@
 
 (defn office-hook [_user _ctx] false)
 
+(def not-a-hook true)
+
 (deftest ^:unit hook-is-resolved-from-a-symbol
   (let [s (setup {:mfa-required? `office-hook} :mfa-enabled true :mfa-secret (mfa/generate-totp-secret))]
     (is (:success? (login s))))
-  (testing "a symbol that does not resolve fails at construction"
-    (doseq [bad ['wagoe.user.shell.mfa-hook-test/missing 'no.such.ns/hook "office-hook"]]
+  (testing "a symbol that does not resolve to a function fails at construction"
+    (doseq [bad ['wagoe.user.shell.mfa-hook-test/missing 'no.such.ns/hook "office-hook"
+                 `not-a-hook]]
       (is (= :configuration-error
              (:type (ex-data (try (auth/create-authentication-service nil nil nil {:mfa-required? bad})
                                   (catch clojure.lang.ExceptionInfo e e)))))
           (pr-str bad)))))
+
+(deftest ^:unit ^:security api-login-takes-the-connection-address-not-the-body
+  (let [enter (:enter interceptors/transform-session-creation-data)
+        ctx   (enter {:interface-type   :http
+                      :request          {:remote-addr "203.0.113.7"}
+                      :raw-session-data {:email "ada@example.com" :password password
+                                         :deviceInfo {:ipAddress "10.0.0.5"}}})]
+    (is (= "203.0.113.7" (get-in ctx [:session-data :ip-address])))))

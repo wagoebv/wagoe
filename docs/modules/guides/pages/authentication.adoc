@@ -103,6 +103,11 @@ signed-in user, so they must sign in where MFA is not required, or ask an
 administrator. The symbol is resolved at boot, and one that does not resolve stops
 the boot. A function that throws fails the login.
 
+WARNING: `:ip-address` is the request's `:remote-addr`. Behind a reverse proxy that
+is the proxy, so set it from `X-Forwarded-For` in your own middleware, trusting only
+your proxy, before keying a hook on it. `deviceInfo.ipAddress` in an API login body
+is ignored.
+
 === Disable MFA
 
 [source,bash]

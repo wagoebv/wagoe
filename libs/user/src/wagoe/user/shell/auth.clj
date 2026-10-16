@@ -170,12 +170,11 @@
 (defn- resolve-mfa-hook
   "Config names the :mfa-required? hook as a symbol; resolve it once, at boot."
   [hook]
-  (cond
-    (fn? hook)               hook
-    (qualified-symbol? hook) (wagoe-config/resolve-symbol hook)
-    :else
-    (throw (ex-info ":mfa-required? must be a function or a qualified symbol"
-                    {:type :configuration-error :symbol hook}))))
+  (let [f (if (qualified-symbol? hook) (wagoe-config/resolve-symbol hook) hook)]
+    (if (or (fn? f) (instance? clojure.lang.MultiFn f))
+      f
+      (throw (ex-info ":mfa-required? must be a function or a qualified symbol naming one"
+                      {:type :configuration-error :symbol hook})))))
 
 (defn create-authentication-service
   "Factory function: Create authentication service instance.
@@ -199,11 +198,15 @@
 (defn mfa-required?
   "Whether this login needs a second factor: the app's :mfa-required? hook
    when it set one, else whether the user turned MFA on. Shared by password
-   and OIDC sign-in."
+   and OIDC sign-in. The hook sees neither the user's secrets nor the code."
   [auth-service user login-context]
   (boolean
    (if-let [hook (get-in auth-service [:auth-config :mfa-required?])]
-     (hook user login-context)
+     (try
+       (hook (dissoc user :password-hash :mfa-secret :mfa-backup-codes :mfa-backup-codes-used)
+             (dissoc login-context :mfa-code))
+       (catch Exception e
+         (throw (ex-info "The :mfa-required? hook failed" {:type :internal-error} e))))
      (:mfa-enabled user))))
 
 (defn open-session!

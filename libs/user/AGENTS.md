@@ -269,7 +269,7 @@ curl -X POST http://localhost:3000/api/auth/login \
 
 ### Deciding Per Login
 
-`:wagoe/user {:auth {:mfa-required? my.app/mfa-required?}}` names a `(fn [user login-context] bool)`, resolved at boot. It replaces the default `(:mfa-enabled user)` for password and OIDC logins (OIDC adds `:provider` to the context). False waives the code without touching the user's MFA settings. True for a user without MFA refuses the login with `:mfa-enrolment-required` (`:oidc/mfa-enrolment-required` for OIDC): enrolment needs a signed-in user. `:auth` is passed whole as the auth service's config.
+`:wagoe/user {:auth {:mfa-required? my.app/mfa-required?}}` names a `(fn [user login-context] bool)`, resolved at boot. It replaces the default `(:mfa-enabled user)` for password and OIDC logins (OIDC adds `:provider` to the context). False waives the code without touching the user's MFA settings. True for a user without MFA refuses the login with `:mfa-enrolment-required` (`:oidc/mfa-enrolment-required` for OIDC): enrolment needs a signed-in user. The hook never sees password or MFA secrets, and `:ip-address` is the request's `:remote-addr` (the API ignores `deviceInfo.ipAddress`). `:auth` is passed whole as the auth service's config, CLI included.
 
 Do not waive MFA by making the repository report `:mfa-enabled false`: login writes the user back, which turns MFA off in the database.
 
