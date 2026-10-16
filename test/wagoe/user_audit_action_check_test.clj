@@ -72,4 +72,4 @@
       (try (check-widened-and-close (epg/db-context pg))
            (finally (epg/stop! pg)))))
   (testing "mysql"
-    (mysql/with-database "audit_check" check-widened)))
+    (mysql/with-database "audit_check" #(check-widened %))))
