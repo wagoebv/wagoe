@@ -227,11 +227,12 @@
        distinct
        (mapv #(symbol (str % "." module ".shell.module-wiring")))))
 
-(def ^:private no-graph {:components {} :http {} :routes [] :job-handlers []})
+(def ^:private no-graph
+  {:components {} :http {} :middleware [] :routes [] :job-handlers []})
 
 (defn merge-http
-  "`http` over `acc`, refusing a key both set. Each is one slot on the handler:
-   a second `:extra-middleware` would silently drop tenant's."
+  "`http` over `acc`, refusing a key both set. Each is one slot on the handler,
+   and the later module would silently replace the earlier."
   [acc k http]
   (when-let [clash (some (set (keys acc)) (keys http))]
     (throw (ex-info (str "Two modules both contribute " clash " to :wagoe/http-handler."
@@ -242,7 +243,10 @@
 (defn- add-graph
   "Fold module `k`'s graph into `acc`. One step for framework and discovered
    modules alike: a discovered module kept only `:components` and lost its
-   `:job-handlers` (BOU-636)."
+   `:job-handlers` (BOU-636).
+
+   `:extra-middleware` is the one `:http` key every module may set: it is
+   collected into `:middleware`, in fold order, rather than taking a slot."
   [acc k {:keys [components http routes job-handlers]}]
   (when-let [clash (some (set (keys (:components acc))) (keys components))]
     (throw (ex-info (str "Two modules both wire " clash
@@ -250,9 +254,33 @@
                     {:type :wagoe/module-key-conflict :key clash :module k})))
   (-> acc
       (update :components merge components)
-      (update :http merge-http k http)
+      (update :http merge-http k (dissoc http :extra-middleware))
+      (cond-> (contains? http :extra-middleware)
+        (update :middleware conj (:extra-middleware http)))
       (update :routes into routes)
       (update :job-handlers into job-handlers)))
+
+(defn- scaffold-components
+  "The four keys a scaffolded module `k` gets: what `module_wiring.clj`
+   defines init-keys for."
+  [k settings]
+  (let [mk #(keyword "wagoe" (str (name k) %))]
+    {(mk "-repository") {:ctx (ig/ref :wagoe/db-context)}
+     (mk "-service")    {:repository (ig/ref (mk "-repository"))}
+     (mk "-routes")     {:service (ig/ref (mk "-service"))
+                         :config  settings}
+     k                  {:enabled? true
+                         :service  (ig/ref (mk "-service"))
+                         :routes   (ig/ref (mk "-routes"))}}))
+
+(defn- over-scaffold
+  "`graph` with the scaffold's four keys under its components, unless it wires
+   `k` itself — then it owns its whole graph. A component both name is merged,
+   the module's keys winning, so an `ig-config` states only what it adds."
+  [k settings graph]
+  (if (contains? (:components graph) k)
+    graph
+    (update graph :components #(merge-with merge (scaffold-components k settings) %))))
 
 (defn discover-module-config
   "Integrant entries for scaffolded modules named under `:active`, in the shape
@@ -304,26 +332,12 @@
 
           own-graph
           (do (log/info "Discovered module with its own graph" {:module module})
-              (add-graph acc k own-graph))
+              (add-graph acc k (over-scaffold k settings own-graph)))
 
           :else
           (do
             (log/info "Discovered scaffolded module" {:module module})
-            (update acc :components assoc
-                    (keyword "wagoe" (str module "-repository"))
-                    {:ctx (ig/ref :wagoe/db-context)}
-
-                    (keyword "wagoe" (str module "-service"))
-                    {:repository (ig/ref (keyword "wagoe" (str module "-repository")))}
-
-                    (keyword "wagoe" (str module "-routes"))
-                    {:service (ig/ref (keyword "wagoe" (str module "-service")))
-                     :config  settings}
-
-                    k
-                    {:enabled? true
-                     :service  (ig/ref (keyword "wagoe" (str module "-service")))
-                     :routes   (ig/ref (keyword "wagoe" (str module "-routes")))})))))
+            (update acc :components merge (scaffold-components k settings))))))
     no-graph
     (scaffolded-module-keys active known-keys))))
 
@@ -528,9 +542,10 @@
 (defn framework-module-config
   "Integrant entries for the framework modules `active` switches on.
 
-   Returns `{:components {…} :http {…} :routes [..] :job-handlers [..]}`.
-   `:components` merges into the system config and `:http` into
-   `:wagoe/http-handler` — that is how tenant contributes `:extra-middleware`.
+   Returns `{:components {…} :http {…} :middleware [..] :routes [..]
+   :job-handlers [..]}`. `:components` merges into the system config and
+   `:http` into `:wagoe/http-handler`. `:middleware` collects each module's
+   `:extra-middleware` — tenant's, for one — in module-key order.
    `:routes` is a vector of refs to modules' route components, which reach the
    handler as one collection rather than as a named slot per module (BOU-330).
 

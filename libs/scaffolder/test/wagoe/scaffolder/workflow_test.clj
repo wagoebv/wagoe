@@ -22,6 +22,7 @@
             [wagoe.platform.shell.database.migrations :as migrations]
             [wagoe.platform.shell.http.reitit-router :as reitit-router]
             [wagoe.scaffolder.cli :as cli]
+            [wagoe.scaffolder.multi-entity-test :as multi]
             [wagoe.scaffolder.ports :as ports]
             [wagoe.scaffolder.shell.service :as service]
             [wagoe.workflow.ports :as workflow]
@@ -137,10 +138,8 @@
    events and admin modules switched on, next to a real workflow component and
    an in-memory bus, on H2."
   [base ctx]
-  (let [build (ns-resolve (symbol (str base ".billing.shell.module-wiring")) 'ig-config)
-        graph (:components (build {:enabled? true}
-                                  {:config {:active {:wagoe/workflow {} :wagoe/events {}
-                                                     :wagoe/admin {:enabled? true}}}}))]
+  (let [graph (multi/module-graph base {:wagoe/workflow {} :wagoe/events {}
+                                        :wagoe/admin {:enabled? true}})]
     (ig/init (merge (walk/postwalk-replace {(ig/ref :wagoe/db-context) ctx} graph)
                     {:wagoe/workflow-db-schema {:ctx ctx :profile :test}
                      :wagoe/workflow {:db-ctx ctx :db-schema (ig/ref :wagoe/workflow-db-schema)

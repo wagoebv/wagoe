@@ -57,8 +57,7 @@
 
 (defn- boot! [dir base active]
   (#'multi/load-and-test! dir)
-  (let [build (ns-resolve (symbol (str base ".billing.shell.module-wiring")) 'ig-config)
-        graph (:components (build {:enabled? true} {:config {:active active}}))
+  (let [graph (multi/module-graph base active)
         system (ig/init (merge (walk/postwalk-replace {(ig/ref :wagoe/db-context) :stand-in} graph)
                                {:wagoe/events {:provider :memory}}))]
     (ig/halt! system)

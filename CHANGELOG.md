@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **App modules can add HTTP middleware and components** (BOU-672): an `ig-config` returns only what it adds to the
+  scaffold's four keys, and its `:http :extra-middleware` runs after the framework modules'. See the platform guide.
 - **Sign in with OpenID Connect** (BOU-447): authorization code with PKCE, a "Sign in with X" button per provider.
   Configure under `:wagoe/user {:oidc …}`; linking by email is opt-in and never reaches an admin.
 - **Live htmx updates over server-sent events** (BOU-464): `sse/sse-handler` streams `sse/push-fragment!` to `sse-swap`

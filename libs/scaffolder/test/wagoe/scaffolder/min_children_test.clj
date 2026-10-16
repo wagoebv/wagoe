@@ -38,9 +38,7 @@
 (defn- boot
   "The module's Integrant graph, as platform discovery builds it, on `db`."
   [base db]
-  (let [build (ns-resolve (symbol (str base ".billing.shell.module-wiring")) 'ig-config)]
-    (ig/init (walk/postwalk-replace {(ig/ref :wagoe/db-context) db}
-                                    (:components (build {:enabled? true} {}))))))
+  (ig/init (walk/postwalk-replace {(ig/ref :wagoe/db-context) db} (multi/module-graph base {}))))
 
 (defn- count-rows [db table]
   (:n (jdbc/execute-one! (:datasource db) [(str "SELECT COUNT(*) AS n FROM " table)])))

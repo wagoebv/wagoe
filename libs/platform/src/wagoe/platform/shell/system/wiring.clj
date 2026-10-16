@@ -346,16 +346,17 @@
 (defn- request-middleware
   "The middleware every request passes through, outermost first.
 
-   `extra-middleware` is a seq of `(fn [handler] ...)` supplied by the
-   application — tenant resolution arrives this way. Platform provides the
-   pipeline; feature libraries inject their middleware, which is why platform
-   does not require the tenant library (BOU-200).
+   `module-middleware` holds each module's `:extra-middleware` — a middleware
+   fn or a seq of them — framework modules first, then the application's, each
+   group in module-key order. Tenant resolution arrives this way, which is why
+   platform does not require the tenant library (BOU-200). `extra-middleware`,
+   a seq of `(fn [handler] ...)` an application wires by hand, runs after them.
 
    Authentication is not here: it runs earlier, ahead of body decoding, with
    the default-deny guard — see `:authentication` in the router config. It
    still precedes the tenant middleware, which reads `[:user :id]` (BOU-373,
    BOU-568)."
-  [{:keys [extra-middleware i18n i18n-middleware]}]
+  [{:keys [module-middleware extra-middleware i18n i18n-middleware]}]
   (let [;; `:i18n` is still accepted. An app that upgrades platform without
         ;; regenerating its config still passes the component under that key —
         ;; the documented input until now — and dropping it would take the
@@ -374,6 +375,7 @@
                       (let [wrap (requiring-resolve 'wagoe.i18n.shell.middleware/wrap-i18n)]
                         (fn [handler] (wrap handler i18n)))))]
     (concat
+     (mapcat #(if (fn? %) [%] %) module-middleware)
      (or extra-middleware [])
      (when i18n-mw [i18n-mw])
      ;; HTML forms can only GET and POST, so a POST carrying _method=delete is
@@ -503,7 +505,7 @@
                                :summary "Prometheus metrics scrape endpoint"})}]]))
 
 (defmethod ig/init-key :wagoe/http-handler
-  [_ {:keys [module-routes logger metrics-emitter tracer error-reporter error-enricher config tenant-service db-context cache i18n i18n-middleware user-service request-capture? auth-middleware extra-middleware router]}]
+  [_ {:keys [module-routes logger metrics-emitter tracer error-reporter error-enricher config tenant-service db-context cache i18n i18n-middleware user-service request-capture? auth-middleware module-middleware extra-middleware router]}]
   (log/info "Initializing top-level HTTP handler")
   (when (empty? auth-middleware)
     (log/warn (str "No authentication middleware is wired (no user module?). "
@@ -584,7 +586,8 @@
                               ;; after the framework's pipeline, so it sees a
                               ;; request the framework has already prepared.
                               :middleware (into (vec (request-middleware
-                                                      {:extra-middleware extra-middleware
+                                                      {:module-middleware module-middleware
+                                                       :extra-middleware extra-middleware
                                                        :i18n             i18n
                                                        :i18n-middleware  i18n-middleware}))
                                                 (:middleware settings))

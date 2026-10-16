@@ -16,6 +16,7 @@
             [wagoe.platform.shell.adapters.database.factory :as db-factory]
             [wagoe.platform.shell.database.migrations :as migrations]
             [wagoe.platform.shell.http.reitit-router :as reitit-router]
+            [wagoe.platform.shell.modules :as modules]
             [wagoe.scaffolder.cli :as cli]
             [wagoe.scaffolder.core.generators :as generators]
             [wagoe.scaffolder.ports :as ports]
@@ -233,16 +234,22 @@
            (~'update-invoice-line-item [~'_ ~'_id ~'_data] nil)
            (~'delete-invoice-line-item [~'_ ~'_id] nil))))
 
+(defn module-graph
+  "The components platform discovery builds for the generated billing module
+   under `base`, with `active` switched on."
+  [base active]
+  (:components (modules/discover-module-config
+                (assoc active :wagoe/billing {:enabled? true})
+                (set (keys modules/framework-modules))
+                base (constantly true) requiring-resolve)))
+
 (defn- boot-module
   "Load the generated module under `dir`, build its Integrant graph the way
    platform discovery does — through the wiring's `ig-config` — and init it.
    The database context is a stand-in: nothing here queries."
   [dir base]
   (load-and-test! dir)
-  (let [wiring  (symbol (str base ".billing.shell.module-wiring"))
-        build   (ns-resolve wiring 'ig-config)
-        _       (assert build "the wiring defines no ig-config")
-        graph   (:components (build {:enabled? true} {}))]
+  (let [graph (module-graph base {})]
     (ig/init (walk/postwalk-replace {(ig/ref :wagoe/db-context) :stand-in} graph))))
 
 (defn- api-paths [system]
