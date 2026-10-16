@@ -18,9 +18,10 @@
   @catalogue-data)
 
 (defn read-clj
-  "`s` read with the Clojure reader, so bb.edn's `#()` and `#\"\"` parse."
+  "`s` read with the Clojure reader, so bb.edn's `#()` and `#\"\"` parse. An
+   unknown tag reads as its value rather than failing the whole file."
   [s]
-  (binding [*read-eval* false] (read-string s)))
+  (binding [*read-eval* false *default-data-reader-fn* (fn [_ v] v)] (read-string s)))
 
 (defn wagoe-lib-name
   "Short name (\"core\") of Wagoe deps entry `lib`, or nil. A local checkout

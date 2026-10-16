@@ -35,6 +35,14 @@
           (is (add/wagoe-project? local))
           (doseq [f (reverse (file-seq (io/file local)))] (.delete f))))
 
+      (testing "detects one whose deps.edn does not read, so add can say so"
+        (let [broken (str tmp "-broken")]
+          (io/make-parents (io/file broken "deps.edn"))
+          (spit (io/file broken "deps.edn")
+                "{:deps {com.wagoe/wagoe-core {:mvn/version \"1.0.0\"}} :deps {}}")
+          (is (add/wagoe-project? broken))
+          (doseq [f (reverse (file-seq (io/file broken)))] (.delete f))))
+
       (testing "returns false for non-wagoe project"
         (let [other (str tmp "-other")]
           (io/make-parents (io/file other "deps.edn"))
@@ -63,9 +71,11 @@
 
 (deftest ^:integration a-local-checkout-gets-the-module-from-the-same-checkout
   ;; A Maven pin next to local libs mixes two Wagoes on one classpath (BOU-664).
-  (let [tmp (str (System/getProperty "java.io.tmpdir") "/wagoe-add-local-" (System/nanoTime))]
+  (let [root (str (System/getProperty "java.io.tmpdir") "/wagoe-add-local-" (System/nanoTime))
+        tmp  (str root "/app")]
     (try
       (make-wagoe-project! tmp)
+      (doseq [lib ["core" "payments"]] (.mkdirs (io/file root "wagoe/libs" lib)))
       (spit (io/file tmp "deps.edn")
             "{:deps {wagoe/core {:local/root \"../wagoe/libs/core\"}}}")
       (testing "writes a :local/root entry beside the existing one"
@@ -78,8 +88,12 @@
         (is (= {:local/root "../wagoe/libs/payments"}
                (add/dep-coords (slurp (io/file tmp "deps.edn")) 'com.wagoe/wagoe-payments nil)))
         (is (nil? (add/patch-deps! tmp {:clojars 'com.wagoe/wagoe-payments :version "1.0.0"}))))
+
+      (testing "but not a lib the checkout lacks, which would stop deps.edn resolving"
+        (is (= "com.wagoe/wagoe-geo {:mvn/version \"1.0.0\"}"
+               (add/dep-entry (slurp (io/file tmp "deps.edn")) 'com.wagoe/wagoe-geo "1.0.0" tmp))))
       (finally
-        (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))
+        (doseq [f (reverse (file-seq (io/file root)))] (.delete f))))))
 
 (deftest ^:unit a-maven-project-still-gets-a-maven-pin
   (is (= "com.wagoe/wagoe-payments {:mvn/version \"1.0.0\"}"

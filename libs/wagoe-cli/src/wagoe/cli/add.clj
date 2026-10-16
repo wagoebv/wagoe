@@ -8,9 +8,16 @@
 ;; ─── Project detection ────────────────────────────────────────────────────────
 
 (defn wagoe-project?
-  "True if dir contains a deps.edn depending on a Wagoe lib."
+  "True if dir contains a deps.edn depending on a Wagoe lib. One that does not
+   read counts when it names one, so `patch-deps!` gets to say it is unreadable."
   [dir]
-  (boolean (seq (cat/wagoe-deps (io/file dir "deps.edn")))))
+  (let [f (io/file dir "deps.edn")]
+    (boolean
+     (or (seq (cat/wagoe-deps f))
+         (and (.exists f)
+              (let [text (slurp f)]
+                (and (str/includes? text "wagoe/")
+                     (try (cat/read-clj text) false (catch Exception _ true)))))))))
 
 ;; ─── deps.edn patching ───────────────────────────────────────────────────────
 
@@ -32,25 +39,34 @@
   (try
     (let [parsed (cat/read-clj content)
           short  (cat/wagoe-lib-name clojars nil)]
-      (some (fn [[lib coord]]
-              (when (= short (cat/wagoe-lib-name lib coord)) coord))
-            (get-in parsed (if (= :dev scope) [:aliases :repl :extra-deps] [:deps]))))
+      (if short
+        (some (fn [[lib coord]]
+                (when (= short (cat/wagoe-lib-name lib coord)) coord))
+              (get-in parsed (if (= :dev scope) [:aliases :repl :extra-deps] [:deps])))
+        (get-in parsed (if (= :dev scope) [:aliases :repl :extra-deps clojars] [:deps clojars]))))
     (catch Exception _ :unreadable)))
 
 (defn dep-entry
   "The deps.edn entry to write for `clojars`. A project on a local checkout
    gets the module from the same checkout, named like its other Wagoe deps,
-   rather than a Maven pin (BOU-664)."
-  [content clojars version]
-  (let [short (cat/wagoe-lib-name clojars nil)]
-    (or (some (fn [[lib coord]]
-                (when-let [n (cat/wagoe-lib-name lib coord)]
-                  (when-let [[_ prefix] (some->> (:local/root coord)
-                                                 (re-matches (re-pattern (str "(.*/|)\\Q" n "\\E/?"))))]
-                    (str (if (= "wagoe" (namespace lib)) (symbol "wagoe" short) clojars)
-                         " {:local/root \"" prefix short "\"}"))))
-              (:deps (cat/read-clj content)))
-        (str clojars " {:mvn/version \"" version "\"}"))))
+   rather than a Maven pin (BOU-664). Given `dir`, only when the checkout has
+   that lib: a :local/root that is not there stops deps.edn resolving at all."
+  ([content clojars version] (dep-entry content clojars version nil))
+  ([content clojars version dir]
+   (let [short   (cat/wagoe-lib-name clojars nil)
+         exists? (fn [path]
+                   (let [p (io/file path)]
+                     (or (nil? dir) (.isDirectory (if (.isAbsolute p) p (io/file dir path))))))]
+     (or (when short
+           (some (fn [[lib coord]]
+                   (when-let [n (cat/wagoe-lib-name lib coord)]
+                     (when-let [[_ prefix] (some->> (:local/root coord)
+                                                    (re-matches (re-pattern (str "(.*/|)\\Q" n "\\E/?"))))]
+                       (when (exists? (str prefix short))
+                         (str (if (= "wagoe" (namespace lib)) (symbol "wagoe" short) clojars)
+                              " {:local/root \"" prefix short "\"}")))))
+                 (:deps (cat/read-clj content))))
+         (str clojars " {:mvn/version \"" version "\"}")))))
 
 (defn- code-only
   "`text` with strings and comments blanked, positions and newlines intact.
@@ -125,7 +141,7 @@
   (let [f         (io/file dir "deps.edn")
         content   (slurp f)
         existing  (dep-coords content clojars scope)
-        entry     (when-not existing (dep-entry content clojars version))]
+        entry     (when-not existing (dep-entry content clojars version dir))]
     (cond
       (= :unreadable existing) :unreadable
       existing                 nil
@@ -552,8 +568,11 @@
               ;; untouched file is how `wagoe add ai` looked while doing
               ;; nothing, and a fresh project already ships devtools in :repl,
               ;; so the no-op branch is the common one for it.
-              (let [by-hand (str "  Add " (:clojars module) " {:mvn/version \""
-                                 (:version module) "\"} by hand.")]
+              (let [by-hand (str "  Add "
+                                 (try (dep-entry deps-content (:clojars module) (:version module) dir)
+                                      (catch Exception _
+                                        (str (:clojars module) " {:mvn/version \"" (:version module) "\"}")))
+                                 " by hand.")]
                 (case (patch-deps! dir module)
                   :repl-alias         (println "  deps.edn: added to the :repl alias — dev-only, not on the production classpath")
                   :deps               (println "  deps.edn: added to :deps")
