@@ -55,18 +55,16 @@
                       :service-test-ns "shell.service-test"} k)))
 
 (defn generate-field-schema
-  "Generate Malli schema for a single field.
-   
-   Args:
-     field-ctx - Field context map
-   
-   Returns:
-     String representation of Malli schema
-   
+  "The Malli entry for a field context in a schema of `role`: `:entity`
+   (default), `:create` or `:update`. A required field is optional on update,
+   which is a partial, and on create when its column has a default (BOU-537).
+
    Pure: true"
-  ([field-ctx] (generate-field-schema field-ctx false))
-  ([field-ctx force-optional?]
-   (let [required   (and (:field-required field-ctx) (not force-optional?))
+  ([field-ctx] (generate-field-schema field-ctx :entity))
+  ([field-ctx role]
+   (let [required   (and (:field-required field-ctx)
+                         (not= :update role)
+                         (not (and (= :create role) (:field-default? field-ctx))))
          malli-type (:malli-type field-ctx)
          field-name (keyword (:field-name-kebab field-ctx))]
      (if required
@@ -91,14 +89,14 @@
         field-schemas (str/join "\n" (map generate-field-schema fields))
         ;; A workflow's status is set by its transitions, never by a request.
         requested (remove :workflow-state? fields)
-        request-schemas (str/join "\n" (map generate-field-schema requested))
+        request-schemas (str/join "\n" (map #(generate-field-schema % :create) requested))
         ;; Every field optional, whatever it is on the entity. An update
         ;; request is a partial: one required field in this schema means every
         ;; caller doing a partial update has to send it. The same
         ;; `field-schemas` string used to be interpolated into all three
         ;; schemas, so `--field name:string:required` made `name` mandatory on
         ;; update — against the convention in libs/scaffolder/AGENTS.md.
-        update-field-schemas (str/join "\n" (map #(generate-field-schema % true) requested))]
+        update-field-schemas (str/join "\n" (map #(generate-field-schema % :update) requested))]
     {:entity (str "(def " entity-name "\n"
                   "  \"Schema for " entity-name " entity.\"\n"
                   "  [:map {:title \"" entity-name "\"}\n"
@@ -2414,24 +2412,22 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s%s%s;%s"
             index)))
 
 (defn schema-field-entry
-  "The Malli entry line for `field`, without indentation.
+  "The Malli entry line for a field definition, without indentation, in a
+   schema of `role` as `generate-field-schema` takes it. See
+   `libs/scaffolder/AGENTS.md`."
+  ([field] (schema-field-entry field :entity))
+  ([field role]
+   (str/trim (generate-field-schema (template/build-field-context field) role))))
 
-   Required fields are plain; optional ones carry `{:optional true}`, matching
-   what module generation emits for the same field definition.
+(defn schema-entry-for
+  "The entry `field` takes in the schema named `schema-name`.
 
-   `force-optional?` produces the optional form regardless. Update request
-   schemas take that one: an update is a partial, so a required entry there
-   means every existing caller doing a partial update has to start sending the
-   new field or fail validation. See `libs/scaffolder/AGENTS.md`, and
-   `generate-field-schema`, which applies the same rule at module generation."
-  ([field] (schema-field-entry field false))
-  ([field force-optional?]
-   (let [field-ctx  (template/build-field-context field)
-         field-name (keyword (:field-name-kebab field-ctx))
-         malli-type (:malli-type field-ctx)]
-     (if (and (:field-required field-ctx) (not force-optional?))
-       (format "[%s %s]" field-name malli-type)
-       (format "[%s {:optional true} %s]" field-name malli-type)))))
+   Pure: true"
+  [field entity schema-name]
+  (schema-field-entry field (condp = schema-name
+                              (str "Create" entity "Request") :create
+                              (str "Update" entity "Request") :update
+                              :entity)))
 
 (defn- schema-map-zloc
   "Zipper at the `[:map …]` vector inside `(def schema-name …)`, or nil.
@@ -2560,7 +2556,7 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s%s%s;%s"
   [child]
   (let [fk     (str (:belongs-to child) "-id")
         fields (remove #(or (:workflow-state? %) (= fk (:field-name-kebab %))) (:fields child))
-        item   (str "[:map " (str/join " " (map #(str/trim (generate-field-schema %)) fields)) "]")]
+        item   (str "[:map " (str/join " " (map #(str/trim (generate-field-schema % :create)) fields)) "]")]
     (if-let [n (:min child)]
       (str "[:" (:entity-plural child) " [:vector {:min " n " :max " max-children "} " item "]]")
       (str "[:" (:entity-plural child) " {:optional true} [:vector {:max " max-children "} " item "]]"))))
@@ -2632,7 +2628,7 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s%s%s;%s"
           k     (entry-key-of entry)]
       (if (existing-entry item k)
         {:status :present :parent parent}
-        (let [created (append-to-item item entry)
+        (let [created (append-to-item item (schema-field-entry field :create))
               shown   (children-item-zloc created parent plural)]
           {:status  :inserted
            :parent  parent
@@ -2786,7 +2782,7 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s%s%s;%s"
         ;; an update is a partial, so a required entry there breaks every
         ;; caller that was sending a subset. Applying one entry to all three
         ;; schemas made `--required` mandatory on update.
-        entry-for     #(schema-field-entry field (= % update-schema))
+        entry-for     #(schema-entry-for field entity %)
         targets       [entity (str "Create" entity "Request") update-schema]
         ;; An entry that is present but not optional, in the update request
         ;; only. Scoped that narrowly on purpose: a project generated before

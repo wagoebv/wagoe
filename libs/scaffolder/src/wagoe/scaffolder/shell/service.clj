@@ -728,7 +728,7 @@
             ;; mandatory on every partial update, and this note is the only
             ;; instruction they get — following it is the expected outcome, not
             ;; a mistake on their part.
-            entry-for     #(generators/schema-field-entry field (= % update-schema))
+            entry-for     #(generators/schema-entry-for field entity %)
             ;; "<entry> to A and B; <other entry> to C" — grouped by the form
             ;; each schema needs, so both the description of what happened and
             ;; the instruction for what is left name the right entry per target.
