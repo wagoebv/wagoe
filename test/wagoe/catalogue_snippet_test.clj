@@ -101,10 +101,9 @@
 
    `wagoe add` injects `:config-snippet` into `:active`; an empty one writes
    nothing, so the library lands in deps.edn and the module is never switched
-   on. That is what reports and calendar did (BOU-427). These three are
+   on. That is what reports and calendar did (BOU-427). These two are
    deliberate — an entry that grows a snippet is removed from here."
-  {"user"     "enabled in code: `wagoe new` writes #{:wagoe/user} as an extra-module"
-   "external" "its SMTP settings are documented under the email entry; :wagoe.external/imap and /twilio are opt-in by hand"
+  {"external" "its SMTP settings are documented under the email entry; :wagoe.external/imap and /twilio are opt-in by hand"
    "ui-style" "an asset bundle every service reads; nothing to configure"})
 
 (deftest ^:unit every-module-is-switched-on-by-what-wagoe-add-writes
