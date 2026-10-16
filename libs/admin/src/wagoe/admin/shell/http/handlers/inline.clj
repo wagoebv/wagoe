@@ -5,7 +5,6 @@
    [wagoe.admin.core.ui :as admin-ui]
    [wagoe.admin.shell.permissions :as shell-permissions]
    [wagoe.admin.shell.http.support :as support]
-   [wagoe.user.core.user :as user-core]
    [ring.util.response :as ring-response]))
 
 (defn inline-edit-widget-handler
@@ -104,7 +103,8 @@
       (try
         ; Update single field
         (let [updated-record (ports/update-entity-field admin-service entity-name id field parsed-value)
-              new-value (get updated-record field)]
+              ;; :removed has no fields: show what was saved (BOU-665).
+              new-value (if (map? updated-record) (get updated-record field) parsed-value)]
 
           ; Return updated cell HTML with success indicator
           (-> (support/html-response request
@@ -121,7 +121,7 @@
                                                      :server-zone-id (:server-zone zones)
                                                      :offsets        (:offsets zones)}))]
             (cond
-              (user-core/refusal? e)
+              (support/refusal? e)
               (form-with [(support/refusal-message request e)])
 
               (= (:type error-data) :validation-error)

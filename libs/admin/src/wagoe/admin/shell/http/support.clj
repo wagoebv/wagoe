@@ -15,7 +15,6 @@
    [wagoe.i18n.shell.middleware :as i18n-middleware]
    [wagoe.i18n.shell.render :as i18n]
    [wagoe.platform.core.http.problem-details :as problem-details]
-   [wagoe.user.core.user :as user-core]
    [clojure.string :as str]
    [clojure.tools.logging :as log]
    [ring.util.codec :as codec]
@@ -390,13 +389,18 @@
         ([k _params] (name k))
         ([k _params _n] (name k)))))
 
+(defn refusal?
+  "Whether `e` is a write refused by a rule: a :conflict, shown to the user
+   rather than raised."
+  [e]
+  (= :conflict (:type (ex-data e))))
+
 (defn attempt
-  "Call `f`: [result nil], or [nil e] when it throws a refusal (a :conflict,
-   shown to the user rather than raised)."
+  "Call `f`: [result nil], or [nil e] when it throws a refusal."
   [f]
   (try [(f) nil]
        (catch clojure.lang.ExceptionInfo e
-         (if (user-core/refusal? e) [nil e] (throw e)))))
+         (if (refusal? e) [nil e] (throw e)))))
 
 (defn refusal-message
   "What to tell the user about refusal `e`: its :message-key translated, or

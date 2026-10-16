@@ -765,12 +765,16 @@
               (user-ports/permanently-delete-user user-service uuid)))
 
           "role-admin"
-          (doseq [id-str ids]
-            (user-ports/update-user-profile user-service {:id (UUID/fromString id-str) :role :admin}))
+          (doseq [id-str ids
+                  :let [uuid (UUID/fromString id-str)]
+                  :when (user-ports/get-user-by-id user-service uuid)]
+            (user-ports/update-user-profile user-service {:id uuid :role :admin}))
 
           "role-user"
-          (doseq [id-str ids]
-            (user-ports/update-user-profile user-service {:id (UUID/fromString id-str) :role :user}))
+          (doseq [id-str ids
+                  :let [uuid (UUID/fromString id-str)]
+                  :when (user-ports/get-user-by-id user-service uuid)]
+            (user-ports/update-user-profile user-service {:id uuid :role :user}))
 
           (throw (ex-info "Unsupported bulk action"
                           {:type :bad-request

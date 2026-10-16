@@ -559,9 +559,10 @@
            (when (and updated-user cache)
              (cache-ports/delete-key! cache (str "user:" (:id updated-user))))
 
-           ;; Remove sensitive data before returning
+           ;; Remove sensitive data before returning. A partial update returns
+           ;; the whole user, as the port promises.
            (when updated-user
-             (dissoc updated-user :password-hash)))))
+             (dissoc (merge old-user updated-user) :password-hash)))))
      {:system {:user-repository user-repository
                :session-repository session-repository
                :auth-service auth-service}}))

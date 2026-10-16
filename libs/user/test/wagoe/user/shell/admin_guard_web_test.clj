@@ -40,10 +40,16 @@
   ;; Writing back the whole cached user failed validation on its empty fields.
   (let [[repo svc] (service)
         _boss (user! repo "boss@example.com" :admin)
-        u     (user! repo "u@example.com" :user)
-        resp  (bulk svc [(:id u)] "role-admin")]
+        tenant (random-uuid)
+        u     (.create-user repo {:email "u@example.com" :name "u" :role :user :active true
+                                  :password-hash "bcrypt+sha512$test"
+                                  :tenant-id tenant :theme :dark})
+        resp  (bulk svc [(:id u)] "role-admin")
+        after (.find-user-by-id repo (:id u))]
     (is (= 200 (:status resp)))
-    (is (= :admin (:role (user-ports/get-user-by-id svc (:id u)))))))
+    (is (= :admin (:role after)))
+    (is (= [tenant :dark] [(:tenant-id after) (:theme after)])
+        "fields the update left out keep their stored values")))
 
 (deftest ^:integration a-bulk-demote-of-the-last-admin-gets-409
   (let [[repo svc] (service)
