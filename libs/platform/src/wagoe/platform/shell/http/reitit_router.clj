@@ -214,11 +214,10 @@
   "The response the interceptor stack gives a typed ex-info, for one thrown
    where that stack cannot catch it."
   [system e request]
-  (let [ctx (assoc (http-interceptors/create-http-context request system) :exception e)]
-    (-> ctx
-        ((:error http-interceptors/http-error-handler))
-        ((:error http-interceptors/http-correlation-header))
-        http-interceptors/extract-response)))
+  (http-interceptors/run-http-interceptors
+   (fn [_] (throw e))
+   [http-interceptors/http-correlation-header http-interceptors/http-error-handler]
+   request system))
 
 (defn- create-exception-middleware
   "Reitit exception middleware, placed between response formatting and request
@@ -270,7 +269,7 @@
 
        ::exception/default
        (fn [e request]
-         (if (some? (:type (ex-data e)))
+         (if (:type (ex-data e))
            (typed-error-response system e request)
            (do (log-error e request "Unhandled exception at the HTTP boundary")
                (server-error-response))))}))))
