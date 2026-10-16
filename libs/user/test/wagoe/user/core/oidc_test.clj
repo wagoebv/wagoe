@@ -75,14 +75,18 @@
   (let [p {:issuer "https://idp.example.com/" :client-id "app"}]
     (is (= {:id "google" :issuer "https://idp.example.com" :label "Google"
             :scopes ["openid" "email" "profile"] :default-role :user
-            :link-by-email? true :auto-create? false :client-id "app"}
+            :link-by-email? false :trust-email? false :auto-create? false :client-id "app"}
            (get-in (sut/normalize-settings {:base-url "https://app.example.com" :providers {:google p}})
                    [:ok :providers "google"])))
     (is (= :configuration-error (get-in (sut/normalize-settings {:providers {:google p}}) [:error :type])))
     (is (:error (sut/normalize-provider :x (assoc p :issuer "http://idp.example.com"))))
     (is (:ok (sut/normalize-provider :x (assoc p :issuer "http://localhost:9000"))))
     (is (:error (sut/normalize-provider :x (assoc p :default-role :admin))))
-    (is (:error (sut/normalize-provider :x (assoc p :scopes ["email"]))))))
+    (is (:error (sut/normalize-provider :x (assoc p :scopes ["email"]))))
+    (is (= :configuration-error
+           (get-in (sut/normalize-provider :entra (assoc p :issuer "https://login.microsoftonline.com/{tenantid}/v2.0"))
+                   [:error :type]))
+        "a multi-tenant issuer template is refused")))
 
 (deftest ^:unit ^:security account-resolution
   (let [provider {:link-by-email? true :auto-create? false :default-role :user}
@@ -104,6 +108,14 @@
              (get-in (sut/resolve-account {:email-user ada :email-user-linked? true :claims claims
                                            :provider (assoc provider :auto-create? true)})
                      [:error :type]))))
+    (testing "an administrator is never linked by email"
+      (is (= :oidc/admin-link-refused
+             (get-in (sut/resolve-account {:email-user (assoc ada :role :admin) :claims claims :provider provider})
+                     [:error :type]))))
+    (testing ":trust-email? treats an email with no email_verified as verified"
+      (is (= {:action :link :user ada}
+             (sut/resolve-account {:email-user ada :claims (dissoc claims :email_verified)
+                                   :provider (assoc provider :trust-email? true)}))))
     (testing "linking by email can be switched off"
       (is (:error (sut/resolve-account {:email-user ada :claims claims
                                         :provider (assoc provider :link-by-email? false)}))))

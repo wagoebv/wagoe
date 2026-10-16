@@ -50,12 +50,18 @@
 (defn- json-response [body]
   {:status 200 :headers {"Content-Type" "application/json"} :body (json/generate-string body)})
 
+(defn- basic-credentials
+  "client_secret_basic as a provider reads it: Base64, then form-decode each half."
+  [header]
+  (when (and header (str/starts-with? header "Basic "))
+    (let [[id secret] (str/split (codecs/bytes->str (codecs/b64->bytes (subs header 6))) #":" 2)]
+      [(codec/form-decode-str id) (codec/form-decode-str (str secret))])))
+
 (defn- token-response [{:keys [form-params headers]}]
-  (let [grant (get (:codes @idp) (get form-params "code"))
-        basic (str "Basic " (codecs/bytes->b64-str (codecs/str->bytes "app:app-secret")))]
+  (let [grant (get (:codes @idp) (get form-params "code"))]
     (swap! idp update :codes dissoc (get form-params "code"))
     (cond
-      (not= basic (get headers "authorization"))
+      (not= ["app" (:client-secret @idp)] (basic-credentials (get headers "authorization")))
       {:status 401 :body "{\"error\":\"invalid_client\"}"}
 
       (or (nil? grant)
@@ -138,9 +144,12 @@
         audit      (mem/->MemoryAuditRepository (atom []))
         identities (->MemoryIdentityRepository (atom {}))
         auth-svc   (auth/create-authentication-service users sessions (mfa/create-mfa-service users {}) {})
+        provider   (merge {:issuer *issuer* :client-id "app" :client-secret "app-secret"
+                           :link-by-email? true}
+                          provider-opts)
+        _          (swap! idp assoc :client-secret (:client-secret provider))
         settings   {:base-url  "http://localhost:3000"
-                    :providers {:fake (merge {:issuer *issuer* :client-id "app" :client-secret "app-secret"}
-                                             provider-opts)}}
+                    :providers {:fake provider}}
         client     (oidc/create-oidc-client {:settings settings :secret (apply str (repeat 40 "s"))
                                              :auth-service auth-svc :audit-repository audit
                                              :identity-repository identities})
@@ -308,6 +317,58 @@
       (is (= 403 (:status resp)))
       (is (nil? (session-token resp))))))
 
+(deftest ^:integration ^:security email-linking-is-opt-in-and-never-reaches-an-admin
+  (testing "off: an existing account is not linked by email"
+    (let [a (app :link-by-email? false)]
+      (add-user! a)
+      (is (= 403 (:status (sign-in! a))))))
+  (testing "on, but the account is an administrator"
+    (let [a     (app)
+          admin (add-user! a :role :admin)
+          resp  (sign-in! a)]
+      (is (= 403 (:status resp)))
+      (is (str/includes? (:body resp) "oidc-admin-link-refused"))
+      (is (empty? (ports/find-identities-by-user (:identities a) (:id admin)))))))
+
+(deftest ^:integration ^:security trust-email-stands-in-for-email-verified
+  (testing "no email_verified claim: refused unless the provider is trusted"
+    (let [a (app)]
+      (add-user! a)
+      (swap! idp assoc :claims-fn #(dissoc % :email_verified))
+      (is (= 403 (:status (sign-in! a))))))
+  (let [a (app :trust-email? true)]
+    (add-user! a)
+    (swap! idp assoc :claims-fn #(dissoc % :email_verified))
+    (is (= "ada@example.com" (authenticated-as a (session-token (sign-in! a)))))))
+
+(deftest ^:integration client-secret-basic-is-form-urlencoded
+  (let [a (app :client-secret "s~e+c%r:et /x")]
+    (add-user! a)
+    (is (= "ada@example.com" (authenticated-as a (session-token (sign-in! a)))))))
+
+(deftest ^:integration ^:security cookies-are-sealed-per-step
+  (let [a (app)]
+    (add-user! a :mfa-enabled true :mfa-secret (mfa/generate-totp-secret))
+    (let [{:keys [location cookie]} (start! a)]
+      (testing "a pending sign-in is not an MFA ticket"
+        (is (= 400 (:status ((:mfa a) (request {:cookies {"oidc-mfa" {:value cookie}}
+                                                :form-params {"mfa-code" "000000"}}))))))
+      (let [mfa-cookie (get-in (callback! a cookie (authorize! location)) [:cookies "oidc-mfa" :value])
+            {:keys [location]} (start! a)]
+        (testing "and an MFA ticket is not a pending sign-in"
+          (is (= 400 (:status (callback! a mfa-cookie (authorize! location))))))))))
+
+(deftest ^:integration ^:security a-dangling-link-is-dropped
+  (let [a   (app :auto-create? true)
+        ada (add-user! a)]
+    (is (some? (session-token (sign-in! a))))
+    ;; The user row goes; the link stays behind.
+    (swap! (:state (:users a)) dissoc (:id ada))
+    (let [resp (sign-in! a)
+          [u]  (vals @(:state (:users a)))]
+      (is (= 200 (:status resp)) "resolved afresh: here, a new account")
+      (is (= [(:id u)] (map :user-id (vals @(:state (:identities a)))))))))
+
 (deftest ^:integration ^:security mfa-is-still-asked
   (let [a      (app)
         secret (mfa/generate-totp-secret)
@@ -316,6 +377,7 @@
         cookie (get-in resp [:cookies "oidc-mfa" :value])
         submit #((:mfa a) (request {:cookies {"oidc-mfa" {:value cookie}} :form-params {"mfa-code" %}}))]
     (is (= 200 (:status resp)))
+    (is (= :strict (get-in resp [:cookies "oidc-mfa" :same-site])))
     (is (nil? (session-token resp)))
     (is (empty? (ports/find-identities-by-user (:identities a) (:id ada)))
         "not linked until the second factor is in")

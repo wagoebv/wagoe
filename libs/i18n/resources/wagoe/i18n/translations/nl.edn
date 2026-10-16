@@ -148,6 +148,7 @@
  :user/oidc-continue           "Doorgaan"
  :user/oidc-failed             "Inloggen via die aanbieder is niet gelukt. Probeer het opnieuw."
  :user/oidc-no-account         "Er hoort geen account bij deze aanmelding. Vraag een beheerder om toegang."
+ :user/oidc-admin-link-refused "Beheerdersaccounts worden niet via e-mail gekoppeld. Log in met uw wachtwoord."
  :user/oidc-account-unavailable "Dit account kan nu niet inloggen."
  :user/oidc-mfa-invalid        "Ongeldige code"
 

@@ -7,7 +7,8 @@
 
    Every step returns {:ok …} or {:error {:type :oidc/… :message …}}; only a
    bad configuration throws, at boot."
-  (:require [buddy.core.hash :as hash]
+  (:require [buddy.core.codecs :as codecs]
+            [buddy.core.hash :as hash]
             [buddy.core.keys :as keys]
             [buddy.sign.jws :as jws]
             [buddy.sign.jwt :as jwt]
@@ -21,7 +22,8 @@
             [wagoe.user.ports :as ports]
             [wagoe.user.shell.auth :as auth]
             [wagoe.user.shell.mfa :as mfa])
-  (:import (java.nio.charset StandardCharsets)
+  (:import (java.net URLEncoder)
+           (java.nio.charset StandardCharsets)
            (java.time Instant)))
 
 (def pending-ttl-seconds
@@ -44,16 +46,27 @@
 (defn- now-epoch [] (.getEpochSecond (Instant/now)))
 
 (defn seal
-  "Encrypt `claims` for a cookie that expires in `ttl` seconds."
-  [client claims ttl]
-  (jwt/encrypt (assoc claims :exp (+ (now-epoch) ttl)) (:key client) {:alg :dir :enc :a256gcm}))
+  "Encrypt `claims` for a cookie of kind `typ` that expires in `ttl` seconds."
+  [client typ claims ttl]
+  (jwt/encrypt (assoc claims :typ (name typ) :exp (+ (now-epoch) ttl))
+               (:key client) {:alg :dir :enc :a256gcm}))
 
 (defn unseal
-  "The claims of a sealed cookie, or nil when it is absent, forged or expired."
-  [client value]
+  "The claims of a sealed cookie of kind `typ`, or nil when it is absent,
+   forged, expired, or sealed for another step — a pending sign-in is not an
+   MFA ticket."
+  [client typ value]
   (when-not (str/blank? value)
-    (try (jwt/decrypt value (:key client) {:alg :dir :enc :a256gcm})
-         (catch Exception _ nil))))
+    (let [claims (try (jwt/decrypt value (:key client) {:alg :dir :enc :a256gcm})
+                      (catch Exception _ nil))]
+      (when (= (name typ) (:typ claims)) claims))))
+
+(defn- basic-auth-header
+  "client_secret_basic: id and secret are form-urlencoded before Base64
+   (RFC 6749 §2.3.1), which clj-http's :basic-auth does not do."
+  [client-id client-secret]
+  (let [enc #(URLEncoder/encode (str %) "UTF-8")]
+    (str "Basic " (codecs/bytes->b64-str (codecs/str->bytes (str (enc client-id) ":" (enc client-secret)))))))
 
 ;; =============================================================================
 ;; HTTP
@@ -136,7 +149,7 @@
         r      (request-json
                 (if basic?
                   {:method :post :url (:token_endpoint discovery-doc) :form-params form
-                   :basic-auth [client-id client-secret]}
+                   :headers {"Authorization" (basic-auth-header client-id client-secret)}}
                   {:method :post :url (:token_endpoint discovery-doc)
                    :form-params (cond-> (assoc form :client_id client-id)
                                   client-secret (assoc :client_secret client-secret))}))]
@@ -172,7 +185,7 @@
                            (:ok d) p
                            (assoc pending :redirect-uri
                                   (oidc/redirect-uri (get-in client [:settings :base-url]) provider-id)))
-                :cookie   (seal client pending pending-ttl-seconds)}})))
+                :cookie   (seal client :pending pending pending-ttl-seconds)}})))
     unknown-provider))
 
 (defn- write-audit! [client entry provider-id]
@@ -215,40 +228,48 @@
    Returns {:ok {:user u :link? bool}} or an error."
   [client p claims login-context]
   (let [{:keys [user-repository]} (:auth-service client)
-        repo     (:identity-repository client)
-        identity (ports/find-identity repo (:iss claims) (:sub claims))
-        linked   (when identity (ports/find-user-by-id user-repository (:user-id identity)))
-        email    (oidc/verified-email claims)]
-    (if (and identity (nil? linked))
-      ;; Linked to an account that has since been deleted.
-      {:error {:type :oidc/account-unavailable :message "Account is not available"}}
-      (let [email-user (when (and email (nil? linked))
-                         ;; Emails are stored as registered; try the provider's casing first.
-                         (some #(ports/find-user-by-email user-repository %)
-                               (distinct [(:email claims) email])))
-            decision   (oidc/resolve-account
-                        {:linked-user        linked
-                         :email-user         email-user
-                         :email-user-linked? (boolean
-                                              (when email-user
-                                                (some #(= (:iss claims) (:issuer %))
-                                                      (ports/find-identities-by-user repo (:id email-user)))))
-                         :claims             claims
-                         :provider           p})]
-        (case (:action decision)
-          :login {:ok {:user (:user decision) :link? false}}
-          :link  {:ok {:user (:user decision) :link? true}}
-          :create
-          (let [user (ports/create-user user-repository
-                                        (assoc (:user-data decision)
-                                               ;; Signs in through its provider; nobody knows this password.
-                                               :password-hash (auth/hash-password (auth/generate-session-token))))]
-            (write-audit! client
-                          (audit-core/create-user-audit-entry
-                           nil "system" user (:ip-address login-context) (:user-agent login-context))
-                          (:id p))
-            {:ok {:user user :link? true}})
-          decision)))))
+        repo   (:identity-repository client)
+        found  (ports/find-identity repo (:iss claims) (:sub claims))
+        linked (when found (ports/find-user-by-id user-repository (:user-id found)))
+        email  (oidc/verified-email claims p)]
+    ;; A link to a user who is gone would refuse this subject for good: drop it
+    ;; and resolve as if it had never been made.
+    (when (and found (nil? linked))
+      (log/warn "Dropping OIDC link to a missing user" {:user-id (:user-id found) :provider (:id p)})
+      (ports/unlink-identity repo (:iss claims) (:sub claims)))
+    (let [email-user (when (and email (nil? linked))
+                       ;; Emails are stored as registered; try the provider's casing first.
+                       (some #(ports/find-user-by-email user-repository %)
+                             (distinct [(:email claims) email])))
+          decision   (oidc/resolve-account
+                      {:linked-user        linked
+                       :email-user         email-user
+                       :email-user-linked? (boolean
+                                            (when email-user
+                                              (some #(= (:iss claims) (:issuer %))
+                                                    (ports/find-identities-by-user repo (:id email-user)))))
+                       :claims             claims
+                       :provider           p})]
+      (case (:action decision)
+        :login {:ok {:user (:user decision) :link? false}}
+        :link  {:ok {:user (:user decision) :link? true}}
+        :create
+        (if-let [user (try
+                        (ports/create-user user-repository
+                                           (assoc (:user-data decision)
+                                                  ;; Signs in through its provider; nobody knows this password.
+                                                  :password-hash (auth/hash-password (auth/generate-session-token))))
+                        ;; The email still belongs to a deactivated, soft-deleted account.
+                        (catch Exception e
+                          (log/warn "OIDC account creation refused" {:provider (:id p) :cause (ex-message e)})
+                          nil))]
+          (do (write-audit! client
+                            (audit-core/create-user-audit-entry
+                             nil "system" user (:ip-address login-context) (:user-agent login-context))
+                            (:id p))
+              {:ok {:user user :link? true}})
+          {:error {:type :oidc/account-unavailable :message "Account is not available"}})
+        decision))))
 
 (defn- sign-in-user
   "Apply the account rules a password login applies, then either open the
@@ -265,7 +286,7 @@
       (:mfa-enabled user)
       {:ok {:outcome :mfa-required
             :user    user
-            :cookie  (seal client (assoc sign-in :user-id (str (:id user))) pending-ttl-seconds)}}
+            :cookie  (seal client :mfa (assoc sign-in :user-id (str (:id user))) pending-ttl-seconds)}}
 
       :else
       (finish! client user sign-in login-context))))
@@ -279,7 +300,7 @@
   [client provider-id params pending-cookie login-context]
   (let [p       (provider client provider-id)
         checked (if p
-                  (oidc/check-callback (unseal client pending-cookie) provider-id params (now-epoch))
+                  (oidc/check-callback (unseal client :pending pending-cookie) provider-id params (now-epoch))
                   unknown-provider)]
     (if (:error checked)
       checked
@@ -313,7 +334,7 @@
 (defn complete-mfa
   "Finish a sign-in that stopped for the second factor."
   [client mfa-cookie code login-context]
-  (let [sign-in (unseal client mfa-cookie)
+  (let [sign-in (unseal client :mfa mfa-cookie)
         {:keys [user-repository mfa-service]} (:auth-service client)
         user    (some->> (:user-id sign-in) parse-uuid (ports/find-user-by-id user-repository))
         allowed (when user (auth-core/should-allow-login-attempt? user nil (Instant/now)))]

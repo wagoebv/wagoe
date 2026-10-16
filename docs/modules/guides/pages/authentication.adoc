@@ -102,7 +102,8 @@ people in to the web UI. Name each provider under `:wagoe/user`:
                              :client-secret #env GOOGLE_CLIENT_SECRET
                              :scopes        ["openid" "email" "profile"]  ; the default
                              :label         "Google"                      ; button text
-                             :link-by-email? true                         ; the default
+                             :link-by-email? false                        ; the default
+                             :trust-email?   false                        ; the default
                              :auto-create?   false}}}}                    ; the default
 ----
 
@@ -120,10 +121,20 @@ Which account a sign-in belongs to:
 . The account already linked to the token's issuer and subject. That link outlives an
   email change at the provider.
 . Otherwise, with `:link-by-email?`, the account with the token's email, and only when
-  the provider marks that email verified. The link is stored from then on.
+  the provider marks that email verified. The link is stored from then on. An
+  administrator account is never linked this way; the sign-in is refused.
 . Otherwise, with `:auto-create?`, a new account with role `:default-role` (`:user`, or
   `:viewer`; never `:admin`) and no usable password.
 . Otherwise the sign-in is refused.
+
+Some providers, Microsoft Entra among them, send no `email_verified` claim, so no email
+counts as verified. `:trust-email? true` on such a provider treats its `email` claim as
+verified.
+
+WARNING: Set `:trust-email?` only for a single-tenant issuer you control. Anyone who can
+put an arbitrary address in that provider's `email` claim can then sign in as the account
+with that address. Multi-tenant issuer templates such as
+`https://login.microsoftonline.com/{tenantid}/v2.0` are refused; name one tenant.
 
 A successful sign-in opens the same database session a password login opens. The same
 account rules apply: a deactivated or locked account cannot sign in, and an account with

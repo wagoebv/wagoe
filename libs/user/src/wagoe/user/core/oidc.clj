@@ -54,6 +54,10 @@
       (not (secure-url? issuer))
       (error :configuration-error (str "OIDC provider " id " :issuer must be https"))
 
+      ;; A multi-tenant template such as Entra's {tenantid} matches any tenant's tokens.
+      (str/includes? issuer "{")
+      (error :configuration-error (str "OIDC provider " id " :issuer must name one tenant, not a template"))
+
       (blank-string? client-id)
       (error :configuration-error (str "OIDC provider " id " has no :client-id"))
 
@@ -66,7 +70,8 @@
 
       :else
       {:ok (merge {:label          (str/capitalize (name id))
-                   :link-by-email? true
+                   :link-by-email? false
+                   :trust-email?   false
                    :auto-create?   false}
                   settings
                   {:id           (name id)
@@ -252,11 +257,13 @@
 ;; =============================================================================
 
 (defn verified-email
-  "The token's email, lower-cased, when the provider says it is verified."
-  [claims]
+  "The token's email, lower-cased, when the provider says it is verified — or
+   when the provider is configured with :trust-email?, for issuers such as
+   Entra that send no email_verified."
+  [claims provider]
   (let [v (:email_verified claims)]
     (when (and (not (blank-string? (:email claims)))
-               (or (true? v) (= "true" v)))
+               (or (true? v) (= "true" v) (true? (:trust-email? provider))))
       (str/lower-case (:email claims)))))
 
 (defn- display-name [claims email]
@@ -271,8 +278,9 @@
    In order: the account already linked to (iss, sub); the account with the
    token's verified email, when the provider allows linking by email and that
    account has no link at this issuer yet — a second subject for the same email
-   is the address changing hands; a new account, when it allows creating one.
-   Nothing else — an unverified email never selects or creates an account.
+   is the address changing hands, and never an administrator; a new account,
+   when it allows creating one. Nothing else — an unverified email never
+   selects or creates an account.
 
    Returns one of
      {:action :login  :user u}
@@ -280,10 +288,15 @@
      {:action :create :user-data {…}}
      {:error {:type :oidc/no-account …}}"
   [{:keys [linked-user email-user email-user-linked? claims provider]}]
-  (let [email (verified-email claims)]
+  (let [email (verified-email claims provider)]
     (cond
       linked-user
       {:action :login :user linked-user}
+
+      ;; An email match must never hand out an administrator account.
+      (and email-user email (:link-by-email? provider) (= :admin (:role email-user)))
+      (error :oidc/admin-link-refused
+             "An administrator account is not linked by email; link it by signing in another way")
 
       (and email-user email (:link-by-email? provider) (not email-user-linked?))
       {:action :link :user email-user}

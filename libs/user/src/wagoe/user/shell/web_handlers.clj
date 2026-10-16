@@ -605,6 +605,7 @@
   (let [[status message] (case type
                            :not-found                 [404 [:t :user/oidc-failed]]
                            :oidc/no-account           [403 [:t :user/oidc-no-account]]
+                           :oidc/admin-link-refused   [403 [:t :user/oidc-admin-link-refused]]
                            :oidc/account-unavailable  [403 [:t :user/oidc-account-unavailable]]
                            (:oidc/http-error :oidc/discovery-failed :oidc/token-exchange-failed)
                            [502 [:t :user/oidc-failed]]
@@ -632,7 +633,9 @@
     (= :mfa-required (get-in result [:ok :outcome]))
     (-> (html-response request (user-ui/oidc-mfa-page {} {}))
         clear-oidc-cookies
-        (assoc-in [:cookies oidc-mfa-cookie] (oidc-cookie config (get-in result [:ok :cookie]))))
+        ;; Strict: only the same-site MFA form posts it back.
+        (assoc-in [:cookies oidc-mfa-cookie]
+                  (assoc (oidc-cookie config (get-in result [:ok :cookie])) :same-site :strict)))
 
     :else
     (oidc-signed-in request config (:ok result))))

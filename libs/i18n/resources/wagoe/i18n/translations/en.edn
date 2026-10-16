@@ -148,6 +148,7 @@
  :user/oidc-continue           "Continue"
  :user/oidc-failed             "Signing in with that provider did not work. Please try again."
  :user/oidc-no-account         "No account belongs to this sign-in. Ask an administrator for access."
+ :user/oidc-admin-link-refused "Administrator accounts cannot be linked by email. Sign in with your password."
  :user/oidc-account-unavailable "This account cannot sign in right now."
  :user/oidc-mfa-invalid        "Invalid code"
 
