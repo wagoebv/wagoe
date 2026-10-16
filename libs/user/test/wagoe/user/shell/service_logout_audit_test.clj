@@ -7,7 +7,6 @@
   (:import [java.time Instant]
            [java.util UUID]))
 
-(def test-db-context (atom nil))
 (def test-user-repository (atom nil))
 (def test-session-repository (atom nil))
 (def test-audit-repository (atom nil))
@@ -17,14 +16,13 @@
   (fn [f]
     (test-db/with-db "logout_audit"
       (fn [db-ctx]
-        (reset! test-db-context db-ctx)
         (persistence/initialize-user-schema! db-ctx)
         (reset! test-user-repository (persistence/create-user-repository db-ctx))
         (reset! test-session-repository (persistence/create-session-repository db-ctx))
         (reset! test-audit-repository (persistence/create-audit-repository db-ctx {:default-limit 20 :max-limit 100}))
         (reset! test-service (user-service/create-user-service
                               @test-user-repository @test-session-repository @test-audit-repository {} nil))
-        (try (f) (finally (reset! test-db-context nil)))))))
+        (f)))))
 
 (deftest ^:integration logout-creates-audit-entry-test
   (testing "logout writes a :logout audit record for the session user"

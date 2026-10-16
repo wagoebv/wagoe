@@ -24,7 +24,6 @@
 ;; Harness: the engine WAGOE_TEST_DB names, H2 by default
 ;; =============================================================================
 
-(def ^:private db-ctx (atom nil))
 (def ^:private user-repo (atom nil))
 (def ^:private session-repo (atom nil))
 
@@ -33,10 +32,9 @@
     (test-db/with-db "user_contract"
       (fn [ctx]
         (persistence/initialize-user-schema! ctx)
-        (reset! db-ctx ctx)
         (reset! user-repo (persistence/create-user-repository ctx))
         (reset! session-repo (persistence/create-session-repository ctx))
-        (try (f) (finally (reset! db-ctx nil) (reset! user-repo nil) (reset! session-repo nil)))))))
+        (try (f) (finally (reset! user-repo nil) (reset! session-repo nil)))))))
 
 ;; =============================================================================
 ;; Entity builders

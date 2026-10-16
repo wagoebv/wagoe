@@ -449,7 +449,7 @@
                      :where [:= :id user-id]}
               record (db/execute-one! *db-ctx* query)]
           (is (some? record))
-          ;; Read raw, so the driver's own type: set is what matters.
+          ;; Raw read: the type is the driver's, so only check it is set.
           (is (some? (:deleted-at record)))))
 
       (testing "Entity no longer appears in list"

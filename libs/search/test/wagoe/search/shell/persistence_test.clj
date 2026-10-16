@@ -21,17 +21,15 @@
 ;; Test database setup
 ;; =============================================================================
 
-(def ^:private test-datasource (atom nil))
 (def ^:private test-store      (atom nil))
 
 (defn- db-fixture [test-fn]
   (test-db/with-db "search"
     (fn [{:keys [datasource adapter]}]
       (create-search-documents-table! datasource)
-      (reset! test-datasource datasource)
       (reset! test-store (persistence/create-search-store datasource adapter))
       (try (test-fn)
-           (finally (reset! test-datasource nil) (reset! test-store nil))))))
+           (finally (reset! test-store nil))))))
 
 (use-fixtures :each db-fixture)
 

@@ -22,7 +22,6 @@
 ;; Test database setup
 ;; =============================================================================
 
-(def ^:private test-datasource (atom nil))
 (def ^:private test-store (atom nil))
 
 (defn- db-fixture [test-fn]
@@ -32,10 +31,9 @@
       (migratus/migrate (mig/migratus-config datasource
                                              (filterv #(str/includes? % "workflow")
                                                       (mig/discover-migration-dirs))))
-      (reset! test-datasource datasource)
       (reset! test-store (persistence/create-workflow-store datasource))
       (try (test-fn)
-           (finally (reset! test-datasource nil) (reset! test-store nil))))))
+           (finally (reset! test-store nil))))))
 
 (use-fixtures :each db-fixture)
 
