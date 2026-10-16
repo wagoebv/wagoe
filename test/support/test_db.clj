@@ -33,7 +33,11 @@
   (case engine
     :h2    (let [ctx (factory/db-context
                       (factory/h2-config (str "mem:" prefix "_" (System/nanoTime) ";DB_CLOSE_DELAY=-1")))]
-             (try (f ctx) (finally (factory/close-db-context! ctx))))
+             ;; DB_CLOSE_DELAY=-1 keeps the database past the pool; empty it.
+             (try (f ctx)
+                  (finally
+                    (jdbc/execute! (:datasource ctx) ["DROP ALL OBJECTS"])
+                    (factory/close-db-context! ctx))))
     :pg    (with-pg-database prefix f)
     :mysql (mysql/with-database prefix f)
     (throw (ex-info (str "WAGOE_TEST_DB must be h2, pg or mysql, not " (name engine))

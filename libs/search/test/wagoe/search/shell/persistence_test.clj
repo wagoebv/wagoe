@@ -2,8 +2,8 @@
   "Integration tests for SearchStore persistence layer, on the engine
    WAGOE_TEST_DB names (H2 by default).
 
-   Uses the LIKE-based fallback path (H2 claims neither :full-text nor :on-conflict),
-   which validates:
+   On H2 this is the LIKE-based fallback path (H2 claims neither :full-text nor
+   :on-conflict); on PostgreSQL the FTS path. Validates:
    - upsert-document! (insert + conflict update)
    - delete-document!
    - search-documents (LIKE fallback)

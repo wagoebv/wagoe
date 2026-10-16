@@ -412,6 +412,24 @@
                                       fk-where)}
                       join-clause (assoc :join join-clause))}))
 
+(defn- typed-record
+  "`row` with its :uuid fields as UUIDs and its :instant fields as Instants,
+   whatever the driver returned: MySQL a CHAR(36) as text and a DATETIME as a
+   LocalDateTime, H2 an OffsetDateTime (BOU-652). A value that does not parse,
+   such as SQLite's `2026-01-01 10:00:00`, is left as read."
+  [entity-config row]
+  (when row
+    (reduce-kv (fn [m k {:keys [type]}]
+                 (let [v (get m k)]
+                   (cond-> m
+                     (and (= :uuid type) (string? v))
+                     (assoc k (or (type-conversion/string->uuid v) v))
+
+                     (and (= :instant type) (some? v) (not (inst? v)))
+                     (assoc k (or (type-conversion/string->instant v) v)))))
+               row
+               (:fields entity-config))))
+
 (defn- live-records
   "The live records among `ids`, in one query, read the way `get-entity`
    reads one."
@@ -422,13 +440,14 @@
         in-ids        [:in id-field (mapv type-conversion/uuid->string ids)]]
     (if (empty? ids)
       []
-      (db/execute-query! db-ctx
-                         (cond-> {:select select-clause
-                                  :from   from-clause
-                                  :where  (if (:soft-delete entity-config false)
-                                            [:and in-ids [:= (get field-aliases :deleted-at :deleted_at) nil]]
-                                            in-ids)}
-                           join-clause (assoc :join join-clause))))))
+      (mapv #(typed-record entity-config %)
+            (db/execute-query! db-ctx
+                               (cond-> {:select select-clause
+                                        :from   from-clause
+                                        :where  (if (:soft-delete entity-config false)
+                                                  [:and in-ids [:= (get field-aliases :deleted-at :deleted_at) nil]]
+                                                  in-ids)}
+                                 join-clause (assoc :join join-clause)))))))
 
 (defn- fk-field [relationship]
   (keyword (str/replace (name (:foreign-key relationship)) "_" "-")))
@@ -621,20 +640,6 @@
 ;; =============================================================================
 ;; Creates
 ;; =============================================================================
-
-(defn- typed-record
-  "`row` with its :uuid fields as UUIDs and its :instant fields as Instants,
-   whatever the driver returned: MySQL a CHAR(36) as text and a DATETIME as a
-   LocalDateTime, H2 an OffsetDateTime (BOU-652)."
-  [entity-config row]
-  (when row
-    (reduce-kv (fn [m k {:keys [type]}]
-                 (let [v (get m k)]
-                   (cond-> m
-                     (and (= :uuid type) (string? v))                (assoc k (type-conversion/string->uuid v))
-                     (and (= :instant type) (some? v) (not (inst? v))) (assoc k (type-conversion/string->instant v)))))
-               row
-               (:fields entity-config))))
 
 (defn- insert-record!
   "Insert `data` as a new row of `entity-config` on `conn` (a db-ctx or a
@@ -1207,13 +1212,14 @@
      {:parent-id parent-id :entity (name (:entity relationship))}
      (fn [{:keys [_params]}]
        (let [{:keys [child-cfg select-clause qualify query]} (related-query schema-provider parent-id relationship)]
-         (db/execute-query! db-ctx
-                            (cond-> (assoc query
-                                           :select   select-clause
-                                           ;; The child list's own order, so a limited
-                                           ;; panel is that list's first page.
-                                           :order-by [[(qualify (:default-sort child-cfg :id)) :asc]])
-                              (:limit relationship) (assoc :limit (:limit relationship))))))
+         (mapv #(typed-record child-cfg %)
+               (db/execute-query! db-ctx
+                                  (cond-> (assoc query
+                                                 :select   select-clause
+                                                 ;; The child list's own order, so a limited
+                                                 ;; panel is that list's first page.
+                                                 :order-by [[(qualify (:default-sort child-cfg :id)) :asc]])
+                                    (:limit relationship) (assoc :limit (:limit relationship)))))))
      db-ctx)))
 
 (extend-type AdminService
