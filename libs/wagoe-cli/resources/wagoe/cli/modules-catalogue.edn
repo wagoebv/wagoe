@@ -211,12 +211,12 @@
    :version             "1.0.1"
    :category            :optional
    :tier                :incubating
-   :config-snippet      "  ;; Report definitions are registered in code with `defreport`.\n  :wagoe/reports\n  {:enabled? true}\n"
+   :config-snippet      "  ;; A ReportServiceProtocol: (ig/ref :wagoe/reports).\n  :wagoe/reports\n  {:enabled? true}\n"
    :test-config-snippet "  :wagoe/reports\n  {:enabled? true}\n"
    :add-command         "wagoe add reports"
    :docs-url            "https://github.com/wagoebv/wagoe/blob/main/libs/reports/AGENTS.md"
-   :post-install        ["No Integrant key. Register your reports at startup:"
-                         "  (require '[wagoe.reports.shell.registry :as reports])"]}
+   :post-install        ["Take (ig/ref :wagoe/reports) and call it through wagoe.reports.ports:"
+                         "  (reports/generate svc invoice-report {:invoice-id 42})"]}
 
   {:name                "calendar"
    :description         "iCal, RRULE recurrence, conflict detection, Hiccup UI"

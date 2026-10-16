@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **CSV reports** (BOU-674): `:type :csv` renders the first `:table` section as RFC 4180 text, formula cells neutralised.
+  Pass `:bom? true` for Excel.
 - **Sign in with OpenID Connect** (BOU-447): authorization code with PKCE, a "Sign in with X" button per provider.
   Configure under `:wagoe/user {:oidc …}`; linking by email is opt-in and never reaches an admin.
 - **Live htmx updates over server-sent events** (BOU-464): `sse/sse-handler` streams `sse/push-fragment!` to `sse-swap`
@@ -98,6 +100,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Reports needed a shell require, and `generate-async` lost its output** (BOU-674). `:wagoe/reports` is now a
+  `ReportServiceProtocol` and async output is stored and mailed. Call the port; `service/generate-async` is gone.
 - **Without a boot profile, the port manager let `-Denv`, `ENV` and `ENVIRONMENT` choose its range** (BOU-530).
   Only `WAG_ENV` affects the HTTP port now, as it does the loaded config.
 - **A session request wrote `last_accessed_at` twice, and a database error during sign-in lookup answered 401** (BOU-666).

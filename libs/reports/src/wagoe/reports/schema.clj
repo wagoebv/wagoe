@@ -35,7 +35,7 @@
    Either :template (fn [data] -> hiccup) or :sections (declarative) must be provided."
   [:map
    [:id          :keyword]
-   [:type        [:enum :pdf :excel :word]]
+   [:type        [:enum :pdf :excel :word :csv]]
    [:page-size   {:optional true} [:enum :a4 :a4-landscape :a3 :letter]]
    [:filename    {:optional true} :string]
    [:template    {:optional true} fn?]       ; (fn [data] -> hiccup)
@@ -50,7 +50,7 @@
   "Result of a report generation call."
   [:map
    [:bytes    bytes?]
-   [:type     [:enum :pdf :excel :word]]
+   [:type     [:enum :pdf :excel :word :csv]]
    [:filename :string]])
 
 ;; =============================================================================

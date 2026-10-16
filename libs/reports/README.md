@@ -5,7 +5,7 @@
 [![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
 [![Clojars Project](https://img.shields.io/clojars/v/com.wagoe/wagoe-reports.svg)](https://clojars.org/com.wagoe/wagoe-reports)
 
-Report generation library for the Wagoe Framework — produce PDF, Excel, and Word (DOCX) documents from a single declarative definition.
+Report generation library for the Wagoe Framework — produce PDF, Excel, Word (DOCX) and CSV documents from a single declarative definition.
 
 ## Installation
 
@@ -26,10 +26,11 @@ Report generation library for the Wagoe Framework — produce PDF, Excel, and Wo
 | **PDF generation** | Hiccup → HTML → PDF via OpenHTMLtoPDF; custom CSS, page sizes |
 | **Excel generation** | Column-based XLSX via docjure; single and multi-sheet support |
 | **Word generation** | Declarative DOCX via Apache POI XWPF; no extra Maven deps |
+| **CSV generation** | RFC 4180, formula-injection guard, optional UTF-8 BOM |
 | **`defreport` macro** | Register reports as data in an in-process registry (`wagoe.reports.shell.registry`) |
 | **Declarative sections** | `:header`, `:paragraph`, `:table`, `:footer`, `:spacer` section types |
 | **Column formats** | `:string`, `:number`, `:currency` (nl-NL), `:date` (ISO-8601) |
-| **Async generation** | Optional wagoe-jobs integration for large, background reports |
+| **Async generation** | wagoe-jobs, saving to wagoe-storage and mailing through wagoe-email when enabled |
 | **FC/IS pattern** | Pure `core/` functions; all I/O in `shell/` adapters |
 
 ## Requirements
@@ -42,8 +43,9 @@ Report generation library for the Wagoe Framework — produce PDF, Excel, and Wo
 ### PDF report with a template function
 
 ```clojure
+;; svc is the :wagoe/reports component: (ig/ref :wagoe/reports)
 (require '[wagoe.reports.shell.registry :as registry]
-         '[wagoe.reports.shell.service :as reports])
+         '[wagoe.reports.ports :as reports])
 
 (registry/defreport invoice-report
   {:id        :invoice-report
@@ -61,7 +63,7 @@ Report generation library for the Wagoe Framework — produce PDF, Excel, and Wo
                       [:tr [:td (:description line)]
                            [:td (str "€ " (:amount line))]])]]]])})
 
-(def output (reports/generate invoice-report {:invoice-id 42}))
+(def output (reports/generate svc invoice-report {:invoice-id 42}))
 ;; => {:bytes #bytes[...] :type :pdf :filename "invoice.pdf"}
 
 ;; Serve from a Ring handler
@@ -85,7 +87,7 @@ Report generation library for the Wagoe Framework — produce PDF, Excel, and Wo
                              {:key :revenue  :label "Revenue" :format :currency}
                              {:key :date     :label "Date"    :format :date}]}]})
 
-(def output (reports/generate sales-report {:from "2026-01-01" :to "2026-03-31"}))
+(def output (reports/generate svc sales-report {:from "2026-01-01" :to "2026-03-31"}))
 ;; => {:bytes #bytes[...] :type :excel :filename "sales.xlsx"}
 ```
 
@@ -108,7 +110,7 @@ Report generation library for the Wagoe Framework — produce PDF, Excel, and Wo
                  {:type    :footer
                   :content "Confidential — not for distribution"}]})
 
-(def output (reports/generate contract-report {:contract-id 7}))
+(def output (reports/generate svc contract-report {:contract-id 7}))
 ;; => {:bytes #bytes[...] :type :word :filename "contract.docx"}
 ```
 
@@ -123,16 +125,18 @@ Report generation library for the Wagoe Framework — produce PDF, Excel, and Wo
 
 ;; Word
 {"Content-Type" "application/vnd.openxmlformats-officedocument.wordprocessingml.document"}
+
+;; CSV
+{"Content-Type" "text/csv; charset=UTF-8"}
 ```
 
 ### Async generation (requires wagoe-jobs)
 
 ```clojure
-(require '[wagoe.reports.shell.service :as reports])
-
-(defn export-handler [request]
-  (let [job-id (reports/generate-async sales-report
+(defn export-handler [svc request]
+  (let [job-id (reports/generate-async svc :sales-report
                  {:from "2026-01-01" :to "2026-03-31"
+                  :storage-key  "reports"              ; needs :wagoe/storage
                   :notify-email "finance@example.com"})]
     {:status 202
      :body   {:job-id job-id :message "Report queued"}}))
@@ -163,14 +167,24 @@ libs/reports/src/wagoe/reports/
     ├── adapters/
     │   ├── pdf.clj              # OpenHTMLtoPDF adapter
     │   ├── excel.clj            # docjure (Apache POI) adapter
-    │   └── word.clj             # Apache POI XWPF adapter
-    ├── service.clj              # Public API: generate, generate-async
-    └── jobs_integration.clj     # Optional wagoe-jobs integration
+    │   ├── word.clj             # Apache POI XWPF adapter
+    │   └── csv.clj              # RFC 4180 CSV adapter
+    ├── service.clj              # ReportService, the :wagoe/reports component
+    ├── module_wiring.clj        # Integrant keys
+    └── jobs_integration.clj     # The :reports/generate job
 ```
 
-## Protocol
+## Protocols
 
 ```clojure
+;; What applications call, on (ig/ref :wagoe/reports)
+(defprotocol ReportServiceProtocol
+  (generate [this report opts])        ; report: definition map or registered id
+  (generate-async [this report opts])  ; registered reports only; returns job id
+  (register-report! [this report-def])
+  (list-reports [this]))
+
+;; What adapters implement
 (defprotocol ReportGeneratorProtocol
   (generate! [this report-def data opts]
     "Generate report bytes. Returns {:bytes ... :type ... :filename ...}")

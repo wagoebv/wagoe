@@ -1,84 +1,80 @@
 (ns wagoe.reports.shell.service
-  "Public convenience API for report generation.
+  "The report service behind `:wagoe/reports`.
 
-   Provides `generate` (sync) and `generate-async` (queued via wagoe-jobs).
-   These functions live in the shell layer — not core — because they
-   instantiate adapter records and call :data-source, both of which are
-   side effects (FC/IS: Core → Shell is forbidden).
-
-   Typical HTTP handler usage:
-
-     (require '[wagoe.reports.shell.service :as reports])
-
-     (defn export-handler [request]
-       (let [output (reports/generate invoice-report {:invoice-id 42})]
-         {:status  200
-          :headers {\"Content-Type\"        \"application/pdf\"
-                    \"Content-Disposition\" (str \"attachment; filename=\\\"\"
-                                               (:filename output) \"\\\"\")}
-          :body    (java.io.ByteArrayInputStream. (:bytes output))}))"
+   Applications take `(ig/ref :wagoe/reports)` and call it through
+   `wagoe.reports.ports/ReportServiceProtocol`, so they require no shell
+   namespace of this module."
   (:require [wagoe.reports.core.report :as core]
             [wagoe.reports.ports :as ports]
+            [wagoe.reports.shell.adapters.csv :as csv]
             [wagoe.reports.shell.adapters.excel :as excel]
             [wagoe.reports.shell.adapters.pdf :as pdf]
             [wagoe.reports.shell.adapters.word :as word]
             [wagoe.reports.shell.jobs-integration :as jobs-integration]
+            [wagoe.reports.shell.registry :as registry]
             [clojure.tools.logging :as log]))
+
+(def ^:private generators
+  {:pdf   pdf/create-pdf-generator
+   :excel excel/create-excel-generator
+   :word  word/create-word-generator
+   :csv   csv/create-csv-generator})
 
 ;; =============================================================================
 ;; Synchronous generation
 ;; =============================================================================
 
 (defn generate
-  "Generate a report synchronously.
+  "Generate `report-def` synchronously with the adapter for its :type.
 
-   Selects the appropriate backend based on (:type report-def):
-     :pdf   → OpenHTMLtoPDF adapter
-     :excel → docjure adapter
-     :word  → Apache POI XWPF adapter
+   Calls :data-source with opts when present. Recognised opts:
+     :css      - CSS appended to default.css (PDF only)
+     :bom?     - prefix a UTF-8 byte order mark (CSV only)
+     :zone-id  - java.time.ZoneId for :date columns
 
-   Calls :data-source with opts if present; passes nil otherwise.
-
-   Args:
-     report-def - ReportDefinition map (from defreport or plain map)
-     opts       - Arbitrary options forwarded to :data-source and the adapter
-                  Recognised keys:
-                    :css  - Additional CSS string appended to default.css (PDF only)
-
-   Returns ReportOutput map: {:bytes byte-array :type :pdf|:excel|:word :filename \"...\"}
-
-   Throws on schema validation failure or adapter error."
+   Returns ReportOutput: {:bytes byte-array :type kw :filename \"...\"}"
   [report-def opts]
   (log/info "Generating report" {:id (:id report-def) :type (:type report-def)})
-  (let [generator (case (:type report-def)
-                    :pdf   (pdf/create-pdf-generator)
-                    :excel (excel/create-excel-generator)
-                    :word  (word/create-word-generator)
-                    (throw (ex-info "Unsupported report type"
-                                    {:type          (:type report-def)
-                                     :supported     #{:pdf :excel :word}
-                                     :report-id     (:id report-def)})))
-        data      (core/resolve-data report-def opts)]
-    (ports/generate! generator report-def data opts)))
+  (let [create (or (generators (:type report-def))
+                   (throw (ex-info "Unsupported report type"
+                                   {:type        :validation-error
+                                    :report-type (:type report-def)
+                                    :supported   (set (keys generators))
+                                    :report-id   (:id report-def)})))]
+    (ports/generate! (create) report-def (core/resolve-data report-def opts) opts)))
 
 ;; =============================================================================
-;; Asynchronous generation (requires wagoe-jobs)
+;; Service component
 ;; =============================================================================
 
-(defn generate-async
-  "Queue report generation as a background job (requires wagoe-jobs).
+(defn- resolve-report
+  "A definition map as given, or the registered one for an id."
+  [report]
+  (if (keyword? report)
+    (or (registry/get-report report)
+        (throw (ex-info (str "Report " report " is not registered")
+                        {:type :not-found :report-id report})))
+    report))
 
-   The job will call generate and optionally notify via email when done.
+(defrecord ReportService [job-queue queue-name file-storage email-sender from]
+  ports/ReportServiceProtocol
 
-   Args:
-     report-def   - ReportDefinition map
-     opts         - Same options as generate, plus:
-                    :notify-email - Address to email the download link when ready
-                    :storage-key  - Object storage key to save the output bytes
+  (generate [_ report opts]
+    (generate (resolve-report report) opts))
 
-   Returns job-id (UUID string).
+  (generate-async [this report opts]
+    (jobs-integration/queue-report-job! this (resolve-report report) opts))
 
-   Throws ex-info with :type :missing-dependency if wagoe-jobs is not available."
-  [report-def opts]
-  (log/info "Queueing async report generation" {:id (:id report-def)})
-  (jobs-integration/queue-report-job! report-def opts))
+  (register-report! [_ report-def]
+    (registry/register-report! report-def))
+
+  (list-reports [_]
+    (registry/list-reports)))
+
+(defn create-report-service
+  "A ReportService. Every collaborator is optional: without `:job-queue`
+   generate-async refuses, without `:file-storage` it refuses :storage-key,
+   without `:email-sender` :notify-email."
+  [{:keys [job-queue queue-name file-storage email-sender from]}]
+  (->ReportService job-queue (or queue-name :default) file-storage email-sender
+                   (or from "no-reply@localhost")))

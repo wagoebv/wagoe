@@ -4,7 +4,7 @@
 
 ## Purpose
 
-PDF, Excel, and Word report generation with Hiccup-style templates and declarative sections. Saves 5–8 days of boilerplate per project. Supports sync generation and optional async via wagoe-jobs.
+PDF, Excel, Word and CSV report generation with Hiccup-style templates and declarative sections. Saves 5–8 days of boilerplate per project. Supports sync generation and optional async via wagoe-jobs.
 
 ## Key Namespaces
 
@@ -12,13 +12,39 @@ PDF, Excel, and Word report generation with Hiccup-style templates and declarati
 |-----------|---------|
 | `wagoe.reports.core.report` | Pure helpers (`format-cell*`, `map-columns*`, `build-table-rows*`, `build-sections-hiccup*`, `prepare-report`, `resolve-data`) |
 | `wagoe.reports.shell.registry` | Definition registry + `defreport` macro (`register-report!`, `get-report`, `list-reports`, `clear-registry!`) — mutable process state, lives in the shell |
-| `wagoe.reports.ports` | Protocol: `ReportGeneratorProtocol` (`generate!`, `supported-type?`) |
+| `wagoe.reports.ports` | `ReportServiceProtocol` (`generate`, `generate-async`, `register-report!`, `list-reports`) — what apps call; `ReportGeneratorProtocol` — what adapters implement |
+| `wagoe.reports.core.csv` | Pure RFC 4180 quoting and formula-injection guard |
 | `wagoe.reports.schema` | Malli schemas: `ColumnDef`, `SectionDef`, `ReportDefinition`, `ReportOutput` |
 | `wagoe.reports.shell.adapters.pdf` | OpenHTMLtoPDF adapter — Hiccup → HTML → PDF bytes |
 | `wagoe.reports.shell.adapters.excel` | docjure adapter — column defs + data → XLSX bytes |
 | `wagoe.reports.shell.adapters.word` | Apache POI XWPF adapter — sections → DOCX bytes |
-| `wagoe.reports.shell.service` | Public convenience API: `generate`, `generate-async` |
-| `wagoe.reports.shell.jobs-integration` | Optional wagoe-jobs integration for async generation |
+| `wagoe.reports.shell.adapters.csv` | CSV adapter — first `:table` section → UTF-8 CSV bytes |
+| `wagoe.reports.shell.service` | `ReportService`, the `:wagoe/reports` component |
+| `wagoe.reports.shell.jobs-integration` | The `:reports/generate` job: enqueue, then generate, store and mail |
+
+## Getting the service
+
+`:wagoe/reports` is a `ReportServiceProtocol`. Take a ref to it and call it
+through `wagoe.reports.ports`, so app code requires no shell namespace of this
+module and passes `bb check:ports`:
+
+```clojure
+;; config.edn
+:wagoe/reports {:enabled? true
+                :from     "reports@example.com"  ; sender of :notify-email mail
+                :queue    :default}              ; queue generate-async uses
+
+;; your component
+{:reports (ig/ref :wagoe/reports)}
+
+(require '[wagoe.reports.ports :as reports])
+(reports/generate svc invoice-report {:invoice-id 42})   ; a definition map
+(reports/generate svc :invoice-report {:invoice-id 42})  ; or a registered id
+```
+
+The examples below call the service `svc`. A definition is plain data, so app
+code can `def` it and `reports/register-report!` it; `defreport` does both but
+lives in `shell.registry`, which `bb check:ports` refuses from an app's shell.
 
 ## `defreport` Macro Usage
 
@@ -26,7 +52,6 @@ PDF, Excel, and Word report generation with Hiccup-style templates and declarati
 
 ```clojure
 (require '[wagoe.reports.shell.registry :as registry])
-(require '[wagoe.reports.shell.service :as reports])
 
 (registry/defreport invoice-report
   {:id        :invoice-report
@@ -46,7 +71,7 @@ PDF, Excel, and Word report generation with Hiccup-style templates and declarati
                            [:td (str "€ " (:amount line))]])]]]]])})
 
 ;; Synchronous generation
-(def output (reports/generate invoice-report {:invoice-id 42}))
+(def output (reports/generate svc invoice-report {:invoice-id 42}))
 ;; => {:bytes #bytes[...] :type :pdf :filename "invoice.pdf"}
 
 ;; Serve from Ring handler
@@ -73,7 +98,7 @@ PDF, Excel, and Word report generation with Hiccup-style templates and declarati
                              {:key :date     :label "Date"    :format :date}]}]})
 
 ;; Generate — :data-source is called with opts
-(def output (reports/generate sales-report {:from "2026-01-01" :to "2026-03-31"}))
+(def output (reports/generate svc sales-report {:from "2026-01-01" :to "2026-03-31"}))
 ```
 
 ### Multi-sheet Excel with explicit :sheets
@@ -113,11 +138,12 @@ PDF, Excel, and Word report generation with Hiccup-style templates and declarati
                   :content "Confidential — not for distribution"}]})
 
 ;; Generate — :data-source is called with opts
-(def output (reports/generate contract-report {:contract-id 7}))
+(def output (reports/generate svc contract-report {:contract-id 7}))
 ;; => {:bytes #bytes[...] :type :word :filename "contract.docx"}
 ```
 
 > **Note:** `:template` is PDF-only. Word reports always use the `:sections` API.
+> Filling an existing Word template (`.docx` with placeholders) is not supported.
 
 **Linting:** the macro binds a var clj-kondo cannot see from a published jar,
 so the bound name reads as an unresolved symbol. From 1.0.0-rc-4,
@@ -139,11 +165,11 @@ Before rc-4, or if you would rather not commit the imports, keep the rule local:
 ## HTTP Handler Integration
 
 ```clojure
-(require '[wagoe.reports.shell.service :as reports])
+(require '[wagoe.reports.ports :as reports])
 
 (defn export-pdf-handler [request]
   (let [invoice-id (-> request :path-params :id parse-long)
-        output     (reports/generate invoice-report {:invoice-id invoice-id})]
+        output     (reports/generate svc invoice-report {:invoice-id invoice-id})]
     {:status  200
      :headers {"Content-Type"        "application/pdf"
                "Content-Disposition" (str "attachment; filename=\"" (:filename output) "\"")}
@@ -151,7 +177,7 @@ Before rc-4, or if you would rather not commit the imports, keep the rule local:
 
 (defn export-excel-handler [request]
   (let [opts   (-> request :query-params)
-        output (reports/generate sales-report opts)]
+        output (reports/generate svc sales-report opts)]
     {:status  200
      :headers {"Content-Type"        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                "Content-Disposition" (str "attachment; filename=\"" (:filename output) "\"")}
@@ -159,7 +185,7 @@ Before rc-4, or if you would rather not commit the imports, keep the rule local:
 
 (defn export-word-handler [request]
   (let [contract-id (-> request :path-params :id parse-long)
-        output      (reports/generate contract-report {:contract-id contract-id})]
+        output      (reports/generate svc contract-report {:contract-id contract-id})]
     {:status  200
      :headers {"Content-Type"        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                "Content-Disposition" (str "attachment; filename=\"" (:filename output) "\"")}
@@ -168,20 +194,41 @@ Before rc-4, or if you would rather not commit the imports, keep the rule local:
 
 ## Async Generation via wagoe-jobs
 
+With `:wagoe/jobs` enabled, the module contributes its `:reports/generate`
+handler to the job registry and hands the service the job queue. Storage and
+email are wired the same way when those modules are on.
+
 ```clojure
-(require '[wagoe.reports.shell.service :as reports])
-(require '[wagoe.reports.shell.jobs-integration :as jobs])
-
-;; Register handler at startup (in your Integrant system)
-(jobs/register-report-job-handler! job-registry)
-
-;; Queue in a handler
-(defn trigger-report-handler [request]
-  (let [job-id (reports/generate-async quarterly-report
-                 {:from "2026-01-01" :to "2026-03-31"
-                  :notify-email "finance@example.com"})]
+(defn trigger-report-handler [svc request]
+  (let [job-id (reports/generate-async svc :quarterly-report
+                 {:from         "2026-01-01" :to "2026-03-31"
+                  :storage-key  "reports/quarterly"      ; needs :wagoe/storage
+                  :notify-email "finance@example.com"})] ; needs :wagoe/email
     {:status 202
      :body   {:job-id job-id :message "Report queued"}}))
+```
+
+- Only the report id and opts reach the queue: definitions hold functions. The
+  report must be registered on every node that runs workers, and opts must be
+  serialisable for the `:db` and `:redis` queues.
+- `:storage-key` is the storage path the output is saved under; the job result
+  carries the stored key and URL.
+- `:notify-email` mails the stored URL, or attaches the file when there is none.
+- Asking for jobs, storage or email when that module is not enabled throws
+  `:missing-dependency` when queued, not later in the worker.
+
+## CSV
+
+`:type :csv` writes the first `:table` section, like Excel: RFC 4180 quoting,
+CRLF line endings, UTF-8. A text cell starting with `=`, `+`, `-`, `@`, tab or
+CR gets a leading `'` so a spreadsheet shows it rather than evaluating it;
+numbers are left alone. Pass `{:bom? true}` for Excel's sake.
+
+```clojure
+(reports/generate svc {:id :users :type :csv
+                       :sections [{:type :table
+                                   :columns [{:key :email :label "Email"}]}]}
+                  {:bom? true})
 ```
 
 ## Custom CSS for PDF
@@ -189,7 +236,7 @@ Before rc-4, or if you would rather not commit the imports, keep the rule local:
 Pass `:css` in opts to append additional styles after the default stylesheet:
 
 ```clojure
-(reports/generate invoice-report
+(reports/generate svc invoice-report
   {:invoice-id 42
    :css "body { font-family: Georgia; } h1 { color: #003366; }"})
 ```
@@ -231,8 +278,8 @@ Set the matching CSS `@page { size: A4 landscape; }` in your custom CSS string.
 2. **Page-size CSS** — OpenHTMLtoPDF reads `@page { size: A4; }` from the CSS, NOT the `:page-size` key directly.
    The default CSS sets `size: A4`. Pass custom CSS with `:css` to override.
 
-3. **FC/IS violation** — `generate` and `generate-async` live in `shell/service.clj`,
-   NOT in `core/report.clj`. Core must stay pure. Do not import shell namespaces from core.
+3. **App code requiring `wagoe.reports.shell.*`** — `bb check:ports` refuses it.
+   Call `wagoe.reports.ports` on `(ig/ref :wagoe/reports)` instead.
 
 4. **Large reports** — for > 10k rows, use `:data-source` + async generation to avoid blocking
    the HTTP thread. `generate-async` queues a wagoe-jobs job.
@@ -263,14 +310,16 @@ clojure -M:clj-kondo --lint libs/reports/src libs/reports/test
 
 ```clojure
 (require '[wagoe.reports.shell.registry :as registry])
-(require '[wagoe.reports.shell.service :as reports])
+(require '[wagoe.reports.ports :as reports])
+(require '[wagoe.reports.shell.service :as service])
+(def svc (service/create-report-service {}))
 
 (registry/defreport smoke-report
   {:id       :smoke-report
    :type     :pdf
    :template (fn [_] [:html [:body [:h1 "Smoke Test"]]])})
 
-(def out (reports/generate smoke-report {}))
+(def out (reports/generate svc smoke-report {}))
 ;; Verify magic bytes
 (= (int \%) (aget ^bytes (:bytes out) 0))  ;; => true
 
