@@ -228,7 +228,11 @@
     (is (= 422 (:status response)))
     (is (= [:error] (keys body)) "the scaffolded APIs' 422: an error, no success flag")
     (is (= "transition-not-found" (get-in body [:error :type])))
-    (is (string? (get-in body [:error :message])))))
+    (is (string? (get-in body [:error :message])))
+    (testing "the correlation id the response header carries (BOU-592)"
+      (is (string? (get-in body [:error :correlation-id])))
+      (is (= (get-in response [:headers "X-Correlation-ID"])
+             (get-in body [:error :correlation-id]))))))
 
 (deftest ^:unit a-request-with-no-transition-is-a-4xx-not-a-500
   ;; `(name nil)` — the rejection path built its message from the transition it
@@ -367,10 +371,13 @@
           instance (body-data response)]
       (is (= 201 (:status response)) "the documented start body was refused")
       (testing "a transition from where it stands that the workflow does not make"
-        (is (= rejected
-               (body-data (post (str "/workflow/instances/" (:id instance) "/transition")
-                                {:transition "paid"}
-                                (admin-token))))))
+        ;; The correlation id is the request's own (BOU-592).
+        (is (= (update rejected :error dissoc :correlation-id)
+               (update (body-data (post (str "/workflow/instances/" (:id instance) "/transition")
+                                        {:transition "paid"}
+                                        (admin-token)))
+                       :error dissoc :correlation-id)))
+        (is (contains? (:error rejected) :correlation-id) "the docs show it"))
       (testing "the documented lookup finds the instance, in the documented shape"
         (let [uri  (documented-lookup)
               body (body-data (get-uri uri (admin-token)))

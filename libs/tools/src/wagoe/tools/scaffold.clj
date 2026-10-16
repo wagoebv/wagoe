@@ -371,6 +371,25 @@
         {:keys [exit]} (apply shell {:continue true :err (tee-writer *err* err)} cmd)]
     {:exit exit :err (str err)}))
 
+(def ^:private quiet-logback
+  "A help request starts the scaffolder JVM only to print text: its logs and
+   logback's status lines came first (BOU-598)."
+  (str "<configuration>"
+       "<statusListener class=\"ch.qos.logback.core.status.NopStatusListener\"/>"
+       "<root level=\"OFF\"/>"
+       "</configuration>"))
+
+(defn help-request?
+  "Whether `args` only ask a scaffolder command for its help."
+  [args]
+  (boolean (some #{"-h" "--help"} args)))
+
+(defn- quiet-logback-file []
+  (let [f (java.io.File/createTempFile "wagoe-quiet-logback" ".xml")]
+    (.deleteOnExit f)
+    (spit f quiet-logback)
+    (str f)))
+
 (defn run-clojure!
   "Shell out to the Clojure scaffolder CLI with given args. Streams output to terminal.
 
@@ -382,33 +401,35 @@
    In a fresh environment this is the first JVM to fetch the scaffolder and
    rewrite-clj, so a transient fetch failure is retried once (BOU-545)."
   [args]
-  (println)
-  (println (bold "Running scaffolder..."))
-  (println)
-  (try
-    (let [in-monorepo? (.exists (io/file "libs/scaffolder"))
-          base-cmd     (if in-monorepo?
-                         ["clojure" "-M" "-m" "wagoe.scaffolder.shell.cli-entry"]
-                         ["clojure"
-                          "-Sdeps"
-                          (scaffolder-deps)
-                          "-M" "-m" "wagoe.scaffolder.shell.cli-entry"])
-          cmd          (concat base-cmd (with-base-ns args))
-          first-try    (run-scaffolder-once cmd)
-          result       (if (and (not (zero? (:exit first-try)))
-                                (resolution-failure? (:err first-try)))
-                         (do (println (yellow "Dependency fetch failed — retrying once..."))
-                             (run-scaffolder-once cmd))
-                         first-try)]
-      ;; Truthy on success: wizard-ai stops a multi-entity run on the first nil.
-      (if (zero? (:exit result))
-        result
-        (do (println (red (str "Scaffolder exited with code " (:exit result))))
-            (*exit!* 1)
-            nil)))
-    (catch Exception e
-      (println (red (str "Scaffolder exited with error: " (.getMessage e))))
-      (*exit!* 1))))
+  (let [help? (help-request? args)]
+    (when-not help?
+      (println)
+      (println (bold "Running scaffolder..."))
+      (println))
+    (try
+      (let [in-monorepo? (.exists (io/file "libs/scaffolder"))
+            base-cmd     (concat ["clojure"]
+                                 (when help?
+                                   [(str "-J-Dlogback.configurationFile=" (quiet-logback-file))])
+                                 (when-not in-monorepo?
+                                   ["-Sdeps" (scaffolder-deps)])
+                                 ["-M" "-m" "wagoe.scaffolder.shell.cli-entry"])
+            cmd          (concat base-cmd (with-base-ns args))
+            first-try    (run-scaffolder-once cmd)
+            result       (if (and (not (zero? (:exit first-try)))
+                                  (resolution-failure? (:err first-try)))
+                           (do (println (yellow "Dependency fetch failed — retrying once..."))
+                               (run-scaffolder-once cmd))
+                           first-try)]
+        ;; Truthy on success: wizard-ai stops a multi-entity run on the first nil.
+        (if (zero? (:exit result))
+          result
+          (do (println (red (str "Scaffolder exited with code " (:exit result))))
+              (*exit!* 1)
+              nil)))
+      (catch Exception e
+        (println (red (str "Scaffolder exited with error: " (.getMessage e))))
+        (*exit!* 1)))))
 
 ;; =============================================================================
 ;; Summary display

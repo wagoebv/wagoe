@@ -91,6 +91,12 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **JSON error bodies a handler built itself, and 404/405s, had no `correlation-id`** (BOU-592, BOU-596): the workflow
+  and scaffolded-transition 422s among them. The platform now adds it.
+- **`bb doctor` exited 0 on errors without saying so, and named dev and test under `--env prod`** (BOU-597): it now
+  says to pass `--ci`. `bb scaffold <cmd> --help` prints only the help (BOU-598).
+- **`bb setup --prod true` said "Cache: keep" while writing Redis** (BOU-599): the summary lists every provider prod gets.
+
 - **On H2, `SET REFERENTIAL_INTEGRITY FALSE` was undone by the next pooled connection** (BOU-654), so scaffolded
   tests failed at random on foreign keys. Upgrade; nothing to change.
 - **The admin users page bypassed the user service** (BOU-665): no audit, no session end, no last-admin guard.

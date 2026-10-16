@@ -227,7 +227,9 @@
           (is (= "entered" (get-in (call :get (str "/invoices/" id) nil) [:body :status]))))
 
         (testing "a skip is refused"
-          (is (= 422 (:status (move "paid"))))
+          (let [resp (move "paid")]
+            (is (= 422 (:status resp)))
+            (is (string? (get-in resp [:body :error :correlation-id])) "BOU-592"))
           (is (= "entered" (get-in (call :get (str "/invoices/" id) nil) [:body :status]))))
 
         (testing "a step forward moves the workflow, and the status follows"

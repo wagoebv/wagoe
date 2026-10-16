@@ -9,7 +9,9 @@
 
    Everything about the failure sits inside `error`, so a client reads one
    key. `type` is a string: the `:type` keyword of the ex-info, without its
-   colon.")
+   colon."
+  (:require [cheshire.core :as json]
+            [clojure.string :as str]))
 
 (defn type-name
   "`:not-found` -> \"not-found\"; a qualified keyword keeps its namespace."
@@ -59,3 +61,28 @@
     (and (map? e)
          (string? (or (get e :type) (get e "type")))
          (string? (or (get e :message) (get e "message"))))))
+
+(defn- json-string-body
+  "The decoded body of a response a handler encoded itself, or nil."
+  [{:keys [headers body]}]
+  (when (and (string? body)
+             (some-> (or (get headers "Content-Type") (get headers "content-type"))
+                     (str/includes? "json")))
+    (try (json/parse-string body true) (catch Exception _ nil))))
+
+(defn with-correlation-id
+  "`response` with `correlation-id` in its error body when it has none: for
+   the bodies handlers build themselves, encoded or not (BOU-592)."
+  [{:keys [status] :as response} correlation-id]
+  (let [error?  (and (number? status) (>= status 400))
+        b       (:body response)
+        decoded (when (and error? (not (map? b))) (json-string-body response))
+        target  (if (map? b) b decoded)]
+    ;; Not `error-body?`: a body still holding a keyword :type is encoded later.
+    (if (and error?
+             (some? correlation-id)
+             (map? (:error target))
+             (nil? (get-in target [:error :correlation-id])))
+      (let [b' (assoc-in target [:error :correlation-id] (str correlation-id))]
+        (assoc response :body (if decoded (json/generate-string b') b')))
+      response)))

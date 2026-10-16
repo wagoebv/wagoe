@@ -540,7 +540,10 @@
          (check-env-refs active-text env-map (optional-env-refs active))
          (check-providers active)
          (check-jwt-secret active env-map (code-enabled-modules (root-dir)))
-         (check-admin-parity dev-admin test-admin)
+         ;; It compares dev with test, so it says nothing about another
+         ;; profile and named the wrong two under --env prod (BOU-597).
+         (when (#{"dev" "test"} env)
+           (check-admin-parity dev-admin test-admin))
          (check-prod-placeholders config-text env)
          (check-reset-endpoint-flag (or parsed {}) env)
          (check-upgrade-wiring src-text))))))
@@ -590,6 +593,12 @@
 ;; Main entry point
 ;; =============================================================================
 
+(defn ci-hint
+  "Said when errors were found and the exit code is still 0 (BOU-597)."
+  [errors]
+  (str errors " error" (when (not= errors 1) "s") " found, exit code 0. "
+       "Pass --ci to exit non-zero on errors."))
+
 (defn -main [& args]
   (let [opts (parse-args args)]
     (when (:help opts)
@@ -623,8 +632,11 @@
                                                           results))))
                               envs)
           total-errors (reduce + (map :errors all-summaries))]
-      (when (and (:ci opts) (pos? total-errors))
-        (System/exit 1)))))
+      (when (pos? total-errors)
+        (if (:ci opts)
+          (System/exit 1)
+          (when-not (:edn opts)
+            (println (ci-hint total-errors))))))))
 
 ;; Run when executed directly (not via bb.edn task)
 (when (= *file* (System/getProperty "babashka.file"))
