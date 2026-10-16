@@ -534,12 +534,10 @@
   (let [answer (fn [status type message]
                  ;; Outside muuntaja, so the body goes out already encoded.
                  (fn [request]
-                   (let [cid (access/correlation-id request (str (random-uuid)))]
-                     {:status  status
-                      :headers {"Content-Type"     "application/json"
-                                "X-Correlation-ID" cid}
-                      :body    (json/generate-string
-                                (errors/body type message {:correlation-id cid}))})))]
+                   (-> (errors/response status type message
+                                        {:correlation-id (access/correlation-id request (str (random-uuid)))})
+                       (update :body json/generate-string)
+                       (assoc-in [:headers "Content-Type"] "application/json"))))]
     (ring/create-default-handler
      {:not-found          (answer 404 :not-found "The requested resource was not found")
       :method-not-allowed (answer 405 :method-not-allowed "The HTTP method is not allowed for this resource")

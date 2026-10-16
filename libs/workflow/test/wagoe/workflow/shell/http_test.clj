@@ -372,11 +372,11 @@
       (is (= 201 (:status response)) "the documented start body was refused")
       (testing "a transition from where it stands that the workflow does not make"
         ;; The correlation id is the request's own (BOU-592).
-        (is (= (update rejected :error dissoc :correlation-id)
-               (update (body-data (post (str "/workflow/instances/" (:id instance) "/transition")
-                                        {:transition "paid"}
-                                        (admin-token)))
-                       :error dissoc :correlation-id)))
+        (let [sans-cid #(update % :error dissoc :correlation-id)]
+          (is (= (sans-cid rejected)
+                 (sans-cid (body-data (post (str "/workflow/instances/" (:id instance) "/transition")
+                                            {:transition "paid"}
+                                            (admin-token)))))))
         (is (contains? (:error rejected) :correlation-id) "the docs show it"))
       (testing "the documented lookup finds the instance, in the documented shape"
         (let [uri  (documented-lookup)
