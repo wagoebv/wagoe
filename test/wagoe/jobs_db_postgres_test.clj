@@ -15,15 +15,18 @@
         ds  (:datasource ctx)]
     (try
       (jobs-db/create-jobs-table! ds)
-      (let [q      (jobs-db/create-db-job-queue ds)
+      (let [q      (jobs-db/create-db-job-queue ds :lease-ms 1)
             worker (random-uuid)
             job    {:id (random-uuid) :job-type :send-email :queue :default :priority :normal
                     :status :pending :args {} :created-at (Instant/now) :updated-at (Instant/now)}]
         (jobs/enqueue-job! q :default job)
         (is (= (:id job) (:id (jobs/dequeue-job! q :default worker))))
         (testing "the ack deletes the claim"
+          ;; A failed ack leaves the row `processing`, which queue-size and
+          ;; dequeue do not see; only a lapsed lease brings it back.
           (jobs/ack-job! q :default worker (:id job))
-          (is (zero? (jobs/queue-size q :default)))
+          (Thread/sleep 50)
+          (is (= {:reclaimed 0} (jobs/reclaim-abandoned-jobs! q :default)))
           (is (nil? (jobs/dequeue-job! q :default worker)))))
       (finally
         (factory/close-db-context! ctx)
