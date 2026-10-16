@@ -91,13 +91,15 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Deprecated
 
+- **`DBAdapter/like` with a hand-built pattern** (BOU-684): `%` and `_` from user input match
+  anything. Pass a mode and the raw value instead; the 3-arity goes in 2.0.
 - **`jwt-authentication-middleware` and `protect-with-jwt` without a user service** (BOU-682): they trust the token, so a
   deactivated user passes. Pass the user service first; the 1-arity warns once and goes in 2.0.
 
 ### Fixed
 
 - **`_` and `%` in admin, user, tenant and audience filters matched any character** (BOU-684).
-  Build a LIKE pattern from user input with `like-pattern`; the port's `like` now declares `ESCAPE '!'`.
+  Upgrade; for your own queries call `like` as `(like adapter :email :contains q)`.
 - **Search suggestions read every row on PostgreSQL, and `_`/`%` in a query matched anything** (BOU-676).
   Run migrations for the trigram index; pg_trgm off the `search_path` now falls back to LIKE.
 - **Push device registration failed on MySQL and PostgreSQL, and seeds with timestamps or symbolic ids on MySQL** (BOU-657).

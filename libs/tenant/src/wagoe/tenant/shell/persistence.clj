@@ -100,13 +100,12 @@
       :status status :search search}
      (fn [{:keys [params]}]
        (let [{:keys [limit offset include-deleted? status search]} params
-             pattern (some->> search (db-ports/like-pattern :contains))
              adapter (:adapter ctx)
              where   (cond-> [:and]
                        (not include-deleted?) (conj [:is :deleted_at nil])
                        status  (conj [:= :status (name status)])
-                       pattern (conj [:or (db-ports/like adapter :name pattern)
-                                      (db-ports/like adapter :slug pattern)]))
+                       search  (conj [:or (db-ports/like adapter :name :contains search)
+                                      (db-ports/like adapter :slug :contains search)]))
              query (cond-> {:select [:*]
                             :from [:tenants]
                             :order-by [[:created_at :desc]]

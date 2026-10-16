@@ -213,9 +213,9 @@
 ;; Fallback SQL builders (H2 / SQLite)
 ;; =============================================================================
 
-(def ^:private like-clause "LOWER(content_all) LIKE ? ESCAPE '!'")
+(def ^:private like-clause (str "LOWER(content_all) LIKE ? ESCAPE '" db-ports/like-escape "'"))
 
-(defn- like-pattern
+(defn- fallback-pattern
   "A LIKE pattern containing `query`, lowercased, for like-clause (BOU-676)."
   [query]
   (db-ports/like-pattern :contains (str/lower-case (or (sanitize-query query) ""))))
@@ -236,7 +236,7 @@
    Returns:
      JDBC SQL vector [sql & params]"
   [index-id entity-type query limit offset filters]
-  (let [pattern (like-pattern query)
+  (let [pattern (fallback-pattern query)
         [filter-sql & filter-params] (build-filter-sql-fallback (or filters {}))
         sql (str "SELECT entity_type, entity_id, metadata, "
                  "  1.0 AS score, "
@@ -261,7 +261,7 @@
    Returns:
      JDBC SQL vector [sql & params]"
   [index-id entity-type query filters]
-  (let [pattern (like-pattern query)
+  (let [pattern (fallback-pattern query)
         [filter-sql & filter-params] (build-filter-sql-fallback (or filters {}))
         sql (str "SELECT count(*) AS cnt "
                  "FROM search_documents "
@@ -273,7 +273,7 @@
 (defn- like-suggest-sql
   [build-filter-sql index-id entity-type query limit filters]
   (let [[filter-sql & filter-params] (build-filter-sql (or filters {}))
-        pattern (like-pattern query)
+        pattern (fallback-pattern query)
         sql (str "SELECT entity_type, entity_id, metadata, "
                  "  0.5 AS score, "
                  "  NULL AS snippet "
