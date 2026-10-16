@@ -26,7 +26,8 @@
    - Only include methods that differ between databases
    - Database-agnostic operations belong in core namespace
    - Type conversions use shared utilities where possible"
-  (:require [malli.core :as m]))
+  (:require [clojure.string :as str]
+            [malli.core :as m]))
 
 ;; =============================================================================
 ;; Core Database Adapter Protocol
@@ -125,7 +126,7 @@
        
      Example:
        (build-where postgres-adapter {:name \"john\" :active true})
-       ;; => [:and [:ilike :name \"%john%\"] [:= :active true]]")
+       ;; => [:and [:escape [:ilike :name \"%john%\"] [:inline \"!\"]] [:= :active true]]")
 
   (boolean->db [this boolean-value]
     "Convert boolean value to database-specific representation.
@@ -216,13 +217,16 @@
      Example:
        (column-type mysql-adapter :uuid) ;; => \"CHAR(36)\"")
 
-  (like [this field pattern]
-    "A HoneySQL condition matching `field` against the LIKE `pattern`
-     regardless of case, on every engine.
+  (like [this field pattern] [this field mode value]
+    "A HoneySQL condition matching `field` against `value` literally, where
+     `mode` puts it (see `like-pattern`), regardless of case, on every engine.
+
+     Deprecated, removed in 2.0: the 3-arity, which takes a LIKE `pattern` as
+     is, so % and _ in user input match anything (BOU-684).
 
      Example:
-       (like h2-adapter :email \"%john%\")
-       ;; => [:like [:lower :email] [:lower \"%john%\"]]"))
+       (like h2-adapter :email :contains \"john\")
+       ;; => [:escape [:like [:lower :email] [:lower \"%john%\"]] [:inline \"!\"]]"))
 
 (defprotocol ParamEncoder
   "Optional: an adapter that encodes query parameters for its engine. Its own
@@ -236,6 +240,23 @@
   (value-decoder [this]
     "A fn decoding each value read from this engine, or nil when its values
      need none."))
+
+(def like-escape
+  "The LIKE escape character. Not backslash, which MySQL string literals would
+   need doubled (BOU-684)."
+  "!")
+
+(defn like-pattern
+  "A LIKE pattern, for `ESCAPE like-escape`, matching `value` literally:
+   anywhere (:contains), at the start (:starts-with) or at the end
+   (:ends-with). % _ and ! are escaped."
+  [mode value]
+  (let [v (str/replace (str value) #"[!%_]" "!$0")]
+    (case mode
+      :contains    (str "%" v "%")
+      :starts-with (str v "%")
+      :ends-with   (str "%" v)
+      (throw (ex-info (str "Unknown LIKE mode " mode) {:type :validation-error :mode mode})))))
 
 (def capability-keywords
   "What a database may honour, each consumed somewhere (ADR-039):

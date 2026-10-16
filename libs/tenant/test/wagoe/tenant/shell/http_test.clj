@@ -103,7 +103,10 @@
       (is (= #{"beta-inc"} (slugs (second (list-with {:status "suspended"}))))))
     (testing "searches name and slug"
       (is (= #{"acme-corp"} (slugs (second (list-with {:search "ACME"})))))
-      (is (= #{"beta-inc"} (slugs (second (list-with {:search "beta-"}))))))))
+      (is (= #{"beta-inc"} (slugs (second (list-with {:search "beta-"}))))))
+    (testing "% and _ in a search are literal"
+      (is (empty? (second (list-with {:search "%"}))))
+      (is (empty? (second (list-with {:search "acme_corp"})))))))
 
 ;; =============================================================================
 ;; Get

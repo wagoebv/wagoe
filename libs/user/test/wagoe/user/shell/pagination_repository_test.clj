@@ -140,3 +140,10 @@
 
         (is (= 10 (count users)) "Should return 10 users from offset 10")
         (is (= 25 total) "Total should still be 25")))))
+
+(deftest ^:contract email-contains-is-literal-and-ignores-case
+  (create-test-user! {:email "a_b@example.com"})
+  (create-test-user! {:email "axb@example.com"})
+  (let [emails #(set (map :email (:users (ports/find-users @test-repository {:filter-email-contains %}))))]
+    (is (= #{"a_b@example.com"} (emails "A_B")) "_ is literal (BOU-684)")
+    (is (empty? (emails "%")) "% is literal")))

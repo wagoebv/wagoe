@@ -108,9 +108,11 @@
           (is (nil? (protocols/build-where adapter {:name nil}))))
 
         (testing "a string is a containment match that ignores case (ADR-039)"
-          (is (= (if (= :ilike string-match)
-                   [:ilike :name "%Jo%"]
-                   [:like [:lower :name] [:lower "%Jo%"]])
+          (is (= [:escape
+                  (if (= :ilike string-match)
+                    [:ilike :name "%Jo%"]
+                    [:like [:lower :name] [:lower "%Jo%"]])
+                  [:inline "!"]]
                  (protocols/build-where adapter {:name "Jo"}))))
 
         (testing "a vector is an IN"

@@ -26,7 +26,10 @@
   (db/execute-update! db-ctx {:insert-into :invoices
                               :values [{:id "1" :number "INV-ABC"}
                                        {:id "2" :number "inv-xyz"}
-                                       {:id "3" :number "Élodie-7"}]}))
+                                       {:id "3" :number "Élodie-7"}
+                                       {:id "4" :number "a_b"}
+                                       {:id "5" :number "axb"}
+                                       {:id "6" :number "50%"}]}))
 
 (defonce ^:private backends (atom {}))
 
@@ -67,3 +70,13 @@
         (is (= #{"1" "2"} (ids svc {:filters {:number {:op :starts-with :value "INV"}}})) "starts-with")
         (is (= #{"1"} (ids svc {:filters {:number {:op :ends-with :value "abc"}}})) "ends-with")
         (is (= 2 (ports/count-entities svc :invoices {:number {:op :contains :value "inv"}})) "count")))))
+
+(deftest ^:integration wildcards-in-search-and-filters-are-literal
+  (doseq [[engine ctx] @backends]
+    (testing (name engine)
+      (let [svc (admin ctx)]
+        (is (= #{"4"} (ids svc {:search "a_b"})) "search, _")
+        (is (= #{"6"} (ids svc {:search "%"})) "search, %")
+        (is (= #{"4"} (ids svc {:filters {:number {:op :contains :value "_"}}})) "contains")
+        (is (= #{"4"} (ids svc {:filters {:number {:op :starts-with :value "a_"}}})) "starts-with")
+        (is (= #{"6"} (ids svc {:filters {:number {:op :ends-with :value "%"}}})) "ends-with")))))

@@ -22,7 +22,11 @@
         (.create-audit-log repo (entry "Jane@Example.com" "Admin@Example.com"))
         (.create-audit-log repo (entry "bob@example.com" "root@example.com"))
         (is (= #{"Jane@Example.com"} (emails {:filter-target-email "jane"})))
-        (is (= #{"Jane@Example.com"} (emails {:filter-actor-email "ADMIN"}))))
+        (is (= #{"Jane@Example.com"} (emails {:filter-actor-email "ADMIN"})))
+        (.create-audit-log repo (entry "a_b@example.com" "a_b@example.com"))
+        (.create-audit-log repo (entry "axb@example.com" "axb@example.com"))
+        (is (= #{"a_b@example.com"} (emails {:filter-target-email "a_b"})) "_ is literal")
+        (is (= #{"a_b@example.com"} (emails {:filter-actor-email "a_b"})) "_ is literal"))
       (finally
         (db-factory/close-db-context! ctx)
         (.delete file)))))
