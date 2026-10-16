@@ -616,9 +616,9 @@
   (let [tenant (fn [h] h)
         guard  (fn [h] h)
         mine   (fn [h] h)
-        stack  (:middleware (router-config-from {:module-middleware [[tenant] guard]
+        stack  (:middleware (router-config-from {:module-middleware [[tenant] guard #'identity]
                                                  :extra-middleware  [mine]}))]
-    (is (= [tenant guard mine] (take 3 stack)))))
+    (is (= [tenant guard #'identity mine] (take 4 stack)) "a var is one middleware, not a seq")))
 
 (defmethod ig/init-key ::probe [_ v] (assoc v :started true))
 (defmethod ig/halt-key! ::probe [_ _] nil)

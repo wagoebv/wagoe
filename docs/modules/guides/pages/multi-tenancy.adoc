@@ -87,12 +87,12 @@ Add the tenant components to your `config.edn`:
 You do not compose this stack by hand. The tenant module builds it in
 `:wagoe/tenant-http-middleware` — tenant resolution first, then membership, each
 contributed only if the service it needs is present — and the application hands
-it to platform's HTTP handler as `:extra-middleware`:
+it to platform's HTTP handler, with every module's middleware, as `:module-middleware`:
 
 [source,clojure]
 ----
 :wagoe/http-handler
-{:extra-middleware #ig/ref :wagoe/tenant-http-middleware
+{:module-middleware [#ig/ref :wagoe/tenant-http-middleware]
  ;; … the rest of the handler's refs
  }
 ----

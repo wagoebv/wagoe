@@ -375,7 +375,8 @@
                       (let [wrap (requiring-resolve 'wagoe.i18n.shell.middleware/wrap-i18n)]
                         (fn [handler] (wrap handler i18n)))))]
     (concat
-     (mapcat #(if (fn? %) [%] %) module-middleware)
+     ;; `sequential?`, not `fn?`: a var or multimethod is a middleware too.
+     (mapcat #(if (or (nil? %) (sequential? %)) % [%]) module-middleware)
      (or extra-middleware [])
      (when i18n-mw [i18n-mw])
      ;; HTML forms can only GET and POST, so a POST carrying _method=delete is

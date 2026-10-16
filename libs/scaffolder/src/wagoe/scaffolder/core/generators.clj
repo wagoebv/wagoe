@@ -1908,7 +1908,7 @@ DROP TABLE IF EXISTS %s;
 ;; =============================================================================
 ;;
 ;; Platform discovery builds a scaffolded module from four keys, one service
-;; and one routes contribution, unless the wiring namespace defines `ig-config`.
+;; and one routes contribution, and merges the wiring's `ig-config` over them.
 ;; So the first further entity installs, once: an `ig-config` that adds
 ;; :wagoe/<m>-entities, and a routes init-key that adds those entities' API
 ;; routes to the module's. The routes init-key is the one form replaced rather
@@ -2150,7 +2150,7 @@ DROP TABLE IF EXISTS %s;
         svc-wanted  (z/sexpr (form-of service-init-form? base))]
     (cond
       (contains? (defined-symbols source) 'ig-config)
-      {:error "it already defines ig-config, so the module builds its own graph"}
+      {:error "it already defines ig-config, which wiring an entity would replace"}
 
       (or (nil? loc) (not= expected (z/sexpr loc)))
       {:error (str "its :wagoe/" module-name "-routes init-key is not the one bb scaffold"

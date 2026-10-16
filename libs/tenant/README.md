@@ -405,7 +405,7 @@ under `/api/v1/tenants` (kebab-case JSON; errors are typed 400/404/409 — a tak
 
 Under the Wagoe app wiring (`wagoe.config`), these keys are added
 automatically and `:wagoe/tenant-http-middleware` is referenced by
-`:wagoe/http-handler`'s `:extra-middleware` — no manual middleware mounting
+`:wagoe/http-handler`'s `:module-middleware` — no manual middleware mounting
 is required.
 
 ### Database Migrations

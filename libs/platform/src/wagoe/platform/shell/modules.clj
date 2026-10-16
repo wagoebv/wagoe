@@ -275,12 +275,14 @@
 
 (defn- over-scaffold
   "`graph` with the scaffold's four keys under its components, unless it wires
-   `k` itself — then it owns its whole graph. A component both name is merged,
+   `k` itself — then it owns its whole graph. A component both wire is merged,
    the module's keys winning, so an `ig-config` states only what it adds."
   [k settings graph]
   (if (contains? (:components graph) k)
     graph
-    (update graph :components #(merge-with merge (scaffold-components k settings) %))))
+    (update graph :components
+            #(merge-with (fn [a b] (if (and (map? b) (not (record? b))) (merge a b) b))
+                         (scaffold-components k settings) %))))
 
 (defn discover-module-config
   "Integrant entries for scaffolded modules named under `:active`, in the shape
@@ -304,11 +306,12 @@
             settings  (get active k)
             loadable? (and (not (false? (:enabled? settings)))
                            (wiring-loadable? wiring))
-           ;; A module that describes its own graph gets it built, exactly as a
-           ;; framework module does. Without this a library outside
-           ;; `framework-modules` could have only the four keys the scaffolder
-           ;; writes — so a 31st library with a graph of its own still needed an
-           ;; entry in a platform table, which is the coupling BOU-330 removes.
+           ;; A module that describes its own graph gets it built — over the
+           ;; four scaffold keys unless it wires `k` (`over-scaffold`). Without
+           ;; this a library outside `framework-modules` could have only the
+           ;; four keys the scaffolder writes — so a 31st library with a graph
+           ;; of its own still needed an entry in a platform table, which is
+           ;; the coupling BOU-330 removes.
            ;;
            ;; Its routes come from its `:routes`, and `discovered-route-refs`
            ;; also refs a `:wagoe/<name>-routes` component by convention.
