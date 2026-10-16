@@ -7,7 +7,11 @@
    - DDL generation from Malli schemas
    - Index generation from schema analysis"
   (:require [wagoe.platform.shell.adapters.database.utils.schema :as schema]
+            [wagoe.platform.ports.database :as protocols]
             [wagoe.platform.shell.adapters.database.h2.core :as h2]
+            [wagoe.platform.shell.adapters.database.mysql.core :as mysql]
+            [wagoe.platform.shell.adapters.database.postgresql.core :as postgresql]
+            [wagoe.platform.shell.adapters.database.sqlite.core :as sqlite]
             [clojure.test :refer [deftest is testing]]))
 
 ;; =============================================================================
@@ -46,17 +50,32 @@
     (testing "Numeric types"
       (is (= "DOUBLE PRECISION" (malli-type->column-type h2-ctx :double))))
 
-    (testing "JSON/Map type"
-      (is (= "CLOB" (malli-type->column-type h2-ctx :map))))
+    (testing "JSON/Map type: VARCHAR, as a CLOB reads back as a JdbcClob (BOU-610)"
+      (is (= "VARCHAR" (malli-type->column-type h2-ctx :map))))
 
     (testing "Text type"
-      (is (= "CLOB" (malli-type->column-type h2-ctx :text))))
+      (is (= "VARCHAR" (malli-type->column-type h2-ctx :text))))
 
     (testing "Regex type (email pattern etc.)"
       (is (= "VARCHAR(255)" (malli-type->column-type h2-ctx :re))))
 
     (testing "Unknown type falls back to VARCHAR(255)"
       (is (= "VARCHAR(255)" (malli-type->column-type h2-ctx :unknown-type))))))
+
+(def ^:private malli->logical
+  {:uuid :uuid :string :string :re :string :int :int :bigint :bigint :double :double
+   :boolean :boolean :text :text :enum :enum :map :json inst? :instant 'inst? :instant
+   :unknown-type :string})
+
+(deftest ^:unit the-builder-asks-the-adapter-for-every-type
+  ;; One table answers, so a fresh table and an added column agree (BOU-610).
+  (doseq [[engine make] [[:h2 h2/new-adapter] [:sqlite sqlite/new-adapter]
+                         [:postgresql postgresql/new-adapter] [:mysql mysql/new-adapter]]
+          [malli-type logical] malli->logical]
+    (let [adapter (make)]
+      (is (= (protocols/column-type adapter logical)
+             (malli-type->column-type {:adapter adapter} malli-type))
+          (str engine " " malli-type)))))
 
 ;; =============================================================================
 ;; Field Extraction Tests ([:maybe ...] unwrapping)
@@ -142,7 +161,7 @@
                         [:id :uuid]
                         [:payload :text]]
           ddl (schema/generate-table-ddl h2-ctx "payloads" malli-schema)]
-      (is (.contains ddl "payload CLOB NOT NULL")))))
+      (is (.contains ddl "payload VARCHAR NOT NULL")))))
 
 (deftest ^:unit generate-table-ddl-with-enum-test
   (testing "DDL with enum field includes CHECK constraint"
@@ -159,7 +178,7 @@
                         [:id :uuid]
                         [:metadata :map]]
           ddl (schema/generate-table-ddl h2-ctx "configs" malli-schema)]
-      (is (.contains ddl "metadata CLOB NOT NULL")))))
+      (is (.contains ddl "metadata VARCHAR NOT NULL")))))
 
 (deftest ^:unit generate-table-ddl-with-double-test
   (testing "DDL with double precision field"

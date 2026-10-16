@@ -95,6 +95,20 @@
         (is (true? (protocols/db->boolean adapter (protocols/boolean->db adapter true))))
         (is (false? (protocols/db->boolean adapter (protocols/boolean->db adapter false))))))))
 
+(deftest ^:unit every-adapter-has-a-column-type-for-each-logical-type
+  (doseq [{:keys [label make]} adapters]
+    (testing label
+      (let [adapter (make)]
+        (doseq [logical protocols/logical-column-types]
+          (is (string? (protocols/column-type adapter logical)) (str logical)))
+        (testing "a string takes a length, 255 by default (BOU-610)"
+          (is (= (protocols/column-type adapter :string) (protocols/column-type adapter [:string 255])))
+          (is (= (if (= "sqlite" label) "TEXT" "VARCHAR(50)") (protocols/column-type adapter [:string 50]))))
+        (doseq [bad [:nope [:uuid 36] [:string 0]]]
+          (is (= :validation-error
+                 (:type (ex-data (try (protocols/column-type adapter bad) (catch Exception e e)))))
+              (pr-str bad)))))))
+
 (deftest ^:unit build-where-agrees-on-everything-but-the-two-decisions
   (doseq [{:keys [label make string-match] :as row} adapters]
     (testing label

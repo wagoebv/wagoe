@@ -31,7 +31,8 @@
    :capabilities       #{:row-locks :alter-foreign-key}
    ;; DATETIME(6): plain DATETIME drops fractional seconds (BOU-574).
    :column-types       {:uuid "CHAR(36)" :instant "DATETIME(6)" :json "JSON"
-                        :boolean "TINYINT(1)" :text "LONGTEXT"}
+                        :boolean "TINYINT(1)" :text "LONGTEXT" :string #(str "VARCHAR(" % ")")
+                        :int "INT" :bigint "BIGINT" :double "DOUBLE" :enum "VARCHAR(50)"}
    :table-exists?      (partial introspection/information-schema-table-exists?
                                 introspection-spec)
    :table-info         (partial introspection/information-schema-table-info

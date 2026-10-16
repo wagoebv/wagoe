@@ -98,6 +98,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Tables from Malli schemas take their column types from the adapter's `column-type`** (BOU-610). On fresh H2
+  databases `:text` and `:map` columns are now `VARCHAR`, not `CLOB`; other engines are unchanged.
 - **A session request wrote `last_accessed_at` twice, and a database error during sign-in lookup answered 401** (BOU-666).
   The access time is now written at most once a minute; a lookup failure is a 500.
 - **Two admins demoting each other at once could leave none; an admin bulk delete of users could stop halfway** (BOU-673).

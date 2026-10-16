@@ -27,7 +27,8 @@
    :capabilities       #{:index-if-not-exists :column-if-not-exists :row-locks :alter-foreign-key}
    ;; VARCHAR, not CLOB or TEXT: those read back as a JdbcClob, not a String.
    :column-types       {:uuid "UUID" :instant "TIMESTAMP WITH TIME ZONE" :json "VARCHAR"
-                        :boolean "BOOLEAN" :text "VARCHAR"}
+                        :boolean "BOOLEAN" :text "VARCHAR" :string #(str "VARCHAR(" % ")")
+                        :int "INTEGER" :bigint "BIGINT" :double "DOUBLE PRECISION" :enum "VARCHAR(50)"}
    :table-exists?      (partial introspection/information-schema-table-exists?
                                 introspection-spec)
    :table-info         (partial introspection/information-schema-table-info
