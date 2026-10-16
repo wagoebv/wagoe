@@ -18,10 +18,16 @@
 ;; =============================================================================
 
 (defn- ->instant
-  "PostgreSQL's driver cannot type a java.util.Date parameter; an Instant every
-   engine takes."
+  "PostgreSQL's driver cannot type a java.util.Date parameter; the execution
+   layer writes an Instant as each engine takes it."
   [t]
   (some-> t inst-ms Instant/ofEpochMilli))
+
+(defn- days-ago
+  "A cutoff encoded as the timestamps are written. A java.sql.Timestamp binds as
+   epoch millis on SQLite, which never compares below the ISO text stored there."
+  [days]
+  (.minus (Instant/now) (java.time.Duration/ofDays days)))
 
 (defn- unique-conflict? [e]
   (= {:type :conflict :constraint :unique}
@@ -105,9 +111,7 @@
                                   (h/where [:= :token device-token]))))
 
   (cleanup-stale-tokens! [_ max-age-days]
-    (let [cutoff (java.sql.Timestamp/from
-                  (.minus (java.time.Instant/now)
-                          (java.time.Duration/ofDays max-age-days)))]
+    (let [cutoff (days-ago max-age-days)]
       (database/execute-update! db
                                 (-> (h/delete-from :push-device-tokens)
                                     (h/where [:and [:= :active false] [:< :last-used-at cutoff]]))))))
@@ -151,9 +155,7 @@
       (assoc counts :notification-id notification-id)))
 
   (cleanup-old-events! [_ retention-days]
-    (let [cutoff (java.sql.Timestamp/from
-                  (.minus (java.time.Instant/now)
-                          (java.time.Duration/ofDays retention-days)))]
+    (let [cutoff (days-ago retention-days)]
       (database/execute-update! db
                                 (-> (h/delete-from :push-analytics-events)
                                     (h/where [:< :timestamp cutoff]))))))

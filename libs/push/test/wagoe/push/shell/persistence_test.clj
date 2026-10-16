@@ -96,3 +96,17 @@
     (let [stats (ports/get-push-stats store :test-notif {})]
       (is (= 2 (:sent stats)))
       (is (= 1 (:delivered stats))))))
+
+(deftest ^:contract cleanup-deletes-only-what-is-older-than-the-cutoff
+  ;; The cutoff was a java.sql.Timestamp, which SQLite compares as epoch millis
+  ;; against the ISO text written there, so nothing was ever older.
+  (let [store (p/->PushAnalyticsStore *db*)
+        event (fn [days-ago]
+                {:id (random-uuid) :notification-id :old-notif :device-token "t"
+                 :platform :fcm :event-type :sent
+                 :timestamp (java.util.Date/from (.minus (java.time.Instant/now)
+                                                         (java.time.Duration/ofDays days-ago)))})]
+    (ports/record-send! store (event 10))
+    (ports/record-send! store (event 1))
+    (ports/cleanup-old-events! store 5)
+    (is (= 1 (:sent (ports/get-push-stats store :old-notif {}))))))
