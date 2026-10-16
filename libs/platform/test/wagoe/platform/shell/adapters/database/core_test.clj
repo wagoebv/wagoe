@@ -261,7 +261,9 @@
 (deftest ^:unit like-pattern-escapes-wildcards
   (is (= "%a!_b!%c!!%" (protocols/like-pattern :contains "a_b%c!")))
   (is (= "a!_%" (protocols/like-pattern :starts-with "a_")))
-  (is (= "%!%" (protocols/like-pattern :ends-with "%"))))
+  (is (= "%!%" (protocols/like-pattern :ends-with "%")))
+  (is (= :validation-error (:type (ex-data (try (protocols/like-pattern :prefix "a")
+                                                (catch clojure.lang.ExceptionInfo e e)))))))
 
 (deftest ^:integration test-build-pagination
   (testing "Pagination building with safe limits"

@@ -251,7 +251,8 @@
     (case mode
       :contains    (str "%" v "%")
       :starts-with (str v "%")
-      :ends-with   (str "%" v))))
+      :ends-with   (str "%" v)
+      (throw (ex-info (str "Unknown LIKE mode " mode) {:type :validation-error :mode mode})))))
 
 (def capability-keywords
   "What a database may honour, each consumed somewhere (ADR-039):

@@ -98,8 +98,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
-- **`_` and `%` in admin, user, tenant and audience filters matched any character** (BOU-684).
-  Upgrade; for your own queries call `like` as `(like adapter :email :contains q)`.
+- **`_` and `%` in admin, user, tenant and audience filters and `build-where` strings matched any character** (BOU-684).
+  A `build-where` value meant as a pattern is now literal; call `(like adapter :email :starts-with q)` instead.
 - **Search suggestions read every row on PostgreSQL, and `_`/`%` in a query matched anything** (BOU-676).
   Run migrations for the trigram index; pg_trgm off the `search_path` now falls back to LIKE.
 - **Push device registration failed on MySQL and PostgreSQL, and seeds with timestamps or symbolic ids on MySQL** (BOU-657).

@@ -26,12 +26,11 @@
    :contains :like})
 
 (defn- sql-op
-  "Return the HoneySQL operator for a filter :op keyword.
-   For :contains, the value is wrapped in % wildcards."
+  "Return the HoneySQL operator for a filter :op keyword. `field-clause` builds
+   the :contains pattern itself."
   [op value]
   (case op
     :in       [:in value]
-    :contains [:like (str "%" value "%")]
     [(get sql-ops op :=) value]))
 
 (defn- days-ago-instant
