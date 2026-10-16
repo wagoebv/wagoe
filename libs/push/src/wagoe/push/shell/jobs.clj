@@ -34,17 +34,19 @@
               (log/infof "Push: marking invalid token %s" (device/token-preview (:device-token result)))
               (ports/mark-token-invalid! device-store (:device-token result)))))))))
 
+(def broadcast-page-size 500)
+
 (defn handle-broadcast
   "Job handler for :push/broadcast. Paginated send to all devices on platform."
   [{:keys [device-store] :as deps}
    {:keys [notification-id data platform _app-id locale]}]
   (let [push-def  (registry/get-push notification-id)
         rendered  (notif/build-notification push-def data (or locale :en))
-        page-size 500]
+        page-size broadcast-page-size]
     (log/infof "Push: broadcasting %s to platform %s" notification-id platform)
-    (loop [offset 0]
+    (loop [after-id nil]
       (let [devices (ports/get-devices-by-platform device-store platform
-                                                   {:limit page-size :offset offset})]
+                                                   {:limit page-size :after-id after-id})]
         (when (seq devices)
           (let [results (service/deliver-to-platform!
                          deps platform rendered devices)]
@@ -55,4 +57,4 @@
               (when (:token-invalid? result)
                 (ports/mark-token-invalid! device-store (:device-token result)))))
           (when (= page-size (count devices))
-            (recur (+ offset page-size))))))))
+            (recur (:id (peek devices)))))))))

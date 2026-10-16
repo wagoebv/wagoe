@@ -71,16 +71,17 @@
                             {:token "dup-token" :platform :fcm :app-id "com.example"})
     (is (= 1 (count (ports/get-user-devices store user-id))))))
 
-(deftest ^:contract get-devices-by-platform-with-pagination
-  (let [store   (p/->DeviceTokenStore *db*)
-        user-id (random-uuid)]
-    (doseq [i (range 5)]
-      (ports/register-device! store user-id
-                              {:token (str "fcm-" i) :platform :fcm :app-id (str "app-" i)}))
-    (let [page1 (ports/get-devices-by-platform store :fcm {:limit 2 :offset 0})
-          page2 (ports/get-devices-by-platform store :fcm {:limit 2 :offset 2})]
-      (is (= 2 (count page1)))
-      (is (= 2 (count page2))))))
+(deftest ^:contract re-registration-moves-the-token-and-returns-the-stored-id
+  ;; The conflict update kept the old user_id, and register returned a fresh id (BOU-683).
+  (let [store  (p/->DeviceTokenStore *db*)
+        alice  (random-uuid)
+        bob    (random-uuid)
+        device {:token "shared-token" :platform :fcm :app-id "com.example"}
+        alices (ports/register-device! store alice device)
+        bobs   (ports/register-device! store bob device)]
+    (is (= (:id alices) (:id bobs)))
+    (is (empty? (ports/get-user-devices store alice)))
+    (is (= ["shared-token"] (map :token (ports/get-user-devices store bob))))))
 
 (deftest ^:contract analytics-record-and-stats
   (let [store (p/->PushAnalyticsStore *db*)]

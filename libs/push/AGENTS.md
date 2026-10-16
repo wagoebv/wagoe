@@ -66,7 +66,7 @@ APNs uses ES256 JWT authentication (team-id + key-id + P8 private key). JWT is m
 ```clojure
 (register-device! [this user-id device-info])
 ;; device-info: {:token str :platform kw :app-id str :device-name str :os-version str}
-;; Upsert: INSERT, catch SQLIntegrityConstraintViolationException, UPDATE active+last-used-at
+;; Upsert: INSERT; on a unique conflict UPDATE user-id, active, last-used-at. Returns the stored id
 
 (unregister-device! [this user-id device-token])
 ;; Hard DELETE by user-id + token
@@ -75,7 +75,7 @@ APNs uses ES256 JWT authentication (team-id + key-id + P8 private key). JWT is m
 ;; Returns all rows where active=true for user
 
 (get-devices-by-platform [this platform opts])
-;; opts: {:limit n :offset n} — limit capped at 1000, used for broadcast pagination
+;; opts: {:limit n :after-id id}, ordered by id; limit capped at 1000. Keyset paging for broadcast
 
 (mark-token-invalid! [this device-token])
 ;; Sets active=false by token (cross-user — token is globally unique)
@@ -172,7 +172,7 @@ Two job types registered under `:wagoe.push/job-handlers`:
 5. `record-send!` per result; `mark-token-invalid!` when `:token-invalid?` is true
 
 **`:push/broadcast`** args: `{:notification-id kw :data map :platform kw :app-id str :locale kw}`
-1. Paginates `get-devices-by-platform` with page-size 500
+1. Pages `get-devices-by-platform` by id (`:after-id`), page-size 500
 2. Loops until fewer than 500 devices returned (end of table)
 3. Same delivery + analytics recording per page
 

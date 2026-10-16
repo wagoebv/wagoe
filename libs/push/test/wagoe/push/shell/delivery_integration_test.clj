@@ -102,6 +102,29 @@
     (let [stats (ports/get-push-stats analytics-store :broadcast-test {})]
       (is (= 3 (:sent stats))))))
 
+(deftest ^:integration handle-broadcast-reaches-every-device-when-tokens-turn-out-invalid
+  ;; Offset paging over a table the broadcast deactivates skipped devices (BOU-683).
+  (registry/register-push! {:id :bcast-invalid :title "Alert" :body "Msg" :channels #{:fcm}})
+  (let [device-store    (p/->DeviceTokenStore pt/*db*)
+        analytics-store (p/->PushAnalyticsStore pt/*db*)
+        rejecting-fcm   (reify ports/IFCMProvider
+                          (fcm-send! [_ _])
+                          (fcm-validate-token [_ _])
+                          (fcm-send-multicast! [_ _ tokens]
+                            (mapv (fn [t] {:success? false :token-invalid? true
+                                           :device-token t :platform :fcm})
+                                  tokens)))]
+    (doseq [i (range 5)]
+      (ports/register-device! device-store (random-uuid)
+                              {:token (str "bcast-" i) :platform :fcm :app-id "com.test"}))
+    (with-redefs [jobs/broadcast-page-size 2]
+      (jobs/handle-broadcast {:device-store    device-store
+                              :analytics-store analytics-store
+                              :fcm-provider    rejecting-fcm}
+                             {:notification-id :bcast-invalid :data {} :platform :fcm :locale :en}))
+    (let [stats (ports/get-push-stats analytics-store :bcast-invalid {})]
+      (is (= 5 (:failed stats))))))
+
 (deftest ^:integration ^:security handle-send-push-does-not-log-device-tokens
   ;; BOU-556: a device token plus the provider credentials is enough to push to it.
   (registry/register-push! {:id :token-log-test :title "Hi" :body "There" :channels #{:fcm}})
