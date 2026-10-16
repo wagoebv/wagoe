@@ -81,6 +81,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **The DB job queue could not ack jobs on PostgreSQL** (BOU-640): each finished job ran again once its lease expired.
+  Upgrade if you use jobs `:provider :db` on PostgreSQL.
 - **MySQL timestamps read back without a zone, so APIs sent UTC as local time** (BOU-653).
   Upgrade if you run on MySQL.
 - **MySQL lost workflow timestamps and admin UUID types; PostgreSQL refused full-text search** (BOU-652).
