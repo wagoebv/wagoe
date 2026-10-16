@@ -86,3 +86,10 @@
   (is (= :dev (sut/active-profile "development")))
   (is (= :prod (sut/active-profile "production")))
   (is (= :test (sut/active-profile " TEST "))))
+
+(deftest ^:unit resolve-symbol-returns-the-value-or-a-configuration-error
+  (is (= sut/normalize-env (sut/resolve-symbol 'wagoe.config/normalize-env)))
+  (doseq [sym ['wagoe.config/missing 'no.such.ns/thing]]
+    (is (= {:type :configuration-error :symbol sym}
+           (ex-data (try (sut/resolve-symbol sym) (catch clojure.lang.ExceptionInfo e e))))
+        (pr-str sym))))

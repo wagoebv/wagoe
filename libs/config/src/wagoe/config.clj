@@ -106,6 +106,24 @@
 ;; Configuration Helpers
 ;; =============================================================================
 
+(defn resolve-symbol
+  "The value of the var a config file names by qualified symbol.
+
+   A missing namespace throws FileNotFoundException without ex-data; a
+   namespace without the var returns nil. Both are the same config mistake, so
+   both throw :configuration-error."
+  [sym]
+  (let [v (try
+            (requiring-resolve sym)
+            (catch Exception e
+              (throw (ex-info (str "Could not load the namespace for " sym)
+                              {:type :configuration-error :symbol sym}
+                              e))))]
+    (if v
+      (deref v)
+      (throw (ex-info (str "Could not resolve symbol " sym)
+                      {:type :configuration-error :symbol sym})))))
+
 (defn- active-database-adapter
   "Determine which database adapter is active from config.
    

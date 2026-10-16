@@ -18,6 +18,7 @@
             [clojure.tools.logging :as log]
             [wagoe.user.core.audit :as audit-core]
             [wagoe.user.core.authentication :as auth-core]
+            [wagoe.user.core.mfa :as mfa-core]
             [wagoe.user.core.oidc :as oidc]
             [wagoe.user.ports :as ports]
             [wagoe.user.shell.auth :as auth]
@@ -278,19 +279,21 @@
   (let [allowed   (auth-core/should-allow-login-attempt? user nil (Instant/now))
         ;; The provider vouches for the person; the second factor is still
         ;; ours to ask for, by the same rule as a password login.
-        required? (when (:allowed? allowed)
-                    (auth/mfa-required? (:auth-service client) user
-                                        (assoc login-context :provider (:provider-id sign-in)) nil))]
+        mfa       (when (:allowed? allowed)
+                    (mfa-core/determine-mfa-requirement
+                     user true nil nil
+                     (auth/mfa-required? (:auth-service client) user
+                                         (assoc login-context :provider (:provider-id sign-in)))))]
     (cond
       (not (:allowed? allowed))
       (do (audit! client user login-context (:provider-id sign-in) false (:reason allowed))
           {:error {:type :oidc/account-unavailable :message (:reason allowed)}})
 
-      (and required? (not (:mfa-enabled user)))
-      (do (audit! client user login-context (:provider-id sign-in) false "MFA enrolment required")
-          {:error {:type :oidc/mfa-enrolment-required :message "MFA must be set up before signing in here"}})
+      (:requires-enrolment? mfa)
+      (do (audit! client user login-context (:provider-id sign-in) false (:reason mfa))
+          {:error {:type :oidc/mfa-enrolment-required :message (:reason mfa)}})
 
-      required?
+      (:requires-mfa? mfa)
       {:ok {:outcome :mfa-required
             :user    user
             :cookie  (seal client :mfa (assoc sign-in :user-id (str (:id user))) pending-ttl-seconds)}}

@@ -10,7 +10,8 @@
    
    All I/O and side effects happen here. Pure business logic
    is delegated to wagoe.user.core.authentication."
-  (:require [wagoe.user.core.authentication :as auth-core]
+  (:require [wagoe.config :as wagoe-config]
+            [wagoe.user.core.authentication :as auth-core]
             [wagoe.user.core.mfa :as mfa-core]
             [wagoe.user.shell.mfa :as mfa-shell]
             [buddy.hashers :as hashers]
@@ -170,19 +171,11 @@
   "Config names the :mfa-required? hook as a symbol; resolve it once, at boot."
   [hook]
   (cond
-    (or (nil? hook) (fn? hook)) hook
-    (qualified-symbol? hook)
-    (let [v (try (requiring-resolve hook)
-                 (catch Exception e
-                   (throw (ex-info (str "Cannot load :mfa-required? " hook)
-                                   {:type :configuration-error :hook hook} e))))]
-      (if v
-        @v
-        (throw (ex-info (str "Cannot resolve :mfa-required? " hook)
-                        {:type :configuration-error :hook hook}))))
+    (fn? hook)               hook
+    (qualified-symbol? hook) (wagoe-config/resolve-symbol hook)
     :else
     (throw (ex-info ":mfa-required? must be a function or a qualified symbol"
-                    {:type :configuration-error :hook hook}))))
+                    {:type :configuration-error :symbol hook}))))
 
 (defn create-authentication-service
   "Factory function: Create authentication service instance.
@@ -207,11 +200,11 @@
   "Whether this login needs a second factor: the app's :mfa-required? hook
    when it set one, else whether the user turned MFA on. Shared by password
    and OIDC sign-in."
-  [auth-service user login-context login-risk]
+  [auth-service user login-context]
   (boolean
    (if-let [hook (get-in auth-service [:auth-config :mfa-required?])]
      (hook user login-context)
-     (mfa-core/should-require-mfa? user login-risk))))
+     (:mfa-enabled user))))
 
 (defn open-session!
   "Create the DB session for a user who has proven who they are, under the
@@ -296,7 +289,7 @@
           mfa-requirement (when (and user password-valid?)
                             (mfa-core/determine-mfa-requirement
                              user password-valid? mfa-code login-risk
-                             (mfa-required? auth-service user login-context login-risk)))
+                             (mfa-required? auth-service user login-context)))
 
           ;; Step 7: Verify MFA code if provided
           mfa-verification (when (and (:requires-mfa? mfa-requirement) mfa-code)
@@ -338,7 +331,7 @@
                      (log/warn "MFA required but not enrolled" {:email email})
                      {:success? false
                       :error {:type    :mfa-enrolment-required
-                              :message "MFA must be set up before signing in here"}})
+                              :message (:reason mfa-requirement)}})
 
                    ;; MFA required but not provided
                    (and (:requires-mfa? mfa-requirement)

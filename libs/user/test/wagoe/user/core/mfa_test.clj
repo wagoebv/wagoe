@@ -44,7 +44,7 @@
             password-valid? true
             mfa-code nil
             login-risk {:risk-level :low}
-            result (mfa/determine-mfa-requirement user password-valid? mfa-code login-risk)]
+            result (mfa/determine-mfa-requirement user password-valid? mfa-code login-risk (:mfa-enabled user))]
         (is (true? (:requires-mfa? result)))
         (is (= "MFA code required" (:reason result)))))
 
@@ -53,7 +53,7 @@
             password-valid? true
             mfa-code nil
             login-risk {:risk-level :low}
-            result (mfa/determine-mfa-requirement user password-valid? mfa-code login-risk)]
+            result (mfa/determine-mfa-requirement user password-valid? mfa-code login-risk (:mfa-enabled user))]
         (is (false? (:requires-mfa? result)))))
 
     (testing "does not require MFA when password invalid"
@@ -61,7 +61,7 @@
             password-valid? false
             mfa-code nil
             login-risk {:risk-level :low}
-            result (mfa/determine-mfa-requirement user password-valid? mfa-code login-risk)]
+            result (mfa/determine-mfa-requirement user password-valid? mfa-code login-risk (:mfa-enabled user))]
         (is (false? (:requires-mfa? result)))))
 
     (testing "requires verification when code provided"
@@ -69,7 +69,7 @@
             password-valid? true
             mfa-code "123456"
             login-risk {:risk-level :low}
-            result (mfa/determine-mfa-requirement user password-valid? mfa-code login-risk)]
+            result (mfa/determine-mfa-requirement user password-valid? mfa-code login-risk (:mfa-enabled user))]
         (is (true? (:requires-mfa? result)))
         (is (= :pending (:mfa-verified? result)))
         (is (= "MFA code verification pending" (:reason result)))))
