@@ -27,9 +27,12 @@ wait_for_health() {
     || { log_excerpt "$log" 30; fail "/health never answered — the app did not start"; }
 }
 
-# The jwt-token POST /api/v1/auth/login answers for $2/$3 on base URL $1.
+# The jwt-token POST /api/v1/auth/login answers for $2/$3 on base URL $1. When
+# there is none, the response goes to stderr so the failure shows why.
 login_token() {
-  curl -sS -X POST -H "Content-Type: application/json" \
-       -d "{\"email\":\"$2\",\"password\":\"$3\"}" "$1/api/v1/auth/login" \
-    | grep -oE '"jwt-token":"[^"]+"' | cut -d'"' -f4 || true
+  local body
+  body=$(curl -sS -X POST -H "Content-Type: application/json" \
+              -d "{\"email\":\"$2\",\"password\":\"$3\"}" "$1/api/v1/auth/login" || true)
+  echo "$body" | grep -oE '"jwt-token":"[^"]+"' | cut -d'"' -f4 \
+    || echo "POST /api/v1/auth/login answered: $body" >&2
 }

@@ -7,7 +7,7 @@
 # over HTTP. MySQL support is claimed only as far as this run proves it.
 #
 # Needs a MySQL 8 server: MYSQL_HOST/PORT/USER/PASSWORD, defaulting to what
-# `bb test:services up` starts. MYSQL_DB is created and dropped.
+# `bb test:services up` starts. MYSQL_DB must not exist; it is created and dropped.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -28,6 +28,7 @@ export WAGOE_SCAFFOLDER_ROOT="$REPO_ROOT/libs/scaffolder"
 WORK=$(mktemp -d)
 LOG="$WORK/app.log"
 APP_PID=""
+DB_CREATED=""
 # The mysql client where there is one (CI runners have it); else a JVM, on the
 # driver versions the repo pins.
 mysql_exec() {
@@ -48,7 +49,8 @@ step() {
 # shellcheck disable=SC2317
 cleanup() {
   [ -n "$APP_PID" ] && { kill "$APP_PID" 2>/dev/null || true; wait "$APP_PID" 2>/dev/null || true; }
-  mysql_exec "DROP DATABASE IF EXISTS $MYSQL_DB" || true
+  # Only the database this run created: MYSQL_DB may name someone's own.
+  [ -n "$DB_CREATED" ] && { mysql_exec "DROP DATABASE IF EXISTS $MYSQL_DB" || true; }
   rm -rf "$WORK"
 }
 trap cleanup EXIT
@@ -77,7 +79,8 @@ ok "generated against this checkout"
 
 # ── 2. boot ─────────────────────────────────────────────────────────────────
 echo "[2/5] boot on MySQL"
-mysql_exec "CREATE DATABASE $MYSQL_DB"
+mysql_exec "CREATE DATABASE $MYSQL_DB" || fail "could not create database $MYSQL_DB — does it exist already?"
+DB_CREATED=1
 HTTP_PORT=3301 clojure -M:run >"$LOG" 2>&1 &
 APP_PID=$!
 wait_for_health "$LOG" 120
@@ -97,7 +100,8 @@ J=(-H "Content-Type: application/json")
 echo "[3/5] API: enum, belongs-to, timestamps"
 CREATED=$(curl -sS -w '\n%{http_code}' -X POST "${A[@]}" "${J[@]}" -d '{"number":"I-1","kind":"credit"}' "$B/api/v1/invoices")
 [ "$(echo "$CREATED" | tail -1)" = "201" ] || { log_excerpt "$LOG" 30; fail "create invoice: $CREATED"; }
-ID=$(echo "$CREATED" | grep -oE '"id":"[0-9a-f-]{36}"' | grep -oE '[0-9a-f-]{36}' | head -1)
+ID=$(echo "$CREATED" | grep -oE '"id":"[0-9a-f-]{36}"' | grep -oE '[0-9a-f-]{36}' | head -1 || true)
+[ -n "$ID" ] || fail "the created invoice has no id: $CREATED"
 echo "$CREATED" | grep -q '"status":"draft"' || fail "a new invoice is not in draft: $CREATED"
 # Zone-less, a MySQL DATETIME reads as local time though it is UTC (BOU-653).
 echo "$CREATED" | grep -qE '"created-at":"[^"]+Z"' || fail "created-at carries no zone: $CREATED"
