@@ -72,7 +72,8 @@ The module carries **two** token mechanisms; know which you are using:
 - **Stateless HS256 JWTs** (`auth/create-jwt-token` / `validate-jwt-token`) are
   **not stored** and therefore **cannot be revoked before expiry** — a logout
   does not invalidate an outstanding JWT. Use only for short-lived, stateless
-  cases where that trade-off is acceptable.
+  cases where that trade-off is acceptable. The middleware does read the
+  token's user, so a deactivated user's JWT is refused (BOU-668).
 
 Signing keys:
 
@@ -228,6 +229,8 @@ export JWT_SECRET="dev-secret-at-least-32-characters-long-here"
 ```
 
 Session tokens are stored in the database. Sessions and users are never cached, so a revoked session or deactivated user is refused on the next request (BOU-663).
+
+`deactivate-user` sets `active` false and the user stays listed; `delete-user` sets `deleted_at` and hides them. Both end sessions and keep the last admin (BOU-681).
 
 ---
 

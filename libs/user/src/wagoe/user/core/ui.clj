@@ -364,11 +364,13 @@
         (ui/submit-button [:t :user/button-update] {:loading-text [:t :user/button-update-loading]})
         ;; Show appropriate action button based on active status
         (if active?
+          ;; An update, like Reactivate: DELETE on this URL soft-deletes (BOU-681).
           [:button.button.danger
            {:type "button"
             :onclick (str "if(confirm('Are you sure you want to deactivate this user?')) {"
-                          "fetch('/web/users/" (:id user) "', {method: 'DELETE', headers: {'HX-Request': 'true'}});"
-                          "window.location.href='/web/users';"
+                          "const form = this.closest('form');"
+                          "form.querySelector('input[name=active]').checked = false;"
+                          "form.requestSubmit();"
                           "}")}
            [:t :user/button-deactivate]]
           ;; Reactivate button for inactive users - uses the same update endpoint but sets active=true

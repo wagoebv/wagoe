@@ -91,6 +91,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Deactivated users vanished from the admin list** (BOU-681): deactivating sets `active` only and keeps them listed; Delete, the bulk one included, soft-deletes.
+  Users deactivated before this stay hidden; restore one by clearing `deleted_at` in `auth_users`.
+- **A deactivated user's JWT, and `validate-session` for their session, still authenticated** (BOU-668); every auth path answers 401 now.
+  Calling `jwt-authentication-middleware` or `protect-with-jwt` yourself? Pass the user service first.
 - **On H2, `SET REFERENTIAL_INTEGRITY FALSE` was undone by the next pooled connection** (BOU-654), so scaffolded
   tests failed at random on foreign keys. Upgrade; nothing to change.
 - **The admin users page bypassed the user service** (BOU-665): no audit, no session end, no last-admin guard.

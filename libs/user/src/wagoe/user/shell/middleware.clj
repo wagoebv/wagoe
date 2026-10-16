@@ -7,6 +7,8 @@
    - Role-based authorization
    - Request context enrichment with user information"
   (:require [wagoe.user.ports :as ports]
+            [wagoe.user.core.session :as session-core]
+            [wagoe.user.core.user :as user-core]
             [wagoe.user.shell.auth :as auth-shell]
             [wagoe.user.shell.service :as user-service]
             [wagoe.core.utils.type-conversion :as type-conv]
@@ -19,23 +21,9 @@
 ;; Helper Functions
 ;; =============================================================================
 
-(def ^:private credential-keys
-  "User fields that must never reach a handler on the request.
-
-   `find-user-by-id` selects `mfa_secret` and the backup codes, and
-   `get-user-by-id` drops only `:password-hash` — so these rode along on
-   `:user`. That was contained while authentication was per-route; BOU-373 put
-   it on every request, which would have handed an MFA secret to public
-   handlers and to any application middleware downstream.
-
-   `:mfa-enabled` is deliberately not here: whether MFA is on is not a secret,
-   and handlers render it."
-  [:password-hash :mfa-secret :mfa-backup-codes :mfa-backup-codes-used])
-
-(defn without-credentials
+(def without-credentials
   "`user` with its secrets removed, ready to put on a request."
-  [user]
-  (apply dissoc user credential-keys))
+  user-core/without-credentials)
 
 (defn extract-bearer-token
   "Extracts Bearer token from Authorization header.
@@ -106,18 +94,23 @@
 ;; JWT Authentication Middleware
 ;; =============================================================================
 
-(defn jwt-authentication-middleware
-  "Middleware that validates JWT tokens from Authorization header.
-   
-   Extracts Bearer token, validates it, and adds user information to request.
-   On validation failure, returns 401 response.
-   
-   Args:
-     handler: Next handler in the chain
-     
-   Returns:
-     Wrapped handler function"
-  [handler]
+(defn- claims-user
+  "The user a token's claims name, as the token says."
+  [claims]
+  {:id    (type-conv/string->uuid (:sub claims))
+   :email (:email claims)
+   ;; written with `name`, read back as a keyword
+   :role  (some-> (:role claims) keyword)})
+
+(def ^:private refusal-messages
+  {:user-not-found "User not found"
+   :user-inactive  "Account is deactivated"
+   :user-deleted   "User not found"})
+
+(defn- jwt-middleware
+  "Authenticate a bearer token as `(user-of claims)`: a user, or the
+   `account-refusal` keyword that makes it a 401."
+  [user-of handler]
   (fn [request]
     (if-let [token (extract-bearer-token request)]
       (try
@@ -133,13 +126,10 @@
         ;; produced `{:id nil :email nil :role nil}` even for a good token.
         (let [{:keys [valid? claims]} (auth-shell/validate-jwt-token token)]
           (if valid?
-            (let [enriched-request (assoc request
-                                          :user {:id    (type-conv/string->uuid (:sub claims))
-                                                 :email (:email claims)
-                                                 ;; written with `name`, read back as a keyword
-                                                 :role  (some-> (:role claims) keyword)}
-                                          :auth-type :jwt)]
-              (handler enriched-request))
+            (let [user (user-of claims)]
+              (if (keyword? user)
+                (create-unauthorized-response (refusal-messages user) user request)
+                (handler (assoc request :user user :auth-type :jwt))))
             (create-unauthorized-response "Invalid JWT token" :invalid-jwt request)))
         (catch Exception ex
           (log/warn ex "JWT validation failed")
@@ -147,6 +137,29 @@
 
       ;; No token provided
       (create-unauthorized-response "JWT token required" :missing-jwt request))))
+
+(defn jwt-authentication-middleware
+  "Middleware that validates JWT tokens from Authorization header.
+   
+   Extracts Bearer token, validates it, and adds user information to request.
+   On validation failure, returns 401 response.
+
+   With `user-service`, the token's user is read and refused when gone or
+   inactive: a JWT cannot be revoked (BOU-668). Without it the user is the
+   token's claims, and a deactivated user passes until the token expires.
+   
+   Args:
+     user-service: User service the token's user is read from
+     handler: Next handler in the chain
+     
+   Returns:
+     Wrapped handler function"
+  ([handler] (jwt-middleware claims-user handler))
+  ([user-service handler]
+   (jwt-middleware (fn [claims]
+                     (let [user (ports/get-user-by-id user-service (type-conv/string->uuid (:sub claims)))]
+                       (or (session-core/account-refusal user) (without-credentials user))))
+                   handler)))
 
 ;; =============================================================================
 ;; Session Authentication Middleware
@@ -169,23 +182,17 @@
     (if-let [session-token (extract-session-token request)]
       (try
         (log/info "Validating session token" {:uri (:uri request)})
-        (if-let [session (ports/validate-session user-service session-token)]
-          ;; Session valid - fetch full user and add to request
+        ;; validate-session refuses a gone or inactive user and hands back the
+        ;; one it read, so there is no second read here (BOU-668).
+        (if-let [{:keys [user] :as session} (ports/validate-session user-service session-token)]
           (do
             (log/info "Session validation successful" {:user-id (:user-id session)})
-            (if-let [user (ports/get-user-by-id user-service (:user-id session))]
-              (if-not (:active user)
-                ;; Deactivated without a soft delete: refused here as at login.
-                (create-unauthorized-response "Account is deactivated" :user-inactive request)
-                (let [enriched-request (assoc request
-                                              :user (without-credentials user)
-                                              :session session
-                                              :auth-type :session)]
-                  (handler enriched-request)))
-              ;; User not found (deleted after session was created?)
-              (do
-                (log/warn "Session valid but user not found" {:user-id (:user-id session)})
-                (create-unauthorized-response "User not found" :user-not-found request))))
+            (if user
+              (handler (assoc request
+                              :user (without-credentials user)
+                              :session (dissoc session :user)
+                              :auth-type :session))
+              (create-unauthorized-response "User not found" :user-not-found request)))
           ;; Session invalid or expired
           (do
             (log/info "Session invalid or expired" {:uri (:uri request)})
@@ -224,7 +231,7 @@
    up in logs and history, and is ignored (BOU-568).
 
    Args:
-     user-service - used for session validation; JWT needs no service
+     user-service - validates sessions and reads a JWT's user
 
    Returns:
      `(fn [handler] ...)`, Reitit- and Ring-compatible."
@@ -246,7 +253,7 @@
                        ws-token (assoc-in [:headers "authorization"] (str "Bearer " ws-token)))]
         (cond
           (extract-bearer-token request)
-          ((jwt-authentication-middleware capture) request)
+          ((jwt-authentication-middleware user-service capture) request)
 
           (extract-session-token request)
           ((session-authentication-middleware user-service capture) request)
@@ -320,7 +327,7 @@
            (cond
              ;; Try JWT authentication first
              bearer-token
-             ((jwt-authentication-middleware handler) request)
+             ((jwt-authentication-middleware user-service handler) request)
 
              ;; Fall back to session authentication
              session-token
@@ -388,12 +395,14 @@
   "Wraps handler with JWT authentication.
    
    Args:
+     user-service: User service the token's user is read from; without it a
+                   deactivated user passes until the token expires
      handler: Handler to protect
      
    Returns:
      Protected handler"
-  [handler]
-  (jwt-authentication-middleware handler))
+  ([handler] (jwt-authentication-middleware handler))
+  ([user-service handler] (jwt-authentication-middleware user-service handler)))
 
 (defn protect-with-session
   "Wraps handler with session authentication.

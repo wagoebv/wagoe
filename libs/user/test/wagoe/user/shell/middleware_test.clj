@@ -48,13 +48,21 @@
   [request]
   {:status 200 :body {:user (:user request) :auth-type (:auth-type request)}})
 
+(defn- users
+  "A user service holding `stored`, for the JWT path's one read."
+  [& stored]
+  (let [by-id (into {} (map (juxt :id identity)) stored)]
+    #_{:clj-kondo/ignore [:missing-protocol-method]}
+    (reify wagoe.user.ports/IUserService
+      (get-user-by-id [_ id] (get by-id id)))))
+
 (deftest ^:unit jwt-authentication-rejects-a-token-it-did-not-issue
   ;; validate-jwt-token answers {:valid? false :error ...} on failure — a map,
   ;; and therefore truthy. The middleware branched on the map itself, so the
   ;; rejection branch was unreachable and any Authorization header
   ;; authenticated. require-authenticated then passed, because a user map with
   ;; nil fields is still `some?`.
-  (let [handler (sut/jwt-authentication-middleware echo-user-handler)]
+  (let [handler (sut/jwt-authentication-middleware (users) echo-user-handler)]
 
     (testing "garbage is not a token"
       (let [resp (handler {:uri "/x" :headers {"authorization" "Bearer not-a-real-jwt"}})]
@@ -77,9 +85,9 @@
   ;; the wrapper map; the id is :sub, inside :claims. So even a valid token
   ;; produced {:id nil :email nil :role nil}.
   (let [id      (java.util.UUID/randomUUID)
-        token   (wagoe.user.shell.auth/create-jwt-token
-                 {:id id :email "real@example.com" :role :admin} 1)
-        handler (sut/jwt-authentication-middleware echo-user-handler)
+        user    {:id id :email "real@example.com" :role :admin :active true}
+        token   (wagoe.user.shell.auth/create-jwt-token user 1)
+        handler (sut/jwt-authentication-middleware (users user) echo-user-handler)
         resp    (handler {:uri "/x" :headers {"authorization" (str "Bearer " token)}})]
     (is (= 200 (:status resp)))
     (is (= :jwt (get-in resp [:body :auth-type])))
@@ -87,6 +95,22 @@
     (is (= "real@example.com" (get-in resp [:body :user :email])))
     (is (= :admin (get-in resp [:body :user :role]))
         "and the role comes back a keyword, as the rest of the codebase uses it")))
+
+(deftest ^:unit ^:security jwt-authentication-refuses-a-deactivated-or-gone-user
+  ;; A JWT cannot be revoked; the user it names is read, as a session's is
+  ;; (BOU-668).
+  (let [id    (java.util.UUID/randomUUID)
+        user  {:id id :email "real@example.com" :role :user}
+        token (wagoe.user.shell.auth/create-jwt-token user 1)
+        call  (fn [svc]
+                ((sut/jwt-authentication-middleware svc echo-user-handler)
+                 {:uri "/x" :headers {"authorization" (str "Bearer " token)}}))]
+    (is (= 401 (:status (call (users (assoc user :active false))))) "deactivated")
+    (is (= 401 (:status (call (users)))) "deleted")
+    (testing "and the global pass sets no :user for it"
+      (is (nil? (get-in (((sut/authenticate-if-present (users (assoc user :active false))) echo-user-handler)
+                         {:uri "/x" :headers {"authorization" (str "Bearer " token)}})
+                        [:body :user]))))))
 
 ;; ===========================================================================
 ;; BOU-373: authentication that enriches without rejecting
@@ -125,23 +149,22 @@
   ;; what I believe the validator returns, and an earlier draft of this test
   ;; encoded the shape BOU-374 turned out to be a bug.
   (let [id      (java.util.UUID/randomUUID)
-        token   (wagoe.user.shell.auth/create-jwt-token
-                 {:id id :email "a@b.c" :role :admin} 1)
-        handler ((sut/authenticate-if-present ::no-service) echo-handler)
+        user    {:id id :email "a@b.c" :role :admin :active true}
+        token   (wagoe.user.shell.auth/create-jwt-token user 1)
+        handler ((sut/authenticate-if-present (users user)) echo-handler)
         request (:body (handler {:uri     "/x"
                                  :headers {"authorization" (str "Bearer " token)}}))]
-    (is (= {:id id :email "a@b.c" :role :admin} (:user request)))
+    (is (= user (:user request)))
     (is (= :jwt (:auth-type request)))
     (is (some? (get-in request [:user :id]))
         "wrap-tenant-membership reads exactly this path")))
 
 (deftest ^:unit authenticate-if-present-sets-user-from-a-valid-session
-  (let [;; The two methods the session path calls; the other 42 are not
+  (let [;; The one method the session path calls; the others are not
         ;; reachable from here.
         service #_{:clj-kondo/ignore [:missing-protocol-method]}
         (reify wagoe.user.ports/IUserService
-          (validate-session [_ _] {:user-id 7})
-          (get-user-by-id [_ _] {:id 7 :email "s@b.c" :role :user :active true}))
+          (validate-session [_ _] {:user-id 7 :user {:id 7 :email "s@b.c" :role :user :active true}}))
         handler ((sut/authenticate-if-present service) echo-handler)
         request (:body (handler {:uri "/x" :cookies {"session-token" {:value "tok"}}}))]
     (is (= {:id 7 :email "s@b.c" :role :user :active true} (:user request)))
@@ -165,8 +188,7 @@
                  :mfa-enabled            true}
         service #_{:clj-kondo/ignore [:missing-protocol-method]}
         (reify wagoe.user.ports/IUserService
-          (validate-session [_ _] {:user-id 7})
-          (get-user-by-id [_ _] stored))
+          (validate-session [_ _] {:user-id 7 :user stored}))
         request (:body (((sut/authenticate-if-present service) echo-handler)
                         {:uri "/x" :cookies {"session-token" {:value "tok"}}}))]
     (is (= 7 (get-in request [:user :id])) "the identity still arrives")
@@ -181,15 +203,14 @@
   (let [token   "sess-7f3c9a1b2d4e6f8091a2b3c4d5e6f708"
         prefix  (subs token 0 8)
         request {:uri "/x" :cookies {"session-token" {:value token}}}]
-    (doseq [[label validate] [["valid session" (constantly {:user-id 7})]
+    (doseq [[label validate] [["valid session" (constantly {:user-id 7 :user {:id 7 :active true}})]
                               ["invalid session" (constantly nil)]
                               ["validation throws" (fn [_] (throw (ex-info "db down" {:type :internal-error})))]]
             [mw-label wrap] [["session" #(sut/session-authentication-middleware % echo-handler)]
                              ["flexible" #((sut/flexible-authentication-middleware %) echo-handler)]]]
       (let [service #_{:clj-kondo/ignore [:missing-protocol-method]}
-                    (reify wagoe.user.ports/IUserService
-                      (validate-session [_ t] (validate t))
-                      (get-user-by-id [_ _] {:id 7 :email "s@b.c" :role :user :active true}))]
+            (reify wagoe.user.ports/IUserService
+              (validate-session [_ t] (validate t)))]
         (log-test/with-log
           ((wrap service) request)
           (is (seq (log-test/the-log)) "the attempt is still logged")
@@ -205,8 +226,7 @@
   (let [calls   (atom 0)
         service #_{:clj-kondo/ignore [:missing-protocol-method]}
         (reify wagoe.user.ports/IUserService
-          (validate-session [_ _] (swap! calls inc) {:user-id 7})
-          (get-user-by-id [_ _] {:id 7 :email "s@b.c" :role :user :active true}))
+          (validate-session [_ _] (swap! calls inc) {:user-id 7 :user {:id 7 :active true}}))
         route   ((sut/flexible-authentication-middleware service) echo-handler)]
 
     (testing "already authenticated — the route-level pass is a no-op"

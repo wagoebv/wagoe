@@ -61,7 +61,7 @@
                    :last-accessed-at nil
                    :revoked-at nil}
           service (sut/->UserService
-                   nil
+                   (->UserRepoStub (atom {user-id {:id user-id :active true}}))
                    (->SessionRepoStub session)
                    nil
                    {}

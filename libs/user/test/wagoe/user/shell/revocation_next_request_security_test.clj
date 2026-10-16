@@ -3,10 +3,12 @@
    (BOU-663)."
   (:require [clojure.test :refer [deftest is testing]]
             [wagoe.user.ports :as ports]
+            [wagoe.user.shell.auth :as auth]
             [wagoe.user.shell.in-memory-repository-test :as mem]
             [wagoe.user.shell.middleware :as middleware]
             [wagoe.user.shell.module-wiring :as wiring]
-            [wagoe.user.shell.service :as service])
+            [wagoe.user.shell.service :as service]
+            [wagoe.user.shell.web-handlers :as web-handlers])
   (:import [java.time Instant]
            [java.util UUID]))
 
@@ -100,3 +102,68 @@
   (is (not (contains? (-> (wiring/ig-config nil {:config {} :enabled #{:wagoe/cache}})
                           (get-in [:components :wagoe/user-service]))
                       :cache))))
+
+;; BOU-668: every auth path refuses an inactive user, not only the session
+;; middleware.
+
+(defn- deactivate-in-store! [{:keys [users]} user]
+  (ports/update-user users (assoc (ports/find-user-by-id users (:id user)) :active false)))
+
+(deftest ^:security ^:unit an-inactive-users-session-does-not-validate
+  (let [st (stores) svc (replica st)
+        [user token] (sign-in! svc st)]
+    (is (= (:id user) (get-in (ports/validate-session svc token) [:user :id]))
+        "a valid session carries its user")
+    (deactivate-in-store! st user)
+    (is (= [:session-invalid :user-inactive]
+           (try (ports/validate-session svc token) nil
+                (catch clojure.lang.ExceptionInfo e ((juxt :type :reason) (ex-data e))))))))
+
+(deftest ^:security ^:unit the-web-root-does-not-send-an-inactive-user-to-the-dashboard
+  (let [st (stores) svc (replica st)
+        [user token] (sign-in! svc st)
+        root (web-handlers/web-root-page-handler svc {})
+        hit  #(root {:uri "/web" :cookies {"session-token" {:value token}}})]
+    (is (= 302 (:status (hit))))
+    (deactivate-in-store! st user)
+    (is (= 200 (:status (hit))) "the landing page, not a redirect")))
+
+(deftest ^:security ^:unit a-deactivated-users-jwt-is-refused
+  (let [st (stores) svc (replica st)
+        [user _] (sign-in! svc st)
+        token (auth/create-jwt-token user 1)
+        call  #((middleware/jwt-authentication-middleware svc (constantly {:status 200}))
+                {:uri "/x" :headers {"authorization" (str "Bearer " token)}})]
+    (is (= 200 (:status (call))))
+    (ports/deactivate-user svc (:id user))
+    (is (= 401 (:status (call))))))
+
+;; BOU-681: deactivation is not a delete.
+
+(deftest ^:unit a-deactivated-user-stays-listed-and-can-be-reactivated
+  (let [st (stores) svc (replica st)
+        [user _] (sign-in! svc st)]
+    (is (true? (ports/deactivate-user svc (:id user))))
+    (let [listed (first (:users (ports/list-users svc {})))]
+      (is (= (:id user) (:id listed)) "still listed")
+      (is (false? (:active listed)))
+      (is (nil? (:deleted-at listed))))
+    (ports/update-user-profile svc {:id (:id user) :active true})
+    (is (true? (:active (ports/get-user-by-id svc (:id user)))))))
+
+(deftest ^:security ^:unit a-deleted-user-leaves-the-list-and-loses-their-session
+  (let [st (stores) svc (replica st)
+        [user token] (sign-in! svc st)]
+    (is (true? (ports/delete-user svc (:id user))))
+    (is (zero? (:total-count (ports/list-users svc {}))) "hidden from the list")
+    (is (nil? (ports/get-user-by-id svc (:id user))))
+    (is (= 401 (:status (request! svc token))))))
+
+(deftest ^:security ^:unit the-last-admin-cannot-be-deleted
+  (let [st    (stores) svc (replica st)
+        admin (ports/register-user svc {:email "root@example.com" :name "Root" :role :admin
+                                        :password "Correct-horse-battery-9"})]
+    (is (= :conflict
+           (try (ports/delete-user svc (:id admin)) nil
+                (catch clojure.lang.ExceptionInfo e (:type (ex-data e))))))
+    (is (some? (ports/get-user-by-id svc (:id admin))))))

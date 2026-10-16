@@ -6,24 +6,28 @@
             [ring.websocket :as ring-ws]
             [wagoe.platform.shell.http.reitit-router :as reitit-router]
             [wagoe.realtime.shell.handlers.ring-websocket :as ws-handler]
+            [wagoe.user.ports :as user-ports]
             [wagoe.user.shell.auth :as auth]
             [wagoe.user.shell.middleware :as user-middleware]))
+
+(def ^:private user
+  {:id #uuid "00000000-0000-0000-0000-0000000000aa" :email "a@example.com" :role :user})
 
 (defn- handler []
   (reitit-router/compile-routes
    [["/ws" {:get {:handler (ws-handler/websocket-handler ::no-service)}}]]
    {:swagger-enabled false
-    ;; JWT needs no user service; a session would, and none is sent here.
-    :authentication  {:middleware [(user-middleware/authenticate-if-present nil)]}}))
+    ;; The JWT path reads the token's user (BOU-668).
+    :authentication  {:middleware [(user-middleware/authenticate-if-present
+                                    #_{:clj-kondo/ignore [:missing-protocol-method]}
+                                    (reify user-ports/IUserService
+                                      (get-user-by-id [_ _] (assoc user :active true))))]}}))
 
 (defn- upgrade [query]
   {:request-method :get
    :uri            "/ws"
    :query-string   query
    :headers        {"connection" "Upgrade" "upgrade" "websocket"}})
-
-(def ^:private user
-  {:id #uuid "00000000-0000-0000-0000-0000000000aa" :email "a@example.com" :role :user})
 
 (deftest ^:unit ^:security a-websocket-upgrade-authenticates-with-its-token
   (let [h (handler)]

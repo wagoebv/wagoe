@@ -126,7 +126,7 @@
 
  :user/bulk-action-deactivate   "Deactiveren"
  :user/bulk-action-activate     "Activeren"
- :user/bulk-action-delete       "Permanent verwijderen"
+ :user/bulk-action-delete       "Verwijderen"
  :user/bulk-action-role-admin   "Rol wijzigen naar admin"
  :user/bulk-action-role-user    "Rol wijzigen naar gebruiker"
  :user/button-apply-bulk        "Toepassen op geselecteerde"
