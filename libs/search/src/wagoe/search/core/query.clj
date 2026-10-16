@@ -133,12 +133,12 @@
                  "), "
                  "q AS (SELECT plainto_tsquery(?, ?) AS tsq) "
                  "SELECT d.entity_type, d.entity_id, d.metadata, "
-                 "  ts_rank(d.tsv, q.tsq) AS rank, "
+                 "  ts_rank(d.tsv, q.tsq) AS score, "
                  snippet-expr " "
                  "FROM docs d, q "
                  "WHERE d.tsv @@ q.tsq "
                  filter-sql " "
-                 "ORDER BY rank DESC "
+                 "ORDER BY score DESC "
                  "LIMIT ? OFFSET ?")]
     (into [sql index-id entity-type language query] (concat filter-params [limit offset]))))
 
@@ -188,13 +188,13 @@
   ([index-id entity-type query limit threshold filters]
    (let [[filter-sql & filter-params] (build-filter-sql-postgres (or filters {}))
          sql (str "SELECT entity_type, entity_id, metadata, "
-                  "  similarity(content_all, ?) AS rank, "
+                  "  similarity(content_all, ?) AS score, "
                   "  NULL AS snippet "
                   "FROM search_documents d "
                   "WHERE index_id = ? AND entity_type = ? "
                   "  AND similarity(content_all, ?) > ? "
                   filter-sql " "
-                  "ORDER BY rank DESC "
+                  "ORDER BY score DESC "
                   "LIMIT ?")]
      (-> [sql query index-id entity-type query threshold]
          (into filter-params)
@@ -223,7 +223,7 @@
   (let [pattern (str "%" (str/lower-case (or (sanitize-query query) "")) "%")
         [filter-sql & filter-params] (build-filter-sql-fallback (or filters {}))
         sql (str "SELECT entity_type, entity_id, metadata, "
-                 "  1.0 AS rank, "
+                 "  1.0 AS score, "
                  "  NULL AS snippet "
                  "FROM search_documents "
                  "WHERE index_id = ? AND entity_type = ? "
@@ -272,7 +272,7 @@
    (let [pattern (str "%" (str/lower-case (or (sanitize-query query) "")) "%")
          [filter-sql & filter-params] (build-filter-sql-fallback (or filters {}))
          sql (str "SELECT entity_type, entity_id, metadata, "
-                  "  0.5 AS rank, "
+                  "  0.5 AS score, "
                   "  NULL AS snippet "
                   "FROM search_documents "
                   "WHERE index_id = ? AND entity_type = ? "

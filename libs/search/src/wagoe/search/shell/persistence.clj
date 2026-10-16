@@ -68,7 +68,7 @@
   (when row
     (cond-> {:entity-type (str->kw (:entity_type row))
              :entity-id   (str->uuid (:entity_id row))
-             :rank        (double (or (:rank row) 1.0))
+             :rank        (double (or (:score row) 1.0))  ; `rank` is reserved in MySQL (BOU-651)
              :snippet     (:snippet row)}
       (:metadata row)
       (assoc :metadata (edn/read-string (:metadata row))))))

@@ -54,6 +54,7 @@
     :needed-by ["wagoe.audience-dialect-test"
                 "wagoe.database-adapter-contract-test"
                 "wagoe.library-migrations-mysql-test"
+                "wagoe.search-mysql-test"
                 "wagoe.scaffolder.migration-dialects-test"]}])
 
 (defn reachable?

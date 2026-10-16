@@ -6,11 +6,12 @@
 --
 -- Field weight columns (A=highest, D=lowest) allow weighted ranking.
 -- content_all is the concatenation of all weight columns for fallback LIKE search.
+-- Key and indexed columns are VARCHAR, since MySQL cannot index TEXT (BOU-651).
 CREATE TABLE IF NOT EXISTS search_documents (
-  id          TEXT NOT NULL PRIMARY KEY,
-  index_id    TEXT NOT NULL,
-  entity_type TEXT NOT NULL,
-  entity_id   TEXT NOT NULL,
+  id          VARCHAR(255) NOT NULL PRIMARY KEY,
+  index_id    VARCHAR(255) NOT NULL,
+  entity_type VARCHAR(255) NOT NULL,
+  entity_id   VARCHAR(255) NOT NULL,
   language    TEXT NOT NULL DEFAULT 'english',
   weight_a    TEXT NOT NULL DEFAULT '',
   weight_b    TEXT NOT NULL DEFAULT '',
@@ -18,7 +19,7 @@ CREATE TABLE IF NOT EXISTS search_documents (
   weight_d    TEXT NOT NULL DEFAULT '',
   content_all TEXT NOT NULL DEFAULT '',
   metadata    TEXT,
-  updated_at  TEXT NOT NULL,
+  updated_at  VARCHAR(64) NOT NULL,
   UNIQUE (index_id, entity_id)
 );
 --;; 

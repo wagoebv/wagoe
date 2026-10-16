@@ -22,6 +22,7 @@
            "libs/workflow/src" "libs/workflow/test"         ;; Phase 14: Workflow
            "libs/workflow/resources"                        ;; workflow migrations
            "libs/search/src" "libs/search/test"             ;; Phase 15: Search
+           "libs/search/resources"                          ;; search migrations
            "libs/reports/src" "libs/reports/test"           ;; Phase 16: Reports
            "libs/calendar/src" "libs/calendar/test"         ;; Phase 17: Calendar
            "libs/geo/src" "libs/geo/test"                   ;; Phase 18: Geo
