@@ -50,6 +50,7 @@
                             [["list" "modules" "--help"] "Usage: wagoe list modules"]
                             [["agents" "--help"] "Usage: wagoe agents update"]
                             [["agents" "update" "--help"] "Usage: wagoe agents update"]
+                            [["upgrade" "--help"] "Usage: wagoe upgrade"]
                             [["version" "--help"] "Usage: wagoe version"]]]
         (let [{:keys [exit out err]} (apply wagoe dir args)]
           (is (= 0 exit) (str args " " out err))

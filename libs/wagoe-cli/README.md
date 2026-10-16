@@ -25,6 +25,7 @@ Requires [Babashka](https://babashka.org) and [bbin](https://github.com/babashka
 | `wagoe add <module>` | Add a framework module (payments, tenant, admin, …) to the current project — patches `deps.edn`, config, and the AGENTS.md module table |
 | `wagoe list` | List the available modules from the module catalogue |
 | `wagoe agents update [--check] [--modules]` | Re-sync the project's `AGENTS.md` installed-modules table with what is actually installed (`--check` verifies without writing; `--modules` touches only the module blocks, as `bb setup` runs it) |
+| `wagoe upgrade [--dry-run \| --apply]` | Rewrite deprecated config values, keys and names after a Wagoe upgrade (prints a diff unless `--apply`) |
 
 ## Quick Start
 

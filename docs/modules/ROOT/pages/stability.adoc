@@ -363,6 +363,11 @@ system says nothing about is an announcement to whoever already read it.
 CI enforces the second point: a var carrying `^:deprecated` that `CHANGELOG.md`
 never names fails the build.
 
+Every deprecation also gets an entry in the table `wagoe upgrade` reads: a
+mechanical rewrite, or the reason there cannot be one. CI fails on a
+`### Deprecated` entry without one. Run `wagoe upgrade` before moving to a new
+major version; see xref:libraries:cli.adoc#_upgrade_past_deprecations[the CLI].
+
 === Deferred to 2.0
 
 Everything currently deprecated, and what replaces it. None of these is removed
