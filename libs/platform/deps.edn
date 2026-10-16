@@ -58,6 +58,7 @@
          org.bouncycastle/bcpkix-jdk18on {:mvn/version "1.86"}
          org.bouncycastle/bcutil-jdk18on {:mvn/version "1.86"}
          buddy/buddy-core                  {:mvn/version "1.12.0-430"}
+         metosin/reitit-core               {:mvn/version "0.10.1"}
          metosin/reitit-ring               {:mvn/version "0.10.1"}
          metosin/reitit-malli              {:mvn/version "0.10.1"}
          metosin/reitit-middleware         {:mvn/version "0.10.1"}

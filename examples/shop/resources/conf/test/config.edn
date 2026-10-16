@@ -24,6 +24,9 @@
    :wagoe/logging
    {:provider :slf4j :level :info}
 
+   :wagoe/user
+   {}
+
    ;; Product module (bb scaffold integrate)
    :wagoe/product
    {:enabled? true}}
