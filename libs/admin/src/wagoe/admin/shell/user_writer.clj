@@ -29,7 +29,7 @@
 
   (delete-record! [_ id {:keys [soft?]}]
     (if soft?
-      (user-ports/deactivate-user user-service (type-conversion/string->uuid id))
+      (user-ports/delete-user user-service (type-conversion/string->uuid id))
       (user-ports/permanently-delete-user user-service (type-conversion/string->uuid id)))))
 
 (defn create-user-writer

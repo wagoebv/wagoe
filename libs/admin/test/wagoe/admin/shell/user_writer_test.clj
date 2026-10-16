@@ -152,10 +152,11 @@
     (is (nil? (get-in resp [:headers "HX-Redirect"])) "the form again, not the list")
     (is (zero? (live-sessions sys u)))
     (is (false? (:active (listed sys u))) "listed, as inactive")
-    (testing "a delete deactivates too"
+    (testing "a delete removes the user from the list"
       (let [u2 (user! sys "u2@example.com" :user)]
         (is (true? (ports/delete-entity admin :users (:id u2))))
-        (is (false? (:active (listed sys u2))))))
+        (is (nil? (listed sys u2)))
+        (is (zero? (live-sessions sys u2)))))
     (testing "reactivated from the list"
       (is (= 200 (:status (save "true"))))
       (is (true? (:active (listed sys u)))))))

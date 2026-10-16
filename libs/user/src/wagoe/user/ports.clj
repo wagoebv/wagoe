@@ -141,6 +141,11 @@
   ;; and can be reactivated (BOU-681). Returns boolean. Throws :conflict for
   ;; your own or the last admin's account.
 
+  (delete-user [this user-id])
+  ;; Soft delete: sets :deleted-at, hiding the user from lists and reads, and
+  ;; ends their sessions. Returns boolean. Throws :conflict for your own or the
+  ;; last admin's account.
+
   (permanently-delete-user [this user-id])
   ;; Irreversible erasure. Returns boolean.
   ;; Throws :user-not-found, :hard-deletion-not-allowed (another record still references the user),

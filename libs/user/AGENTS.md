@@ -228,6 +228,8 @@ export JWT_SECRET="dev-secret-at-least-32-characters-long-here"
 
 Session tokens are stored in the database. Sessions and users are never cached, so a revoked session or deactivated user is refused on the next request (BOU-663).
 
+`deactivate-user` sets `active` false and the user stays listed; `delete-user` sets `deleted_at` and hides them. Both end sessions and keep the last admin (BOU-681).
+
 ---
 
 ## Multi-Factor Authentication (MFA)

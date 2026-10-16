@@ -150,3 +150,20 @@
       (is (nil? (:deleted-at listed))))
     (ports/update-user-profile svc {:id (:id user) :active true})
     (is (true? (:active (ports/get-user-by-id svc (:id user)))))))
+
+(deftest ^:security ^:unit a-deleted-user-leaves-the-list-and-loses-their-session
+  (let [st (stores) svc (replica st)
+        [user token] (sign-in! svc st)]
+    (is (true? (ports/delete-user svc (:id user))))
+    (is (zero? (:total-count (ports/list-users svc {}))) "hidden from the list")
+    (is (nil? (ports/get-user-by-id svc (:id user))))
+    (is (= 401 (:status (request! svc token))))))
+
+(deftest ^:security ^:unit the-last-admin-cannot-be-deleted
+  (let [st    (stores) svc (replica st)
+        admin (ports/register-user svc {:email "root@example.com" :name "Root" :role :admin
+                                        :password "Correct-horse-battery-9"})]
+    (is (= :conflict
+           (try (ports/delete-user svc (:id admin)) nil
+                (catch clojure.lang.ExceptionInfo e (:type (ex-data e))))))
+    (is (some? (ports/get-user-by-id svc (:id admin))))))

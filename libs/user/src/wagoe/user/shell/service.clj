@@ -585,6 +585,30 @@
                :audit-repository audit-repository
                :auth-service auth-service}}))
 
+  (delete-user [_ user-id]
+    (service-interceptors/execute-service-operation
+     :delete-user
+     {:user-id user-id}
+     (fn [{:keys [params]}]
+       (let [user-id (:user-id params)
+             user    (.find-user-by-id user-repository user-id)
+             result  (when user
+                       (change-access! user-repository session-repository user nil
+                                       #(.soft-delete-user user-repository user-id)))]
+         (when result
+           (try
+             (let [{:keys [actor-id actor-email ip-address user-agent]} (effective-audit-context {})]
+               (.create-audit-log audit-repository
+                                  (audit-core/delete-user-audit-entry
+                                   actor-id actor-email user-id (:email user) ip-address user-agent)))
+             (catch Exception e
+               (println "WARN: Failed to create audit log:" (.getMessage e)))))
+         (boolean result)))
+     {:system {:user-repository user-repository
+               :session-repository session-repository
+               :audit-repository audit-repository
+               :auth-service auth-service}}))
+
   (permanently-delete-user [_ user-id]
     (service-interceptors/execute-service-operation
      :permanently-delete-user
