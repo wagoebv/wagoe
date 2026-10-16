@@ -89,10 +89,21 @@ for what is public API, what is internal, and how deprecations are announced.
 - **Entities without `:list-fields` get role-ordered default columns** (ADR-040): title, relations, status, enums,
   money, dates, then the rest, at most seven; UUIDs, long text and audit columns other than `created-at` are left out.
 
+### Deprecated
+
+- **`jwt-authentication-middleware` and `protect-with-jwt` without a user service** (BOU-682): they trust the token, so a
+  deactivated user passes. Pass the user service first; the 1-arity warns once and goes in 2.0.
+
 ### Fixed
 
 - **One event the bus never accepts stalled the outbox relay for good; replica clock skew could split its lease** (BOU-679).
   Dead-lettered after `:max-attempts` over `:dead-letter-after-ms` (10, 1h); the lease uses database time. See `outbox/requeue!`.
+- **PostgreSQL `:application-name` and `:statement-timeout-ms` were ignored** (BOU-658). Upgrade; migrations, seeds and
+  tenant provisioning run without the timeout, in-memory H2 migrations use `mem:wagoe`, and a config without `:pool` boots.
+- **Auth middleware answered 401 for what the handler threw** (BOU-682): a `:conflict` or database error behind JWT or
+  session auth is now its own status. Nothing to change.
+- **A permanent user delete was audited as `:delete`, like a soft one** (BOU-682); it is `:permanent-delete` now.
+  Run `bb migrate up` (or boot) to widen the audit table's action check.
 - **Deactivated users vanished from the admin list** (BOU-681): deactivating sets `active` only and keeps them listed; Delete, the bulk one included, soft-deletes.
   Users deactivated before this stay hidden; restore one by clearing `deleted_at` in `auth_users`.
 - **A deactivated user's JWT, and `validate-session` for their session, still authenticated** (BOU-668); every auth path answers 401 now.

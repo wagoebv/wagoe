@@ -229,46 +229,14 @@
 ;; Configuration-to-Database-Config Conversion
 ;; =============================================================================
 
-(defn- sqlite-config->db-config
-  "Convert SQLite configuration to database adapter config"
-  [config]
-  {:adapter :sqlite
-   :database-path (:db config)
-   :pool (:pool config {})})
-
-(defn- postgresql-config->db-config
-  "Convert PostgreSQL configuration to database adapter config"
-  [config]
-  {:adapter :postgresql
-   :host (:host config)
-   :port (:port config)
-   :name (:dbname config)
-   :username (:user config)
-   :password (:password config)
-   :pool (:pool config {})})
-
-(defn- mysql-config->db-config
-  "Convert MySQL configuration to database adapter config: the boot path's
-   conversion, so the two cannot drift apart again (BOU-647)."
-  [config]
-  (update (config/db-spec-for-adapter :mysql config) :pool #(or % {})))
-
-(defn- h2-config->db-config
-  "Convert H2 configuration to database adapter config"
-  [config]
-  {:adapter :h2
-   :database-path (or (:db config) "mem:testdb")
-   :pool (:pool config {})})
-
 (defn config->db-config
-  "Convert configuration entry to database adapter config"
+  "Convert a configuration entry to a database adapter config: the boot
+   path's conversion minus `:migrate-on-start?`, so the two cannot drift
+   apart (BOU-647, BOU-658)."
   [config-key config]
   (let [adapter-type (config-key->adapter-type config-key)]
-    (case adapter-type
-      :sqlite (sqlite-config->db-config config)
-      :postgresql (postgresql-config->db-config config)
-      :mysql (mysql-config->db-config config)
-      :h2 (h2-config->db-config config)
+    (if adapter-type
+      (config/db-spec-for-adapter adapter-type config)
       (throw (IllegalArgumentException.
               (str "Unknown adapter type for config key: " config-key))))))
 
@@ -303,7 +271,11 @@
       (throw (ex-info "No active database configured"
                       {:type :configuration-error :environment env})))
     (let [[config-key config] (first db-configs)
-          ;; Create a datasource for the database configuration
+          ;; Migrations, seeds and tenant provisioning run long statements:
+          ;; the app's timeout would cancel them, and an absent one means the
+          ;; 30s default, so 0 (BOU-658).
+          config (cond-> config
+                   (= :postgresql (:adapter config)) (assoc :statement-timeout-ms 0))
           datasource (factory/create-datasource config)]
       (assoc config
              :datasource datasource

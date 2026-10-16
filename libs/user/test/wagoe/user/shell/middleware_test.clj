@@ -5,7 +5,8 @@
             [buddy.sign.jwt]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
-            [clojure.tools.logging.test :as log-test]))
+            [clojure.tools.logging.test :as log-test]
+            [wagoe.platform.shell.http.interceptors :as http-interceptors]))
 
 (deftest ^:unit extract-session-token-test
   (testing "decodes percent-encoded session token from cookie"
@@ -241,3 +242,49 @@
       (is (= 200 (:status (route {:uri "/x" :cookies {"session-token" {:value "tok"}}}))))
       (is (= 1 @calls) "no short-circuit when nothing has authenticated yet")
       (is (= 401 (:status (route {:uri "/x"}))) "and no credentials is still a 401"))))
+
+;; ===========================================================================
+;; BOU-682: what a handler throws is not an authentication failure
+;; ===========================================================================
+
+(defn- through-error-mapping
+  "`handler` behind the platform's error handler, as a route is."
+  [handler request]
+  (http-interceptors/run-http-interceptors
+   handler [http-interceptors/http-correlation-header http-interceptors/http-error-handler]
+   request {}))
+
+(deftest ^:unit ^:security a-handler-exception-is-not-a-401
+  ;; The middleware wrapped its handler in the try that catches a failed
+  ;; validation, so a :conflict or a database error answered 401 and was
+  ;; logged as an authentication failure.
+  (let [id      (java.util.UUID/randomUUID)
+        user    {:id id :email "real@example.com" :role :user :active true}
+        token   (wagoe.user.shell.auth/create-jwt-token user 1)
+        service #_{:clj-kondo/ignore [:missing-protocol-method]}
+        (reify wagoe.user.ports/IUserService
+          (get-user-by-id [_ _] user)
+          (validate-session [_ _] {:user-id id :user user}))
+        jwt     {:uri "/api/x" :request-method :post :headers {"authorization" (str "Bearer " token)}}
+        session {:uri "/api/x" :request-method :post :cookies {"session-token" {:value "tok"}}}]
+    (doseq [[label thrown status] [["a :conflict" (ex-info "Email taken" {:type :conflict}) 409]
+                                   ["a database error" (java.sql.SQLException. "connection reset") 500]]
+            [mw-label wrap request] [["jwt" #(sut/jwt-authentication-middleware service %) jwt]
+                                     ["session" #(sut/session-authentication-middleware service %) session]
+                                     ["flexible, jwt" #((sut/flexible-authentication-middleware service) %) jwt]
+                                     ["flexible, session" #((sut/flexible-authentication-middleware service) %) session]]]
+      (testing (str mw-label ": " label)
+        (log-test/with-log
+          (let [resp (through-error-mapping (wrap (fn [_] (throw thrown))) request)]
+            (is (= status (:status resp)))
+            (is (not (log-test/logged? 'wagoe.user.shell.middleware :warn Throwable #"validation failed"))
+                "and it is not logged as an authentication failure")))))))
+
+(deftest ^:unit the-claims-only-arity-warns-once
+  (reset! @#'sut/claims-only-warned? false)
+  (log-test/with-log
+    (sut/jwt-authentication-middleware echo-user-handler)
+    (sut/protect-with-jwt echo-user-handler)
+    (sut/jwt-authentication-middleware echo-user-handler)
+    (is (= 1 (count (filter #(and (= :warn (:level %)) (str/includes? (str (:message %)) "deprecated"))
+                            (log-test/the-log)))))))

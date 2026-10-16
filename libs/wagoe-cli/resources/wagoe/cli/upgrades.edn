@@ -25,4 +25,9 @@
  {:ticket "BOU-433"
   :since  "1.0.0-rc-1"
   :note   "wagoe.jobs.shell.adapters.db/enqueue-in-tx! is wagoe.jobs.ports/enqueue-in-tx! on the queue component."
-  :manual "The port takes the queue component as its first argument, which the old call has no value for."}]
+  :manual "The port takes the queue component as its first argument, which the old call has no value for."}
+
+ {:ticket "BOU-682"
+  :since  "1.0.2"
+  :note   "wagoe.user.shell.middleware/jwt-authentication-middleware and protect-with-jwt without a user service."
+  :manual "Pass the user service as the first argument: (jwt-authentication-middleware user-service handler). A rewrite has no user service to pass."}]

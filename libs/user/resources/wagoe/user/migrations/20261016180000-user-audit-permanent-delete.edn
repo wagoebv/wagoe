@@ -1,0 +1,5 @@
+;; user_audit_log's action check, widened to take :permanent-delete on a
+;; database created before it (BOU-682). The same idempotent definition.
+{:ns      wagoe.user.shell.user-tables
+ :up-fn   "up"
+ :down-fn "down"}

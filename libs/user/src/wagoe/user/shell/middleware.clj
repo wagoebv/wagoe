@@ -107,36 +107,51 @@
    :user-inactive  "Account is deactivated"
    :user-deleted   "User not found"})
 
+(defn- jwt-user
+  "`{:user u}` for the user a bearer token authenticates as `(user-of claims)`,
+   or `{:refusal response}`, the 401 that refuses it."
+  [user-of token request]
+  (try
+    ;; Destructured, not tested for truthiness. `validate-jwt-token`
+    ;; answers a map either way — `{:valid? false :error ...}` on failure —
+    ;; so `(if jwt-claims ...)` was always true: the rejection branch was
+    ;; unreachable and any Authorization header authenticated, including a
+    ;; token signed with somebody else's secret. `require-authenticated`
+    ;; passed too, because `{:id nil}` is still `some?`.
+    ;;
+    ;; The claims are inside `:claims`, and the id is `:sub` — a string, as
+    ;; `create-jwt-token` writes it — so reading `:user-id` off the wrapper
+    ;; produced `{:id nil :email nil :role nil}` even for a good token.
+    (let [{:keys [valid? claims]} (auth-shell/validate-jwt-token token)]
+      (if valid?
+        (let [user (user-of claims)]
+          (if (keyword? user)
+            {:refusal (create-unauthorized-response (refusal-messages user) user request)}
+            {:user user}))
+        {:refusal (create-unauthorized-response "Invalid JWT token" :invalid-jwt request)}))
+    (catch Exception ex
+      (log/warn ex "JWT validation failed")
+      {:refusal (create-unauthorized-response "JWT validation failed" :jwt-validation-error request)})))
+
 (defn- jwt-middleware
   "Authenticate a bearer token as `(user-of claims)`: a user, or the
-   `account-refusal` keyword that makes it a 401."
+   `account-refusal` keyword that makes it a 401. The handler runs outside the
+   try, so what it throws reaches the error mapping unchanged (BOU-682)."
   [user-of handler]
   (fn [request]
     (if-let [token (extract-bearer-token request)]
-      (try
-        ;; Destructured, not tested for truthiness. `validate-jwt-token`
-        ;; answers a map either way — `{:valid? false :error ...}` on failure —
-        ;; so `(if jwt-claims ...)` was always true: the rejection branch was
-        ;; unreachable and any Authorization header authenticated, including a
-        ;; token signed with somebody else's secret. `require-authenticated`
-        ;; passed too, because `{:id nil}` is still `some?`.
-        ;;
-        ;; The claims are inside `:claims`, and the id is `:sub` — a string, as
-        ;; `create-jwt-token` writes it — so reading `:user-id` off the wrapper
-        ;; produced `{:id nil :email nil :role nil}` even for a good token.
-        (let [{:keys [valid? claims]} (auth-shell/validate-jwt-token token)]
-          (if valid?
-            (let [user (user-of claims)]
-              (if (keyword? user)
-                (create-unauthorized-response (refusal-messages user) user request)
-                (handler (assoc request :user user :auth-type :jwt))))
-            (create-unauthorized-response "Invalid JWT token" :invalid-jwt request)))
-        (catch Exception ex
-          (log/warn ex "JWT validation failed")
-          (create-unauthorized-response "JWT validation failed" :jwt-validation-error request)))
-
-      ;; No token provided
+      (let [{:keys [user refusal]} (jwt-user user-of token request)]
+        (or refusal (handler (assoc request :user user :auth-type :jwt))))
       (create-unauthorized-response "JWT token required" :missing-jwt request))))
+
+(defonce ^:private claims-only-warned? (atom false))
+
+(defn- warn-claims-only!
+  "Once per process: the deprecated arity trusts a token's claims."
+  []
+  (when (compare-and-set! claims-only-warned? false true)
+    (log/warn (str "jwt-authentication-middleware and protect-with-jwt without a user service"
+                   " are deprecated: a deactivated user's JWT passes. Pass the user service (BOU-682)."))))
 
 (defn jwt-authentication-middleware
   "Middleware that validates JWT tokens from Authorization header.
@@ -144,9 +159,11 @@
    Extracts Bearer token, validates it, and adds user information to request.
    On validation failure, returns 401 response.
 
-   With `user-service`, the token's user is read and refused when gone or
-   inactive: a JWT cannot be revoked (BOU-668). Without it the user is the
-   token's claims, and a deactivated user passes until the token expires.
+   The token's user is read and refused when gone or inactive: a JWT cannot be
+   revoked (BOU-668).
+
+   Deprecated: the 1-arity, without `user-service`, trusts the token's claims,
+   so a deactivated user passes until the token expires (BOU-682).
    
    Args:
      user-service: User service the token's user is read from
@@ -154,7 +171,9 @@
      
    Returns:
      Wrapped handler function"
-  ([handler] (jwt-middleware claims-user handler))
+  ([handler]
+   (warn-claims-only!)
+   (jwt-middleware claims-user handler))
   ([user-service handler]
    (jwt-middleware (fn [claims]
                      (let [user (ports/get-user-by-id user-service (type-conv/string->uuid (:sub claims)))]
@@ -165,11 +184,33 @@
 ;; Session Authentication Middleware
 ;; =============================================================================
 
+(defn- session-user
+  "`{:user u :session s}` for the session `token` names, or `{:refusal response}`,
+   the 401 that refuses it."
+  [user-service token request]
+  (try
+    (log/info "Validating session token" {:uri (:uri request)})
+    ;; validate-session refuses a gone or inactive user and hands back the
+    ;; one it read, so there is no second read here (BOU-668).
+    (if-let [{:keys [user] :as session} (ports/validate-session user-service token)]
+      (do
+        (log/info "Session validation successful" {:user-id (:user-id session)})
+        (if user
+          {:user (without-credentials user) :session (dissoc session :user)}
+          {:refusal (create-unauthorized-response "User not found" :user-not-found request)}))
+      (do
+        (log/info "Session invalid or expired" {:uri (:uri request)})
+        {:refusal (create-unauthorized-response "Invalid or expired session" :invalid-session request)}))
+    (catch Exception ex
+      (log/warn ex "Session validation failed" {:uri (:uri request)})
+      {:refusal (create-unauthorized-response "Session validation failed" :session-validation-error request)})))
+
 (defn session-authentication-middleware
   "Middleware that validates session tokens and updates session access time.
    
    Extracts session token, validates it through user service, and adds user
-   information to request. On validation failure, returns 401 response.
+   information to request. On validation failure, returns 401 response. What
+   the handler throws reaches the error mapping, not a 401 (BOU-682).
    
    Args:
      user-service: User service instance for session validation
@@ -180,26 +221,8 @@
   [user-service handler]
   (fn [request]
     (if-let [session-token (extract-session-token request)]
-      (try
-        (log/info "Validating session token" {:uri (:uri request)})
-        ;; validate-session refuses a gone or inactive user and hands back the
-        ;; one it read, so there is no second read here (BOU-668).
-        (if-let [{:keys [user] :as session} (ports/validate-session user-service session-token)]
-          (do
-            (log/info "Session validation successful" {:user-id (:user-id session)})
-            (if user
-              (handler (assoc request
-                              :user (without-credentials user)
-                              :session (dissoc session :user)
-                              :auth-type :session))
-              (create-unauthorized-response "User not found" :user-not-found request)))
-          ;; Session invalid or expired
-          (do
-            (log/info "Session invalid or expired" {:uri (:uri request)})
-            (create-unauthorized-response "Invalid or expired session" :invalid-session request)))
-        (catch Exception ex
-          (log/warn ex "Session validation failed" {:uri (:uri request)})
-          (create-unauthorized-response "Session validation failed" :session-validation-error request)))
+      (let [{:keys [user session refusal]} (session-user user-service session-token request)]
+        (or refusal (handler (assoc request :user user :session session :auth-type :session))))
 
       ;; No session token provided
       (do
@@ -394,9 +417,11 @@
 (defn protect-with-jwt
   "Wraps handler with JWT authentication.
    
+   Deprecated: the 1-arity, without `user-service`, lets a deactivated user's
+   token pass until it expires (BOU-682).
+
    Args:
-     user-service: User service the token's user is read from; without it a
-                   deactivated user passes until the token expires
+     user-service: User service the token's user is read from
      handler: Handler to protect
      
    Returns:
