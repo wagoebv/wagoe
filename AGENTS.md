@@ -864,7 +864,8 @@ java.time.temporal.ChronoUnit/DAYS
 **Supported databases**: PostgreSQL, SQLite and MySQL 8, and H2 for tests
 (`scripts/mysql-smoke.sh` proves a generated app on MySQL). Tenancy
 (`:wagoe/tenant`) needs PostgreSQL and refuses to boot on SQLite, MySQL, and H2
-unless `:wagoe/tenant` sets `:allow-h2? true` (the test profile does).
+unless `:wagoe/tenant` sets `:allow-h2? true` (the test profile does). On MySQL,
+push and seeds with timestamps wait on BOU-657.
 
 **Current Setup (Development)**:
 - **Database**: PostgreSQL on `localhost:5432`, database `wagoe_dev` — `:wagoe/postgresql`

@@ -6,19 +6,20 @@
 # :migrate-on-start?, then the API, the transitions and the admin are driven
 # over HTTP. MySQL support is claimed only as far as this run proves it.
 #
-# Needs a MySQL 8 server: MYSQL_HOST/PORT/USER/PASSWORD (default 127.0.0.1,
-# 3306, root, probe — `bb test:services up`). MYSQL_DB is created and dropped.
+# Needs a MySQL 8 server: MYSQL_HOST/PORT/USER/PASSWORD, defaulting to what
+# `bb test:services up` starts. MYSQL_DB is created and dropped.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 . "$REPO_ROOT/scripts/lib/log-excerpt.sh"
 . "$REPO_ROOT/scripts/lib/smoke-worktree.sh"
+. "$REPO_ROOT/scripts/lib/app-smoke.sh"
 
 fail() { echo; echo "MYSQL SMOKE FAILURE: $*"; exit 1; }
 ok()   { echo "  ok — $*"; }
 
-export MYSQL_HOST="${MYSQL_HOST:-127.0.0.1}" MYSQL_PORT="${MYSQL_PORT:-3306}"
-export MYSQL_USER="${MYSQL_USER:-root}" MYSQL_PASSWORD="${MYSQL_PASSWORD:-probe}"
+export MYSQL_HOST="${MYSQL_HOST:-127.0.0.1}" MYSQL_PORT="${MYSQL_PORT:-${WAGOE_TEST_MYSQL_PORT:-3306}}"
+export MYSQL_USER="${MYSQL_USER:-root}" MYSQL_PASSWORD="${MYSQL_PASSWORD:-${WAGOE_TEST_MYSQL_PASSWORD:-probe}}"
 export MYSQL_DB="${MYSQL_DB:-wagoe_smoke_$$}"
 export JWT_SECRET="mysql-smoke-secret-minimum-32-characters"
 export WAG_ENV=dev
@@ -27,9 +28,22 @@ export WAGOE_SCAFFOLDER_ROOT="$REPO_ROOT/libs/scaffolder"
 WORK=$(mktemp -d)
 LOG="$WORK/app.log"
 APP_PID=""
+# The mysql client where there is one (CI runners have it); else a JVM, on the
+# driver versions the repo pins.
 mysql_exec() {
-  clojure -Sdeps '{:deps {com.mysql/mysql-connector-j {:mvn/version "26.7.0"} com.github.seancorfield/next.jdbc {:mvn/version "1.3.1118"}}}' \
-    -M -e "(require '[next.jdbc :as j]) (j/execute! (j/get-datasource {:dbtype \"mysql\" :host \"$MYSQL_HOST\" :port $MYSQL_PORT :user \"$MYSQL_USER\" :password \"$MYSQL_PASSWORD\"}) [\"$1\"])" >/dev/null
+  if command -v mysql >/dev/null; then
+    MYSQL_PWD="$MYSQL_PASSWORD" mysql -h"$MYSQL_HOST" -P"$MYSQL_PORT" -u"$MYSQL_USER" -e "$1"
+  else
+    local v
+    v=$(grep -oE '(com\.mysql/mysql-connector-j|com\.github\.seancorfield/next\.jdbc) +\{:mvn/version "[^"]+"\}' "$REPO_ROOT/deps.edn" | sort -u | tr '\n' ' ')
+    (cd "$WORK" && clojure -Sdeps "{:deps {$v}}" -M -e "(require '[next.jdbc :as j]) (j/execute! (j/get-datasource {:dbtype \"mysql\" :host \"$MYSQL_HOST\" :port $MYSQL_PORT :user \"$MYSQL_USER\" :password \"$MYSQL_PASSWORD\"}) [\"$1\"])" >/dev/null)
+  fi
+}
+# Run "$@" with its output in $1; on failure show it and stop with $2.
+step() {
+  local log=$1 msg=$2
+  shift 2
+  "$@" >>"$log" 2>&1 || { log_excerpt "$log" 20; fail "$msg"; }
 }
 # shellcheck disable=SC2317
 cleanup() {
@@ -47,23 +61,18 @@ wagoe() {
 # ── 1. generate ─────────────────────────────────────────────────────────────
 echo "[1/5] wagoe new, MySQL, admin, workflow, events, scaffold"
 cd "$WORK"
-wagoe new smoke --skip-git >"$WORK/new.log" 2>&1 || { log_excerpt "$WORK/new.log" 20; fail "wagoe new"; }
+step "$WORK/new.log" "wagoe new" wagoe new smoke --skip-git
 pin_to_worktree "$WORK/smoke" "$REPO_ROOT"
 cd "$WORK/smoke"
-bb setup --database mysql --admin-ui true </dev/null >"$WORK/setup.log" 2>&1 \
-  || { log_excerpt "$WORK/setup.log" 20; fail "bb setup --database mysql"; }
-for m in workflow events; do
-  wagoe add "$m" >"$WORK/add-$m.log" 2>&1 || { log_excerpt "$WORK/add-$m.log" 20; fail "wagoe add $m"; }
-done
-bb scaffold generate --module-name invoice --entity Invoice --field number:string:required \
-  --field kind:enum:values=standard,credit:required:default=standard \
-  --workflow 'status:draft>sent>paid' >"$WORK/scaffold.log" 2>&1 \
-  || { log_excerpt "$WORK/scaffold.log" 20; fail "bb scaffold generate"; }
-bb scaffold entity --module-name invoice --entity InvoiceLine --belongs-to invoice \
-  --field qty:int:required >>"$WORK/scaffold.log" 2>&1 \
-  || { log_excerpt "$WORK/scaffold.log" 20; fail "bb scaffold entity --belongs-to"; }
-bb scaffold integrate invoice >>"$WORK/scaffold.log" 2>&1 \
-  || { log_excerpt "$WORK/scaffold.log" 20; fail "bb scaffold integrate"; }
+step "$WORK/setup.log" "bb setup --database mysql" bb setup --database mysql --admin-ui true </dev/null
+step "$WORK/add.log" "wagoe add workflow" wagoe add workflow
+step "$WORK/add.log" "wagoe add events" wagoe add events
+step "$WORK/scaffold.log" "bb scaffold generate" bb scaffold generate --module-name invoice --entity Invoice \
+  --field number:string:required --field kind:enum:values=standard,credit:required:default=standard \
+  --workflow 'status:draft>sent>paid'
+step "$WORK/scaffold.log" "bb scaffold entity --belongs-to" bb scaffold entity --module-name invoice \
+  --entity InvoiceLine --belongs-to invoice --field qty:int:required
+step "$WORK/scaffold.log" "bb scaffold integrate" bb scaffold integrate invoice
 ok "generated against this checkout"
 
 # ── 2. boot ─────────────────────────────────────────────────────────────────
@@ -71,24 +80,15 @@ echo "[2/5] boot on MySQL"
 mysql_exec "CREATE DATABASE $MYSQL_DB"
 HTTP_PORT=3301 clojure -M:run >"$LOG" 2>&1 &
 APP_PID=$!
-PORT=""
-for _ in $(seq 1 120); do
-  PORT=$(grep -oE ':port +[0-9]{4,5}' "$LOG" 2>/dev/null | grep -oE '[0-9]{4,5}' | tail -1 || true)
-  [ -n "$PORT" ] && curl -fsS -o /dev/null "http://localhost:$PORT/health" 2>/dev/null && break
-  kill -0 "$APP_PID" 2>/dev/null || { log_excerpt "$LOG" 40; fail "the app exited during startup"; }
-  sleep 2
-done
-curl -fsS -o /dev/null "http://localhost:$PORT/health" || { log_excerpt "$LOG" 40; fail "/health never answered"; }
+wait_for_health "$LOG" 120
 B="http://localhost:$PORT"
 ok "booted; every migration applied on MySQL"
 
 PW='Smoke-pass-12345'
-printf '%s\n%s\n' "$PW" "$PW" | bb create-admin --env dev --email admin@smoke.test --name Admin \
-  >"$WORK/admin.log" 2>&1 || { log_excerpt "$WORK/admin.log" 20; fail "bb create-admin"; }
+printf '%s\n%s\n' "$PW" "$PW" | step "$WORK/admin.log" "bb create-admin" \
+  bb create-admin --env dev --email admin@smoke.test --name Admin
 grep -q "Admin user created successfully" "$WORK/admin.log" || { log_excerpt "$WORK/admin.log" 20; fail "no admin created"; }
-TOKEN=$(curl -sS -X POST -H 'Content-Type: application/json' \
-             -d "{\"email\":\"admin@smoke.test\",\"password\":\"$PW\"}" "$B/api/v1/auth/login" \
-          | grep -oE '"jwt-token":"[^"]+"' | cut -d'"' -f4 || true)
+TOKEN=$(login_token "$B" admin@smoke.test "$PW")
 [ -n "$TOKEN" ] || fail "login returned no jwt-token"
 A=(-H "Authorization: Bearer $TOKEN")
 J=(-H "Content-Type: application/json")

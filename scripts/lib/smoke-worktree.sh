@@ -21,8 +21,8 @@ pin_to_worktree() {
     # -i.bak, not -i: BSD sed (macOS) takes the suffix as a required argument.
     sed -E -i.bak "s|com\.wagoe/${art}([[:space:]]+)\{:mvn/version \"[^\"]+\"\}|com.wagoe/${art}\1{:local/root \"${d%/}\"}|g" \
       "$dir/deps.edn" "$dir/bb.edn"
-    rm -f "$dir/deps.edn.bak" "$dir/bb.edn.bak"
   done
+  rm -f "$dir/deps.edn.bak" "$dir/bb.edn.bak"
   for f in deps.edn bb.edn; do
     still=$(grep -oE "com\.wagoe/[a-z0-9-]+[[:space:]]*\{:mvn/version" "$dir/$f" || true)
     if [ -n "$still" ]; then

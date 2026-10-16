@@ -1049,7 +1049,7 @@ jobs:
   mysql-smoke:
     name: MySQL Smoke
     runs-on: ubuntu-latest
-    needs: changes
+    needs: [warm-deps, changes]
     if: needs.changes.outputs.code == 'true'
     services:
       mysql:
@@ -1067,17 +1067,16 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      # bb too: the generated project is set up and scaffolded with it.
-      - name: Setup Java
-        uses: actions/setup-java@v5
+      # The shared cache: the generated app's deps are :local/root into libs/.
+      - name: Setup Clojure + warm deps
+        uses: ./.github/actions/clojure-deps
         with:
-          distribution: temurin
-          java-version: "21"
+          aliases: "-"
 
-      - name: Setup Clojure
+      # The generated project is set up and scaffolded with bb.
+      - name: Setup bb
         uses: DeLaGuardo/setup-clojure@13.6.1
         with:
-          cli: 1.12.6.1673
           bb: latest
 
       - name: Run MySQL smoke

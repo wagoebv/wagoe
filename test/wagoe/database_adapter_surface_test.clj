@@ -396,3 +396,12 @@
             (jdbc/execute! ds ["DROP TABLE IF EXISTS admin_types"])
             (factory/close-db-context! ctx))))
       (println "  note: MySQL not reachable — column_type introspection unverified"))))
+
+(deftest ^:unit only-mysql-decodes-what-it-reads
+  ;; Its DATETIME arrives zone-less; it was written in UTC (BOU-653).
+  (let [decode (protocols/value-decoder (mysql/new-adapter))
+        ldt    (java.time.LocalDateTime/of 2026 10 16 6 8 12)]
+    (is (= (java.time.Instant/parse "2026-10-16T06:08:12Z") (decode ldt)))
+    (is (= "text" (decode "text")) "anything else passes through"))
+  (doseq [make [h2/new-adapter postgresql/new-adapter sqlite/new-adapter]]
+    (is (nil? (protocols/value-decoder (make))) "no decoder, so no per-row work")))

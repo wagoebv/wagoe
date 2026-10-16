@@ -93,6 +93,14 @@
     (into [sql] (map #(protocols/param->db adapter %)) params)
     query))
 
+(defn- decode-rows
+  "`rows` with each value as the engine's adapter decodes it, where it does."
+  [adapter rows]
+  (if-let [decode (and (instance? wagoe.platform.ports.database.ResultDecoder adapter)
+                       (protocols/value-decoder adapter))]
+    (mapv #(update-vals % decode) rows)
+    rows))
+
 (defn- prepare-sql-query
   "Normalize supported query inputs into a JDBC-ready `[sql & params]` vector."
   [ctx query]
@@ -231,8 +239,9 @@
       ;; Side effect: database I/O
       ;; Kebab-case builder converts column names once per result set —
       ;; a per-row snake->kebab map rebuild would double result-processing cost.
-      (let [result (jdbc/execute! (current-datasource ctx) sql-query
-                                  {:builder-fn rs/as-unqualified-kebab-maps})
+      (let [result (decode-rows (:adapter ctx)
+                                (jdbc/execute! (current-datasource ctx) sql-query
+                                               {:builder-fn rs/as-unqualified-kebab-maps}))
             duration (- (System/currentTimeMillis) start-time)
             success-details (merge operation-details
                                    {:duration-ms duration

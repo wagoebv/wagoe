@@ -41,6 +41,12 @@
       (instance? Instant v)  (LocalDateTime/ofInstant v ZoneOffset/UTC)
       :else                  v)))
 
+(defn db->value
+  "A DATETIME as the UTC Instant it was written as: the driver returns it
+   without its zone, so JSON showed UTC as local time (BOU-653)."
+  [value]
+  (if (instance? LocalDateTime value) (.toInstant ^LocalDateTime value ZoneOffset/UTC) value))
+
 (defn session-statements
   "Strict mode, UTC, and UTF-8. Each runs on its own — see
    common.adapter/run-session-statements!."
