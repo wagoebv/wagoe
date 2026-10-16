@@ -86,7 +86,7 @@
                      value))
                  query-map))
 
-(defn- encode-params
+(defn encode-params
   "`[sql & params]` with each param as the engine takes it (BOU-648)."
   [adapter [sql & params :as query]]
   (if (instance? wagoe.platform.ports.database.ParamEncoder adapter)

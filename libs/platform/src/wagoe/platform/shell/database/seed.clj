@@ -5,7 +5,10 @@
    `wagoe.platform.core.database.seed`. This namespace owns the I/O: reading the
    file, acquiring the datasource, and executing the inserts."
   (:require [wagoe.platform.core.database.seed :as core-seed]
+            [wagoe.platform.shell.adapters.database.common.execution :as execution]
             [wagoe.platform.shell.adapters.database.config :as db-config]
+            [wagoe.platform.shell.adapters.database.factory :as factory]
+            [wagoe.platform.ports.database :as db-ports]
             [clojure.edn :as edn]
             [clojure.java.io :as io]
             [clojure.string :as str]
@@ -44,12 +47,13 @@
                    :message (str "Seed file is not valid EDN: " (ex-message e))}})))))
 
 (defn- insert-table!
-  "Inserts one table's rows inside the caller's transaction. Returns the count."
-  [tx {:keys [table rows]}]
-  (let [stmt (sql/format {:insert-into (keyword table)
-                          :values      rows})]
-    (jdbc/execute! tx stmt)
-    (count rows)))
+  "Inserts one table's rows inside the caller's transaction, each value encoded
+   as `adapter`'s engine takes it: MySQL refuses an ISO instant string. Returns
+   the count."
+  [tx adapter {:keys [table rows]}]
+  (jdbc/execute! tx (execution/encode-params adapter (sql/format {:insert-into (keyword table)
+                                                                  :values      rows})))
+  (count rows))
 
 (defn hook-summary
   "The lines the seeder prints for what hook `k` returned: a string or strings
@@ -98,14 +102,18 @@
   "{:columns #{name} :uuid-id? bool} of `table`, or nil when the database does
    not know it. H2 keeps unquoted names upper-case, so that spelling is asked
    for too."
-  [^Connection c table]
+  [^Connection c adapter table]
   (let [md     (.getMetaData c)
         catalog (try (.getCatalog c) (catch Exception _ nil))
         schema (try (.getSchema c) (catch Exception _ nil))
         lc     #(some-> ^String % str/lower-case)
+        ;; Where the engine has no uuid type (MySQL: CHAR(36)), the adapter's.
+        uuid   (lc (db-ports/column-type adapter :uuid))
+        type-of #(let [t (lc (.getString ^ResultSet % "TYPE_NAME"))]
+                   (if (#{t (str t "(" (.getInt ^ResultSet % "COLUMN_SIZE") ")")} uuid) "uuid" t))
         cols   (fn [t] (into {} (metadata-rows (.getColumns md catalog schema t "%")
                                                #(vector (lc (.getString ^ResultSet % "COLUMN_NAME"))
-                                                        (lc (.getString ^ResultSet % "TYPE_NAME"))))))
+                                                        (type-of %)))))
         [t columns] (some #(let [c (cols %)] (when (seq c) [% c])) [table (str/upper-case table)])]
     (when t
       (let [pk (set (metadata-rows (.getPrimaryKeys md catalog schema t)
@@ -137,20 +145,21 @@
     {:error err}
     (try
       (jdbc/with-transaction [tx ds]
-        (let [tables   (into {} (keep (fn [[t _]]
+        (let [adapter  (factory/adapter-for (factory/engine-of tx))
+              tables   (into {} (keep (fn [[t _]]
                                         (let [n (core-seed/table->name t)]
-                                          (some->> (table-info tx n) (vector n)))))
+                                          (some->> (table-info tx adapter n) (vector n)))))
                              (core-seed/entries data))
               resolved (core-seed/resolve-seed data {:tables tables
                                                      :now    (type-conversion/instant->string (Instant/now))
                                                      :new-id #(str (UUID/randomUUID))})]
           (if-let [err (:error resolved)]
             {:error err}
-            (let [plan   (core-seed/seed-plan (:ok resolved))
-                  detail (mapv (fn [{:keys [table] :as entry}]
-                                 {:table table
-                                  :rows  (insert-table! tx entry)})
-                               plan)]
+            (let [plan    (core-seed/seed-plan (:ok resolved))
+                  detail  (mapv (fn [{:keys [table] :as entry}]
+                                  {:table table
+                                   :rows  (insert-table! tx adapter entry)})
+                                plan)]
               {:ok {:tables   (count detail)
                     :rows     (reduce + (map :rows detail))
                     :detail   detail

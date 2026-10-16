@@ -121,7 +121,7 @@
        (try
          (with-open [conn (.getConnection ds)]
            (let [md (.getMetaData conn)
-                 rs (.getTables md nil nil "%" (into-array String ["TABLE"]))]
+                 rs (.getTables md (.getCatalog conn) nil "%" (into-array String ["TABLE"]))]
              (loop [acc []]
                (if (.next rs)
                  (recur (conj acc {:name (.getString rs "TABLE_NAME")}))

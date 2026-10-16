@@ -13,6 +13,7 @@
             [migratus.core :as migratus]
             [next.jdbc :as jdbc]
             [next.jdbc.result-set]
+            [wagoe.platform.database :as database]
             [wagoe.platform.shell.database.migrations :as mig]
             [wagoe.platform.shell.database.timestamp-tz :as timestamp-tz]
             [wagoe.push.ports :as push-ports]
@@ -48,7 +49,7 @@
           (is (contains? tables "push_analytics_events")))
 
         (testing "and the device store can query one"
-          (let [store (push-persistence/->DeviceTokenStore ds)]
+          (let [store (push-persistence/->DeviceTokenStore (database/context-of ds))]
             (is (= [] (push-ports/get-user-devices store (UUID/randomUUID)))
                 "the table exists but the store cannot read it")))
 

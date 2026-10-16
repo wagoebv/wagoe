@@ -13,8 +13,7 @@
 (use-fixtures :each
   (fn [f]
     (registry/clear-registry!)
-    (binding [pt/*db* (pt/create-test-db)]
-      (f))))
+    (pt/with-test-db f)))
 
 ;; --- deliver-to-platform! ---
 

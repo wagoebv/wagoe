@@ -219,7 +219,7 @@
     (let [md (.getMetaData c)]
       (boolean
        (some (fn [t]
-               (with-open [rs (.getIndexInfo md nil nil t false false)]
+               (with-open [rs (.getIndexInfo md (.getCatalog c) nil t false false)]
                  (loop []
                    (when (.next rs)
                      (or (= index (some-> (.getString rs "INDEX_NAME") str/lower-case)) (recur))))))

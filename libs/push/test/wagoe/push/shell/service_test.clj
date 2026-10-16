@@ -11,8 +11,7 @@
 (use-fixtures :each
   (fn [f]
     (registry/clear-registry!)
-    (binding [pt/*db* (pt/create-test-db)]
-      (f))))
+    (pt/with-test-db f)))
 
 (deftest ^:integration send-push-enqueues-job
   (registry/register-push!

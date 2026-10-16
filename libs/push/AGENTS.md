@@ -13,7 +13,7 @@ Multi-platform push notification delivery for FCM (Firebase) and APNs (Apple). D
 | `wagoe.push.ports` | Ports | IPushService, IFCMProvider, IAPNsProvider, IDeviceTokenStore, IPushAnalyticsStore |
 | `wagoe.push.schema` | Schema | Malli schemas for all domain types |
 | `wagoe.push.shell.service` | Shell | IPushService impl, HMAC generation/verification |
-| `wagoe.push.shell.persistence` | Shell | next.jdbc/HoneySQL stores for devices + analytics |
+| `wagoe.push.shell.persistence` | Shell | HoneySQL stores for devices + analytics, on a db-context via `wagoe.platform.database` |
 | `wagoe.push.shell.adapters.mock` | Shell | Mock FCM + APNs (dev/test) |
 | `wagoe.push.shell.adapters.fcm` | Shell | Google FCM v1 API adapter |
 | `wagoe.push.shell.adapters.apns` | Shell | Apple APNs HTTP/2 adapter |
@@ -298,7 +298,7 @@ block, not an Integrant key.
 4. **Template variables** — `{{var}}` syntax; missing vars left as-is (not stripped)
 5. **Locale fallback** — requested → `:en` → first available
 6. **`push_send_log` is legacy** — migration creates the table but current persistence shell writes to `push_analytics_events` only
-7. **Upsert strategy** — persistence uses INSERT + catch `SQLIntegrityConstraintViolationException` + UPDATE for H2+PostgreSQL compat (avoids dialect-specific `ON CONFLICT`)
+7. **Upsert strategy** — persistence uses INSERT, catches the `{:type :conflict :constraint :unique}` the execution layer throws, then UPDATEs (no dialect-specific `ON CONFLICT`)
 8. **FCM "multicast" is concurrent single sends** — `fcm-send-multicast!` sends one per-token request via `sendAsync`, not FCM batch API
 9. **APNs JWT is minted per call** — `make-jwt` runs on every `apns-send!` and `apns-send-batch!` invocation; no caching. Fine for normal throughput; at broadcast scale (thousands of tokens) this becomes a known bottleneck — JWT caching with a ~45-min expiry window is the fix
 10. **Registry lives in the shell** — the definition registry (`defpush`, `register-push!`, `get-push`, `list-pushes`, `clear-registry!`) is in `wagoe.push.shell.registry`; `wagoe.push.core.notification` is pure (rendering only). Call `registry/clear-registry!` in test setup when testing notification lookup.
@@ -334,6 +334,6 @@ block, not an Integrant key.
 ```bash
 clojure -M:test :push                              # All
 clojure -M:test :push --focus-meta :unit            # Unit
-clojure -M:test :push --focus-meta :contract        # Contract (H2)
+clojure -M:test :push --focus-meta :contract        # Contract (engine from WAGOE_TEST_DB, H2 by default)
 clojure -M:test :push --focus-meta :integration     # Integration
 ```
