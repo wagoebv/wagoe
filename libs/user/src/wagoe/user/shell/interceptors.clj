@@ -537,7 +537,7 @@
                                        :interface-type interface-type}))))})
 
 (def deactivate-user-account
-  "Deactivates (soft deletes) the user account."
+  "Deactivates the user account."
   {:name ::deactivate-user-account
    :enter (fn [context]
             (let [user-id (:user-id context)

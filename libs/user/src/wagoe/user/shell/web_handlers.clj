@@ -756,8 +756,7 @@
             (let [uuid (UUID/fromString id-str)
                   user (user-ports/get-user-by-id user-service uuid)]
               (when user
-                ;; Reactivate by updating with active=true and clearing deleted_at
-                (user-ports/update-user-profile user-service (assoc user :active true :deleted_at nil)))))
+                (user-ports/update-user-profile user-service (assoc user :active true)))))
 
           "delete"
           (doseq [id-str ids]
@@ -968,7 +967,7 @@
 (defn delete-user-htmx-handler
   "HTMX handler for deactivating a user (DELETE /web/users/:id).
    
-   Performs soft delete via deactivate-user.
+   The user stays listed, inactive (BOU-681).
    
    Args:
      user-service: User service instance

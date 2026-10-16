@@ -19,6 +19,15 @@
     (.isBefore (:expires-at session) current-time) {:valid? false :reason :expired}
     :else {:valid? true}))
 
+;; A session is only as good as its user: deactivation refuses it the way
+;; login is refused (BOU-668).
+(defn session-user-refusal
+  "Why `user` (nil when gone) may not use a session, or nil."
+  [user]
+  (cond
+    (nil? user) :user-not-found
+    (not (:active user)) :user-inactive))
+
 ;; Session creation helpers  
 (defn generate-session-token
   "Build a deterministic session token from a timestamp and nonce."

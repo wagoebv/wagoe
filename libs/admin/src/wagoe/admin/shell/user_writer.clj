@@ -24,11 +24,8 @@
 (defrecord UserWriter [user-service]
   ports/IEntityWriter
   (update-record! [_ id changes]
-    (let [changes (user-changes changes)
-          user    (user-ports/update-user-profile
-                   user-service (assoc changes :id (type-conversion/string->uuid id)))]
-      ;; The user service soft-deletes a deactivated user.
-      (if (false? (:active changes)) :removed user)))
+    (user-ports/update-user-profile
+     user-service (assoc (user-changes changes) :id (type-conversion/string->uuid id))))
 
   (delete-record! [_ id {:keys [soft?]}]
     (if soft?

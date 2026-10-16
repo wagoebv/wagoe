@@ -137,9 +137,10 @@
   ;; Throws :user-not-found, :validation-error, :business-rule-violation.
 
   (deactivate-user [this user-id])
-  ;; Soft-deletes after checking deletion policy and ends the user's sessions.
-  ;; Returns boolean. Throws :user-not-found, :deletion-not-allowed, and
-  ;; :conflict for your own or the last admin's account.
+  ;; Sets :active false and ends the user's sessions; the user stays listed
+  ;; and can be reactivated (BOU-681). Returns boolean. Throws
+  ;; :user-not-found, :deletion-not-allowed, and :conflict for your own or the
+  ;; last admin's account.
 
   (permanently-delete-user [this user-id])
   ;; Irreversible erasure. Returns boolean.
@@ -157,9 +158,10 @@
   ;; Does not throw on a bad password — it returns the failure shape.
 
   (validate-session [this session-token])
-  ;; Returns the session with :last-accessed-at refreshed, or nil when the token
-  ;; is unknown. Throws {:type :session-invalid :reason …} for a session that
-  ;; exists but no longer validates, so middleware answers 401.
+  ;; Returns the session with :last-accessed-at refreshed and its :user (no
+  ;; :password-hash), or nil when the token is unknown. Throws
+  ;; {:type :session-invalid :reason …} for a session that exists but no longer
+  ;; validates, its user gone or inactive included, so middleware answers 401.
 
   (logout-user [this session-token])
   ;; Returns {:invalidated true :session-id …}, or {:invalidated false} when the

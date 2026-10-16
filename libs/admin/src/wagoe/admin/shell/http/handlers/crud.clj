@@ -345,9 +345,6 @@
       (if (and valid? (not refusal))
         ; Update entity and re-render detail page with success flash
         (let [updated-record updated
-              ;; A writer's update can take the record out of the list: the
-              ;; user service soft-deletes a deactivated user (BOU-665).
-              then-list?     (or then-list? (= :removed updated-record))
               permissions    (permissions/get-entity-permissions user entity-name entity-config)
               ctx             (when-not then-list?
                                 (support/build-entity-detail-opts admin-service schema-provider config entity-name entity-config updated-record request))]

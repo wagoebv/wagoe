@@ -180,10 +180,10 @@
     (testing "the audit trail recorded the registration and the update"
       (is (<= 2 (:total-count (ports/list-audit-logs svc {})))))
 
-    (testing "deactivate-user soft-deletes: gone from reads, not from the store"
+    (testing "deactivate-user keeps the user, inactive (BOU-681)"
       (is (true? (ports/deactivate-user svc user-id)))
-      (is (nil? (ports/get-user-by-email svc "ada@example.com")))
-      (is (zero? (:total-count (ports/list-users svc {})))))))
+      (is (false? (:active (ports/get-user-by-email svc "ada@example.com"))))
+      (is (= 1 (:total-count (ports/list-users svc {})))))))
 
 (deftest ^:unit sessions-survive-a-non-database-session-store
   (let [svc (memory-service)

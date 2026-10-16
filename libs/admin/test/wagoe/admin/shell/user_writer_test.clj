@@ -131,21 +131,34 @@
       (is (= "Renamed" (:name stored)))
       (is (not= 99 (:login-count stored))))))
 
-(deftest ^:integration a-deactivating-save-returns-to-the-list
-  ;; The user service soft-deletes a deactivated user, so there is no record
-  ;; left to show the form for.
+(defn- listed [{:keys [admin]} user]
+  (->> (:records (ports/list-entities admin :users {:limit 50}))
+       (filter #(= (str (:id user)) (str (:id %))))
+       first))
+
+(deftest ^:integration a-deactivated-user-stays-listed-and-can-be-reactivated
+  ;; Deactivation sets active only, so the user stays in the list (BOU-681).
   (let [{:keys [admin schema config] :as sys} (system)
         boss    (user! sys "boss@example.com" :admin)
         u       (user! sys "u@example.com" :user)
         handler (crud/update-entity-handler admin schema config)
-        resp    (handler {:request-method :put
-                          :uri            (str "/web/admin/users/" (:id u))
-                          :user           boss
-                          :path-params    {:entity "users" :id (str (:id u))}
-                          :form-params    {"active" "false"}})]
+        save    #(handler {:request-method :put
+                           :uri            (str "/web/admin/users/" (:id u))
+                           :user           boss
+                           :path-params    {:entity "users" :id (str (:id u))}
+                           :form-params    {"active" %}})
+        resp    (save "false")]
     (is (= 200 (:status resp)))
-    (is (= "/web/admin/users" (get-in resp [:headers "HX-Redirect"])))
-    (is (zero? (live-sessions sys u)))))
+    (is (nil? (get-in resp [:headers "HX-Redirect"])) "the form again, not the list")
+    (is (zero? (live-sessions sys u)))
+    (is (false? (:active (listed sys u))) "listed, as inactive")
+    (testing "a delete deactivates too"
+      (let [u2 (user! sys "u2@example.com" :user)]
+        (is (true? (ports/delete-entity admin :users (:id u2))))
+        (is (false? (:active (listed sys u2))))))
+    (testing "reactivated from the list"
+      (is (= 200 (:status (save "true"))))
+      (is (true? (:active (listed sys u)))))))
 
 (deftest ^:integration a-refused-save-shows-the-form-with-409
   (let [{:keys [admin schema config] :as sys} (system)

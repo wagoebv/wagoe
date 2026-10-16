@@ -70,7 +70,8 @@ The module carries **two** token mechanisms; know which you are using:
 - **Stateless HS256 JWTs** (`auth/create-jwt-token` / `validate-jwt-token`) are
   **not stored** and therefore **cannot be revoked before expiry** — a logout
   does not invalidate an outstanding JWT. Use only for short-lived, stateless
-  cases where that trade-off is acceptable.
+  cases where that trade-off is acceptable. The middleware does read the
+  token's user, so a deactivated user's JWT is refused (BOU-668).
 
 Signing keys:
 
