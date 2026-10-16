@@ -33,6 +33,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **Live htmx updates over server-sent events** (BOU-464): `sse/sse-handler` streams `sse/push-fragment!` to `sse-swap`
   elements; the htmx `sse` extension ships in every bundle. Custom `IRealtimeService`s need `connect-identified`.
+- **Transactional outbox for events** (BOU-448): `publish-in-tx!` commits an event with your transaction; a relay
+  publishes it at least once. Opt in with `:outbox {}` under `:wagoe/events`.
 - **MySQL 8 is supported** (BOU-574): a generated app boots, migrates and serves on it.
   Switch with `bb setup --database mysql`; tenancy needs PostgreSQL, push and seeds wait on BOU-657.
 - **`bb check:vulns`** (BOU-451): known vulnerabilities in every `deps.edn`, aliases included, from GitHub's advisory

@@ -234,6 +234,9 @@
     ;; The event bus is infrastructure: every service that runs needs one,
     ;; whichever module it is running.
     :wagoe/events
+    ;; Any service may write an event in its transaction; `:wagoe/events-relay`
+    ;; is what `service events` claims (BOU-448).
+    :wagoe/events-outbox
     :wagoe/http-handler :wagoe/http-server :wagoe/dashboard
     ;; Emitted only when running as a service, and by definition part of it.
     :wagoe/rpc-server})
@@ -254,9 +257,11 @@
   ;; it refuses to assemble under this profile (BOU-477).
   ;; Merged, not replaced: payments has no default provider (BOU-564), and
   ;; the test profile's mock is the one it may run.
-  (reduce (fn [cfg k] (update-in cfg [:active k] merge {:enabled? true}))
-          (test-config)
-          (remove modules/dev-only-modules (keys modules/framework-modules))))
+  ;; The outbox is opt-in, so it is switched on to be seen at all (BOU-448).
+  (-> (reduce (fn [cfg k] (update-in cfg [:active k] merge {:enabled? true}))
+              (test-config)
+              (remove modules/dev-only-modules (keys modules/framework-modules)))
+      (assoc-in [:active :wagoe/events :outbox] {})))
 
 (deftest ^:integration no-module-component-is-mistaken-for-the-platform
   (let [config    (everything-enabled-config)
@@ -457,3 +462,11 @@
           (is (contains? cfg (:component rpc))
               (str service " offers " (:protocol rpc) " on " (:component rpc)
                    ", which its own selection does not build")))))))
+
+(deftest ^:integration a-service-may-write-to-the-outbox-but-does-not-relay-it
+  ;; One place relays the outbox; any service may write to it (BOU-448).
+  (let [config  (everything-enabled-config)
+        [cfg _] (main/service-ig-config config #{:push})]
+    (is (contains? cfg :wagoe/events-outbox))
+    (is (not (contains? cfg :wagoe/events-relay)))
+    (is (contains? (first (main/service-ig-config config #{:events})) :wagoe/events-relay))))

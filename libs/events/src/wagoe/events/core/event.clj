@@ -45,6 +45,11 @@
     (str/blank? (name topic))
     "Topic must not be blank"))
 
+(defn topic-name
+  "`topic` as a string, namespace included: `:orders/placed` -> \"orders/placed\"."
+  [topic]
+  (if (keyword? topic) (subs (str topic) 1) (str topic)))
+
 (defn event
   "Build an event of `type` from `source` carrying `payload`.
 
