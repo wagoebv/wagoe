@@ -13,11 +13,12 @@
 
 (defn- event-text
   "Fragments render here, per subscriber, so markers resolve in that
-   subscriber's locale. Anything else goes out as JSON, named by its :type."
+   subscriber's locale. Anything else goes out as JSON, named by its :type;
+   untyped JSON must not land on \"message\", which `sse-swap` swaps as HTML."
   [t-fn {:keys [type event fragment] :as message}]
   (if (= :fragment type)
-    (sse/format-event (or event "message") (i18n/render fragment t-fn))
-    (sse/format-event (if type (name type) "message") (json/generate-string message))))
+    (sse/format-event (if event (name event) "message") (i18n/render fragment t-fn))
+    (sse/format-event (if type (name type) "realtime") (json/generate-string message))))
 
 (defrecord SseConnection [connection-id ^BlockingQueue queue open-state t-fn]
   ports/IWebSocketConnection

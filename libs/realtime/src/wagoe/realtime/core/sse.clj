@@ -11,10 +11,11 @@
 
 (defn format-event
   "One SSE event. Each line of `data` gets its own `data:` field, as the spec
-   requires; the browser joins them back with newlines."
+   requires; the browser joins them back with newlines. A lone CR ends a line
+   in SSE too, so it splits here rather than inject a field."
   [event data]
   (str "event: " event "\n"
-       (->> (str/split-lines (str data))
+       (->> (str/split (str data) #"\r\n|\r|\n")
             (map #(str "data: " % "\n"))
             (apply str))
        "\n"))

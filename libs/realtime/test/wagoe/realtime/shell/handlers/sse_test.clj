@@ -133,6 +133,14 @@
     (is (not= ::timeout (deref done 2000 ::timeout)))
     (is (= 200 (:status (handler req))) "a closed stream frees its slot")))
 
+(deftest ^:unit event-names
+  (let [conn (sse-adapter/create-sse-connection (random-uuid) nil)]
+    (ports/send-message conn {:type :fragment :event :badge :fragment "a"})
+    (ports/send-message conn {:payload 1})
+    (is (str/starts-with? (sse-adapter/next-event conn 10) "event: badge\n"))
+    (is (str/starts-with? (sse-adapter/next-event conn 10) "event: realtime\n")
+        "untyped JSON stays off the event sse-swap renders as HTML")))
+
 (deftest ^:unit a-client-that-stops-reading-is-dropped
   (let [conn (sse-adapter/create-sse-connection (random-uuid) nil :queue-size 1)]
     (ports/send-message conn {:type :fragment :fragment "a"})

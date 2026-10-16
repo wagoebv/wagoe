@@ -5,7 +5,9 @@
 
 (deftest ^:unit format-event-splits-lines
   (is (= "event: row\ndata: <tr>\ndata: </tr>\n\n" (sse/format-event "row" "<tr>\n</tr>")))
-  (is (= "event: message\ndata: x\n\n" (sse/format-event "message" "x"))))
+  (is (= "event: message\ndata: x\n\n" (sse/format-event "message" "x")))
+  (is (= "event: row\ndata: a\ndata: event: b\n\n" (sse/format-event "row" "a\revent: b"))
+      "a lone CR cannot start a field of its own"))
 
 (deftest ^:unit user-identity
   (let [id (random-uuid)]
