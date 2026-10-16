@@ -40,6 +40,5 @@
 (defn index-down
   "Migratus entry point."
   [config]
-  (let [conn (db/migration-connectable config)]
-    (when (= :postgresql (db/engine-of conn))
-      (jdbc/execute! conn [(str "DROP INDEX IF EXISTS " index-name)]))))
+  (db/drop-index-if-exists! (db/context-of (db/migration-connectable config))
+                            index-name :search_documents))

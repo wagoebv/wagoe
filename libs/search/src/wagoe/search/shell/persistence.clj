@@ -83,18 +83,22 @@
     :installed true
     :unusable  false
     (and (trigram/installed? datasource)
-         (or (compare-and-set! state nil :installed) (= :installed @state)))))
-
-(defn- undefined-function?
-  "pg_trgm installed in a schema off the search_path (BOU-676)."
-  [^java.sql.SQLException e]
-  (= "42883" (.getSQLState e)))
+         (= :installed (swap! state #(or % :installed))))))
 
 (defn- trigram-suggest
-  [datasource threshold sql-vec]
-  (jdbc/with-transaction [tx datasource]
-    (jdbc/execute! tx (qry/build-trigram-threshold-sql threshold))
-    (jdbc/execute! tx sql-vec {:builder-fn rs/as-unqualified-lower-maps})))
+  "Rows suggested by pg_trgm, or nil, and `state` :unusable, when PostgreSQL
+   cannot resolve its operator: pg_trgm in a schema off the search_path (BOU-676)."
+  [datasource state threshold sql-vec]
+  (try
+    (jdbc/with-transaction [tx datasource]
+      (jdbc/execute! tx (qry/build-trigram-threshold-sql threshold))
+      (jdbc/execute! tx sql-vec {:builder-fn rs/as-unqualified-lower-maps}))
+    (catch java.sql.SQLException e
+      (when-not (= "42883" (.getSQLState e)) (throw e))
+      (log/warn "pg_trgm is installed but not on the search_path; suggestions use LIKE"
+                {:error (.getMessage e)})
+      (reset! state :unusable)
+      nil)))
 
 ;; =============================================================================
 ;; ISearchStore implementation
@@ -183,23 +187,14 @@
            :or   {limit 5 threshold 0.3}} opts
           idx     (kw->str index-id)
           et      (kw->str entity-type)
-          like    #(jdbc/execute! datasource
-                                  (if full-text?
-                                    (qry/build-postgres-like-suggest-sql idx et query limit filters)
-                                    (qry/build-fallback-suggest-sql idx et query limit filters))
-                                  {:builder-fn rs/as-unqualified-lower-maps})
-          rows    (if (and full-text? (trigram? trigram-state datasource))
-                    (try
-                      (trigram-suggest datasource threshold
-                                       (qry/build-postgres-suggest-sql idx et query limit filters))
-                      (catch java.sql.SQLException e
-                        (if (undefined-function? e)
-                          (do (log/warn "pg_trgm is installed but not on the search_path; suggestions use LIKE"
-                                        {:error (.getMessage e)})
-                              (reset! trigram-state :unusable)
-                              (like))
-                          (throw e))))
-                    (like))]
+          rows    (or (when (and full-text? (trigram? trigram-state datasource))
+                        (trigram-suggest datasource trigram-state threshold
+                                         (qry/build-postgres-suggest-sql idx et query limit filters)))
+                      (jdbc/execute! datasource
+                                     (if full-text?
+                                       (qry/build-postgres-like-suggest-sql idx et query limit filters)
+                                       (qry/build-fallback-suggest-sql idx et query limit filters))
+                                     {:builder-fn rs/as-unqualified-lower-maps}))]
       (mapv db->result rows)))
 
   (count-documents [_ index-id]

@@ -212,10 +212,12 @@
 ;; Fallback SQL builders (H2 / SQLite)
 ;; =============================================================================
 
+(def ^:private like-clause "LOWER(content_all) LIKE ? ESCAPE '!'")
+
 (defn- like-pattern
-  "A LIKE pattern containing `query`, lowercased. % and _ in the query match
-   themselves, escaped with ! for the ESCAPE '!' every LIKE here carries; not
-   backslash, which MySQL string literals would need doubled (BOU-676)."
+  "A LIKE pattern containing `query`, lowercased, for like-clause. % and _ in
+   the query match themselves, escaped with !; not backslash, which MySQL
+   string literals would need doubled (BOU-676)."
   [query]
   (str "%" (str/replace (str/lower-case (or (sanitize-query query) "")) #"[!%_]" "!$0") "%"))
 
@@ -242,7 +244,7 @@
                  "  NULL AS snippet "
                  "FROM search_documents "
                  "WHERE index_id = ? AND entity_type = ? "
-                 "  AND LOWER(content_all) LIKE ? ESCAPE '!' "
+                 "  AND " like-clause " "
                  filter-sql " "
                  "ORDER BY updated_at DESC "
                  "LIMIT ? OFFSET ?")]
@@ -265,7 +267,7 @@
         sql (str "SELECT count(*) AS cnt "
                  "FROM search_documents "
                  "WHERE index_id = ? AND entity_type = ? "
-                 "  AND LOWER(content_all) LIKE ? ESCAPE '!' "
+                 "  AND " like-clause " "
                  filter-sql)]
     (into [sql index-id entity-type pattern] filter-params)))
 
@@ -278,7 +280,7 @@
                  "  NULL AS snippet "
                  "FROM search_documents d "
                  "WHERE index_id = ? AND entity_type = ? "
-                 "  AND LOWER(content_all) LIKE ? ESCAPE '!' "
+                 "  AND " like-clause " "
                  filter-sql " "
                  "ORDER BY updated_at DESC "
                  "LIMIT ?")]
