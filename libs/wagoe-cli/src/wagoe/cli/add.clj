@@ -8,11 +8,13 @@
 ;; ─── Project detection ────────────────────────────────────────────────────────
 
 (defn wagoe-project?
-  "True if dir contains a deps.edn referencing com.wagoe."
+  "True if dir contains a deps.edn depending on a Wagoe lib."
   [dir]
-  (let [f (io/file dir "deps.edn")]
-    (and (.exists f)
-         (str/includes? (slurp f) "com.wagoe"))))
+  (let [f    (io/file dir "deps.edn")
+        deps (cat/wagoe-deps f)]
+    (if (= :unreadable deps)
+      (str/includes? (slurp f) "com.wagoe")
+      (boolean (seq deps)))))
 
 ;; ─── deps.edn patching ───────────────────────────────────────────────────────
 

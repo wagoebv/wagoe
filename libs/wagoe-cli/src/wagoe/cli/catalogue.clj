@@ -17,6 +17,23 @@
   []
   @catalogue-data)
 
+(defn wagoe-deps
+  "Short names (\"core\", \"tools\") of the Wagoe libs in the :deps of EDN
+   file `f`, nil when it is missing, :unreadable when it will not parse.
+   A local checkout names them `wagoe/core {:local/root ..}` (BOU-662)."
+  [f]
+  (when (.exists (io/file f))
+    (try
+      (set (keep (fn [[lib coord]]
+                   (when (symbol? lib)
+                     (case (namespace lib)
+                       "com.wagoe" (second (re-matches #"wagoe-(.+)" (name lib)))
+                       "wagoe"     (when (and (map? coord) (:local/root coord))
+                                     (name lib))
+                       nil)))
+                 (:deps (edn/read-string (slurp f)))))
+      (catch Exception _ :unreadable))))
+
 (defn find-module
   "Find a module by name string. Returns the module map or nil."
   [module-name]

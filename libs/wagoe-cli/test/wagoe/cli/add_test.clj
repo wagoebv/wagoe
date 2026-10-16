@@ -27,6 +27,14 @@
         (make-wagoe-project! tmp)
         (is (add/wagoe-project? tmp)))
 
+      (testing "detects a project taking Wagoe from a local checkout (BOU-662)"
+        (let [local (str tmp "-local")]
+          (io/make-parents (io/file local "deps.edn"))
+          (spit (io/file local "deps.edn")
+                "{:deps {wagoe/core {:local/root \"../wagoe/libs/core\"}}}")
+          (is (add/wagoe-project? local))
+          (doseq [f (reverse (file-seq (io/file local)))] (.delete f))))
+
       (testing "returns false for non-wagoe project"
         (let [other (str tmp "-other")]
           (io/make-parents (io/file other "deps.edn"))
