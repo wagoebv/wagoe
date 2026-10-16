@@ -47,20 +47,11 @@
 ;; Service component
 ;; =============================================================================
 
-(defn- resolve-report
-  "A definition map as given, or the registered one for an id."
-  [report]
-  (if (keyword? report)
-    (or (registry/get-report report)
-        (throw (ex-info (str "Report " report " is not registered")
-                        {:type :not-found :report-id report})))
-    report))
-
 (defrecord ReportService [job-queue queue-name file-storage email-sender from]
   ports/ReportServiceProtocol
 
   (generate [_ report opts]
-    (generate (resolve-report report) opts))
+    (generate (if (keyword? report) (registry/registered-report report) report) opts))
 
   (generate-async [this report opts]
     (jobs-integration/queue-report-job! this (if (keyword? report) report (:id report)) opts))

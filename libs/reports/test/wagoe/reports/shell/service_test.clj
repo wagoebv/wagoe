@@ -115,3 +115,14 @@
   (is (= :not-found (thrown-type #(jobs-integration/process-report-job
                                    (sut/create-report-service {})
                                    {:report-id :sales :opts {}})))))
+
+(deftest ^:unit args-survive-a-json-backed-queue
+  (registry/register-report! sales)
+  (let [enqueued (atom [])
+        svc      (sut/create-report-service {:job-queue (fake-queue enqueued)})
+        _        (ports/generate-async svc :sales {:zone-id (java.time.ZoneId/of "UTC")})
+        args     (:args (second (first @enqueued)))]
+    (is (= "UTC" (get-in args [:opts :zone-id])) "a ZoneId does not encode as JSON")
+    (testing "the :db and :redis queues hand keyword values back as strings"
+      (is (:success? (jobs-integration/process-report-job
+                      svc {:report-id "sales" :opts (:opts args)}))))))

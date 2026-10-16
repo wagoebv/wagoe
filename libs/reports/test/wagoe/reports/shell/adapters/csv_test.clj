@@ -32,3 +32,9 @@
 (deftest ^:unit supports-only-csv
   (is (ports/supported-type? (sut/create-csv-generator) :csv))
   (is (not (ports/supported-type? (sut/create-csv-generator) :pdf))))
+
+(deftest ^:unit no-table-is-a-validation-error
+  (is (= :validation-error
+         (try (ports/generate! (sut/create-csv-generator) (dissoc report :sections) [{:city "x"}] {})
+              nil
+              (catch clojure.lang.ExceptionInfo e (:type (ex-data e)))))))
