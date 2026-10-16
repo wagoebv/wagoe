@@ -80,3 +80,9 @@
     (is (= :configuration-error (:type (ex-data e))))
     (is (re-find #"admin/gone\.edn" (str (ex-message e))))
     (is (re-find #"conf/test/config\.edn" (str (ex-message e))))))
+
+(deftest ^:unit wag-env-names-the-active-profile
+  (is (= :dev (sut/active-profile nil)))
+  (is (= :dev (sut/active-profile "development")))
+  (is (= :prod (sut/active-profile "production")))
+  (is (= :test (sut/active-profile " TEST "))))
