@@ -103,8 +103,7 @@
       (try
         ; Update single field
         (let [updated-record (ports/update-entity-field admin-service entity-name id field parsed-value)
-              ;; :removed has no fields: show what was saved (BOU-665).
-              new-value (if (map? updated-record) (get updated-record field) parsed-value)]
+              new-value (get updated-record field)]
 
           ; Return updated cell HTML with success indicator
           (-> (support/html-response request

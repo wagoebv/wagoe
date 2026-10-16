@@ -364,11 +364,13 @@
         (ui/submit-button [:t :user/button-update] {:loading-text [:t :user/button-update-loading]})
         ;; Show appropriate action button based on active status
         (if active?
+          ;; An update, like Reactivate: DELETE on this URL soft-deletes (BOU-681).
           [:button.button.danger
            {:type "button"
             :onclick (str "if(confirm('Are you sure you want to deactivate this user?')) {"
-                          "fetch('/web/users/" (:id user) "', {method: 'DELETE', headers: {'HX-Request': 'true'}});"
-                          "window.location.href='/web/users';"
+                          "const form = this.closest('form');"
+                          "form.querySelector('input[name=active]').checked = false;"
+                          "form.requestSubmit();"
                           "}")}
            [:t :user/button-deactivate]]
           ;; Reactivate button for inactive users - uses the same update endpoint but sets active=true
@@ -1171,6 +1173,7 @@
                   :create :success
                   :update :info
                   :delete :danger
+                  :permanent-delete :danger
                   :deactivate :warning
                   :activate :success
                   :login :info
@@ -1178,7 +1181,7 @@
                   :role-change :warning
                   :bulk-action :info
                   :neutral)]
-    (ui/badge (str/capitalize action-name) {:variant variant
+    (ui/badge (str/capitalize (str/replace action-name "-" " ")) {:variant variant
                                             :class "audit-action-badge"})))
 
 (defn result-badge
@@ -1410,6 +1413,7 @@
       [:option {:value "create" :selected (= "create" (:action filters))} [:t :common/audit-create]]
       [:option {:value "update" :selected (= "update" (:action filters))} [:t :common/audit-update]]
       [:option {:value "delete" :selected (= "delete" (:action filters))} [:t :common/audit-delete]]
+      [:option {:value "permanent-delete" :selected (= "permanent-delete" (:action filters))} [:t :common/audit-permanent-delete]]
       [:option {:value "activate" :selected (= "activate" (:action filters))} [:t :common/audit-activate]]
       [:option {:value "deactivate" :selected (= "deactivate" (:action filters))} [:t :common/audit-deactivate]]
       [:option {:value "login" :selected (= "login" (:action filters))} [:t :common/audit-login]]

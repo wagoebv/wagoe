@@ -43,16 +43,23 @@
 (def ^:private session-token "a-valid-session")
 (def ^:private session-user-id (UUID/randomUUID))
 
+(def ^:private jwt-users
+  "The users `token-for` minted a JWT for, by id: the JWT path reads them."
+  (atom {}))
+
+(defn- token-for [user]
+  (swap! jwt-users assoc (:id user) (assoc user :active true))
+  (auth-shell/create-jwt-token user 1))
+
 (def ^:private user-service
-  "Knows one session, for one admin."
+  "Knows one session, for one admin, and the JWT users."
   #_{:clj-kondo/ignore [:missing-protocol-method]}
   (reify user-ports/IUserService
+    (get-user-by-id [_ id] (get @jwt-users id))
     (validate-session [_ token]
       (when (= session-token token)
-        {:user-id session-user-id :session-token token}))
-    (get-user-by-id [_ id]
-      (when (= session-user-id id)
-        {:id id :email "session@example.com" :role :admin :active true}))))
+        {:user-id session-user-id :session-token token
+         :user {:id session-user-id :email "session@example.com" :role :admin :active true}}))))
 
 (defn- with-served-api
   "Compile the workflow API routes through the platform router and put the
@@ -77,8 +84,7 @@
 ;; =============================================================================
 
 (defn- admin-token []
-  (auth-shell/create-jwt-token
-   {:id (UUID/randomUUID) :email "admin@example.com" :role :admin} 1))
+  (token-for {:id (UUID/randomUUID) :email "admin@example.com" :role :admin}))
 
 (defn- body-data
   "The response body as data. Muuntaja encodes it, so it arrives as a stream."
@@ -143,7 +149,7 @@
                            [:user  [{:id "c" :to "c" :enabled false :reason "insufficient-permissions"}
                                     {:id "d" :to "d" :enabled false :reason "guard-rejected"}]]]]
     (testing (name role)
-      (let [token    (auth-shell/create-jwt-token {:id (UUID/randomUUID) :email "c@example.com" :role role} 1)
+      (let [token    (token-for {:id (UUID/randomUUID) :email "c@example.com" :role role})
             instance (ports/start-workflow! *service* {:workflow-id :gated :entity-type :x
                                                        :entity-id   (UUID/randomUUID)})
             uri      (str "/workflow/instances/" (:id instance))
@@ -207,8 +213,7 @@
 (deftest ^:unit a-permissioned-transition-is-refused-for-a-caller-without-the-role
   ;; The counterpart, so the admin test cannot pass by handing everyone
   ;; every role.
-  (let [token    (auth-shell/create-jwt-token
-                  {:id (UUID/randomUUID) :email "u@example.com" :role :user} 1)
+  (let [token    (token-for {:id (UUID/randomUUID) :email "u@example.com" :role :user})
         response (post (str "/workflow/instances/" (:id (new-instance)) "/transition")
                        {:transition "delivered"}
                        token)]

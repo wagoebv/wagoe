@@ -155,6 +155,17 @@
       (.invalidate-all-user-sessions session-repository (:id before)))
     result))
 
+(defn- audit-quietly!
+  "Record `entry-fn`'s audit entry for `user-id`; a failed write warns and does
+   not undo the change."
+  [audit-repository entry-fn user-id email]
+  (try
+    (let [{:keys [actor-id actor-email ip-address user-agent]} (effective-audit-context {})]
+      (.create-audit-log audit-repository
+                         (entry-fn actor-id actor-email user-id email ip-address user-agent)))
+    (catch Exception e
+      (println "WARN: Failed to create audit log:" (.getMessage e)))))
+
 ;; =============================================================================
 ;; Database-Agnostic User Service (I/O Shell Layer)
 ;; =============================================================================
@@ -402,15 +413,19 @@
          ;; request (BOU-663).
          (when-let [session (.find-session-by-token session-repository session-token)]
            (let [current-time (current-timestamp)
-                 validation-result (session-core/is-session-valid? session current-time)]
-             (if (:valid? validation-result)
-               (let [updated-session-data (session-core/update-session-access session current-time)]
-                 (or (.update-session session-repository updated-session-data)
-                     updated-session-data))
+                 {:keys [valid? reason]} (session-core/is-session-valid? session current-time)
+                 user    (when valid? (.find-user-by-id user-repository (:user-id session)))
+                 refusal (if valid? (session-core/account-refusal user) reason)]
+             (when refusal
                ;; Session invalid — throw so middleware returns 401
                (throw (ex-info "Session invalid"
                                {:type :session-invalid
-                                :reason (:reason validation-result)})))))))
+                                :reason refusal})))
+             ;; The user rides along, so the middleware need not read it again.
+             (let [updated-session-data (session-core/update-session-access session current-time)]
+               (assoc (or (.update-session session-repository updated-session-data)
+                          updated-session-data)
+                      :user (user-core/without-credentials user)))))))
      {:system {:user-repository user-repository
                :session-repository session-repository
                :auth-service auth-service}}))
@@ -512,7 +527,7 @@
                               :original-data user-entity
                               :interface-type :cli}))))
 
-         ;; 2. Prepare user with updated timestamp and handle active/deleted_at
+         ;; 2. Stamp updated-at
          (let [current-time (current-timestamp)
                prepared-user (user-core/prepare-user-for-update user-entity current-time)
                ;; 3. Persist using impure shell persistence layer
@@ -551,25 +566,34 @@
        (let [user-id (:user-id params)
              ;; Get user details before deactivation for audit trail
              user (.find-user-by-id user-repository user-id)
-             result (change-access! user-repository session-repository user nil
-                                    #(.soft-delete-user user-repository user-id))]
+             ;; :active only, never :deleted-at: a deactivated user stays
+             ;; listed and can be reactivated (BOU-681). Only that column is
+             ;; written, so a concurrent password or MFA change is not undone.
+             after  {:id user-id :active false}
+             result (when user
+                      (change-access! user-repository session-repository user after
+                                      #(.update-user user-repository
+                                                     (user-core/prepare-user-for-update after (current-timestamp)))))]
+         (when result
+           (audit-quietly! audit-repository audit-core/deactivate-user-audit-entry user-id (:email user)))
+         (boolean result)))
+     {:system {:user-repository user-repository
+               :session-repository session-repository
+               :audit-repository audit-repository
+               :auth-service auth-service}}))
 
-         ;; Create audit log entry
-         (when (and result user)
-           (try
-             (let [{:keys [actor-id actor-email ip-address user-agent]}
-                   (effective-audit-context {})
-                   audit-entry (audit-core/deactivate-user-audit-entry
-                                actor-id
-                                actor-email
-                                user-id
-                                (:email user)
-                                ip-address
-                                user-agent)]
-               (.create-audit-log audit-repository audit-entry))
-             (catch Exception e
-               (println "WARN: Failed to create audit log:" (.getMessage e)))))
-
+  (delete-user [_ user-id]
+    (service-interceptors/execute-service-operation
+     :delete-user
+     {:user-id user-id}
+     (fn [{:keys [params]}]
+       (let [user-id (:user-id params)
+             user    (.find-user-by-id user-repository user-id)
+             result  (when user
+                       (change-access! user-repository session-repository user nil
+                                       #(.soft-delete-user user-repository user-id)))]
+         (when result
+           (audit-quietly! audit-repository audit-core/delete-user-audit-entry user-id (:email user)))
          (boolean result)))
      {:system {:user-repository user-repository
                :session-repository session-repository
@@ -600,7 +624,7 @@
            (try
              (let [{:keys [actor-id actor-email ip-address user-agent]}
                    (effective-audit-context {})
-                   audit-entry (audit-core/delete-user-audit-entry
+                   audit-entry (audit-core/permanently-delete-user-audit-entry
                                 actor-id
                                 actor-email
                                 user-id

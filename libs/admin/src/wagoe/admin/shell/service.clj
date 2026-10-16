@@ -630,12 +630,10 @@
   (apply dissoc data (conj (:readonly-fields entity-config #{}) (:primary-key entity-config :id))))
 
 (defn- written-update!
-  "Update through `writer`: the record read back, or :removed when the write
-   took it out of the list."
+  "Update through `writer`, returning the record read back."
   [svc writer entity-config entity-name id data]
-  (if (= :removed (ports/update-record! writer id (writable-data entity-config data)))
-    :removed
-    (ports/get-entity svc entity-name id)))
+  (ports/update-record! writer id (writable-data entity-config data))
+  (ports/get-entity svc entity-name id))
 
 (defn- written-delete!
   "Delete `ids` through `writer`, one at a time. Returns {:entity :id :prior}

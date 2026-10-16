@@ -537,7 +537,7 @@
                                        :interface-type interface-type}))))})
 
 (def deactivate-user-account
-  "Deactivates (soft deletes) the user account."
+  "Soft-deletes the user account."
   {:name ::deactivate-user-account
    :enter (fn [context]
             (let [user-id (:user-id context)
@@ -548,7 +548,7 @@
               (try
                 (let [result (user-service/with-audit-context
                                (user-service/request-audit-context (:request context))
-                               #(ports/deactivate-user service user-id))]
+                               #(ports/delete-user service user-id))]
                   (-> updated-context
                       (assoc :deactivation-result result)
                       (ctx/add-breadcrumb :operation :user-deactivate-success
