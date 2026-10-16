@@ -23,6 +23,9 @@
       (when-not v
         (throw (ex-info (str ":wagoe/user " k " names " x ", which does not resolve")
                         {:type :configuration-error :key k :symbol x})))
+      (when-not (fn? @v)
+        (throw (ex-info (str ":wagoe/user " k " names " x ", which is not a function")
+                        {:type :configuration-error :key k :symbol x})))
       @v)
     x))
 
@@ -45,11 +48,15 @@
 
 (defn path-for
   "Where `user` lands after signing in. A function's answer that is not a path
-   on this site — nil included — falls back to the defaults."
+   on this site — nil included — falls back to the defaults, as does one that
+   throws: by then the session exists, and a 500 would strand it."
   [config user]
   (let [r (:login-redirect (settings config))]
     (if (fn? r)
-      (let [path (r user)]
+      (let [path (try (r user)
+                      (catch Exception e
+                        (log/warn e ":login-redirect threw; using the default")
+                        nil))]
         (if (redirect/local-path? path)
           path
           (do (when (some? path)

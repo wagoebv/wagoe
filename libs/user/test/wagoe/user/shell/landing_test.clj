@@ -35,6 +35,8 @@
     :viewer "https://evil.example"
     nil))
 
+(def not-a-fn "/web/x")
+
 (deftest ^:contract defaults-are-unchanged
   (is (= "/web/admin/users" (login-location {} :admin)))
   (is (= "/web/dashboard" (login-location {} :user))))
@@ -55,7 +57,10 @@
       (is (= "/web/dashboard" (login-location cfg :user)) "nil means the default")
       (is (= "/web/dashboard" (login-location cfg :viewer)) "an off-site answer is refused")))
   (testing "a function value"
-    (is (= "/web/x" (login-location (config {:login-redirect (constantly "/web/x")}) :user)))))
+    (is (= "/web/x" (login-location (config {:login-redirect (constantly "/web/x")}) :user))))
+  (testing "a function that throws means the default"
+    (is (= "/web/dashboard"
+           (login-location (config {:login-redirect (fn [_] (throw (ex-info "boom" {})))}) :user)))))
 
 (deftest ^:contract password-mfa-lands-per-config
   (let [svc (reify ports/IUserService
@@ -84,6 +89,8 @@
                     {:login-redirect {:owner "/web/x"}}
                     {:login-redirect "/web/x"}
                     {:login-redirect 'no.such.ns/landing}
+                    {:login-redirect `not-a-fn}
+                    {:dashboard {:handler `not-a-fn}}
                     {:dashboard "off"}
                     {:dashboard {:handler 'no.such.ns/page}}
                     {:dashboard {:handler `landing-of :extra 1}}]]
