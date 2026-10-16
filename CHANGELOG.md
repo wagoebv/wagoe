@@ -83,6 +83,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **On H2, `SET REFERENTIAL_INTEGRITY FALSE` was undone by the next pooled connection** (BOU-654), so scaffolded
   tests failed at random on foreign keys. Upgrade; nothing to change.
+- **The DB job queue could not ack jobs on PostgreSQL** (BOU-640): each finished job ran again once its lease expired.
+  Upgrade if you use jobs `:provider :db` on PostgreSQL.
 - **Revoked sessions and deactivated users stayed signed in**: until the cache expired with `:wagoe/cache` on, and for good when made inactive without a soft delete (BOU-663).
   Upgrade if you use session authentication.
 - **`bb scaffold field` enums read back as strings** (BOU-656): the field now joins the repository's `enum-fields`.
