@@ -96,6 +96,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **`_` and `%` in admin, user, tenant and audience filters matched any character** (BOU-684).
+  Build a LIKE pattern from user input with `like-pattern`; the port's `like` now declares `ESCAPE '!'`.
 - **Search suggestions read every row on PostgreSQL, and `_`/`%` in a query matched anything** (BOU-676).
   Run migrations for the trigram index; pg_trgm off the `search_path` now falls back to LIKE.
 - **Push device registration failed on MySQL and PostgreSQL, and seeds with timestamps or symbolic ids on MySQL** (BOU-657).

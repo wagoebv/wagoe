@@ -1,13 +1,13 @@
 (ns wagoe.tenant.shell.persistence
   (:require [wagoe.core.utils.type-conversion :as type-conversion]
             [wagoe.platform.database :as db]
+            [wagoe.platform.ports.database :as db-ports]
             [wagoe.platform.shell.persistence-interceptors :as persistence-interceptors]
             [wagoe.tenant.ports :as ports]
             [wagoe.tenant.shell.provisioning :as provisioning]
             [wagoe.tenant.shell.tenant-tables :as tenant-tables]
             [cheshire.core]
             [clojure.set]
-            [clojure.string :as str]
             [clojure.tools.logging :as log]))
 
 ;; =============================================================================
@@ -100,12 +100,13 @@
       :status status :search search}
      (fn [{:keys [params]}]
        (let [{:keys [limit offset include-deleted? status search]} params
-             pattern (some->> search str/lower-case (format "%%%s%%"))
+             pattern (some->> search (db-ports/like-pattern :contains))
+             adapter (:adapter ctx)
              where   (cond-> [:and]
                        (not include-deleted?) (conj [:is :deleted_at nil])
                        status  (conj [:= :status (name status)])
-                       pattern (conj [:or [:like [:lower :name] pattern]
-                                      [:like [:lower :slug] pattern]]))
+                       pattern (conj [:or (db-ports/like adapter :name pattern)
+                                      (db-ports/like adapter :slug pattern)]))
              query (cond-> {:select [:*]
                             :from [:tenants]
                             :order-by [[:created_at :desc]]

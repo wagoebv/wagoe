@@ -166,6 +166,29 @@
     (when-not (= {:build-where true :like true} got)
       (str "a stored \"Élodie\" matched " (pr-str got)))))
 
+(defn- like-wildcards-are-literal
+  "% _ and ! in a `like-pattern` value match only themselves (BOU-684)."
+  [ctx]
+  (ddl! ctx "DROP TABLE IF EXISTS wild")
+  (ddl! ctx "CREATE TABLE wild (id INTEGER NOT NULL PRIMARY KEY, name VARCHAR(20))")
+  (db/execute-update! ctx {:insert-into :wild
+                           :values [{:id 1 :name "a_b"} {:id 2 :name "axb"} {:id 3 :name "50%"}
+                                    {:id 4 :name "500"} {:id 5 :name "hi!"} {:id 6 :name "a!_b"}]})
+  (let [a   (adapter ctx)
+        ids (fn [mode value]
+              (set (map #(val (first %))
+                        (db/execute-query! ctx {:select [:id] :from [:wild]
+                                                :where (protocols/like a :name (protocols/like-pattern mode value))}))))
+        got {"_"  (ids :contains "a_b")
+             "%"  (ids :ends-with "%")
+             "!"  (ids :contains "!")
+             "!_" (ids :starts-with "a!_")
+             "where" (set (map #(val (first %))
+                               (db/execute-query! ctx {:select [:id] :from [:wild]
+                                                       :where (protocols/build-where a {:name "0%"})})))}]
+    (when-not (= {"_" #{1} "%" #{3} "!" #{5 6} "!_" #{6} "where" #{3}} got)
+      (str "matched " (pr-str got)))))
+
 (defn- strings-ignore-case-in-any-locale
   "A Turkish JVM lowers \"ID\" to \"ıd\"; the database lowers it to \"id\". The
    match must not depend on which one folds the pattern."
@@ -413,6 +436,7 @@
    {:lookup/uuid               found-by-uuid
     :strings/ignore-case       strings-ignore-case
     :strings/any-locale        strings-ignore-case-in-any-locale
+    :strings/like-literal      like-wildcards-are-literal
     :strings/unicode           strings-ignore-unicode-case
     :connections/session       every-connection-is-set-up
     :ddl/index-twice           index-twice

@@ -8,7 +8,8 @@
    Filter support: callers may pass a :filters map of keyword->string pairs.
    Filter values are matched against the JSON \"filters\" column using
    DB-appropriate JSON path syntax."
-  (:require [wagoe.search.core.index :as index]
+  (:require [wagoe.platform.ports.database :as db-ports]
+            [wagoe.search.core.index :as index]
             [clojure.string :as str]))
 
 ;; =============================================================================
@@ -215,11 +216,9 @@
 (def ^:private like-clause "LOWER(content_all) LIKE ? ESCAPE '!'")
 
 (defn- like-pattern
-  "A LIKE pattern containing `query`, lowercased, for like-clause. % and _ in
-   the query match themselves, escaped with !; not backslash, which MySQL
-   string literals would need doubled (BOU-676)."
+  "A LIKE pattern containing `query`, lowercased, for like-clause (BOU-676)."
   [query]
-  (str "%" (str/replace (str/lower-case (or (sanitize-query query) "")) #"[!%_]" "!$0") "%"))
+  (db-ports/like-pattern :contains (str/lower-case (or (sanitize-query query) ""))))
 
 (defn build-fallback-search-sql
   "Build a parameterized JDBC SQL vector for LIKE-based fallback search.

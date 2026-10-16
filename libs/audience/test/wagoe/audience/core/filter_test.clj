@@ -101,7 +101,11 @@
     (is (= [:>= :x 1]  (f/filter->sql {:type :demographics :field :x :op :gte :value 1})))
     (is (= [:< :x 1]   (f/filter->sql {:type :demographics :field :x :op :lt  :value 1})))
     (is (= [:<= :x 1]  (f/filter->sql {:type :demographics :field :x :op :lte :value 1})))
-    (is (= [:like :x "%foo%"] (f/filter->sql {:type :demographics :field :x :op :contains :value "foo"})))))
+    (is (= [:escape [:like :x "%foo%"] [:inline "!"]]
+           (f/filter->sql {:type :demographics :field :x :op :contains :value "foo"}))))
+  (testing ":contains escapes % _ and ! (BOU-684)"
+    (is (= [:escape [:like :x "%!%!_!!%"] [:inline "!"]]
+           (f/filter->sql {:type :demographics :field :x :op :contains :value "%_!"})))))
 
 ;; =============================================================================
 ;; Predicate tests for DB-evaluable filter types

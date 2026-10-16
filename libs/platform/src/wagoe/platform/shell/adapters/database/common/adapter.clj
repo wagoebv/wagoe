@@ -58,11 +58,14 @@
    elsewhere both sides lowered, since H2's LIKE is case-sensitive (ADR-039).
    The pattern is lowered in SQL too: the JVM's locale folds differently (a
    Turkish one turns \"ID\" into \"ıd\"). SQLite's lower() is replaced by a
-   Unicode one on each connection (BOU-606)."
+   Unicode one on each connection (BOU-606). Escaped with !, as
+   `protocols/like-pattern` builds it (BOU-684)."
   [string-match field pattern]
-  (if (= :ilike string-match)
-    [:ilike field pattern]
-    [:like [:lower field] [:lower pattern]]))
+  [:escape
+   (if (= :ilike string-match)
+     [:ilike field pattern]
+     [:like [:lower field] [:lower pattern]])
+   [:inline "!"]])
 
 (defn build-where-clause
   "Build a WHERE fragment from `filters`, in this engine's terms.
@@ -76,7 +79,7 @@
     (let [conditions (for [[field value] filters
                            :when (some? value)]
                        (cond
-                         (string? value)  (case-insensitive-like string-match field (str "%" value "%"))
+                         (string? value)  (case-insensitive-like string-match field (protocols/like-pattern :contains value))
                          (vector? value)  [:in field value]
                          (boolean? value) [:= field (boolean->db booleans value)]
                          :else            [:= field value]))]

@@ -128,7 +128,7 @@
              [:ilike :name percent-john-percent]]"
   [adapter search-term search-fields]
   (when (and search-term (seq search-fields))
-    (let [search-pattern (str "%" search-term "%")]
+    (let [search-pattern (db-ports/like-pattern :contains search-term)]
       (vec (cons :or
                  (mapv (fn [field]
                          (db-ports/like adapter field search-pattern))
@@ -170,9 +170,9 @@
                                 :gte         [:>= field value]
                                 :lt          [:< field value]
                                 :lte         [:<= field value]
-                                :contains    (db-ports/like adapter field (str "%" value "%"))
-                                :starts-with (db-ports/like adapter field (str value "%"))
-                                :ends-with   (db-ports/like adapter field (str "%" value))
+                                :contains    (db-ports/like adapter field (db-ports/like-pattern :contains value))
+                                :starts-with (db-ports/like adapter field (db-ports/like-pattern :starts-with value))
+                                :ends-with   (db-ports/like adapter field (db-ports/like-pattern :ends-with value))
                                 :in          [:in field (vec values)]
                                 :not-in      [:not-in field (vec values)]
                                 :is-null     [:= field nil]

@@ -26,7 +26,8 @@
    - Only include methods that differ between databases
    - Database-agnostic operations belong in core namespace
    - Type conversions use shared utilities where possible"
-  (:require [malli.core :as m]))
+  (:require [clojure.string :as str]
+            [malli.core :as m]))
 
 ;; =============================================================================
 ;; Core Database Adapter Protocol
@@ -125,7 +126,7 @@
        
      Example:
        (build-where postgres-adapter {:name \"john\" :active true})
-       ;; => [:and [:ilike :name \"%john%\"] [:= :active true]]")
+       ;; => [:and [:escape [:ilike :name \"%john%\"] [:inline \"!\"]] [:= :active true]]")
 
   (boolean->db [this boolean-value]
     "Convert boolean value to database-specific representation.
@@ -214,11 +215,12 @@
 
   (like [this field pattern]
     "A HoneySQL condition matching `field` against the LIKE `pattern`
-     regardless of case, on every engine.
+     regardless of case, on every engine, with `ESCAPE '!'`. Build `pattern`
+     with `like-pattern` when any of it comes from user input.
 
      Example:
-       (like h2-adapter :email \"%john%\")
-       ;; => [:like [:lower :email] [:lower \"%john%\"]]"))
+       (like h2-adapter :email (like-pattern :contains \"john\"))
+       ;; => [:escape [:like [:lower :email] [:lower \"%john%\"]] [:inline \"!\"]]"))
 
 (defprotocol ParamEncoder
   "Optional: an adapter that encodes query parameters for its engine. Its own
@@ -232,6 +234,18 @@
   (value-decoder [this]
     "A fn decoding each value read from this engine, or nil when its values
      need none."))
+
+(defn like-pattern
+  "A LIKE pattern matching `value` literally: anywhere (:contains), at the start
+   (:starts-with) or at the end (:ends-with). % _ and ! are escaped with !, the
+   escape character `like` declares; ! because MySQL string literals would need
+   a backslash doubled (BOU-684)."
+  [mode value]
+  (let [v (str/replace (str value) #"[!%_]" "!$0")]
+    (case mode
+      :contains    (str "%" v "%")
+      :starts-with (str v "%")
+      :ends-with   (str "%" v))))
 
 (def capability-keywords
   "What a database may honour, each consumed somewhere (ADR-039):

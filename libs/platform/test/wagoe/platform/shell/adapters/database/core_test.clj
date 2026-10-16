@@ -246,7 +246,7 @@
       (let [filters {:name "John*"}
             where-clause (db/build-where-clause ctx filters)]
         (is (sequential? where-clause)) ; Can be list or vector
-        (is (= :like (first where-clause)))) ; H2 uses LIKE
+        (is (= :like (first (second where-clause))))) ; H2 uses LIKE, wrapped in ESCAPE
 
       ;; Test with vector filter (should use IN)
       (let [filters {:id [(UUID/randomUUID) (UUID/randomUUID)]}
@@ -257,6 +257,11 @@
       ;; Test empty filters
       (is (nil? (db/build-where-clause ctx {})))
       (is (nil? (db/build-where-clause ctx nil))))))
+
+(deftest ^:unit like-pattern-escapes-wildcards
+  (is (= "%a!_b!%c!!%" (protocols/like-pattern :contains "a_b%c!")))
+  (is (= "a!_%" (protocols/like-pattern :starts-with "a_")))
+  (is (= "%!%" (protocols/like-pattern :ends-with "%"))))
 
 (deftest ^:integration test-build-pagination
   (testing "Pagination building with safe limits"
