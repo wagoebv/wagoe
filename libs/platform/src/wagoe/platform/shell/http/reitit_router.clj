@@ -506,7 +506,12 @@
      :conflicts (get config :conflicts report-ambiguous-routes)
      ;; Innermost, after the route's own middleware: interceptors see a fully
      ;; prepared request (session, body, coercions) (BOU-331).
-     ::middleware/transform #(conj % (route-interceptors (:system config)))}))
+     ::middleware/transform #(conj % (route-interceptors (:system config)))
+     ;; The OPTIONS Reitit adds to every path inherits the path's data; without
+     ;; this a preflight would run its interceptors and the default stack.
+     ::ring/default-options-endpoint (assoc ring/default-options-endpoint
+                                            :skip-interceptors? true
+                                            :interceptors ^:replace [])}))
 
 (defn- create-default-handler
   "Create default handler for routes not matched by router.

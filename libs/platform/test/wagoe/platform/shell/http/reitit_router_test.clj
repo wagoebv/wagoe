@@ -511,8 +511,9 @@
 
 (defn- stacked?
   "Whether the default interceptor stack answered `uri`: it sets X-Correlation-ID."
-  [handler uri]
-  (some? (get-in (handler {:request-method :get :uri uri}) [:headers "X-Correlation-ID"])))
+  ([handler uri] (stacked? handler :get uri))
+  ([handler method uri]
+   (some? (get-in (handler {:request-method method :uri uri}) [:headers "X-Correlation-ID"]))))
 
 (deftest ^:unit reitit-data-passes-through-and-still-gets-the-interceptor-stack
   ;; The one thing the normalized format did that Reitit does not: every
@@ -531,7 +532,8 @@
                  {:system {}})]
     (testing "every endpoint gains the default stack"
       (is (stacked? handler "/users"))
-      (is (stacked? handler "/b")))
+      (is (stacked? handler "/b"))
+      (is (stacked? handler :post "/b")))
     (testing "an endpoint that opts out gets none of it"
       (is (= 200 (:status (handler {:request-method :get :uri "/health"}))))
       (is (not (stacked? handler "/health"))))
@@ -1132,4 +1134,9 @@
     (testing "a method declaring none runs its path's and parent's"
       (is (= ["path" "parent"] (tags :get))))
     (testing "a method's own sit closest to the handler"
-      (is (= ["method" "path" "parent"] (tags :post))))))
+      (is (= ["method" "path" "parent"] (tags :post))))
+    (testing "the OPTIONS Reitit adds runs none of them, nor the default stack"
+      (let [resp (handler {:request-method :options :uri "/api/path"})]
+        (is (= 200 (:status resp)))
+        (is (nil? (get-in resp [:headers "x-tags"])))
+        (is (nil? (get-in resp [:headers "X-Correlation-ID"])))))))
