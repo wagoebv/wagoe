@@ -5,14 +5,15 @@
    and raw parameterized SQL for FTS-specific queries.
 
    Strategies chosen by the adapter's capabilities (ADR-039):
-   - :full-text — to_tsvector/plainto_tsquery + ts_rank + ts_headline;
-     without it, a LOWER/LIKE fallback
+   - :full-text — to_tsvector/plainto_tsquery + ts_rank + ts_headline, and
+     pg_trgm suggestions where it is installed; without it, a LOWER/LIKE fallback
    - :on-conflict — INSERT … ON CONFLICT DO UPDATE; without it, delete and
      insert in one transaction"
   (:require [wagoe.search.ports :as ports]
             [wagoe.search.core.index :as index]
             [wagoe.search.core.query :as qry]
             [wagoe.platform.ports.database :as db-ports]
+            [wagoe.search.shell.trigram :as trigram]
             [cheshire.core :as json]
             [next.jdbc :as jdbc]
             [next.jdbc.result-set :as rs]
@@ -77,7 +78,7 @@
 ;; ISearchStore implementation
 ;; =============================================================================
 
-(defrecord SearchStore [datasource full-text? on-conflict?]
+(defrecord SearchStore [datasource full-text? on-conflict? trigram?]
   ports/ISearchStore
 
   (upsert-document! [_ doc]
@@ -158,13 +159,14 @@
                {:index-id index-id :entity-type entity-type :query query})
     (let [{:keys [limit threshold filters]
            :or   {limit 5 threshold 0.15}} opts
-          sql-vec (if full-text?
-                    (qry/build-postgres-suggest-sql
-                     (kw->str index-id) (kw->str entity-type)
-                     query limit threshold filters)
-                    (qry/build-fallback-suggest-sql
-                     (kw->str index-id) (kw->str entity-type)
-                     query limit filters))
+          [idx et] [(kw->str index-id) (kw->str entity-type)]
+          sql-vec (cond
+                    (and full-text? @trigram?)
+                    (qry/build-postgres-suggest-sql idx et query limit threshold filters)
+                    full-text?
+                    (qry/build-postgres-like-suggest-sql idx et query limit filters)
+                    :else
+                    (qry/build-fallback-suggest-sql idx et query limit filters))
           rows (jdbc/execute! datasource sql-vec
                               {:builder-fn rs/as-unqualified-lower-maps})]
       (mapv db->result rows)))
@@ -190,7 +192,10 @@
    Returns:
      SearchStore implementing ISearchStore"
   [datasource adapter]
-  (let [capabilities (db-ports/capabilities adapter)]
+  (let [capabilities (db-ports/capabilities adapter)
+        full-text?   (contains? capabilities :full-text)]
     (->SearchStore datasource
-                   (contains? capabilities :full-text)
-                   (contains? capabilities :on-conflict))))
+                   full-text?
+                   (contains? capabilities :on-conflict)
+                   ;; Read on first suggest, by when the migrations have run.
+                   (delay (and full-text? (trigram/installed? datasource))))))

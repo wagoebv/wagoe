@@ -81,6 +81,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Search suggestions failed on PostgreSQL without `pg_trgm`** (BOU-661): a migration now creates it, and suggestions use LIKE where it may not.
+  Run migrations if you use search on PostgreSQL.
 - **Revoked sessions and deactivated users stayed signed in**: until the cache expired with `:wagoe/cache` on, and for good when made inactive without a soft delete (BOU-663).
   Upgrade if you use session authentication.
 - **`bb scaffold field` enums read back as strings** (BOU-656): the field now joins the repository's `enum-fields`.
