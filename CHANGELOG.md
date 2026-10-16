@@ -81,6 +81,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **With `:wagoe/cache` on, revoked sessions and deactivated users stayed signed in until the cache expired** (BOU-663).
+  Upgrade if you enable `:wagoe/cache`.
 - **MySQL timestamps read back without a zone, so APIs sent UTC as local time** (BOU-653).
   Upgrade if you run on MySQL.
 - **MySQL lost workflow timestamps and admin UUID types; PostgreSQL refused full-text search** (BOU-652).

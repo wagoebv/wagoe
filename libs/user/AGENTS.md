@@ -92,12 +92,10 @@ Signing keys:
                         session-repository
                         audit-repository
                         validation-config
-                        auth-service
-                        cache])            ; optional
+                        auth-service])
 
-;; Factory functions
+;; Factory function
 (create-user-service repo session-repo audit-repo validation-cfg auth-svc)
-(create-user-service repo session-repo audit-repo validation-cfg auth-svc cache)
 ```
 
 ### Key Service Methods
@@ -109,10 +107,10 @@ Signing keys:
 ;; Authentication — delegates to auth-service, creates session and audit log
 (authenticate-user service {:email "..." :password "..."})
 
-;; Session validation — checks cache first, then database, updates access time
+;; Session validation — reads the database every time, updates access time
 (validate-session service session-token)
 
-;; Logout — invalidates session, clears cache, creates audit log
+;; Logout — invalidates session, creates audit log
 (logout-user service session-token)
 
 ;; Profile update — uses *audit-context* for actor attribution
@@ -227,7 +225,7 @@ export JWT_SECRET="dev-secret-at-least-32-characters-long-here"
  :exp      unix-timestamp}
 ```
 
-Session tokens are stored in the database and optionally cached in Redis for fast validation. Cache TTL aligns with token expiry.
+Session tokens are stored in the database. Sessions and users are never cached, so a revoked session or deactivated user is refused on the next request (BOU-663).
 
 ---
 
@@ -338,7 +336,6 @@ them. Change them in `initialize-user-schema!`, never in a second copy.
 - Keep internal keys kebab-case; convert snake_case/camelCase only at DB/API boundaries.
 - `*audit-context*` is `nil` by default — always use `with-audit-context` in HTTP handlers.
 - `defrecord` changes require `(ig-repl/halt)` + `(ig-repl/go)`, not just `(ig-repl/reset)`.
-- Session cache and database must stay in sync — use `logout-user` to invalidate both.
 
 ---
 

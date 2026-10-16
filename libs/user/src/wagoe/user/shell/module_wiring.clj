@@ -120,10 +120,10 @@
 ;; =============================================================================
 
 (defmethod ig/init-key :wagoe/user-service
-  [_ {:keys [user-repository session-repository audit-repository validation-config auth-service cache]}]
-  (log/info "Initializing user service" {:cache-enabled? (some? cache)})
+  [_ {:keys [user-repository session-repository audit-repository validation-config auth-service]}]
+  (log/info "Initializing user service")
   (let [service (user-service/create-user-service
-                 user-repository session-repository audit-repository validation-config auth-service cache)]
+                 user-repository session-repository audit-repository validation-config auth-service)]
     (log/info "User service initialized")
     service))
 
@@ -239,9 +239,8 @@
 
    Called with the module's `:active` settings — nil, because the user module is
    switched on in code rather than in config — and the context the application
-   supplies: `:config`, `:validation-config`, and `:enabled`, the set of sibling
-   modules that are on."
-  [_settings {:keys [config validation-config enabled]}]
+   supplies: `:config` and `:validation-config`."
+  [_settings {:keys [config validation-config]}]
   {:components
    {:wagoe/user-db-schema     {:ctx (ig/ref :wagoe/db-context)}
     :wagoe/user-repository    {:ctx (ig/ref :wagoe/db-context)}
@@ -260,16 +259,14 @@
                                :session-repository (ig/ref :wagoe/session-repository)
                                :mfa-service        (ig/ref :wagoe/mfa-service)
                                :auth-config        {}}
-    :wagoe/user-service       (cond-> {:user-repository    (ig/ref :wagoe/user-repository)
-                                       :session-repository (ig/ref :wagoe/session-repository)
-                                       :audit-repository   (ig/ref :wagoe/audit-repository)
-                                       :validation-config  validation-config
-                                       :auth-service       (ig/ref :wagoe/auth-service)
-                                       :logger             (ig/ref :wagoe/logging)
-                                       :metrics            (ig/ref :wagoe/metrics)
-                                       :error-reporter     (ig/ref :wagoe/error-reporting)}
-                                (contains? enabled :wagoe/cache)
-                                (assoc :cache (ig/ref :wagoe/cache)))
+    :wagoe/user-service       {:user-repository    (ig/ref :wagoe/user-repository)
+                               :session-repository (ig/ref :wagoe/session-repository)
+                               :audit-repository   (ig/ref :wagoe/audit-repository)
+                               :validation-config  validation-config
+                               :auth-service       (ig/ref :wagoe/auth-service)
+                               :logger             (ig/ref :wagoe/logging)
+                               :metrics            (ig/ref :wagoe/metrics)
+                               :error-reporter     (ig/ref :wagoe/error-reporting)}
     :wagoe/user-routes        {:user-service (ig/ref :wagoe/user-service)
                                :mfa-service  (ig/ref :wagoe/mfa-service)
                                :email-sender (ig/ref :wagoe/email)

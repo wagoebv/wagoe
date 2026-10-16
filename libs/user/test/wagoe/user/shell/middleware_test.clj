@@ -199,7 +199,7 @@
 (deftest ^:unit flexible-authentication-does-not-revalidate-an-authenticated-request
   ;; user, admin and workflow routes carry flexible-authentication-middleware.
   ;; With BOU-373 the global pass has already validated the same credentials by
-  ;; the time those run, and validate-session is not free: with the cache off it
+  ;; the time those run, and validate-session is not free: it
   ;; reads the session, writes the access time, then fetches the user. Doing it
   ;; twice per request doubles that for no gain.
   (let [calls   (atom 0)
