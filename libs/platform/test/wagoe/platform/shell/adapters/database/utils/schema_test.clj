@@ -29,38 +29,6 @@
 ;; Column Type Mapping Tests
 ;; =============================================================================
 
-(deftest ^:unit malli-type->column-type-h2-test
-  (testing "Malli type to H2 column type mapping"
-    (testing "Basic types"
-      (is (= "UUID" (malli-type->column-type h2-ctx :uuid)))
-      (is (= "VARCHAR(255)" (malli-type->column-type h2-ctx :string)))
-      (is (= "INTEGER" (malli-type->column-type h2-ctx :int)))
-      (is (= "BOOLEAN" (malli-type->column-type h2-ctx :boolean))))
-
-    (testing "Timestamp type (inst? symbol)"
-      (is (= "TIMESTAMP WITH TIME ZONE" (malli-type->column-type h2-ctx 'inst?))))
-
-    (testing "Timestamp type (inst? function)"
-      (is (= "TIMESTAMP WITH TIME ZONE" (malli-type->column-type h2-ctx inst?))))
-
-    (testing "Enum type"
-      (is (= "VARCHAR(50)" (malli-type->column-type h2-ctx :enum))))
-
-    (testing "Numeric types"
-      (is (= "DOUBLE PRECISION" (malli-type->column-type h2-ctx :double))))
-
-    (testing "JSON/Map type: VARCHAR, as a CLOB reads back as a JdbcClob (BOU-610)"
-      (is (= "VARCHAR" (malli-type->column-type h2-ctx :map))))
-
-    (testing "Text type"
-      (is (= "VARCHAR" (malli-type->column-type h2-ctx :text))))
-
-    (testing "Regex type (email pattern etc.)"
-      (is (= "VARCHAR(255)" (malli-type->column-type h2-ctx :re))))
-
-    (testing "Unknown type falls back to VARCHAR(255)"
-      (is (= "VARCHAR(255)" (malli-type->column-type h2-ctx :unknown-type))))))
-
 (def ^:private expected-types
   "Malli type -> [H2 SQLite PostgreSQL MySQL]. What the builder made before
    BOU-610, but CLOB on H2, which reads back as a JdbcClob."

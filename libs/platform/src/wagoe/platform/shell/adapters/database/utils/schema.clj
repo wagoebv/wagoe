@@ -405,7 +405,7 @@
         \"user_sessions\" UserSession-schema})"
   [ctx schema-definitions]
   (log/info "Initializing database schema from Malli definitions"
-            {:dialect (protocols/dialect (:adapter ctx))
+            {:engine (protocols/engine (:adapter ctx))
              :tables (keys schema-definitions)})
 
   (try
@@ -429,11 +429,11 @@
         (db-core/create-index-if-not-exists! ctx index table columns)))
 
     (log/info "Database schema initialization completed successfully"
-              {:dialect (protocols/dialect (:adapter ctx))
+              {:engine (protocols/engine (:adapter ctx))
                :tables (keys schema-definitions)})
 
     (catch Exception e
       (log/error "Database schema initialization failed"
                  {:error (.getMessage e)
-                  :dialect (protocols/dialect (:adapter ctx))})
+                  :engine (protocols/engine (:adapter ctx))})
       (throw e))))

@@ -136,8 +136,8 @@
           (finally (factory/close-db-context! ctx)))))))
 
 (deftest ^:integration an-upgraded-database-has-the-column-types-of-a-fresh-one
-  ;; The upgrades once picked their own types: created_at came out VARCHAR(255)
-  ;; where a fresh PostgreSQL has TIMESTAMPTZ (BOU-610). WAGOE_TEST_DB picks the engine.
+  ;; Before BOU-622 the upgrades picked their own types, so an upgraded database
+  ;; differed from a fresh one (BOU-610). WAGOE_TEST_DB picks the engine.
   (test-db/with-db "user_fresh"
     (fn [fresh]
       (sut/initialize-user-schema! fresh)
