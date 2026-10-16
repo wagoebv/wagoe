@@ -129,7 +129,7 @@ The config includes:
 
 === Client address behind a proxy
 
-Behind a proxy the TCP peer is the proxy. Rate limiting, login lockout, sessions
+Behind a proxy the TCP peer is the proxy. Rate limiting, login risk checks, sessions
 and the audit log then see every user as one address. List the proxies whose
 `X-Forwarded-For` you trust:
 

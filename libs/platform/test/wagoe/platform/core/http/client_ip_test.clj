@@ -24,7 +24,7 @@
   (testing "an IPv4-mapped address is the IPv4 address"
     (is (= [10 1 2 3] (client-ip/parse-ip "::ffff:10.1.2.3"))))
   (testing "malformed IPv6"
-    (doseq [s ["1::2::3" ":1:2:3:4:5:6:7" "1:2:3:4:5:6:7:8:9" "12345::" "g::1" "::ffff:1.2.3"]]
+    (doseq [s ["1::2::3" ":1:2:3:4:5:6:7" "1:2:3:4:5:6:7:8:9" "12345::" "g::1" "::ffff:1.2.3" "1.2.3.4%:a"]]
       (is (nil? (client-ip/parse-ip s)) s))))
 
 (deftest ^:unit ^:security parse-trusted-proxies-test
@@ -34,6 +34,10 @@
   (testing "bare addresses are single hosts"
     (is (= [{:bytes [10 0 0 1] :prefix 32}] (cidrs "10.0.0.1")))
     (is (= 128 (:prefix (first (cidrs "::1"))))))
+  (testing "an IPv4-mapped range is the IPv4 range"
+    (is (= [{:bytes [10 0 0 0] :prefix 8}] (cidrs "::ffff:10.0.0.0/104")))
+    (is (= :configuration-error
+           (get-in (client-ip/parse-trusted-proxies ["::ffff:10.0.0.0/64"]) [:error :type]))))
   (testing "invalid entries are named in a configuration error"
     (let [{:keys [error]} (client-ip/parse-trusted-proxies ["10.0.0.0/8" "10.0.0.0/33" "proxy.local" "::/129"])]
       (is (= :configuration-error (:type error)))
@@ -63,6 +67,7 @@
     (testing "malformed hops stop the walk at the nearest trusted address"
       (is (= "10.0.0.9" (client-ip/client-ip (req "10.0.0.5" "198.51.100.7, garbage, 10.0.0.9") trusted)))
       (is (= "10.0.0.5" (client-ip/client-ip (req "10.0.0.5" "unknown") trusted)))
+      (is (= "10.0.0.5" (client-ip/client-ip (req "10.0.0.5" "1.2.3.4%:a") trusted)))
       (is (= "10.0.0.5" (client-ip/client-ip (req "10.0.0.5" "") trusted)))
       (is (= "10.0.0.5" (client-ip/client-ip (req "10.0.0.5" " , ,") trusted))))
     (testing "a trusted peer with no header, or every hop trusted"

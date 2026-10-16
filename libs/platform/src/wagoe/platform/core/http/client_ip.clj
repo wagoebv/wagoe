@@ -26,7 +26,8 @@
   [s]
   (if-not (str/includes? s ".")
     s
-    (let [i (str/last-index-of s ":")]
+    ;; No colon left once a zone is stripped: "1.2.3.4%:a".
+    (when-let [i (str/last-index-of s ":")]
       (when-let [[a b c d] (parse-ipv4 (subs s (inc i)))]
         (str (subs s 0 (inc i))
              (Long/toHexString (+ (* a 256) b)) ":"
@@ -77,10 +78,12 @@
   (when (string? s)
     (let [[addr bits & more] (str/split (str/trim s) #"/" -1)
           bs     (parse-ip addr)
+          ;; ::ffff:a.b.c.d/104 parses to IPv4 bytes, so its prefix loses 96.
+          mapped (if (and (= 4 (count bs)) (str/includes? addr ":")) 96 0)
           prefix (if bits
-                   (when (re-matches #"\d{1,3}" bits) (parse-long bits))
+                   (when (re-matches #"\d{1,3}" bits) (- (parse-long bits) mapped))
                    (* 8 (count bs)))]
-      (when (and bs prefix (empty? more) (<= prefix (* 8 (count bs))))
+      (when (and bs prefix (empty? more) (<= 0 prefix (* 8 (count bs))))
         {:bytes bs :prefix prefix}))))
 
 (defn parse-trusted-proxies
