@@ -1,5 +1,7 @@
 {:hooks {:analyze-call {wagoe.observability.tracing.core/with-span hooks.wagoe.observability.tracing/with-span}}
- :lint-as {wagoe.platform.database/with-transaction clojure.core/with-open
+ :lint-as {wagoe.test/with-test-system clojure.core/let
+           wagoe.test/with-test-tenant clojure.core/let
+           wagoe.platform.database/with-transaction clojure.core/with-open
            wagoe.platform.shell.adapters.database.common.core/with-transaction clojure.core/with-open
            wagoe.platform.shell.adapters.database.sqlite.core/with-transaction clojure.core/with-open
            wagoe.platform.shell.adapters.database.h2.core/with-transaction clojure.core/with-open
