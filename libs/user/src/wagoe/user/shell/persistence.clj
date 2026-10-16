@@ -254,6 +254,12 @@
           (update :changes parse-json-field)
           (update :metadata parse-json-field)))))
 
+(defn- update-present
+  "`update` only when `m` has `k`: a key a partial update leaves out must not
+   reach the SET clause as NULL (BOU-665)."
+  [m k f]
+  (if (contains? m k) (update m k f) m))
+
 ;; =============================================================================
 ;; User Repository Implementation
 ;; =============================================================================
@@ -571,13 +577,13 @@
              ;; Update auth_users
              (when has-auth-updates?
                (let [db-auth (-> auth-updates
-                                 (update :active #(when % (protocols/boolean->db adapter %)))
-                                 (update :updated-at type-conversion/instant->string)
-                                 (update :deleted-at type-conversion/instant->string)
-                                 (update :mfa-enabled-at type-conversion/instant->string)
-                                 (update :lockout-until type-conversion/instant->string)
-                                 (update :mfa-backup-codes #(when % (cheshire.core/generate-string %)))
-                                 (update :mfa-backup-codes-used #(when % (cheshire.core/generate-string %)))
+                                 (update-present :active #(when (some? %) (protocols/boolean->db adapter %)))
+                                 (update-present :updated-at type-conversion/instant->string)
+                                 (update-present :deleted-at type-conversion/instant->string)
+                                 (update-present :mfa-enabled-at type-conversion/instant->string)
+                                 (update-present :lockout-until type-conversion/instant->string)
+                                 (update-present :mfa-backup-codes #(when % (cheshire.core/generate-string %)))
+                                 (update-present :mfa-backup-codes-used #(when % (cheshire.core/generate-string %)))
                                  (set/rename-keys {:password-hash :password_hash
                                                    :mfa-enabled :mfa_enabled
                                                    :mfa-secret :mfa_secret
@@ -596,17 +602,17 @@
              ;; Update users
              (when has-profile-updates?
                (let [db-profile (-> profile-updates
-                                    (update :tenant-id type-conversion/uuid->string)
-                                    (update :role type-conversion/keyword->string)
-                                    (update :last-login type-conversion/instant->string)
-                                    (update :updated-at type-conversion/instant->string)
-                                    (update :deleted-at type-conversion/instant->string)
-                                    (update :notifications-email #(when (some? %) (protocols/boolean->db adapter %)))
-                                    (update :notifications-push #(when (some? %) (protocols/boolean->db adapter %)))
-                                    (update :notifications-sms #(when (some? %) (protocols/boolean->db adapter %)))
-                                    (update :theme type-conversion/keyword->string)
-                                    (update :date-format type-conversion/keyword->string)
-                                    (update :time-format type-conversion/keyword->string)
+                                    (update-present :tenant-id type-conversion/uuid->string)
+                                    (update-present :role type-conversion/keyword->string)
+                                    (update-present :last-login type-conversion/instant->string)
+                                    (update-present :updated-at type-conversion/instant->string)
+                                    (update-present :deleted-at type-conversion/instant->string)
+                                    (update-present :notifications-email #(when (some? %) (protocols/boolean->db adapter %)))
+                                    (update-present :notifications-push #(when (some? %) (protocols/boolean->db adapter %)))
+                                    (update-present :notifications-sms #(when (some? %) (protocols/boolean->db adapter %)))
+                                    (update-present :theme type-conversion/keyword->string)
+                                    (update-present :date-format type-conversion/keyword->string)
+                                    (update-present :time-format type-conversion/keyword->string)
                                     (set/rename-keys {:tenant-id :tenant_id
                                                       :avatar-url :avatar_url
                                                       :login-count :login_count
@@ -627,13 +633,13 @@
            (cond
              has-auth-updates?
              (let [db-auth (-> auth-updates
-                               (update :active #(when % (protocols/boolean->db adapter %)))
-                               (update :updated-at type-conversion/instant->string)
-                               (update :deleted-at type-conversion/instant->string)
-                               (update :mfa-enabled-at type-conversion/instant->string)
-                               (update :lockout-until type-conversion/instant->string)
-                               (update :mfa-backup-codes #(when % (cheshire.core/generate-string %)))
-                               (update :mfa-backup-codes-used #(when % (cheshire.core/generate-string %)))
+                               (update-present :active #(when (some? %) (protocols/boolean->db adapter %)))
+                               (update-present :updated-at type-conversion/instant->string)
+                               (update-present :deleted-at type-conversion/instant->string)
+                               (update-present :mfa-enabled-at type-conversion/instant->string)
+                               (update-present :lockout-until type-conversion/instant->string)
+                               (update-present :mfa-backup-codes #(when % (cheshire.core/generate-string %)))
+                               (update-present :mfa-backup-codes-used #(when % (cheshire.core/generate-string %)))
                                (set/rename-keys {:password-hash :password_hash
                                                  :mfa-enabled :mfa_enabled
                                                  :mfa-secret :mfa_secret
@@ -655,17 +661,17 @@
 
              has-profile-updates?
              (let [db-profile (-> profile-updates
-                                  (update :tenant-id type-conversion/uuid->string)
-                                  (update :role type-conversion/keyword->string)
-                                  (update :last-login type-conversion/instant->string)
-                                  (update :updated-at type-conversion/instant->string)
-                                  (update :deleted-at type-conversion/instant->string)
-                                  (update :notifications-email #(when (some? %) (protocols/boolean->db adapter %)))
-                                  (update :notifications-push #(when (some? %) (protocols/boolean->db adapter %)))
-                                  (update :notifications-sms #(when (some? %) (protocols/boolean->db adapter %)))
-                                  (update :theme type-conversion/keyword->string)
-                                  (update :date-format type-conversion/keyword->string)
-                                  (update :time-format type-conversion/keyword->string)
+                                  (update-present :tenant-id type-conversion/uuid->string)
+                                  (update-present :role type-conversion/keyword->string)
+                                  (update-present :last-login type-conversion/instant->string)
+                                  (update-present :updated-at type-conversion/instant->string)
+                                  (update-present :deleted-at type-conversion/instant->string)
+                                  (update-present :notifications-email #(when (some? %) (protocols/boolean->db adapter %)))
+                                  (update-present :notifications-push #(when (some? %) (protocols/boolean->db adapter %)))
+                                  (update-present :notifications-sms #(when (some? %) (protocols/boolean->db adapter %)))
+                                  (update-present :theme type-conversion/keyword->string)
+                                  (update-present :date-format type-conversion/keyword->string)
+                                  (update-present :time-format type-conversion/keyword->string)
                                   (set/rename-keys {:tenant-id :tenant_id
                                                     :avatar-url :avatar_url
                                                     :login-count :login_count

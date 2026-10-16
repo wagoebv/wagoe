@@ -278,6 +278,8 @@
  :user/mfa-disable-prompt           "To disable two-factor authentication, please confirm your password:"
  :user/profile-page-title           "Profile & Security"
  :user/profile-label-sessions       "Sessions"
+ :user/refused-own-admin-rights     "You cannot remove your own admin rights."
+ :user/refused-last-admin           "The last active admin cannot lose admin rights."
 
  ;; =============================================================================
  ;; Admin entity: Tenants

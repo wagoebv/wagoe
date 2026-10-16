@@ -21,6 +21,7 @@
             [wagoe.user.core.oidc :as oidc-core]
             [wagoe.user.core.password-policy :as password-policy]
             [wagoe.user.core.ui :as user-ui]
+            [wagoe.user.core.user :as user-core]
             [wagoe.user.core.profile-ui :as profile-ui]
             [wagoe.user.ports :as user-ports]
             [wagoe.user.schema :as user-schema]
@@ -184,6 +185,13 @@
   [e]
   (when (contains? #{:bad-request :user-exists} (:type (ex-data e)))
     (ex-message e)))
+
+(defn- refused
+  "A refused write (BOU-665): 409, saying why."
+  [request e]
+  (html-response request
+                 (ui/error-message (if-let [k (:message-key (ex-data e))] [:t k] (ex-message e)))
+                 409))
 
 (defn- mfa-error-message
   "What to show for a failed MFA result. `:cannot-*` carries the core's reason;
@@ -869,18 +877,16 @@
               (user-ports/permanently-delete-user user-service uuid)))
 
           "role-admin"
-          (doseq [id-str ids]
-            (let [uuid (UUID/fromString id-str)
-                  user (user-ports/get-user-by-id user-service uuid)]
-              (when user
-                (user-ports/update-user-profile user-service (assoc user :role :admin)))))
+          (doseq [id-str ids
+                  :let [uuid (UUID/fromString id-str)]
+                  :when (user-ports/get-user-by-id user-service uuid)]
+            (user-ports/update-user-profile user-service {:id uuid :role :admin}))
 
           "role-user"
-          (doseq [id-str ids]
-            (let [uuid (UUID/fromString id-str)
-                  user (user-ports/get-user-by-id user-service uuid)]
-              (when user
-                (user-ports/update-user-profile user-service (assoc user :role :user)))))
+          (doseq [id-str ids
+                  :let [uuid (UUID/fromString id-str)]
+                  :when (user-ports/get-user-by-id user-service uuid)]
+            (user-ports/update-user-profile user-service {:id uuid :role :user}))
 
           (throw (ex-info "Unsupported bulk action"
                           {:type :bad-request
@@ -894,9 +900,10 @@
 
       (catch clojure.lang.ExceptionInfo e
         (let [data (ex-data e)]
-          (if (= (:type data) :bad-request)
-            (html-response request (ui/error-message (user-facing-message e)) 400)
-            (server-error request e "Bulk user operation failed"))))
+          (cond
+            (= :bad-request (:type data)) (html-response request (ui/error-message (user-facing-message e)) 400)
+            (user-core/refusal? e)        (refused request e)
+            :else                         (server-error request e "Bulk user operation failed"))))
 
       (catch Exception e
         (server-error request e "Unexpected error in bulk-update-users-htmx-handler")))))
@@ -1045,9 +1052,11 @@
                   existing-user (user-ports/get-user-by-id user-service uuid)]
               (if-not existing-user
                 (html-response request (ui/error-message "User not found") 404)
-                (let [;; Merge form data into existing user (only update provided fields)
-                      user-data (merge existing-user
-                                       (select-keys prepared-data [:name :email :role :active]))
+                (let [;; Only the submitted fields: writing back the rest of a
+                      ;; cached user failed validation on its empty optionals.
+                      user-data (into {:id uuid}
+                                      (remove (comp nil? val))
+                                      (select-keys prepared-data [:name :email :role :active]))
                       user-result (user-ports/update-user-profile user-service user-data)]
                   ;; Re-render the form with updated user data and a success
                   ;; indicator. The banner goes inside the form's own
@@ -1062,7 +1071,9 @@
                    200
                    {"HX-Trigger" "userUpdated"}))))
             (catch Exception e
-              (server-error request e "Error updating user")))))
+              (if (user-core/refusal? e)
+                (refused request e)
+                (server-error request e "Error updating user"))))))
       (catch IllegalArgumentException _
         (html-response request (ui/error-message "Invalid user ID") 400)))))
 

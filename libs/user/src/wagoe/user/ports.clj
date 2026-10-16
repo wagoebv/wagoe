@@ -152,17 +152,21 @@
   ;; Returns {:users [...] :total-count n}, none carrying :password-hash.
 
   (update-user-profile [this user-entity])
-  ;; Takes a complete entity with :id. Returns it without :password-hash.
-  ;; A changed :role revokes the user's sessions (BOU-191).
+  ;; Takes an entity with :id; required keys it leaves out keep their stored
+  ;; values. Returns it without :password-hash. A changed :role or a
+  ;; deactivation revokes the user's sessions (BOU-191, BOU-665).
+  ;; Throws :conflict for removing your own or the last admin's rights.
   ;; Throws :user-not-found, :validation-error, :business-rule-violation.
 
   (deactivate-user [this user-id])
-  ;; Soft-deletes after checking deletion policy. Returns boolean.
-  ;; Throws :user-not-found, :deletion-not-allowed.
+  ;; Soft-deletes after checking deletion policy and ends the user's sessions.
+  ;; Returns boolean. Throws :user-not-found, :deletion-not-allowed, and
+  ;; :conflict for your own or the last admin's account.
 
   (permanently-delete-user [this user-id])
   ;; Irreversible erasure. Returns boolean.
-  ;; Throws :user-not-found, :hard-deletion-not-allowed (another record still references the user).
+  ;; Throws :user-not-found, :hard-deletion-not-allowed (another record still references the user),
+  ;; and :conflict for your own or the last admin's account.
 
   (authenticate-user [this user-credentials])
   ;; user-credentials: {:email :password :ip-address :user-agent :mfa-code}
