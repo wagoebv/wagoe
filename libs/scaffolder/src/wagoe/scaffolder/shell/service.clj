@@ -633,7 +633,8 @@
                             :note (str "added :" (name (:name field)) " to enum-fields")}])
             enum-step (when (and enum? (nil? enum-added))
                         (str "Add :" (name (:name field)) " to enum-fields in " (.getPath persistence)
-                             ", copied with ->row and ->entity from a newly generated module"
+                             (when-not (some-> enum-source (str/includes? "enum-fields"))
+                               ", copied with ->row and ->entity from a newly generated module")
                              ", or storing it fails"))
 
             ;; Before anything is written. The migration and the schema entry

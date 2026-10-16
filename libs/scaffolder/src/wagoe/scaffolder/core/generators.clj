@@ -2757,22 +2757,6 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s%s%s;%s"
         (when (and placed (not= placed source))
           {:content placed})))))
 
-(defn- enum-fields-set? [loc]
-  (and (= :set (z/tag loc))
-       (= '[def enum-fields] (vec (take 2 (child-sexprs (z/up loc)))))))
-
-(defn add-enum-field-to-persistence
-  "`source` with `field` in its enum-fields set (BOU-656), or nil when it has
-   no such set."
-  [source field]
-  (when-let [loc (first-loc source enum-fields-set?)]
-    (let [k (keyword (:field-name-kebab (template/build-field-context field)))]
-      (if (some #{k} (child-sexprs loc))
-        source
-        (-> (cond-> loc (z/down loc) (z/append-child* (n/spaces 1)))
-            (z/append-child* (n/keyword-node k))
-            z/root-string)))))
-
 (defn add-field-to-schema
   "Add `field` to the entity and request schemas in `source`.
 
@@ -3158,6 +3142,20 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s%s%s;%s"
         (cond-> newline? (z/append-child* (n/spaces (column first-child))))
         (z/append-child* node))
     (z/append-child* loc node)))
+
+(defn- enum-fields-set? [loc]
+  (and (= :set (z/tag loc))
+       (= '[def enum-fields] (vec (take 2 (child-sexprs (z/up loc)))))))
+
+(defn add-enum-field-to-persistence
+  "`source` with `field` in its enum-fields set (BOU-656), or nil when it has
+   no such set."
+  [source field]
+  (when-let [loc (first-loc source enum-fields-set?)]
+    (let [k (keyword (:field-name-kebab (template/build-field-context field)))]
+      (if (some #{k} (child-sexprs loc))
+        source
+        (z/root-string (append-item loc (n/keyword-node k) false))))))
 
 (defn- append-entry
   "The map at `loc` with `k v` added on a line of its own, the value in the

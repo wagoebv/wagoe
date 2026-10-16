@@ -979,7 +979,12 @@
         (is (some #(and (str/includes? % ":status") (str/includes? % (.getPath p)))
                   (:next-steps (ports/add-field svc {:module-name "billing" :base-ns "bou656old" :entity "Invoice"
                                                      :field {:name :status :type :enum :enum-values [:a :b]}
-                                                     :output-dir (.getPath dir) :dry-run true}))))))))
+                                                     :output-dir (.getPath dir) :dry-run true}))))))
+    (testing "a field that is not an enum leaves persistence alone"
+      (let [r (ports/add-field svc {:module-name "billing" :base-ns "bou656" :entity "Invoice"
+                                    :field {:name :sku :type :string} :output-dir (.getPath dir) :dry-run true})]
+        (is (not-any? #(str/includes? % "persistence") (:next-steps r)))
+        (is (not-any? #(str/includes? (:path %) "persistence") (:files r)))))))
 
 (deftest ^:unit an-enum-field-joins-the-set-once
   (let [kind {:name :kind :type :enum :enum-values [:a :b]}
