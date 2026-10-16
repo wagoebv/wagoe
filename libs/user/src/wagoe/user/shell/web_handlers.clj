@@ -403,6 +403,15 @@
 ;; Authentication Handlers (Login / Logout)
 ;; =============================================================================
 
+(defn- login-branding
+  "Login page options every rendering of it shares."
+  [config]
+  {:logo-url       (get-in config [:wagoe/settings :logo-url])
+   :oidc-providers (oidc-core/login-buttons (get-in config [:active :wagoe/user :oidc :providers]))})
+
+(defn- session-cookie [config session-token]
+  {:value session-token :http-only true :secure (secure-cookies? config) :same-site :strict :path "/"})
+
 (defn login-page-handler
   "GET /web/login - render login page."
   [config]
@@ -414,12 +423,10 @@
                          {:email remembered-email
                           :remember true}
                          {})
-          page-opts {:user (get request :user)
-                     :flash (get request :flash)
-                     :return-to return-to
-                     :logo-url (get-in config [:wagoe/settings :logo-url])
-                     :oidc-providers (oidc-core/login-buttons
-                                      (get-in config [:active :wagoe/user :oidc :providers]))}]
+          page-opts (merge {:user (get request :user)
+                            :flash (get request :flash)
+                            :return-to return-to}
+                           (login-branding config))]
       (html-response request (user-ui/login-page initial-data {} page-opts)))))
 
 (defn login-submit-handler
@@ -479,11 +486,7 @@
                   ;; Set session-token cookie and redirect to original URL or default
                 (-> (response/redirect return-to)
                     (assoc-in [:cookies "session-token"]
-                              (cond-> {:value session-token
-                                       :http-only true
-                                       :secure (secure-cookies? config)
-                                       :same-site :strict
-                                       :path "/"}
+                              (cond-> (session-cookie config session-token)
                                   ;; Only set max-age if remember-me is checked
                                   ;; Without max-age, cookie is a session cookie (expires when browser closes)
                                 remember? (assoc :max-age cookie-max-age)))
@@ -586,6 +589,11 @@
 
 (def ^:private oidc-cookie-cleared {:value "" :max-age 0 :path "/web/auth/oidc"})
 
+(defn- clear-oidc-cookies [response]
+  (-> response
+      (assoc-in [:cookies oidc-pending-cookie] oidc-cookie-cleared)
+      (assoc-in [:cookies oidc-mfa-cookie] oidc-cookie-cleared)))
+
 (defn- login-context [request]
   {:ip-address (:remote-addr request)
    :user-agent (get-in request [:headers "user-agent"])})
@@ -602,13 +610,9 @@
                            [502 [:t :user/oidc-failed]]
                            [400 [:t :user/oidc-failed]])]
     (-> (html-response request
-                       (user-ui/login-page {} {} {:error message
-                                                  :logo-url (get-in config [:wagoe/settings :logo-url])
-                                                  :oidc-providers (oidc-core/login-buttons
-                                                                   (get-in config [:active :wagoe/user :oidc :providers]))})
+                       (user-ui/login-page {} {} (assoc (login-branding config) :error message))
                        status)
-        (assoc-in [:cookies oidc-pending-cookie] oidc-cookie-cleared)
-        (assoc-in [:cookies oidc-mfa-cookie] oidc-cookie-cleared))))
+        clear-oidc-cookies)))
 
 (defn- oidc-signed-in
   "Set the session cookie exactly as password login does, and move on."
@@ -617,11 +621,8 @@
         location (safe-return-url return-to default)]
     (-> (html-response request (user-ui/oidc-continue-page location) 200
                        {"Refresh" (str "0;url=" location)})
-        (assoc-in [:cookies "session-token"]
-                  {:value (:session-token session) :http-only true
-                   :secure (secure-cookies? config) :same-site :strict :path "/"})
-        (assoc-in [:cookies oidc-pending-cookie] oidc-cookie-cleared)
-        (assoc-in [:cookies oidc-mfa-cookie] oidc-cookie-cleared))))
+        (assoc-in [:cookies "session-token"] (session-cookie config (:session-token session)))
+        clear-oidc-cookies)))
 
 (defn- oidc-outcome [request config result]
   (cond
@@ -630,7 +631,7 @@
 
     (= :mfa-required (get-in result [:ok :outcome]))
     (-> (html-response request (user-ui/oidc-mfa-page {} {}))
-        (assoc-in [:cookies oidc-pending-cookie] oidc-cookie-cleared)
+        clear-oidc-cookies
         (assoc-in [:cookies oidc-mfa-cookie] (oidc-cookie config (get-in result [:ok :cookie]))))
 
     :else
@@ -765,12 +766,7 @@
                                                  "Your account has been created successfully. "
                                                  "Take a moment to review your profile and set up "
                                                  "Multi-Factor Authentication for enhanced security.")})
-                    (assoc-in [:cookies "session-token"]
-                              {:value session-token
-                               :http-only true
-                               :path "/"
-                               :secure (secure-cookies? config)
-                               :same-site :strict})))
+                    (assoc-in [:cookies "session-token"] (session-cookie config session-token))))
               ;; Shouldn't happen, but fallback to login page
               (response/redirect "/web/login")))
           ;; The service applies the configured password policy, which the

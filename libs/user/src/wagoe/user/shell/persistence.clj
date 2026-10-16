@@ -716,18 +716,15 @@
      :hard-delete-user
      {:user-id user-id}
      (fn [{:keys [params]}]
-       (let [user-id (:user-id params)
-             ;; A schema older than OIDC sign-in has no such table.
-             identities? (db/table-exists? ctx :user_identities)]
+       (let [user-id (:user-id params)]
          ;; Use transaction to delete from both tables
          ;; Must delete from users first (child with FK constraint)
          (db/with-transaction [tx ctx]
            (let [user-id-str (type-conversion/uuid->string user-id)
 
                  ;; Sign-in links are personal data too.
-                 _ (when identities?
-                     (db/execute-update! tx {:delete-from :user_identities
-                                             :where [:= :user_id user-id-str]}))
+                 _ (db/execute-update! tx {:delete-from :user_identities
+                                           :where [:= :user_id user-id-str]})
 
                  ;; Delete from users table first (FK constraint)
                  profile-query {:delete-from :users

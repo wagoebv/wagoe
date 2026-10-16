@@ -244,7 +244,7 @@
   [_ {:keys [settings] :as opts}]
   (log/info "Initializing OIDC sign-in" {:providers (keys (:providers settings))})
   (oidc/create-oidc-client
-   (assoc opts :secret (or (:state-secret settings) (System/getenv "JWT_SECRET")))))
+   (assoc opts :secret (or (:state-secret settings) (user-auth/get-jwt-secret)))))
 
 (defmethod ig/init-key :wagoe/user-oidc-routes
   [_ {:keys [oidc config]}]

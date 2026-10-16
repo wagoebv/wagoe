@@ -90,7 +90,10 @@
    only added cost on every sign/verify."
   (delay (validate-jwt-secret* (System/getenv "JWT_SECRET"))))
 
-(defn- get-jwt-secret [] @jwt-secret)
+(defn get-jwt-secret
+  "The validated JWT_SECRET. Throws :configuration-error when it is missing or short."
+  []
+  @jwt-secret)
 
 (defn validate-jwt-secret!
   "Fail-fast startup check: force resolution + validation of JWT_SECRET so a

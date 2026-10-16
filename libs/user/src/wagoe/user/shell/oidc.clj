@@ -55,9 +55,6 @@
     (try (jwt/decrypt value (:key client) {:alg :dir :enc :a256gcm})
          (catch Exception _ nil))))
 
-(defn- random-token []
-  (auth/generate-session-token))
-
 ;; =============================================================================
 ;; HTTP
 ;; =============================================================================
@@ -132,17 +129,17 @@
 (defn- exchange-code [client provider discovery-doc code verifier]
   (let [{:keys [client-id client-secret token-endpoint-auth]} provider
         basic? (and client-secret (not= :post token-endpoint-auth))
+        form   {:grant_type    "authorization_code"
+                :code          code
+                :redirect_uri  (oidc/redirect-uri (get-in client [:settings :base-url]) (:id provider))
+                :code_verifier verifier}
         r      (request-json
-                (cond-> {:method      :post
-                         :url         (:token_endpoint discovery-doc)
-                         :form-params (cond-> {:grant_type    "authorization_code"
-                                               :code          code
-                                               :redirect_uri  (oidc/redirect-uri (get-in client [:settings :base-url])
-                                                                                 (:id provider))
-                                               :code_verifier verifier}
-                                        (not basic?) (assoc :client_id client-id)
-                                        (and client-secret (not basic?)) (assoc :client_secret client-secret))}
-                  basic? (assoc :basic-auth [client-id client-secret])))]
+                (if basic?
+                  {:method :post :url (:token_endpoint discovery-doc) :form-params form
+                   :basic-auth [client-id client-secret]}
+                  {:method :post :url (:token_endpoint discovery-doc)
+                   :form-params (cond-> (assoc form :client_id client-id)
+                                  client-secret (assoc :client_secret client-secret))}))]
     (cond
       (:error r)                    (assoc-in r [:error :type] :oidc/token-exchange-failed)
       (str/blank? (:id_token (:ok r))) {:error {:type :oidc/token-exchange-failed
@@ -153,8 +150,11 @@
 ;; Signing in
 ;; =============================================================================
 
-(defn provider [client provider-id]
+(defn- provider [client provider-id]
   (get-in client [:settings :providers provider-id]))
+
+(def ^:private unknown-provider
+  {:error {:type :not-found :message "Unknown sign-in provider"}})
 
 (defn start
   "Begin a sign-in. Returns {:ok {:location url :cookie sealed-pending}}."
@@ -164,30 +164,33 @@
       (if (:error d)
         d
         (let [pending {:provider      provider-id
-                       :state         (random-token)
-                       :nonce         (random-token)
-                       :code-verifier (random-token)
+                       :state         (auth/generate-session-token)
+                       :nonce         (auth/generate-session-token)
+                       :code-verifier (auth/generate-session-token)
                        :return-to     return-to}]
           {:ok {:location (oidc/authorization-url
                            (:ok d) p
                            (assoc pending :redirect-uri
                                   (oidc/redirect-uri (get-in client [:settings :base-url]) provider-id)))
                 :cookie   (seal client pending pending-ttl-seconds)}})))
-    {:error {:type :not-found :message "Unknown sign-in provider"}}))
+    unknown-provider))
+
+(defn- write-audit! [client entry provider-id]
+  (when-let [repo (:audit-repository client)]
+    (ports/create-audit-log repo (assoc entry :metadata {:method "oidc" :provider provider-id}))))
 
 (defn- audit! [client user login-context provider-id success? message]
-  (when (and user (:audit-repository client))
-    (ports/create-audit-log (:audit-repository client)
-                            (assoc (audit-core/login-audit-entry (:id user) (:email user)
-                                                                 (:ip-address login-context)
-                                                                 (:user-agent login-context)
-                                                                 success? message)
-                                   :metadata {:method "oidc" :provider provider-id}))))
+  (when user
+    (write-audit! client
+                  (audit-core/login-audit-entry (:id user) (:email user)
+                                                (:ip-address login-context) (:user-agent login-context)
+                                                success? message)
+                  provider-id)))
 
 (defn- finish!
   "Record the login, link the identity if this sign-in is what links it, and
    open a session — the same session a password login gets."
-  [client user {:keys [provider-id identity link?]} login-context]
+  [client user {:keys [provider-id identity link?] :as sign-in} login-context]
   (let [{:keys [user-repository session-repository]} (:auth-service client)
         repo    (:identity-repository client)
         now     (Instant/now)
@@ -201,14 +204,10 @@
     (let [{:keys [session]} (auth/open-session! (:auth-service client) user risk login-context now)]
       (audit! client user login-context provider-id true nil)
       (log/info "OIDC sign-in" {:user-id (:id user) :provider provider-id :linked? (boolean link?)})
-      {:ok {:outcome :signed-in
-            :user    (dissoc user :password-hash :mfa-secret :mfa-backup-codes :mfa-backup-codes-used)
-            :session session}})))
-
-(defn- unusable-password-hash
-  "A created account signs in through its provider; nobody knows this password."
-  []
-  (auth/hash-password (random-token)))
+      {:ok {:outcome   :signed-in
+            :user      (dissoc user :password-hash :mfa-secret :mfa-backup-codes :mfa-backup-codes-used)
+            :session   session
+            :return-to (:return-to sign-in)}})))
 
 (defn- account
   "The account for verified `claims`, created when the provider allows it.
@@ -234,13 +233,12 @@
           :create
           (let [user (ports/create-user user-repository
                                         (assoc (:user-data decision)
-                                               :password-hash (unusable-password-hash)))]
-            (when-let [audit-repo (:audit-repository client)]
-              (ports/create-audit-log audit-repo
-                                      (assoc (audit-core/create-user-audit-entry
-                                              nil "system" user
-                                              (:ip-address login-context) (:user-agent login-context))
-                                             :metadata {:method "oidc" :provider (:id p)})))
+                                               ;; Signs in through its provider; nobody knows this password.
+                                               :password-hash (auth/hash-password (auth/generate-session-token))))]
+            (write-audit! client
+                          (audit-core/create-user-audit-entry
+                           nil "system" user (:ip-address login-context) (:user-agent login-context))
+                          (:id p))
             {:ok {:user user :link? true}})
           decision)))))
 
@@ -274,7 +272,7 @@
   (let [p       (provider client provider-id)
         checked (if p
                   (oidc/check-callback (unseal client pending-cookie) provider-id params (now-epoch))
-                  {:error {:type :not-found :message "Unknown sign-in provider"}})]
+                  unknown-provider)]
     (if (:error checked)
       checked
       (let [{:keys [code pending]} (:ok checked)
@@ -292,17 +290,16 @@
             acct   (if (:error claims) claims (account client p (:ok claims) login-context))]
         (if (:error acct)
           acct
-          (let [c (:ok claims)
-                r (sign-in-user client (get-in acct [:ok :user])
-                                {:provider-id provider-id
-                                 :link?       (get-in acct [:ok :link?])
-                                 :identity    {:provider provider-id
-                                               :issuer   (:iss c)
-                                               :subject  (:sub c)
-                                               :email    (:email c)}
-                                 :return-to   (:return-to pending)}
-                                login-context)]
-            (cond-> r (:ok r) (assoc-in [:ok :return-to] (:return-to pending)))))))))
+          (let [c (:ok claims)]
+            (sign-in-user client (get-in acct [:ok :user])
+                          {:provider-id provider-id
+                           :link?       (get-in acct [:ok :link?])
+                           :identity    {:provider provider-id
+                                         :issuer   (:iss c)
+                                         :subject  (:sub c)
+                                         :email    (:email c)}
+                           :return-to   (:return-to pending)}
+                          login-context)))))))
 
 (defn complete-mfa
   "Finish a sign-in that stopped for the second factor."
@@ -324,7 +321,7 @@
           (let [user (if (:used-backup-code? check)
                        (let [u (merge user (:updates check))] (ports/update-user user-repository u) u)
                        user)]
-            (assoc-in (finish! client user sign-in login-context) [:ok :return-to] (:return-to sign-in)))
+            (finish! client user sign-in login-context))
           ;; Wrong codes count towards the lockout, as they do on the password form.
           (do (ports/update-user user-repository
                                  (merge user (auth-core/calculate-failed-login-consequences
