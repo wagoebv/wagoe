@@ -2,7 +2,8 @@
   "PDF generation adapter using OpenHTMLtoPDF.
 
    Three-step pipeline:
-     1. Render Hiccup → HTML string (via hiccup.core/html)
+     1. Render Hiccup → HTML string (via hiccup2.core/html, which escapes
+        strings; embed trusted markup with hiccup2.core/raw)
      2. Inject default CSS from resources/wagoe/reports/default.css
      3. Pass HTML to PdfRendererBuilder → ByteArrayOutputStream → bytes
 
@@ -13,9 +14,11 @@
   (:require [wagoe.reports.core.report :as core]
             [wagoe.reports.ports :as ports]
             [clojure.java.io :as io]
+            [clojure.string :as str]
             [clojure.tools.logging :as log]
-            [hiccup.core :as h])
-  (:import [com.openhtmltopdf.pdfboxout PdfRendererBuilder]
+            [hiccup2.core :as h])
+  (:import [com.openhtmltopdf.extend FSUriResolver]
+           [com.openhtmltopdf.pdfboxout PdfRendererBuilder]
            [java.io ByteArrayOutputStream]))
 
 ;; =============================================================================
@@ -58,6 +61,27 @@
       [:html [:head style] [:body hiccup-form]])))
 
 ;; =============================================================================
+;; HTML rendering
+;; =============================================================================
+
+(def ^:private xml-illegal-chars
+  ;; Characters XML 1.0 forbids even as references; the parser rejects them.
+  #"[\x00-\x08\x0B\x0C\x0E-\x1F\uFFFE\uFFFF]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]")
+
+(defn- render-html
+  [hiccup-form]
+  (-> (str "<!DOCTYPE html>" (h/html hiccup-form))
+      (str/replace xml-illegal-chars "")))
+
+(def ^:private data-uris-only
+  "Resolves only data: URIs, so a report never fetches a URL or reads a file
+   named in its content (BOU-675)."
+  (reify FSUriResolver
+    (resolveURI [_ _base uri]
+      (when (and uri (.regionMatches ^String uri true 0 "data:" 0 5))
+        uri))))
+
+;; =============================================================================
 ;; OpenHTMLtoPDF generator record
 ;; =============================================================================
 
@@ -74,9 +98,10 @@
                          (tmpl data)
                          (core/build-sections-hiccup* (:sections report-def) data formatting-context))
           full-hiccup  (inject-css hiccup-form css-override)
-          html-str     (str "<!DOCTYPE html>" (h/html full-hiccup))
+          html-str     (render-html full-hiccup)
           baos         (ByteArrayOutputStream.)
           builder      (doto (PdfRendererBuilder.)
+                         (.useUriResolver data-uris-only)
                          (.withHtmlContent html-str nil)
                          (.toStream baos))]
       (.run builder)
