@@ -55,6 +55,7 @@ Contains:
   - `resources/public/js/theme.js`
   - `resources/public/js/alpine.min.js`
   - `resources/public/js/htmx.min.js`
+  - `resources/public/js/htmx-ext-sse.min.js`
   - `resources/public/js/forms.js`
   - `resources/public/js/keyboard.js`
 

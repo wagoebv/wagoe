@@ -648,6 +648,10 @@ Both values are submitted when checkbox is checked, resulting in an array.
 - HTMX target selector should match the root element of the response
 - Use `hx-target="#foo"` → response should have `[:div#foo ...]` as root
 - Keep filter UI outside HTMX-updated regions if it shouldn't change
+- To update another part of the page as well (a badge, a toast), pass it as
+  the third argument rather than widening the root:
+  `(support/htmx-fragment-response request table [[:span#badge n]])` swaps
+  each extra element out of band, by id (`wagoe.shared.ui.core.htmx/oob`)
 
 ### 4. Split-Table Entities Missing `:create-redirect-url`
 

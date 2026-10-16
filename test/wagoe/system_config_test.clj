@@ -35,13 +35,15 @@
 (def ^:private enabled
   "A module's settings when this file switches every module on. Payments has
    no default provider, and this config has no profile to allow the mock
-   (BOU-564); it is only assembled, never started. User names an OIDC
-   provider, without which its sign-in components are not assembled."
+   (BOU-564); it is only assembled, never started. The events outbox is opt-in,
+   so it is switched on here to be assembled at all (BOU-448). User names an
+   OIDC provider, without which its sign-in components are not assembled."
   (fn [k] (get {:wagoe/payment-provider {:provider :stripe :api-key "sk" :webhook-secret "wh"}
-                :wagoe/user {:enabled? true
-                             :oidc {:base-url  "https://app.example.com"
-                                    :providers {:example {:issuer    "https://idp.example.com"
-                                                          :client-id "app"}}}}}
+                :wagoe/events           {:provider :memory :outbox {}}
+                :wagoe/user             {:enabled? true
+                                         :oidc {:base-url  "https://app.example.com"
+                                                :providers {:example {:issuer    "https://idp.example.com"
+                                                                      :client-id "app"}}}}}
                k {:enabled? true})))
 
 (defn- base-config
@@ -59,6 +61,7 @@
     :wagoe/metrics {:provider :no-op}
     :wagoe/error-reporting {:provider :no-op}
     :wagoe/cache {:provider :memory}
+    :wagoe/user {}
     :wagoe/sqlite {:db "dev-database.db"
                    :pool {:maximum-pool-size 5}}}})
 
@@ -204,6 +207,14 @@
       ;; as well as if something was added.
       (doseq [k [:wagoe/postgresql :wagoe/logging :wagoe/error-reporting :wagoe/http]]
         (is (contains? active k) (str k " disappeared from the prod profile"))))))
+
+(deftest ^:integration every-profile-switches-user-on-in-config
+  ;; Not through :extra-modules: `migrate up` reads only :active, so a user
+  ;; module enabled in code never got its tables (BOU-669).
+  (doseq [profile [:dev :test :acc :prod]]
+    (is (contains? (modules/enabled-libraries (:active (sut/load-config {:profile profile})))
+                   "user")
+        (str profile " does not switch :wagoe/user on in :active"))))
 
 (deftest ^:integration conditional-keys-register-themselves
   ;; The rule stated in `ig-config`'s docstring: a key emitted only when it is

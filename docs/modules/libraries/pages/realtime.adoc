@@ -37,6 +37,9 @@ message routing, and topic-based pub/sub.
 | `wagoe.realtime.shell.adapters.websocket-adapter`
 | Ring/Jetty WebSocket adapter
 
+| `wagoe.realtime.shell.handlers.sse`
+| Server-sent events for htmx: `sse-handler`, `push-fragment!` (see xref:guides:realtime.adoc[the guide])
+
 | `wagoe.realtime.shell.adapters.jwt-adapter`
 | Test JWT verifier; the application supplies the real one
 |===

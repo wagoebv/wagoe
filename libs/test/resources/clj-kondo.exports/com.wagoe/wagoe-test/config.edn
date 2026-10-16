@@ -1,0 +1,4 @@
+;; clj-kondo configuration exported to any project that depends on
+;; com.wagoe/wagoe-test. Both macros bind like `let`.
+{:lint-as {wagoe.test/with-test-system clojure.core/let
+           wagoe.test/with-test-tenant clojure.core/let}}

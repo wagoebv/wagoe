@@ -3,6 +3,7 @@
 
    Config key: :wagoe/realtime
      {:provider :memory | :redis        ; :in-memory is the pre-1.0 spelling
+      :max-streams 32                   ; concurrent SSE streams on this node
       ;; redis only:
       :host \"localhost\" :port 6379
       :password \"...\" :database 0        ; auth + db selection (production)
@@ -74,14 +75,20 @@
                            :known    [:memory :redis]})))
         svc (service/create-realtime-service conn-registry jwt-verifier
                                              :pubsub-manager pubsub-manager
-                                             :bus bus)]
+                                             :bus bus
+                                             :max-streams (:max-streams config))]
     (log/info "Realtime component initialized" {:provider provider})
     {:service svc :registry conn-registry :pubsub-manager pubsub-manager
      :bus bus :pool pool}))
 
 (defmethod ig/halt-key! :wagoe/realtime
-  [_ {:keys [bus pool]}]
+  [_ {:keys [bus pool registry]}]
   (log/info "Halting realtime component")
+  ;; An open SSE stream holds a request thread until it is closed; left open,
+  ;; it outlives the halt.
+  (when registry
+    (doseq [c (ports/all-connections registry)]
+      (try (ports/close c) (catch Exception e (log/warn e "closing a realtime connection failed")))))
   ;; Closeable buses (RedisMessageBus) own an internal pool that .close releases
   ;; after stopping the subscriber; the in-memory bus is not Closeable, so just
   ;; stop its subscriber. Closing the bus this way avoids leaking its pool.

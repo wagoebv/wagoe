@@ -316,6 +316,25 @@
       (log/error e "Error processing scheduled jobs")
       0)))
 
+(defn run-pending!
+  "Run every job that is due, on the calling thread, until no queue has one
+   left. Returns how many ran. For tests: with a worker thread the outcome is
+   a race (BOU-469). A retry or a scheduled job lands in the future, so this
+   ends."
+  [config queue store registry]
+  (let [state (create-worker-state :default)]
+    (loop [n 0]
+      ;; Every round: a job may enqueue one with an :execute-at already due,
+      ;; which lands in the scheduled set rather than on a queue.
+      (process-scheduled-jobs! queue)
+      (let [ran (reduce (fn [ran q]
+                          (cond-> ran
+                            (process-single-job! config queue store registry (assoc state :queue-name q))
+                            inc))
+                        0
+                        (ports/list-queues queue))]
+        (if (pos? ran) (recur (+ n ran)) n)))))
+
 ;; =============================================================================
 ;; Worker Loop
 ;; =============================================================================

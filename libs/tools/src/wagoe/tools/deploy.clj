@@ -63,6 +63,7 @@
    "ui-style"
    "shared-ui"
    "admin"
+   "test"
    "wagoe-cli"
    "devtools"
    "wagoe-mcp"])
