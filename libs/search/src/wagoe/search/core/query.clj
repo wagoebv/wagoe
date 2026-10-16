@@ -173,14 +173,15 @@
 (defn build-postgres-suggest-sql
   "Build a parameterized SQL vector for trigram similarity suggestions.
 
-   Requires: CREATE EXTENSION IF NOT EXISTS pg_trgm;
+   Requires pg_trgm. word_similarity, not similarity: a prefix scored against a
+   whole document stays under any useful threshold (BOU-661).
 
    Args:
      index-id    - string
      entity-type - string
      query       - string (partial user input)
      limit       - integer
-     threshold   - number (similarity threshold, e.g. 0.15)
+     threshold   - number (word_similarity threshold, e.g. 0.3)
      filters     - map of keyword->any (optional)
 
    Returns:
@@ -190,11 +191,11 @@
   ([index-id entity-type query limit threshold filters]
    (let [[filter-sql & filter-params] (build-filter-sql-postgres (or filters {}))
          sql (str "SELECT entity_type, entity_id, metadata, "
-                  "  similarity(content_all, ?) AS score, "
+                  "  word_similarity(?, content_all) AS score, "
                   "  NULL AS snippet "
                   "FROM search_documents d "
                   "WHERE index_id = ? AND entity_type = ? "
-                  "  AND similarity(content_all, ?) > ? "
+                  "  AND word_similarity(?, content_all) > ? "
                   filter-sql " "
                   "ORDER BY score DESC "
                   "LIMIT ?")]
@@ -256,6 +257,23 @@
                  filter-sql)]
     (into [sql index-id entity-type pattern] filter-params)))
 
+(defn- like-suggest-sql
+  [build-filter-sql index-id entity-type query limit filters]
+  (let [[filter-sql & filter-params] (build-filter-sql (or filters {}))
+        pattern (str "%" (str/lower-case (or (sanitize-query query) "")) "%")
+        sql (str "SELECT entity_type, entity_id, metadata, "
+                 "  0.5 AS score, "
+                 "  NULL AS snippet "
+                 "FROM search_documents d "
+                 "WHERE index_id = ? AND entity_type = ? "
+                 "  AND LOWER(content_all) LIKE ? "
+                 filter-sql " "
+                 "ORDER BY updated_at DESC "
+                 "LIMIT ?")]
+    (-> [sql index-id entity-type pattern]
+        (into filter-params)
+        (conj limit))))
+
 (defn build-fallback-suggest-sql
   "Build a LIKE-based fallback suggest query for H2/SQLite.
 
@@ -271,17 +289,10 @@
   ([index-id entity-type query limit]
    (build-fallback-suggest-sql index-id entity-type query limit nil))
   ([index-id entity-type query limit filters]
-   (let [pattern (str "%" (str/lower-case (or (sanitize-query query) "")) "%")
-         [filter-sql & filter-params] (build-filter-sql-fallback (or filters {}))
-         sql (str "SELECT entity_type, entity_id, metadata, "
-                  "  0.5 AS score, "
-                  "  NULL AS snippet "
-                  "FROM search_documents "
-                  "WHERE index_id = ? AND entity_type = ? "
-                  "  AND LOWER(content_all) LIKE ? "
-                  filter-sql " "
-                  "ORDER BY updated_at DESC "
-                  "LIMIT ?")]
-     (-> [sql index-id entity-type pattern]
-         (into filter-params)
-         (conj limit)))))
+   (like-suggest-sql build-filter-sql-fallback index-id entity-type query limit filters)))
+
+(defn build-postgres-like-suggest-sql
+  "The LIKE suggest query with PostgreSQL's filter SQL, for a database without
+   pg_trgm (BOU-661). Same arguments as build-fallback-suggest-sql."
+  [index-id entity-type query limit filters]
+  (like-suggest-sql build-filter-sql-postgres index-id entity-type query limit filters))

@@ -20,6 +20,7 @@ libs/search/
 │   │   └── ui.clj          # Hiccup: indices-page, index-detail-page, search-results-fragment
 │   └── shell/
 │       ├── registry.clj    # defsearch macro + global definition registry (mutable state)
+│       ├── trigram.clj      # pg_trgm migration + installed? check
 │       ├── persistence.clj  # SearchStore (next.jdbc, HoneySQL ON CONFLICT upsert)
 │       ├── service.clj      # SearchService (orchestration, pagination, reindex)
 │       ├── http.clj         # Ring routes: API + admin web UI
@@ -89,6 +90,10 @@ Converts field values to weighted content columns (pure — `wagoe.search.core.i
 |--------------------|----------|
 | `:full-text` (PostgreSQL) | `to_tsvector` / `plainto_tsquery` / `ts_rank` / `ts_headline` |
 | no `:full-text` (H2, SQLite, MySQL) | `LOWER(content_all) LIKE LOWER('%q%')` |
+
+Suggestions on PostgreSQL use pg_trgm `word_similarity`. A migration creates
+the extension; where the migration user may not, it logs a warning and
+suggestions use LIKE until it exists (BOU-661).
 
 `create-search-store` takes the adapter: `:full-text` picks the query and
 `:on-conflict` the upsert (ADR-039).
