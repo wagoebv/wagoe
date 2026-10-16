@@ -760,14 +760,11 @@
                                    :required false :unique false}
                            :output-dir (.getPath dir) :dry-run false})
               steps  (:next-steps result)
-              persistence (first (filter #(str/includes? % "persistence.clj") steps))]
-          (is (str/includes? persistence (.getPath dir))
-              "the file the user has to edit by hand must be the generated one")
-          ;; The step is a sentence; pull the path out of it and check something
-          ;; is actually there. A path nothing is at is no better than a wrong one.
-          (let [path (second (re-find #"enum-fields in (\S+?\.clj)" persistence))]
-            (is (.isFile (io/file path)) (str "no file at " path)))
-          (is (str/includes? persistence ":state"))
+              ;; The enum is added to enum-fields for the user now (BOU-656).
+              persistence (first (filter #(str/ends-with? (:path %) "persistence.clj") (:files result)))]
+          (is (str/includes? (:path persistence) (.getPath dir))
+              "the persistence edited must be the generated one")
+          (is (str/includes? (slurp (:path persistence)) "#{:state}"))
           (is (not-any? #(str/includes? % "entity->db") steps)
               "the generated persistence has no per-field transforms (BOU-562)")
           (doseq [cmd (filter #(str/includes? % "clojure -M:") steps)]
@@ -789,7 +786,7 @@
                                    :required false :unique false}
                            :output-dir (.getPath dir) :dry-run true})
               steps  (:next-steps result)]
-          (is (some #(str/includes? % "src/wagoe/widget/shell/persistence.clj") steps))
+          (is (some #(str/includes? (:path %) "src/wagoe/widget/shell/persistence.clj") (:files result)))
           (is (every? #(str/includes? % (.getPath dir))
                       (filter #(str/includes? % "clojure -M:") steps))
               "every command names the project it acts on"))

@@ -83,6 +83,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **`wagoe add` and `wagoe doctor` did not recognise a project on a local Wagoe checkout** (BOU-662, BOU-664).
   `wagoe add` now writes the module from that checkout; upgrade wagoe-cli if you use `:local/root`.
+- **`bb scaffold field` enums read back as strings** (BOU-656): the field now joins the repository's `enum-fields`.
+  For an enum added before, add it to `enum-fields` in the entity's persistence namespace.
 - **A typed `ex-info` thrown from route `:middleware` answered 500** (BOU-659); it now answers its `:type`'s status.
   Upgrade if your route middleware throws typed errors.
 - **MySQL timestamps read back without a zone, so APIs sent UTC as local time** (BOU-653).
