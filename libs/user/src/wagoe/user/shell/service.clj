@@ -157,16 +157,15 @@
     (if refusal (throw refusal) result)))
 
 (defn- ends-sessions?
-  "Whether `after` changes `before`'s access: a delete (nil), a role change
-   (BOU-191) or a deactivation (BOU-665). A role `after` leaves out is kept."
+  "Whether `after` changes `before`'s access: a role change (BOU-191) or a
+   deactivation (BOU-665). A role `after` leaves out is kept."
   [before after]
-  (or (nil? after)
-      (and (:role after) (not= (:role before) (:role after)))
+  (or (and (:role after) (not= (:role before) (:role after)))
       (user-core/deactivates? before after)))
 
 (defn- change-access!
-  "Run `write!`, the change from `before` to `after` (nil: a delete): refused
-   by the admin guard, and ending the user's sessions when it changes their
+  "Run `write!`, the change from `before` to `after`: refused by the admin
+   guard, and ending the user's sessions when it changes their
    access. Returns what `write!` returned."
   [user-repository session-repository before after write!]
   (let [result (if (and before (user-core/removes-admin? before after))

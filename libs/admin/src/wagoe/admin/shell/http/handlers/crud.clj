@@ -288,15 +288,6 @@
               ;; anything that is not a browser — that nothing was written.
               (assoc :status 422)))))))
 
-(defn- attempt-update
-  "support/attempt, also catching a :validation-error that names its fields."
-  [f]
-  (try (support/attempt f)
-       (catch clojure.lang.ExceptionInfo e
-         (if (and (= :validation-error (:type (ex-data e))) (seq (:errors (ex-data e))))
-           [nil e]
-           (throw e)))))
-
 (defn update-entity-handler
   "Handler for updating existing entity.
 
@@ -349,9 +340,9 @@
           ;; A rule the write broke, such as the last admin's role (BOU-665):
           ;; the form again, saying why.
           [updated-record refusal] (when valid?
-                                     (attempt-update #(ports/update-entity admin-service entity-name id form-data)))
+                                     (support/attempt #(ports/update-entity admin-service entity-name id form-data)))
           ;; A value the database refused, such as a taken email: on its field.
-          rejected (when (= :validation-error (:type (ex-data refusal))) (:errors (ex-data refusal)))
+          rejected (some-> refusal support/rejection)
           conflict (when-not rejected refusal)]
 
       (if (and valid? (not refusal))
