@@ -389,6 +389,27 @@
         ([k _params] (name k))
         ([k _params _n] (name k)))))
 
+(defn refusal?
+  "Whether `e` is a write refused by a rule: a :conflict, shown to the user
+   rather than raised."
+  [e]
+  (= :conflict (:type (ex-data e))))
+
+(defn attempt
+  "Call `f`: [result nil], or [nil e] when it throws a refusal."
+  [f]
+  (try [(f) nil]
+       (catch clojure.lang.ExceptionInfo e
+         (if (refusal? e) [nil e] (throw e)))))
+
+(defn refusal-message
+  "What to tell the user about refusal `e`: its :message-key translated, or
+   its message."
+  [request e]
+  (if-let [k (:message-key (ex-data e))]
+    ((t-fn request) k)
+    (ex-message e)))
+
 (defn html-response
   "Create HTML response with standard headers, resolving [:t ...] i18n markers.
 

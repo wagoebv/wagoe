@@ -14,17 +14,6 @@
             [wagoe.user.schema :as schema]
             [clojure.string :as str]))
 
-(defn- extract-audit-context
-  "Extract actor/network metadata from interceptor context for audit logging."
-  [context]
-  (let [request (:request context)
-        actor (or (:user request)
-                  (get-in request [:session :user]))]
-    {:actor-id (:id actor)
-     :actor-email (:email actor)
-     :ip-address (:remote-addr request)
-     :user-agent (get-in request [:headers "user-agent"])}))
-
 (def validate-user-creation-input
   "Validates required fields for user creation.
    
@@ -152,7 +141,7 @@
                                                        :role (:role user-data)})
                   ;; Call the core service; it returns the created user entity directly
                   created-user (user-service/with-audit-context
-                                 (extract-audit-context context)
+                                 (user-service/request-audit-context (:request context))
                                  #(ports/register-user service user-data))]
               ;; Add success breadcrumb and result
               (-> updated-context
@@ -558,7 +547,7 @@
 
               (try
                 (let [result (user-service/with-audit-context
-                               (extract-audit-context context)
+                               (user-service/request-audit-context (:request context))
                                #(ports/deactivate-user service user-id))]
                   (-> updated-context
                       (assoc :deactivation-result result)
@@ -743,7 +732,7 @@
 
               (try
                 (let [updated-user (user-service/with-audit-context
-                                     (extract-audit-context context)
+                                     (user-service/request-audit-context (:request context))
                                      #(ports/update-user-profile service user-entity))]
                   (-> updated-context
                       (assoc :updated-user updated-user)
