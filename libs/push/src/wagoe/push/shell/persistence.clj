@@ -38,9 +38,13 @@
 ;; DeviceTokenStore
 ;; =============================================================================
 
-(defn- row->device [row]
+(defn- row->device
+  "MySQL and SQLite hand UUIDs back as text."
+  [row]
   (when row
     (-> row
+        (update :id tc/string->uuid)
+        (update :user-id tc/string->uuid)
         (update :platform keyword)
         (assoc :active? (boolean (:active row)))
         (dissoc :active))))
@@ -50,19 +54,20 @@
                             (-> (h/insert-into :push-device-tokens)
                                 (h/values [row]))))
 
-(defn- update-device-row! [db {:keys [token app-id] :as row}]
+(defn- token-key [{:keys [token app-id]}]
+  [:and [:= :token token] [:= :app-id app-id]])
+
+(defn- update-device-row! [db row]
   (database/execute-update! db
                             (-> (h/update :push-device-tokens)
                                 (h/set (select-keys row [:user-id :active :last-used-at :device-name :os-version]))
-                                (h/where [:and [:= :token token] [:= :app-id app-id]]))))
+                                (h/where (token-key row)))))
 
-(defn- stored-device-id
-  "MySQL hands the id back as text."
-  [db {:keys [token app-id]}]
+(defn- stored-device-id [db row]
   (-> (database/execute-one! db
                              (-> (h/select :id)
                                  (h/from :push-device-tokens)
-                                 (h/where [:and [:= :token token] [:= :app-id app-id]])))
+                                 (h/where (token-key row))))
       :id
       tc/string->uuid))
 
@@ -108,7 +113,7 @@
          (mapv row->device)))
 
   (get-devices-by-platform [_ platform opts]
-    (let [{:keys [limit after-id]} opts]
+    (let [{:keys [limit after-id] :or {limit 100}} opts]
       (->> (database/execute-query! db
                                     (-> (h/select :*)
                                         (h/from :push-device-tokens)
@@ -116,7 +121,7 @@
                                                  [:= :active true]
                                                  (when after-id [:> :id after-id]))
                                         (h/order-by :id)
-                                        (h/limit (min (or limit 100) 1000))))
+                                        (h/limit (min limit 1000))))
            (mapv row->device))))
 
   (mark-token-invalid! [_ device-token]

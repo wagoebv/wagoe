@@ -41,12 +41,11 @@
   [{:keys [device-store] :as deps}
    {:keys [notification-id data platform _app-id locale]}]
   (let [push-def  (registry/get-push notification-id)
-        rendered  (notif/build-notification push-def data (or locale :en))
-        page-size broadcast-page-size]
+        rendered  (notif/build-notification push-def data (or locale :en))]
     (log/infof "Push: broadcasting %s to platform %s" notification-id platform)
     (loop [after-id nil]
       (let [devices (ports/get-devices-by-platform device-store platform
-                                                   {:limit page-size :after-id after-id})]
+                                                   {:limit broadcast-page-size :after-id after-id})]
         (when (seq devices)
           (let [results (service/deliver-to-platform!
                          deps platform rendered devices)]
@@ -56,5 +55,5 @@
                                          {:id (random-uuid)}))
               (when (:token-invalid? result)
                 (ports/mark-token-invalid! device-store (:device-token result)))))
-          (when (= page-size (count devices))
+          (when (= broadcast-page-size (count devices))
             (recur (:id (peek devices)))))))))
