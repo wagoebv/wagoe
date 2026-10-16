@@ -406,11 +406,23 @@
                    (ddl! tx "CREATE TABLE in_schema (id INTEGER)")
                    (db/execute-query! tx {:raw (str "SELECT id FROM " schema ".in_schema")})))))})
 
+(defn- clock-in-epoch-millis
+  "`now-ms-sql` reads the database clock in epoch millis. The test database is
+   local, so it is within a few seconds of the JVM's."
+  [ctx]
+  (let [db-now (-> (jdbc/execute-one! (:datasource ctx)
+                                      [(str "SELECT " (protocols/now-ms-sql (adapter ctx)) " AS n")])
+                   vals first long)
+        drift  (abs (- db-now (System/currentTimeMillis)))]
+    (when (> drift 5000)
+      (str "database clock is " drift "ms from the JVM's: " db-now))))
+
 (def ^:private cases
   "Case name -> (fn [ctx]) returning nil when the engine conforms."
   (merge
    (into {} (for [k (keys round-trips)] [(keyword "round-trip" (name k)) (round-trip-case k)]))
    {:lookup/uuid               found-by-uuid
+    :clock/now-ms              clock-in-epoch-millis
     :strings/ignore-case       strings-ignore-case
     :strings/any-locale        strings-ignore-case-in-any-locale
     :strings/unicode           strings-ignore-unicode-case

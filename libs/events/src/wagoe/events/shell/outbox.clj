@@ -65,8 +65,10 @@
                                   [[:attempts "INT DEFAULT 0 NOT NULL"]
                                    [:dead_ms "BIGINT NULL"]
                                    [:last_error (str (db-ports/column-type (:adapter ctx) :text) " NULL")]])
-    (db/create-index-if-not-exists! ctx "ix_event_outbox_pending" :event_outbox
-                                    [:delivered_ms :seq])
+    ;; dead_ms in the index, or every poll walks past each dead letter.
+    (db/create-index-if-not-exists! ctx "ix_event_outbox_live" :event_outbox
+                                    [:delivered_ms :dead_ms :seq])
+    (db/drop-index-if-exists! ctx "ix_event_outbox_pending" :event_outbox)
     (jdbc/execute! ds ["CREATE TABLE IF NOT EXISTS event_outbox_relay (
                           name     VARCHAR(64) PRIMARY KEY,
                           owner    VARCHAR(36) NULL,
@@ -104,15 +106,13 @@
                            (event/topic-name topic)
                            (codec/encode {:topic topic :event event})]))
 
-(defn- db-now-ms
-  "SQL for the database's clock in epoch millis, so every replica times the
-   lease by one clock."
-  [engine]
-  (case engine
-    :postgresql "CAST(EXTRACT(EPOCH FROM clock_timestamp()) * 1000 AS BIGINT)"
-    :mysql      "CAST(UNIX_TIMESTAMP(NOW(3)) * 1000 AS SIGNED)"
-    :h2         "DATEDIFF('MILLISECOND', TIMESTAMP WITH TIME ZONE '1970-01-01 00:00:00+00', CURRENT_TIMESTAMP)"
-    :sqlite     "CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER)"))
+(defn- claim-sql
+  "Take or renew the lease, timed by the database clock: a replica's own clock
+   may be skewed."
+  [adapter]
+  (let [now (db-ports/now-ms-sql adapter)]
+    (str "UPDATE event_outbox_relay SET owner = ?, until_ms = " now " + ?
+          WHERE name = 'relay' AND (until_ms < " now " OR owner = ?)")))
 
 (defrecord EventOutbox [ds bus opts owner]
   ports/ITransactionalPublisher
@@ -133,11 +133,11 @@
   [ds bus & [opts]]
   (assoc (->EventOutbox ds bus (merge defaults opts) (str (random-uuid)))
          :purged-at (atom 0)
-         :db-now (db-now-ms (db/engine-of ds))))
+         :claim-sql (claim-sql (:adapter (db/context-of ds)))))
 
 ;; --- relay ------------------------------------------------------------------
 
-(defn- now-ms [] (System/currentTimeMillis))
+(defn- placeholders [ids] (str/join "," (repeat (count ids) "?")))
 
 (defn- pending [ds limit]
   (jdbc/execute! ds ["SELECT id, envelope, attempts FROM event_outbox
@@ -162,23 +162,20 @@
   "Count a failed attempt on `row`; dead-letter it at `max-attempts` or when
    the error is fatal. True when dead-lettered."
   [ds {:keys [id attempts]} error max-attempts]
-  (let [attempts (inc (or attempts 0))
+  (let [attempts (inc attempts)
         dead?    (or (:fatal? error) (>= attempts max-attempts))
         message  (let [m (str (:type error) (some->> (:message error) (str " ")))]
                    (subs m 0 (min 1000 (count m))))]
     (jdbc/execute-one! ds ["UPDATE event_outbox SET attempts = ?, last_error = ?, dead_ms = ? WHERE id = ?"
-                           attempts message (when dead? (now-ms)) id])
+                           attempts message (when dead? (System/currentTimeMillis)) id])
     dead?))
 
 (defn- claim-relay!
-  "Take or renew the relay lease for `owner`; true when held. `db-now` is the
-   database clock: a replica's own clock may be skewed. A relay paused past
-   `lease-ms` may overlap the next owner for one batch: duplicates, no loss."
-  [ds db-now owner lease-ms]
-  (= 1 (::jdbc/update-count
-        (jdbc/execute-one! ds [(str "UPDATE event_outbox_relay SET owner = ?, until_ms = " db-now " + ?
-                                     WHERE name = 'relay' AND (until_ms < " db-now " OR owner = ?)")
-                               owner lease-ms owner]))))
+  "Take or renew the relay lease for `owner` with `claim-sql`; true when held.
+   A relay paused past `lease-ms` may overlap the next owner for one batch:
+   duplicates, no loss."
+  [ds claim-sql owner lease-ms]
+  (= 1 (::jdbc/update-count (jdbc/execute-one! ds [claim-sql owner lease-ms owner]))))
 
 (defn- release-relay! [ds owner]
   (jdbc/execute-one! ds ["UPDATE event_outbox_relay SET until_ms = 0
@@ -187,15 +184,15 @@
 (defn- mark-delivered! [ds ids]
   (when (seq ids)
     (jdbc/execute-one! ds (into [(str "UPDATE event_outbox SET delivered_ms = ? WHERE id IN ("
-                                      (str/join "," (repeat (count ids) "?")) ")")
-                                 (now-ms)]
+                                      (placeholders ids) ")")
+                                 (System/currentTimeMillis)]
                                 ids))))
 
 (defn- purge-delivered!
   "Delete rows delivered more than `retain-ms` ago, at most once per
    `retain-ms` or hour, whichever is shorter: not a DELETE on every idle tick."
   [ds purged-at retain-ms]
-  (let [now (now-ms)]
+  (let [now (System/currentTimeMillis)]
     (when (>= (- now @purged-at) (min retain-ms (* 60 60 1000)))
       (reset! purged-at now)
       (jdbc/execute-one! ds ["DELETE FROM event_outbox WHERE delivered_ms < ?"
@@ -207,9 +204,9 @@
    earlier one; the failed row is retried next pass. A row dead-lettered
    instead (see `record-failure!`) is skipped and the pass goes on. Does
    nothing while another relay holds the lease. Returns the count delivered."
-  [{:keys [ds bus opts owner purged-at db-now]}]
+  [{:keys [ds bus opts owner purged-at claim-sql]}]
   (let [{:keys [batch-size retain-ms lease-ms max-attempts]} opts]
-    (if-not (claim-relay! ds db-now owner lease-ms)
+    (if-not (claim-relay! ds claim-sql owner lease-ms)
       0
       (let [rows (pending ds batch-size)
             ids  (reduce (fn [ids row]
@@ -250,7 +247,7 @@
     (::jdbc/update-count
      (jdbc/execute-one! ds (into [(str "UPDATE event_outbox SET dead_ms = NULL, attempts = 0, last_error = NULL
                                          WHERE dead_ms IS NOT NULL AND id IN ("
-                                       (str/join "," (repeat (count ids) "?")) ")")]
+                                       (placeholders ids) ")")]
                                  ids)))))
 
 (defn- relay-tick! [outbox]
