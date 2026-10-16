@@ -170,42 +170,54 @@
                  filter-sql)]
     (into [sql index-id entity-type language query] filter-params)))
 
+(defn build-trigram-threshold-sql
+  "Set pg_trgm.word_similarity_threshold, which `<%` compares against, for the
+   current transaction. Run it in the transaction of build-postgres-suggest-sql."
+  [threshold]
+  ["SELECT set_config('pg_trgm.word_similarity_threshold', ?, true)" (str threshold)])
+
 (defn build-postgres-suggest-sql
   "Build a parameterized SQL vector for trigram similarity suggestions.
 
    Requires pg_trgm. word_similarity, not similarity: a prefix scored against a
-   whole document stays under any useful threshold (BOU-661).
+   whole document stays under any useful threshold (BOU-661). The `<%` operator
+   rather than a word_similarity comparison, so the trigram index on content_all
+   can serve it; its threshold comes from build-trigram-threshold-sql (BOU-676).
 
    Args:
      index-id    - string
      entity-type - string
      query       - string (partial user input)
      limit       - integer
-     threshold   - number (word_similarity threshold, e.g. 0.3)
      filters     - map of keyword->any (optional)
 
    Returns:
      JDBC SQL vector [sql & params]"
-  ([index-id entity-type query limit threshold]
-   (build-postgres-suggest-sql index-id entity-type query limit threshold nil))
-  ([index-id entity-type query limit threshold filters]
-   (let [[filter-sql & filter-params] (build-filter-sql-postgres (or filters {}))
-         sql (str "SELECT entity_type, entity_id, metadata, "
-                  "  word_similarity(?, content_all) AS score, "
-                  "  NULL AS snippet "
-                  "FROM search_documents d "
-                  "WHERE index_id = ? AND entity_type = ? "
-                  "  AND word_similarity(?, content_all) > ? "
-                  filter-sql " "
-                  "ORDER BY score DESC "
-                  "LIMIT ?")]
-     (-> [sql query index-id entity-type query threshold]
-         (into filter-params)
-         (conj limit)))))
+  [index-id entity-type query limit filters]
+  (let [[filter-sql & filter-params] (build-filter-sql-postgres (or filters {}))
+        sql (str "SELECT entity_type, entity_id, metadata, "
+                 "  word_similarity(?, content_all) AS score, "
+                 "  NULL AS snippet "
+                 "FROM search_documents d "
+                 "WHERE index_id = ? AND entity_type = ? "
+                 "  AND ? <% content_all "
+                 filter-sql " "
+                 "ORDER BY score DESC "
+                 "LIMIT ?")]
+    (-> [sql query index-id entity-type query]
+        (into filter-params)
+        (conj limit))))
 
 ;; =============================================================================
 ;; Fallback SQL builders (H2 / SQLite)
 ;; =============================================================================
+
+(defn- like-pattern
+  "A LIKE pattern containing `query`, lowercased. % and _ in the query match
+   themselves, escaped with ! for the ESCAPE '!' every LIKE here carries; not
+   backslash, which MySQL string literals would need doubled (BOU-676)."
+  [query]
+  (str "%" (str/replace (str/lower-case (or (sanitize-query query) "")) #"[!%_]" "!$0") "%"))
 
 (defn build-fallback-search-sql
   "Build a parameterized JDBC SQL vector for LIKE-based fallback search.
@@ -223,14 +235,14 @@
    Returns:
      JDBC SQL vector [sql & params]"
   [index-id entity-type query limit offset filters]
-  (let [pattern (str "%" (str/lower-case (or (sanitize-query query) "")) "%")
+  (let [pattern (like-pattern query)
         [filter-sql & filter-params] (build-filter-sql-fallback (or filters {}))
         sql (str "SELECT entity_type, entity_id, metadata, "
                  "  1.0 AS score, "
                  "  NULL AS snippet "
                  "FROM search_documents "
                  "WHERE index_id = ? AND entity_type = ? "
-                 "  AND LOWER(content_all) LIKE ? "
+                 "  AND LOWER(content_all) LIKE ? ESCAPE '!' "
                  filter-sql " "
                  "ORDER BY updated_at DESC "
                  "LIMIT ? OFFSET ?")]
@@ -248,25 +260,25 @@
    Returns:
      JDBC SQL vector [sql & params]"
   [index-id entity-type query filters]
-  (let [pattern (str "%" (str/lower-case (or (sanitize-query query) "")) "%")
+  (let [pattern (like-pattern query)
         [filter-sql & filter-params] (build-filter-sql-fallback (or filters {}))
         sql (str "SELECT count(*) AS cnt "
                  "FROM search_documents "
                  "WHERE index_id = ? AND entity_type = ? "
-                 "  AND LOWER(content_all) LIKE ? "
+                 "  AND LOWER(content_all) LIKE ? ESCAPE '!' "
                  filter-sql)]
     (into [sql index-id entity-type pattern] filter-params)))
 
 (defn- like-suggest-sql
   [build-filter-sql index-id entity-type query limit filters]
   (let [[filter-sql & filter-params] (build-filter-sql (or filters {}))
-        pattern (str "%" (str/lower-case (or (sanitize-query query) "")) "%")
+        pattern (like-pattern query)
         sql (str "SELECT entity_type, entity_id, metadata, "
                  "  0.5 AS score, "
                  "  NULL AS snippet "
                  "FROM search_documents d "
                  "WHERE index_id = ? AND entity_type = ? "
-                 "  AND LOWER(content_all) LIKE ? "
+                 "  AND LOWER(content_all) LIKE ? ESCAPE '!' "
                  filter-sql " "
                  "ORDER BY updated_at DESC "
                  "LIMIT ?")]

@@ -91,6 +91,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Search suggestions read every row on PostgreSQL, and `_`/`%` in a query matched anything** (BOU-676).
+  Run migrations for the trigram index; pg_trgm off the `search_path` now falls back to LIKE.
 - **Deactivated users vanished from the admin list** (BOU-681): deactivating sets `active` only and keeps them listed; Delete, the bulk one included, soft-deletes.
   Users deactivated before this stay hidden; restore one by clearing `deleted_at` in `auth_users`.
 - **A deactivated user's JWT, and `validate-session` for their session, still authenticated** (BOU-668); every auth path answers 401 now.

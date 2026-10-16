@@ -14,6 +14,9 @@
             [wagoe.search.test.support :refer [create-search-documents-table! make-doc]]
             [wagoe.search.ports :as ports]
             [wagoe.search.shell.persistence :as persistence]
+            [wagoe.search.shell.trigram :as trigram]
+            [wagoe.search.core.query :as qry]
+            [clojure.string :as str]
             [support.test-db :as test-db]
             [next.jdbc :as jdbc])
   (:import [java.util UUID]))
@@ -246,7 +249,7 @@
 (deftest ^:integration suggest-without-pg-trgm-test
   (testing "PostgreSQL without pg_trgm suggests by LIKE (BOU-661)"
     (let [{:keys [datasource]} @test-store]
-      (when (full-text?) (jdbc/execute! datasource ["DROP EXTENSION pg_trgm"]))
+      (when (full-text?) (jdbc/execute! datasource ["DROP EXTENSION pg_trgm CASCADE"]))
       (let [[expected actual] (tenant-1-suggestions
                                (persistence/create-search-store datasource @test-adapter))]
         (is (= expected actual))))))
@@ -257,3 +260,49 @@
     (is (= (full-text?)
            (boolean (seq (ports/suggest-documents @test-store :product-search :product
                                                   "widgit" {:limit 5})))))))
+
+(deftest ^:integration suggest-with-pg-trgm-off-the-search-path-test
+  (testing "pg_trgm outside the search_path: LIKE, and trigram is not tried again (BOU-676)"
+    (let [{:keys [datasource]} @test-store]
+      (when (full-text?)
+        (jdbc/execute! datasource ["DROP EXTENSION pg_trgm CASCADE"])
+        (jdbc/execute! datasource ["CREATE SCHEMA trgm"])
+        (jdbc/execute! datasource ["CREATE EXTENSION pg_trgm SCHEMA trgm"]))
+      (let [store             (persistence/create-search-store datasource @test-adapter)
+            [expected actual] (tenant-1-suggestions store)]
+        (is (= expected actual))
+        (is (= (when (full-text?) :unusable) @(:trigram-state store)))))))
+
+(deftest ^:integration trigram-suggest-uses-the-index-test
+  (testing "the suggest query can be served by the trigram index (BOU-676)"
+    (if-not (full-text?)
+      (testing "elsewhere pg_trgm is not even looked for"
+        (ports/suggest-documents @test-store :product-search :product "wid" {:limit 5})
+        (is (nil? @(:trigram-state @test-store))))
+      (let [{:keys [datasource]} @test-store
+            [sql & params]       (qry/build-postgres-suggest-sql "product-search" "product" "wid" 5 nil)
+            plan                 (jdbc/with-transaction [tx datasource {:rollback-only true}]
+                                   ;; On a test-sized table the planner prefers the btrees on
+                                   ;; index_id and entity_type, or reads it whole. Without
+                                   ;; them, a plan that avoids the trigram index has none to use.
+                                   (jdbc/execute! tx ["DROP INDEX idx_search_documents_index_id, idx_search_documents_entity"])
+                                   (jdbc/execute! tx ["ALTER TABLE search_documents DROP CONSTRAINT search_documents_index_id_entity_id_key"])
+                                   (jdbc/execute! tx ["SET LOCAL enable_seqscan = off"])
+                                   (jdbc/execute! tx (qry/build-trigram-threshold-sql 0.3))
+                                   (->> (jdbc/execute! tx (into [(str "EXPLAIN " sql)] params))
+                                        (map (comp str first vals))
+                                        (str/join "\n")))]
+        (is (str/includes? plan trigram/index-name) plan)))))
+
+(deftest ^:integration like-wildcards-are-literal-test
+  (testing "a_b finds a_b, not axb (BOU-676)"
+    (let [a-b        (UUID/randomUUID)
+          like-store (assoc @test-store :trigram-state (atom :unusable))]
+      (ports/upsert-document! @test-store (make-doc {:entity-id a-b :content-all "a_b"}))
+      (ports/upsert-document! @test-store (make-doc {:content-all "axb"}))
+      (is (= [a-b] (map :entity-id (ports/suggest-documents like-store :product-search :product
+                                                            "a_b" {:limit 5}))))
+      (when-not (full-text?)
+        (is (= [a-b] (map :entity-id (ports/search-documents @test-store :product-search :product
+                                                             "a_b" {:limit 5 :offset 0}))))
+        (is (= 1 (ports/count-results @test-store :product "a_b" {:index-id :product-search})))))))
