@@ -122,7 +122,7 @@ reverse. When the event must match the data, publish through the outbox.
 :wagoe/events
 {:provider :redis
  :outbox   {:poll-ms 1000 :batch-size 100 :retain-ms 86400000 :lease-ms 30000
-            :max-attempts 10}}
+            :max-attempts 10 :dead-letter-after-ms 3600000 :max-backoff-ms 60000}}
 
 ;; take a ref to :wagoe/events-outbox
 (jdbc/with-transaction [tx ds]            ; or (db/with-transaction [tx ctx])
@@ -143,14 +143,16 @@ in order and marks them delivered; delivered rows are deleted after
   without its event.
 - A failed publish stops the pass, so a later event never overtakes an earlier
   one. Order holds within a transaction; concurrent transactions interleave.
-- **A row that fails `:max-attempts` times is dead-lettered** (BOU-679): logged
-  at error, kept with its `last_error`, and skipped, so the events after it
-  overtake it. An undecodable envelope is dead-lettered on the first try.
-  `(outbox/dead-letters outbox)` lists them; `(outbox/requeue! outbox ids)`
-  makes them pending again, ahead of anything newer still pending.
-  A bus outage counts too: one pass per `:poll-ms`, so an outage longer than
-  `:max-attempts` × `:poll-ms` dead-letters the rows at the head. Size it for
-  the outages you expect.
+  After a failed pass the relay waits twice as long, up to `:max-backoff-ms`,
+  and is back to `:poll-ms` after a good one.
+- **A row is dead-lettered once it has failed `:max-attempts` times and its
+  first failure is `:dead-letter-after-ms` old** (BOU-679), by the database
+  clock: logged at error, kept with its `last_error`, and skipped, so the
+  events after it overtake it. A bus outage shorter than the window
+  dead-letters nothing. An undecodable envelope is dead-lettered on the first
+  try. `(outbox/dead-letters outbox)` lists them; `(outbox/requeue! outbox ids)`
+  makes them pending again, ahead of anything newer still pending. Both
+  options must be positive integers, checked at boot.
 - Relays on several replicas take turns through a lease row
   (`event_outbox_relay`), so one publishes at a time. Keep `:lease-ms` above
   the time one batch takes; `:relay? false` keeps a node out entirely. The

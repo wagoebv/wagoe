@@ -184,7 +184,13 @@
 
 (defn- relayed-ns [seen] (map (comp :n :payload second) @seen))
 
-(deftest ^:integration poison-row-is-dead-lettered-after-max-attempts
+(defn- age-failures!
+  "Move every first failure back past the default :dead-letter-after-ms."
+  [ds]
+  (jdbc/execute-one! ds ["UPDATE event_outbox SET first_failed_ms = first_failed_ms - ?
+                           WHERE first_failed_ms IS NOT NULL" (* 2 60 60 1000)]))
+
+(deftest ^:integration poison-row-is-dead-lettered-past-both-thresholds
   (with-outbox "outbox_poison"
     (fn [{:keys [ds seen bus outbox]}]
       (let [picky  (reify ports/IEventPublisher
@@ -196,12 +202,15 @@
         (publish-all! outbox (range 3))
         (is (= 0 (outbox/relay-once! outbox)) "attempt 1 stops the pass")
         (is (= 0 (outbox/relay-once! outbox)) "attempt 2 stops the pass")
-        (is (= 2 (outbox/relay-once! outbox)) "attempt 3 dead-letters it; the rest flow")
+        (is (= 0 (outbox/relay-once! outbox)) "attempt 3 is inside :dead-letter-after-ms")
+        (is (empty? (outbox/dead-letters outbox)))
+        (age-failures! ds)
+        (is (= 2 (outbox/relay-once! outbox)) "attempt 4, an hour on, dead-letters it; the rest flow")
         (is (= [1 2] (relayed-ns seen)))
         (is (zero? (pending-count ds)))
         (let [[dead :as all] (outbox/dead-letters outbox)]
           (is (= 1 (count all)))
-          (is (= 3 (:attempts dead)))
+          (is (= 4 (:attempts dead)))
           (is (re-find #"rejected" (:last-error dead)))
           (is (some? (:dead-ms dead))))))))
 
@@ -218,10 +227,12 @@
 
 (deftest ^:integration requeued-dead-letter-is-delivered
   (with-outbox "outbox_requeue"
-    (fn [{:keys [seen fail outbox]}]
+    (fn [{:keys [ds seen fail outbox]}]
       (let [outbox (assoc-in outbox [:opts :max-attempts] 1)]
         (publish-all! outbox [0])
         (reset! fail true)
+        (is (= 0 (outbox/relay-once! outbox)))
+        (age-failures! ds)
         (is (= 0 (outbox/relay-once! outbox)))
         (let [ids (map :id (outbox/dead-letters outbox))]
           (is (= 1 (count ids)))
@@ -245,3 +256,35 @@
         (is (= 0 (outbox/relay-once! other)) "held until database now passes it")
         (publish-all! outbox [1])
         (is (= 1 (outbox/relay-once! outbox)) "still held by its owner")))))
+
+(deftest ^:integration a-bus-outage-dead-letters-nothing
+  (with-outbox "outbox_outage"
+    (fn [{:keys [ds seen fail outbox]}]
+      (let [outbox (assoc-in outbox [:opts :max-attempts] 3)]
+        (publish-all! outbox (range 3))
+        (reset! fail true)
+        (dotimes [_ 20]
+          (outbox/relay-once! outbox))
+        (is (empty? (outbox/dead-letters outbox)) "20 attempts, but inside :dead-letter-after-ms")
+        (is (= 3 (pending-count ds)))
+        (reset! fail false)
+        (is (= 3 (outbox/relay-once! outbox)))
+        (is (= [0 1 2] (relayed-ns seen)) "in order once the bus is back")))))
+
+(deftest ^:integration the-relay-backs-off-after-a-failed-pass
+  (with-outbox "outbox_backoff"
+    (fn [{:keys [fail outbox]}]
+      (let [outbox (update outbox :opts assoc :poll-ms 100 :max-backoff-ms 500)
+            tick   #(#'outbox/relay-tick! outbox %)]
+        (publish-all! outbox [0])
+        (reset! fail true)
+        (is (= [200 400 500 500] (rest (take 5 (iterate tick 100)))) "doubles, capped")
+        (reset! fail false)
+        (is (= 100 (tick 500)) "back to :poll-ms once a pass succeeds")))))
+
+(deftest ^:unit policy-options-are-checked-at-creation
+  (doseq [bad [{:max-attempts 0} {:max-attempts "10"} {:dead-letter-after-ms -1} {:dead-letter-after-ms nil}]]
+    (is (= :validation-error
+           (try (outbox/create-outbox nil nil bad)
+                (catch clojure.lang.ExceptionInfo e (:type (ex-data e)))))
+        (pr-str bad))))
