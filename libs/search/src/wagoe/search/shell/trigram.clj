@@ -25,17 +25,22 @@
 
 (defn index-up
   "Migratus entry point: the trigram index suggestions use. Outside a
-   transaction, so the table is locked for the build and nothing else."
+   transaction, since a failed statement would abort it and the warning
+   below could not stand in for the index."
   [config]
   (let [conn (db/migration-connectable config)]
-    (when (and (= :postgresql (db/engine-of conn)) (installed? conn))
-      (try
-        (jdbc/execute! conn [(str "CREATE INDEX IF NOT EXISTS " index-name
-                                  " ON search_documents USING GIN (content_all gin_trgm_ops)")])
-        (catch java.sql.SQLException e
-          ;; pg_trgm in a schema off the search_path: gin_trgm_ops is not found.
-          (log/warn "Trigram index not created; search suggestions read every row"
-                    {:error (db/loggable-message e)}))))))
+    (when (= :postgresql (db/engine-of conn))
+      (if-not (installed? conn)
+        (log/warn "pg_trgm not installed; after CREATE EXTENSION pg_trgm, create the trigram index by hand"
+                  {:index index-name})
+        (try
+          (jdbc/execute! conn [(str "CREATE INDEX IF NOT EXISTS " index-name
+                                    " ON search_documents USING GIN (content_all gin_trgm_ops)")])
+          (catch java.sql.SQLException e
+            ;; 42704: pg_trgm in a schema off the search_path, gin_trgm_ops not found.
+            (when-not (= "42704" (.getSQLState e)) (throw e))
+            (log/warn "Trigram index not created; search suggestions read every row"
+                      {:error (db/loggable-message e)})))))))
 
 (defn index-down
   "Migratus entry point."

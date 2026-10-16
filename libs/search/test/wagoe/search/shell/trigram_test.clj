@@ -14,8 +14,13 @@
   (testing "gin_trgm_ops not on the search_path gets a warning (BOU-676)"
     (with-redefs [db/engine-of   (constantly :postgresql)
                   sut/installed? (constantly true)
-                  jdbc/execute!  (fn [& _] (throw (java.sql.SQLException. "operator class \"gin_trgm_ops\" does not exist")))]
-      (is (nil? (sut/index-up {:db {:datasource :unused}}))))))
+                  jdbc/execute!  (fn [& _] (throw (java.sql.SQLException. "operator class \"gin_trgm_ops\" does not exist" "42704")))]
+      (is (nil? (sut/index-up {:db {:datasource :unused}})))))
+  (testing "any other failure fails the migration, rather than leaving it applied without the index"
+    (with-redefs [db/engine-of   (constantly :postgresql)
+                  sut/installed? (constantly true)
+                  jdbc/execute!  (fn [& _] (throw (java.sql.SQLException. "canceling statement due to lock timeout" "55P03")))]
+      (is (thrown? java.sql.SQLException (sut/index-up {:db {:datasource :unused}}))))))
 
 (deftest ^:unit no-index-without-pg-trgm
   (let [ran (atom [])]

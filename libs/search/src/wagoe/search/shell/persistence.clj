@@ -183,8 +183,10 @@
   (suggest-documents [_ index-id entity-type query opts]
     (log/debug "Suggesting documents"
                {:index-id index-id :entity-type entity-type :query query})
-    (let [{:keys [limit threshold filters]
-           :or   {limit 5 threshold 0.3}} opts
+    (let [{:keys [limit filters]
+           :or   {limit 5}} opts
+          ;; or, not :or: an explicit nil would reach set_config as '' and fail.
+          threshold (or (:threshold opts) 0.3)
           idx     (kw->str index-id)
           et      (kw->str entity-type)
           rows    (or (when (and full-text? (trigram? trigram-state datasource))
