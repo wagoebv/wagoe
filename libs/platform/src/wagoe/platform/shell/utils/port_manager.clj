@@ -5,7 +5,8 @@
    and intelligent port allocation for different development scenarios."
   (:require [clojure.java.io :as io]
             [clojure.string :as str]
-            [clojure.tools.logging :as log]))
+            [clojure.tools.logging :as log]
+            [wagoe.config :as config]))
 
 (defn port-available?
   "Check if a port is available for binding.
@@ -71,24 +72,22 @@
    (some #(System/getenv %)
          ["CONTAINER" "DOCKER_CONTAINER" "KUBERNETES_SERVICE_HOST"])))
 
-(def ^:private searchable-envs #{"dev" "development" "test" "local"})
+(def ^:private searchable-envs #{"dev" "test" "local"})
+
+(defn getenv
+  "Indirection so tests can redef it."
+  [k]
+  (System/getenv k))
 
 (defn development-environment?
   "True when the app may search a port range instead of binding the exact port.
 
    `profile` is the config profile the app booted with, and wins. Without one,
-   -Denv > WAG_ENV > ENV > ENVIRONMENT, defaulting to development (a bare REPL).
-   Reading only ENVIRONMENT/ENV made every `WAG_ENV=prod` boot look like
-   development (BOU-566)."
+   WAG_ENV as the config loader reads it, defaulting to dev (BOU-530)."
   ([] (development-environment? nil))
   ([profile]
-   (let [env (or (some-> profile name)
-                 (System/getProperty "env")
-                 (System/getenv "WAG_ENV")
-                 (System/getenv "ENV")
-                 (System/getenv "ENVIRONMENT")
-                 "development")]
-     (contains? searchable-envs (str/lower-case env)))))
+   (contains? searchable-envs
+              (config/normalize-env (or (some-> profile name) (getenv "WAG_ENV") "dev")))))
 
 (defn- coerce-port
   "aero's #env yields a String, so a config without #long hands one down (BOU-251)."

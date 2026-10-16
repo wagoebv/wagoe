@@ -294,6 +294,27 @@
           (is (= 3001 (:port (pm/allocate-port 3000 {:profile profile
                                                      :port-range {:start 3000 :end 3099}})))))))))
 
+;; BOU-530: without a profile the detector read ENV/ENVIRONMENT, so a
+;; `WAG_ENV=prod` boot searched ports like dev.
+(deftest ^:unit without-a-profile-wag-env-decides
+  (let [env-is (fn [vars] (fn [k] (get vars k)))]
+    (doseq [[vars searches?] [[{"WAG_ENV" "prod"} false]
+                              [{"WAG_ENV" "production"} false]
+                              [{"WAG_ENV" "acc"} false]
+                              [{"WAG_ENV" "dev"} true]
+                              [{"WAG_ENV" "development"} true]
+                              [{"WAG_ENV" "test"} true]
+                              [{} true]
+                              [{"ENV" "prod" "ENVIRONMENT" "prod"} true]
+                              [{"WAG_ENV" "prod" "ENV" "dev" "ENVIRONMENT" "dev"} false]]]
+      (with-redefs [pm/getenv (env-is vars)]
+        (is (= searches? (pm/development-environment?)) (pr-str vars))))
+    (testing "the profile wins over WAG_ENV"
+      (with-redefs [pm/getenv (env-is {"WAG_ENV" "dev"})]
+        (is (not (pm/development-environment? :prod))))
+      (with-redefs [pm/getenv (env-is {"WAG_ENV" "prod"})]
+        (is (pm/development-environment? :test))))))
+
 (deftest ^:unit the-conflict-warning-needs-a-conflict
   ;; `#or [#env HTTP_PORT 3000]` without #long hands a String down. "3056" is
   ;; not= 3056, so an unchanged port logged "port conflict resolved" (BOU-566).
