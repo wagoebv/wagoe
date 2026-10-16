@@ -36,6 +36,7 @@
            "libs/i18n/resources"                            ;; i18n translation catalogues
            "libs/push/src" "libs/push/test"                 ;; Push notifications
            "libs/push/resources"                            ;; Push resources
+           "libs/test/src" "libs/test/test"                ;; Test kit for apps (BOU-469)
            "libs/audience/src" "libs/audience/test"        ;; Phase 21: Audience
            "libs/audience/resources"]                      ;; Audience migrations
 

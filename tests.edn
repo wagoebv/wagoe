@@ -26,7 +26,8 @@
                         "libs/i18n/src"
                         "libs/devtools/src"
                         "libs/push/src"
-                        "libs/audience/src"]
+                        "libs/audience/src"
+                        "libs/test/src"]
 
   :tests [{:id :unit
            :test-paths ["test"
@@ -56,7 +57,8 @@
                         "libs/i18n/test"
                         "libs/devtools/test"
                         "libs/push/test"
-                        "libs/audience/test"]
+                        "libs/audience/test"
+                        "libs/test/test"]
            :ns-patterns ["wagoe.*-test"]
            :randomize? true}
 
@@ -179,6 +181,10 @@
           {:id :audience
            :test-paths ["libs/audience/test"]
            :ns-patterns ["wagoe.audience.*-test"]}
+
+          {:id :test
+           :test-paths ["libs/test/test"]
+           :ns-patterns ["wagoe.test-test"]}
 
          ;; End-to-end suite lives in tests.e2e.edn so default
          ;; clojure -M:test runs stay opt-in and do not require spel.
