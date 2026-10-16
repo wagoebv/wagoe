@@ -91,6 +91,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **One event the bus never accepts stalled the outbox relay for good; replica clock skew could split its lease** (BOU-679).
+  Such a row is dead-lettered after `:max-attempts` (default 10); the lease uses database time. See `outbox/requeue!`.
 - **Deactivated users vanished from the admin list** (BOU-681): deactivating sets `active` only and keeps them listed; Delete, the bulk one included, soft-deletes.
   Users deactivated before this stay hidden; restore one by clearing `deleted_at` in `auth_users`.
 - **A deactivated user's JWT, and `validate-session` for their session, still authenticated** (BOU-668); every auth path answers 401 now.

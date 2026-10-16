@@ -121,7 +121,8 @@ reverse. When the event must match the data, publish through the outbox.
 ;; config.edn — opt in; needs :wagoe/db-context
 :wagoe/events
 {:provider :redis
- :outbox   {:poll-ms 1000 :batch-size 100 :retain-ms 86400000 :lease-ms 30000}}
+ :outbox   {:poll-ms 1000 :batch-size 100 :retain-ms 86400000 :lease-ms 30000
+            :max-attempts 10}}
 
 ;; take a ref to :wagoe/events-outbox
 (jdbc/with-transaction [tx ds]            ; or (db/with-transaction [tx ctx])
@@ -142,9 +143,16 @@ in order and marks them delivered; delivered rows are deleted after
   without its event.
 - A failed publish stops the pass, so a later event never overtakes an earlier
   one. Order holds within a transaction; concurrent transactions interleave.
+- **A row that fails `:max-attempts` times is dead-lettered** (BOU-679): logged
+  at error, kept with its `last_error`, and skipped, so the events after it
+  overtake it. An undecodable envelope is dead-lettered on the first try.
+  `(outbox/dead-letters outbox)` lists them; `(outbox/requeue! outbox ids)`
+  makes them pending again, ahead of anything newer still pending.
 - Relays on several replicas take turns through a lease row
   (`event_outbox_relay`), so one publishes at a time. Keep `:lease-ms` above
-  the time one batch takes; `:relay? false` keeps a node out entirely.
+  the time one batch takes; `:relay? false` keeps a node out entirely. The
+  lease expiry is computed from the database clock, so replica clock skew
+  does not matter.
 - The relay is its own component, `:wagoe/events-relay`, claimed by
   `service events`; `:wagoe/events-outbox` is platform, so every service can
   write to it. Delivered rows are purged at most once per `:retain-ms` or hour.

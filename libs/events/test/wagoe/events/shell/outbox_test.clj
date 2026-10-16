@@ -36,7 +36,7 @@
 (defn- event [n] (publisher/build :order/placed :orders {:n n} {:tenant-id "t1"}))
 
 (defn- pending-count [ds]
-  (:n (jdbc/execute-one! ds ["SELECT COUNT(*) AS n FROM event_outbox WHERE delivered_ms IS NULL"]
+  (:n (jdbc/execute-one! ds ["SELECT COUNT(*) AS n FROM event_outbox WHERE delivered_ms IS NULL AND dead_ms IS NULL"]
                          {:builder-fn rs/as-unqualified-lower-maps})))
 
 (deftest ^:integration committed-event-is-delivered-once
@@ -176,3 +176,74 @@
         (is (nil? (purge! ds at 1000)) "the next within the interval does not")
         (reset! at (- (System/currentTimeMillis) 2000))
         (is (some? (purge! ds at 1000)))))))
+
+(defn- publish-all! [ds outbox ns]
+  (jdbc/with-transaction [tx ds]
+    (doseq [n ns]
+      (ports/publish-in-tx! outbox tx :orders (event n)))))
+
+(defn- relayed-ns [seen] (map (comp :n :payload second) @seen))
+
+(deftest ^:integration poison-row-is-dead-lettered-after-max-attempts
+  (with-outbox "outbox_poison"
+    (fn [{:keys [ds seen bus outbox]}]
+      (let [picky  (reify ports/IEventPublisher
+                     (publish! [_ topic e]
+                       (if (zero? (:n (:payload e)))
+                         {:error {:type :events/rejected}}
+                         (ports/publish! bus topic e))))
+            outbox (-> outbox (assoc :bus picky) (assoc-in [:opts :max-attempts] 3))]
+        (publish-all! ds outbox (range 3))
+        (is (= 0 (outbox/relay-once! outbox)) "attempt 1 stops the pass")
+        (is (= 0 (outbox/relay-once! outbox)) "attempt 2 stops the pass")
+        (is (= 2 (outbox/relay-once! outbox)) "attempt 3 dead-letters it; the rest flow")
+        (is (= [1 2] (relayed-ns seen)))
+        (is (zero? (pending-count ds)))
+        (let [[dead :as all] (outbox/dead-letters outbox)]
+          (is (= 1 (count all)))
+          (is (= 3 (:attempts dead)))
+          (is (re-find #"rejected" (:last-error dead)))
+          (is (some? (:dead-ms dead))))))))
+
+(deftest ^:integration undecodable-row-is-dead-lettered-at-once
+  (with-outbox "outbox_undecodable"
+    (fn [{:keys [ds seen outbox]}]
+      (publish-all! ds outbox (range 2))
+      (let [first-id (:id (jdbc/execute-one! ds ["SELECT id FROM event_outbox ORDER BY seq LIMIT 1"]
+                                             {:builder-fn rs/as-unqualified-lower-maps}))]
+        (jdbc/execute-one! ds ["UPDATE event_outbox SET envelope = 'not transit' WHERE id = ?" first-id]))
+      (is (= 1 (outbox/relay-once! outbox)))
+      (is (= [1] (relayed-ns seen)))
+      (is (= [1] (map :attempts (outbox/dead-letters outbox)))))))
+
+(deftest ^:integration requeued-dead-letter-is-delivered
+  (with-outbox "outbox_requeue"
+    (fn [{:keys [ds seen fail outbox]}]
+      (let [outbox (assoc-in outbox [:opts :max-attempts] 1)]
+        (publish-all! ds outbox [0])
+        (reset! fail true)
+        (is (= 0 (outbox/relay-once! outbox)))
+        (let [ids (map :id (outbox/dead-letters outbox))]
+          (is (= 1 (count ids)))
+          (reset! fail false)
+          (is (= 0 (outbox/relay-once! outbox)) "dead letters are not relayed")
+          (is (= 1 (outbox/requeue! outbox ids)))
+          (is (= 0 (outbox/requeue! outbox ids)) "only dead rows are requeued"))
+        (is (empty? (outbox/dead-letters outbox)))
+        (is (= 1 (outbox/relay-once! outbox)))
+        (is (= [0] (relayed-ns seen)))))))
+
+(deftest ^:integration lease-is-timed-by-the-database-clock
+  (with-outbox "outbox_lease_clock"
+    (fn [{:keys [ds bus outbox]}]
+      (let [other (outbox/create-outbox ds bus)
+            until #(:until_ms (jdbc/execute-one! ds ["SELECT until_ms FROM event_outbox_relay"]
+                                                 {:builder-fn rs/as-unqualified-lower-maps}))]
+        (is (= 0 (outbox/relay-once! outbox)) "takes the lease")
+        (is (< (abs (- (until) (+ (System/currentTimeMillis) 30000))) 5000)
+            "expiry is database now plus :lease-ms, in epoch millis")
+        (publish-all! ds outbox [1])
+        (testing "a replica whose clock runs an hour ahead cannot take a live lease"
+          (with-redefs-fn {#'outbox/now-ms #(+ (System/currentTimeMillis) (* 60 60 1000))}
+            #(is (= 0 (outbox/relay-once! other)))))
+        (is (= 1 (outbox/relay-once! outbox)) "still held by its owner")))))
