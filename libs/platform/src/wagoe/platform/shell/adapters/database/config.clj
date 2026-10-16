@@ -271,7 +271,11 @@
       (throw (ex-info "No active database configured"
                       {:type :configuration-error :environment env})))
     (let [[config-key config] (first db-configs)
-          ;; Create a datasource for the database configuration
+          ;; Migrations, seeds and tenant provisioning run long statements:
+          ;; the app's timeout would cancel them, and an absent one means the
+          ;; 30s default, so 0 (BOU-658).
+          config (cond-> config
+                   (= :postgresql (:adapter config)) (assoc :statement-timeout-ms 0))
           datasource (factory/create-datasource config)]
       (assoc config
              :datasource datasource

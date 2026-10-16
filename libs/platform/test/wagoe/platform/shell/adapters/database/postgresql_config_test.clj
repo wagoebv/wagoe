@@ -49,3 +49,22 @@
             (factory/close-db-context! ctx))))
       (finally
         (epg/stop! pg)))))
+
+(deftest ^:integration migrations-run-without-the-apps-statement-timeout
+  (let [pg (epg/start!)]
+    (try
+      (with-redefs [db-config/get-database-configs
+                    (fn [_] {:active {:wagoe/postgresql
+                                      {:host "localhost" :port (epg/port pg) :dbname "postgres"
+                                       :user "postgres" :password "postgres"
+                                       :statement-timeout-ms 50
+                                       :pool {:minimum-idle 1 :maximum-pool-size 1}}}})]
+        (let [{:keys [datasource] :as cfg} (db-config/get-active-db-config)]
+          (try
+            (is (= 0 (:statement-timeout-ms cfg)))
+            (with-open [conn (jdbc/get-connection datasource)]
+              (is (= "0" (:statement_timeout (jdbc/execute-one! conn ["SHOW statement_timeout"])))))
+            (finally
+              (.close ^java.io.Closeable datasource)))))
+      (finally
+        (epg/stop! pg)))))

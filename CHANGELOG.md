@@ -91,8 +91,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
-- **PostgreSQL `:application-name` and `:statement-timeout-ms` were ignored** (BOU-658). Upgrade; migrations now
-  honour the timeout too, in-memory H2 migrations use `mem:wagoe`, and a config without `:pool` boots.
+- **PostgreSQL `:application-name` and `:statement-timeout-ms` were ignored** (BOU-658). Upgrade; migrations, seeds and
+  tenant provisioning run without the timeout, in-memory H2 migrations use `mem:wagoe`, and a config without `:pool` boots.
 - **On H2, `SET REFERENTIAL_INTEGRITY FALSE` was undone by the next pooled connection** (BOU-654), so scaffolded
   tests failed at random on foreign keys. Upgrade; nothing to change.
 - **The admin users page bypassed the user service** (BOU-665): no audit, no session end, no last-admin guard.
