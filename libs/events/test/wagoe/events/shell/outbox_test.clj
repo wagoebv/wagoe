@@ -1,0 +1,140 @@
+(ns wagoe.events.shell.outbox-test
+  "BOU-448: an event commits with the business change or not at all. Runs on
+   the engine WAGOE_TEST_DB names (h2 by default; pg, mysql)."
+  (:require [clojure.test :refer [deftest is testing]]
+            [integrant.core :as ig]
+            [next.jdbc :as jdbc]
+            [next.jdbc.result-set :as rs]
+            [support.test-db :as test-db]
+            [wagoe.events.ports :as ports]
+            [wagoe.events.shell.module-wiring :as wiring]
+            [wagoe.events.shell.outbox :as outbox]
+            [wagoe.events.shell.publisher :as publisher]
+            [wagoe.platform.database :as db]))
+
+(defn- recording-bus
+  "A bus that records what it is handed. `fail?` makes publish! return an error."
+  [fail?]
+  (let [seen (atom [])]
+    {:seen seen
+     :bus  (reify ports/IEventPublisher
+             (publish! [_ topic event]
+               (if @fail?
+                 {:error {:type :events/unavailable}}
+                 (do (swap! seen conj [topic event]) (:id event)))))}))
+
+(defn- with-outbox [prefix f]
+  (test-db/with-db prefix
+    (fn [ctx]
+      (let [ds   (:datasource ctx)
+            fail (atom false)
+            {:keys [seen bus]} (recording-bus fail)]
+        (outbox/create-outbox-table! ds)
+        (f {:ctx ctx :ds ds :seen seen :fail fail
+            :outbox (outbox/create-outbox ds bus {:retain-ms 60000})})))))
+
+(defn- event [n] (publisher/build :order/placed :orders {:n n} {:tenant-id "t1"}))
+
+(defn- pending-count [ds]
+  (:n (jdbc/execute-one! ds ["SELECT COUNT(*) AS n FROM event_outbox WHERE delivered_ms IS NULL"]
+                         {:builder-fn rs/as-unqualified-lower-maps})))
+
+(deftest ^:integration committed-event-is-delivered-once
+  (with-outbox "outbox_commit"
+    (fn [{:keys [ds seen outbox]}]
+      (let [e (event 1)]
+        (is (= (:id e) (jdbc/with-transaction [tx ds]
+                         (ports/publish-in-tx! outbox tx :orders/placed e))))
+        (is (= 1 (outbox/relay-once! outbox)))
+        (is (= 0 (outbox/relay-once! outbox)) "a delivered row is not relayed again")
+        (is (= [[:orders/placed e]] @seen) "topic and envelope survive the table")
+        (is (zero? (pending-count ds)))))))
+
+(deftest ^:integration rolled-back-event-is-never-delivered
+  (with-outbox "outbox_rollback"
+    (fn [{:keys [ds seen outbox]}]
+      (is (thrown? clojure.lang.ExceptionInfo
+                   (jdbc/with-transaction [tx ds]
+                     (ports/publish-in-tx! outbox tx :orders (event 1))
+                     (throw (ex-info "business change failed" {:type :conflict})))))
+      (is (= 0 (outbox/relay-once! outbox)))
+      (is (empty? @seen)))))
+
+(deftest ^:integration relay-crash-before-mark-redelivers
+  (with-outbox "outbox_crash"
+    (fn [{:keys [ds seen outbox]}]
+      (jdbc/with-transaction [tx ds]
+        (ports/publish-in-tx! outbox tx :orders (event 1)))
+      (with-redefs-fn {#'outbox/mark-delivered! (fn [& _] (throw (ex-info "relay died" {:type :internal-error})))}
+        #(is (thrown? clojure.lang.ExceptionInfo (outbox/relay-once! outbox))))
+      (is (= 1 (count @seen)) "published before the crash")
+      (is (= 1 (outbox/relay-once! outbox)) "still pending, so published again")
+      (is (= 2 (count @seen)))
+      (is (apply = (map (comp :id second) @seen)) "same :id, so a consumer can dedupe")
+      (is (= 0 (outbox/relay-once! outbox))))))
+
+(deftest ^:integration failed-publish-keeps-order
+  (with-outbox "outbox_order"
+    (fn [{:keys [ds seen fail outbox]}]
+      (jdbc/with-transaction [tx ds]
+        (doseq [n (range 5)]
+          (ports/publish-in-tx! outbox tx :orders (event n))))
+      (reset! fail true)
+      (is (= 0 (outbox/relay-once! outbox)))
+      (is (= 5 (pending-count ds)))
+      (reset! fail false)
+      (is (= 5 (outbox/relay-once! outbox)))
+      (is (= (range 5) (map (comp :n :payload second) @seen))))))
+
+(deftest ^:integration platform-transaction-context-is-accepted
+  (with-outbox "outbox_platform_tx"
+    (fn [{:keys [ctx seen outbox]}]
+      (db/with-transaction [tx ctx]
+        (publisher/emit-in-tx! outbox tx :orders :order/placed :orders {:n 1}))
+      (is (= 1 (outbox/relay-once! outbox)))
+      (is (= {:n 1} (:payload (second (first @seen))))))))
+
+(deftest ^:integration refuses-what-would-lose-the-event
+  (with-outbox "outbox_refuse"
+    (fn [{:keys [ds outbox]}]
+      (testing "a datasource would autocommit the row outside the business change"
+        (is (= :validation-error
+               (try (ports/publish-in-tx! outbox ds :orders (event 1))
+                    (catch clojure.lang.ExceptionInfo e (:type (ex-data e)))))))
+      (testing "a malformed event throws, rolling the transaction back"
+        (is (thrown? clojure.lang.ExceptionInfo
+                     (jdbc/with-transaction [tx ds]
+                       (ports/publish-in-tx! outbox tx :orders {:no "envelope"})))))
+      (is (zero? (pending-count ds))))))
+
+(deftest ^:integration delivered-rows-are-purged-after-retention
+  (with-outbox "outbox_purge"
+    (fn [{:keys [ds outbox]}]
+      (let [outbox (assoc-in outbox [:opts :retain-ms] -1000)]
+        (jdbc/with-transaction [tx ds]
+          (ports/publish-in-tx! outbox tx :orders (event 1)))
+        (is (= 1 (outbox/relay-once! outbox)))
+        (is (= 0 (:n (jdbc/execute-one! ds ["SELECT COUNT(*) AS n FROM event_outbox"]
+                                        {:builder-fn rs/as-unqualified-lower-maps}))))))))
+
+(deftest ^:integration the-relay-delivers-on-its-own
+  (with-outbox "outbox_relay"
+    (fn [{:keys [ds seen outbox]}]
+      (let [o (outbox/start-relay! (assoc-in outbox [:opts :poll-ms] 20))]
+        (try
+          (jdbc/with-transaction [tx ds]
+            (ports/publish-in-tx! o tx :orders (event 1)))
+          (loop [n 0]
+            (when (and (empty? @seen) (< n 100))
+              (Thread/sleep 20)
+              (recur (inc n))))
+          (is (= 1 (count @seen)))
+          (finally (outbox/stop-relay! o)))))))
+
+(deftest ^:unit outbox-component-only-when-configured
+  (is (= #{:wagoe/events}
+         (set (keys (:components (wiring/ig-config {:provider :memory} {}))))))
+  (let [c (:components (wiring/ig-config {:provider :memory :outbox {:poll-ms 500}} {}))]
+    (is (= 500 (get-in c [:wagoe/events-outbox :poll-ms])))
+    (is (= (ig/ref :wagoe/events) (get-in c [:wagoe/events-outbox :bus])))
+    (is (= (ig/ref :wagoe/db-context) (get-in c [:wagoe/events-outbox :db-ctx])))))

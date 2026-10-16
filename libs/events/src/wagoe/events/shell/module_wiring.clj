@@ -5,6 +5,7 @@
    configures `:wagoe/events` requires this namespace and nothing in the
    framework needs to know the module exists."
   (:require [wagoe.events.shell.adapters.in-memory :as in-memory]
+            [wagoe.events.shell.outbox :as outbox]
             [wagoe.events.shell.adapters.redis-streams :as redis-streams]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
@@ -93,3 +94,29 @@
 
       :memory (in-memory/stop! bus)
       nil)))
+
+(defmethod ig/init-key :wagoe/events-outbox
+  [_ {:keys [bus db-ctx] :as config}]
+  (let [ds (:datasource db-ctx)]
+    (when-not ds
+      (throw (ex-info ":wagoe/events :outbox needs a :wagoe/db-context with a :datasource"
+                      {:type :configuration-error})))
+    (outbox/create-outbox-table! ds)
+    (let [o (outbox/create-outbox ds bus (select-keys config (keys outbox/defaults)))]
+      (log/info "Event outbox initialized" (:opts o))
+      (cond-> o (get-in o [:opts :relay?]) outbox/start-relay!))))
+
+(defmethod ig/halt-key! :wagoe/events-outbox
+  [_ o]
+  (when o (outbox/stop-relay! o)))
+
+(defn ig-config
+  "`:wagoe/events`, and `:wagoe/events-outbox` when the settings carry
+   `:outbox` (a map of `outbox/defaults` overrides; `{}` takes them all)."
+  [settings _ctx]
+  {:components
+   (cond-> {:wagoe/events settings}
+     (:outbox settings)
+     (assoc :wagoe/events-outbox (merge (:outbox settings)
+                                        {:bus    (ig/ref :wagoe/events)
+                                         :db-ctx (ig/ref :wagoe/db-context)})))})

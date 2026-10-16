@@ -58,3 +58,26 @@
      `opts` may carry `:limit` and `:since` (an instant). Returns a sequence,
      which may be empty — an empty history and no history are different things,
      and a backend that cannot answer should not implement this protocol."))
+
+(defprotocol ITransactionalPublisher
+  "Optional capability: publish as part of the caller's database transaction.
+
+   `publish!` goes to the broker straight away, so a business change can commit
+   while its event is lost, or the reverse. This writes the event to an outbox
+   table in the caller's transaction instead, and a relay publishes it after
+   commit (BOU-448). Implemented by the outbox, not by a bus: only something in
+   the business database can join its transaction."
+
+  (publish-in-tx! [this tx topic event]
+    "Record `event` for `topic` inside the open transaction `tx`. Returns the
+     event's `:id`. Delivered at least once if `tx` commits, never if it rolls
+     back.
+
+     Throws ex-info `{:type :validation-error}` when `tx` is not an open
+     transaction or the event is malformed: a returned error that the caller
+     ignored would commit the business change without its event."))
+
+(defn transactional-publisher?
+  "True when `x` supports `publish-in-tx!`."
+  [x]
+  (satisfies? ITransactionalPublisher x))

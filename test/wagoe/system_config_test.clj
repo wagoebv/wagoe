@@ -35,8 +35,10 @@
 (def ^:private enabled
   "A module's settings when this file switches every module on. Payments has
    no default provider, and this config has no profile to allow the mock
-   (BOU-564); it is only assembled, never started."
-  (fn [k] (get {:wagoe/payment-provider {:provider :stripe :api-key "sk" :webhook-secret "wh"}}
+   (BOU-564); it is only assembled, never started. The events outbox is opt-in,
+   so it is switched on here to be assembled at all (BOU-448)."
+  (fn [k] (get {:wagoe/payment-provider {:provider :stripe :api-key "sk" :webhook-secret "wh"}
+                :wagoe/events           {:provider :memory :outbox {}}}
                k {:enabled? true})))
 
 (defn- base-config

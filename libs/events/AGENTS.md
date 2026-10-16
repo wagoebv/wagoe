@@ -111,6 +111,42 @@ guarantee: one permanently failing handler then blocks its topic.
 
 ---
 
+## Transactional outbox (BOU-448)
+
+`publish!` reaches the broker straight away, independent of any database
+transaction: the business change can commit and the event be lost, or the
+reverse. When the event must match the data, publish through the outbox.
+
+```clojure
+;; config.edn — opt in; needs :wagoe/db-context
+:wagoe/events
+{:provider :redis
+ :outbox   {:poll-ms 1000 :batch-size 100 :retain-ms 86400000 :relay? true}}
+
+;; take a ref to :wagoe/events-outbox
+(jdbc/with-transaction [tx ds]            ; or (db/with-transaction [tx ctx])
+  (orders/create! tx order)
+  (publisher/emit-in-tx! outbox tx :orders :order/placed :orders {:order-id 7}))
+```
+
+The event is a row in `event_outbox`, written on `tx` (created at boot on H2,
+PostgreSQL, MySQL and SQLite). A relay polls the table, publishes pending rows
+in order and marks them delivered; delivered rows are deleted after
+`:retain-ms`.
+
+- **Rollback → never published. Commit → published at least once.** A relay
+  that dies between publish and mark publishes the row again with the same
+  `:id`, so consumers must be idempotent, as they must anyway.
+- `publish-in-tx!` **throws** (`:validation-error`) on a datasource or a
+  malformed event, unlike `publish!`: an ignored error would commit the change
+  without its event.
+- A failed publish stops the pass, so a later event never overtakes an earlier
+  one. Order holds within a transaction; concurrent transactions interleave.
+- Every relay publishes every pending row. Run one: `:relay? false` on the other
+  nodes.
+
+---
+
 ## Consumer groups
 
 `:group` splits work between **processes**. Every event goes to exactly one
@@ -252,10 +288,12 @@ surface found the rest in one pass.
 ```
 libs/events/src/wagoe/events/
 ├── core/event.clj                    # pure: envelope, validation, redelivery, tenancy
-├── ports.clj                         # IEventPublisher, IEventSubscriber, IEventHistory
+├── ports.clj                         # IEventPublisher, IEventSubscriber, IEventHistory, ITransactionalPublisher
 └── shell/
     ├── publisher.clj                 # id + clock, then publish
-    ├── module_wiring.clj             # :wagoe/events
+    ├── codec.clj                     # transit wire format (Redis, outbox)
+    ├── outbox.clj                    # event_outbox table, publish-in-tx!, relay
+    ├── module_wiring.clj             # :wagoe/events, :wagoe/events-outbox
     └── adapters/{in_memory,redis_streams}.clj
 ```
 
