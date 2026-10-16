@@ -21,6 +21,9 @@ WebSocket-based real-time communication with JWT authentication, message routing
 | `wagoe.realtime.shell.pubsub-manager` | Atom-backed pub/sub state management |
 | `wagoe.realtime.shell.adapters.websocket-adapter` | Ring/Jetty WebSocket adapter + TestWebSocketAdapter |
 | `wagoe.realtime.shell.adapters.jwt-adapter` | TestJWTAdapter only — the application supplies the real IJWTVerifier |
+| `wagoe.realtime.core.sse` | Pure: SSE wire format, session user → identity, topic decision |
+| `wagoe.realtime.shell.handlers.sse` | SSE stream handler + `push-fragment!` for htmx |
+| `wagoe.realtime.shell.adapters.sse-adapter` | SSE connection: queues rendered events for the stream |
 
 ## Message Routing Types
 
@@ -73,6 +76,28 @@ The `:on-open` callback runs after a successful `realtime-ports/connect`. Use it
 ;; Unsubscribe (automatic on disconnect)
 (ports/unsubscribe-from-topic pubsub-mgr conn-id "order:123")
 ```
+
+## Server-sent events (htmx)
+
+`sse-handler` opens a stream on `?topic=` (repeatable) for the signed-in
+session user; `push-fragment!` renders Hiccup per subscriber (their locale)
+and sends it as an SSE event, over the bus, so any replica can push.
+
+```clojure
+["/orders/events" {:get {:handler (sse/sse-handler svc :authorize-topic (fn [req topic] ...))}}]
+[:div {:hx-ext "sse" :sse-connect "/web/orders/events?topic=order:1"}
+ [:tbody#rows {:sse-swap "message" :hx-swap "beforeend"}]]
+(sse/push-fragment! svc "order:1" [:tr [:td "Shipped"]])            ; event "message"
+(sse/push-fragment! svc "order:1" [:span#badge "4"] {:event "badge"})
+```
+
+- No `:authorize-topic` means every topic is refused (403). No `:user` is 401.
+- The stream connection registers like a WebSocket (`connect-identified`), so
+  user/role/broadcast sends reach it too, as JSON named by `:type`.
+- Each stream holds one Jetty thread (sync Ring). Heartbeat every 15 s; a
+  dead client is noticed at the next write and deregistered.
+- Under `:redis`, fragments are Nippy-serialised: plain Hiccup, no `raw-string`.
+- A client that falls `:queue-size` (256) events behind is dropped.
 
 ## Scaling & providers
 

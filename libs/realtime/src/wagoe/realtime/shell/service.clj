@@ -137,7 +137,29 @@
       (when (some? n) (pos? n))))
 
   (publish-to-topic [_this topic message]
-    (ports/publish bus (bus/topic-envelope topic (stamp message)))))
+    (ports/publish bus (bus/topic-envelope topic (stamp message))))
+
+  (connect-identified [_this connection {:keys [user-id roles email]} topics]
+    (when (and (seq topics) (nil? pubsub-manager))
+      (throw (ex-info "Topic subscriptions need a pub/sub manager"
+                      {:type :internal-error :topics topics})))
+    (let [now           (current-timestamp)
+          connection-id (java.util.UUID/randomUUID)
+          record        (conn/create-connection user-id roles
+                                                {:email email :connected-at now}
+                                                connection-id now)]
+      (ports/register connection-registry connection-id record connection)
+      (try
+        (doseq [topic topics]
+          (ports/subscribe-to-topic pubsub-manager connection-id topic))
+        (catch Exception e
+          ;; A half-subscribed connection would linger in the registry.
+          (ports/unsubscribe-from-all-topics pubsub-manager connection-id)
+          (ports/unregister connection-registry connection-id)
+          (throw e)))
+      (log/info "Realtime connection established"
+                {:connection-id connection-id :user-id user-id :topics topics})
+      connection-id)))
 
 ;; =============================================================================
 ;; Factory Functions

@@ -167,7 +167,20 @@
     Example:
       (publish-to-topic service \"order:123\"
         {:type \"order-updated\"
-         :payload {:status \"shipped\"}})"))
+         :payload {:status \"shipped\"}})")
+
+  (connect-identified [this connection identity topics]
+    "Register a connection whose user the caller has already authenticated,
+    and subscribe it to `topics`. For transports that ride the web session
+    rather than a JWT, such as server-sent events.
+
+    Args:
+      connection - IWebSocketConnection
+      identity   - {:user-id uuid :roles #{kw} :email str?}
+      topics     - topic names, already authorised by the caller
+
+    Returns:
+      Connection ID (UUID). `disconnect` removes it and its subscriptions."))
 
 ;; =============================================================================
 ;; Connection Registry Ports

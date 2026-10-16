@@ -15,6 +15,7 @@
    [wagoe.i18n.shell.middleware :as i18n-middleware]
    [wagoe.i18n.shell.render :as i18n]
    [wagoe.platform.core.http.problem-details :as problem-details]
+   [wagoe.shared.ui.core.htmx :as htmx]
    [clojure.string :as str]
    [clojure.tools.logging :as log]
    [ring.util.codec :as codec]
@@ -409,12 +410,21 @@
    Args:
      request: Ring request map
      html: Hiccup data or HTML string
+     oob-fragments: (optional) elements swapped out of band, by id — a badge
+                    counter or a toast beside the main fragment
 
    Returns:
      Ring response map with HTMX headers"
-  [request html]
-  (-> (html-response request html)
-      (ring-response/header "HX-Trigger" "entityListUpdated")))
+  ([request html]
+   (htmx-fragment-response request html nil))
+  ([request html oob-fragments]
+   (let [t (t-fn request)]
+     (-> (->> (cons html (map htmx/oob oob-fragments))
+              (map #(i18n/render % t))
+              (apply str)
+              ring-response/response)
+         (ring-response/content-type "text/html; charset=utf-8")
+         (ring-response/header "HX-Trigger" "entityListUpdated")))))
 
 (defn create-config-error-response
   "The admin page saying why `entity-name` cannot be created, or nil when it

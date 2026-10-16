@@ -653,6 +653,29 @@ client.connect()
 
 ---
 
+## Live htmx Fragments (Server-Sent Events)
+
+`wagoe.realtime.shell.handlers.sse` streams rendered Hiccup to htmx's `sse`
+extension, which ships in every ui-style JS bundle:
+
+```clojure
+(require '[wagoe.realtime.shell.handlers.sse :as sse])
+
+;; a non-public web route: the session authenticates it
+["/orders/events" {:get {:handler (sse/sse-handler svc :authorize-topic may-see-topic?)}}]
+
+;; page
+[:div {:hx-ext "sse" :sse-connect "/web/orders/events?topic=order:123"}
+ [:tbody#rows {:sse-swap "message" :hx-swap "beforeend"}]]
+
+;; anywhere, on any replica
+(sse/push-fragment! svc "order:123" [:tr [:td "Shipped"]])
+```
+
+`:authorize-topic` is `(fn [request topic])`; without it every topic is
+refused. Fragments render per subscriber, so `[:t ...]` markers use their
+locale. Each open stream holds one server thread.
+
 ## Configuration
 
 ### Integrant Configuration

@@ -68,6 +68,39 @@ with JWT authentication, message routing, and topic-based pub/sub.
 (ports/unsubscribe-from-topic pubsub-mgr conn-id "order:123")
 ----
 
+== Live htmx fragments (server-sent events)
+
+Push rendered Hiccup to a page without writing JavaScript. The stream rides
+the web session, so mount it as an ordinary web route, not `:public`. A client
+names its topics in the URL; `:authorize-topic` decides which it may have, and
+without it every topic is refused.
+
+[source,clojure]
+----
+(require '[wagoe.realtime.shell.handlers.sse :as sse])
+
+;; route, in the module's :web routes
+["/orders/events"
+ {:get {:handler (sse/sse-handler svc
+                                  :authorize-topic (fn [request topic]
+                                                     (may-see-order? (:user request) topic)))}}]
+
+;; page
+[:div {:hx-ext "sse" :sse-connect "/web/orders/events?topic=order:123"}
+ [:table [:tbody#order-rows {:sse-swap "message" :hx-swap "beforeend"}]]]
+
+;; from a handler, a job, any replica
+(sse/push-fragment! svc "order:123" [:tr [:td "Shipped"]])
+(sse/push-fragment! svc "order:123" [:span#badge [:t :orders/count {:n 4}]] {:event "badge"})
+----
+
+`[:t ...]` markers resolve in each subscriber's locale. An element with
+`:hx-swap-oob` swaps by id, so one push can update several places. Under the
+`:redis` provider fragments cross the wire: keep them plain data.
+
+Each open stream holds one server thread for as long as the page is open, and
+writes a heartbeat every 15 seconds; a closed tab is cleaned up at the next one.
+
 == Integrant configuration
 
 [source,clojure]
