@@ -83,6 +83,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **`wagoe add` and `wagoe doctor` did not recognise a project on a local Wagoe checkout** (BOU-662, BOU-664).
   `wagoe add` now writes the module from that checkout; upgrade wagoe-cli if you use `:local/root`.
+- **Revoked sessions and deactivated users stayed signed in**: until the cache expired with `:wagoe/cache` on, and for good when made inactive without a soft delete (BOU-663).
+  Upgrade if you use session authentication.
 - **`bb scaffold field` enums read back as strings** (BOU-656): the field now joins the repository's `enum-fields`.
   For an enum added before, add it to `enum-fields` in the entity's persistence namespace.
 - **A typed `ex-info` thrown from route `:middleware` answered 500** (BOU-659); it now answers its `:type`'s status.

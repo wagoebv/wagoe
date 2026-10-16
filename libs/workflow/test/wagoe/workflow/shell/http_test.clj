@@ -52,7 +52,7 @@
         {:user-id session-user-id :session-token token}))
     (get-user-by-id [_ id]
       (when (= session-user-id id)
-        {:id id :email "session@example.com" :role :admin}))))
+        {:id id :email "session@example.com" :role :admin :active true}))))
 
 (defn- with-served-api
   "Compile the workflow API routes through the platform router and put the
