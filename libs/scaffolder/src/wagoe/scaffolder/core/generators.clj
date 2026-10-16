@@ -3143,6 +3143,20 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s%s%s;%s"
         (z/append-child* node))
     (z/append-child* loc node)))
 
+(defn- enum-fields-set? [loc]
+  (and (= :set (z/tag loc))
+       (= '[def enum-fields] (vec (take 2 (child-sexprs (z/up loc)))))))
+
+(defn add-enum-field-to-persistence
+  "`source` with `field` in its enum-fields set (BOU-656), or nil when it has
+   no such set."
+  [source field]
+  (when-let [loc (first-loc source enum-fields-set?)]
+    (let [k (keyword (:field-name-kebab (template/build-field-context field)))]
+      (if (some #{k} (child-sexprs loc))
+        source
+        (z/root-string (append-item loc (n/keyword-node k) false))))))
+
 (defn- append-entry
   "The map at `loc` with `k v` added on a line of its own, the value in the
    column the first entry's value is in."
