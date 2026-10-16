@@ -34,8 +34,12 @@
            :let  [src (slurp f)]
            table (concat
                   (map second (re-seq #"\"CREATE TABLE IF NOT EXISTS (\w+)" src))
-                  (for [[_ m] (re-seq #"initialize-tables-from-schemas! ctx\s*\{([^}]*)\}" src)
-                        [_ t] (re-seq #"\"(\w+)\"" m)]
+                  ;; The map inline, or a var defined in the same file.
+                  (for [[_ m sym] (re-seq #"initialize-tables-from-schemas! ctx\s*(?:\{([^}]*)\}|([\w-]+))" src)
+                        :let  [m (or m (second (re-find (re-pattern (str "\\(def " (java.util.regex.Pattern/quote sym)
+                                                                         "\\s[^{]*\\{([^}]*)\\}"))
+                                                        src)))]
+                        [_ t] (re-seq #"\"(\w+)\"" (or m ""))]
                     t)
                   (for [[_ sql-file] (re-seq #"\(migration-resource \"([^\"]+)\"" src)
                         sql          (file-seq (io/file lib "resources"))

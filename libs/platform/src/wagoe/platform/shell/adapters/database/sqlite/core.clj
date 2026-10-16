@@ -27,7 +27,8 @@
    :now-ms-sql         "CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER)"
    :capabilities       #{:transactional-ddl :index-if-not-exists :on-conflict}
    :column-types       {:uuid "CHAR(36)" :instant "TEXT" :json "TEXT"
-                        :boolean "INTEGER" :text "TEXT"}
+                        :boolean "INTEGER" :text "TEXT" :string "TEXT"
+                        :int "INTEGER" :bigint "INTEGER" :double "REAL" :enum "TEXT"}
    :table-exists?      introspection/sqlite-table-exists?
    :table-info         introspection/sqlite-table-info})
 
