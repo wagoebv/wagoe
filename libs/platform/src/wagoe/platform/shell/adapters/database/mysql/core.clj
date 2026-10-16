@@ -10,7 +10,9 @@
 
 (def ^:private introspection-spec
   {:schema [:database] :honey {:dialect :mysql} :fold-table-name? false
-   :generated-columns [:extra]})
+   :generated-columns [:extra]
+   ;; data_type says tinyint and char, which a boolean and a UUID are (BOU-649).
+   :type-column :column_type})
 
 (def spec
   "What MySQL does differently. See common.adapter for the keys."

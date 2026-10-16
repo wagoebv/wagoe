@@ -15,6 +15,7 @@
             [next.jdbc :as jdbc]
             [next.jdbc.result-set :as rs]
             [support.embedded-pg :as epg]
+            [wagoe.admin.core.schema-introspection :as admin-introspection]
             [wagoe.platform.shell.adapters.database.common.adapter :as adapter]
             [wagoe.platform.shell.adapters.database.common.execution :as execution]
             [wagoe.platform.ports.database :as protocols]
@@ -374,3 +375,21 @@
         id     (java.util.UUID/randomUUID)]
     (is (= ["SELECT ?" id] (encode (reify protocols/DBAdapter) ["SELECT ?" id])))
     (is (= ["SELECT ?" (str id)] (encode (mysql/new-adapter) ["SELECT ?" id])))))
+
+(deftest ^:integration mysql-reports-the-types-the-admin-reads
+  ;; information_schema's data_type said tinyint and char; the admin took a
+  ;; boolean for a number and a UUID for a string (BOU-649).
+  (if @mysql-up?
+    (let [ctx (factory/db-context (mysql-config))
+          ds  (:datasource ctx)]
+      (try
+        (jdbc/execute! ds ["DROP TABLE IF EXISTS admin_types"])
+        (jdbc/execute! ds [(str "CREATE TABLE admin_types (id CHAR(36) PRIMARY KEY,"
+                                " flag TINYINT(1), n BIGINT UNSIGNED, at DATETIME(6))")])
+        (let [types (into {} (map (juxt :name #(admin-introspection/infer-field-type (:type %))))
+                          (protocols/get-table-info (:adapter ctx) ds :admin_types))]
+          (is (= {"id" :uuid "flag" :boolean "n" :int "at" :instant} types)))
+        (finally
+          (jdbc/execute! ds ["DROP TABLE IF EXISTS admin_types"])
+          (factory/close-db-context! ctx))))
+    (println "  note: MySQL not reachable — admin type detection unverified")))

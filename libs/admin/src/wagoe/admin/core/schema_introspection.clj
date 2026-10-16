@@ -27,6 +27,7 @@
    Values are field type keywords used in entity configuration."
   {"uuid" :uuid
    "char(36)" :uuid           ; UUID as string in some databases
+   "tinyint(1)" :boolean      ; MySQL's boolean
    "varchar" :string
    "character varying" :string
    "text" :text
@@ -82,6 +83,7 @@
     (-> sql-type
         str/lower-case
         (str/replace #"\(.*\)" "")  ; Remove size/precision
+        (str/replace #"\s+(unsigned|signed|zerofill)\b" "")  ; MySQL's column_type
         str/trim)))
 
 (defn infer-field-type
@@ -105,8 +107,10 @@
      (infer-field-type \"UNKNOWN_TYPE\")     ;=> :string"
   ([sql-type] (infer-field-type sql-type nil))
   ([sql-type field-name]
-   (let [normalized (normalize-sql-type sql-type)
-         base-type (get sql-type->field-type normalized :string)]
+   ;; The full type first: char(36) and tinyint(1) mean something their base
+   ;; type does not (BOU-649).
+   (let [base-type (or (some->> sql-type str/lower-case str/trim (get sql-type->field-type))
+                       (get sql-type->field-type (normalize-sql-type sql-type) :string))]
      ;; Apply heuristics if field is text type
      (if (and (= base-type :text) field-name)
        (let [name-str (name field-name)]
