@@ -237,9 +237,8 @@
 (defn ig-config
   "This module's Integrant entries, for `wagoe.platform.shell.system.config`.
 
-   Called with the module's `:active` settings — nil, because the user module is
-   switched on in code rather than in config — and the context the application
-   supplies: `:config`, `:validation-config`, and `:enabled`, the set of sibling
+   Called with the module's `:active` settings, which it does not read, and the
+   context the application supplies: `:config`, `:validation-config`, and `:enabled`, the set of sibling
    modules that are on."
   [_settings {:keys [config validation-config enabled]}]
   {:components

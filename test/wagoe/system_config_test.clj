@@ -209,8 +209,9 @@
   ;; Not through :extra-modules: `migrate up` reads only :active, so a user
   ;; module enabled in code never got its tables (BOU-669).
   (doseq [profile [:dev :test :acc :prod]]
-    (is (contains? (:active (sut/load-config {:profile profile})) :wagoe/user)
-        (str profile " does not have :wagoe/user in :active"))))
+    (is (contains? (modules/enabled-libraries (:active (sut/load-config {:profile profile})))
+                   "user")
+        (str profile " does not switch :wagoe/user on in :active"))))
 
 (deftest ^:integration conditional-keys-register-themselves
   ;; The rule stated in `ig-config`'s docstring: a key emitted only when it is
