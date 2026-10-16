@@ -56,6 +56,9 @@
    :wagoe/logging
    {:provider :slf4j :level :debug}
 
+   :wagoe/user
+   {}
+
    ;; Product module (bb scaffold integrate)
    :wagoe/product
    {:enabled? true}}
