@@ -81,6 +81,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **`:interceptors` and `:skip-interceptors?` on a path or parent route were ignored** (BOU-642); they now apply to its
+  methods, like `:public`. A parent's `:skip-interceptors?` now drops CSRF and rate limiting from its children; check them.
 - **`wagoe new` enabled user in code, so migrations skipped it and a fresh database had no `auth_users`** (BOU-667).
   It now writes `:wagoe/user` into `:active`; in an existing project, run `wagoe add user`.
 - **The DB job queue could not ack jobs on PostgreSQL** (BOU-640): each finished job ran again once its lease expired.
