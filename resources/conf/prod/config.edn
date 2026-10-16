@@ -38,6 +38,10 @@
     :cross-field-validation {:admin-requires-company-email? true ; Strict rules in production
                              :manager-requires-department? true}}}
 
+  ;; Authentication, sessions and user management. In :active so `migrate up`
+  ;; creates its tables (BOU-669).
+  :wagoe/user {}
+
   ;; Active database configurations
   ;; Production typically uses PostgreSQL for reliability and performance
 
