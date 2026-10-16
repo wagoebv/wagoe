@@ -413,7 +413,6 @@
      :get-user-by-id
      {:user-id user-id}
      (fn [{:keys [params]}]
-       ;; Not cached: authentication reads the role and active state here.
        (some-> (.find-user-by-id user-repository (:user-id params))
                (dissoc :password-hash)))
      {:system {:user-repository user-repository
@@ -718,15 +717,11 @@
      audit-repository: Implementation of IUserAuditRepository
      validation-config: Map containing validation policies and settings
      auth-service: Implementation of IAuthenticationService
-     cache: ignored. Sessions and users are not cached, so revocation counts
-            on the next request (BOU-663); the arity stays for callers.
 
    Returns:
      UserService instance
 
    Example:
      (def service (create-user-service user-repo session-repo audit-repo validation-cfg auth-svc))"
-  ([user-repository session-repository audit-repository validation-config auth-service]
-   (->UserService user-repository session-repository audit-repository validation-config auth-service))
-  ([user-repository session-repository audit-repository validation-config auth-service _cache]
-   (->UserService user-repository session-repository audit-repository validation-config auth-service)))
+  [user-repository session-repository audit-repository validation-config auth-service]
+  (->UserService user-repository session-repository audit-repository validation-config auth-service))

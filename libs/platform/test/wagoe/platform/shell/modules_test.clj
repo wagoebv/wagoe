@@ -211,7 +211,7 @@
       (is (= {:search-routes (ig/ref :wagoe/search-routes)} http)))))
 
 (deftest ^:unit a-module-sees-which-of-its-peers-are-on
-  ;; user-service takes a cache ref only when there is a cache to ref; without
+  ;; audience takes a cache ref only when there is a cache to ref; without
   ;; this the config carries a dangling ref and the boot fails.
   (let [with-cache (assemble {:wagoe/user {} :wagoe/cache {}}
                              {'wagoe.user.shell.module-wiring

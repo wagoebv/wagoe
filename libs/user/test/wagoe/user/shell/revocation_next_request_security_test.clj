@@ -1,8 +1,7 @@
-(ns wagoe.user.shell.cache-revocation-security-test
-  "BOU-663: with :wagoe/cache on, authentication must still see revocation,
-   deactivation and role changes on the very next request."
+(ns wagoe.user.shell.revocation-next-request-security-test
+  "Revocation, deactivation and role changes are seen on the very next request
+   (BOU-663)."
   (:require [clojure.test :refer [deftest is testing]]
-            [wagoe.cache.shell.adapters.in-memory :as in-memory]
             [wagoe.user.ports :as ports]
             [wagoe.user.shell.in-memory-repository-test :as mem]
             [wagoe.user.shell.middleware :as middleware]
@@ -12,13 +11,11 @@
            [java.util UUID]))
 
 (defn- replica
-  "A user service on the shared stores, with its own in-memory cache — one
-   process of a deployment."
+  "A user service on the shared stores — one process of a deployment."
   [{:keys [users sessions audit]}]
   (service/create-user-service users sessions audit
                                {:password-policy {:min-length 12}}
-                               nil
-                               (in-memory/create-in-memory-cache {})))
+                               nil))
 
 (defn- stores []
   {:users    (mem/->MemoryUserRepository (atom {}))
@@ -73,7 +70,14 @@
           [user token] (sign-in! a st)]
       (is (= 200 (:status (request! b token))))
       (ports/deactivate-user a (:id user))
-      (is (= 401 (:status (request! b token)))))))
+      (is (= 401 (:status (request! b token))))))
+  (testing "inactive without a soft delete, written straight to the store"
+    (let [st (stores) svc (replica st)
+          [user token] (sign-in! svc st)]
+      (is (= 200 (:status (request! svc token))))
+      (ports/update-user (:users st) (assoc (ports/find-user-by-id (:users st) (:id user))
+                                            :active false))
+      (is (= 401 (:status (request! svc token)))))))
 
 (deftest ^:security ^:unit role-change-is-seen-on-the-next-request
   (let [st (stores) svc (replica st)
@@ -92,8 +96,7 @@
     (is (.isAfter ^Instant (:last-accessed-at (ports/validate-session svc token))
                   ^Instant first-seen))))
 
-
 (deftest ^:security ^:unit the-user-service-is-not-handed-the-cache
-  (is (not (contains? (-> (wiring/ig-config nil {:config {} :enabled #{:wagoe/cache}})
+  (is (not (contains? (-> (wiring/ig-config nil {:config {}})
                           (get-in [:components :wagoe/user-service]))
                       :cache))))

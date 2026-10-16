@@ -173,11 +173,14 @@
           (do
             (log/info "Session validation successful" {:user-id (:user-id session)})
             (if-let [user (ports/get-user-by-id user-service (:user-id session))]
-              (let [enriched-request (assoc request
-                                            :user (without-credentials user)
-                                            :session session
-                                            :auth-type :session)]
-                (handler enriched-request))
+              (if-not (:active user)
+                ;; Deactivated without a soft delete: refused here as at login.
+                (create-unauthorized-response "Account is deactivated" :user-inactive request)
+                (let [enriched-request (assoc request
+                                              :user (without-credentials user)
+                                              :session session
+                                              :auth-type :session)]
+                  (handler enriched-request)))
               ;; User not found (deleted after session was created?)
               (do
                 (log/warn "Session valid but user not found" {:user-id (:user-id session)})
