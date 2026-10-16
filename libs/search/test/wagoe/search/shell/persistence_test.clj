@@ -8,13 +8,14 @@
    - delete-document!
    - search-documents (LIKE fallback)
    - count-results (LIKE fallback)
-   - suggest-documents (LIKE fallback)
+   - suggest-documents (pg_trgm on PostgreSQL, LIKE without it)
    - count-documents"
   (:require [clojure.test :refer [deftest testing is use-fixtures]]
             [wagoe.search.test.support :refer [create-search-documents-table! make-doc]]
             [wagoe.search.ports :as ports]
             [wagoe.search.shell.persistence :as persistence]
-            [support.test-db :as test-db])
+            [support.test-db :as test-db]
+            [next.jdbc :as jdbc])
   (:import [java.util UUID]))
 
 ;; =============================================================================
@@ -22,16 +23,20 @@
 ;; =============================================================================
 
 (def ^:private test-store      (atom nil))
+(def ^:private test-adapter    (atom nil))
 
 (defn- db-fixture [test-fn]
   (test-db/with-db "search"
     (fn [{:keys [datasource adapter]}]
       (create-search-documents-table! datasource)
+      (reset! test-adapter adapter)
       (reset! test-store (persistence/create-search-store datasource adapter))
       (try (test-fn)
            (finally (reset! test-store nil))))))
 
 (use-fixtures :each db-fixture)
+
+(defn- full-text? [] (:full-text? @test-store))
 
 ;; =============================================================================
 ;; upsert-document! / count-documents
@@ -46,11 +51,9 @@
 (deftest ^:integration upsert-conflict-test
   (testing "updates existing document on conflict (same entity-id)"
     (let [entity-id (UUID/randomUUID)
-          doc1      (make-doc {:entity-id entity-id :weight-a "Original"
-                               :content-all "Original"})
+          doc1      (make-doc {:entity-id entity-id :content-all "Original"})
           doc2      (make-doc {:id (str (UUID/randomUUID))
-                               :entity-id entity-id :weight-a "Updated"
-                               :content-all "Updated"})]
+                               :entity-id entity-id :content-all "Updated"})]
       (ports/upsert-document! @test-store doc1)
       (ports/upsert-document! @test-store doc2)
       ;; Should be exactly 1: upsert deduplicates on (index_id, entity_id)
@@ -87,11 +90,14 @@
       (is (= 1 (count results)))
       (is (= :product (:entity-type (first results))))))
 
-  (testing "returns all documents for empty query (via service layer, store returns LIKE %%)"
+  (testing "an empty query: LIKE '%%' matches everything, an empty tsquery nothing"
+    ;; The service answers an empty query itself; this is the store alone.
     (ports/upsert-document! @test-store (make-doc {:content-all "Widget Pro"}))
     (let [results (ports/search-documents @test-store :product-search :product
                                           "" {:limit 10 :offset 0})]
-      (is (pos? (count results)))))
+      (if (full-text?)
+        (is (empty? results))
+        (is (pos? (count results))))))
 
   (testing "respects limit and offset"
     (dotimes [n 5]
@@ -139,7 +145,7 @@
                                   {:index-id :product-search})))))
 
 ;; =============================================================================
-;; suggest-documents (LIKE fallback)
+;; suggest-documents
 ;; =============================================================================
 
 (deftest ^:integration suggest-documents-test
@@ -169,7 +175,7 @@
                                          :content-all "Widget Meta"
                                          :metadata    {:sku "WGT-001"}}))
       (let [suggestions (ports/suggest-documents @test-store :product-search :product
-                                                 "widget" {:limit 5})
+                                                 "widget meta" {:limit 5})
             found       (first (filter #(= entity-id (:entity-id %)) suggestions))]
         (is (some? found))
         (is (= "WGT-001" (get-in found [:metadata :sku])))))))
@@ -218,3 +224,36 @@
                      @test-store :product-search :product
                      "unfiltered" {:limit 10 :offset 0})]
         (is (= 2 (count results)))))))
+
+(defn- tenant-1-suggestions
+  "Entity ids `store` suggests for \"wid\" under tenant-1, after indexing one
+   matching document per tenant. Returns [expected actual]."
+  [store]
+  (let [entity-a (UUID/randomUUID)]
+    (ports/upsert-document! store (make-doc {:entity-id entity-a :content-all "Widget Alpha"
+                                             :filters {:tenant-id "tenant-1"}}))
+    (ports/upsert-document! store (make-doc {:content-all "Widget Beta"
+                                             :filters {:tenant-id "tenant-2"}}))
+    [[entity-a]
+     (map :entity-id (ports/suggest-documents store :product-search :product "wid"
+                                              {:limit 5 :filters {:tenant-id "tenant-1"}}))]))
+
+(deftest ^:integration suggest-filters-test
+  (testing "suggestions keep to the filter"
+    (let [[expected actual] (tenant-1-suggestions @test-store)]
+      (is (= expected actual)))))
+
+(deftest ^:integration suggest-without-pg-trgm-test
+  (testing "PostgreSQL without pg_trgm suggests by LIKE (BOU-661)"
+    (let [{:keys [datasource]} @test-store]
+      (when (full-text?) (jdbc/execute! datasource ["DROP EXTENSION pg_trgm"]))
+      (let [[expected actual] (tenant-1-suggestions
+                               (persistence/create-search-store datasource @test-adapter))]
+        (is (= expected actual))))))
+
+(deftest ^:integration suggest-typo-test
+  (testing "pg_trgm suggests through a typo, LIKE does not: the trigram path is the one taken"
+    (ports/upsert-document! @test-store (make-doc {:content-all "Widget Alpha"}))
+    (is (= (full-text?)
+           (boolean (seq (ports/suggest-documents @test-store :product-search :product
+                                                  "widgit" {:limit 5})))))))

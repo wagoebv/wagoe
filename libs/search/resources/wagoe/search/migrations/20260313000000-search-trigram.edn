@@ -1,0 +1,6 @@
+;; pg_trgm for suggestions on PostgreSQL. Outside a transaction, so a refused
+;; CREATE EXTENSION aborts nothing (BOU-661).
+{:ns           wagoe.search.shell.trigram
+ :up-fn        "up"
+ :down-fn      nil
+ :transaction? false}
