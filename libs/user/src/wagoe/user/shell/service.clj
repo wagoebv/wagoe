@@ -624,7 +624,7 @@
            (try
              (let [{:keys [actor-id actor-email ip-address user-agent]}
                    (effective-audit-context {})
-                   audit-entry (audit-core/delete-user-audit-entry
+                   audit-entry (audit-core/permanently-delete-user-audit-entry
                                 actor-id
                                 actor-email
                                 user-id

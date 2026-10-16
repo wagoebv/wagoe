@@ -117,24 +117,24 @@
       (is (= 0 (count (get-in entry [:changes :fields]))))
       (is (= 0 (get-in entry [:metadata :field-count]))))
 
-  (testing "Creates audit entry with only some fields changed"
-    (let [old-values {:role :user :name "Name" :active true}
-          new-values {:role :user :name "Name" :active false}
-          entry (audit/update-user-audit-entry
-                 test-actor-id
-                 test-actor-email
-                 test-target-id
-                 test-target-email
-                 old-values
-                 new-values
-                 test-ip
-                 test-user-agent)]
+    (testing "Creates audit entry with only some fields changed"
+      (let [old-values {:role :user :name "Name" :active true}
+            new-values {:role :user :name "Name" :active false}
+            entry (audit/update-user-audit-entry
+                   test-actor-id
+                   test-actor-email
+                   test-target-id
+                   test-target-email
+                   old-values
+                   new-values
+                   test-ip
+                   test-user-agent)]
 
-      (is (= 1 (count (get-in entry [:changes :fields]))))
-      (let [active-change (first (get-in entry [:changes :fields]))]
-        (is (= "active" (:field active-change)))
-        (is (= "true" (:old active-change)))
-        (is (= "false" (:new active-change))))))))
+        (is (= 1 (count (get-in entry [:changes :fields]))))
+        (let [active-change (first (get-in entry [:changes :fields]))]
+          (is (= "active" (:field active-change)))
+          (is (= "true" (:old active-change)))
+          (is (= "false" (:new active-change))))))))
 
 ;; =============================================================================
 ;; Deactivate User Audit Entry Tests
@@ -193,7 +193,7 @@
 ;; =============================================================================
 
 (deftest ^:unit delete-user-audit-entry-test
-  (testing "Creates audit entry for hard delete"
+  (testing "Creates audit entry for soft delete"
     (let [entry (audit/delete-user-audit-entry
                  test-actor-id
                  test-actor-email
@@ -208,16 +208,12 @@
       (is (= {:deleted true} (:changes entry)))
       (is (= :success (:result entry)))))
 
-  (testing "Includes permanent flag in metadata for hard delete"
-    (let [entry (audit/delete-user-audit-entry
-                 test-actor-id
-                 test-actor-email
-                 test-target-id
-                 test-target-email
-                 test-ip
-                 test-user-agent)]
-
-      (is (true? (get-in entry [:metadata :permanent]))))))
+  (testing "a permanent delete is told apart from a soft one (BOU-682)"
+    (let [args  [test-actor-id test-actor-email test-target-id test-target-email test-ip test-user-agent]
+          soft  (apply audit/delete-user-audit-entry args)
+          erase (apply audit/permanently-delete-user-audit-entry args)]
+      (is (= :permanent-delete (:action erase)))
+      (is (= (dissoc soft :action) (dissoc erase :action)) "and differs in nothing else"))))
 
 ;; =============================================================================
 ;; Role Change Audit Entry Tests

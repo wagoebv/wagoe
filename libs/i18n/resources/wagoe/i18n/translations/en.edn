@@ -51,6 +51,7 @@
  :common/audit-create       "Create"
  :common/audit-update       "Update"
  :common/audit-delete       "Delete"
+ :common/audit-permanent-delete "Permanent delete"
  :common/audit-activate     "Activate"
  :common/audit-deactivate   "Deactivate"
  :common/audit-login        "Login"

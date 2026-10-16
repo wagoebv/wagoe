@@ -27,6 +27,7 @@
             [wagoe.platform.shell.persistence-interceptors :as persistence-interceptors]
             [cheshire.core]
             [clojure.set :as set]
+            [clojure.string :as str]
             [clojure.walk]
             [clojure.tools.logging :as log])
   (:import [java.util UUID]))
@@ -51,6 +52,66 @@
                           "    mfa_backup_codes = NULL, mfa_backup_codes_used = NULL, "
                           "    mfa_enabled_at = NULL "
                           "WHERE mfa_secret IS NOT NULL AND mfa_secret NOT LIKE 'enc:v1:%'"))))
+
+(def ^:private audit-action-check "chk_user_audit_log_action")
+
+(defn- audit-action-clause []
+  (str "action IN (" (str/join ", " (map #(str "'" (name %) "'") user-schema/audit-actions)) ")"))
+
+(defn- audit-action-check-sql
+  "The SQL of user_audit_log's action CHECK, or for SQLite of the whole table,
+   or nil when there is none to read."
+  [ctx engine]
+  (some-> (case engine
+            :postgresql (db/execute-one! ctx [(str "SELECT pg_get_constraintdef(oid) AS definition FROM pg_constraint"
+                                                   " WHERE conrelid = to_regclass('user_audit_log') AND conname = ?")
+                                              audit-action-check])
+            :mysql      (db/execute-one! ctx [(str "SELECT CHECK_CLAUSE AS definition FROM information_schema.CHECK_CONSTRAINTS"
+                                                   " WHERE CONSTRAINT_SCHEMA = DATABASE() AND CONSTRAINT_NAME = ?")
+                                              audit-action-check])
+            :sqlite     (db/execute-one! ctx ["SELECT sql AS definition FROM sqlite_master WHERE type = 'table' AND name = 'user_audit_log'"])
+            nil)
+          :definition))
+
+(defn- rebuild-sqlite-audit-log!
+  "SQLite cannot alter a CHECK, so the table is copied into one created with
+   the current check."
+  [ctx table-sql]
+  (let [create (-> table-sql
+                   (str/replace-first #"(?i)^CREATE TABLE\s+(IF NOT EXISTS\s+)?\"?user_audit_log\"?"
+                                      "CREATE TABLE user_audit_log_new")
+                   (str/replace-first #"CHECK\s*\(\s*action IN \([^)]*\)\s*\)"
+                                      (str "CHECK(" (audit-action-clause) ")")))]
+    (if (str/includes? create "'permanent-delete'")
+      (db/with-transaction [tx ctx]
+        (db/execute-ddl! tx create)
+        (db/execute-ddl! tx "INSERT INTO user_audit_log_new SELECT * FROM user_audit_log")
+        (db/execute-ddl! tx "DROP TABLE user_audit_log")
+        (db/execute-ddl! tx "ALTER TABLE user_audit_log_new RENAME TO user_audit_log"))
+      (log/warn "user_audit_log's action check has an unexpected shape and was left as it is"
+                {:sql table-sql}))))
+
+(defn- widen-audit-action-check!
+  "Let user_audit_log's action CHECK take every `audit-actions` value on a
+   database created before one was added: `:permanent-delete` (BOU-682).
+   Without it that audit entry is refused, and the refusal only warns. H2
+   re-applies its checks at every boot already."
+  [ctx]
+  (let [engine (protocols/engine (:adapter ctx))
+        sql    (audit-action-check-sql ctx engine)]
+    (when (and sql (not (str/includes? sql "'permanent-delete'")))
+      (log/info "Widening user_audit_log's action check" {:engine engine})
+      (case engine
+        :sqlite     (rebuild-sqlite-audit-log! ctx sql)
+        ;; NOT VALID, then VALIDATE: the scan runs without blocking writes.
+        :postgresql (do (db/with-transaction [tx ctx]
+                          (db/execute-ddl! tx (str "ALTER TABLE user_audit_log DROP CONSTRAINT " audit-action-check))
+                          (db/execute-ddl! tx (str "ALTER TABLE user_audit_log ADD CONSTRAINT " audit-action-check
+                                                   " CHECK(" (audit-action-clause) ") NOT VALID")))
+                        (db/execute-ddl! ctx (str "ALTER TABLE user_audit_log VALIDATE CONSTRAINT " audit-action-check)))
+        :mysql      (do (db/execute-ddl! ctx (str "ALTER TABLE user_audit_log DROP CHECK " audit-action-check))
+                        (db/execute-ddl! ctx (str "ALTER TABLE user_audit_log ADD CONSTRAINT " audit-action-check
+                                                  " CHECK(" (audit-action-clause) ")")))))))
 
 (defn initialize-user-schema!
   "Initialize database schema for user entities using Malli schema definitions.
@@ -94,6 +155,7 @@
                                        "user_identities" user-schema/UserIdentity})
   (db/create-index-if-not-exists! ctx "uk_user_identities_issuer_subject" :user_identities
                                   [:issuer :subject] {:unique? true})
+  (widen-audit-action-check! ctx)
 
   ;; Retire any MFA rows still holding a pre-encryption plaintext secret. After
   ;; the tables, which add the mfa columns an older auth_users lacks.
