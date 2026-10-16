@@ -330,14 +330,12 @@
                    :module-key k
                    :namespaces (mapv str candidates)}))
 
-          own-graph
-          (do (log/info "Discovered module with its own graph" {:module module})
-              (add-graph acc k (over-scaffold k settings own-graph)))
-
           :else
-          (do
-            (log/info "Discovered scaffolded module" {:module module})
-            (update acc :components merge (scaffold-components k settings))))))
+          (do (log/info (if own-graph
+                          "Discovered module with its own graph"
+                          "Discovered scaffolded module")
+                        {:module module})
+              (add-graph acc k (over-scaffold k settings own-graph))))))
     no-graph
     (scaffolded-module-keys active known-keys))))
 
