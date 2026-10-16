@@ -2757,6 +2757,26 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s%s%s;%s"
         (when (and placed (not= placed source))
           {:content placed})))))
 
+(defn- enum-fields-set? [loc]
+  (and (= :set (z/tag loc))
+       (= '[def enum-fields] (vec (take 2 (child-sexprs (z/up loc)))))))
+
+(defn add-enum-field-to-persistence
+  "`source`, a persistence namespace generate wrote, with `field` in its
+   enum-fields set, so the repository reads the stored string back as a
+   keyword (BOU-656). The source unchanged when the field is there already,
+   nil when it has no enum-fields set.
+
+   Pure: true"
+  [source field]
+  (when-let [loc (first-loc source enum-fields-set?)]
+    (let [k (keyword (:field-name-kebab (template/build-field-context field)))]
+      (if (some #{k} (child-sexprs loc))
+        source
+        (-> (cond-> loc (z/down loc) (z/append-child* (n/spaces 1)))
+            (z/append-child* (n/keyword-node k))
+            z/root-string)))))
+
 (defn add-field-to-schema
   "Add `field` to the entity and request schemas in `source`.
 

@@ -622,12 +622,17 @@
                            (str (.getPath persistence) " has no date->iso, so this field will read back a day"
                                 " early east of UTC. Regenerate that file, or copy date->iso and ->entity"
                                 " from a newly generated module."))
-            ;; Written as a keyword, an enum value is a column name to HoneySQL.
-            enum-step (when (= :enum (:type field))
+            ;; Written as a keyword, an enum value is a column name to HoneySQL,
+            ;; and read back it stays a string unless it is in enum-fields.
+            enum-source (when (and (= :enum (:type field)) (.isFile persistence))
+                          (slurp persistence))
+            enum-added  (some-> enum-source (generators/add-enum-field-to-persistence field))
+            enum-edits  (when (and enum-added (not= enum-added enum-source))
+                          [{:file persistence :content enum-added
+                            :note (str "added :" (name (:name field)) " to enum-fields")}])
+            enum-step (when (and (= :enum (:type field)) (nil? enum-added))
                         (str "Add :" (name (:name field)) " to enum-fields in " (.getPath persistence)
-                             (when-not (and (.isFile persistence)
-                                            (str/includes? (slurp persistence) "enum-fields"))
-                               (str ", copied with ->row and ->entity from a newly generated module"))
+                             ", copied with ->row and ->entity from a newly generated module"
                              ", or storing it fails"))
 
             ;; Before anything is written. The migration and the schema entry
@@ -806,16 +811,14 @@
               {:path (.getPath schema-file) :action :skip :manual? true
                :note (str (when dry-run "dry run — ") (problem-desc edit))
                :manual-note (remaining-note edit)})
-            all-files (into (conj (vec written) schema-entry) (write-edits! (concat panel-edits test-edits) dry-run))]
+            all-files (into (conj (vec written) schema-entry) (write-edits! (concat panel-edits test-edits enum-edits) dry-run))]
 
         {:success true
          :module-name module-name
          :command :field
          :files all-files
-         ;; The generated persistence reads and writes every column as it is,
-         ;; so a field needs nothing there — except an enum, which has to be in
-         ;; `enum-fields` to be stored as a string (BOU-562). The path is
-         ;; resolved under --output-dir like every other in this report.
+         ;; An enum has to be in `enum-fields` (BOU-562); this step remains
+         ;; only for a persistence file without that set.
          :next-steps (cond-> (filterv some?
                                       [enum-step
                                        ;; The commands run against whatever project
