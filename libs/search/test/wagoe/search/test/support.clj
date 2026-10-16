@@ -12,7 +12,9 @@
   (migratus/migrate (migrations/migratus-config ds ["wagoe/search/migrations/"])))
 
 (defn make-doc
-  "A product search document, with `overrides` merged in."
+  "A product search document, with `overrides` merged in. A `:content-all`
+   override is the whole text, weight columns included, as indexing makes it;
+   PostgreSQL's full-text search reads the weights, LIKE reads content-all."
   ([] (make-doc {}))
   ([overrides]
    (merge {:id          (str (UUID/randomUUID))
@@ -26,4 +28,6 @@
            :weight-d    ""
            :content-all "Widget Pro A great widget for professionals tools hardware"
            :updated-at  (Instant/now)}
+          (when-let [text (:content-all overrides)]
+            {:weight-a text :weight-b "" :weight-c ""})
           overrides)))

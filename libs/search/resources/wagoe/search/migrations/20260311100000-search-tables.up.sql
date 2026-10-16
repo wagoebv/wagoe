@@ -44,9 +44,4 @@ CREATE INDEX IF NOT EXISTS idx_search_documents_updated
 --       coalesce(weight_d,''))
 --   );
 --
--- pg_trgm index for trigram similarity suggestions (run this on PostgreSQL only):
---
--- CREATE EXTENSION IF NOT EXISTS pg_trgm;
--- CREATE INDEX IF NOT EXISTS idx_search_documents_trgm
---   ON search_documents
---   USING GIN (content_all gin_trgm_ops);
+-- pg_trgm, for suggestions, is created by 20260313000000-search-trigram.edn.
