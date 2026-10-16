@@ -483,13 +483,17 @@
                 :correlation-id correlation-id}))
             ctx)})
 
+(defn- add-correlation-id [{:keys [correlation-id] :as ctx}]
+  (-> ctx
+      (update :response errors/with-correlation-id correlation-id)
+      (merge-response-headers {"X-Correlation-ID" correlation-id})))
+
 (def http-correlation-header
-  "Adds correlation ID to response headers."
+  "Adds the correlation ID to the response headers, and to an error body a
+   handler built without one (BOU-592)."
   {:name :http-correlation-header
-   :leave (fn [{:keys [correlation-id] :as ctx}]
-            (merge-response-headers ctx {"X-Correlation-ID" correlation-id}))
-   :error (fn [{:keys [correlation-id] :as ctx}]
-            (merge-response-headers ctx {"X-Correlation-ID" correlation-id}))})
+   :leave add-correlation-id
+   :error add-correlation-id})
 
 (def http-error-handler
   "Converts exceptions into safe HTTP error responses."

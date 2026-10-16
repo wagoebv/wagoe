@@ -39,12 +39,14 @@
   {[:post "/test/reset"] "truncates the database the other calls read"})
 
 (defn- one-shape?
-  "The body is the one error shape. A body that is not JSON is judged by the
-   path: a page may answer HTML, an API may not."
+  "The body is the one error shape, carrying the request's correlation id
+   (BOU-592). A body that is not JSON is judged by the path: a page may answer
+   HTML, an API may not."
   [uri response]
   (let [body (rt/decoded response)]
     (cond
-      (map? body)          (errors/error-body? body)
+      (map? body)          (and (errors/error-body? body)
+                                (string? (get-in body [:error :correlation-id])))
       (str/starts-with? uri "/web") true
       :else                false)))
 

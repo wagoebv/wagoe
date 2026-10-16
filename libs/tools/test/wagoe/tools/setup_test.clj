@@ -1022,6 +1022,9 @@
           (is (not (contains? prod :my/gateway)))
           (is (str/includes? out ":my/gateway") "and says what it left out"))
         (is (= :redis (get-in prod [:wagoe/events :provider])) "one process in dev, several in prod")
+        (testing "the summary names every provider prod gets, not keep (BOU-599)"
+          (doseq [[k p] [["events" "redis"] ["cache" "redis"] ["realtime" "redis"] ["jobs" "db"]]]
+            (is (re-find (re-pattern (str ":wagoe/" k "\\s+" p)) out) k)))
         (is (env-ref? (get-in prod [:wagoe/events :host])))
         (is (str/includes? (slurp (conf-file dir "prod")) "\n  :wagoe/events\n  {:provider :redis")
             "at the column of the keys around it")
