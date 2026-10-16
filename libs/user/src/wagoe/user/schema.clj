@@ -138,6 +138,18 @@
    [:user-agent {:optional true} :string]
    [:ip-address {:optional true} :string]])
 
+(def UserIdentity
+  "Schema for a link between a user and an OpenID Connect (issuer, subject)."
+  [:map {:title "User Identity"}
+   [:id :uuid]
+   [:user-id :uuid]
+   [:provider :string]
+   [:issuer :string]
+   [:subject :string]
+   [:email {:optional true} [:maybe :string]]
+   [:created-at inst?]
+   [:last-login-at {:optional true} [:maybe inst?]]])
+
 (def UserAuditLog
   "Schema for User Audit Log entity - tracks all user-related actions for compliance and security.
    

@@ -8,7 +8,9 @@
             [wagoe.user.shell.auth-persistence :as auth-persistence]
             [wagoe.user.shell.service :as user-service]
             [wagoe.user.shell.auth :as user-auth]
+            [wagoe.user.shell.identity-persistence :as identity-persistence]
             [wagoe.user.shell.mfa :as user-mfa]
+            [wagoe.user.shell.oidc :as oidc]
             [wagoe.user.shell.middleware :as user-middleware]
             [wagoe.user.shell.session-pruner :as session-pruner]
             [clojure.tools.logging :as log]
@@ -231,19 +233,35 @@
   (session-pruner/stop! handle))
 
 ;; =============================================================================
+;; OpenID Connect sign-in
+;; =============================================================================
+
+(defmethod ig/init-key :wagoe/user-identity-repository
+  [_ {:keys [ctx]}]
+  (identity-persistence/create-identity-repository ctx))
+
+(defmethod ig/init-key :wagoe/user-oidc
+  [_ {:keys [settings] :as opts}]
+  (log/info "Initializing OIDC sign-in" {:providers (keys (:providers settings))})
+  (oidc/create-oidc-client
+   (assoc opts :secret (or (:state-secret settings) (user-auth/get-jwt-secret)))))
+
+(defmethod ig/init-key :wagoe/user-oidc-routes
+  [_ {:keys [oidc config]}]
+  (require 'wagoe.user.shell.http)
+  ((ns-resolve 'wagoe.user.shell.http 'oidc-routes) oidc config))
+
+;; =============================================================================
 ;; Module graph
 ;; =============================================================================
 
-(defn ig-config
-  "This module's Integrant entries, for `wagoe.platform.shell.system.config`.
-
-   Called with the module's `:active` settings, which it does not read, and the
-   context the application supplies: `:config` and `:validation-config`."
-  [_settings {:keys [config validation-config]}]
+(defn- base-graph
+  [config validation-config]
   {:components
    {:wagoe/user-db-schema     {:ctx (ig/ref :wagoe/db-context)}
     :wagoe/user-repository    {:ctx (ig/ref :wagoe/db-context)}
     :wagoe/session-repository {:ctx (ig/ref :wagoe/db-context)}
+    :wagoe/user-identity-repository {:ctx (ig/ref :wagoe/db-context)}
     ;; Expiry hides a session; it does not remove the row. Without this the
     ;; table grows with every login, for ever (BOU-429).
     :wagoe/session-pruner     {:session-repository (ig/ref :wagoe/session-repository)
@@ -285,3 +303,22 @@
    :http   {:user-service    (ig/ref :wagoe/user-service)
             :auth-middleware (ig/ref :wagoe/user-http-middleware)}
    :routes [(ig/ref :wagoe/user-routes)]})
+
+(defn ig-config
+  "This module's Integrant entries, for `wagoe.platform.shell.system.config`.
+
+   Called with the module's `:active` settings — nil when the user module is
+   switched on in code rather than in config — and the context the application
+   supplies: `:config` and `:validation-config`. OIDC sign-in is wired only
+   when the settings name a provider under `[:oidc :providers]`."
+  [settings {:keys [config validation-config]}]
+  (cond-> (base-graph config validation-config)
+    (seq (get-in settings [:oidc :providers]))
+    (-> (update :components assoc
+                :wagoe/user-oidc        {:settings            (:oidc settings)
+                                         :auth-service        (ig/ref :wagoe/auth-service)
+                                         :audit-repository    (ig/ref :wagoe/audit-repository)
+                                         :identity-repository (ig/ref :wagoe/user-identity-repository)}
+                :wagoe/user-oidc-routes {:oidc   (ig/ref :wagoe/user-oidc)
+                                         :config config})
+        (update :routes conj (ig/ref :wagoe/user-oidc-routes)))))

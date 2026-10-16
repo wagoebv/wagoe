@@ -90,7 +90,10 @@
    only added cost on every sign/verify."
   (delay (validate-jwt-secret* (System/getenv "JWT_SECRET"))))
 
-(defn- get-jwt-secret [] @jwt-secret)
+(defn get-jwt-secret
+  "The validated JWT_SECRET. Throws :configuration-error when it is missing or short."
+  []
+  @jwt-secret)
 
 (defn validate-jwt-secret!
   "Fail-fast startup check: force resolution + validation of JWT_SECRET so a
@@ -176,6 +179,26 @@
      AuthenticationService instance"
   [user-repository session-repository mfa-service auth-config]
   (->AuthenticationService user-repository session-repository mfa-service auth-config))
+
+(defn open-session!
+  "Create the DB session for a user who has proven who they are, under the
+   session policy. Shared by password and OIDC sign-in.
+
+   Returns {:policy … :session …}; :session carries a :jwt-token that is not
+   stored."
+  [auth-service user login-risk login-context current-time]
+  (let [{:keys [session-repository auth-config]} auth-service
+        policy (auth-core/should-create-session? user login-risk auth-config)]
+    {:policy  policy
+     :session (when (:create-session? policy)
+                (let [hours   (:session-duration-hours policy)
+                      session (.create-session session-repository
+                                               {:user-id       (:id user)
+                                                :session-token (generate-session-token)
+                                                :expires-at    (.plus ^Instant current-time (Duration/ofHours hours))
+                                                :user-agent    (:user-agent login-context)
+                                                :ip-address    (:ip-address login-context)})]
+                  (assoc session :jwt-token (create-jwt-token user hours))))}))
 
 (defn authenticate-user
   "Coordinate user authentication with all security checks including MFA.
@@ -313,23 +336,8 @@
                          updated-user (merge user-after-mfa login-updates)
                          _ (.update-user user-repository updated-user)
 
-                         ;; Determine session creation policy
-                         session-policy (auth-core/should-create-session? user login-risk auth-config)
-
-                          ;; Create session if policy allows
-                         session (when (:create-session? session-policy)
-                                   (let [session-token (generate-session-token)
-                                         jwt-token (create-jwt-token user (:session-duration-hours session-policy))
-                                         session-data {:user-id (:id user)
-                                                       :session-token session-token
-                                                        ;; jwt-token is NOT stored in DB, only returned to client
-                                                       :expires-at (.plus current-time
-                                                                          (Duration/ofHours (:session-duration-hours session-policy)))
-                                                       :user-agent (:user-agent login-context)
-                                                       :ip-address (:ip-address login-context)}
-                                         created-session (.create-session session-repository session-data)]
-                                      ;; Add jwt-token to returned session (not persisted)
-                                     (assoc created-session :jwt-token jwt-token)))]
+                         {session-policy :policy session :session}
+                         (open-session! auth-service user login-risk login-context current-time)]
 
                      (log/info "Authentication successful"
                                {:email email

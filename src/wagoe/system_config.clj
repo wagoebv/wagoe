@@ -92,7 +92,9 @@
                      ;; Its timer belongs to whoever owns user_sessions, so a
                      ;; service that does not run the user module does not also
                      ;; prune its table (BOU-429).
-                     :wagoe/session-pruner]
+                     :wagoe/session-pruner
+                     :wagoe/user-identity-repository
+                     :wagoe/user-oidc :wagoe/user-oidc-routes]
               ;; What this module offers the rest of a split deployment. Only
               ;; served when it is run as a service *and* :wagoe/rpc is
               ;; configured — a `server` boot never starts the listener.

@@ -90,6 +90,28 @@
   ;; Entries where the user is the target. options: {:limit :offset :sort-by
   ;; :sort-direction}. Returns a seq of entries.
 
+(defprotocol IUserIdentityRepository
+  "Links between an account and an external sign-in: an OpenID Connect
+   (issuer, subject) pair. An issuer never reuses a subject, so the pair names
+   one person for good, where an email address can change hands."
+
+  (find-identity [this issuer subject])
+  ;; Returns {:id :user-id :provider :issuer :subject :email :created-at
+  ;;          :last-login-at}, or nil.
+
+  (find-identities-by-user [this user-id])
+  ;; Returns the user's links, oldest first.
+
+  (link-identity [this identity])
+  ;; identity: {:user-id :provider :issuer :subject :email}. Generates :id and
+  ;; :created-at. Returns the stored link. Throws on a duplicate (issuer, subject).
+
+  (touch-identity [this issuer subject at])
+  ;; Sets :last-login-at. Returns boolean.
+
+  (unlink-identity [this issuer subject]))
+  ;; Removes the link. Returns boolean.
+
 ;; =============================================================================
 ;; Service
 ;; =============================================================================
