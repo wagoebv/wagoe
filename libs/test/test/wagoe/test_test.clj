@@ -22,6 +22,7 @@
     (t/with-test-system [b app/ig-config]
       (is (nil? (:wagoe/http-server a)) "a test system binds no port")
       (is (= 200 (:status (t/request (t/client a) :get "/health"))))
+      (is (= 200 (:status (t/request (t/client a) :get "/health?probe=1"))) "a query in the uri")
       (user-ports/register-user (:wagoe/user-service a)
                                 {:email "only-in-a@example.com" :name "Ann" :role :user
                                  :password "Kit-Passw0rd-469!"})

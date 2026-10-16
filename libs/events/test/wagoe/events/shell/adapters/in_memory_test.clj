@@ -135,7 +135,12 @@
         (is (= [:order/placed] @received) "drain! returned before delivery")
         (is (= [:invoice/raised] (map :type (in-memory/drain! bus :invoices))))
         (testing "a second drain has nothing new"
-          (is (= [] (in-memory/drain! bus :orders))))))))
+          (is (= [] (in-memory/drain! bus :orders))))
+        (testing "history is untouched by a drain"
+          (is (= [:order/placed] (map :type (ports/history bus :orders)))))
+        (testing "a drain after another publish returns only that one"
+          (publisher/emit! bus :orders :order/shipped :test {:order-id 1})
+          (is (= [:order/shipped] (map :type (in-memory/drain! bus :orders)))))))))
 
 (deftest ^:unit history-is-bounded
   ;; A process-local buffer with no bound is a memory leak that only appears in

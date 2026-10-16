@@ -24,7 +24,8 @@
             [wagoe.realtime.ports :as realtime-ports]
             [wagoe.tenant.ports :as tenant-ports])
   (:import [java.net URLDecoder URLEncoder]
-           [java.security SecureRandom]))
+           [java.security SecureRandom]
+           [java.sql DriverManager]))
 
 ;; =============================================================================
 ;; System
@@ -35,8 +36,9 @@
   "wagoe-test-csrf-secret-at-least-32-characters")
 
 (defn- in-process
-  "`config` with every adapter that could leave the process kept in it, and its
-   own H2 database so two systems never share rows."
+  "`config` with cache, events, realtime and jobs kept in process, and its own
+   H2 database so two systems never share rows. Other adapters (email,
+   payments, storage, another database) are the app's test profile's to choose."
   [config]
   (let [active (:active config)
         on?    #(contains? active %)]
@@ -45,11 +47,26 @@
                     [:wagoe/cache :wagoe/events :wagoe/realtime :wagoe/jobs])
       (on? :wagoe/h2)       (update-in [:active :wagoe/h2] assoc
                                        :memory false
-                                       :db (str "mem:wagoe_test_" (System/nanoTime) ";DB_CLOSE_DELAY=-1"))
-      ;; No worker threads: jobs run when the test calls run-pending-jobs!.
-      (on? :wagoe/jobs)     (assoc-in [:active :wagoe/jobs :workers :count] 0)
+                                       :db (str "mem:wagoe_test_" (str/replace (str (random-uuid)) "-" "")
+                                                ";DB_CLOSE_DELAY=-1"))
       (and (on? :wagoe/tenant) (on? :wagoe/h2))
       (assoc-in [:active :wagoe/tenant :allow-h2?] true))))
+
+(defn- without-workers
+  "No worker threads: jobs run when the test calls run-pending-jobs!. Set on the
+   Integrant map, so it holds when the app enables jobs in code."
+  [ig-map]
+  (cond-> (dissoc ig-map :wagoe/http-server)
+    (contains? ig-map :wagoe/job-workers) (assoc-in [:wagoe/job-workers :workers :count] 0)))
+
+(defn- drop-h2!
+  "DB_CLOSE_DELAY=-1 keeps an in-memory database until the JVM exits, so each
+   system's would outlive it."
+  [db]
+  (when db
+    (with-open [c (DriverManager/getConnection (str "jdbc:h2:" db))
+                s (.createStatement c)]
+      (.execute s "SHUTDOWN"))))
 
 (defn start-system
   "Boot the application's Integrant system for a test and return it.
@@ -65,14 +82,24 @@
   (let [{:keys [ig-config profile] tweak :config :or {profile :test tweak identity}}
         (if (map? ig-config-or-opts) ig-config-or-opts {:ig-config ig-config-or-opts})
         cfg    (in-process (tweak (config/load-config {:profile profile})))
-        system (ig/init (dissoc (ig-config cfg) :wagoe/http-server))
+        h2-db  (get-in cfg [:active :wagoe/h2 :db])
+        system (try
+                 (ig/init (without-workers (ig-config cfg)))
+                 (catch clojure.lang.ExceptionInfo e
+                   ;; Integrant leaves what it built to the caller.
+                   (some-> (:system (ex-data e)) ig/halt!)
+                   (drop-h2! h2-db)
+                   (throw e)))
         sent   (atom [])]
     (when-let [bus (get-in system [:wagoe/realtime :bus])]
       (realtime-ports/start-subscriber! bus (fn [envelope] (swap! sent conj envelope) 0)))
-    (vary-meta system assoc ::realtime-sent sent)))
+    (vary-meta system assoc ::realtime-sent sent ::h2-db h2-db)))
 
 (defn stop-system [system]
-  (ig/halt! system))
+  (try
+    (ig/halt! system)
+    (finally
+      (drop-h2! (::h2-db (meta system))))))
 
 (defmacro with-test-system
   "Boot a test system from `ig-config-or-opts` (see `start-system`), bind it
@@ -153,17 +180,20 @@
 (def ^:private ^SecureRandom rng (SecureRandom.))
 
 (defn- csrf-header
-  "A token bound to what the server binds it to: the session, else the
-   pre-session cookie, which the client makes up when it has neither."
-  [{:keys [cookies]}]
-  (let [binding (or (get @cookies "session-token")
-                    (get @cookies "csrf-session")
-                    (let [id (str (random-uuid))]
-                      (swap! cookies assoc "csrf-session" id)
-                      id))
+  "A token bound to what the server binds it to: the X-Session-Token header
+   (verbatim), else the session cookie, else the pre-session cookie, which the
+   client makes up when it has none. Ring decodes cookie values; so does this."
+  [{:keys [cookies]} headers]
+  (let [binding (or (get headers "x-session-token")
+                    (some-> (or (get @cookies "session-token")
+                                (get @cookies "csrf-session")
+                                (let [id (str (random-uuid))]
+                                  (swap! cookies assoc "csrf-session" id)
+                                  id))
+                            (URLDecoder/decode "UTF-8")))
         nonce   (byte-array 16)]
     (.nextBytes rng nonce)
-    {csrf/header-name (csrf/generate-token csrf-secret (URLDecoder/decode ^String binding "UTF-8") nonce)}))
+    {csrf/header-name (csrf/generate-token csrf-secret binding nonce)}))
 
 (defn- remember-cookies! [cookies response]
   (let [set-cookie (get-in response [:headers "Set-Cookie"])]
@@ -183,8 +213,12 @@
    (let [body     (cond form (form-string form)
                         (some? json) (json/generate-string json)
                         :else body)
+         ;; A query written into the uri is a query, not part of the path.
+         [uri uri-query] (str/split uri #"\?" 2)
+         query-string    (str/join "&" (remove str/blank? [uri-query (some-> query form-string)]))
          ;; Before reading the jar: it may add the pre-session cookie.
-         csrf     (when (#{:post :put :patch :delete} method) (csrf-header c))
+         csrf     (when (#{:post :put :patch :delete} method)
+                    (csrf-header c (merge headers (:headers opts))))
          jar      @cookies
          response (handler
                    (cond-> {:request-method method
@@ -199,7 +233,7 @@
                                               (some? json) (assoc "content-type" "application/json"
                                                                   "accept" "application/json")
                                               true         (merge csrf (:headers opts)))}
-                     query (assoc :query-string (form-string query))
+                     (seq query-string) (assoc :query-string query-string)
                      body  (assoc :body (java.io.ByteArrayInputStream. (.getBytes ^String body "UTF-8")))))]
      (remember-cookies! cookies response)
      (update response :body #(if (or (nil? %) (string? %)) % (slurp %))))))

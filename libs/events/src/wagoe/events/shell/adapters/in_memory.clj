@@ -91,9 +91,19 @@
     (let [now (:history @state)]
       (when-not (identical? seen now)
         (recur now))))
+  ;; A mark per topic rather than clearing history: `ports/history` is what the
+  ;; application under test reads, and draining must not change its answer.
   (let [k       (keyword topic)
-        [old _] (swap-vals! state update :history dissoc k)]
-    (get-in old [:history k] [])))
+        [old _] (swap-vals! state
+                            (fn [s]
+                              (if-let [newest (peek (get-in s [:history k]))]
+                                (assoc-in s [:drained k] (:id newest))
+                                s)))
+        events  (get-in old [:history k] [])
+        mark    (get-in old [:drained k])
+        at      (when mark (first (keep-indexed #(when (= mark (:id %2)) %1) events)))]
+    ;; A mark no longer in the bounded history means every event kept is new.
+    (if at (subvec events (inc at)) events)))
 
 (defn stop!
   "Stop delivering and release the thread.

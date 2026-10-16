@@ -322,9 +322,11 @@
    a race (BOU-469). A retry or a scheduled job lands in the future, so this
    ends."
   [config queue store registry]
-  (process-scheduled-jobs! queue)
   (let [state (create-worker-state :default)]
     (loop [n 0]
+      ;; Every round: a job may enqueue one with an :execute-at already due,
+      ;; which lands in the scheduled set rather than on a queue.
+      (process-scheduled-jobs! queue)
       (let [ran (reduce (fn [ran q]
                           (cond-> ran
                             (process-single-job! config queue store registry (assoc state :queue-name q))

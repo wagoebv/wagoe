@@ -485,13 +485,17 @@
                                ;; A job that enqueues another runs in the same call.
                                (when (= "first" (:value args))
                                  (ports/enqueue-job! queue :mail
-                                                     (create-test-job {:args {:value "second"}})))
+                                                     (create-test-job {:args {:value "second"}}))
+                                 ;; Due already, but parked in the scheduled set.
+                                 (ports/enqueue-job! queue :default
+                                                     (assoc (create-test-job {:args {:value "due"}})
+                                                            :execute-at (Instant/now))))
                                {:success? true}))
     (ports/enqueue-job! queue :default (create-test-job {:args {:value "first"}}))
     (ports/enqueue-job! queue :default
                         (assoc (create-test-job {:args {:value "later"}})
                                :execute-at (.plusSeconds (Instant/now) 3600)))
-    (is (= 2 (worker/run-pending! {} queue store *registry*)))
+    (is (= 3 (worker/run-pending! {} queue store *registry*)))
     (is (= #{(Thread/currentThread)} @threads))
     (testing "a job scheduled for later stays queued"
       (is (zero? (worker/run-pending! {} queue store *registry*))))))
