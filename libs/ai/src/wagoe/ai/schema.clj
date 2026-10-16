@@ -158,6 +158,7 @@
    [:description     {:optional true} :string]
    [:soft-delete     {:optional true} :boolean]
    [:create-redirect-url {:optional true} :any]
+   [:writer          {:optional true} :keyword]
    [:permissions     {:optional true} [:map {:closed true}
                                        [:create {:optional true} :boolean]
                                        [:create-hint {:optional true} :string]]]

@@ -194,6 +194,49 @@
       ;; No active field provided, just return base update
       base-update)))
 
+(defn- active-admin? [user]
+  (and (= :admin (keyword (:role user)))
+       (not (false? (:active user)))
+       (nil? (:deleted-at user))))
+
+(defn removes-admin?
+  "Whether `after` takes an active admin's rights away from `before`: a
+   demotion, a deactivation, or, with `after` nil, a delete. A key `after`
+   leaves out keeps its value."
+  [before after]
+  (boolean (and (active-admin? before)
+                (or (nil? after) (not (active-admin? (merge before after)))))))
+
+(defn deactivates?
+  "Whether `after` deactivates the active user `before`."
+  [before after]
+  (and (not (false? (:active before)))
+       (contains? after :active)
+       (false? (:active after))))
+
+(defn admin-removal-refusal
+  "Why taking admin rights from `target` is refused, or nil: no admin removes
+   their own, and the last active admin keeps theirs (BOU-665)."
+  [actor-id target other-active-admins]
+  (cond
+    (= actor-id (:id target))
+    {:error {:type        :conflict
+             :reason      :own-admin-rights
+             :message-key :user/refused-own-admin-rights
+             :message     "You cannot remove your own admin rights"}}
+
+    (zero? other-active-admins)
+    {:error {:type        :conflict
+             :reason      :last-admin
+             :message-key :user/refused-last-admin
+             :message     "The last active admin cannot lose admin rights"}}))
+
+(defn refusal?
+  "Whether exception `e` is a write refused by a rule, such as the guard
+   above: a :conflict, shown to the user rather than raised."
+  [e]
+  (= :conflict (:type (ex-data e))))
+
 ;; =============================================================================
 ;; User Query Business Logic
 ;; =============================================================================
@@ -367,30 +410,6 @@
 ;; User Deletion Business Logic
 ;; =============================================================================
 
-(defn can-delete-user?
-  "Pure function: Determine if user can be deleted.
-
-       Args:
-         user: User entity to check
-
-       Returns:
-         {:allowed? true} or
-         {:allowed? false :reason keyword}
-
-       Pure - business rule checking only."
-  [user]
-  (cond
-    ;; System users cannot be deleted
-    (= "system@example.com" (:email user))
-    {:allowed? false :reason :system-user}
-
-    ;; Last admin user cannot be deleted (full check in service layer)
-    (= :admin (:role user))
-    {:allowed? false :reason :last-admin-user}
-
-    :else
-    {:allowed? true}))
-
 (defn prepare-user-for-soft-deletion
   "Pure function: Prepare user for soft deletion.
 
@@ -407,24 +426,6 @@
       (assoc :deleted-at current-time)
       (assoc :active false)
       (assoc :updated-at current-time)))
-
-(defn can-hard-delete-user?
-  "Pure function: Determine if user can be hard deleted.
-
-       Args:
-         user: User entity to check
-
-       Returns:
-         {:allowed? true} or
-         {:allowed? false :reason keyword}
-
-       Pure - business rule checking only."
-  [user]
-  (let [deletion-check (can-delete-user? user)]
-    (if (:allowed? deletion-check)
-      ;; Additional hard-deletion specific rules
-      {:allowed? true}
-      deletion-check)))
 
 ;; =============================================================================
 ;; User Analysis Functions
