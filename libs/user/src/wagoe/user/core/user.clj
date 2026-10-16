@@ -231,6 +231,12 @@
              :message-key :user/refused-last-admin
              :message     "The last active admin cannot lose admin rights"}}))
 
+(defn refusal?
+  "Whether exception `e` is a write refused by a rule, such as the guard
+   above: a :conflict, shown to the user rather than raised."
+  [e]
+  (= :conflict (:type (ex-data e))))
+
 ;; =============================================================================
 ;; User Query Business Logic
 ;; =============================================================================
@@ -404,30 +410,6 @@
 ;; User Deletion Business Logic
 ;; =============================================================================
 
-(defn can-delete-user?
-  "Pure function: Determine if user can be deleted.
-
-       Args:
-         user: User entity to check
-
-       Returns:
-         {:allowed? true} or
-         {:allowed? false :reason keyword}
-
-       Pure - business rule checking only."
-  [user]
-  (cond
-    ;; System users cannot be deleted
-    (= "system@example.com" (:email user))
-    {:allowed? false :reason :system-user}
-
-    ;; Last admin user cannot be deleted (full check in service layer)
-    (= :admin (:role user))
-    {:allowed? false :reason :last-admin-user}
-
-    :else
-    {:allowed? true}))
-
 (defn prepare-user-for-soft-deletion
   "Pure function: Prepare user for soft deletion.
 
@@ -444,24 +426,6 @@
       (assoc :deleted-at current-time)
       (assoc :active false)
       (assoc :updated-at current-time)))
-
-(defn can-hard-delete-user?
-  "Pure function: Determine if user can be hard deleted.
-
-       Args:
-         user: User entity to check
-
-       Returns:
-         {:allowed? true} or
-         {:allowed? false :reason keyword}
-
-       Pure - business rule checking only."
-  [user]
-  (let [deletion-check (can-delete-user? user)]
-    (if (:allowed? deletion-check)
-      ;; Additional hard-deletion specific rules
-      {:allowed? true}
-      deletion-check)))
 
 ;; =============================================================================
 ;; User Analysis Functions

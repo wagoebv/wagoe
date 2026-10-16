@@ -2,62 +2,40 @@
   "The users entity's writes, through the user service, so an admin edit gets
    its audit entry, session reset and last-admin guard (BOU-665)."
   (:require
+   [malli.core :as m]
    [wagoe.admin.ports :as ports]
-   [wagoe.user.ports :as user-ports]))
+   [wagoe.core.utils.type-conversion :as type-conversion]
+   [wagoe.core.validation :as cv]
+   [wagoe.user.ports :as user-ports]
+   [wagoe.user.schema :as user-schema]))
 
-(def ^:private editable
-  "What the user service lets an admin change. Others, such as login_count,
-   are the service's own to write."
-  #{:email :name :role :active :avatar-url :theme :language :timezone
-    :date-format :time-format :notifications-email :notifications-push :notifications-sms})
+(def ^:private decode
+  (cv/decoder user-schema/UpdateUserRequest user-schema/user-request-transformer))
 
-(def ^:private keyword-fields
-  "Enums the admin form sends as strings and the user schema holds as keywords."
-  #{:role :theme :date-format :time-format})
+(def ^:private updatable
+  (set (map first (m/children user-schema/UpdateUserRequest))))
 
 (defn- user-changes
-  "`changes` as the user schema reads them. An emptied optional field is
+  "`changes` as the user service reads them. An emptied optional field is
    left as it was: the schema has no nil for it."
   [changes]
-  (into {}
-        (keep (fn [[k v]]
-                (when (and (editable k) (some? v))
-                  [k (if (and (keyword-fields k) (string? v)) (keyword v) v)])))
-        changes))
+  (into {} (remove (comp nil? val)) (select-keys (decode changes) updatable)))
 
-(defn- user-id [id]
-  (if (string? id) (parse-uuid id) id))
-
-(defn- audit-context [actor]
-  {:actor-id    (:id actor)
-   :actor-email (:email actor)
-   :ip-address  (:ip-address actor)
-   :user-agent  (:user-agent actor)})
-
-(defrecord UserWriter [user-service with-audit-context]
+(defrecord UserWriter [user-service]
   ports/IEntityWriter
-  (update-record! [_ actor id changes]
-    (let [user (or (user-ports/get-user-by-id user-service (user-id id))
-                   (throw (ex-info "User not found" {:type :not-found :id id})))]
-      (with-audit-context
-        (audit-context actor)
-        ;; Only what the schema requires, plus the change: writing back the
-        ;; rest of a cached user could undo a login or MFA change since.
-        #(user-ports/update-user-profile
-          user-service
-          (merge (select-keys user [:id :email :name :role :active :created-at])
-                 (user-changes changes))))))
+  (update-record! [_ id changes]
+    (let [changes (user-changes changes)
+          user    (user-ports/update-user-profile
+                   user-service (assoc changes :id (type-conversion/string->uuid id)))]
+      ;; The user service soft-deletes a deactivated user.
+      (if (false? (:active changes)) :removed user)))
 
-  (delete-record! [_ actor id {:keys [soft?]}]
-    (with-audit-context
-      (audit-context actor)
-      #(if soft?
-         (user-ports/deactivate-user user-service (user-id id))
-         (user-ports/permanently-delete-user user-service (user-id id))))))
+  (delete-record! [_ id {:keys [soft?]}]
+    (if soft?
+      (user-ports/deactivate-user user-service (type-conversion/string->uuid id))
+      (user-ports/permanently-delete-user user-service (type-conversion/string->uuid id)))))
 
 (defn create-user-writer
-  "A writer for the users entity. `with-audit-context` is the user service's
-   (fn [audit-context f]); the composition root passes it in, since this
-   module may not require the user module's shell."
-  [user-service with-audit-context]
-  (->UserWriter user-service with-audit-context))
+  "A writer for the users entity, through `user-service`."
+  [user-service]
+  (->UserWriter user-service))

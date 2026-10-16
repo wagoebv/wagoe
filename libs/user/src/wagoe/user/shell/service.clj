@@ -71,6 +71,15 @@
   (binding [*audit-context* (merge *audit-context* audit-context)]
     (f)))
 
+(defn request-audit-context
+  "The audit context of a Ring request: its signed-in user is the actor."
+  [request]
+  (let [actor (or (:user request) (get-in request [:session :user]))]
+    {:actor-id    (:id actor)
+     :actor-email (:email actor)
+     :ip-address  (:remote-addr request)
+     :user-agent  (get-in request [:headers "user-agent"])}))
+
 (defn- effective-audit-context
   "Build final audit context by combining defaults with bound request context."
   [{:keys [default-actor-id default-actor-email]}]
@@ -127,6 +136,25 @@
       (when-let [{:keys [error]} (user-core/admin-removal-refusal
                                   (:actor-id *audit-context*) before others)]
         (throw (ex-info (:message error) (assoc error :user-id (:id before))))))))
+
+(defn- ends-sessions?
+  "Whether `after` changes `before`'s access: a delete (nil), a role change
+   (BOU-191) or a deactivation (BOU-665). A role `after` leaves out is kept."
+  [before after]
+  (or (nil? after)
+      (and (:role after) (not= (:role before) (:role after)))
+      (user-core/deactivates? before after)))
+
+(defn- change-access!
+  "Run `write!`, the change from `before` to `after` (nil: a delete): refused
+   by the admin guard, and ending the user's sessions when it changes their
+   access. Returns what `write!` returned."
+  [user-repository session-repository before after write!]
+  (when before (assert-admin-kept! user-repository before after))
+  (let [result (write!)]
+    (when (and result before (ends-sessions? before after))
+      (.invalidate-all-user-sessions session-repository (:id before)))
+    result))
 
 ;; =============================================================================
 ;; Database-Agnostic User Service (I/O Shell Layer)
@@ -490,9 +518,11 @@
      {:user-entity user-entity
       :user-id (:id user-entity)}
      (fn [{:keys [params]}]
-       (let [user-entity (:user-entity params)
-             ;; Get old user data for audit trail (before update)
-             old-user (.find-user-by-id user-repository (:id user-entity))]
+       (let [;; Get old user data for audit trail (before update)
+             old-user (.find-user-by-id user-repository (:id (:user-entity params)))
+             ;; A partial update keeps the stored values of the required keys.
+             user-entity (cond->> (:user-entity params)
+                           old-user (merge (select-keys old-user [:email :name :role :active :created-at])))]
          ;; 1. Validate update using pure core function
          (let [validation-result (user-core/validate-user-update-request user-entity)]
            (when-not (:valid? validation-result)
@@ -502,14 +532,12 @@
                               :original-data user-entity
                               :interface-type :cli}))))
 
-         (when old-user
-           (assert-admin-kept! user-repository old-user user-entity))
-
          ;; 2. Prepare user with updated timestamp and handle active/deleted_at
          (let [current-time (current-timestamp)
                prepared-user (user-core/prepare-user-for-update user-entity current-time)
                ;; 3. Persist using impure shell persistence layer
-               updated-user (.update-user user-repository prepared-user)]
+               updated-user (change-access! user-repository session-repository old-user user-entity
+                                            #(.update-user user-repository prepared-user))]
 
           ;; 4. Create audit log entry
            (when (and updated-user old-user)
@@ -531,19 +559,6 @@
            (when (and updated-user cache)
              (cache-ports/delete-key! cache (str "user:" (:id updated-user))))
 
-           ;; Privilege change (BOU-191): if the user's role changed, invalidate
-           ;; their sessions so any active session must re-establish under the new
-           ;; role — a demotion must not retain elevated access, and a promotion
-           ;; forces a fresh session rather than silently upgrading a live one.
-           ;; Guard on (:role updated-user) so a partial update that omits :role
-           ;; is not mistaken for a demotion-to-nil and does not churn sessions.
-           ;; A deactivation ends them too (BOU-665).
-           (when (and updated-user old-user
-                      (or (and (:role updated-user)
-                               (not= (:role old-user) (:role updated-user)))
-                          (user-core/deactivates? old-user user-entity)))
-             (.invalidate-all-user-sessions session-repository (:id updated-user)))
-
            ;; Remove sensitive data before returning
            (when updated-user
              (dissoc updated-user :password-hash)))))
@@ -559,15 +574,12 @@
        (let [user-id (:user-id params)
              ;; Get user details before deactivation for audit trail
              user (.find-user-by-id user-repository user-id)
-             _ (when user (assert-admin-kept! user-repository user nil))
-             result (.soft-delete-user user-repository user-id)]
+             result (change-access! user-repository session-repository user nil
+                                    #(.soft-delete-user user-repository user-id))]
 
          ;; Invalidate user cache on deactivation
          (when (and result cache)
            (cache-ports/delete-key! cache (str "user:" user-id)))
-
-         (when result
-           (.invalidate-all-user-sessions session-repository user-id))
 
          ;; Create audit log entry
          (when (and result user)

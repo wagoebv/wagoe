@@ -377,7 +377,7 @@ For entities using `:query-overrides`, set `:soft-delete-table` to tell the serv
 
 ## Entity Writers
 
-`:writer :user` routes an entity's updates and deletes, inline edits and bulk deletes included, through `ports/IEntityWriter` instead of SQL. The shipped users config uses it, so an admin edit goes through the user service: it is audited with the admin as actor, a role change or deactivation ends the user's sessions, and no admin can demote, deactivate or delete themselves or the last active admin. The refusal is a `:conflict`; the form shows it with a 409, a delete as an error toast. The admin wires `:user` itself; reads and creates are unchanged. Has-many restricts and cascades do not run for an entity with a writer: its module owns them.
+`:writer :user` sends an entity's updates and deletes through `ports/IEntityWriter` instead of SQL; the shipped users config uses it, so the user service audits them, ends sessions and refuses removing your own or the last admin's rights (409). Has-many restricts and cascades do not run for such an entity.
 
 ---
 

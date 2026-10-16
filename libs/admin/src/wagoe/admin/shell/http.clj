@@ -20,7 +20,6 @@
    [wagoe.admin.shell.http.handlers.detail :as detail]
    [wagoe.admin.shell.http.handlers.inline :as inline]
    [wagoe.admin.shell.http.handlers.list :as list-handlers]
-   [wagoe.admin.shell.service :as service]
    [wagoe.user.shell.middleware :as user-middleware]))
 
 ;; Facade re-export: consumers (e.g. http_test) resolve
@@ -31,16 +30,6 @@
 ;; Route Definitions
 ;; =============================================================================
 
-(defn- bind-actor
-  "Hands the signed-in user to entity writers, for their audit (BOU-665)."
-  [handler]
-  (fn [request]
-    (binding [service/*actor* (some-> (:user request)
-                                      (select-keys [:id :email])
-                                      (assoc :ip-address (:remote-addr request)
-                                             :user-agent (get-in request [:headers "user-agent"])))]
-      (handler request))))
-
 (defn web-routes
   "The admin interface's web routes, as Reitit data.
 
@@ -49,8 +38,7 @@
    Routes use flexible-authentication-middleware for session or token auth."
   [admin-service schema-provider config user-service]
   (let [;; Reuse existing auth middleware from user module
-        auth-middleware (comp (user-middleware/flexible-authentication-middleware user-service)
-                              bind-actor)]
+        auth-middleware (user-middleware/flexible-authentication-middleware user-service)]
 
     [["/"
       {:middleware [auth-middleware]

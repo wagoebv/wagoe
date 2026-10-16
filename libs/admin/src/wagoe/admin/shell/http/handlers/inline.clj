@@ -5,6 +5,7 @@
    [wagoe.admin.core.ui :as admin-ui]
    [wagoe.admin.shell.permissions :as shell-permissions]
    [wagoe.admin.shell.http.support :as support]
+   [wagoe.user.core.user :as user-core]
    [ring.util.response :as ring-response]))
 
 (defn inline-edit-widget-handler
@@ -112,20 +113,21 @@
               (ring-response/header "HX-Trigger" "entityUpdated")))
 
         (catch Exception e
-          (let [error-data (ex-data e)]
-            (if (#{:validation-error :conflict} (:type error-data))
-              ; Return inline form with error message
-              (support/html-response request
-                                     (admin-ui/render-inline-edit-form-with-error
-                                      entity-name id field field-value field-config
-                                      (if (support/refusal? e)
-                                        [(support/refusal-message request e)]
-                                        (get-in error-data [:errors field] ["Validation failed"]))
-                                      {:zone-id        (:input-zone zones)
-                                       :server-zone-id (:server-zone zones)
-                                       :offsets        (:offsets zones)}))
-              ; Re-throw other errors
-              (throw e)))))))))
+          (let [error-data (ex-data e)
+                form-with  #(support/html-response request
+                                                   (admin-ui/render-inline-edit-form-with-error
+                                                    entity-name id field field-value field-config %
+                                                    {:zone-id        (:input-zone zones)
+                                                     :server-zone-id (:server-zone zones)
+                                                     :offsets        (:offsets zones)}))]
+            (cond
+              (user-core/refusal? e)
+              (form-with [(support/refusal-message request e)])
+
+              (= (:type error-data) :validation-error)
+              (form-with (get-in error-data [:errors field] ["Validation failed"]))
+
+              :else (throw e)))))))))
 
 (defn cancel-inline-edit-handler
   "Handler for GET /:entity/:id/:field/cancel - cancels inline edit.

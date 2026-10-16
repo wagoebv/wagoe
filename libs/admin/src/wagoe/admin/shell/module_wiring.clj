@@ -17,8 +17,7 @@
    [wagoe.admin.shell.service :as service]
    [wagoe.admin.shell.user-writer :as user-writer]
    [wagoe.admin.shell.http :as http]
-   [wagoe.admin.shell.http.support :as support]
-   [wagoe.user.shell.service :as user-service]))
+   [wagoe.admin.shell.http.support :as support]))
 
 ;; =============================================================================
 ;; Admin Config Component (pass-through holder referenced by other components)
@@ -67,8 +66,7 @@
                                 ;; An entity config says `:writer :user` to be written
                                 ;; through the user service (BOU-665).
                                 (when users
-                                  {:user (user-writer/create-user-writer
-                                          users user-service/with-audit-context)})))
+                                  {:user (user-writer/create-user-writer users)})))
 
 (defmethod ig/halt-key! :wagoe/admin-service
   [_ _admin-service]

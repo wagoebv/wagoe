@@ -616,11 +616,6 @@
 ;; Entity writers (BOU-665)
 ;; =============================================================================
 
-(def ^:dynamic *actor*
-  "The signed-in user making the request, as an IEntityWriter gets it. Bound
-   by the admin routes."
-  nil)
-
 (defn- entity-writer
   "The IEntityWriter `entity-config` names under :writer, or nil without one."
   [writers entity-config]
@@ -629,168 +624,31 @@
         (throw (ex-info (str "No admin writer " k " is wired")
                         {:type :configuration-error :writer k})))))
 
+(defn- writable-data
+  "`data` without the read-only fields and the primary key."
+  [entity-config data]
+  (apply dissoc data (conj (:readonly-fields entity-config #{}) (:primary-key entity-config :id))))
+
+(defn- written-update!
+  "Update through `writer`: the record read back, or :removed when the write
+   took it out of the list."
+  [svc writer entity-config entity-name id data]
+  (if (= :removed (ports/update-record! writer id (writable-data entity-config data)))
+    :removed
+    (ports/get-entity svc entity-name id)))
+
 (defn- written-delete!
   "Delete `ids` through `writer`, one at a time. Returns {:entity :id :prior}
    per record deleted, like delete-records!."
-  [{:keys [db-ctx schema-provider]} writer entity-name ids priors?]
-  (let [soft? (:soft-delete (ports/get-entity-config schema-provider entity-name) false)]
+  [{:keys [db-ctx schema-provider]} writer entity-config entity-name ids priors?]
+  (let [priors (when priors?
+                 (into {} (map (juxt #(str (get % (:primary-key entity-config :id))) identity))
+                       (live-records db-ctx schema-provider entity-name ids)))
+        opts   {:soft? (:soft-delete entity-config false)}]
     (into []
-          (keep (fn [id]
-                  (let [prior (when priors? (first (live-records db-ctx schema-provider entity-name [id])))]
-                    (when (ports/delete-record! writer *actor* id {:soft? soft?})
-                      {:entity entity-name :id (str id) :prior prior}))))
+          (keep #(when (ports/delete-record! writer % opts)
+                   {:entity entity-name :id (str %) :prior (get priors (str %))}))
           ids)))
-
-(defn- update-entity*
-  "update-entity with SQL, for an entity without a writer."
-  [{:keys [db-ctx schema-provider]} entity-name id data]
-  (persist-interceptors/execute-persistence-operation
-   :admin-update-entity
-   {:entity (name entity-name) :id id}
-   (fn [{:keys [_params]}]
-     (let [entity-config (ports/get-entity-config schema-provider entity-name)
-           table-name (:table-name entity-config)
-           primary-key (:primary-key entity-config :id)
-           readonly-fields (:readonly-fields entity-config #{})
-
-            ; Remove only readonly and ID fields from update (not hide-fields!)
-            ; hide-fields are for display only, data can still be provided
-           sanitized-data (apply dissoc data (conj readonly-fields primary-key))
-
-             ; Only set timestamp columns that exist in the table
-           now-str (type-conversion/instant->string (Instant/now))
-           entity-fields (:fields entity-config)
-           prepared-data (cond-> sanitized-data
-                           (contains? entity-fields :updated-at) (assoc :updated-at now-str))
-
-            ; Convert all typed values (UUID, Instant) to strings for database
-           db-ready-data (prepare-values-for-db prepared-data)
-
-            ; Convert kebab-case keys to snake_case for database
-           db-data (case-conversion/kebab-case->snake-case-map db-ready-data)
-
-            ;; Convert UUID to string for PostgreSQL compatibility
-           id-str (type-conversion/uuid->string id)
-
-           split-cfg (:split-table-update entity-config)
-
-           _ (try
-               (if split-cfg
-                 (let [{:keys [secondary-table secondary-fields]} split-cfg
-                       {:keys [primary-data secondary-data]}
-                       (split-update-data sanitized-data secondary-fields entity-fields now-str)
-                       primary-db   (-> primary-data
-                                        prepare-values-for-db
-                                        case-conversion/kebab-case->snake-case-map)
-                       secondary-db (-> secondary-data
-                                        prepare-values-for-db
-                                        case-conversion/kebab-case->snake-case-map)]
-                   (db/with-transaction* db-ctx
-                     (fn [tx]
-                       (when (seq primary-db)
-                         (db/execute-update! tx {:update table-name
-                                                 :set    primary-db
-                                                 :where  [:= primary-key id-str]}))
-                       (when (seq secondary-db)
-                         (db/execute-update! tx {:update secondary-table
-                                                 :set    secondary-db
-                                                 :where  [:= primary-key id-str]})))))
-                 ;; non-split path
-                 (db/execute-update! db-ctx {:update table-name
-                                             :set    db-data
-                                             :where  [:= primary-key id-str]}))
-               (catch Exception e
-                 (throw (or (not-null-violation e) (foreign-key-violation e) (unique-violation e) e))))
-
-            ; Fetch the updated record using join-aware query
-           {:keys [from-clause select-clause join-clause field-aliases]} (resolve-query-config entity-config)
-           id-field (get field-aliases :id primary-key)
-           select-query (cond-> {:select select-clause
-                                 :from from-clause
-                                 :where [:= id-field id-str]}
-                          join-clause (assoc :join join-clause))
-           db-result (db/execute-one! db-ctx select-query)]
-
-        ; Keys arrive kebab-case from the execution layer builder-fn
-       (typed-record entity-config db-result)))
-   db-ctx))
-
-(defn- update-entity-field*
-  "update-entity-field with SQL, for an entity without a writer."
-  [{:keys [db-ctx schema-provider]} entity-name id field value]
-  ; Week 2: Single field update for inline editing
-  ; More efficient than full entity update - only validates and updates one field
-  (persist-interceptors/execute-persistence-operation
-   :admin-update-entity-field
-   {:entity (name entity-name) :id id :field (name field)}
-   (fn [{:keys [_params]}]
-     (let [entity-config (ports/get-entity-config schema-provider entity-name)
-           table-name (:table-name entity-config)
-           primary-key (:primary-key entity-config :id)
-           readonly-fields (set (:readonly-fields entity-config))
-           field-config (get-in entity-config [:fields field])]
-
-       ; Validate field exists and is not readonly
-       (when-not field-config
-         (throw (ex-info "Field does not exist"
-                         {:type :validation-error
-                          :field field
-                          :entity entity-name})))
-
-       (when (contains? readonly-fields field)
-         (throw (ex-info "Cannot update readonly field"
-                         {:type :readonly-field
-                          :field field
-                          :entity entity-name})))
-
-       ; Validate required fields
-       (when (and (:required field-config) (nil? value))
-         (throw (ex-info "Field is required"
-                         {:type :validation-error
-                          :field field
-                          :errors {field ["Field is required"]}})))
-
-       ; Prepare single field update with updated-at timestamp
-       (let [now-str (type-conversion/instant->string (Instant/now))
-             update-data {field value :updated-at now-str}
-
-             ; Convert typed values to database format
-             db-ready-data (prepare-values-for-db update-data)
-
-             ; Convert to snake_case for database
-             db-data (case-conversion/kebab-case->snake-case-map db-ready-data)
-
-             ; Convert ID to string
-             id-str (type-conversion/uuid->string id)
-
-             ; Determine which table owns this field (handles split-table entities)
-             split-cfg (:split-table-update entity-config)
-             effective-table (if (and split-cfg
-                                      (contains? (:secondary-fields split-cfg) field))
-                               (:secondary-table split-cfg)
-                               table-name)
-
-             ; Execute update against the correct table
-             update-query {:update effective-table
-                           :set db-data
-                           :where [:= primary-key id-str]}
-             _ (try
-                 (db/execute-update! db-ctx update-query)
-                 (catch Exception e
-                   (throw (or (not-null-violation e) (foreign-key-violation e) (unique-violation e) e))))
-
-             ; Fetch updated record using join-aware query
-             {:keys [from-clause select-clause join-clause field-aliases]} (resolve-query-config entity-config)
-             id-field (get field-aliases :id primary-key)
-             select-query (cond-> {:select select-clause
-                                   :from from-clause
-                                   :where [:= id-field id-str]}
-                            join-clause (assoc :join join-clause))
-             db-result (db/execute-one! db-ctx select-query)]
-
-         ; Keys arrive kebab-case from the execution layer builder-fn
-         (typed-record entity-config db-result))))
-   db-ctx))
 
 ;; =============================================================================
 ;; Admin Service Implementation
@@ -807,18 +665,19 @@
    checked before the operation, like the split-table create check, so they
    are not logged as failed database operations."
   [{:keys [db-ctx schema-provider workflows writers] :as svc} entity-name ids priors?]
-  (if-let [writer (entity-writer writers (ports/get-entity-config schema-provider entity-name))]
-    (written-delete! svc writer entity-name ids priors?)
-    (do
-      (check-minimums! db-ctx schema-provider entity-name
-                       (live-records db-ctx schema-provider entity-name ids))
-      (assert-unrestricted! db-ctx schema-provider entity-name ids)
-      (persist-interceptors/execute-persistence-operation
-       :admin-delete-entities
-       {:entity (name entity-name) :count (count ids)}
-       (fn [{:keys [_params]}]
-         (delete-records! db-ctx schema-provider workflows entity-name ids priors?))
-       db-ctx))))
+  (let [entity-config (ports/get-entity-config schema-provider entity-name)]
+    (if-let [writer (entity-writer writers entity-config)]
+      (written-delete! svc writer entity-config entity-name ids priors?)
+      (do
+        (check-minimums! db-ctx schema-provider entity-name
+                         (live-records db-ctx schema-provider entity-name ids))
+        (assert-unrestricted! db-ctx schema-provider entity-name ids)
+        (persist-interceptors/execute-persistence-operation
+         :admin-delete-entities
+         {:entity (name entity-name) :count (count ids)}
+         (fn [{:keys [_params]}]
+           (delete-records! db-ctx schema-provider workflows entity-name ids priors?))
+         db-ctx)))))
 
 ;; =============================================================================
 ;; Creates
@@ -1186,22 +1045,153 @@
        db-ctx)))
 
   (update-entity [this entity-name id data]
-    (if-let [writer (entity-writer writers (ports/get-entity-config schema-provider entity-name))]
-      (let [entity-config (ports/get-entity-config schema-provider entity-name)]
-        (ports/update-record! writer *actor* id
-                              (apply dissoc data (conj (:readonly-fields entity-config #{})
-                                                       (:primary-key entity-config :id))))
-        (ports/get-entity this entity-name id))
-      (update-entity* this entity-name id data)))
+    (let [entity-config (ports/get-entity-config schema-provider entity-name)]
+      (if-let [writer (entity-writer writers entity-config)]
+        (written-update! this writer entity-config entity-name id data)
+        (persist-interceptors/execute-persistence-operation
+         :admin-update-entity
+         {:entity (name entity-name) :id id}
+         (fn [{:keys [_params]}]
+           (let [table-name (:table-name entity-config)
+                 primary-key (:primary-key entity-config :id)
+
+                  ; Remove only readonly and ID fields from update (not hide-fields!)
+                  ; hide-fields are for display only, data can still be provided
+                 sanitized-data (writable-data entity-config data)
+
+                   ; Only set timestamp columns that exist in the table
+                 now-str (type-conversion/instant->string (Instant/now))
+                 entity-fields (:fields entity-config)
+                 prepared-data (cond-> sanitized-data
+                                 (contains? entity-fields :updated-at) (assoc :updated-at now-str))
+
+                  ; Convert all typed values (UUID, Instant) to strings for database
+                 db-ready-data (prepare-values-for-db prepared-data)
+
+                  ; Convert kebab-case keys to snake_case for database
+                 db-data (case-conversion/kebab-case->snake-case-map db-ready-data)
+
+                  ;; Convert UUID to string for PostgreSQL compatibility
+                 id-str (type-conversion/uuid->string id)
+
+                 split-cfg (:split-table-update entity-config)
+
+                 _ (try
+                     (if split-cfg
+                       (let [{:keys [secondary-table secondary-fields]} split-cfg
+                             {:keys [primary-data secondary-data]}
+                             (split-update-data sanitized-data secondary-fields entity-fields now-str)
+                             primary-db   (-> primary-data
+                                              prepare-values-for-db
+                                              case-conversion/kebab-case->snake-case-map)
+                             secondary-db (-> secondary-data
+                                              prepare-values-for-db
+                                              case-conversion/kebab-case->snake-case-map)]
+                         (db/with-transaction* db-ctx
+                           (fn [tx]
+                             (when (seq primary-db)
+                               (db/execute-update! tx {:update table-name
+                                                       :set    primary-db
+                                                       :where  [:= primary-key id-str]}))
+                             (when (seq secondary-db)
+                               (db/execute-update! tx {:update secondary-table
+                                                       :set    secondary-db
+                                                       :where  [:= primary-key id-str]})))))
+                       ;; non-split path
+                       (db/execute-update! db-ctx {:update table-name
+                                                   :set    db-data
+                                                   :where  [:= primary-key id-str]}))
+                     (catch Exception e
+                       (throw (or (not-null-violation e) (foreign-key-violation e) (unique-violation e) e))))
+
+                  ; Fetch the updated record using join-aware query
+                 {:keys [from-clause select-clause join-clause field-aliases]} (resolve-query-config entity-config)
+                 id-field (get field-aliases :id primary-key)
+                 select-query (cond-> {:select select-clause
+                                       :from from-clause
+                                       :where [:= id-field id-str]}
+                                join-clause (assoc :join join-clause))
+                 db-result (db/execute-one! db-ctx select-query)]
+
+              ; Keys arrive kebab-case from the execution layer builder-fn
+             (typed-record entity-config db-result)))
+         db-ctx))))
 
   (update-entity-field [this entity-name id field value]
-    (let [entity-config (ports/get-entity-config schema-provider entity-name)]
-      (if (:writer entity-config)
-        (do (when (contains? (set (:readonly-fields entity-config)) field)
-              (throw (ex-info "Cannot update readonly field"
-                              {:type :readonly-field :field field :entity entity-name})))
-            (ports/update-entity this entity-name id {field value}))
-        (update-entity-field* this entity-name id field value))))
+    ; Week 2: Single field update for inline editing
+    ; More efficient than full entity update - only validates and updates one field
+    (let [entity-config (ports/get-entity-config schema-provider entity-name)
+          field-config (get-in entity-config [:fields field])]
+
+      ; Validate field exists and is not readonly
+      (when-not field-config
+        (throw (ex-info "Field does not exist"
+                        {:type :validation-error
+                         :field field
+                         :entity entity-name})))
+
+      (when (contains? (set (:readonly-fields entity-config)) field)
+        (throw (ex-info "Cannot update readonly field"
+                        {:type :readonly-field
+                         :field field
+                         :entity entity-name})))
+
+      ; Validate required fields
+      (when (and (:required field-config) (nil? value))
+        (throw (ex-info "Field is required"
+                        {:type :validation-error
+                         :field field
+                         :errors {field ["Field is required"]}})))
+
+      (if (entity-writer writers entity-config)
+        (ports/update-entity this entity-name id {field value})
+        (persist-interceptors/execute-persistence-operation
+         :admin-update-entity-field
+         {:entity (name entity-name) :id id :field (name field)}
+         (fn [{:keys [_params]}]
+           (let [table-name (:table-name entity-config)
+                 primary-key (:primary-key entity-config :id)
+                 ; Prepare single field update with updated-at timestamp
+                 now-str (type-conversion/instant->string (Instant/now))
+               update-data {field value :updated-at now-str}
+
+               ; Convert typed values to database format
+               db-ready-data (prepare-values-for-db update-data)
+
+               ; Convert to snake_case for database
+               db-data (case-conversion/kebab-case->snake-case-map db-ready-data)
+
+               ; Convert ID to string
+               id-str (type-conversion/uuid->string id)
+
+               ; Determine which table owns this field (handles split-table entities)
+               split-cfg (:split-table-update entity-config)
+               effective-table (if (and split-cfg
+                                        (contains? (:secondary-fields split-cfg) field))
+                                 (:secondary-table split-cfg)
+                                 table-name)
+
+               ; Execute update against the correct table
+               update-query {:update effective-table
+                             :set db-data
+                             :where [:= primary-key id-str]}
+               _ (try
+                   (db/execute-update! db-ctx update-query)
+                   (catch Exception e
+                     (throw (or (not-null-violation e) (foreign-key-violation e) (unique-violation e) e))))
+
+               ; Fetch updated record using join-aware query
+               {:keys [from-clause select-clause join-clause field-aliases]} (resolve-query-config entity-config)
+               id-field (get field-aliases :id primary-key)
+               select-query (cond-> {:select select-clause
+                                     :from from-clause
+                                     :where [:= id-field id-str]}
+                              join-clause (assoc :join join-clause))
+               db-result (db/execute-one! db-ctx select-query)]
+
+           ; Keys arrive kebab-case from the execution layer builder-fn
+           (typed-record entity-config db-result)))
+         db-ctx))))
 
   (delete-entity [this entity-name id]
     (pos? (roots-removed entity-name [id] (checked-delete! this entity-name [id] false))))
@@ -1412,7 +1402,7 @@
   (update-entity [_ entity-name id data]
     (let [prior  (ports/get-entity inner entity-name id)
           record (ports/update-entity inner entity-name id data)]
-      (when record
+      (when (map? record)
         (publish-lifecycle! publisher schema-provider :admin/entity-updated
                             entity-name id record prior))
       record))
@@ -1420,7 +1410,7 @@
   (update-entity-field [_ entity-name id field value]
     (let [prior  (ports/get-entity inner entity-name id)
           record (ports/update-entity-field inner entity-name id field value)]
-      (when record
+      (when (map? record)
         (publish-lifecycle! publisher schema-provider :admin/entity-updated
                             entity-name id record prior))
       record))

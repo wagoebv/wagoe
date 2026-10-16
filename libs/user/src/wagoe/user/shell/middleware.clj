@@ -8,6 +8,7 @@
    - Request context enrichment with user information"
   (:require [wagoe.user.ports :as ports]
             [wagoe.user.shell.auth :as auth-shell]
+            [wagoe.user.shell.service :as user-service]
             [wagoe.core.utils.type-conversion :as type-conv]
             [wagoe.platform.core.http.access :as access]
             [clojure.string :as str]
@@ -254,6 +255,16 @@
 ;; Flexible Authentication Middleware
 ;; =============================================================================
 
+(defn- wrap-audit-context
+  "Make the signed-in user the actor of what the user service audits and
+   guards during the request (BOU-665)."
+  [handler]
+  (fn [request]
+    (if (:user request)
+      (user-service/with-audit-context (user-service/request-audit-context request)
+        #(handler request))
+      (handler request))))
+
 (defn flexible-authentication-middleware
   "Middleware that accepts either JWT or session token authentication.
    
@@ -281,45 +292,46 @@
   ([user-service handler]
    (log/trace "Initializing flexible authentication middleware"
               {:user-service (type user-service) :handler (type handler)})
-   (fn [request]
-     (if (:user request)
-       ;; Already authenticated upstream. `authenticate-if-present` runs
-       ;; globally since BOU-373 and has validated these same credentials, and a
-       ;; second pass is not free: with the cache off, `validate-session` reads
-       ;; the session, writes its access time, then fetches the user. Repeating
-       ;; that doubles the database work on every authenticated request to a
-       ;; route carrying this middleware — most of user, admin and workflow.
-       ;;
-       ;; Only the middleware chain can set `:user`; it is not readable from
-       ;; anything the client sends.
-       (handler request)
+   (let [handler (wrap-audit-context handler)]
+     (fn [request]
+       (if (:user request)
+         ;; Already authenticated upstream. `authenticate-if-present` runs
+         ;; globally since BOU-373 and has validated these same credentials, and a
+         ;; second pass is not free: with the cache off, `validate-session` reads
+         ;; the session, writes its access time, then fetches the user. Repeating
+         ;; that doubles the database work on every authenticated request to a
+         ;; route carrying this middleware — most of user, admin and workflow.
+         ;;
+         ;; Only the middleware chain can set `:user`; it is not readable from
+         ;; anything the client sends.
+         (handler request)
 
-       (let [session-token (extract-session-token request)
-             bearer-token  (extract-bearer-token request)]
-         (log/info "Processing authentication request"
-                   {:uri (:uri request)
-                    :method (:request-method request)
-                    :has-session (boolean session-token)
-                    :has-bearer (boolean bearer-token)
-                    :cookies (keys (:cookies request))})
-         (cond
-           ;; Try JWT authentication first
-           bearer-token
-           ((jwt-authentication-middleware handler) request)
+         (let [session-token (extract-session-token request)
+               bearer-token  (extract-bearer-token request)]
+           (log/info "Processing authentication request"
+                     {:uri (:uri request)
+                      :method (:request-method request)
+                      :has-session (boolean session-token)
+                      :has-bearer (boolean bearer-token)
+                      :cookies (keys (:cookies request))})
+           (cond
+             ;; Try JWT authentication first
+             bearer-token
+             ((jwt-authentication-middleware handler) request)
 
-           ;; Fall back to session authentication
-           session-token
-           (do
-             (log/info "Attempting session authentication")
-             ((session-authentication-middleware user-service handler) request))
+             ;; Fall back to session authentication
+             session-token
+             (do
+               (log/info "Attempting session authentication")
+               ((session-authentication-middleware user-service handler) request))
 
-           ;; No authentication provided
-           :else
-           (do
-             (log/info "No authentication credentials provided"
-                       {:headers-keys (keys (:headers request))
-                        :cookie-header (get-in request [:headers "cookie"])})
-             (create-unauthorized-response "Authentication required" :no-credentials request))))))))
+             ;; No authentication provided
+             :else
+             (do
+               (log/info "No authentication credentials provided"
+                         {:headers-keys (keys (:headers request))
+                          :cookie-header (get-in request [:headers "cookie"])})
+               (create-unauthorized-response "Authentication required" :no-credentials request)))))))))
 
 ;; =============================================================================
 ;; Authorization Middleware

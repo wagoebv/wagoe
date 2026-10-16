@@ -243,7 +243,8 @@
               :active false}
 
      Returns:
-       Updated entity record with new updated-at timestamp
+       Updated entity record with new updated-at timestamp, or :removed
+       when an entity writer's update took it out of the list (BOU-665)
 
      Throws:
        - ExceptionInfo with :type :validation-error for invalid data
@@ -464,19 +465,15 @@
 ;; =============================================================================
 
 (defprotocol IEntityWriter
-  "Writes for an entity whose rules live in another module. An entity whose
-   config names a writer under :writer is updated and deleted through it, not
-   with SQL, so that module's audit, session and guard rules apply. Refusals
-   are typed ex-infos; one carrying :message-key is shown translated."
+  "Updates and deletes for an entity whose config names this writer under
+   :writer, so another module's rules apply. Refusals are typed ex-infos."
 
-  (update-record! [this actor id changes]
-    "Apply `changes` ({field value}, read-only fields already removed) to
-     record `id`. `actor` is the signed-in user: {:id :email :ip-address
-     :user-agent}, or nil outside a request. The admin reads the record back.")
+  (update-record! [this id changes]
+    "Apply `changes`, read-only fields removed. Returns :removed when the
+     record leaves the list, anything else otherwise.")
 
-  (delete-record! [this actor id opts]
-    "Delete record `id`; opts {:soft? bool} from the entity config. Returns
-     true when a record was deleted."))
+  (delete-record! [this id opts]
+    "Delete record `id`; opts {:soft? bool}. Returns true when deleted."))
 
 ;; =============================================================================
 ;; List Overview Port (ADR-040)

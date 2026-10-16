@@ -52,7 +52,7 @@
                 (logging-no-op/create-logging-component {})
                 (error-reporting-no-op/create-error-reporting-component {})
                 config nil nil
-                {:user (user-writer/create-user-writer users user-service/with-audit-context)})}))
+                {:user (user-writer/create-user-writer users)})}))
 
 (defn- user! [{:keys [repo sessions]} email role]
   (let [user (.create-user repo {:email email :name email :role role :active true
@@ -65,6 +65,11 @@
 (defn- live-sessions [{:keys [sessions]} user]
   (count (.find-sessions-by-user sessions (:id user))))
 
+(defn- as
+  "Call `f` with `user` as the actor, as the authentication middleware does."
+  [user f]
+  (user-service/with-audit-context (user-service/request-audit-context {:user user}) f))
+
 (defn- refusal [f]
   (try (with-silent-logging (f)) nil
        (catch clojure.lang.ExceptionInfo e (ex-data e))))
@@ -73,8 +78,7 @@
   (let [{:keys [admin users] :as sys} (system)
         boss (user! sys "boss@example.com" :admin)
         u    (user! sys "u@example.com" :user)]
-    (binding [service/*actor* {:id (:id boss) :email (:email boss)}]
-      (ports/update-entity admin :users (:id u) {:role "viewer"}))
+    (as boss #(ports/update-entity admin :users (:id u) {:role "viewer"}))
     (is (= :viewer (:role (user-ports/get-user-by-id users (:id u)))))
     (is (zero? (live-sessions sys u)) "a role change ends the user's sessions (BOU-191)")
     (let [entry (first (user-ports/get-audit-logs-for-user users (:id u) {}))]
@@ -110,13 +114,13 @@
   (let [{:keys [admin users] :as sys} (system)
         boss  (user! sys "boss@example.com" :admin)
         other (user! sys "other@example.com" :admin)]
-    (binding [service/*actor* {:id (:id boss) :email (:email boss)}]
-      (is (= :own-admin-rights
-             (:reason (refusal #(ports/update-entity admin :users (:id boss) {:role "user"})))))
-      (is (= :own-admin-rights (:reason (refusal #(ports/delete-entity admin :users (:id boss))))))
-      (testing "another admin can be demoted while one remains"
-        (ports/update-entity admin :users (:id other) {:role "user"})
-        (is (= :user (:role (user-ports/get-user-by-id users (:id other)))))))))
+    (is (= :own-admin-rights
+           (:reason (refusal #(as boss (fn [] (ports/update-entity admin :users (:id boss) {:role "user"})))))))
+    (is (= :own-admin-rights
+           (:reason (refusal #(as boss (fn [] (ports/delete-entity admin :users (:id boss))))))))
+    (testing "another admin can be demoted while one remains"
+      (as boss #(ports/update-entity admin :users (:id other) {:role "user"}))
+      (is (= :user (:role (user-ports/get-user-by-id users (:id other))))))))
 
 (deftest ^:integration fields-the-user-module-writes-are-read-only
   (let [{:keys [admin repo] :as sys} (system)
