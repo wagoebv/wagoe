@@ -23,10 +23,12 @@
 (def sql-type->field-type
   "Mapping from SQL/database types to logical field types.
 
-   Keys are lowercase type names as strings (normalized from database).
+   Keys are lowercase type names: a full type where the width means something
+   (`char(36)`, `tinyint(1)`), else the base type `normalize-sql-type` gives.
    Values are field type keywords used in entity configuration."
   {"uuid" :uuid
    "char(36)" :uuid           ; UUID as string in some databases
+   "tinyint(1)" :boolean      ; MySQL's boolean
    "varchar" :string
    "character varying" :string
    "text" :text
@@ -64,7 +66,8 @@
    "binary" :binary})
 
 (defn normalize-sql-type
-  "Normalize SQL type string to lowercase without size/precision.
+  "Normalize SQL type string to lowercase without size/precision, or MySQL's
+   unsigned/zerofill.
 
    Args:
      sql-type: String SQL type (e.g., 'VARCHAR(255)', 'DECIMAL(10,2)')
@@ -82,6 +85,7 @@
     (-> sql-type
         str/lower-case
         (str/replace #"\(.*\)" "")  ; Remove size/precision
+        (str/replace #"\s+(unsigned|zerofill)" "")  ; MySQL's column_type
         str/trim)))
 
 (defn infer-field-type
@@ -105,8 +109,10 @@
      (infer-field-type \"UNKNOWN_TYPE\")     ;=> :string"
   ([sql-type] (infer-field-type sql-type nil))
   ([sql-type field-name]
-   (let [normalized (normalize-sql-type sql-type)
-         base-type (get sql-type->field-type normalized :string)]
+   ;; The full type first: char(36) and tinyint(1) mean something their base
+   ;; type does not (BOU-649).
+   (let [base-type (or (some->> sql-type str/lower-case str/trim (get sql-type->field-type))
+                       (get sql-type->field-type (normalize-sql-type sql-type) :string))]
      ;; Apply heuristics if field is text type
      (if (and (= base-type :text) field-name)
        (let [name-str (name field-name)]
