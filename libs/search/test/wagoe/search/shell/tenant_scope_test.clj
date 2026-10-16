@@ -2,8 +2,7 @@
   "A search of a tenant-scoped index reads the caller's tenant and nothing else,
    whatever filter the caller sends (BOU-568)."
   (:require [clojure.test :refer [deftest is testing use-fixtures]]
-            [next.jdbc :as jdbc]
-            [wagoe.platform.shell.adapters.database.h2.core :as h2]
+            [support.test-db :as test-db]
             [wagoe.search.ports :as ports]
             [wagoe.search.shell.http :as sut]
             [wagoe.search.shell.persistence :as persistence]
@@ -21,21 +20,21 @@
 (def ^:dynamic *engine* nil)
 
 (defn- with-engine [f]
-  (let [ds (jdbc/get-datasource
-            {:jdbcUrl (str "jdbc:h2:mem:search-scope-" (UUID/randomUUID) ";DB_CLOSE_DELAY=-1")})]
-    (create-search-documents-table! ds)
-    (registry/register-search! {:id :scoped-items :entity-type :item
-                                :fields [{:name :title :weight :a}]
-                                :filters [:tenant-id]})
-    (registry/register-search! {:id :open-items :entity-type :item
-                                :fields [{:name :title :weight :a}]})
-    (let [engine (service/create-search-service (persistence/create-search-store ds (h2/new-adapter)))]
-      (ports/index-document! engine :scoped-items doc-a {:title "widget alpha"}
-                             {:filter-values {:tenant-id tenant-a}})
-      (ports/index-document! engine :scoped-items doc-b {:title "widget beta"}
-                             {:filter-values {:tenant-id tenant-b}})
-      (ports/index-document! engine :open-items doc-open {:title "widget open"} {})
-      (binding [*engine* engine] (f)))))
+  (test-db/with-db "search_scope"
+    (fn [{:keys [datasource adapter]}]
+      (create-search-documents-table! datasource)
+      (registry/register-search! {:id :scoped-items :entity-type :item
+                                  :fields [{:name :title :weight :a}]
+                                  :filters [:tenant-id]})
+      (registry/register-search! {:id :open-items :entity-type :item
+                                  :fields [{:name :title :weight :a}]})
+      (let [engine (service/create-search-service (persistence/create-search-store datasource adapter))]
+        (ports/index-document! engine :scoped-items doc-a {:title "widget alpha"}
+                               {:filter-values {:tenant-id tenant-a}})
+        (ports/index-document! engine :scoped-items doc-b {:title "widget beta"}
+                               {:filter-values {:tenant-id tenant-b}})
+        (ports/index-document! engine :open-items doc-open {:title "widget open"} {})
+        (binding [*engine* engine] (f))))))
 
 (use-fixtures :each with-engine)
 

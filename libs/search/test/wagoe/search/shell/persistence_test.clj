@@ -1,5 +1,6 @@
 (ns wagoe.search.shell.persistence-test
-  "Integration tests for SearchStore persistence layer against H2.
+  "Integration tests for SearchStore persistence layer, on the engine
+   WAGOE_TEST_DB names (H2 by default).
 
    Uses the LIKE-based fallback path (H2 claims neither :full-text nor :on-conflict),
    which validates:
@@ -10,14 +11,11 @@
    - suggest-documents (LIKE fallback)
    - count-documents"
   (:require [clojure.test :refer [deftest testing is use-fixtures]]
-            [wagoe.platform.shell.adapters.database.h2.core :as h2]
             [wagoe.search.test.support :refer [create-search-documents-table! make-doc]]
             [wagoe.search.ports :as ports]
             [wagoe.search.shell.persistence :as persistence]
-            [next.jdbc :as jdbc]
-            [next.jdbc.connection :as connection])
-  (:import [java.util UUID]
-           [com.zaxxer.hikari HikariDataSource]))
+            [support.test-db :as test-db])
+  (:import [java.util UUID]))
 
 ;; =============================================================================
 ;; Test database setup
@@ -26,34 +24,14 @@
 (def ^:private test-datasource (atom nil))
 (def ^:private test-store      (atom nil))
 
-(defn- setup-test-db []
-  (let [^HikariDataSource ds
-        (connection/->pool
-         com.zaxxer.hikari.HikariDataSource
-         {:jdbcUrl  "jdbc:h2:mem:search-test;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;DB_CLOSE_DELAY=-1"
-          :username "sa"
-          :password ""})]
-    (reset! test-datasource ds)
-
-    (create-search-documents-table! ds)
-
-    (reset! test-store (persistence/create-search-store ds (h2/new-adapter)))))
-
-(defn- teardown-test-db []
-  (when-let [ds @test-datasource]
-    (try
-      (jdbc/execute! ds ["DROP ALL OBJECTS"])
-      (.close ^HikariDataSource ds)
-      (catch Exception _e nil))
-    (reset! test-datasource nil)
-    (reset! test-store nil)))
-
 (defn- db-fixture [test-fn]
-  (setup-test-db)
-  (try
-    (test-fn)
-    (finally
-      (teardown-test-db))))
+  (test-db/with-db "search"
+    (fn [{:keys [datasource adapter]}]
+      (create-search-documents-table! datasource)
+      (reset! test-datasource datasource)
+      (reset! test-store (persistence/create-search-store datasource adapter))
+      (try (test-fn)
+           (finally (reset! test-datasource nil) (reset! test-store nil))))))
 
 (use-fixtures :each db-fixture)
 

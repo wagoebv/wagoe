@@ -47,6 +47,7 @@ JWT_SECRET="dev-secret-at-least-32-characters-long" WAG_ENV=test clojure -M:test
 #   :test/otel    observability             (OpenTelemetry in-memory exporters)
 #   :test/http    devtools                  (clj-http-lite)
 clojure -M:test:test/pg:test/pg-mac :admin         # one suite, only what it needs (macOS)
+WAGOE_TEST_DB=mysql clojure -M:test :admin         # admin, user, workflow, search on mysql or pg (support.test-db)
 
 # Testing - Per-library test suites
 clojure -M:test :core                              # Core library tests

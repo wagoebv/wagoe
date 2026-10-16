@@ -15,47 +15,28 @@
    column set the repository actually uses."
   (:require [wagoe.user.ports :as ports]
             [wagoe.user.shell.persistence :as persistence]
-            [wagoe.platform.shell.adapters.database.h2.core :as h2]
             [clojure.test :refer [deftest testing is use-fixtures]]
-            [next.jdbc.connection :as connection])
+            [support.test-db :as test-db])
   (:import [java.time Instant]
-           [java.util UUID]
-           [com.zaxxer.hikari HikariDataSource]))
+           [java.util UUID]))
 
 ;; =============================================================================
-;; H2 harness
+;; Harness: the engine WAGOE_TEST_DB names, H2 by default
 ;; =============================================================================
 
 (def ^:private db-ctx (atom nil))
 (def ^:private user-repo (atom nil))
 (def ^:private session-repo (atom nil))
 
-(defn- setup-db []
-  (let [^HikariDataSource ds
-        (connection/->pool
-         com.zaxxer.hikari.HikariDataSource
-         ;; Unique DB name per setup: this ns is collected by BOTH the :unit
-         ;; aggregate suite and the :user suite, so it runs twice in one JVM. A
-         ;; fixed name + DB_CLOSE_DELAY=-1 would keep the first DB alive and the
-         ;; second run would re-init schema on top of it (initialize-user-schema!
-         ;; is not idempotent for CHECK constraints), corrupting them.
-         {:jdbcUrl (str "jdbc:h2:mem:user-contract-" (UUID/randomUUID) ";MODE=PostgreSQL"
-                        ";DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;DB_CLOSE_DELAY=-1")
-          :username "sa" :password ""})
-        ctx {:datasource ds :adapter (h2/new-adapter)}]
-    (persistence/initialize-user-schema! ctx)
-    (reset! db-ctx ctx)
-    (reset! user-repo (persistence/create-user-repository ctx))
-    (reset! session-repo (persistence/create-session-repository ctx))))
-
-(defn- teardown-db []
-  (when-let [^HikariDataSource ds (:datasource @db-ctx)]
-    (.close ds))
-  (reset! db-ctx nil)
-  (reset! user-repo nil)
-  (reset! session-repo nil))
-
-(use-fixtures :once (fn [f] (setup-db) (try (f) (finally (teardown-db)))))
+(use-fixtures :once
+  (fn [f]
+    (test-db/with-db "user_contract"
+      (fn [ctx]
+        (persistence/initialize-user-schema! ctx)
+        (reset! db-ctx ctx)
+        (reset! user-repo (persistence/create-user-repository ctx))
+        (reset! session-repo (persistence/create-session-repository ctx))
+        (try (f) (finally (reset! db-ctx nil) (reset! user-repo nil) (reset! session-repo nil)))))))
 
 ;; =============================================================================
 ;; Entity builders

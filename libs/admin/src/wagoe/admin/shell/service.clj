@@ -622,6 +622,20 @@
 ;; Creates
 ;; =============================================================================
 
+(defn- typed-record
+  "`row` with its :uuid fields as UUIDs and its :instant fields as Instants,
+   whatever the driver returned: MySQL a CHAR(36) as text and a DATETIME as a
+   LocalDateTime, H2 an OffsetDateTime (BOU-652)."
+  [entity-config row]
+  (when row
+    (reduce-kv (fn [m k {:keys [type]}]
+                 (let [v (get m k)]
+                   (cond-> m
+                     (and (= :uuid type) (string? v))                (assoc k (type-conversion/string->uuid v))
+                     (and (= :instant type) (some? v) (not (inst? v))) (assoc k (type-conversion/string->instant v)))))
+               row
+               (:fields entity-config))))
+
 (defn- insert-record!
   "Insert `data` as a new row of `entity-config` on `conn` (a db-ctx or a
    transaction) and return the row as read back."
@@ -648,7 +662,8 @@
       (db/execute-one! conn {:insert-into table-name :values [db-data]})
       (catch Exception e
         (throw (or (not-null-violation e) (foreign-key-violation e) (unique-violation e) e))))
-    (db/execute-one! conn {:select [:*] :from [table-name] :where [:= primary-key id-str]})))
+    (typed-record entity-config
+                  (db/execute-one! conn {:select [:*] :from [table-name] :where [:= primary-key id-str]}))))
 
 (defn- nested-relationships
   "The has-many entries of `entity-config` created with it, as
@@ -904,7 +919,7 @@
              total-count (:total count-result 0)
 
               ; Keys arrive kebab-case from the execution layer builder-fn
-             kebab-records records
+             kebab-records (mapv #(typed-record entity-config %) records)
 
               ; Calculate pagination metadata
              page-size (:limit pagination)
@@ -939,7 +954,7 @@
                      join-clause (assoc :join join-clause))
              db-result (db/execute-one! db-ctx query)]
           ; Keys arrive kebab-case from the execution layer builder-fn
-         db-result))
+         (typed-record entity-config db-result)))
      db-ctx))
 
   (create-entity [_ entity-name data]
@@ -1051,7 +1066,7 @@
              db-result (db/execute-one! db-ctx select-query)]
 
           ; Keys arrive kebab-case from the execution layer builder-fn
-         db-result))
+         (typed-record entity-config db-result)))
      db-ctx))
 
   (update-entity-field [_ entity-name id field value]
@@ -1126,7 +1141,7 @@
                db-result (db/execute-one! db-ctx select-query)]
 
            ; Keys arrive kebab-case from the execution layer builder-fn
-           db-result)))
+           (typed-record entity-config db-result))))
      db-ctx))
 
   (delete-entity [this entity-name id]

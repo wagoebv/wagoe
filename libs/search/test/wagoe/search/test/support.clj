@@ -1,30 +1,15 @@
 (ns wagoe.search.test.support
   "What the search tests share: the search_documents table and a sample document."
-  (:require [next.jdbc :as jdbc])
+  (:require [migratus.core :as migratus]
+            [wagoe.platform.shell.database.migrations :as migrations])
   (:import [java.time Instant]
            [java.util UUID]))
 
 (defn create-search-documents-table!
-  "The search_documents table and its index, as the tests create them on H2 and
-   SQLite."
+  "The search_documents table, from the migrations the library ships, so the
+   tests run against the schema an application gets."
   [ds]
-  (jdbc/execute! ds ["CREATE TABLE IF NOT EXISTS search_documents (
-                        id          TEXT NOT NULL PRIMARY KEY,
-                        index_id    TEXT NOT NULL,
-                        entity_type TEXT NOT NULL,
-                        entity_id   TEXT NOT NULL,
-                        language    TEXT NOT NULL DEFAULT 'english',
-                        weight_a    TEXT NOT NULL DEFAULT '',
-                        weight_b    TEXT NOT NULL DEFAULT '',
-                        weight_c    TEXT NOT NULL DEFAULT '',
-                        weight_d    TEXT NOT NULL DEFAULT '',
-                        content_all TEXT NOT NULL DEFAULT '',
-                        metadata    TEXT,
-                        filters     TEXT,
-                        updated_at  TEXT NOT NULL,
-                        UNIQUE (index_id, entity_id))"])
-  (jdbc/execute! ds ["CREATE INDEX IF NOT EXISTS idx_search_documents_index_id
-                        ON search_documents (index_id)"]))
+  (migratus/migrate (migrations/migratus-config ds ["wagoe/search/migrations/"])))
 
 (defn make-doc
   "A product search document, with `overrides` merged in."

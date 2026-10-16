@@ -79,6 +79,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **MySQL lost workflow timestamps and admin UUID types; PostgreSQL refused full-text search** (BOU-652). Upgrade if
+  you run workflow or the admin on MySQL, or search on PostgreSQL; suggestions there still need `pg_trgm` (BOU-661).
 - **Search did not run on MySQL, and generated apps had no search table** (BOU-651).
   Run `bb migrate up` with search enabled.
 - **Jobs `:provider :db` and workflow did not boot on MySQL** (BOU-650): their boot DDL was PostgreSQL-shaped.
