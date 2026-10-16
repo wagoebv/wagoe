@@ -10,6 +10,26 @@
                   jdbc/execute! (fn [& _] (throw (java.sql.SQLException. "permission denied to create extension")))]
       (is (nil? (sut/up {:db {:datasource :unused}}))))))
 
+(deftest ^:unit an-index-pg-trgm-cannot-serve-does-not-fail-the-migration
+  (testing "gin_trgm_ops not on the search_path gets a warning (BOU-676)"
+    (with-redefs [db/engine-of   (constantly :postgresql)
+                  sut/installed? (constantly true)
+                  jdbc/execute!  (fn [& _] (throw (java.sql.SQLException. "operator class \"gin_trgm_ops\" does not exist" "42704")))]
+      (is (nil? (sut/index-up {:db {:datasource :unused}})))))
+  (testing "any other failure fails the migration, rather than leaving it applied without the index"
+    (with-redefs [db/engine-of   (constantly :postgresql)
+                  sut/installed? (constantly true)
+                  jdbc/execute!  (fn [& _] (throw (java.sql.SQLException. "canceling statement due to lock timeout" "55P03")))]
+      (is (thrown? java.sql.SQLException (sut/index-up {:db {:datasource :unused}}))))))
+
+(deftest ^:unit no-index-without-pg-trgm
+  (let [ran (atom [])]
+    (with-redefs [db/engine-of   (constantly :postgresql)
+                  sut/installed? (constantly false)
+                  jdbc/execute!  (fn [_ sql] (swap! ran conj sql))]
+      (sut/index-up {:db {:datasource :unused}})
+      (is (empty? @ran)))))
+
 (deftest ^:unit the-migration-touches-only-postgresql
   (let [ran (atom [])]
     (with-redefs [db/engine-of  (constantly :mysql)

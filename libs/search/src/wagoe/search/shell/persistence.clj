@@ -74,18 +74,37 @@
       (:metadata row)
       (assoc :metadata (edn/read-string (:metadata row))))))
 
-(defn- trigram-probe
-  "A fn answering whether pg_trgm is installed. Only a yes is kept: an
-   extension created after boot is picked up, and a failed read is not."
-  [datasource]
-  (let [installed (atom false)]
-    (fn [] (or @installed (reset! installed (trigram/installed? datasource))))))
+(defn- trigram?
+  "Whether to suggest by pg_trgm. `state` is nil until the probe says yes,
+   so an extension created after boot is picked up and a failed read is not;
+   :unusable, once PostgreSQL could not resolve the operator, is final."
+  [state datasource]
+  (case @state
+    :installed true
+    :unusable  false
+    (and (trigram/installed? datasource)
+         (= :installed (swap! state #(or % :installed))))))
+
+(defn- trigram-suggest
+  "Rows suggested by pg_trgm, or nil, and `state` :unusable, when PostgreSQL
+   cannot resolve its operator: pg_trgm in a schema off the search_path (BOU-676)."
+  [datasource state threshold sql-vec]
+  (try
+    (jdbc/with-transaction [tx datasource]
+      (jdbc/execute! tx (qry/build-trigram-threshold-sql threshold))
+      (jdbc/execute! tx sql-vec {:builder-fn rs/as-unqualified-lower-maps}))
+    (catch java.sql.SQLException e
+      (when-not (= "42883" (.getSQLState e)) (throw e))
+      (log/warn "pg_trgm is installed but not on the search_path; suggestions use LIKE"
+                {:error (.getMessage e)})
+      (reset! state :unusable)
+      nil)))
 
 ;; =============================================================================
 ;; ISearchStore implementation
 ;; =============================================================================
 
-(defrecord SearchStore [datasource full-text? on-conflict? trigram?]
+(defrecord SearchStore [datasource full-text? on-conflict? trigram-state]
   ports/ISearchStore
 
   (upsert-document! [_ doc]
@@ -164,19 +183,20 @@
   (suggest-documents [_ index-id entity-type query opts]
     (log/debug "Suggesting documents"
                {:index-id index-id :entity-type entity-type :query query})
-    (let [{:keys [limit threshold filters]
-           :or   {limit 5 threshold 0.3}} opts
+    (let [{:keys [limit filters]
+           :or   {limit 5}} opts
+          ;; or, not :or: an explicit nil would reach set_config as '' and fail.
+          threshold (or (:threshold opts) 0.3)
           idx     (kw->str index-id)
           et      (kw->str entity-type)
-          sql-vec (cond
-                    (and full-text? (trigram?))
-                    (qry/build-postgres-suggest-sql idx et query limit threshold filters)
-                    full-text?
-                    (qry/build-postgres-like-suggest-sql idx et query limit filters)
-                    :else
-                    (qry/build-fallback-suggest-sql idx et query limit filters))
-          rows (jdbc/execute! datasource sql-vec
-                              {:builder-fn rs/as-unqualified-lower-maps})]
+          rows    (or (when (and full-text? (trigram? trigram-state datasource))
+                        (trigram-suggest datasource trigram-state threshold
+                                         (qry/build-postgres-suggest-sql idx et query limit filters)))
+                      (jdbc/execute! datasource
+                                     (if full-text?
+                                       (qry/build-postgres-like-suggest-sql idx et query limit filters)
+                                       (qry/build-fallback-suggest-sql idx et query limit filters))
+                                     {:builder-fn rs/as-unqualified-lower-maps}))]
       (mapv db->result rows)))
 
   (count-documents [_ index-id]
@@ -204,4 +224,4 @@
     (->SearchStore datasource
                    (contains? capabilities :full-text)
                    (contains? capabilities :on-conflict)
-                   (trigram-probe datasource))))
+                   (atom nil))))

@@ -143,10 +143,28 @@
 
 (deftest ^:unit suggest-sql-carries-the-tenant-filter
   ;; Suggestions of a tenant-scoped index are filtered like searches (BOU-568).
-  (let [[sql & params] (query/build-postgres-suggest-sql "i" "t" "wid" 5 0.15 {:tenant-id "a"})]
+  (let [[sql & params] (query/build-postgres-suggest-sql "i" "t" "wid" 5 {:tenant-id "a"})]
     (is (re-find #"FROM search_documents d " sql))
     (is (re-find #"d\.filters::jsonb->>'tenant_id' = \?" sql))
-    (is (= ["wid" "i" "t" "wid" 0.15 "a" 5] params)))
+    (is (= ["wid" "i" "t" "wid" "a" 5] params)))
   (let [[sql & params] (query/build-fallback-suggest-sql "i" "t" "wid" 5 {:tenant-id "a"})]
     (is (re-find #"INSTR\(filters, \?\)" sql))
     (is (= ["i" "t" "%wid%" "\"tenant_id\":\"a\"" 5] params))))
+
+(deftest ^:unit trigram-suggest-is-index-eligible
+  ;; An operator the GIN index serves, not a word_similarity comparison (BOU-676).
+  (let [[sql] (query/build-postgres-suggest-sql "i" "t" "wid" 5 nil)]
+    (is (re-find #"\? <% content_all" sql))
+    (is (not (re-find #"word_similarity\([^)]*\) >" sql))))
+  (is (= ["SELECT set_config('pg_trgm.word_similarity_threshold', ?, true)" "0.3"]
+         (query/build-trigram-threshold-sql 0.3))))
+
+(deftest ^:unit like-wildcards-in-the-query-are-literal
+  ;; "a_b" suggested any "a?b" (BOU-676).
+  (doseq [build [#(query/build-fallback-search-sql "i" "t" % 5 0 nil)
+                 #(query/build-fallback-count-sql "i" "t" % nil)
+                 #(query/build-fallback-suggest-sql "i" "t" % 5)
+                 #(query/build-postgres-like-suggest-sql "i" "t" % 5 nil)]]
+    (let [[sql _ _ pattern] (build "A_b 50%")]
+      (is (re-find #"LIKE \? ESCAPE '!'" sql))
+      (is (= "%a!_b 50!%%" pattern)))))
