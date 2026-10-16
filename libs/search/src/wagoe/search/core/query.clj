@@ -3,7 +3,7 @@
 
    Two query paths:
    - PostgreSQL: to_tsvector/plainto_tsquery + ts_rank + ts_headline
-   - Fallback (H2/SQLite): LOWER/LIKE-based search
+   - Fallback (H2/SQLite/MySQL): LOWER/LIKE-based search
 
    Filter support: callers may pass a :filters map of keyword->string pairs.
    Filter values are matched against the JSON \"filters\" column using

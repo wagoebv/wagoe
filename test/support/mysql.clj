@@ -20,8 +20,9 @@
   [prefix f]
   (let [dbname (str prefix "_" (System/nanoTime))]
     (jdbc/execute! (server) [(str "CREATE DATABASE " dbname)])
-    (let [ctx (factory/db-context (factory/mysql-config "127.0.0.1" port dbname "root" password))]
-      (try (f ctx)
-           (finally
-             (factory/close-db-context! ctx)
-             (jdbc/execute! (server) [(str "DROP DATABASE " dbname)]))))))
+    (try
+      (let [ctx (factory/db-context (factory/mysql-config "127.0.0.1" port dbname "root" password))]
+        (try (f ctx)
+             (finally (factory/close-db-context! ctx))))
+      (finally
+        (jdbc/execute! (server) [(str "DROP DATABASE " dbname)])))))
