@@ -58,7 +58,7 @@
     (testing ":notify-email without email"
       (is (= :missing-dependency (thrown-type #(ports/generate-async svc :sales {:notify-email "a@b.c"})))))
     (testing "an unregistered definition, whose functions cannot reach a worker"
-      (is (= :validation-error (thrown-type #(ports/generate-async svc (assoc sales :id :other) {})))))))
+      (is (= :not-found (thrown-type #(ports/generate-async svc (assoc sales :id :other) {})))))))
 
 (defn- run-job [svc [_ job]]
   (jobs-integration/process-report-job svc (:args job)))

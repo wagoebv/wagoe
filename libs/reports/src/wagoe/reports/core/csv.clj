@@ -1,6 +1,5 @@
 (ns wagoe.reports.core.csv
-  "RFC 4180 CSV text from a report's first :table section, the one the Excel
-   adapter reads."
+  "RFC 4180 CSV text from a report's first :table section."
   (:require [clojure.string :as str]
             [wagoe.reports.core.report :as report]))
 
@@ -31,16 +30,17 @@
     (if (number? raw) s (neutralise-formula s))))
 
 (defn csv-rows
-  "Header plus one row per record, as vectors of unquoted strings."
+  "Header plus one row per record, as vectors of unquoted strings. Lazy, so a
+   large export is not held twice."
   [columns data formatting-context]
-  (into [(mapv (comp neutralise-formula str :label) columns)]
-        (map (fn [record] (mapv #(cell record % formatting-context) columns)))
-        data))
+  (cons (mapv (comp neutralise-formula str :label) columns)
+        (map (fn [record] (mapv #(cell record % formatting-context) columns)) data)))
 
 (defn ->csv
   "CSV text for the first :table section of `sections`, CRLF line endings."
   [sections data formatting-context]
-  (let [columns (:columns (first (filter #(= :table (:type %)) sections)))]
-    (->> (csv-rows columns data formatting-context)
-         (map #(str (str/join "," (map quote-field %)) "\r\n"))
-         (apply str))))
+  (let [sb (StringBuilder.)]
+    (doseq [row (csv-rows (report/first-table-columns sections) data formatting-context)]
+      (.append sb ^String (str/join "," (map quote-field row)))
+      (.append sb "\r\n"))
+    (str sb)))

@@ -43,6 +43,9 @@
          sites in jobs_integration.clj."}
   {:lib "reports"   :namespace "wagoe.jobs.ports"
    :why "BY DESIGN. Same optional-companion shape as email's."}
+  {:lib "reports"   :namespace "wagoe.jobs.core.job"
+   :why "TO FIX. Same as workflow's below: create-job builds the job map, and
+         a hand-copied one drifts (BOU-418). Clears when jobs puts it on its port."}
   {:lib "reports"   :namespace "wagoe.storage.ports"
    :why "BY DESIGN. Optional companion for generate-async :storage-key (BOU-674);
          declaring wagoe/storage would pull the S3 and GCS SDKs into every app

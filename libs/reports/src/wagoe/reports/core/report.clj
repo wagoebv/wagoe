@@ -124,6 +124,12 @@
       [:meta {:charset "UTF-8"}]]
      (into [:body] body-content)]))
 
+(defn first-table-columns
+  "The :columns of the first :table section, or nil. Excel and CSV read only
+   this one."
+  [sections]
+  (:columns (first (filter #(= :table (:type %)) sections))))
+
 ;; =============================================================================
 ;; Report preparation (pure)
 ;; =============================================================================

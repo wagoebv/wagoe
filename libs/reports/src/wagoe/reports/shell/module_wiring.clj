@@ -19,7 +19,8 @@
   [_ {:keys [job-queue storage email queue from]}]
   (service/create-report-service {:job-queue    job-queue
                                   :queue-name   queue
-                                  ;; :wagoe/storage is {:storage <IFileStorage> …}
+                                  ;; :wagoe/storage is {:storage <IFileStorage> …}. Its
+                                  ;; IStorageService is not on storage's port.
                                   :file-storage (:storage storage)
                                   :email-sender email
                                   :from         from}))
@@ -33,7 +34,7 @@
 (defn ig-config
   "This module's Integrant entries, for `wagoe.platform.shell.system.config`."
   [settings {:keys [enabled]}]
-  (let [on? #(contains? (or enabled #{}) %)]
+  (let [on? #(contains? enabled %)]
     (cond-> {:components
              {:wagoe/reports (cond-> (or settings {})
                                (on? :wagoe/jobs)    (assoc :job-queue (ig/ref :wagoe/job-queue))

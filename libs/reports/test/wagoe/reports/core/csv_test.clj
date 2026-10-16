@@ -1,6 +1,6 @@
 (ns wagoe.reports.core.csv-test
   (:require [wagoe.reports.core.csv :as sut]
-            [clojure.test :refer [deftest is testing]])
+            [clojure.test :refer [deftest is]])
   (:import [java.time ZoneId]))
 
 (def ^:private ctx {:zone-id (ZoneId/of "UTC")})
@@ -30,9 +30,8 @@
     (is (= (str "Name,Qty,Delta\r\n"
                 "\"Widget, large\",2.0,-5\r\n"
                 "\"'=HYPERLINK(\"\"x\"\")\",0.0,3\r\n")
-           (sut/->csv sections data ctx)))
-    (testing "a negative number stays a number"
-      (is (= "-5" (get-in (sut/csv-rows (:columns (second sections)) data ctx) [1 2]))))))
+           (sut/->csv sections data ctx))
+        "a negative number stays unquoted: it is data, not a formula")))
 
 (deftest ^:unit no-data-still-writes-the-header
   (is (= "A\r\n" (sut/->csv [{:type :table :columns [{:key :a :label "A"}]}] nil ctx))))

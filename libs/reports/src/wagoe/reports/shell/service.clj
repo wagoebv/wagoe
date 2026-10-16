@@ -63,7 +63,7 @@
     (generate (resolve-report report) opts))
 
   (generate-async [this report opts]
-    (jobs-integration/queue-report-job! this (resolve-report report) opts))
+    (jobs-integration/queue-report-job! this (if (keyword? report) report (:id report)) opts))
 
   (register-report! [_ report-def]
     (registry/register-report! report-def))
