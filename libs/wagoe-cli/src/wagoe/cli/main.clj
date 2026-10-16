@@ -16,6 +16,7 @@
   (println "  wagoe list modules             List available modules")
   (println "  wagoe list modules --json      Machine-readable module list")
   (println "  wagoe agents update [--check]  Refresh framework sections of AGENTS.md after an upgrade")
+  (println "  wagoe upgrade [--apply]        Rewrite deprecated config keys and names (diff by default)")
   (println "  wagoe version                  Show CLI version")
   (println)
   (println "wagoe <command> --help shows a command's usage."))
@@ -54,6 +55,8 @@
   (cond
     (= "doctor" cmd)      (do (require 'wagoe.cli.doctor)
                               ((resolve 'wagoe.cli.doctor/print-help)))
+    (= "upgrade" cmd)     (do (require 'wagoe.cli.upgrade)
+                              (run! println @(resolve 'wagoe.cli.upgrade/usage)))
     (command-usage cmd)   (run! println (command-usage cmd))
     :else                 (usage)))
 
@@ -72,6 +75,8 @@
                     ((resolve 'wagoe.cli.agents-update/-main) (rest rest-args)))
                 (do (println "Usage: wagoe agents update [--check] [--modules]")
                     (System/exit 1)))
+    "upgrade" (do (require 'wagoe.cli.upgrade)
+                  ((resolve 'wagoe.cli.upgrade/-main) rest-args))
     "version" (println (str "wagoe CLI version "
                             (:cli-version (catalogue/load-catalogue))))
     (do (when cmd (println (str "Unknown command: " cmd "\n")))

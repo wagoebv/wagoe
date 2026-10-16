@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **`wagoe upgrade`** (BOU-470) rewrites deprecated config values, keys and names, keeping formatting.
+  It prints a diff by default; `--apply` writes. What it cannot rewrite it lists.
 - **MySQL 8 is supported** (BOU-574): a generated app boots, migrates and serves on it.
   Switch with `bb setup --database mysql`; tenancy needs PostgreSQL, push and seeds wait on BOU-657.
 - **`bb check:vulns`** (BOU-451): known vulnerabilities in every `deps.edn`, aliases included, from GitHub's advisory

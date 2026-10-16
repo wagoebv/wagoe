@@ -140,6 +140,26 @@ wagoe list modules          # Human-readable table
 wagoe list modules --json   # Machine-readable JSON
 ----
 
+=== Upgrade past deprecations
+
+[source,bash]
+----
+wagoe upgrade               # Print a diff per file, write nothing
+wagoe upgrade --apply       # Write the changes
+----
+
+Run from inside a project after bumping the Wagoe version. It rewrites what a
+release deprecated in `resources/**/config.edn` and in the `.clj`/`.cljc` files
+under `src/`, `test/` and `dev/`. Formatting and comments are kept, and a second
+run changes nothing.
+
+It follows a table that grows with each deprecation: renamed config keys and
+values (looked up at the top of `config.edn` and under `:active` and
+`:inactive`), renamed namespaces, and renamed functions, through whatever alias
+the file requires them under. A function that is `:refer`'d is reported rather
+than rewritten. A deprecation that cannot be rewritten mechanically is listed at
+the end with what to do by hand.
+
 === Show version
 
 [source,bash]

@@ -17,6 +17,7 @@
 (ns wagoe.tools.check-changelog
   (:require [clojure.string :as str]
             [babashka.process :as process]
+            [clojure.edn :as edn]
             [edamame.core :as e]
             [wagoe.tools.ansi :as ansi]))
 
@@ -286,6 +287,37 @@
       (println))
     (boolean (seq findings))))
 
+;; =============================================================================
+;; Rule 4 — `wagoe upgrade` knows every deprecation
+;; =============================================================================
+
+(def upgrades-path "libs/wagoe-cli/resources/wagoe/cli/upgrades.edn")
+
+(defn deprecations-without-upgrade
+  "Tickets of `### Deprecated` entries that no `upgrades` entry names, so
+   `wagoe upgrade` neither rewrites them nor says why it cannot. An entry is
+   matched on the first ticket it cites."
+  [changelog upgrades]
+  (let [known (set (map :ticket upgrades))]
+    (->> (re-seq deprecated-section-re changelog)
+         (mapcat (fn [[_ section]] (rest (str/split section #"(?m)^- "))))
+         (keep #(re-find #"BOU-\d+" %))
+         (remove known)
+         distinct)))
+
+(defn- report-upgrades
+  "Prints the deprecations `wagoe upgrade` does not know and returns whether any."
+  []
+  (let [missing (deprecations-without-upgrade (slurp changelog-path)
+                                              (edn/read-string (slurp upgrades-path)))]
+    (when (seq missing)
+      (println (ansi/red (str "Deprecations with no entry in " upgrades-path ":")))
+      (println)
+      (doseq [t missing] (println (str "  " t)))
+      (println)
+      (println "Add a rewrite, or a :manual reason a rewrite cannot do it."))
+    (boolean (seq missing))))
+
 (defn- base-ref
   "What to compare against. `CHANGELOG_BASE` wins, so CI can name the PR base."
   []
@@ -345,7 +377,8 @@
     (let [changed     (changed-since base)
           missing     (verdict changed (opted-out? base))
           undocumented (report-deprecations)
-          unstable    (report-stability)]
+          unstable    (report-stability)
+          unupgraded  (report-upgrades)]
       (when missing
         (let [{:keys [files]} missing]
           (when undocumented (println))
@@ -359,7 +392,7 @@
           (println (str "framework will notice. If they will notice nothing, say so with "
                         opt-out-marker))
           (println "in a commit message on this branch.")))
-      (if (or missing undocumented unstable)
+      (if (or missing undocumented unstable unupgraded)
         (System/exit 1)
         (do
           (println (ansi/green (str changelog-path " is up to date with this branch, "

@@ -1,7 +1,9 @@
 {:paths ["src" "resources"]
  :deps  {;; cheshire brings jackson-core below 2.22.3: CVE-2026-89407, CVE-2026-89425 (BOU-618).
          com.fasterxml.jackson.core/jackson-core {:mvn/version "2.22.3"}
-         cheshire/cheshire {:mvn/version "6.2.0"}}
+         cheshire/cheshire {:mvn/version "6.2.0"}
+         ;; Built into Babashka; declared for the JVM and the published POM.
+         rewrite-clj/rewrite-clj {:mvn/version "1.2.57"}}
  :aliases
  {:test  {:extra-paths ["test"]
           :extra-deps  {lambdaisland/kaocha {:mvn/version "1.91.1392"}
