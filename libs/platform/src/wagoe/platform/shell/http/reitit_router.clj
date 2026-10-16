@@ -12,6 +12,7 @@
             [malli.error :as me]
             [muuntaja.core :as m]
             [reitit.coercion.malli :as malli-coercion]
+            [reitit.middleware :as middleware]
             [reitit.ring :as ring]
             [reitit.ring.coercion :as coercion]
             [reitit.ring.middleware.exception :as exception]
@@ -460,6 +461,25 @@
                                   :supported  (vec (sort (keys coercions)))})))
     :else            v))
 
+(defn- route-interceptors
+  "Middleware running an endpoint's interceptors: the framework's default
+   stack — security headers, CSRF, rate limiting, metrics, error handling —
+   then the route's `:interceptors`, unless it says `:skip-interceptors?`, as
+   the health checks do.
+
+   Compiled from the merged route data, so both may sit on the method, the
+   path or a parent route; Reitit concatenates `:interceptors` parent first,
+   leaving a method's own closest to the handler (BOU-642)."
+  [system]
+  {:name    ::route-interceptors
+   :compile (fn [{:keys [interceptors skip-interceptors?]} _opts]
+              (let [own (or (resolve-interceptors interceptors) [])
+                    all (if skip-interceptors?
+                          own
+                          (into (vec http-interceptors/default-http-interceptors) own))]
+                (when (seq all)
+                  (interceptors->middleware all system))))})
+
 (defn- create-router-options
   "Create Reitit router options from config.
    
@@ -483,7 +503,10 @@
      ;; On by default since BOU-356. `/users/new` beside `/users/:id` is
      ;; allowed — Reitit matches the literal first — while two routes neither
      ;; precedence nor anything else decides between fail the boot.
-     :conflicts (get config :conflicts report-ambiguous-routes)}))
+     :conflicts (get config :conflicts report-ambiguous-routes)
+     ;; Innermost, after the route's own middleware: interceptors see a fully
+     ;; prepared request (session, body, coercions) (BOU-331).
+     ::middleware/transform #(conj % (route-interceptors (:system config)))}))
 
 (defn- create-default-handler
   "Create default handler for routes not matched by router.
@@ -530,12 +553,14 @@
   [["/swagger.json"
     {:get {:no-doc true
            :public true
+           :skip-interceptors? true
            :swagger swagger-data
            :handler (swagger/create-swagger-handler)}}]
 
    ["/api-docs/*"
     {:get {:no-doc true
            :public true
+           :skip-interceptors? true
            :handler (swagger-ui/create-swagger-ui-handler
                      {:url "/swagger.json"
                       :config {:validatorUrl nil}})}}]])
@@ -731,65 +756,6 @@
                     (drop-body-for-head request))))
         (handler request))))
 
-(def ^:private http-methods
-  "The endpoint keys Reitit route data can carry."
-  #{:get :post :put :delete :patch :head :options :trace})
-
-(defn- decorate-endpoint
-  "Add the framework's default HTTP interceptor stack to one Reitit endpoint.
-
-   This is the one thing the normalized format did that Reitit does not do for
-   us: every endpoint gets `default-http-interceptors` — security headers, CSRF,
-   rate limiting, metrics, error handling — unless it says `:skip-interceptors?`,
-   which genuinely-internal endpoints like the health checks do.
-
-   Appended last, so interceptors sit closest to the handler and still see a
-   fully prepared request (session, body, coercions) (BOU-331).
-
-   `inherited` are the `:interceptors` of the enclosing path and parent routes,
-   run before the endpoint's own (BOU-642)."
-  [endpoint system inherited]
-  (let [;; `{:get my-handler}` is Reitit's own shorthand for
-        ;; `{:get {:handler my-handler}}`. Left as-is it has nowhere to hang
-        ;; middleware, so the endpoint would quietly serve without security
-        ;; headers, CSRF or rate limiting — a hole that opens by writing less.
-        {:keys [middleware interceptors skip-interceptors?] :as endpoint}
-        (if (map? endpoint) endpoint {:handler endpoint})
-
-        route-interceptors (or (resolve-interceptors (concat inherited interceptors)) [])
-        all-interceptors   (if skip-interceptors?
-                             route-interceptors
-                             (vec (concat http-interceptors/default-http-interceptors
-                                          route-interceptors)))]
-    (cond-> (dissoc endpoint :interceptors :skip-interceptors?)
-      (seq all-interceptors)
-      (assoc :middleware (vec (concat (or middleware [])
-                                      [(interceptors->middleware all-interceptors system)]))))))
-
-(defn- decorate-reitit-route
-  "Walk a Reitit route vector, decorating every endpoint it contains.
-
-   `[path data & children]`, where `data` may carry endpoints directly and each
-   child is another route vector. Route-level `:middleware`, `:name`, coercion
-   and nesting are Reitit's own and pass through untouched. `:interceptors` on
-   a route are handed down to every endpoint under it, the way Reitit merges
-   `:public` (BOU-642)."
-  ([route system] (decorate-reitit-route route system []))
-  ([route system inherited]
-   (if-not (vector? route)
-     route
-     (let [[path data & children] route
-           inherited (into inherited (when (map? data) (:interceptors data)))
-           data'     (when (map? data)
-                       (reduce-kv (fn [m k v]
-                                    (assoc m k (if (http-methods k)
-                                                 (decorate-endpoint v system inherited)
-                                                 v)))
-                                  {} (dissoc data :interceptors)))
-           children' (mapv #(decorate-reitit-route % system inherited)
-                           (if (map? data) children (cons data children)))]
-       (into (if (map? data) [path data'] [path]) children')))))
-
 ;; =============================================================================
 ;; Compiling routes
 ;; =============================================================================
@@ -802,22 +768,17 @@
    are gone (ADR-037). The Reitit router is attached to the handler's metadata
    so devtools can read the route table without unwrapping middleware."
   [route-specs config]
-  (let [;; Extract observability services from config (if provided)
-        system (:system config)
-
-          ;; Extract Swagger configuration (optional)
+  (let [;; Extract Swagger configuration (optional)
         swagger-enabled? (get config :swagger-enabled true)  ; Enabled by default
         swagger-data (or (:swagger-data config)
                          {:info {:title "Wagoe API"
                                  :description "Wagoe Framework REST API"
                                  :version "0.1.0"}})
 
-        reitit-routes (mapv #(decorate-reitit-route % system) route-specs)
-
           ;; Add Swagger routes if enabled
         all-routes (if swagger-enabled?
-                     (into (create-swagger-routes swagger-data) reitit-routes)
-                     reitit-routes)
+                     (into (create-swagger-routes swagger-data) route-specs)
+                     route-specs)
 
           ;; Create router options
         router-opts (create-router-options config)

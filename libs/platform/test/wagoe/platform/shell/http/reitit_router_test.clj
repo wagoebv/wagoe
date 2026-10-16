@@ -4,6 +4,7 @@
             [cheshire.core :as json]
             [clojure.string :as str]
             [clojure.test :refer [deftest testing is]]
+            [reitit.core :as r]
             [reitit.ring.middleware.multipart :as multipart]
             [ring.util.codec :as codec]
             [ring.util.request :as ring-request]))
@@ -478,9 +479,9 @@
                                          {:system system}))
         details (fn [system]
                   (get-in (json/parse-string
-                           (slurp (:body ((handler system) {:request-method :post :uri "/users"
-                                                            :headers {} :body-params {}})))
-                           true)
+                             (slurp (:body ((handler system) {:request-method :post :uri "/users"
+                                                              :headers {} :body-params {}})))
+                             true)
                           [:error :details]))]
     (is (= {:role ["missing required key"]}
            (details {:error-enricher (constantly {:code "WGE-201"}) :environment "dev"})))
@@ -508,67 +509,46 @@
 ;; Reitit route data, used as-is (ADR-037 / BOU-331)
 ;; =============================================================================
 
+(defn- stacked?
+  "Whether the default interceptor stack answered `uri`: it sets X-Correlation-ID."
+  [handler uri]
+  (some? (get-in (handler {:request-method :get :uri uri}) [:headers "X-Correlation-ID"])))
+
 (deftest ^:unit reitit-data-passes-through-and-still-gets-the-interceptor-stack
   ;; The one thing the normalized format did that Reitit does not: every
   ;; endpoint gets the default interceptor stack — security headers, CSRF, rate
   ;; limiting, metrics — unless it opts out. Collapsing the format must not
   ;; collapse that.
-  (let [decorate #'reitit/decorate-reitit-route
-        [_ data] (decorate ["/users" {:get {:handler identity}}] {})]
-
-    (testing "the endpoint keeps its handler"
-      (is (= identity (get-in data [:get :handler]))))
-
-    (testing "and gains the default stack as middleware"
-      (is (= 1 (count (get-in data [:get :middleware])))))
-
+  (let [ok      (fn [_] {:status 200 :body {}})
+        handler (reitit/compile-routes
+                 [["/users" {:name ::users :get {:handler ok}}]
+                  ["/b" {:post {:handler ok} :get {:handler ok}}]
+                  ["/health" {:get {:handler ok :skip-interceptors? true}}]
+                  ["/internal" {:skip-interceptors? true}
+                   ["/probe" {:get {:handler ok}}]]
+                  ["/api" {} ["/nested" {:get {:handler ok}}]]
+                  ["/shorthand" {:get ok}]]
+                 {:system {}})]
+    (testing "every endpoint gains the default stack"
+      (is (stacked? handler "/users"))
+      (is (stacked? handler "/b")))
     (testing "an endpoint that opts out gets none of it"
-      (let [[_ d] (decorate ["/health" {:get {:handler identity
-                                              :skip-interceptors? true}}] {})]
-        (is (nil? (get-in d [:get :middleware])))
-        (is (not (contains? (:get d) :skip-interceptors?))
-            ":skip-interceptors? is ours, not Reitit's — it must not reach the router")))
-
-    (testing "route-level data Reitit understands is left alone"
-      (let [[path d] (decorate ["/users" {:name ::users
-                                          :middleware [:route-mw]
-                                          :get {:handler identity}}] {})]
-        (is (= "/users" path))
-        (is (= ::users (:name d)) "named routes are Reitit's, and reverse routing needs them")
-        (is (= [:route-mw] (:middleware d)))))
-
-    (testing "nested routes are walked, so children are decorated too"
-      (let [[_ _ child] (decorate ["/api" {} ["/users" {:get {:handler identity}}]] {})
-            [_ child-data] child]
-        (is (= 1 (count (get-in child-data [:get :middleware]))))))
-
-    (testing "non-endpoint keys are not mistaken for endpoints"
-      (let [[_ d] (decorate ["/x" {:conflicting true :get {:handler identity}}] {})]
-        (is (true? (:conflicting d)))))
-
+      (is (= 200 (:status (handler {:request-method :get :uri "/health"}))))
+      (is (not (stacked? handler "/health"))))
+    (testing "so does every endpoint under a route that opts out"
+      (is (not (stacked? handler "/internal/probe"))))
+    (testing "nested routes get it too"
+      (is (stacked? handler "/api/nested")))
+    (testing "named routes are Reitit's, and reverse routing needs them"
+      (is (= "/users" (:path (r/match-by-name (:reitit/router (meta handler)) ::users)))))
     (testing "Reitit's bare-handler shorthand gets the stack too"
-      ;; `{:get my-handler}` is valid Reitit and has nowhere to hang
-      ;; middleware. Skipping it would serve that endpoint without security
-      ;; headers, CSRF or rate limiting — a hole opened by writing less.
-      (let [[_ d] (decorate ["/shorthand" {:get identity}] {})]
-        (is (= identity (get-in d [:get :handler]))
-            "the shorthand is expanded, not dropped")
-        (is (= 1 (count (get-in d [:get :middleware])))
-            "an endpoint written shorthand is as protected as one written long")))))
-
-(deftest ^:unit every-route-in-the-table-is-decorated
-  ;; compile-routes maps over the table; decorate-reitit-route takes one route.
-  ;; An earlier version of this test handed the whole table to the single-route
-  ;; function and passed, because [[..] [..]] destructures as [path data] and
-  ;; comes back out with two elements — the assertions held while nothing was
-  ;; decorated.
-  (let [decorate #'reitit/decorate-reitit-route
-        table    [["/a" {:get {:handler identity}}]
-                  ["/b" {:post {:handler identity}}]]
-        out      (mapv #(decorate % {}) table)]
-    (is (= ["/a" "/b"] (mapv first out)))
-    (is (= 1 (count (get-in (second (first out)) [:get :middleware]))))
-    (is (= 1 (count (get-in (second (second out)) [:post :middleware]))))))
+      ;; Skipping it would serve that endpoint without security headers, CSRF
+      ;; or rate limiting — a hole opened by writing less.
+      (is (= 200 (:status (handler {:request-method :get :uri "/shorthand"}))))
+      (is (stacked? handler "/shorthand")))
+    (testing "the Swagger routes still serve, outside the stack as before"
+      (is (= 200 (:status (handler {:request-method :get :uri "/swagger.json"}))))
+      (is (not (stacked? handler "/swagger.json"))))))
 
 ;; ===========================================================================
 ;; BOU-356: two routes that can both match the same request
