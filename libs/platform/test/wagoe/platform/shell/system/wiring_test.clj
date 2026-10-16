@@ -199,6 +199,32 @@
                        :config {:wagoe/profile :prod
                                 :active {:wagoe/http {:rate-limit {:enabled? true}}}}})))))
 
+(deftest ^:security ^:unit invalid-trusted-proxies-fail-the-boot
+  (is (thrown-with-msg?
+       clojure.lang.ExceptionInfo
+       #"trusted-proxies .* \[\"10.0.0.0/33\"\]"
+       (ig/init-key :wagoe/http-handler
+                    {:router ::router
+                     :logger ::logger
+                     :metrics-emitter ::metrics
+                     :error-reporter ::error-reporter
+                     :config {:active {:wagoe/http {:trusted-proxies ["10.0.0.0/33"]}}}}))))
+
+(deftest ^:security ^:unit the-handler-resolves-the-client-ip-outermost
+  (let [handler (with-redefs [wagoe.platform.shell.http.reitit-router/compile-routes
+                              (fn [_routes _router-config] (fn [request] {:status 200 :body request}))]
+                  (ig/init-key :wagoe/http-handler
+                               {:router ::router
+                                :logger ::logger
+                                :metrics-emitter ::metrics
+                                :error-reporter ::error-reporter
+                                :config {:active {:wagoe/http {:trusted-proxies ["10.0.0.0/8"]}}}}))
+        seen    (fn [peer] (get-in (handler {:request-method :get :uri "/x" :remote-addr peer
+                                             :headers {"x-forwarded-for" "198.51.100.7"}})
+                                   [:body :client-ip]))]
+    (is (= "198.51.100.7" (seen "10.1.2.3")) "behind a trusted proxy: the forwarded client")
+    (is (= "203.0.113.9" (seen "203.0.113.9")) "from anyone else: the peer, header ignored")))
+
 (deftest ^:unit component-init-falls-back-to-no-op-providers-for-unknown-adapters
   (with-redefs [wagoe.observability.logging.shell.adapters.no-op/create-logging-component
                 (fn [config] [:logging-no-op config])

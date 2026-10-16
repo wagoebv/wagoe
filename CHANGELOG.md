@@ -98,6 +98,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Security: behind a proxy every client shared one rate-limit bucket and audit IP; X-Forwarded-For was trusted from anyone** (BOU-671).
+  Set `:wagoe/http :trusted-proxies` to your proxies' CIDRs; read the address as `:client-ip`.
 - **A session request wrote `last_accessed_at` twice, and a database error during sign-in lookup answered 401** (BOU-666).
   The access time is now written at most once a minute; a lookup failure is a 500.
 - **Two admins demoting each other at once could leave none; an admin bulk delete of users could stop halfway** (BOU-673).

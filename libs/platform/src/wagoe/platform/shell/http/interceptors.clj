@@ -47,6 +47,7 @@
             [wagoe.observability.errors.core :as error-reporting]
             [wagoe.observability.core.sql-redaction :as redaction]
             [wagoe.platform.core.csrf :as csrf]
+            [wagoe.platform.core.http.client-ip :as client-ip]
             [wagoe.platform.core.http.errors :as errors]
             [wagoe.platform.core.http.problem-details :as problem-details]
             [buddy.core.nonce :as nonce]
@@ -704,6 +705,22 @@
 
           :else (handler request))))))
 ;; ==============================================================================
+;; Client IP
+;; ==============================================================================
+
+(defn wrap-client-ip
+  "Sets `:client-ip` on the request: the peer, or the client behind it when the
+   peer is in `trusted-cidrs` (from `client-ip/parse-trusted-proxies`). The
+   platform installs it outermost; wrap a handler mounted in front of the
+   platform's with it too. Keeps the handler's metadata (`:reitit/router`)."
+  [handler trusted-cidrs]
+  (with-meta
+    (fn [request]
+      (let [ip (client-ip/client-ip request trusted-cidrs)]
+        (handler (cond-> request ip (assoc :client-ip ip)))))
+    (meta handler)))
+
+;; ==============================================================================
 ;; Rate Limiting
 ;; ==============================================================================
 
@@ -714,7 +731,7 @@
    Priority order:
    1. Authenticated user ID (from :user in request)
    2. API key (from headers)
-   3. Remote IP address
+   3. Client IP address (see `wrap-client-ip`)
 
    Args:
      request: Ring request map
@@ -724,7 +741,7 @@
   [request]
   (or (get-in request [:user :id])
       (get-in request [:headers "x-api-key"])
-      (:remote-addr request)
+      (client-ip/request-ip request)
       "unknown"))
 
 (defn- check-rate-limit-redis
