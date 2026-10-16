@@ -1,34 +1,36 @@
 (ns wagoe.push.shell.persistence-test
+  "On the engine WAGOE_TEST_DB names, with push's shipped migrations."
   (:require [clojure.test :refer [deftest is use-fixtures]]
+            [migratus.core :as migratus]
+            [next.jdbc :as jdbc]
+            [next.jdbc.result-set :as rs]
+            [support.test-db :as test-db]
+            [wagoe.platform.shell.database.migrations :as migrations]
             [wagoe.push.shell.persistence :as p]
-            [wagoe.push.ports :as ports]
-            [next.jdbc :as jdbc]))
+            [wagoe.push.ports :as ports]))
 
 (def ^:dynamic *db* nil)
 
-(defn create-test-db []
-  (let [ds (jdbc/get-datasource {:dbtype "h2:mem" :dbname (str "push-test-" (random-uuid))})]
-    (jdbc/execute! ds ["CREATE TABLE IF NOT EXISTS push_device_tokens (
-                         id UUID PRIMARY KEY, user_id UUID NOT NULL, tenant_id UUID,
-                         token VARCHAR(512) NOT NULL, platform VARCHAR(10) NOT NULL,
-                         app_id VARCHAR(255) NOT NULL, device_name VARCHAR(255),
-                         os_version VARCHAR(50), active BOOLEAN NOT NULL DEFAULT TRUE,
-                         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                         last_used_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                         CONSTRAINT uq_push_device_token UNIQUE (token, app_id))"])
-    (jdbc/execute! ds ["CREATE TABLE IF NOT EXISTS push_analytics_events (
-                         id UUID PRIMARY KEY, notification_id VARCHAR(255) NOT NULL,
-                         device_token VARCHAR(512) NOT NULL, platform VARCHAR(10) NOT NULL,
-                         event_type VARCHAR(20) NOT NULL, user_id UUID,
-                         provider_message_id VARCHAR(255), error_message TEXT,
-                         timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                         tenant_id UUID)"])
-    ds))
+(defn with-test-db
+  "Call `f` with `*db*` bound to a migrated db-context."
+  [f]
+  (test-db/with-db "push"
+    (fn [ctx]
+      (migratus/migrate (migrations/migratus-config (:datasource ctx) ["wagoe/push/migrations/"]))
+      (binding [*db* ctx]
+        (f)))))
 
-(use-fixtures :each
-  (fn [f]
-    (binding [*db* (create-test-db)]
-      (f))))
+(use-fixtures :each with-test-db)
+
+(deftest ^:contract a-device-id-is-stored-as-its-uuid
+  ;; MySQL stored a raw UUID parameter Java-serialised (BOU-657).
+  (let [store  (p/->DeviceTokenStore *db*)
+        record (ports/register-device! store (random-uuid)
+                                       {:token "uuid-token" :platform :fcm :app-id "com.example"})]
+    (is (= (str (:id record))
+           (str (:id (jdbc/execute-one! (:datasource *db*)
+                                        ["SELECT id FROM push_device_tokens WHERE token = 'uuid-token'"]
+                                        {:builder-fn rs/as-unqualified-lower-maps})))))))
 
 (deftest ^:contract device-token-register-and-retrieve
   (let [store   (p/->DeviceTokenStore *db*)

@@ -5,7 +5,9 @@
    `wagoe.platform.core.database.seed`. This namespace owns the I/O: reading the
    file, acquiring the datasource, and executing the inserts."
   (:require [wagoe.platform.core.database.seed :as core-seed]
+            [wagoe.platform.shell.adapters.database.common.execution :as execution]
             [wagoe.platform.shell.adapters.database.config :as db-config]
+            [wagoe.platform.shell.adapters.database.factory :as factory]
             [clojure.edn :as edn]
             [clojure.java.io :as io]
             [clojure.string :as str]
@@ -44,12 +46,13 @@
                    :message (str "Seed file is not valid EDN: " (ex-message e))}})))))
 
 (defn- insert-table!
-  "Inserts one table's rows inside the caller's transaction. Returns the count."
-  [tx {:keys [table rows]}]
-  (let [stmt (sql/format {:insert-into (keyword table)
-                          :values      rows})]
-    (jdbc/execute! tx stmt)
-    (count rows)))
+  "Inserts one table's rows inside the caller's transaction, each value encoded
+   as `adapter`'s engine takes it: MySQL refuses an ISO instant string. Returns
+   the count."
+  [tx adapter {:keys [table rows]}]
+  (jdbc/execute! tx (execution/encode-params adapter (sql/format {:insert-into (keyword table)
+                                                                  :values      rows})))
+  (count rows))
 
 (defn hook-summary
   "The lines the seeder prints for what hook `k` returned: a string or strings
@@ -103,9 +106,12 @@
         catalog (try (.getCatalog c) (catch Exception _ nil))
         schema (try (.getSchema c) (catch Exception _ nil))
         lc     #(some-> ^String % str/lower-case)
+        ;; MySQL has no uuid type: a uuid column is CHAR(36) there.
+        type-of #(let [t (lc (.getString ^ResultSet % "TYPE_NAME"))]
+                   (if (and (= "char" t) (= 36 (.getInt ^ResultSet % "COLUMN_SIZE"))) "uuid" t))
         cols   (fn [t] (into {} (metadata-rows (.getColumns md catalog schema t "%")
                                                #(vector (lc (.getString ^ResultSet % "COLUMN_NAME"))
-                                                        (lc (.getString ^ResultSet % "TYPE_NAME"))))))
+                                                        (type-of %)))))
         [t columns] (some #(let [c (cols %)] (when (seq c) [% c])) [table (str/upper-case table)])]
     (when t
       (let [pk (set (metadata-rows (.getPrimaryKeys md catalog schema t)
@@ -146,11 +152,12 @@
                                                      :new-id #(str (UUID/randomUUID))})]
           (if-let [err (:error resolved)]
             {:error err}
-            (let [plan   (core-seed/seed-plan (:ok resolved))
-                  detail (mapv (fn [{:keys [table] :as entry}]
-                                 {:table table
-                                  :rows  (insert-table! tx entry)})
-                               plan)]
+            (let [plan    (core-seed/seed-plan (:ok resolved))
+                  adapter (factory/adapter-for (factory/engine-of tx))
+                  detail  (mapv (fn [{:keys [table] :as entry}]
+                                  {:table table
+                                   :rows  (insert-table! tx adapter entry)})
+                                plan)]
               {:ok {:tables   (count detail)
                     :rows     (reduce + (map :rows detail))
                     :detail   detail

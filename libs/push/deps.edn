@@ -10,6 +10,7 @@
          ring/ring-core           {:mvn/version "1.15.5"}
          com.google.auth/google-auth-library-oauth2-http {:mvn/version "1.52.0"}
          wagoe/jobs             {:local/root "../jobs"}
+         wagoe/platform         {:local/root "../platform"}
          wagoe/core             {:local/root "../core"}}
 
  :aliases

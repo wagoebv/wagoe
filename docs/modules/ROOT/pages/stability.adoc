@@ -39,8 +39,7 @@ at `1.0.0`, and the surface below is the one it promises.
 
 | Databases
 | PostgreSQL, SQLite and MySQL 8, and H2 for tests. Multi-tenancy needs
-  PostgreSQL; on MySQL, push notifications and seeds with timestamps are not
-  supported yet.
+  PostgreSQL.
 |===
 
 Lockstep versioning means you never have to work out which `wagoe-user` goes

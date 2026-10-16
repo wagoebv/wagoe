@@ -39,9 +39,10 @@
   [datasource]
   (with-open [^Connection c (jdbc/get-connection datasource)]
     (let [md (.getMetaData c)]
+      ;; This database's catalog: MySQL reads nil as every database on the server.
       (boolean
        (some (fn [[t col]]
-               (with-open [rs (.getColumns md nil nil t col)] (.next rs)))
+               (with-open [rs (.getColumns md (.getCatalog c) nil t col)] (.next rs)))
              [["workflow_instances" "entity_uuid"] ["WORKFLOW_INSTANCES" "ENTITY_UUID"]])))))
 
 (defn ensure-entity-uuid!

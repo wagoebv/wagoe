@@ -42,7 +42,7 @@ for what is public API, what is internal, and how deprecations are announced.
 - **Transactional outbox for events** (BOU-448): `publish-in-tx!` commits an event with your transaction; a relay
   publishes it at least once. Opt in with `:outbox {}` under `:wagoe/events`.
 - **MySQL 8 is supported** (BOU-574): a generated app boots, migrates and serves on it.
-  Switch with `bb setup --database mysql`; tenancy needs PostgreSQL, push and seeds wait on BOU-657.
+  Switch with `bb setup --database mysql`; tenancy needs PostgreSQL.
 - **`bb check:vulns`** (BOU-451): known vulnerabilities in every `deps.edn`, aliases included, from GitHub's advisory
   database. Runs weekly and on PRs that change a `deps.edn`; coverage now runs on every push to main.
 - **`DBAdapter` answers `engine`, `capabilities`, `column-type` and `like`** (BOU-450, ADR-039). Ask these instead of
@@ -91,6 +91,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Push device registration failed on MySQL and PostgreSQL, and seeds with timestamps or symbolic ids on MySQL** (BOU-657).
+  Upgrade; nothing to change.
+- **On MySQL, workflow's "run `bb migrate up`" warning was skipped when another database had the column** (BOU-660).
+  Upgrade; nothing to change.
 - **On H2, `SET REFERENTIAL_INTEGRITY FALSE` was undone by the next pooled connection** (BOU-654), so scaffolded
   tests failed at random on foreign keys. Upgrade; nothing to change.
 - **The admin users page bypassed the user service** (BOU-665): no audit, no session end, no last-admin guard.
