@@ -1173,6 +1173,7 @@
                   :create :success
                   :update :info
                   :delete :danger
+                  :permanent-delete :danger
                   :deactivate :warning
                   :activate :success
                   :login :info
@@ -1180,7 +1181,7 @@
                   :role-change :warning
                   :bulk-action :info
                   :neutral)]
-    (ui/badge (str/capitalize action-name) {:variant variant
+    (ui/badge (str/capitalize (str/replace action-name "-" " ")) {:variant variant
                                             :class "audit-action-badge"})))
 
 (defn result-badge
@@ -1412,6 +1413,7 @@
       [:option {:value "create" :selected (= "create" (:action filters))} [:t :common/audit-create]]
       [:option {:value "update" :selected (= "update" (:action filters))} [:t :common/audit-update]]
       [:option {:value "delete" :selected (= "delete" (:action filters))} [:t :common/audit-delete]]
+      [:option {:value "permanent-delete" :selected (= "permanent-delete" (:action filters))} [:t :common/audit-permanent-delete]]
       [:option {:value "activate" :selected (= "activate" (:action filters))} [:t :common/audit-activate]]
       [:option {:value "deactivate" :selected (= "deactivate" (:action filters))} [:t :common/audit-deactivate]]
       [:option {:value "login" :selected (= "login" (:action filters))} [:t :common/audit-login]]

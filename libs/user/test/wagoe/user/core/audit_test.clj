@@ -193,7 +193,7 @@
 ;; =============================================================================
 
 (deftest ^:unit delete-user-audit-entry-test
-  (testing "Creates audit entry for hard delete"
+  (testing "Creates audit entry for soft delete"
     (let [entry (audit/delete-user-audit-entry
                  test-actor-id
                  test-actor-email
@@ -208,16 +208,12 @@
       (is (= {:deleted true} (:changes entry)))
       (is (= :success (:result entry)))))
 
-  (testing "Includes permanent flag in metadata for hard delete"
-    (let [entry (audit/delete-user-audit-entry
-                 test-actor-id
-                 test-actor-email
-                 test-target-id
-                 test-target-email
-                 test-ip
-                 test-user-agent)]
-
-      (is (true? (get-in entry [:metadata :permanent]))))))
+  (testing "a permanent delete is told apart from a soft one (BOU-682)"
+    (let [args  [test-actor-id test-actor-email test-target-id test-target-email test-ip test-user-agent]
+          soft  (apply audit/delete-user-audit-entry args)
+          erase (apply audit/permanently-delete-user-audit-entry args)]
+      (is (= :permanent-delete (:action erase)))
+      (is (= (dissoc soft :action) (dissoc erase :action)) "and differs in nothing else"))))
 
 ;; =============================================================================
 ;; Role Change Audit Entry Tests

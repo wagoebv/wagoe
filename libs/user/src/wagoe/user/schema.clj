@@ -150,13 +150,20 @@
    [:created-at inst?]
    [:last-login-at {:optional true} [:maybe inst?]]])
 
+(def audit-actions
+  "What an audit entry records. The database checks `action` against these; a
+   value added here needs the check widened on existing databases, as
+   `:permanent-delete` did (BOU-682)."
+  [:create :update :delete :permanent-delete :activate :deactivate :role-change
+   :bulk-action :login :logout])
+
 (def UserAuditLog
   "Schema for User Audit Log entity - tracks all user-related actions for compliance and security.
    
    Captures who did what, when, and what changed for full audit trail visibility."
   [:map {:title "User Audit Log"}
    [:id :uuid]
-   [:action [:enum :create :update :delete :activate :deactivate :role-change :bulk-action :login :logout]]
+   [:action (into [:enum] audit-actions)]
    [:actor-id {:optional true} [:maybe :uuid]] ; User who performed the action (nil for system actions)
    [:actor-email {:optional true} [:maybe :string]] ; Email of actor for easy reference
    [:target-user-id :uuid] ; User who was affected by the action
