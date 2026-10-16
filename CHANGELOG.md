@@ -100,6 +100,12 @@ for what is public API, what is internal, and how deprecations are announced.
   Upgrade; nothing to change.
 - **On MySQL, workflow's "run `bb migrate up`" warning was skipped when another database had the column** (BOU-660).
   Upgrade; nothing to change.
+- **JSON error bodies a handler built itself, and 404/405s, had no `correlation-id`** (BOU-592, BOU-596): the workflow
+  and scaffolded-transition 422s among them. The platform now adds it.
+- **`bb doctor` exited 0 on errors without saying so, and named dev and test under `--env prod`** (BOU-597): it now
+  says to pass `--ci`. `bb scaffold <cmd> --help` prints only the help (BOU-598).
+- **`bb setup --prod true` said "Cache: keep" while writing Redis** (BOU-599): the summary lists every provider prod gets.
+
 - **PostgreSQL `:application-name` and `:statement-timeout-ms` were ignored** (BOU-658). Upgrade; migrations, seeds and
   tenant provisioning run without the timeout, in-memory H2 migrations use `mem:wagoe`, and a config without `:pool` boots.
 - **Auth middleware answered 401 for what the handler threw** (BOU-682): a `:conflict` or database error behind JWT or

@@ -313,6 +313,26 @@
           (scaffold/run-clojure! ["generate" "--module-name" "tasks"]))))
     {:calls @calls :exit @exit :err (str err)}))
 
+(defn- scaffolder-call
+  "What run-clojure! prints and the command it runs for `args`."
+  [args]
+  (let [cmd (atom nil)
+        out (with-out-str
+              (binding [scaffold/*exit!* (fn [_])]
+                (with-redefs [process/shell (fn [_opts & c] (reset! cmd (vec c)) {:exit 0})]
+                  (scaffold/run-clojure! args))))]
+    {:out out :cmd @cmd}))
+
+(deftest ^:unit a-help-request-prints-only-the-help
+  ;; BOU-598: "Running scaffolder..." and the JVM's logs came first.
+  (let [{:keys [out cmd]} (scaffolder-call ["subscriber" "--help"])]
+    (is (not (str/includes? out "Running scaffolder")))
+    (is (some #(str/starts-with? % "-J-Dlogback.configurationFile=") cmd) (pr-str cmd)))
+  (testing "a real run still says it is running, and logs"
+    (let [{:keys [out cmd]} (scaffolder-call ["generate" "--module-name" "tasks"])]
+      (is (str/includes? out "Running scaffolder"))
+      (is (not-any? #(str/starts-with? % "-J-D") cmd)))))
+
 (deftest ^:unit a-dependency-fetch-failure-is-retried-once
   (testing "a resolution error, then success: retried, and no failure"
     (is (= [2 nil] ((juxt :calls :exit) (run-scaffolder [(fails-with fetch-error) "exit 0"])))))
