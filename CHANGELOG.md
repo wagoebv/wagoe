@@ -100,6 +100,8 @@ for what is public API, what is internal, and how deprecations are announced.
   Upgrade; nothing to change.
 - **On MySQL, workflow's "run `bb migrate up`" warning was skipped when another database had the column** (BOU-660).
   Upgrade; nothing to change.
+- **PostgreSQL `:application-name` and `:statement-timeout-ms` were ignored** (BOU-658). Upgrade; migrations, seeds and
+  tenant provisioning run without the timeout, in-memory H2 migrations use `mem:wagoe`, and a config without `:pool` boots.
 - **Auth middleware answered 401 for what the handler threw** (BOU-682): a `:conflict` or database error behind JWT or
   session auth is now its own status. Nothing to change.
 - **A permanent user delete was audited as `:delete`, like a soft one** (BOU-682); it is `:permanent-delete` now.
