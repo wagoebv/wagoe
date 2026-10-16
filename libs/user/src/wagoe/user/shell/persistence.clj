@@ -76,7 +76,9 @@
                                               audit-action-check])
             :sqlite     (db/execute-one! ctx ["SELECT sql AS definition FROM sqlite_master WHERE type = 'table' AND name = 'user_audit_log'"])
             nil)
-          :definition))
+          :definition
+          ;; MySQL's CHECK_CLAUSE escapes the quotes: _utf8mb4\'create\'.
+          (str/replace "\\" "")))
 
 (defn- rebuild-sqlite-audit-log!
   "SQLite cannot alter a CHECK, so the table is copied into one created with
@@ -89,10 +91,15 @@
                                       audit-action-check-clause))]
     (if (takes-every-action? create)
       (db/with-transaction [tx ctx]
-        (db/execute-ddl! tx create)
-        (db/execute-ddl! tx "INSERT INTO user_audit_log_new SELECT * FROM user_audit_log")
-        (db/execute-ddl! tx "DROP TABLE user_audit_log")
-        (db/execute-ddl! tx "ALTER TABLE user_audit_log_new RENAME TO user_audit_log"))
+        ;; DROP TABLE takes the table's indexes and triggers with it.
+        (let [dependents (db/execute-query! tx [(str "SELECT sql FROM sqlite_master WHERE tbl_name = 'user_audit_log'"
+                                                     " AND type IN ('index', 'trigger') AND sql IS NOT NULL")])]
+          (db/execute-ddl! tx create)
+          (db/execute-ddl! tx "INSERT INTO user_audit_log_new SELECT * FROM user_audit_log")
+          (db/execute-ddl! tx "DROP TABLE user_audit_log")
+          (db/execute-ddl! tx "ALTER TABLE user_audit_log_new RENAME TO user_audit_log")
+          (doseq [{:keys [sql]} dependents]
+            (db/execute-ddl! tx sql))))
       (log/warn "user_audit_log's action check has an unexpected shape and was left as it is"
                 {:sql table-sql}))))
 
@@ -114,9 +121,10 @@
                           (db/execute-ddl! tx (str "ALTER TABLE user_audit_log ADD CONSTRAINT " audit-action-check
                                                    " " audit-action-check-clause " NOT VALID")))
                         (db/execute-ddl! ctx (str "ALTER TABLE user_audit_log VALIDATE CONSTRAINT " audit-action-check)))
-        :mysql      (do (db/execute-ddl! ctx (str "ALTER TABLE user_audit_log DROP CHECK " audit-action-check))
-                        (db/execute-ddl! ctx (str "ALTER TABLE user_audit_log ADD CONSTRAINT " audit-action-check
-                                                  " " audit-action-check-clause)))))))
+        ;; One statement: MySQL DDL does not roll back, so a failed ADD after
+        ;; a separate DROP would leave no check at all.
+        :mysql      (db/execute-ddl! ctx (str "ALTER TABLE user_audit_log DROP CHECK " audit-action-check
+                                              ", ADD CONSTRAINT " audit-action-check " " audit-action-check-clause))))))
 
 (defn initialize-user-schema!
   "Initialize database schema for user entities using Malli schema definitions.

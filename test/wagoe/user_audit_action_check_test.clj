@@ -6,6 +6,7 @@
 
    Needs MySQL: `bb test:services up`."
   (:require [clojure.test :refer [deftest is testing]]
+            [clojure.tools.logging.test :as log-test]
             [support.embedded-pg :as epg]
             [support.mysql :as mysql]
             [wagoe.platform.database :as db]
@@ -31,7 +32,11 @@
     (ports/create-audit-log repo (entry audit/delete-user-audit-entry))
     (is (thrown? Exception (ports/create-audit-log repo (entry audit/permanently-delete-user-audit-entry)))
         "the old check refuses it, or this proves nothing")
-    (dotimes [_ 2] (persistence/initialize-user-schema! ctx))
+    (persistence/initialize-user-schema! ctx)
+    (log-test/with-log
+      (persistence/initialize-user-schema! ctx)
+      (is (not (log-test/logged? 'wagoe.user.shell.persistence :info #"Widening"))
+          "a widened check is left alone"))
     (ports/create-audit-log repo (entry audit/permanently-delete-user-audit-entry))
     (is (= #{:delete :permanent-delete}
            (set (map :action (:audit-logs (ports/find-audit-logs repo {:limit 10})))))
@@ -45,6 +50,18 @@
 
 (deftest ^:integration the-audit-action-check-takes-permanent-delete
   (testing "sqlite"
+    (let [f   (doto (java.io.File/createTempFile "audit-check-" ".db") .deleteOnExit)
+          ctx (factory/db-context (factory/sqlite-config (str f)))
+          indexes #(set (map :name (db/execute-query! ctx [(str "SELECT name FROM sqlite_master"
+                                                                " WHERE type = 'index' AND tbl_name = 'user_audit_log'"
+                                                                " AND sql IS NOT NULL")])))]
+      (try
+        (db/initialize-tables-from-schemas! ctx {"user_audit_log" old-audit-log})
+        (let [before (indexes)]
+          (persistence/initialize-user-schema! ctx)
+          (is (seq before))
+          (is (= before (indexes)) "the rebuilt table keeps its indexes"))
+        (finally (factory/close-db-context! ctx))))
     (let [f (doto (java.io.File/createTempFile "audit-check-" ".db") .deleteOnExit)]
       (check-widened-and-close (factory/db-context (factory/sqlite-config (str f))))))
   (testing "h2"

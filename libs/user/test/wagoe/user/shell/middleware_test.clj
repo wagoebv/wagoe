@@ -277,7 +277,7 @@
         (log-test/with-log
           (let [resp (through-error-mapping (wrap (fn [_] (throw thrown))) request)]
             (is (= status (:status resp)))
-            (is (not (log-test/logged? 'wagoe.user.shell.middleware :warn #"validation failed"))
+            (is (not (log-test/logged? 'wagoe.user.shell.middleware :warn Throwable #"validation failed"))
                 "and it is not logged as an authentication failure")))))))
 
 (deftest ^:unit the-claims-only-arity-warns-once
