@@ -19,14 +19,15 @@
     (.isBefore (:expires-at session) current-time) {:valid? false :reason :expired}
     :else {:valid? true}))
 
-;; A session is only as good as its user: deactivation refuses it the way
-;; login is refused (BOU-668).
-(defn session-user-refusal
-  "Why `user` (nil when gone) may not use a session, or nil."
+;; A token is only as good as its user: a session or JWT is refused for the
+;; reasons login is (BOU-668).
+(defn account-refusal
+  "Why `user` (nil when gone) may not authenticate, or nil."
   [user]
   (cond
-    (nil? user) :user-not-found
-    (not (:active user)) :user-inactive))
+    (nil? user)          :user-not-found
+    (not (:active user)) :user-inactive
+    (:deleted-at user)   :user-deleted))
 
 ;; Session creation helpers  
 (defn generate-session-token

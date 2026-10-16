@@ -7,6 +7,8 @@
    - Role-based authorization
    - Request context enrichment with user information"
   (:require [wagoe.user.ports :as ports]
+            [wagoe.user.core.session :as session-core]
+            [wagoe.user.core.user :as user-core]
             [wagoe.user.shell.auth :as auth-shell]
             [wagoe.user.shell.service :as user-service]
             [wagoe.core.utils.type-conversion :as type-conv]
@@ -19,23 +21,9 @@
 ;; Helper Functions
 ;; =============================================================================
 
-(def ^:private credential-keys
-  "User fields that must never reach a handler on the request.
-
-   `find-user-by-id` selects `mfa_secret` and the backup codes, and
-   `get-user-by-id` drops only `:password-hash` — so these rode along on
-   `:user`. That was contained while authentication was per-route; BOU-373 put
-   it on every request, which would have handed an MFA secret to public
-   handlers and to any application middleware downstream.
-
-   `:mfa-enabled` is deliberately not here: whether MFA is on is not a secret,
-   and handlers render it."
-  [:password-hash :mfa-secret :mfa-backup-codes :mfa-backup-codes-used])
-
-(defn without-credentials
+(def without-credentials
   "`user` with its secrets removed, ready to put on a request."
-  [user]
-  (apply dissoc user credential-keys))
+  user-core/without-credentials)
 
 (defn extract-bearer-token
   "Extracts Bearer token from Authorization header.
@@ -114,8 +102,14 @@
    ;; written with `name`, read back as a keyword
    :role  (some-> (:role claims) keyword)})
 
+(def ^:private refusal-messages
+  {:user-not-found "User not found"
+   :user-inactive  "Account is deactivated"
+   :user-deleted   "User not found"})
+
 (defn- jwt-middleware
-  "Authenticate a bearer token as `(user-of claims)`; nil from it is a 401."
+  "Authenticate a bearer token as `(user-of claims)`: a user, or the
+   `account-refusal` keyword that makes it a 401."
   [user-of handler]
   (fn [request]
     (if-let [token (extract-bearer-token request)]
@@ -132,9 +126,10 @@
         ;; produced `{:id nil :email nil :role nil}` even for a good token.
         (let [{:keys [valid? claims]} (auth-shell/validate-jwt-token token)]
           (if valid?
-            (if-let [user (user-of claims)]
-              (handler (assoc request :user user :auth-type :jwt))
-              (create-unauthorized-response "Account is deactivated" :user-inactive request))
+            (let [user (user-of claims)]
+              (if (keyword? user)
+                (create-unauthorized-response (refusal-messages user) user request)
+                (handler (assoc request :user user :auth-type :jwt))))
             (create-unauthorized-response "Invalid JWT token" :invalid-jwt request)))
         (catch Exception ex
           (log/warn ex "JWT validation failed")
@@ -163,7 +158,7 @@
   ([user-service handler]
    (jwt-middleware (fn [claims]
                      (let [user (ports/get-user-by-id user-service (type-conv/string->uuid (:sub claims)))]
-                       (when (:active user) (without-credentials user))))
+                       (or (session-core/account-refusal user) (without-credentials user))))
                    handler)))
 
 ;; =============================================================================

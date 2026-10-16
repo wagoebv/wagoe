@@ -403,18 +403,18 @@
          (when-let [session (.find-session-by-token session-repository session-token)]
            (let [current-time (current-timestamp)
                  {:keys [valid? reason]} (session-core/is-session-valid? session current-time)
-                 user   (when valid? (.find-user-by-id user-repository (:user-id session)))
-                 reason (if valid? (session-core/session-user-refusal user) reason)]
-             (when reason
+                 user    (when valid? (.find-user-by-id user-repository (:user-id session)))
+                 refusal (if valid? (session-core/account-refusal user) reason)]
+             (when refusal
                ;; Session invalid — throw so middleware returns 401
                (throw (ex-info "Session invalid"
                                {:type :session-invalid
-                                :reason reason})))
+                                :reason refusal})))
              ;; The user rides along, so the middleware need not read it again.
              (let [updated-session-data (session-core/update-session-access session current-time)]
                (assoc (or (.update-session session-repository updated-session-data)
                           updated-session-data)
-                      :user (dissoc user :password-hash)))))))
+                      :user (user-core/without-credentials user)))))))
      {:system {:user-repository user-repository
                :session-repository session-repository
                :auth-service auth-service}}))
@@ -516,7 +516,7 @@
                               :original-data user-entity
                               :interface-type :cli}))))
 
-         ;; 2. Prepare user with updated timestamp and handle active/deleted_at
+         ;; 2. Stamp updated-at
          (let [current-time (current-timestamp)
                prepared-user (user-core/prepare-user-for-update user-entity current-time)
                ;; 3. Persist using impure shell persistence layer
@@ -557,14 +557,14 @@
              user (.find-user-by-id user-repository user-id)
              ;; :active only, never :deleted-at: a deactivated user stays
              ;; listed and can be reactivated (BOU-681).
+             after  (assoc user :active false)
              result (when user
-                      (change-access! user-repository session-repository user {:active false}
+                      (change-access! user-repository session-repository user after
                                       #(.update-user user-repository
-                                                     (user-core/prepare-user-for-update
-                                                      (assoc user :active false) (current-timestamp)))))]
+                                                     (user-core/prepare-user-for-update after (current-timestamp)))))]
 
          ;; Create audit log entry
-         (when (and result user)
+         (when result
            (try
              (let [{:keys [actor-id actor-email ip-address user-agent]}
                    (effective-audit-context {})

@@ -167,6 +167,21 @@
      :reason :user-not-found
      :user-id (:id user-entity)}))
 
+(def ^:private credential-keys
+  "User fields that must never leave the service on a user it hands out.
+
+   `find-user-by-id` selects `mfa_secret` and the backup codes, so stripping
+   only `:password-hash` let them ride along on a request's `:user` (BOU-373).
+
+   `:mfa-enabled` is deliberately not here: whether MFA is on is not a secret,
+   and handlers render it."
+  [:password-hash :mfa-secret :mfa-backup-codes :mfa-backup-codes-used])
+
+(defn without-credentials
+  "`user` with its secrets removed."
+  [user]
+  (apply dissoc user credential-keys))
+
 (defn prepare-user-for-update
   "`user-entity` stamped with `current-time` as :updated-at. Deactivating
    sets :active only; :deleted-at is for deletes, so a deactivated user stays
