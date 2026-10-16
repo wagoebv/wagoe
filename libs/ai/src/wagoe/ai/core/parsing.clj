@@ -118,18 +118,39 @@
 (def ^:private valid-field-types
   #{"string" "text" "int" "decimal" "boolean" "email" "uuid" "enum" "date" "datetime" "json"})
 
+(defn- default-suits?
+  "Whether `s` could be the column DEFAULT of a field of type `t`. A default
+   the scaffolder refuses fails the whole run, and the parse is cached, so a
+   model's bad guess (`now` for a datetime) is dropped here instead. The
+   scaffolder still has the final word (BOU-537)."
+  [t enum-values s]
+  (and (not (str/blank? s))
+       (case t
+         "int"      (some? (re-matches #"-?\d+" s))
+         "decimal"  (some? (re-matches #"-?\d+(\.\d+)?" s))
+         "boolean"  (contains? #{"true" "false"} s)
+         "json"     false
+         "enum"     (some? (some #{s} (map #(if (keyword? %) (name %) (str %)) enum-values)))
+         "uuid"     (some? (re-matches #"(?i)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}" s))
+         "date"     (some? (re-matches #"\d{4}-\d{2}-\d{2}" s))
+         "datetime" (some? (re-matches #"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})" s))
+         true)))
+
 (defn- normalise-field [f]
-  (let [t (let [raw (get f :type (get f "type" "string"))]
-            (if (valid-field-types raw) raw "string"))]
+  (let [t           (let [raw (get f :type (get f "type" "string"))]
+                      (if (valid-field-types raw) raw "string"))
+        enum-values (when (= t "enum")
+                      (get f :enum-values (get f "enum-values" (get f :values (get f "values")))))
+        default     (let [d (get f :default (get f "default"))]
+                      (when (or (string? d) (number? d) (boolean? d)) (str d)))]
     (cond-> {:name     (get f :name (get f "name"))
              :type     t
              :required (boolean (get f :required (get f "required" true)))
              :unique   (boolean (get f :unique (get f "unique" false)))}
+      (and default (default-suits? t enum-values default))
+      (assoc :default default)
       (= t "enum")
-      (assoc :enum-values (get f :enum-values
-                               (get f "enum-values"
-                                    (get f :values
-                                         (get f "values"))))))))
+      (assoc :enum-values enum-values))))
 
 (defn- workflow?
   "Whether `w` names a field and at least two distinct states, in order."
@@ -196,38 +217,6 @@
      or {:error str} on failure."
   [module-spec]
   (parse-module-spec (json/generate-string module-spec)))
-
-(defn- enum-value->str
-  "An enum value as the CLI spells it. Provider JSON gives strings, a
-   hand-built spec gives keywords."
-  [v]
-  (if (keyword? v) (name v) (str v)))
-
-(defn module-spec->cli-args
-  "Convert a parsed module spec map into CLI args for the scaffolder.
-
-   Args:
-     spec - normalised module spec map from parse-module-spec
-
-   Returns:
-     Vector of string args for wagoe.scaffolder.shell.cli-entry."
-  [{:keys [module-name entity fields http web public-api]}]
-  (let [base       ["generate" "--module-name" module-name "--entity" entity]
-        ;; `values=` carries the enum's values through. Without it the spec said
-        ;; only `status:enum` and the generated schema was `[:enum]`, which
-        ;; matches nothing — the values were parsed and then dropped (BOU-447).
-        field-args (mapcat (fn [{:keys [name type required unique enum-values]}]
-                             ["--field" (str/join ":"
-                                                  (filter some? [name type
-                                                                 (when (seq enum-values)
-                                                                   (str "values="
-                                                                        (str/join "," (map enum-value->str enum-values))))
-                                                                 (when required "required")
-                                                                 (when unique "unique")]))])
-                           fields)
-        no-http    (when-not http ["--no-http"])
-        no-web     (when-not web  ["--no-web"])]
-    (vec (concat base field-args no-http no-web (when public-api ["--public-api"])))))
 
 (defn normalise-setup-spec
   "The seven setup choices, with a default for every one the provider omitted.

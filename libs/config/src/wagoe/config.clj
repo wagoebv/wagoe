@@ -36,6 +36,11 @@
   (let [s (some-> env str .trim .toLowerCase)]
     (get env-aliases s s)))
 
+(defn active-profile
+  "The profile `load-config` picks when none is passed: WAG_ENV, else dev."
+  ([] (active-profile (System/getenv "WAG_ENV")))
+  ([wag-env] (keyword (normalize-env (or wag-env "dev")))))
+
 (defn- url-exists? [^java.net.URL url]
   (try (with-open [_ (.openStream url)] true)
        (catch java.io.IOException _ false)))
@@ -83,7 +88,7 @@
      (load-config)
      (load-config {:profile :test})"
   ([] (load-config {}))
-  ([{:keys [profile] :or {profile (keyword (or (System/getenv "WAG_ENV") "dev"))}}]
+  ([{:keys [profile] :or {profile (active-profile)}}]
    (let [profile (keyword (normalize-env (name profile)))
          config-path (str "conf/" (name profile) "/config.edn")
          config-resource (io/resource config-path)]

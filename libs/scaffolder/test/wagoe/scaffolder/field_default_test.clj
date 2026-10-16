@@ -223,3 +223,46 @@
     (is (= "a:b" (:default (cli/parse-field-spec "note:string:default=a:b"))))
     (is (= "a:unique" (:default (cli/parse-field-spec "note:string:default='a:unique':indexed"))))
     (is (true? (:indexed (cli/parse-field-spec "note:string:default='a:unique':indexed"))))))
+
+;; =============================================================================
+;; The request schema (BOU-537)
+;; =============================================================================
+
+(defn- schema-def
+  "The text of `(def name …)` in schema.clj source `src`."
+  [src nm]
+  (re-find (re-pattern (str "(?s)\\(def " nm "\\n.*?\\]\\)\\n")) src))
+
+(defn- module-ctx [& entities]
+  (template/build-module-context {:module-name "orders" :base-ns "app" :entities (vec entities)}))
+
+(deftest ^:unit a-defaulted-field-is-optional-on-create
+  (let [src (gen/generate-schema-file
+             (module-ctx {:name "Order" :fields [{:name :ref :type :string :required true}
+                                                 {:name :qty :type :int :required true :default "1"}]}))]
+    (testing "a create may leave it out: the column fills it"
+      (is (str/includes? (schema-def src "CreateOrderRequest") "[:qty {:optional true} :int]"))
+      (is (str/includes? (schema-def src "CreateOrderRequest") "[:ref :string]")
+          "a required field without a default stays required")
+      (is (m/validate (last (read-string (schema-def src "CreateOrderRequest"))) {:ref "R-1"})))
+    (testing "the entity still has it: every row does"
+      (is (str/includes? (schema-def src "Order") "[:qty :int]")))
+    (testing "update was optional already"
+      (is (str/includes? (schema-def src "UpdateOrderRequest") "[:qty {:optional true} :int]"))))
+
+  (testing "a child created with its parent may leave it out too"
+    (is (str/includes? (gen/children-entry
+                        (second (:entities (module-ctx {:name "Order" :fields [{:name :ref :type :string}]}
+                                                       {:name "OrderLine" :belongs-to "Order"
+                                                        :fields [{:name :note :type :string :required true
+                                                                  :default "n/a"}]}))))
+                       "[:note {:optional true}"))))
+
+(deftest ^:unit adding-a-defaulted-field-makes-it-optional-on-create
+  (let [src (gen/generate-schema-file
+             (module-ctx {:name "Order" :fields [{:name :ref :type :string :required true}]}))
+        r   (gen/add-field-to-schema src "Order" {:name :qty :type :int :required true :default "1"})]
+    (is (= :updated (:status r)))
+    (is (str/includes? (schema-def (:content r) "Order") "[:qty :int]"))
+    (is (str/includes? (schema-def (:content r) "CreateOrderRequest") "[:qty {:optional true} :int]"))
+    (is (str/includes? (schema-def (:content r) "UpdateOrderRequest") "[:qty {:optional true} :int]"))))
