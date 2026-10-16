@@ -173,11 +173,14 @@
           (do
             (log/info "Session validation successful" {:user-id (:user-id session)})
             (if-let [user (ports/get-user-by-id user-service (:user-id session))]
-              (let [enriched-request (assoc request
-                                            :user (without-credentials user)
-                                            :session session
-                                            :auth-type :session)]
-                (handler enriched-request))
+              (if-not (:active user)
+                ;; Deactivated without a soft delete: refused here as at login.
+                (create-unauthorized-response "Account is deactivated" :user-inactive request)
+                (let [enriched-request (assoc request
+                                              :user (without-credentials user)
+                                              :session session
+                                              :auth-type :session)]
+                  (handler enriched-request)))
               ;; User not found (deleted after session was created?)
               (do
                 (log/warn "Session valid but user not found" {:user-id (:user-id session)})
@@ -285,7 +288,7 @@
      (if (:user request)
        ;; Already authenticated upstream. `authenticate-if-present` runs
        ;; globally since BOU-373 and has validated these same credentials, and a
-       ;; second pass is not free: with the cache off, `validate-session` reads
+       ;; second pass is not free: `validate-session` reads
        ;; the session, writes its access time, then fetches the user. Repeating
        ;; that doubles the database work on every authenticated request to a
        ;; route carrying this middleware — most of user, admin and workflow.

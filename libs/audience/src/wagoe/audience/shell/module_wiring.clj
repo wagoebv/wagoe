@@ -126,7 +126,7 @@
    Two refs are conditional, for the same reason in both cases — a ref to a
    component the config does not contain is a dangling ref that fails the boot:
 
-     `:cache-service`, the way user-service takes its optional cache;
+     `:cache-service`, only when `:wagoe/cache` is on;
      `:wagoe/audience-routes`, which is mounted only when the user module is on,
      because the authorization guard these endpoints need lives there. Without
      it they are not mounted at all rather than mounted open (BOU-419 review)."

@@ -10,7 +10,6 @@
          wagoe/external       {:local/root "../external"}
          wagoe/email          {:local/root "../email"}
          wagoe/tenant         {:local/root "../tenant"}
-         wagoe/cache          {:local/root "../cache"}
          wagoe/observability  {:local/root "../observability"}
          wagoe/i18n           {:local/root "../i18n"}
          wagoe/core           {:local/root "../core"}

@@ -118,11 +118,7 @@
       (is (= {:tenant-service (ig/ref :wagoe/tenant-service)
               :membership-service (ig/ref :wagoe/membership-service)
               :db-context (ig/ref :wagoe/db-context)}
-             (:wagoe/tenant-http-middleware ig-config))))
-
-    (testing "cache-enabled user service wiring keeps the cache dependency"
-      (is (= (ig/ref :wagoe/cache)
-             (get-in ig-config [:wagoe/user-service :cache]))))))
+             (:wagoe/tenant-http-middleware ig-config))))))
 
 ;; =============================================================================
 ;; Every profile's database configuration must be one the framework accepts
