@@ -243,7 +243,8 @@
               :active false}
 
      Returns:
-       Updated entity record with new updated-at timestamp
+       Updated entity record with new updated-at timestamp, or :removed
+       when an entity writer's update took it out of the list (BOU-665)
 
      Throws:
        - ExceptionInfo with :type :validation-error for invalid data
@@ -458,6 +459,21 @@
      connection and :transaction-of the datasource it was opened on. A store
      on another datasource cannot join it; it removes the instances on its
      own, after the fact. `tx` may be nil. Returns the number removed."))
+
+;; =============================================================================
+;; Entity Writer Port (BOU-665)
+;; =============================================================================
+
+(defprotocol IEntityWriter
+  "Updates and deletes for an entity whose config names this writer under
+   :writer, so another module's rules apply. Refusals are typed ex-infos."
+
+  (update-record! [this id changes]
+    "Apply `changes`, read-only fields removed. Returns :removed when the
+     record leaves the list, anything else otherwise.")
+
+  (delete-record! [this id opts]
+    "Delete record `id`; opts {:soft? bool}. Returns true when deleted."))
 
 ;; =============================================================================
 ;; List Overview Port (ADR-040)
