@@ -60,10 +60,7 @@
         project-dir (name->dir project-name)
         jwt-secret  (random-jwt-secret)
         with-user?  (not (false? (:with-user? opts)))
-        subs        {;; The set `system-config` takes as :extra-modules — the
-                     ;; modules an app enables in code rather than in config.
-                     :user-modules             (if with-user? "#{:wagoe/user}" "#{}")
-                     :project-name             project-name
+        subs        {:project-name             project-name
                      :project-ns               project-ns
                      :project-dir              project-dir
                      :jwt-secret               jwt-secret
@@ -140,6 +137,9 @@
     (doseq [[target tmpl] files]
       (write-file! dir target (templates/render (templates/read-template tmpl) subs)))
     (.setExecutable (io/file dir ".githooks/pre-commit") true false)
+    ;; In every profile's :active, which is what `migrate up` reads (BOU-667).
+    (when with-user?
+      (add/patch-configs! dir (cat/find-module "user")))
     ;; What the files just written hold, not a list kept by hand (BOU-573).
     (add/sync-agents-md! dir)))
 
@@ -240,7 +240,7 @@
                           " config user.email you@example.com && git -C " project-name
                           " commit -m \"Initial commit\"")))))
       (println (str "\n✓ Project created: " project-name "/"))
-      (println "\nCore modules installed: core, observability, platform, user")
+      (println (str "\nCore modules installed: core, observability, platform" (when with-user? ", user")))
       (println "\nOptional modules available — add any with:\n")
       (doseq [{:keys [description add-command]} (take 6 (cat/optional-modules))]
         (println (format "  %-25s %s" add-command description)))
