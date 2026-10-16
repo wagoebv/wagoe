@@ -83,7 +83,7 @@
     (-> sql-type
         str/lower-case
         (str/replace #"\(.*\)" "")  ; Remove size/precision
-        (str/replace #"\s+(unsigned|signed|zerofill)\b" "")  ; MySQL's column_type
+        (str/replace #"\s+(unsigned|zerofill)" "")  ; MySQL's column_type
         str/trim)))
 
 (defn infer-field-type

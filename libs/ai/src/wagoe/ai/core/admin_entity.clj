@@ -21,8 +21,8 @@
     (condp re-find t
       #"^(TIMESTAMP|DATETIME)"                                :instant
       #"^DATE\b"                                              :date
-      #"^UUID\b"                                              :uuid
-      #"^BOOL"                                                :boolean
+      #"^(UUID\b|CHAR\(36\))"                                 :uuid
+      #"^(BOOL|TINYINT\(1\))"                                  :boolean
       #"^(INT|INTEGER|BIGINT|SMALLINT|TINYINT|MEDIUMINT|SERIAL|BIGSERIAL)\b" :int
       #"^(DECIMAL|NUMERIC|REAL|DOUBLE|FLOAT|MONEY)"           :decimal
       #"^JSONB?\b"                                            :json

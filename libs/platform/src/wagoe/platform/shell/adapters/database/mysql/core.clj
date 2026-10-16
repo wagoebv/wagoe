@@ -11,7 +11,7 @@
 (def ^:private introspection-spec
   {:schema [:database] :honey {:dialect :mysql} :fold-table-name? false
    :generated-columns [:extra]
-   ;; data_type says tinyint and char, which a boolean and a UUID are (BOU-649).
+   ;; data_type drops the (1) and (36) that mark a boolean and a UUID (BOU-649).
    :type-column :column_type})
 
 (def spec
