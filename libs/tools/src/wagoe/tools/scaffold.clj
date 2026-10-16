@@ -126,10 +126,11 @@
 
 (defn prompt-default
   "The column default, or nil when left blank. The scaffolder checks it
-   against the type."
-  [indent]
-  (let [s (prompt (str indent "Default (blank for none)"))]
-    (when-not (str/blank? s) s)))
+   against the type. Not asked for json, which takes none."
+  [ftype indent]
+  (when-not (= "json" ftype)
+    (let [s (prompt (str indent "Default (blank for none)"))]
+      (when-not (str/blank? s) s))))
 
 (defn select-from-menu
   "Print a numbered menu of items and return the chosen item. Loops on invalid input."
@@ -156,10 +157,13 @@
 ;; =============================================================================
 
 (defn- default->modifier
-  "`default=v`, quoted when `v` holds a colon the spec would split on."
+  "`default=v`, quoted when `v` holds a colon the spec would split on, or
+   starts with a quote the parser would take for an unclosed one."
   [v]
   (let [s (str v)]
-    (if (str/includes? s ":") (str "default='" s "'") (str "default=" s))))
+    (if (or (str/includes? s ":") (str/starts-with? s "'"))
+      (str "default='" s "'")
+      (str "default=" s))))
 
 (defn field->spec
   "Convert a field map to CLI spec: name:type[:values=a,b,c][:required][:unique][:default=v]"
@@ -537,7 +541,7 @@
                                values   (when (= "enum" ftype) (prompt-enum-values))
                                required (confirm "  Required?" true)
                                unique   (confirm "  Unique?" false)
-                               default  (prompt-default "  ")]
+                               default  (prompt-default ftype "  ")]
                            (println)
                            (recur (conj acc (cond-> {:name fname :type ftype
                                                      :required required :unique unique}
@@ -610,7 +614,7 @@
         values   (when (= "enum" ftype) (prompt-enum-values))
         required (confirm "Required?" true)
         unique   (confirm "Unique?" false)
-        default  (prompt-default "")
+        default  (prompt-default ftype "")
         dry-run  (confirm "Dry run?" false)
 
         args (cond-> ["field" "--module-name" module "--entity" entity

@@ -184,7 +184,12 @@
     (is (= "1" (:default (spec "{\"name\": \"q\", \"type\": \"int\", \"default\": 1}"))))
     (is (= "false" (:default (spec "{\"name\": \"b\", \"type\": \"boolean\", \"default\": false}"))))
     (is (not (contains? (spec "{\"name\": \"x\", \"type\": \"string\"}") :default)))
-    (is (not (contains? (spec "{\"name\": \"x\", \"type\": \"json\", \"default\": {}}") :default)))))
+    (is (not (contains? (spec "{\"name\": \"x\", \"type\": \"json\", \"default\": {}}") :default)))
+    (testing "one the scaffolder would refuse is dropped, not left to fail the run"
+      (is (not (contains? (spec "{\"name\": \"at\", \"type\": \"datetime\", \"default\": \"now\"}") :default)))
+      (is (not (contains? (spec "{\"name\": \"q\", \"type\": \"int\", \"default\": \"draft\"}") :default)))
+      (is (not (contains? (spec "{\"name\": \"s\", \"type\": \"enum\", \"enum-values\": [\"sent\"], \"default\": \"draft\"}") :default)))
+      (is (not (contains? (spec "{\"name\": \"x\", \"type\": \"string\", \"default\": \"\"}") :default))))))
 
 (deftest ^:unit normalise-setup-spec-test
   ;; `parse-json-response` keywordizes, and the setup CLI read string keys, so

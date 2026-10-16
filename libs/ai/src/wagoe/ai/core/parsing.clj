@@ -118,22 +118,39 @@
 (def ^:private valid-field-types
   #{"string" "text" "int" "decimal" "boolean" "email" "uuid" "enum" "date" "datetime" "json"})
 
+(defn- default-suits?
+  "Whether `s` could be the column DEFAULT of a field of type `t`. A default
+   the scaffolder refuses fails the whole run, and the parse is cached, so a
+   model's bad guess (`now` for a datetime) is dropped here instead. The
+   scaffolder still has the final word (BOU-537)."
+  [t enum-values s]
+  (and (not (str/blank? s))
+       (case t
+         "int"      (some? (re-matches #"-?\d+" s))
+         "decimal"  (some? (re-matches #"-?\d+(\.\d+)?" s))
+         "boolean"  (contains? #{"true" "false"} s)
+         "json"     false
+         "enum"     (some? (some #{s} (map #(if (keyword? %) (name %) (str %)) enum-values)))
+         "uuid"     (some? (re-matches #"(?i)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}" s))
+         "date"     (some? (re-matches #"\d{4}-\d{2}-\d{2}" s))
+         "datetime" (some? (re-matches #"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})" s))
+         true)))
+
 (defn- normalise-field [f]
-  (let [t       (let [raw (get f :type (get f "type" "string"))]
-                  (if (valid-field-types raw) raw "string"))
-        default (get f :default (get f "default"))]
+  (let [t           (let [raw (get f :type (get f "type" "string"))]
+                      (if (valid-field-types raw) raw "string"))
+        enum-values (when (= t "enum")
+                      (get f :enum-values (get f "enum-values" (get f :values (get f "values")))))
+        default     (let [d (get f :default (get f "default"))]
+                      (when (or (string? d) (number? d) (boolean? d)) (str d)))]
     (cond-> {:name     (get f :name (get f "name"))
              :type     t
              :required (boolean (get f :required (get f "required" true)))
              :unique   (boolean (get f :unique (get f "unique" false)))}
-      ;; The scaffolder checks it against the type (BOU-537).
-      (or (string? default) (number? default) (boolean? default))
-      (assoc :default (str default))
+      (and default (default-suits? t enum-values default))
+      (assoc :default default)
       (= t "enum")
-      (assoc :enum-values (get f :enum-values
-                               (get f "enum-values"
-                                    (get f :values
-                                         (get f "values"))))))))
+      (assoc :enum-values enum-values))))
 
 (defn- workflow?
   "Whether `w` names a field and at least two distinct states, in order."

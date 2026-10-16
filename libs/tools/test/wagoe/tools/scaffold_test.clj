@@ -413,7 +413,10 @@
   (is (= "qty:int:required:default=1"
          (scaffold/field->spec {:name "qty" :type "int" :required true :default 1})))
   (is (= "link:string:default='https://x.org'"
-         (scaffold/field->spec {:name "link" :type "string" :default "https://x.org"}))))
+         (scaffold/field->spec {:name "link" :type "string" :default "https://x.org"})))
+  (is (= "q:string:default=''x'"
+         (scaffold/field->spec {:name "q" :type "string" :default "'x"}))
+      "a leading quote would read as an unclosed one"))
 
 (deftest ^:unit a-printed-command-can-be-pasted
   ;; Joined unquoted, `>` in a workflow spec became a redirect and a spaced
