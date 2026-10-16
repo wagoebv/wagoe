@@ -295,12 +295,22 @@
           (is (= 3001 (:port (pm/allocate-port 3000 {:profile profile
                                                      :port-range {:start 3000 :end 3099}})))))))))
 
-;; BOU-530: without a profile the detector read ENV/ENVIRONMENT, so a
-;; `WAG_ENV=prod` boot searched ports like dev.
+;; BOU-530: without a profile the detector read -Denv, ENV and ENVIRONMENT,
+;; which the config loader ignores. -Denv even outranked WAG_ENV.
 (deftest ^:unit without-a-profile-the-loaders-profile-decides
   (doseq [[profile searches?] [[:prod false] [:acc false] [:dev true] [:test true]]]
     (with-redefs [config/active-profile (constantly profile)]
       (is (= searches? (pm/development-environment?)) (str profile))))
+  (testing "-Denv does not outrank it"
+    (let [prior (System/getProperty "env")]
+      (try
+        (System/setProperty "env" "dev")
+        (with-redefs [config/active-profile (constantly :prod)]
+          (is (not (pm/development-environment?))))
+        (finally
+          (if prior
+            (System/setProperty "env" prior)
+            (System/clearProperty "env"))))))
   (testing "the boot profile wins"
     (with-redefs [config/active-profile (constantly :dev)]
       (is (not (pm/development-environment? :prod))))))

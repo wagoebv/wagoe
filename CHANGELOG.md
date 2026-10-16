@@ -98,8 +98,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
-- **Without a boot profile, the port manager chose its range from `ENV`/`ENVIRONMENT`, not `WAG_ENV`** (BOU-530).
-  `ENV` and `ENVIRONMENT` no longer affect the HTTP port; set `WAG_ENV`.
+- **Without a boot profile, the port manager let `-Denv`, `ENV` and `ENVIRONMENT` choose its range** (BOU-530).
+  Only `WAG_ENV` affects the HTTP port now, as it does the loaded config.
 - **A session request wrote `last_accessed_at` twice, and a database error during sign-in lookup answered 401** (BOU-666).
   The access time is now written at most once a minute; a lookup failure is a 500.
 - **Two admins demoting each other at once could leave none; an admin bulk delete of users could stop halfway** (BOU-673).
