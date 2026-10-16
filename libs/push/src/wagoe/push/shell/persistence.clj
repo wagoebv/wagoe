@@ -9,6 +9,7 @@
    This needs no dialect-specific ON CONFLICT syntax."
   (:require [wagoe.push.ports :as ports]
             [wagoe.push.core.device :as device]
+            [wagoe.core.utils.type-conversion :as tc]
             [wagoe.platform.database :as database]
             [honey.sql.helpers :as h])
   (:import [java.time Instant]))
@@ -37,9 +38,12 @@
 ;; DeviceTokenStore
 ;; =============================================================================
 
-(defn- row->device [row]
+(defn- row->device
+  "MySQL and SQLite hand the id back as text."
+  [row]
   (when row
     (-> row
+        (update :id tc/string->uuid)
         (update :platform keyword)
         (assoc :active? (boolean (:active row)))
         (dissoc :active))))
@@ -49,13 +53,26 @@
                             (-> (h/insert-into :push-device-tokens)
                                 (h/values [row]))))
 
-(defn- update-device-row! [db {:keys [token app-id] :as row}]
+(defn- token-key [{:keys [token app-id]}]
+  [:and [:= :token token] [:= :app-id app-id]])
+
+(defn- update-device-row! [db row]
   (database/execute-update! db
                             (-> (h/update :push-device-tokens)
-                                (h/set (select-keys row [:active :last-used-at :device-name :os-version]))
-                                (h/where [:and [:= :token token] [:= :app-id app-id]]))))
+                                (h/set (select-keys row [:user-id :active :last-used-at :device-name :os-version]))
+                                (h/where (token-key row)))))
 
-(defn- upsert-device! [db record]
+(defn- stored-device-id [db row]
+  (-> (database/execute-one! db
+                             (-> (h/select :id)
+                                 (h/from :push-device-tokens)
+                                 (h/where (token-key row))))
+      :id
+      tc/string->uuid))
+
+(defn- upsert-device!
+  "Returns the stored row's id: on conflict that is the existing row's, not ours."
+  [db record]
   (let [row {:id          (:id record)
              :user-id     (:user-id record)
              :token       (:token record)
@@ -68,18 +85,19 @@
              :last-used-at (->instant (:last-used-at record))}]
     (try
       (insert-device-row! db row)
+      (:id row)
       (catch clojure.lang.ExceptionInfo e
         (when-not (unique-conflict? e) (throw e))
-        ;; Duplicate token+app_id — update active status and last-used
-        (update-device-row! db row)))))
+        ;; Duplicate token+app_id: the token now belongs to whoever registered it last.
+        (update-device-row! db row)
+        (stored-device-id db row)))))
 
 (defrecord DeviceTokenStore [db]
   ports/IDeviceTokenStore
 
   (register-device! [_ user-id device-info]
     (let [record (device/prepare-device-record user-id device-info (random-uuid) (java.util.Date.))]
-      (upsert-device! db record)
-      record))
+      (assoc record :id (upsert-device! db record))))
 
   (unregister-device! [_ user-id device-token]
     (database/execute-update! db
@@ -94,14 +112,15 @@
          (mapv row->device)))
 
   (get-devices-by-platform [_ platform opts]
-    (let [{:keys [limit offset] :or {limit 100 offset 0}} opts
-          limit (min limit 1000)]
+    (let [{:keys [limit after-id] :or {limit 100}} opts]
       (->> (database/execute-query! db
                                     (-> (h/select :*)
                                         (h/from :push-device-tokens)
-                                        (h/where [:and [:= :platform (name platform)] [:= :active true]])
-                                        (h/limit limit)
-                                        (h/offset offset)))
+                                        (h/where [:= :platform (name platform)]
+                                                 [:= :active true]
+                                                 (when after-id [:> :id after-id]))
+                                        (h/order-by :id)
+                                        (h/limit (min limit 1000))))
            (mapv row->device))))
 
   (mark-token-invalid! [_ device-token]
