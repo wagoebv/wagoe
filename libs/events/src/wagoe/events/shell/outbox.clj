@@ -166,7 +166,10 @@
         dead?    (or (:fatal? error) (>= attempts max-attempts))
         message  (let [m (str (:type error) (some->> (:message error) (str " ")))]
                    (subs m 0 (min 1000 (count m))))]
-    (jdbc/execute-one! ds ["UPDATE event_outbox SET attempts = ?, last_error = ?, dead_ms = ? WHERE id = ?"
+    ;; Guarded: a relay overlapping this one after a lease pause may have
+    ;; delivered the row meanwhile.
+    (jdbc/execute-one! ds ["UPDATE event_outbox SET attempts = ?, last_error = ?, dead_ms = ?
+                             WHERE id = ? AND delivered_ms IS NULL AND dead_ms IS NULL"
                            attempts message (when dead? (System/currentTimeMillis)) id])
     dead?))
 
@@ -198,36 +201,45 @@
       (jdbc/execute-one! ds ["DELETE FROM event_outbox WHERE delivered_ms < ?"
                              (- now retain-ms)]))))
 
+(defn- relay-pass!
+  "One relay pass: `{:delivered n :more? bool}`, `:more?` when the batch was
+   full and nothing stopped it, so more may be waiting."
+  [{:keys [ds bus opts owner purged-at claim-sql]}]
+  (let [{:keys [batch-size retain-ms lease-ms max-attempts]} opts]
+    (if-not (claim-relay! ds claim-sql owner lease-ms)
+      {:delivered 0 :more? false}
+      (let [rows (pending ds batch-size)
+            {:keys [ids stopped?]}
+            (reduce (fn [acc row]
+                      (let [{:keys [error]} (publish-row bus row)]
+                        (cond
+                          (not error) (update acc :ids conj (:id row))
+                          (record-failure! ds row error max-attempts)
+                          (do (log/error "outbox relay: event dead-lettered, skipping it"
+                                         {:id (:id row) :error error})
+                              acc)
+                          :else
+                          (do (log/warn "outbox relay: publish failed, retrying next pass"
+                                        {:id (:id row) :error error})
+                              (reduced (assoc acc :stopped? true))))))
+                    {:ids [] :stopped? false}
+                    rows)]
+        (mark-delivered! ds ids)
+        ;; Only once the backlog is drained.
+        (when (< (count rows) batch-size)
+          (purge-delivered! ds purged-at retain-ms))
+        ;; `pos?` keeps a :batch-size of 0 from spinning.
+        {:delivered (count ids)
+         :more?     (and (pos? batch-size) (= (count rows) batch-size) (not stopped?))}))))
+
 (defn relay-once!
   "Publish up to `:batch-size` pending rows in order and mark them delivered.
    Stops at the first failed publish, so a later event never overtakes an
    earlier one; the failed row is retried next pass. A row dead-lettered
    instead (see `record-failure!`) is skipped and the pass goes on. Does
    nothing while another relay holds the lease. Returns the count delivered."
-  [{:keys [ds bus opts owner purged-at claim-sql]}]
-  (let [{:keys [batch-size retain-ms lease-ms max-attempts]} opts]
-    (if-not (claim-relay! ds claim-sql owner lease-ms)
-      0
-      (let [rows (pending ds batch-size)
-            ids  (reduce (fn [ids row]
-                           (let [{:keys [error]} (publish-row bus row)]
-                             (cond
-                               (not error) (conj ids (:id row))
-                               (record-failure! ds row error max-attempts)
-                               (do (log/error "outbox relay: event dead-lettered, skipping it"
-                                              {:id (:id row) :error error})
-                                   ids)
-                               :else
-                               (do (log/warn "outbox relay: publish failed, retrying next pass"
-                                             {:id (:id row) :error error})
-                                   (reduced ids)))))
-                         []
-                         rows)]
-        (mark-delivered! ds ids)
-        ;; Only once the backlog is drained.
-        (when (< (count rows) batch-size)
-          (purge-delivered! ds purged-at retain-ms))
-        (count ids)))))
+  [outbox]
+  (:delivered (relay-pass! outbox)))
 
 (defn dead-letters
   "Dead-lettered rows, oldest first: `:id`, `:topic`, `:attempts`,
@@ -252,10 +264,9 @@
 
 (defn- relay-tick! [outbox]
   (try
-    ;; A full batch means more may be waiting. `pos?` keeps a :batch-size of 0
-    ;; from spinning.
-    (while (let [n (relay-once! outbox)]
-             (and (pos? n) (= n (get-in outbox [:opts :batch-size])))))
+    ;; Counted by rows read, not delivered: a dead letter in a full batch
+    ;; still means more may be waiting.
+    (while (:more? (relay-pass! outbox)))
     (catch Throwable t
       ;; Caught, or the scheduler cancels every later run.
       (log/error t "outbox relay pass failed"))))

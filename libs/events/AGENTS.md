@@ -148,6 +148,9 @@ in order and marks them delivered; delivered rows are deleted after
   overtake it. An undecodable envelope is dead-lettered on the first try.
   `(outbox/dead-letters outbox)` lists them; `(outbox/requeue! outbox ids)`
   makes them pending again, ahead of anything newer still pending.
+  A bus outage counts too: one pass per `:poll-ms`, so an outage longer than
+  `:max-attempts` × `:poll-ms` dead-letters the rows at the head. Size it for
+  the outages you expect.
 - Relays on several replicas take turns through a lease row
   (`event_outbox_relay`), so one publishes at a time. Keep `:lease-ms` above
   the time one batch takes; `:relay? false` keeps a node out entirely. The
