@@ -19,18 +19,20 @@
              (db-config/config->db-config k settings))))))
 
 (deftest ^:integration settings-reach-a-pooled-connection
-  (let [pg  (epg/start!)
-        cfg (db-config/config->db-config
-             :wagoe/postgresql
-             {:host "localhost" :port (epg/port pg) :dbname "postgres"
-              :user "postgres" :password "postgres"
-              :application-name "bou-658" :statement-timeout-ms 4321
-              :pool {:minimum-idle 1 :maximum-pool-size 2}})
-        ctx (factory/db-context cfg)]
+  (let [pg (epg/start!)]
     (try
-      (with-open [conn (jdbc/get-connection (:datasource ctx))]
-        (is (= "bou-658" (:application_name (jdbc/execute-one! conn ["SHOW application_name"]))))
-        (is (= "4321ms" (:statement_timeout (jdbc/execute-one! conn ["SHOW statement_timeout"])))))
+      (let [ctx (factory/db-context
+                 (db-config/config->db-config
+                  :wagoe/postgresql
+                  {:host "localhost" :port (epg/port pg) :dbname "postgres"
+                   :user "postgres" :password "postgres"
+                   :application-name "bou-658" :statement-timeout-ms 4321
+                   :pool {:minimum-idle 1 :maximum-pool-size 2}}))]
+        (try
+          (with-open [conn (jdbc/get-connection (:datasource ctx))]
+            (is (= "bou-658" (:application_name (jdbc/execute-one! conn ["SHOW application_name"]))))
+            (is (= "4321ms" (:statement_timeout (jdbc/execute-one! conn ["SHOW statement_timeout"])))))
+          (finally
+            (factory/close-db-context! ctx))))
       (finally
-        (factory/close-db-context! ctx)
         (epg/stop! pg)))))

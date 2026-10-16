@@ -234,7 +234,7 @@
    path's conversion, so the two cannot drift apart (BOU-647, BOU-658)."
   [config-key config]
   (let [adapter-type (config-key->adapter-type config-key)]
-    (if (#{:sqlite :postgresql :mysql :h2} adapter-type)
+    (if adapter-type
       (config/db-spec-for-adapter adapter-type config)
       (throw (IllegalArgumentException.
               (str "Unknown adapter type for config key: " config-key))))))

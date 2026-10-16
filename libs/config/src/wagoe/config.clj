@@ -131,54 +131,47 @@
       (throw (ex-info "No active database adapter found in configuration"
                       {:active-keys (keys (:active config))}))))
 
+(defn- assoc-some-from
+  "Copy `ks` from `src` into `m`, skipping nils: a nil `:pool` or
+   `:connection-params` fails the db-config schema at boot."
+  [m src ks]
+  (reduce (fn [m k] (if-some [v (get src k)] (assoc m k v) m)) m ks))
+
 (defn db-spec-for-adapter
   "The adapter-specific half of `db-spec`. Public because the migration
    path's conversion is this one, so the two cannot drift (BOU-647, BOU-658)."
   [adapter adapter-config]
-  (cond->
-   (case adapter
-     :sqlite
-     {:adapter :sqlite
-      :database-path (:db adapter-config)}
+  (let [server {:host (:host adapter-config)
+                :port (:port adapter-config)
+                :name (:dbname adapter-config)
+                :username (:user adapter-config)
+                :password (:password adapter-config)}]
+    (-> (case adapter
+          :sqlite
+          {:adapter :sqlite
+           :database-path (:db adapter-config)}
 
-     :h2
-     {:adapter :h2
-      :database-path (if (:memory adapter-config)
-                       "mem:wagoe;DB_CLOSE_DELAY=-1"
-                       (:db adapter-config))}
+          :h2
+          {:adapter :h2
+           :database-path (if (:memory adapter-config)
+                            "mem:wagoe;DB_CLOSE_DELAY=-1"
+                            (:db adapter-config))}
 
-     :postgresql
-     (cond-> {:adapter :postgresql
-              :host (:host adapter-config)
-              :port (:port adapter-config)
-              :name (:dbname adapter-config)
-              :username (:user adapter-config)
-              :password (:password adapter-config)}
-       (some? (:application-name adapter-config))
-       (assoc :application-name (:application-name adapter-config))
-       (some? (:statement-timeout-ms adapter-config))
-       (assoc :statement-timeout-ms (:statement-timeout-ms adapter-config)))
+          :postgresql
+          (-> (assoc server :adapter :postgresql)
+              (assoc-some-from adapter-config [:application-name :statement-timeout-ms]))
 
-     :mysql
-     (cond-> {:adapter :mysql
-              :host (:host adapter-config)
-              :port (:port adapter-config)
-              :name (:dbname adapter-config)
-              :username (:user adapter-config)
-              :password (:password adapter-config)}
-       ;; A nil here would fail the db-config schema's map? check at boot.
-       (some? (:connection-params adapter-config))
-       (assoc :connection-params (:connection-params adapter-config))
-       ;; Kept when nil: `:sql-mode nil` turns strict mode off.
-       (contains? adapter-config :sql-mode)
-       (assoc :sql-mode (:sql-mode adapter-config)))
+          :mysql
+          (cond-> (-> (assoc server :adapter :mysql)
+                      (assoc-some-from adapter-config [:connection-params]))
+            ;; Kept when nil: `:sql-mode nil` turns strict mode off.
+            (contains? adapter-config :sql-mode)
+            (assoc :sql-mode (:sql-mode adapter-config)))
 
-     (throw (ex-info "Unsupported database adapter"
-                     {:adapter adapter
-                      :supported [:sqlite :h2 :postgresql :mysql]})))
-    ;; Omitted when unset: `:pool nil` fails the db-config schema at boot.
-    (some? (:pool adapter-config))
-    (assoc :pool (:pool adapter-config))))
+          (throw (ex-info "Unsupported database adapter"
+                          {:adapter adapter
+                           :supported [:sqlite :h2 :postgresql :mysql]})))
+        (assoc-some-from adapter-config [:pool]))))
 
 (defn db-spec
   "Extract database specification from config for the active adapter.
