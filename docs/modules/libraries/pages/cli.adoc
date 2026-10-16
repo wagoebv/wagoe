@@ -156,7 +156,9 @@ run changes nothing.
 It follows a table that grows with each deprecation: renamed config keys and
 values (looked up at the top of `config.edn` and under `:active` and
 `:inactive`), renamed namespaces, and renamed functions, through whatever alias
-the file requires them under. A function that is `:refer`'d is reported rather
+the file requires them under. A config value behind an Aero tag has its literal
+default rewritten (`#or [#env X "database"]`); one with no literal, such as
+`#keyword #env X`, is reported. A function that is `:refer`'d is reported rather
 than rewritten. A deprecation that cannot be rewritten mechanically is listed at
 the end with what to do by hand.
 

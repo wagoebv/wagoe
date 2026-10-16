@@ -59,6 +59,42 @@
   [root path f]
   (or (some-> root (path-loc path) f z/root z/of-node) root))
 
+(defn- renamed-literal
+  "What `v` becomes under `renames`, for a keyword or a string naming one."
+  [renames v]
+  (cond (keyword? v) (get renames v)
+        (string? v)  (some-> (get renames (keyword v)) name)))
+
+(defn- map-key? [loc]
+  (and (= :map (some-> loc z/up z/tag))
+       (even? (count (take-while some? (iterate z/left (z/left loc)))))))
+
+(defn- literal-locs
+  "Keyword and string locations inside `sub`, a subzip, map keys excluded.
+   Lazy over a zipper, so walk it before editing."
+  [sub]
+  (->> (iterate z/next sub)
+       (take-while (complement z/end?))
+       (filter #(and (= :token (z/tag %)) (not (map-key? %))
+                     (let [v (sexpr %)] (or (keyword? v) (string? v)))))))
+
+(defn- rename-value
+  "`loc` with its deprecated value renamed, or nil. Inside an Aero tag such as
+   `#or [#env X \"database\"]` the literal default is what gets renamed."
+  [renames loc]
+  (if (= :token (z/tag loc))
+    (some->> (sexpr loc) (renamed-literal renames) (z/replace loc))
+    (let [edited (z/subedit-node
+                  loc (fn [sub]
+                        (loop [l sub]
+                          (cond (z/end? l) l
+                                (and (= :token (z/tag l)) (not (map-key? l)))
+                                (recur (z/next (if-let [new (renamed-literal renames (sexpr l))]
+                                                 (z/replace l new)
+                                                 l)))
+                                :else (recur (z/next l))))))]
+      (when (not= (z/node edited) (z/node loc)) edited))))
+
 (defn- config-edits
   "Each rewrite in `table` as [path f], once per config section."
   [table]
@@ -67,12 +103,29 @@
         edit    (concat
                  (for [[path renames] (:config-value entry)]
                    [(into section path)
-                    #(when-let [new (get renames (sexpr %))] (z/replace % new))])
+                    #(rename-value renames %)])
                  (for [[from to] (:config-key entry)]
                    [(into section (butlast from))
                     #(when-not (key-loc % (last to))
                        (some-> (key-loc % (last from)) (z/replace (last to))))]))]
     edit))
+
+(defn config-notices
+  "A notice for each deprecated config value set only through an Aero tag, such
+   as `#keyword #env JOBS_PROVIDER`: there is no literal to rewrite, and the
+   value the environment supplies may still be an old name."
+  [table text path]
+  (if-let [root (z/of-string text)]
+    (for [section config-sections
+          entry   table
+          [kpath renames] (:config-value entry)
+          :let [loc (path-loc root (into section kpath))]
+          :when (and loc (not= :token (z/tag loc))
+                     (empty? (literal-locs (z/subzip loc))))]
+      (str path ": " (pr-str (into section kpath)) " is set through "
+           (z/string loc) "; make sure it is not "
+           (str/join " or " (map pr-str (sort (keys renames))))))
+    []))
 
 (defn rewrite-config
   "`text` of a config.edn with every config rewrite in `table` applied."
@@ -296,7 +349,9 @@
                           ["src" "test" "dev"]))
         results (concat
                  (for [f configs]
-                   (rewrite-file dir f (fn [old _] {:new (rewrite-config table old)})))
+                   (rewrite-file dir f (fn [old path]
+                                         (let [new (rewrite-config table old)]
+                                           {:new new :notices (vec (config-notices table new path))}))))
                  (for [f sources]
                    (rewrite-file dir f (fn [old path]
                                          (let [{:keys [text notices]} (rewrite-source table old path)]

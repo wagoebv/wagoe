@@ -46,6 +46,22 @@
   (let [both "{:wagoe/search {:old-index \"a\" :index \"b\"}}"]
     (is (= both (upgrade/rewrite-config table both)))))
 
+(deftest ^:unit values-behind-aero-tags
+  (testing "a literal default inside the tag is renamed"
+    (let [cfg "{:wagoe/jobs  {:provider #keyword #or [#env JOBS_PROVIDER \"database\"]}
+ :wagoe/cache {:provider #profile {:dev :in-memory :prod :redis}}}"
+          out (upgrade/rewrite-config table cfg)]
+      (is (= "{:wagoe/jobs  {:provider #keyword #or [#env JOBS_PROVIDER \"db\"]}
+ :wagoe/cache {:provider #profile {:dev :memory :prod :redis}}}"
+             out))
+      (is (empty? (upgrade/config-notices table out "c.edn")))
+      (is (= out (upgrade/rewrite-config table out)))))
+  (testing "a tag with no literal is reported, not skipped"
+    (let [cfg "{:active {:wagoe/jobs {:provider #keyword #env JOBS_PROVIDER}}}"]
+      (is (= cfg (upgrade/rewrite-config table cfg)))
+      (is (= ["c.edn: [:active :wagoe/jobs :provider] is set through #keyword #env JOBS_PROVIDER; make sure it is not :database"]
+             (upgrade/config-notices table cfg "c.edn"))))))
+
 (def ^:private source
   "(ns my.app.jobs
   \"Docstring.\"
