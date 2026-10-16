@@ -184,11 +184,33 @@
 ;; Session Authentication Middleware
 ;; =============================================================================
 
+(defn- session-user
+  "`{:user u :session s}` for the session `token` names, or `{:refusal response}`,
+   the 401 that refuses it."
+  [user-service token request]
+  (try
+    (log/info "Validating session token" {:uri (:uri request)})
+    ;; validate-session refuses a gone or inactive user and hands back the
+    ;; one it read, so there is no second read here (BOU-668).
+    (if-let [{:keys [user] :as session} (ports/validate-session user-service token)]
+      (do
+        (log/info "Session validation successful" {:user-id (:user-id session)})
+        (if user
+          {:user (without-credentials user) :session (dissoc session :user)}
+          {:refusal (create-unauthorized-response "User not found" :user-not-found request)}))
+      (do
+        (log/info "Session invalid or expired" {:uri (:uri request)})
+        {:refusal (create-unauthorized-response "Invalid or expired session" :invalid-session request)}))
+    (catch Exception ex
+      (log/warn ex "Session validation failed" {:uri (:uri request)})
+      {:refusal (create-unauthorized-response "Session validation failed" :session-validation-error request)})))
+
 (defn session-authentication-middleware
   "Middleware that validates session tokens and updates session access time.
    
    Extracts session token, validates it through user service, and adds user
-   information to request. On validation failure, returns 401 response.
+   information to request. On validation failure, returns 401 response. What
+   the handler throws reaches the error mapping, not a 401 (BOU-682).
    
    Args:
      user-service: User service instance for session validation
@@ -199,31 +221,8 @@
   [user-service handler]
   (fn [request]
     (if-let [session-token (extract-session-token request)]
-      ;; Only validation is in the try: what the handler throws reaches the
-      ;; error mapping, not a 401 (BOU-682).
-      (let [{:keys [session refusal]}
-            (try
-              (log/info "Validating session token" {:uri (:uri request)})
-              ;; validate-session refuses a gone or inactive user and hands back the
-              ;; one it read, so there is no second read here (BOU-668).
-              (if-let [{:keys [user] :as session} (ports/validate-session user-service session-token)]
-                (do
-                  (log/info "Session validation successful" {:user-id (:user-id session)})
-                  (if user
-                    {:session session}
-                    {:refusal (create-unauthorized-response "User not found" :user-not-found request)}))
-                ;; Session invalid or expired
-                (do
-                  (log/info "Session invalid or expired" {:uri (:uri request)})
-                  {:refusal (create-unauthorized-response "Invalid or expired session" :invalid-session request)}))
-              (catch Exception ex
-                (log/warn ex "Session validation failed" {:uri (:uri request)})
-                {:refusal (create-unauthorized-response "Session validation failed" :session-validation-error request)}))]
-        (or refusal
-            (handler (assoc request
-                            :user (without-credentials (:user session))
-                            :session (dissoc session :user)
-                            :auth-type :session))))
+      (let [{:keys [user session refusal]} (session-user user-service session-token request)]
+        (or refusal (handler (assoc request :user user :session session :auth-type :session))))
 
       ;; No session token provided
       (do

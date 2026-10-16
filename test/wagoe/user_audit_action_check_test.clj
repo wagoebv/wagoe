@@ -40,21 +40,19 @@
                                                                :action :no-such-action)))
         "and the check still checks")))
 
+(defn- check-widened-and-close [ctx]
+  (try (check-widened ctx) (finally (factory/close-db-context! ctx))))
+
 (deftest ^:integration the-audit-action-check-takes-permanent-delete
   (testing "sqlite"
-    (let [f   (doto (java.io.File/createTempFile "audit-check-" ".db") .deleteOnExit)
-          ctx (factory/db-context (factory/sqlite-config (str f)))]
-      (try (check-widened ctx) (finally (factory/close-db-context! ctx)))))
+    (let [f (doto (java.io.File/createTempFile "audit-check-" ".db") .deleteOnExit)]
+      (check-widened-and-close (factory/db-context (factory/sqlite-config (str f))))))
   (testing "h2"
-    (let [ctx (factory/db-context (factory/h2-config (str "mem:audit_check_" (System/nanoTime) ";DB_CLOSE_DELAY=-1")))]
-      (try (check-widened ctx) (finally (factory/close-db-context! ctx)))))
+    (check-widened-and-close
+     (factory/db-context (factory/h2-config (str "mem:audit_check_" (System/nanoTime) ";DB_CLOSE_DELAY=-1")))))
   (testing "postgresql"
-    (let [pg  (epg/start!)
-          ctx (epg/db-context pg)]
-      (try (check-widened ctx)
-           (finally (factory/close-db-context! ctx) (epg/stop! pg)))))
+    (let [pg (epg/start!)]
+      (try (check-widened-and-close (epg/db-context pg))
+           (finally (epg/stop! pg)))))
   (testing "mysql"
-    (let [up? (try (with-open [c (.getConnection ^javax.sql.DataSource (mysql/server))] (some? c))
-                   (catch Exception _ false))]
-      (is up? "MySQL is not reachable; start it with `bb test:services up`")
-      (when up? (mysql/with-database "audit_check" check-widened)))))
+    (mysql/with-database "audit_check" check-widened)))

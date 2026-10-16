@@ -55,8 +55,13 @@
 
 (def ^:private audit-action-check "chk_user_audit_log_action")
 
-(defn- audit-action-clause []
-  (str "action IN (" (str/join ", " (map #(str "'" (name %) "'") user-schema/audit-actions)) ")"))
+(def ^:private audit-action-check-clause
+  (str "CHECK(action IN (" (str/join ", " (map #(str "'" (name %) "'") user-schema/audit-actions)) "))"))
+
+(defn- takes-every-action?
+  "Whether a CHECK's (or table's) SQL names every `audit-actions` value."
+  [sql]
+  (every? #(str/includes? sql (str "'" (name %) "'")) user-schema/audit-actions))
 
 (defn- audit-action-check-sql
   "The SQL of user_audit_log's action CHECK, or for SQLite of the whole table,
@@ -81,8 +86,8 @@
                    (str/replace-first #"(?i)^CREATE TABLE\s+(IF NOT EXISTS\s+)?\"?user_audit_log\"?"
                                       "CREATE TABLE user_audit_log_new")
                    (str/replace-first #"CHECK\s*\(\s*action IN \([^)]*\)\s*\)"
-                                      (str "CHECK(" (audit-action-clause) ")")))]
-    (if (str/includes? create "'permanent-delete'")
+                                      audit-action-check-clause))]
+    (if (takes-every-action? create)
       (db/with-transaction [tx ctx]
         (db/execute-ddl! tx create)
         (db/execute-ddl! tx "INSERT INTO user_audit_log_new SELECT * FROM user_audit_log")
@@ -99,7 +104,7 @@
   [ctx]
   (let [engine (protocols/engine (:adapter ctx))
         sql    (audit-action-check-sql ctx engine)]
-    (when (and sql (not (str/includes? sql "'permanent-delete'")))
+    (when (and sql (not (takes-every-action? sql)))
       (log/info "Widening user_audit_log's action check" {:engine engine})
       (case engine
         :sqlite     (rebuild-sqlite-audit-log! ctx sql)
@@ -107,11 +112,11 @@
         :postgresql (do (db/with-transaction [tx ctx]
                           (db/execute-ddl! tx (str "ALTER TABLE user_audit_log DROP CONSTRAINT " audit-action-check))
                           (db/execute-ddl! tx (str "ALTER TABLE user_audit_log ADD CONSTRAINT " audit-action-check
-                                                   " CHECK(" (audit-action-clause) ") NOT VALID")))
+                                                   " " audit-action-check-clause " NOT VALID")))
                         (db/execute-ddl! ctx (str "ALTER TABLE user_audit_log VALIDATE CONSTRAINT " audit-action-check)))
         :mysql      (do (db/execute-ddl! ctx (str "ALTER TABLE user_audit_log DROP CHECK " audit-action-check))
                         (db/execute-ddl! ctx (str "ALTER TABLE user_audit_log ADD CONSTRAINT " audit-action-check
-                                                  " CHECK(" (audit-action-clause) ")")))))))
+                                                  " " audit-action-check-clause)))))))
 
 (defn initialize-user-schema!
   "Initialize database schema for user entities using Malli schema definitions.

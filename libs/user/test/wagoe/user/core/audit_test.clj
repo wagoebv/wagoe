@@ -117,24 +117,24 @@
       (is (= 0 (count (get-in entry [:changes :fields]))))
       (is (= 0 (get-in entry [:metadata :field-count]))))
 
-    (testing "Creates audit entry with only some fields changed"
-      (let [old-values {:role :user :name "Name" :active true}
-            new-values {:role :user :name "Name" :active false}
-            entry (audit/update-user-audit-entry
-                   test-actor-id
-                   test-actor-email
-                   test-target-id
-                   test-target-email
-                   old-values
-                   new-values
-                   test-ip
-                   test-user-agent)]
+  (testing "Creates audit entry with only some fields changed"
+    (let [old-values {:role :user :name "Name" :active true}
+          new-values {:role :user :name "Name" :active false}
+          entry (audit/update-user-audit-entry
+                 test-actor-id
+                 test-actor-email
+                 test-target-id
+                 test-target-email
+                 old-values
+                 new-values
+                 test-ip
+                 test-user-agent)]
 
-        (is (= 1 (count (get-in entry [:changes :fields]))))
-        (let [active-change (first (get-in entry [:changes :fields]))]
-          (is (= "active" (:field active-change)))
-          (is (= "true" (:old active-change)))
-          (is (= "false" (:new active-change))))))))
+      (is (= 1 (count (get-in entry [:changes :fields]))))
+      (let [active-change (first (get-in entry [:changes :fields]))]
+        (is (= "active" (:field active-change)))
+        (is (= "true" (:old active-change)))
+        (is (= "false" (:new active-change))))))))
 
 ;; =============================================================================
 ;; Deactivate User Audit Entry Tests
