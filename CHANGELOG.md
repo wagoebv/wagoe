@@ -83,6 +83,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **`:interceptors` and `:skip-interceptors?` on a path or parent route were ignored** (BOU-642); they now apply to its
   methods, like `:public`. A parent's `:skip-interceptors?` now drops CSRF and rate limiting from its children; check them.
+- **A typed `ex-info` thrown from route `:middleware` answered 500** (BOU-659); it now answers its `:type`'s status.
+  Upgrade if your route middleware throws typed errors.
 - **MySQL timestamps read back without a zone, so APIs sent UTC as local time** (BOU-653).
   Upgrade if you run on MySQL.
 - **MySQL lost workflow timestamps and admin UUID types; PostgreSQL refused full-text search** (BOU-652).
