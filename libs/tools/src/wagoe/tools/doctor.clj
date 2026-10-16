@@ -532,9 +532,7 @@
       (let [parsed       (parse-config-minimal config-text)
             active       (or (:active parsed) {})
             active-text  (extract-active-section config-text)
-            src-text     (load-app-source-text)
-            dev-admin    (or (list-admin-files "dev") [])
-            test-admin   (or (list-admin-files "test") [])]
+            src-text     (load-app-source-text)]
         (concat
          (check-config-loadable parsed)
          (check-env-refs active-text env-map (optional-env-refs active))
@@ -543,7 +541,8 @@
          ;; It compares dev with test, so it says nothing about another
          ;; profile and named the wrong two under --env prod (BOU-597).
          (when (#{"dev" "test"} env)
-           (check-admin-parity dev-admin test-admin))
+           (check-admin-parity (or (list-admin-files "dev") [])
+                               (or (list-admin-files "test") [])))
          (check-prod-placeholders config-text env)
          (check-reset-endpoint-flag (or parsed {}) env)
          (check-upgrade-wiring src-text))))))

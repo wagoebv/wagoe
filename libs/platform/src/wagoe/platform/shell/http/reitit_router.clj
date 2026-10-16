@@ -207,9 +207,11 @@
                        {:correlation-id cid}))))
 
 (defn- server-error-response
-  "A 500 that says nothing. What went wrong goes to the log."
-  []
-  (errors/response 500 :internal-error "Internal Server Error"))
+  "A 500 that says nothing but the correlation id. What went wrong goes to the
+   log, under that id (BOU-592)."
+  [correlation-id]
+  (errors/response 500 :internal-error "Internal Server Error"
+                   {:correlation-id correlation-id}))
 
 (defn- typed-error-response
   "The response the interceptor stack gives a typed ex-info, for one thrown
@@ -240,17 +242,19 @@
    here by that same stack's error handler (BOU-659)."
   [config]
   (let [system (or (:system config) {})
-        log-error (fn [e request msg]
-                    ;; Not the throwable: reitit puts the whole Ring request in
-                    ;; the ex-data of a coercion failure — headers, cookies,
-                    ;; the match tree — and logging it writes the Authorization
-                    ;; header of the caller into the log on every occurrence.
-                    (log/error msg
-                               {:uri            (:uri request)
-                                :method         (some-> (:request-method request) name)
-                                :correlation-id (get-in request [:headers "x-correlation-id"])
-                                :exception      (some-> ^Throwable e class .getName)
-                                :message        (ex-message e)}))]
+        fail (fn [e request msg]
+               (let [cid (access/correlation-id request (str (random-uuid)))]
+                 ;; Not the throwable: reitit puts the whole Ring request in
+                 ;; the ex-data of a coercion failure — headers, cookies,
+                 ;; the match tree — and logging it writes the Authorization
+                 ;; header of the caller into the log on every occurrence.
+                 (log/error msg
+                            {:uri            (:uri request)
+                             :method         (some-> (:request-method request) name)
+                             :correlation-id cid
+                             :exception      (some-> ^Throwable e class .getName)
+                             :message        (ex-message e)})
+                 (server-error-response cid)))]
     (exception/create-exception-middleware
      (merge
       exception/default-handlers
@@ -265,15 +269,13 @@
        ;; in the request: generic 500, details in the log only.
        :reitit.coercion/response-coercion
        (fn [e request]
-         (log-error e request "Response coercion failed")
-         (server-error-response))
+         (fail e request "Response coercion failed"))
 
        ::exception/default
        (fn [e request]
          (if (:type (ex-data e))
            (typed-error-response system e request)
-           (do (log-error e request "Unhandled exception at the HTTP boundary")
-               (server-error-response))))}))))
+           (fail e request "Unhandled exception at the HTTP boundary")))}))))
 
 (def ^:private require-authentication
   "Refuses a request without a `:user`, unless the endpoint is `:public true`.
