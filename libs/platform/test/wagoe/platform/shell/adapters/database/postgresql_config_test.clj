@@ -6,7 +6,9 @@
             [support.embedded-pg :as epg]
             [wagoe.config :as config]
             [wagoe.platform.shell.adapters.database.config :as db-config]
-            [wagoe.platform.shell.adapters.database.factory :as factory]))
+            [wagoe.platform.ports.database :as ports]
+            [wagoe.platform.shell.adapters.database.factory :as factory]
+            [wagoe.platform.shell.adapters.database.postgresql.connection :as pg-conn]))
 
 (deftest ^:unit boot-and-migrate-convert-every-adapter-alike
   (doseq [[k settings] {:wagoe/sqlite     {:db "app.db"}
@@ -17,6 +19,17 @@
     (testing (name k)
       (is (= (config/db-spec {:active {k settings}})
              (db-config/config->db-config k settings))))))
+
+(deftest ^:unit an-application-name-cannot-inject-url-params
+  (let [url (pg-conn/build-jdbc-url {:host "db" :port 5432 :name "app"
+                                     :application-name "a&ssl=true"})]
+    (is (re-find #"ApplicationName=a%26ssl%3Dtrue&" url))))
+
+(deftest ^:unit a-string-timeout-is-refused-at-validation
+  ;; `#env` without `#long` yields a string; it would otherwise fail in `pos?`.
+  (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Invalid database configuration"
+                        (ports/validate-db-config {:adapter :postgresql :host "db" :port 5432 :name "app"
+                                                   :statement-timeout-ms "5000"}))))
 
 (deftest ^:integration settings-reach-a-pooled-connection
   (let [pg (epg/start!)]

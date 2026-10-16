@@ -231,7 +231,8 @@
 
 (defn config->db-config
   "Convert a configuration entry to a database adapter config: the boot
-   path's conversion, so the two cannot drift apart (BOU-647, BOU-658)."
+   path's conversion minus `:migrate-on-start?`, so the two cannot drift
+   apart (BOU-647, BOU-658)."
   [config-key config]
   (let [adapter-type (config-key->adapter-type config-key)]
     (if adapter-type

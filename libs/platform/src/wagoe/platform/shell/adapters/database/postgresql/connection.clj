@@ -1,5 +1,6 @@
 (ns wagoe.platform.shell.adapters.database.postgresql.connection
-  "PostgreSQL connection settings and JDBC URL.")
+  "PostgreSQL connection settings and JDBC URL."
+  (:import [java.net URLEncoder]))
 
 (def ^:private default-application-name
   "Default application name for PostgreSQL connections."
@@ -29,7 +30,8 @@
                   (pos? timeout) (str "%20-c%20statement_timeout=" timeout))]
     (str "jdbc:postgresql://" host ":" port "/" name
          "?stringtype=unspecified"
-         "&ApplicationName=" (or application-name default-application-name)
+         ;; Encoded: pgjdbc URL-decodes the value, and splits on `&`.
+         "&ApplicationName=" (URLEncoder/encode ^String (or application-name default-application-name) "UTF-8")
          "&reWriteBatchedInserts=true"
          "&logServerErrorDetail=false"
          "&options=" options)))

@@ -141,11 +141,12 @@
   "The adapter-specific half of `db-spec`. Public because the migration
    path's conversion is this one, so the two cannot drift (BOU-647, BOU-658)."
   [adapter adapter-config]
-  (let [server {:host (:host adapter-config)
-                :port (:port adapter-config)
-                :name (:dbname adapter-config)
-                :username (:user adapter-config)
-                :password (:password adapter-config)}]
+  (let [server #(hash-map :adapter %
+                          :host (:host adapter-config)
+                          :port (:port adapter-config)
+                          :name (:dbname adapter-config)
+                          :username (:user adapter-config)
+                          :password (:password adapter-config))]
     (-> (case adapter
           :sqlite
           {:adapter :sqlite
@@ -158,11 +159,11 @@
                             (:db adapter-config))}
 
           :postgresql
-          (-> (assoc server :adapter :postgresql)
+          (-> (server :postgresql)
               (assoc-some-from adapter-config [:application-name :statement-timeout-ms]))
 
           :mysql
-          (cond-> (-> (assoc server :adapter :mysql)
+          (cond-> (-> (server :mysql)
                       (assoc-some-from adapter-config [:connection-params]))
             ;; Kept when nil: `:sql-mode nil` turns strict mode off.
             (contains? adapter-config :sql-mode)
