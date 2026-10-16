@@ -98,6 +98,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **A scaffolded field's `default=` was unreachable from the wizards and `bb scaffold ai`, and stayed required on create**
+  (BOU-537). Both now take a default; a defaulted field is optional in the generated Create request.
+- **`wagoe.ai.core.parsing/module-spec->cli-args` rendered only the first entity** (BOU-541). Removed; nothing called it.
+  `bb scaffold ai` builds one command per entity.
 - **A session request wrote `last_accessed_at` twice, and a database error during sign-in lookup answered 401** (BOU-666).
   The access time is now written at most once a minute; a lookup failure is a 500.
 - **Two admins demoting each other at once could leave none; an admin bulk delete of users could stop halfway** (BOU-673).

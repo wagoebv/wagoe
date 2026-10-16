@@ -176,29 +176,15 @@
                 "{\"module-name\": \"p\", \"entity\": \"P\", \"fields\": [{\"name\": \"x\", \"type\": \"string\"}]}")]
     (is (= [{:name "P" :fields (:fields result)}] (:entities result)))))
 
-(deftest ^:unit module-spec->cli-args-test
-  (testing "generates correct CLI args for generate command"
-    (let [spec {:module-name "product"
-                :entity      "Product"
-                :fields      [{:name "price" :type "decimal" :required true :unique false}]
-                :http        true
-                :web         true}
-          args (parsing/module-spec->cli-args spec)]
-      (is (= "generate" (first args)))
-      (is (some #{"product"} args))
-      (is (some #{"Product"} args))
-      (is (some #{"--field"} args))
-      (is (some #(str/includes? % "price") args))))
-
-  (testing "adds --no-http when http is false"
-    (let [spec {:module-name "p" :entity "P" :fields [] :http false :web true}
-          args (parsing/module-spec->cli-args spec)]
-      (is (some #{"--no-http"} args))))
-
-  (testing "adds --no-web when web is false"
-    (let [spec {:module-name "p" :entity "P" :fields [] :http true :web false}
-          args (parsing/module-spec->cli-args spec)]
-      (is (some #{"--no-web"} args)))))
+(deftest ^:unit a-default-reaches-the-field-spec
+  ;; BOU-537: dropped here, so `bb scaffold ai` could not set one.
+  (let [spec (fn [field] (-> (str "{\"module-name\": \"p\", \"entity\": \"P\", \"fields\": [" field "]}")
+                             parsing/parse-module-spec :fields first))]
+    (is (= "draft" (:default (spec "{\"name\": \"s\", \"type\": \"enum\", \"enum-values\": [\"draft\"], \"default\": \"draft\"}"))))
+    (is (= "1" (:default (spec "{\"name\": \"q\", \"type\": \"int\", \"default\": 1}"))))
+    (is (= "false" (:default (spec "{\"name\": \"b\", \"type\": \"boolean\", \"default\": false}"))))
+    (is (not (contains? (spec "{\"name\": \"x\", \"type\": \"string\"}") :default)))
+    (is (not (contains? (spec "{\"name\": \"x\", \"type\": \"json\", \"default\": {}}") :default)))))
 
 (deftest ^:unit normalise-setup-spec-test
   ;; `parse-json-response` keywordizes, and the setup CLI read string keys, so
@@ -580,14 +566,11 @@
   ;; and it was coerced to string.
   (let [json   "{\"module-name\": \"p\", \"entity\": \"P\", \"fields\": [{\"name\": \"at\", \"type\": \"datetime\"}, {\"name\": \"on\", \"type\": \"date\"}]}"
         fields (:fields (parsing/parse-module-spec json))]
-    (is (= ["datetime" "date"] (mapv :type fields)))
-    (is (some #{"at:datetime:required"} (parsing/module-spec->cli-args (parsing/parse-module-spec json))))))
+    (is (= ["datetime" "date"] (mapv :type fields)))))
 
 (deftest ^:unit public-api-reaches-the-scaffolder
   ;; Generated API routes require a signed-in user; the spec can open them.
   (let [spec (fn [extra] (parsing/parse-module-spec
                           (str "{\"module-name\": \"p\", \"entity\": \"P\", \"fields\": []" extra "}")))]
     (is (false? (:public-api (spec ""))))
-    (is (not-any? #{"--public-api"} (parsing/module-spec->cli-args (spec ""))))
-    (is (true? (:public-api (spec ", \"public-api\": true"))))
-    (is (some #{"--public-api"} (parsing/module-spec->cli-args (spec ", \"public-api\": true"))))))
+    (is (true? (:public-api (spec ", \"public-api\": true"))))))

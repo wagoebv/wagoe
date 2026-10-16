@@ -124,6 +124,13 @@
         (vec values)
         (do (println (red "  An enum needs at least one value")) (recur))))))
 
+(defn prompt-default
+  "The column default, or nil when left blank. The scaffolder checks it
+   against the type."
+  [indent]
+  (let [s (prompt (str indent "Default (blank for none)"))]
+    (when-not (str/blank? s) s)))
+
 (defn select-from-menu
   "Print a numbered menu of items and return the chosen item. Loops on invalid input."
   [items]
@@ -148,14 +155,21 @@
 ;; Command building
 ;; =============================================================================
 
+(defn- default->modifier
+  "`default=v`, quoted when `v` holds a colon the spec would split on."
+  [v]
+  (let [s (str v)]
+    (if (str/includes? s ":") (str "default='" s "'") (str "default=" s))))
+
 (defn field->spec
-  "Convert a field map to CLI spec: name:type[:values=a,b,c][:required][:unique]"
-  [{:keys [name type required unique enum-values]}]
+  "Convert a field map to CLI spec: name:type[:values=a,b,c][:required][:unique][:default=v]"
+  [{:keys [name type required unique enum-values default]}]
   (str/join ":" (filter some? [name type
                                (when (seq enum-values)
                                  (str "values=" (str/join "," enum-values)))
                                (when required "required")
-                               (when unique "unique")])))
+                               (when unique "unique")
+                               (when (some? default) (default->modifier default))])))
 
 (defn workflow->spec
   "{:field \"status\" :states [\"entered\" \"paid\"]} as --workflow takes it."
@@ -444,8 +458,9 @@
     (println (str (cyan "│") " Fields:  " (yellow "(none \u2014 scaffolder requires at least one)")))
     (do
       (println (str (cyan "│") " Fields:"))
-      (doseq [{:keys [name type required unique]} fields]
-        (let [mods (->> [(when required "required") (when unique "unique")]
+      (doseq [{:keys [name type required unique default]} fields]
+        (let [mods (->> [(when required "required") (when unique "unique")
+                         (when (some? default) (str "default " default))]
                         (filter some?)
                         (str/join ", "))
               mods-str (if (seq mods) (str " (" mods ")") "")]
@@ -521,11 +536,13 @@
                          (let [ftype    (select-from-menu field-types)
                                values   (when (= "enum" ftype) (prompt-enum-values))
                                required (confirm "  Required?" true)
-                               unique   (confirm "  Unique?" false)]
+                               unique   (confirm "  Unique?" false)
+                               default  (prompt-default "  ")]
                            (println)
                            (recur (conj acc (cond-> {:name fname :type ftype
                                                      :required required :unique unique}
-                                              (seq values) (assoc :enum-values values))))))))))
+                                              (seq values) (assoc :enum-values values)
+                                              default      (assoc :default default))))))))))
 
         _ (display-generate-summary module entity fields http web)
 
@@ -593,6 +610,7 @@
         values   (when (= "enum" ftype) (prompt-enum-values))
         required (confirm "Required?" true)
         unique   (confirm "Unique?" false)
+        default  (prompt-default "")
         dry-run  (confirm "Dry run?" false)
 
         args (cond-> ["field" "--module-name" module "--entity" entity
@@ -600,6 +618,7 @@
                (seq values) (conj "--enum-values" (str/join "," values))
                required (conj "--required")
                unique   (conj "--unique")
+               default  (conj "--default" default)
                dry-run  (conj "--dry-run"))]
 
     (println)

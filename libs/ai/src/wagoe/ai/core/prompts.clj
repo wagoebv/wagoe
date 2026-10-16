@@ -53,7 +53,7 @@ Output ONLY valid JSON with this exact structure:
   \"entities\": [
     {\"name\": \"PascalCaseName\",
      \"fields\": [
-       {\"name\": \"field-name\", \"type\": \"string|text|int|decimal|boolean|email|uuid|enum|date|datetime|json\", \"required\": true|false, \"unique\": false, \"enum-values\": [\"draft\", \"sent\"]}
+       {\"name\": \"field-name\", \"type\": \"string|text|int|decimal|boolean|email|uuid|enum|date|datetime|json\", \"required\": true|false, \"unique\": false, \"enum-values\": [\"draft\", \"sent\"], \"default\": \"draft\"}
      ]},
     {\"name\": \"ChildName\", \"belongs-to\": \"PascalCaseName\", \"min\": 1, \"fields\": [...],
      \"workflow\": {\"field\": \"status\", \"states\": [\"first\", \"second\"]}}
@@ -84,6 +84,7 @@ Rules:
 - valid field types: string, text, int, decimal, boolean, email, uuid, enum, date, datetime, json
 - date is a calendar day (a due date, a birthday); datetime is a moment in time (when something happened or is scheduled)
 - an \"enum\" field MUST also carry \"enum-values\": a non-empty array of kebab-case strings
+- a field the description gives a default (status starts as draft, quantity defaults to 1) carries \"default\": that value, for an enum one of its enum-values. Leave default out otherwise
 - a status the description walks through in order (an invoice entered, then delivered, then paid) is a \"workflow\" on its entity, not an enum field: {\"field\": \"status\", \"states\": [\"entered\", \"delivered\", \"paid\"]}, states in order, kebab-case, at least two. Leave workflow out otherwise
 - default required=true, unique=false unless stated otherwise
 - default http=true, web=true unless stated otherwise

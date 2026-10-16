@@ -91,7 +91,7 @@
         field-schemas (str/join "\n" (map generate-field-schema fields))
         ;; A workflow's status is set by its transitions, never by a request.
         requested (remove :workflow-state? fields)
-        request-schemas (str/join "\n" (map generate-field-schema requested))
+        request-schemas (str/join "\n" (map #(generate-field-schema % (:field-default? %)) requested))
         ;; Every field optional, whatever it is on the entity. An update
         ;; request is a partial: one required field in this schema means every
         ;; caller doing a partial update has to send it. The same
@@ -2433,6 +2433,16 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s%s%s;%s"
        (format "[%s %s]" field-name malli-type)
        (format "[%s {:optional true} %s]" field-name malli-type)))))
 
+(defn schema-entry-for
+  "The entry `field` takes in `schema-name`: optional in the Update request,
+   and in the Create request when its column has a default (BOU-537).
+
+   Pure: true"
+  [field entity schema-name]
+  (schema-field-entry field (or (= schema-name (str "Update" entity "Request"))
+                                (and (= schema-name (str "Create" entity "Request"))
+                                     (some? (:default field))))))
+
 (defn- schema-map-zloc
   "Zipper at the `[:map …]` vector inside `(def schema-name …)`, or nil.
 
@@ -2560,7 +2570,7 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s%s%s;%s"
   [child]
   (let [fk     (str (:belongs-to child) "-id")
         fields (remove #(or (:workflow-state? %) (= fk (:field-name-kebab %))) (:fields child))
-        item   (str "[:map " (str/join " " (map #(str/trim (generate-field-schema %)) fields)) "]")]
+        item   (str "[:map " (str/join " " (map #(str/trim (generate-field-schema % (:field-default? %))) fields)) "]")]
     (if-let [n (:min child)]
       (str "[:" (:entity-plural child) " [:vector {:min " n " :max " max-children "} " item "]]")
       (str "[:" (:entity-plural child) " {:optional true} [:vector {:max " max-children "} " item "]]"))))
@@ -2632,7 +2642,7 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s%s%s;%s"
           k     (entry-key-of entry)]
       (if (existing-entry item k)
         {:status :present :parent parent}
-        (let [created (append-to-item item entry)
+        (let [created (append-to-item item (schema-field-entry field (some? (:default field))))
               shown   (children-item-zloc created parent plural)]
           {:status  :inserted
            :parent  parent
@@ -2786,7 +2796,7 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s%s%s;%s"
         ;; an update is a partial, so a required entry there breaks every
         ;; caller that was sending a subset. Applying one entry to all three
         ;; schemas made `--required` mandatory on update.
-        entry-for     #(schema-field-entry field (= % update-schema))
+        entry-for     #(schema-entry-for field entity %)
         targets       [entity (str "Create" entity "Request") update-schema]
         ;; An entry that is present but not optional, in the update request
         ;; only. Scoped that narrowly on purpose: a project generated before
