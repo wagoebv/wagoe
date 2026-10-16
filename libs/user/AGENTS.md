@@ -139,8 +139,8 @@ The `*audit-context*` dynamic var carries per-request audit metadata (actor, IP,
 (user-service/with-audit-context
   {:actor-id    (get-in request [:session :user :id])
    :actor-email (get-in request [:session :user :email])
-   :ip-address  (get-in request [:headers "x-forwarded-for"]
-                        (:remote-addr request))
+   ;; Not the raw X-Forwarded-For header: the client writes it.
+   :ip-address  (wagoe.platform.core.http.client-ip/request-ip request)
    :user-agent  (get-in request [:headers "user-agent"])}
   (fn []
     ;; All service calls within f see the bound context

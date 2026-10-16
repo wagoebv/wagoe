@@ -380,7 +380,16 @@ client is evicted to make room. So even a sustained stream of fresh client ids
 (rotating API keys, many remote addresses) cannot grow the state map past the cap
 on a long-running node.
 
-Client identity is resolved as user id → `x-api-key` header → remote address.
+Client identity is resolved as user id → `x-api-key` header → client IP.
+
+### Client IP
+
+`wrap-client-ip`, outermost in the handler, sets `:client-ip` on every request.
+Read it through `wagoe.platform.core.http.client-ip/request-ip`, never
+`:remote-addr` or `X-Forwarded-For` directly. `X-Forwarded-For` is honoured only
+when the peer is in `:wagoe/http :trusted-proxies` (CIDRs, default empty); the
+client is then the right-most hop that is not a trusted proxy. An invalid CIDR
+fails the boot.
 
 ### Explicit / per-route form
 
