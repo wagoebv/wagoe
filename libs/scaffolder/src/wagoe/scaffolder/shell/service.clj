@@ -624,13 +624,14 @@
                                 " from a newly generated module."))
             ;; Written as a keyword, an enum value is a column name to HoneySQL,
             ;; and read back it stays a string unless it is in enum-fields.
-            enum-source (when (and (= :enum (:type field)) (.isFile persistence))
+            enum?       (= :enum (:type field))
+            enum-source (when (and enum? (.isFile persistence))
                           (slurp persistence))
             enum-added  (some-> enum-source (generators/add-enum-field-to-persistence field))
             enum-edits  (when (and enum-added (not= enum-added enum-source))
                           [{:file persistence :content enum-added
                             :note (str "added :" (name (:name field)) " to enum-fields")}])
-            enum-step (when (and (= :enum (:type field)) (nil? enum-added))
+            enum-step (when (and enum? (nil? enum-added))
                         (str "Add :" (name (:name field)) " to enum-fields in " (.getPath persistence)
                              ", copied with ->row and ->entity from a newly generated module"
                              ", or storing it fails"))

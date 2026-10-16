@@ -2762,12 +2762,8 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s%s%s;%s"
        (= '[def enum-fields] (vec (take 2 (child-sexprs (z/up loc)))))))
 
 (defn add-enum-field-to-persistence
-  "`source`, a persistence namespace generate wrote, with `field` in its
-   enum-fields set, so the repository reads the stored string back as a
-   keyword (BOU-656). The source unchanged when the field is there already,
-   nil when it has no enum-fields set.
-
-   Pure: true"
+  "`source` with `field` in its enum-fields set (BOU-656), or nil when it has
+   no such set."
   [source field]
   (when-let [loc (first-loc source enum-fields-set?)]
     (let [k (keyword (:field-name-kebab (template/build-field-context field)))]
