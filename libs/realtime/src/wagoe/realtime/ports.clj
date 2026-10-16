@@ -180,7 +180,8 @@
       topics     - topic names, already authorised by the caller
 
     Returns:
-      Connection ID (UUID). `disconnect` removes it and its subscriptions."))
+      The connection's own `connection-id`. `disconnect` removes it and its
+      subscriptions."))
 
 ;; =============================================================================
 ;; Connection Registry Ports

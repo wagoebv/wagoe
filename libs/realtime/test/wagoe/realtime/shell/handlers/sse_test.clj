@@ -119,6 +119,20 @@
     (is (empty? (ports/get-topic-subscribers pubsub "order:1")))
     (is (empty? (ports/get-topic-subscribers pubsub "order:2")))))
 
+(deftest ^:integration past-max-streams-answers-503
+  (let [{:keys [service]} (system)
+        opts    [:authorize-topic allow-orders :heartbeat-ms 20 :max-streams 1]
+        handler (apply sse/sse-handler service opts)
+        req     (request {"topic" "order:1"})
+        resp    (handler req)
+        client  (client-stream)
+        done    (future (ring-protocols/write-body-to-stream (:body resp) resp (:out client)))]
+    (is (= 200 (:status resp)))
+    (is (= 503 (:status (handler req))))
+    (reset! (:broken? client) true)
+    (is (not= ::timeout (deref done 2000 ::timeout)))
+    (is (= 200 (:status (handler req))) "a closed stream frees its slot")))
+
 (deftest ^:unit a-client-that-stops-reading-is-dropped
   (let [conn (sse-adapter/create-sse-connection (random-uuid) nil :queue-size 1)]
     (ports/send-message conn {:type :fragment :fragment "a"})

@@ -1,7 +1,8 @@
 (ns wagoe.realtime.core.sse
   "Pure pieces of the server-sent events bridge: the wire format, the identity
    a session user maps to, and the decision on which topics a stream may open."
-  (:require [clojure.string :as str]))
+  (:require [clojure.string :as str]
+            [wagoe.realtime.schema :as schema]))
 
 (def heartbeat
   "An SSE comment line. Browsers ignore it; it keeps proxies from timing the
@@ -44,16 +45,14 @@
           :else           [])))
 
 (defn subscription-decision
-  "Decide whether `topics` may be streamed. `allowed?` answers per topic;
-   `valid?` is the topic schema.
-
+  "Decide whether `topics` may be streamed; `allowed?` answers per topic.
    Returns {:ok topics} or {:error {:type ... :message ...}}."
-  [topics valid? allowed?]
+  [topics allowed?]
   (cond
     (empty? topics)
     {:error {:type :validation-error :message "At least one topic is required"}}
 
-    (not-every? valid? topics)
+    (not-every? schema/valid-topic? topics)
     {:error {:type :validation-error :message "Invalid topic name"}}
 
     (not-every? allowed? topics)

@@ -41,6 +41,18 @@
     message
     (assoc message :timestamp (current-timestamp))))
 
+(defn- register-connection!
+  "Register `ws-connection` for an already authenticated user; returns its id."
+  [connection-registry connection-id {:keys [user-id roles email]} ws-connection]
+  (let [now (current-timestamp)]
+    (ports/register connection-registry connection-id
+                    (conn/create-connection user-id roles {:email email :connected-at now}
+                                            connection-id now)
+                    ws-connection)
+    (log/info "Realtime connection established"
+              {:connection-id connection-id :user-id user-id :email email :roles roles})
+    connection-id))
+
 ;; =============================================================================
 ;; Realtime Service (Shell Layer)
 ;; =============================================================================
@@ -58,32 +70,9 @@
                           {:type :unauthorized
                            :message "WebSocket connection requires 'token' query parameter"})))
 
-        ;; 2. Verify JWT token via the injected verifier
-        (let [claims (ports/verify-jwt jwt-verifier token)
-              now (current-timestamp)
-              connection-id (java.util.UUID/randomUUID)
-
-              ;; 3. Create connection record (pure core function)
-              connection (conn/create-connection
-                          (:user-id claims)
-                          (:roles claims)
-                          {:email (:email claims)
-                           :connected-at now}
-                          connection-id
-                          now)]
-
-          ;; 4. Register connection in registry (I/O - stateful atom)
-          (ports/register connection-registry connection-id connection ws-connection)
-
-          ;; 5. Log connection event
-          (log/info "WebSocket connection established"
-                    {:connection-id connection-id
-                     :user-id (:user-id claims)
-                     :email (:email claims)
-                     :roles (:roles claims)})
-
-          ;; Return connection ID
-          connection-id))
+        ;; 2. Verify JWT token via the injected verifier, then register
+        (register-connection! connection-registry (java.util.UUID/randomUUID)
+                              (ports/verify-jwt jwt-verifier token) ws-connection))
       (catch clojure.lang.ExceptionInfo e
         ;; Re-throw with proper logging
         (log/warn "WebSocket connection failed"
@@ -139,26 +128,19 @@
   (publish-to-topic [_this topic message]
     (ports/publish bus (bus/topic-envelope topic (stamp message))))
 
-  (connect-identified [_this connection {:keys [user-id roles email]} topics]
+  (connect-identified [this connection identity topics]
     (when (and (seq topics) (nil? pubsub-manager))
       (throw (ex-info "Topic subscriptions need a pub/sub manager"
                       {:type :internal-error :topics topics})))
-    (let [now           (current-timestamp)
-          connection-id (java.util.UUID/randomUUID)
-          record        (conn/create-connection user-id roles
-                                                {:email email :connected-at now}
-                                                connection-id now)]
-      (ports/register connection-registry connection-id record connection)
+    (let [connection-id (register-connection! connection-registry (ports/connection-id connection)
+                                              identity connection)]
       (try
         (doseq [topic topics]
           (ports/subscribe-to-topic pubsub-manager connection-id topic))
         (catch Exception e
           ;; A half-subscribed connection would linger in the registry.
-          (ports/unsubscribe-from-all-topics pubsub-manager connection-id)
-          (ports/unregister connection-registry connection-id)
+          (ports/disconnect this connection-id)
           (throw e)))
-      (log/info "Realtime connection established"
-                {:connection-id connection-id :user-id user-id :topics topics})
       connection-id)))
 
 ;; =============================================================================

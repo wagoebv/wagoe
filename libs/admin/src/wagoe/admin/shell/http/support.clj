@@ -419,11 +419,9 @@
    (htmx-fragment-response request html nil))
   ([request html oob-fragments]
    (let [t (t-fn request)]
-     (-> (->> (cons html (map htmx/oob oob-fragments))
-              (map #(i18n/render % t))
-              (apply str)
-              ring-response/response)
-         (ring-response/content-type "text/html; charset=utf-8")
+     (-> (html-response request (->> (cons html (map htmx/oob oob-fragments))
+                                     (map #(i18n/render % t))
+                                     (apply str)))
          (ring-response/header "HX-Trigger" "entityListUpdated")))))
 
 (defn create-config-error-response

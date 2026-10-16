@@ -1,7 +1,7 @@
 (ns wagoe.realtime.shell.adapters.sse-adapter
   "A server-sent events connection, registered like a WebSocket so the bus
-   delivers to it. `send-message` formats the event and queues it; the
-   streaming response body drains the queue."
+   delivers to it. `send-message` queues the message; the streaming response
+   body drains and renders it on its own thread, off the bus."
   (:require [wagoe.realtime.ports :as ports]
             [wagoe.realtime.core.sse :as sse]
             [wagoe.i18n.shell.render :as i18n]
@@ -23,15 +23,10 @@
   ports/IWebSocketConnection
 
   (send-message [_this message]
-    (when @open-state
-      (try
-        (when-not (.offer queue (event-text t-fn message))
-          ;; A client that stops reading must not grow the heap.
-          (log/warn "SSE client too slow; closing" {:connection-id connection-id})
-          (reset! open-state false)
-          (.offer queue closed))
-        (catch Exception e
-          (log/warn e "Failed to render SSE event" {:connection-id connection-id}))))
+    (when (and @open-state (not (.offer queue message)))
+      ;; A client that stops reading must not grow the heap.
+      (log/warn "SSE client too slow; closing" {:connection-id connection-id})
+      (reset! open-state false))
     nil)
 
   (close [_this]
@@ -45,15 +40,24 @@
 
 (defn create-sse-connection
   "`t-fn` translates [:t ...] markers in pushed fragments; nil renders keys."
-  [connection-id t-fn & {:keys [queue-size] :or {queue-size 256}}]
-  (->SseConnection connection-id (LinkedBlockingQueue. (int queue-size)) (atom true) t-fn))
+  [connection-id t-fn & {:keys [queue-size]}]
+  (->SseConnection connection-id (LinkedBlockingQueue. (int (or queue-size 256))) (atom true) t-fn))
 
 (defn next-event
-  "The next queued event text, nil after `timeout-ms` with nothing queued, or
-   ::closed once the connection is closed."
-  [{:keys [^BlockingQueue queue open-state]} timeout-ms]
-  (if @open-state
-    (.poll queue (long timeout-ms) TimeUnit/MILLISECONDS)
-    closed))
+  "The next queued event as SSE text, nil after `timeout-ms` with nothing
+   queued (or when it fails to render), or ::closed once the connection is closed."
+  [{:keys [connection-id ^BlockingQueue queue open-state t-fn]} timeout-ms]
+  (if-not @open-state
+    closed
+    (let [message (.poll queue (long timeout-ms) TimeUnit/MILLISECONDS)]
+      (cond
+        (nil? message)          nil
+        (= closed message)      closed
+        :else
+        (try
+          (event-text t-fn message)
+          (catch Exception e
+            (log/warn e "Failed to render SSE event" {:connection-id connection-id})
+            nil))))))
 
 (defn closed? [x] (= closed x))

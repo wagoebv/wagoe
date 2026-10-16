@@ -100,6 +100,7 @@ without it every topic is refused.
 
 Each open stream holds one server thread for as long as the page is open, and
 writes a heartbeat every 15 seconds; a closed tab is cleaned up at the next one.
+Past `:max-streams` (default 32, under Jetty's 50 threads) the handler answers 503.
 
 == Integrant configuration
 
