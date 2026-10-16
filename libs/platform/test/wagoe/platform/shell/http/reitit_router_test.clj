@@ -478,9 +478,9 @@
                                          {:system system}))
         details (fn [system]
                   (get-in (json/parse-string
-                             (slurp (:body ((handler system) {:request-method :post :uri "/users"
-                                                              :headers {} :body-params {}})))
-                             true)
+                           (slurp (:body ((handler system) {:request-method :post :uri "/users"
+                                                            :headers {} :body-params {}})))
+                           true)
                           [:error :details]))]
     (is (= {:role ["missing required key"]}
            (details {:error-enricher (constantly {:code "WGE-201"}) :environment "dev"})))
@@ -1136,3 +1136,20 @@
     (testing "nil lifts a limit rather than falling back to the default"
       (is (= {:max-file-size nil :max-file-count 1}
              (:details (error-body (post {:max-file-size nil :max-file-count 1}))))))))
+
+(deftest ^:unit interceptors-on-a-path-or-parent-apply-to-its-methods
+  ;; Inherited like :public (BOU-568), rather than ignored (BOU-642).
+  (let [tag     (fn [t] {:name  (keyword t)
+                         :leave #(update-in % [:response :headers "x-tags"] (fnil conj []) t)})
+        ok      (fn [_] {:status 200 :body {}})
+        handler (reitit/compile-routes
+                 [["/api" {:interceptors [(tag "parent")]}
+                   ["/path" {:interceptors [(tag "path")]
+                             :get  {:handler ok}
+                             :post {:handler ok :interceptors [(tag "method")]}}]]]
+                 {:system {}})
+        tags    #(get-in (handler {:request-method % :uri "/api/path"}) [:headers "x-tags"])]
+    (testing "a method declaring none runs its path's and parent's"
+      (is (= ["path" "parent"] (tags :get))))
+    (testing "a method's own sit closest to the handler"
+      (is (= ["method" "path" "parent"] (tags :post))))))

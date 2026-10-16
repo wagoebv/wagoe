@@ -744,8 +744,11 @@
    which genuinely-internal endpoints like the health checks do.
 
    Appended last, so interceptors sit closest to the handler and still see a
-   fully prepared request (session, body, coercions) (BOU-331)."
-  [endpoint system]
+   fully prepared request (session, body, coercions) (BOU-331).
+
+   `inherited` are the `:interceptors` of the enclosing path and parent routes,
+   run before the endpoint's own (BOU-642)."
+  [endpoint system inherited]
   (let [;; `{:get my-handler}` is Reitit's own shorthand for
         ;; `{:get {:handler my-handler}}`. Left as-is it has nowhere to hang
         ;; middleware, so the endpoint would quietly serve without security
@@ -753,7 +756,7 @@
         {:keys [middleware interceptors skip-interceptors?] :as endpoint}
         (if (map? endpoint) endpoint {:handler endpoint})
 
-        route-interceptors (or (resolve-interceptors interceptors) [])
+        route-interceptors (or (resolve-interceptors (concat inherited interceptors)) [])
         all-interceptors   (if skip-interceptors?
                              route-interceptors
                              (vec (concat http-interceptors/default-http-interceptors
@@ -768,21 +771,24 @@
 
    `[path data & children]`, where `data` may carry endpoints directly and each
    child is another route vector. Route-level `:middleware`, `:name`, coercion
-   and nesting are Reitit's own and pass through untouched."
-  [route system]
-  (if-not (vector? route)
-    route
-    (let [[path data & children] route
-          data'    (if (map? data)
-                     (reduce-kv (fn [m k v]
-                                  (assoc m k (if (http-methods k)
-                                               (decorate-endpoint v system)
-                                               v)))
-                                {} data)
-                     data)
-          children' (mapv #(decorate-reitit-route % system) (if (map? data) children
-                                                                (cons data children)))]
-      (into (if (map? data) [path data'] [path]) children'))))
+   and nesting are Reitit's own and pass through untouched. `:interceptors` on
+   a route are handed down to every endpoint under it, the way Reitit merges
+   `:public` (BOU-642)."
+  ([route system] (decorate-reitit-route route system []))
+  ([route system inherited]
+   (if-not (vector? route)
+     route
+     (let [[path data & children] route
+           inherited (into inherited (when (map? data) (:interceptors data)))
+           data'     (when (map? data)
+                       (reduce-kv (fn [m k v]
+                                    (assoc m k (if (http-methods k)
+                                                 (decorate-endpoint v system inherited)
+                                                 v)))
+                                  {} (dissoc data :interceptors)))
+           children' (mapv #(decorate-reitit-route % system inherited)
+                           (if (map? data) children (cons data children)))]
+       (into (if (map? data) [path data'] [path]) children')))))
 
 ;; =============================================================================
 ;; Compiling routes
