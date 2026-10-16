@@ -127,6 +127,14 @@
         :mysql      (db/execute-ddl! ctx (str "ALTER TABLE user_audit_log DROP CHECK " audit-action-check
                                               ", ADD CONSTRAINT " audit-action-check " " audit-action-check-clause))))))
 
+(def tables
+  "The user module's tables, by name, and the Malli schema each is built from."
+  {"auth_users"      user-schema/AuthUser
+   "users"           user-schema/TenantUser
+   "user_sessions"   user-schema/UserSession
+   "user_audit_log"  user-schema/UserAuditLog
+   "user_identities" user-schema/UserIdentity})
+
 (defn initialize-user-schema!
   "Initialize database schema for user entities using Malli schema definitions.
 
@@ -161,12 +169,7 @@
   [ctx]
   (log/info "Initializing user schema from Malli definitions (split-table architecture)")
 
-  (db/initialize-tables-from-schemas! ctx
-                                      {"auth_users" user-schema/AuthUser
-                                       "users" user-schema/TenantUser
-                                       "user_sessions" user-schema/UserSession
-                                       "user_audit_log" user-schema/UserAuditLog
-                                       "user_identities" user-schema/UserIdentity})
+  (db/initialize-tables-from-schemas! ctx tables)
   (db/create-index-if-not-exists! ctx "uk_user_identities_issuer_subject" :user_identities
                                   [:issuer :subject] {:unique? true})
   (widen-audit-action-check! ctx)

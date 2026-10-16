@@ -87,7 +87,9 @@ parsing product names, comparing drivers or reading nil as PostgreSQL.
 
 `(column-type this logical)`:: the DDL type for `:uuid`, `:instant`, `:json`,
   `:boolean`, `:text`. Replaces the per-module type tables in audience, user and
-  workflow, and the type half of `migration-sql/for-mysql`.
+  workflow, and the type half of `migration-sql/for-mysql`. BOU-610 added
+  `:string` (with a length), `:int`, `:bigint`, `:double` and `:enum`, so the
+  Malli schema builder asks it too.
 
 String matching becomes part of the contract rather than a per-site choice:
 `build-where`'s containment and a new `(like this field pattern)` are

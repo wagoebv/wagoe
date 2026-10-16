@@ -8,6 +8,9 @@
    - Index generation from schema analysis"
   (:require [wagoe.platform.shell.adapters.database.utils.schema :as schema]
             [wagoe.platform.shell.adapters.database.h2.core :as h2]
+            [wagoe.platform.shell.adapters.database.mysql.core :as mysql]
+            [wagoe.platform.shell.adapters.database.postgresql.core :as postgresql]
+            [wagoe.platform.shell.adapters.database.sqlite.core :as sqlite]
             [clojure.test :refer [deftest is testing]]))
 
 ;; =============================================================================
@@ -26,37 +29,32 @@
 ;; Column Type Mapping Tests
 ;; =============================================================================
 
-(deftest ^:unit malli-type->column-type-h2-test
-  (testing "Malli type to H2 column type mapping"
-    (testing "Basic types"
-      (is (= "UUID" (malli-type->column-type h2-ctx :uuid)))
-      (is (= "VARCHAR(255)" (malli-type->column-type h2-ctx :string)))
-      (is (= "INTEGER" (malli-type->column-type h2-ctx :int)))
-      (is (= "BOOLEAN" (malli-type->column-type h2-ctx :boolean))))
+(def ^:private expected-types
+  "Malli type -> [H2 SQLite PostgreSQL MySQL]. What the builder made before
+   BOU-610, but CLOB on H2, which reads back as a JdbcClob."
+  (let [ts "TIMESTAMP WITH TIME ZONE"]
+    {:uuid         ["UUID" "CHAR(36)" "UUID" "CHAR(36)"]
+     :string       ["VARCHAR(255)" "TEXT" "VARCHAR(255)" "VARCHAR(255)"]
+     :re           ["VARCHAR(255)" "TEXT" "VARCHAR(255)" "VARCHAR(255)"]
+     :unknown-type ["VARCHAR(255)" "TEXT" "VARCHAR(255)" "VARCHAR(255)"]
+     :int          ["INTEGER" "INTEGER" "INTEGER" "INT"]
+     :bigint       ["BIGINT" "INTEGER" "BIGINT" "BIGINT"]
+     :double       ["DOUBLE PRECISION" "REAL" "DOUBLE PRECISION" "DOUBLE"]
+     :boolean      ["BOOLEAN" "INTEGER" "BOOLEAN" "TINYINT(1)"]
+     :text         ["VARCHAR" "TEXT" "TEXT" "LONGTEXT"]
+     :enum         ["VARCHAR(50)" "TEXT" "VARCHAR(50)" "VARCHAR(50)"]
+     :map          ["VARCHAR" "TEXT" "JSONB" "JSON"]
+     inst?         [ts "TEXT" ts "DATETIME(6)"]
+     'inst?        [ts "TEXT" ts "DATETIME(6)"]}))
 
-    (testing "Timestamp type (inst? symbol)"
-      (is (= "TIMESTAMP WITH TIME ZONE" (malli-type->column-type h2-ctx 'inst?))))
-
-    (testing "Timestamp type (inst? function)"
-      (is (= "TIMESTAMP WITH TIME ZONE" (malli-type->column-type h2-ctx inst?))))
-
-    (testing "Enum type"
-      (is (= "VARCHAR(50)" (malli-type->column-type h2-ctx :enum))))
-
-    (testing "Numeric types"
-      (is (= "DOUBLE PRECISION" (malli-type->column-type h2-ctx :double))))
-
-    (testing "JSON/Map type"
-      (is (= "CLOB" (malli-type->column-type h2-ctx :map))))
-
-    (testing "Text type"
-      (is (= "CLOB" (malli-type->column-type h2-ctx :text))))
-
-    (testing "Regex type (email pattern etc.)"
-      (is (= "VARCHAR(255)" (malli-type->column-type h2-ctx :re))))
-
-    (testing "Unknown type falls back to VARCHAR(255)"
-      (is (= "VARCHAR(255)" (malli-type->column-type h2-ctx :unknown-type))))))
+(deftest ^:unit the-builder-asks-the-adapter-for-every-type
+  ;; One table answers, so a fresh table and an added column agree (BOU-610).
+  (doseq [[malli-type types] expected-types
+          [engine make expected] (map vector [:h2 :sqlite :postgresql :mysql]
+                                      [h2/new-adapter sqlite/new-adapter postgresql/new-adapter mysql/new-adapter]
+                                      types)]
+    (is (= expected (malli-type->column-type {:adapter (make)} malli-type))
+        (str engine " " malli-type))))
 
 ;; =============================================================================
 ;; Field Extraction Tests ([:maybe ...] unwrapping)
@@ -142,7 +140,7 @@
                         [:id :uuid]
                         [:payload :text]]
           ddl (schema/generate-table-ddl h2-ctx "payloads" malli-schema)]
-      (is (.contains ddl "payload CLOB NOT NULL")))))
+      (is (.contains ddl "payload VARCHAR NOT NULL")))))
 
 (deftest ^:unit generate-table-ddl-with-enum-test
   (testing "DDL with enum field includes CHECK constraint"
@@ -159,7 +157,7 @@
                         [:id :uuid]
                         [:metadata :map]]
           ddl (schema/generate-table-ddl h2-ctx "configs" malli-schema)]
-      (is (.contains ddl "metadata CLOB NOT NULL")))))
+      (is (.contains ddl "metadata VARCHAR NOT NULL")))))
 
 (deftest ^:unit generate-table-ddl-with-double-test
   (testing "DDL with double precision field"

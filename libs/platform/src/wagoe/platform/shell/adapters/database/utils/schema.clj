@@ -3,7 +3,7 @@
    
    This namespace provides utilities for generating database DDL statements
    from Malli schema definitions. It handles:
-   - Column type mapping based on database dialect
+   - Column types, from the adapter's `column-type`
    - Table creation with constraints
    - Index generation from schema analysis
    - Cross-database compatibility
@@ -37,99 +37,18 @@
 ;; Column Type Mapping
 ;; =============================================================================
 
+(def ^:private malli->logical
+  "The `protocols/logical-column-types` entry for a Malli type. inst? comes as
+   the fn or, quoted, the symbol."
+  {:uuid :uuid :string :string :re :string :int :int :bigint :bigint
+   :double :double :boolean :boolean :text :text :enum :enum :map :json
+   inst? :instant 'inst? :instant})
+
 (defn- malli-type->column-type
-  "Map Malli schema types to database column types based on dialect.
-
-   Uses condp instead of case because inst? is a symbol (not a keyword)
-   and case only supports compile-time constant dispatch.
-
-   Args:
-     ctx: Database context with adapter
-     malli-type: Malli type (keyword like :uuid, :string or symbol like inst?)
-
-   Returns:
-     String column type definition"
+  "The engine's DDL type for `malli-type`; a string's when unknown. The adapter
+   owns the table, so the builder and `column-type` cannot disagree (BOU-610)."
   [ctx malli-type]
-  (let [adapter (:adapter ctx)
-        ;; PostgreSQL adapter returns nil for dialect (HoneySQL default),
-        ;; normalize to :postgresql so case dispatch works correctly
-        dialect (or (protocols/dialect adapter) :postgresql)]
-    (condp = malli-type
-      :uuid (case dialect
-              (:sqlite :mysql) "CHAR(36)"
-              (:postgresql :h2 :ansi) "UUID"
-              "VARCHAR(36)")
-
-      :string (case dialect
-                :sqlite "TEXT"
-                "VARCHAR(255)")
-
-      :int (case dialect
-             :sqlite "INTEGER"
-             :mysql "INT"
-             (:postgresql :h2 :ansi) "INTEGER"
-             "INTEGER")
-
-      :bigint (case dialect
-                :sqlite "INTEGER"
-                :mysql "BIGINT"
-                (:postgresql :h2 :ansi) "BIGINT"
-                "BIGINT")
-
-      :boolean (case dialect
-                 :sqlite "INTEGER"
-                 :mysql "TINYINT(1)"
-                 (:postgresql :h2 :ansi) "BOOLEAN"
-                 "BOOLEAN")
-
-      :text (case dialect
-              :sqlite "TEXT"
-              :mysql "LONGTEXT"
-              :postgresql "TEXT"
-              (:h2 :ansi) "CLOB"
-              "TEXT")
-
-      inst? (case dialect
-              :sqlite "TEXT"
-              :mysql "DATETIME(6)"
-              :postgresql "TIMESTAMPTZ"
-              (:h2 :ansi) "TIMESTAMP WITH TIME ZONE"
-              "TIMESTAMP")
-
-      'inst? (case dialect
-               :sqlite "TEXT"
-               :mysql "DATETIME(6)"
-               :postgresql "TIMESTAMPTZ"
-               (:h2 :ansi) "TIMESTAMP WITH TIME ZONE"
-               "TIMESTAMP")
-
-      :enum (case dialect
-              :sqlite "TEXT"
-              "VARCHAR(50)")
-
-      :double (case dialect
-                :sqlite "REAL"
-                :mysql "DOUBLE"
-                (:postgresql :h2 :ansi) "DOUBLE PRECISION"
-                "DOUBLE PRECISION")
-
-      :map (case dialect
-             :sqlite "TEXT"
-             :mysql "JSON"
-             :postgresql "JSONB"
-             (:h2 :ansi) "CLOB"
-             "TEXT")
-
-      :re (case dialect
-            :sqlite "TEXT"
-            "VARCHAR(255)")
-
-      ;; Default fallback for unknown types
-      (case dialect
-        :sqlite "TEXT"
-        :mysql "VARCHAR(255)"
-        (:postgresql :h2 :ansi) "VARCHAR(255)"
-        "TEXT"))))
+  (protocols/column-type (:adapter ctx) (malli->logical malli-type :string)))
 
 ;; =============================================================================
 ;; Malli Schema Field Processing
@@ -216,9 +135,7 @@
   "The DEFAULT clause of a field: only a required `active` boolean has one."
   [ctx {:keys [name type optional?]}]
   (if (and (= type :boolean) (= name "active") (not optional?))
-    (case (or (protocols/dialect (:adapter ctx)) :postgresql)
-      :sqlite " DEFAULT 1"
-      " DEFAULT true")
+    (str " DEFAULT " (protocols/boolean->db (:adapter ctx) true))
     ""))
 
 (defn- generate-column-definition
@@ -368,17 +285,17 @@
 ;; Idempotent Enum-Constraint Repair
 ;; =============================================================================
 
-(def ^:private constraint-repair-dialects
-  "Dialects that need — and support — idempotent re-application of named enum
+(def ^:private constraint-repair-engines
+  "Engines that need — and support — idempotent re-application of named enum
    CHECK constraints on re-init.
 
-   Only :ansi (H2) qualifies: it is the sole dialect that corrupts CHECK
+   Only H2 qualifies: it is the sole engine that corrupts CHECK
    constraint clauses when a fresh pool re-opens a persisted in-memory DB.
    PostgreSQL and MySQL keep their constraints intact across reconnects and
    treat a repeat CREATE TABLE IF NOT EXISTS as a no-op, so re-adding
    constraints on every boot would only churn table locks for no benefit;
    SQLite cannot ALTER add/drop CHECK constraints at all."
-  #{:ansi})
+  #{:h2})
 
 (defn- enum-constraint-repair-ddls
   "DROP-then-ADD DDL pairs that idempotently (re)establish named enum CHECK
@@ -417,18 +334,17 @@
        (into [])))
 
 (defn- repair-enum-constraints!
-  "Re-apply named enum CHECK constraints for `table-name` when the dialect
-   supports it. Called only for tables that already existed before this init,
+  "Re-apply named enum CHECK constraints for `table-name` when the engine
+   needs it. Called only for tables that already existed before this init,
    making schema initialization idempotent and healing H2 reconnect corruption."
   [ctx table-name malli-schema]
-  (let [dialect (or (protocols/dialect (:adapter ctx)) :postgresql)]
-    (when (contains? constraint-repair-dialects dialect)
-      (let [field-infos (->> (rest malli-schema)
-                             (map extract-field-info)
-                             (filter some?))]
-        (doseq [ddl (enum-constraint-repair-ddls table-name field-infos)]
-          (log/debug "Repairing enum constraint" {:table table-name :ddl ddl})
-          (db-core/execute-ddl! ctx ddl))))))
+  (when (contains? constraint-repair-engines (protocols/engine (:adapter ctx)))
+    (let [field-infos (->> (rest malli-schema)
+                           (map extract-field-info)
+                           (filter some?))]
+      (doseq [ddl (enum-constraint-repair-ddls table-name field-infos)]
+        (log/debug "Repairing enum constraint" {:table table-name :ddl ddl})
+        (db-core/execute-ddl! ctx ddl)))))
 
 ;; =============================================================================
 ;; Missing Columns
@@ -456,7 +372,7 @@
         (doseq [{:keys [name] :as f} missing
                 :let [values (enum-field-values f)]
                 :when values]
-          (if (= :sqlite (protocols/dialect (:adapter ctx)))
+          (if (= :sqlite (protocols/engine (:adapter ctx)))
             (log/info "SQLite cannot add a CHECK to an existing table; the enum is not enforced"
                       {:table table-name :column (col-name name)})
             (db-core/add-check-if-not-exists! ctx table-name
@@ -489,7 +405,7 @@
         \"user_sessions\" UserSession-schema})"
   [ctx schema-definitions]
   (log/info "Initializing database schema from Malli definitions"
-            {:dialect (protocols/dialect (:adapter ctx))
+            {:engine (protocols/engine (:adapter ctx))
              :tables (keys schema-definitions)})
 
   (try
@@ -513,11 +429,11 @@
         (db-core/create-index-if-not-exists! ctx index table columns)))
 
     (log/info "Database schema initialization completed successfully"
-              {:dialect (protocols/dialect (:adapter ctx))
+              {:engine (protocols/engine (:adapter ctx))
                :tables (keys schema-definitions)})
 
     (catch Exception e
       (log/error "Database schema initialization failed"
                  {:error (.getMessage e)
-                  :dialect (protocols/dialect (:adapter ctx))})
+                  :engine (protocols/engine (:adapter ctx))})
       (throw e))))

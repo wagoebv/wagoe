@@ -212,10 +212,12 @@
      suite checks each claim both ways (ADR-039).")
 
   (column-type [this logical]
-    "The DDL type for `logical`, one of `logical-column-types`.
+    "The DDL type for `logical`, one of `logical-column-types`, or
+     [:string length]; :string alone is 255 long.
 
      Example:
-       (column-type mysql-adapter :uuid) ;; => \"CHAR(36)\"")
+       (column-type mysql-adapter :uuid)        ;; => \"CHAR(36)\"
+       (column-type mysql-adapter [:string 50]) ;; => \"VARCHAR(50)\"")
 
   (like [this field pattern] [this field mode value]
     "A HoneySQL condition matching `field` against `value` literally, where
@@ -274,7 +276,7 @@
 
 (def logical-column-types
   "What `column-type` answers for."
-  #{:uuid :instant :json :boolean :text})
+  #{:uuid :instant :json :boolean :text :string :int :bigint :double :enum})
 
 ;; =============================================================================
 ;; Configuration Schemas (Malli)
