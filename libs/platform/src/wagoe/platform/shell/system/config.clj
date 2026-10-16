@@ -13,7 +13,7 @@
    produced a module whose tables were never created.
 
    Usage:
-     (system-config (config/load-config) {:extra-modules #{:wagoe/user}})"
+     (system-config (config/load-config) {:base-ns \"shop\"})"
   (:require [wagoe.config :as config]
             [wagoe.platform.shell.database.migrations :as migrations]
             [wagoe.platform.shell.modules :as modules]
@@ -92,8 +92,8 @@
 
    Options:
      :extra-modules  modules the application enables in code rather than in
-                     config. `wagoe new` writes `#{:wagoe/user}` here, or an
-                     empty set for `--no-user`.
+                     config. Their migrations do not run; prefer a key in
+                     :active.
      :base-ns        namespace prefix for scaffolded modules, default \"wagoe\"
                      — what `bb scaffold generate` uses unless told otherwise.
 

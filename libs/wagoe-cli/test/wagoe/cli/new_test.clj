@@ -419,27 +419,32 @@
                                 "/wagoe-new-test-" (System/nanoTime))]
                    (try
                      (new/generate! dir "sample" opts)
-                     (slurp (io/file dir "src/sample/system_config.clj"))
+                     {:code   (slurp (io/file dir "src/sample/system_config.clj"))
+                      :active (into {} (for [env ["dev" "test"]]
+                                         [env (:active (edn/read-string {:default (fn [_ v] v)}
+                                                                        (slurp (io/file dir "resources/conf" env "config.edn"))))]))}
                      (finally
                        (doseq [f (reverse (file-seq (io/file dir)))] (.delete f))))))
         with    (render {})
         without (render {:with-user? false})]
 
-    (testing "the flag reaches the generated config as the set the assembler takes"
-      ;; A set rather than a boolean since BOU-326: the user module is the one
-      ;; an application switches on in code, and :extra-modules is how.
-      (is (str/includes? with    "{:extra-modules #{:wagoe/user}"))
-      (is (str/includes? without "{:extra-modules #{}")))
+    (testing "the flag reaches every profile's :active, which is all `migrate up` reads"
+      ;; Enabled in code through :extra-modules, user was skipped by both
+      ;; migration paths and a fresh database got no auth_users (BOU-667).
+      (doseq [env ["dev" "test"]]
+        (is (contains? (get-in with [:active env]) :wagoe/user) env)
+        (is (not (contains? (get-in without [:active env]) :wagoe/user)) env)))
+
+    (testing "and the code no longer enables it"
+      (is (not (str/includes? (:code with) ":extra-modules"))))
 
     (testing "and the app tells the assembler where its own modules live"
       ;; Without this the default wins and a module generated into
       ;; sample.product is never found (BOU-360).
-      (is (str/includes? with ":base-ns       \"sample\"")))
+      (is (str/includes? (:code with) ":base-ns \"sample\"")))
 
-    (testing "both variants are the same file apart from that set"
-      ;; Turning the user module back on is editing one word, not restoring a
-      ;; block the generator left out.
-      (is (= (str/replace with "#{:wagoe/user}" "#{}") without)))
+    (testing "both variants share the system config"
+      (is (= (:code with) (:code without))))
 
     (testing "default is user-on"
       (is (= with (render {:with-user? true}))))))
@@ -474,9 +479,7 @@
                               (read-string (str "[" src "]")))
                 nodes   (tree-seq coll? seq ig-form)]
             (is (some #(and (symbol? %) (= "system-config" (name %))) nodes)
-                "ig-config must call system-config")
-            (is (some #{:extra-modules} nodes)
-                "and tell it which modules this app enables in code"))))
+                "ig-config must call system-config"))))
       (finally
         (when (.exists (io/file tmp))
           (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f)))))))
@@ -625,7 +628,7 @@
             installed (block "wagoe:installed-modules")
             [in-deps not-in-deps] (str/split (block "wagoe:available-modules") #"Not in deps\.edn")]
         (is (str/includes? installed "- core ("))
-        (is (str/includes? installed "- user (") "on in system_config.clj's :extra-modules")
+        (is (str/includes? installed "- user (") "its key is in config.edn")
         (is (str/includes? installed "- email (") "the platform always runs it")
         (is (str/includes? installed "- i18n (") "the platform always runs it")
         (is (str/includes? installed "- external (") "in deps.edn with nothing to configure")
@@ -640,7 +643,7 @@
         (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))
 
 ;; --no-user keeps wagoe-user in deps.edn and leaves :wagoe/user out of
-;; system_config.clj's :extra-modules, so the module is not running (BOU-573).
+;; config.edn, so the module is not running (BOU-573).
 (deftest ^:integration agents-md-does-not-list-user-as-installed-under-no-user
   (let [tmp (str (System/getProperty "java.io.tmpdir") "/wagoe-agents-nouser-" (System/currentTimeMillis))]
     (try
@@ -648,6 +651,6 @@
       (let [content (slurp (io/file tmp "AGENTS.md"))
             block   (fn [b] (second (re-find (re-pattern (str "(?s)<!-- " b " -->(.*?)<!-- /" b " -->")) content)))]
         (is (not (str/includes? (block "wagoe:installed-modules") "- user (")))
-        (is (re-find #"(?s)In deps\.edn but not switched on.*\| user \|.*`:wagoe/user` to `:extra-modules`" (block "wagoe:available-modules"))))
+        (is (re-find #"(?s)In deps\.edn but not switched on.*\| user \|.*`wagoe add user`" (block "wagoe:available-modules"))))
       (finally
         (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))
