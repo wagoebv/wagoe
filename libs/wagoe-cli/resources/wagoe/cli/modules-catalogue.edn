@@ -52,10 +52,11 @@
    :version             "1.0.1"
    :category            :core
    :tier                :stable
-   :config-snippet      ""
-   :test-config-snippet ""
-   ;; No config key: the app switches it on in code, through system_config.clj's
-   ;; :extra-modules, which `wagoe new --no-user` leaves empty (BOU-573).
+   ;; In config, not system_config.clj's :extra-modules: `migrate up` reads
+   ;; only :active, so a fresh database got no user tables (BOU-667).
+   :config-snippet      "  :wagoe/user\n  {}\n"
+   :test-config-snippet "  :wagoe/user\n  {}\n"
+   ;; Core, but `wagoe new --no-user` leaves it off (BOU-573).
    :module-key          :wagoe/user
    :add-command         "wagoe add user"
    :docs-url            "https://github.com/wagoebv/wagoe/blob/main/libs/user/AGENTS.md"}

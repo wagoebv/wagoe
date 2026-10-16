@@ -92,8 +92,8 @@
 
    Options:
      :extra-modules  modules the application enables in code rather than in
-                     config. `wagoe new` writes `#{:wagoe/user}` here, or an
-                     empty set for `--no-user`.
+                     config. Their migrations do not run; prefer a key in
+                     :active.
      :base-ns        namespace prefix for scaffolded modules, default \"wagoe\"
                      — what `bb scaffold generate` uses unless told otherwise.
 

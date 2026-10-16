@@ -81,6 +81,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **`wagoe new` enabled user in code, so migrations skipped it and a fresh database had no `auth_users`** (BOU-667).
+  It now writes `:wagoe/user` into `:active`; in an existing project, run `wagoe add user`.
 - **A typed `ex-info` thrown from route `:middleware` answered 500** (BOU-659); it now answers its `:type`'s status.
   Upgrade if your route middleware throws typed errors.
 - **MySQL timestamps read back without a zone, so APIs sent UTC as local time** (BOU-653).
