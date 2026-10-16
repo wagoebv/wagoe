@@ -83,6 +83,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **Revoked sessions and deactivated users stayed signed in**: until the cache expired with `:wagoe/cache` on, and for good when made inactive without a soft delete (BOU-663).
   Upgrade if you use session authentication.
+- **A typed `ex-info` thrown from route `:middleware` answered 500** (BOU-659); it now answers its `:type`'s status.
+  Upgrade if your route middleware throws typed errors.
 - **MySQL timestamps read back without a zone, so APIs sent UTC as local time** (BOU-653).
   Upgrade if you run on MySQL.
 - **MySQL lost workflow timestamps and admin UUID types; PostgreSQL refused full-text search** (BOU-652).
