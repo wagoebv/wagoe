@@ -78,3 +78,19 @@
            ["/web/admin/users#top"     "/web/admin/users#top"]]]
     (is (= expected (support/safe-return-to {:query-params {"return_to" return-to}}))
         (pr-str return-to))))
+
+(deftest ^:unit a-fragment-response-carries-oob-fragments
+  (let [req {:i18n/t (fn ([k] (name k)) ([k _] (name k)) ([k _ _] (name k)))}]
+    (testing "one fragment, as before"
+      (let [resp (support/htmx-fragment-response req [:tr#row [:td "a"]])]
+        (is (= "<tr id=\"row\"><td>a</td></tr>" (:body resp)))
+        (is (= "entityListUpdated" (get-in resp [:headers "HX-Trigger"])))))
+    (testing "row, badge and toast in one response"
+      (is (= (str "<tr id=\"row\"><td>a</td></tr>"
+                  "<span hx-swap-oob=\"true\" id=\"badge\">3</span>"
+                  "<div hx-swap-oob=\"beforeend:#toasts\"><p>saved</p></div>")
+             (:body (support/htmx-fragment-response
+                     req
+                     [:tr#row [:td "a"]]
+                     [[:span#badge "3"]
+                      [:div {:hx-swap-oob "beforeend:#toasts"} [:p [:t :saved]]]])))))))

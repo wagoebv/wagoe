@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **Live htmx updates over server-sent events** (BOU-464): `sse/sse-handler` streams `sse/push-fragment!` to `sse-swap`
+  elements; the htmx `sse` extension ships in every bundle. Custom `IRealtimeService`s need `connect-identified`.
 - **`com.wagoe/wagoe-test`, a test kit for apps** (BOU-469): `with-test-system`, a Ring client with session + CSRF,
   test tenants, `run-pending-jobs!`, `drain-events!`, `drain-realtime!`. Add it to `:test`; see `libs/test/README.md`.
 - **`wagoe upgrade`** (BOU-470) rewrites deprecated config values, keys and names, keeping formatting.
