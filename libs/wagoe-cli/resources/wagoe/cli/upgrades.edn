@@ -1,0 +1,28 @@
+;; What `wagoe upgrade` rewrites: one entry per `### Deprecated` entry in
+;; CHANGELOG.md, matched on :ticket. `bb check:changelog` fails on a deprecation
+;; with no entry here.
+;;
+;; An entry rewrites with one or more of these, or says why it cannot (:manual):
+;;   :config-key   {[:wagoe/x :old] [:wagoe/x :new]}   ; renames a key in its own map
+;;   :config-value {[:wagoe/x :key] {:old-value :new-value}}
+;;   :ns-rename    {old.ns new.ns}
+;;   :fn-rename    {old.ns/f new.ns/g}                  ; only when the arguments are the same
+;; Config paths are looked up at the top of each config.edn and under :active
+;; and :inactive.
+[{:ticket "BOU-346"
+  :since  "1.0.0-rc-1"
+  :note   "The :wagoe/admin and :wagoe/auth-user-repository Integrant components."
+  :manual "Drop them from hand-written wiring and point refs to :wagoe/auth-user-repository at :wagoe/user-repository. :wagoe/admin under :active is the module switch and stays, so a rewrite cannot tell the two apart."}
+
+ {:ticket       "BOU-436"
+  :since        "1.0.0-rc-1"
+  :note         "Provider names :in-memory, :redis-streams and :database are :memory, :redis and :db."
+  :config-value {[:wagoe/cache :provider]    {:in-memory :memory}
+                 [:wagoe/realtime :provider] {:in-memory :memory}
+                 [:wagoe/jobs :provider]     {:in-memory :memory, :database :db}
+                 [:wagoe/events :provider]   {:in-memory :memory, :redis-streams :redis}}}
+
+ {:ticket "BOU-433"
+  :since  "1.0.0-rc-1"
+  :note   "wagoe.jobs.shell.adapters.db/enqueue-in-tx! is wagoe.jobs.ports/enqueue-in-tx! on the queue component."
+  :manual "The port takes the queue component as its first argument, which the old call has no value for."}]

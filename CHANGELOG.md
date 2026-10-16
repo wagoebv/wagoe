@@ -33,6 +33,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **`com.wagoe/wagoe-test`, a test kit for apps** (BOU-469): `with-test-system`, a Ring client with session + CSRF,
   test tenants, `run-pending-jobs!`, `drain-events!`, `drain-realtime!`. Add it to `:test`; see `libs/test/README.md`.
+- **`wagoe upgrade`** (BOU-470) rewrites deprecated config values, keys and names, keeping formatting.
+  It prints a diff by default; `--apply` writes. What it cannot rewrite it lists.
 - **Transactional outbox for events** (BOU-448): `publish-in-tx!` commits an event with your transaction; a relay
   publishes it at least once. Opt in with `:outbox {}` under `:wagoe/events`.
 - **MySQL 8 is supported** (BOU-574): a generated app boots, migrates and serves on it.
