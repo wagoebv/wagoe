@@ -159,7 +159,8 @@
                {:index-id index-id :entity-type entity-type :query query})
     (let [{:keys [limit threshold filters]
            :or   {limit 5 threshold 0.15}} opts
-          [idx et] [(kw->str index-id) (kw->str entity-type)]
+          idx     (kw->str index-id)
+          et      (kw->str entity-type)
           sql-vec (cond
                     (and full-text? @trigram?)
                     (qry/build-postgres-suggest-sql idx et query limit threshold filters)
@@ -192,10 +193,9 @@
    Returns:
      SearchStore implementing ISearchStore"
   [datasource adapter]
-  (let [capabilities (db-ports/capabilities adapter)
-        full-text?   (contains? capabilities :full-text)]
+  (let [capabilities (db-ports/capabilities adapter)]
     (->SearchStore datasource
-                   full-text?
+                   (contains? capabilities :full-text)
                    (contains? capabilities :on-conflict)
-                   ;; Read on first suggest, by when the migrations have run.
-                   (delay (and full-text? (trigram/installed? datasource))))))
+                   ;; Read on first full-text suggest, by when the migrations have run.
+                   (delay (trigram/installed? datasource)))))

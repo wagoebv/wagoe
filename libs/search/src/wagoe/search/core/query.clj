@@ -258,8 +258,9 @@
     (into [sql index-id entity-type pattern] filter-params)))
 
 (defn- like-suggest-sql
-  [index-id entity-type query limit [filter-sql & filter-params]]
-  (let [pattern (str "%" (str/lower-case (or (sanitize-query query) "")) "%")
+  [build-filter-sql index-id entity-type query limit filters]
+  (let [[filter-sql & filter-params] (build-filter-sql (or filters {}))
+        pattern (str "%" (str/lower-case (or (sanitize-query query) "")) "%")
         sql (str "SELECT entity_type, entity_id, metadata, "
                  "  0.5 AS score, "
                  "  NULL AS snippet "
@@ -288,12 +289,10 @@
   ([index-id entity-type query limit]
    (build-fallback-suggest-sql index-id entity-type query limit nil))
   ([index-id entity-type query limit filters]
-   (like-suggest-sql index-id entity-type query limit
-                     (build-filter-sql-fallback (or filters {})))))
+   (like-suggest-sql build-filter-sql-fallback index-id entity-type query limit filters)))
 
 (defn build-postgres-like-suggest-sql
   "The LIKE suggest query with PostgreSQL's filter SQL, for a database without
    pg_trgm (BOU-661). Same arguments as build-fallback-suggest-sql."
   [index-id entity-type query limit filters]
-  (like-suggest-sql index-id entity-type query limit
-                    (build-filter-sql-postgres (or filters {}))))
+  (like-suggest-sql build-filter-sql-postgres index-id entity-type query limit filters))

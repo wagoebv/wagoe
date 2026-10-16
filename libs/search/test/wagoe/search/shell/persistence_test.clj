@@ -15,8 +15,7 @@
             [wagoe.search.ports :as ports]
             [wagoe.search.shell.persistence :as persistence]
             [support.test-db :as test-db]
-            [next.jdbc :as jdbc]
-            [wagoe.platform.database :as db])
+            [next.jdbc :as jdbc])
   (:import [java.util UUID]))
 
 ;; =============================================================================
@@ -24,22 +23,18 @@
 ;; =============================================================================
 
 (def ^:private test-store      (atom nil))
+(def ^:private test-adapter    (atom nil))
 
 (defn- db-fixture [test-fn]
   (test-db/with-db "search"
     (fn [{:keys [datasource adapter]}]
       (create-search-documents-table! datasource)
+      (reset! test-adapter adapter)
       (reset! test-store (persistence/create-search-store datasource adapter))
       (try (test-fn)
            (finally (reset! test-store nil))))))
 
 (use-fixtures :each db-fixture)
-
-(defn- doc
-  "A document whose text is its content-all alone, so PostgreSQL's full-text
-   search, which reads the weight columns, sees the words LIKE does."
-  [overrides]
-  (make-doc (merge {:weight-a (:content-all overrides) :weight-b "" :weight-c ""} overrides)))
 
 (defn- full-text? [] (:full-text? @test-store))
 
@@ -56,11 +51,9 @@
 (deftest ^:integration upsert-conflict-test
   (testing "updates existing document on conflict (same entity-id)"
     (let [entity-id (UUID/randomUUID)
-          doc1      (doc {:entity-id entity-id :weight-a "Original"
-                               :content-all "Original"})
-          doc2      (doc {:id (str (UUID/randomUUID))
-                               :entity-id entity-id :weight-a "Updated"
-                               :content-all "Updated"})]
+          doc1      (make-doc {:entity-id entity-id :content-all "Original"})
+          doc2      (make-doc {:id (str (UUID/randomUUID))
+                               :entity-id entity-id :content-all "Updated"})]
       (ports/upsert-document! @test-store doc1)
       (ports/upsert-document! @test-store doc2)
       ;; Should be exactly 1: upsert deduplicates on (index_id, entity_id)
@@ -90,8 +83,8 @@
 
 (deftest ^:integration search-documents-test
   (testing "finds documents matching the query"
-    (ports/upsert-document! @test-store (doc {:content-all "Widget Pro tools"}))
-    (ports/upsert-document! @test-store (doc {:content-all "Gadget Plus electronics"}))
+    (ports/upsert-document! @test-store (make-doc {:content-all "Widget Pro tools"}))
+    (ports/upsert-document! @test-store (make-doc {:content-all "Gadget Plus electronics"}))
     (let [results (ports/search-documents @test-store :product-search :product
                                           "widget" {:limit 10 :offset 0})]
       (is (= 1 (count results)))
@@ -99,7 +92,7 @@
 
   (testing "an empty query: LIKE '%%' matches everything, an empty tsquery nothing"
     ;; The service answers an empty query itself; this is the store alone.
-    (ports/upsert-document! @test-store (doc {:content-all "Widget Pro"}))
+    (ports/upsert-document! @test-store (make-doc {:content-all "Widget Pro"}))
     (let [results (ports/search-documents @test-store :product-search :product
                                           "" {:limit 10 :offset 0})]
       (if (full-text?)
@@ -109,7 +102,7 @@
   (testing "respects limit and offset"
     (dotimes [n 5]
       (ports/upsert-document! @test-store
-                              (doc {:entity-id   (UUID/randomUUID)
+                              (make-doc {:entity-id   (UUID/randomUUID)
                                          :content-all (str "Widget " n)})))
     (let [page1 (ports/search-documents @test-store :product-search :product
                                         "widget" {:limit 2 :offset 0})
@@ -122,7 +115,7 @@
   (testing "search results include entity-type and entity-id"
     (let [entity-id (UUID/randomUUID)]
       (ports/upsert-document! @test-store
-                              (doc {:entity-id   entity-id
+                              (make-doc {:entity-id   entity-id
                                          :content-all "Unique keyword xyzzy"}))
       (let [results (ports/search-documents @test-store :product-search :product
                                             "xyzzy" {:limit 10 :offset 0})]
@@ -138,10 +131,10 @@
   (testing "counts matching documents"
     (dotimes [_ 3]
       (ports/upsert-document! @test-store
-                              (doc {:entity-id   (UUID/randomUUID)
+                              (make-doc {:entity-id   (UUID/randomUUID)
                                          :content-all "Widget Pro special"})))
     (ports/upsert-document! @test-store
-                            (doc {:entity-id   (UUID/randomUUID)
+                            (make-doc {:entity-id   (UUID/randomUUID)
                                        :content-all "Gadget Plus other"}))
     (let [count (ports/count-results @test-store :product "widget"
                                      {:index-id :product-search})]
@@ -159,7 +152,7 @@
   (testing "returns suggestions matching partial query"
     (let [entity-id (UUID/randomUUID)]
       (ports/upsert-document! @test-store
-                              (doc {:entity-id   entity-id
+                              (make-doc {:entity-id   entity-id
                                          :content-all "Widget Pro Max Special"}))
       (let [suggestions (ports/suggest-documents @test-store :product-search :product
                                                  "wid" {:limit 5})]
@@ -169,7 +162,7 @@
   (testing "respects limit"
     (dotimes [_ 5]
       (ports/upsert-document! @test-store
-                              (doc {:entity-id   (UUID/randomUUID)
+                              (make-doc {:entity-id   (UUID/randomUUID)
                                          :content-all "Widget Something"})))
     (let [suggestions (ports/suggest-documents @test-store :product-search :product
                                                "widget" {:limit 2})]
@@ -178,7 +171,7 @@
   (testing "returns metadata if present"
     (let [entity-id (UUID/randomUUID)]
       (ports/upsert-document! @test-store
-                              (doc {:entity-id   entity-id
+                              (make-doc {:entity-id   entity-id
                                          :content-all "Widget Meta"
                                          :metadata    {:sku "WGT-001"}}))
       (let [suggestions (ports/suggest-documents @test-store :product-search :product
@@ -197,12 +190,12 @@
           entity-b (UUID/randomUUID)]
       (ports/upsert-document!
        @test-store
-       (doc {:entity-id   entity-a
+       (make-doc {:entity-id   entity-a
                   :content-all "Filterware Alpha"
                   :filters     {:tenant-id "tenant-1" :status "active"}}))
       (ports/upsert-document!
        @test-store
-       (doc {:entity-id   entity-b
+       (make-doc {:entity-id   entity-b
                   :content-all "Filterware Beta"
                   :filters     {:tenant-id "tenant-2" :status "active"}}))
       (let [results (ports/search-documents
@@ -223,38 +216,39 @@
           entity-d (UUID/randomUUID)]
       (ports/upsert-document!
        @test-store
-       (doc {:entity-id entity-c :content-all "Unfiltered Content One"}))
+       (make-doc {:entity-id entity-c :content-all "Unfiltered Content One"}))
       (ports/upsert-document!
        @test-store
-       (doc {:entity-id entity-d :content-all "Unfiltered Content Two"}))
+       (make-doc {:entity-id entity-d :content-all "Unfiltered Content Two"}))
       (let [results (ports/search-documents
                      @test-store :product-search :product
                      "unfiltered" {:limit 10 :offset 0})]
         (is (= 2 (count results)))))))
 
+(defn- tenant-1-suggestions
+  "Entity ids `store` suggests for \"wid\" under tenant-1, after indexing one
+   matching document per tenant. Returns [expected actual]."
+  [store]
+  (let [entity-a (UUID/randomUUID)]
+    (ports/upsert-document! store (make-doc {:entity-id entity-a :content-all "Widget Alpha"
+                                             :filters {:tenant-id "tenant-1"}}))
+    (ports/upsert-document! store (make-doc {:content-all "Widget Beta"
+                                             :filters {:tenant-id "tenant-2"}}))
+    [[entity-a]
+     (map :entity-id (ports/suggest-documents store :product-search :product "wid"
+                                              {:limit 5 :filters {:tenant-id "tenant-1"}}))]))
+
 (deftest ^:integration suggest-filters-test
   (testing "suggestions keep to the filter"
-    (let [entity-a (UUID/randomUUID)]
-      (ports/upsert-document! @test-store (doc {:entity-id entity-a :content-all "Widget Alpha"
-                                                :filters {:tenant-id "tenant-1"}}))
-      (ports/upsert-document! @test-store (doc {:content-all "Widget Beta"
-                                                :filters {:tenant-id "tenant-2"}}))
-      (is (= [entity-a]
-             (map :entity-id (ports/suggest-documents @test-store :product-search :product "wid"
-                                                      {:limit 5 :filters {:tenant-id "tenant-1"}})))))))
+    (let [[expected actual] (tenant-1-suggestions @test-store)]
+      (is (= expected actual)))))
 
 (deftest ^:integration suggest-without-pg-trgm-test
   (testing "PostgreSQL without pg_trgm suggests by LIKE (BOU-661)"
     (if-not (full-text?)
       (is (not (full-text?)) "LIKE is already the only strategy here")
       (let [{:keys [datasource]} @test-store
-            entity-a             (UUID/randomUUID)]
-        (jdbc/execute! datasource ["DROP EXTENSION pg_trgm"])
-        (let [store (persistence/create-search-store datasource (:adapter (db/context-of datasource)))]
-          (ports/upsert-document! store (doc {:entity-id entity-a :content-all "Widget Alpha"
-                                              :filters {:tenant-id "tenant-1"}}))
-          (ports/upsert-document! store (doc {:content-all "Widget Beta"
-                                              :filters {:tenant-id "tenant-2"}}))
-          (is (= [entity-a]
-                 (map :entity-id (ports/suggest-documents store :product-search :product "wid"
-                                                          {:limit 5 :filters {:tenant-id "tenant-1"}})))))))))
+            _                    (jdbc/execute! datasource ["DROP EXTENSION pg_trgm"])
+            [expected actual]    (tenant-1-suggestions
+                                  (persistence/create-search-store datasource @test-adapter))]
+        (is (= expected actual))))))
