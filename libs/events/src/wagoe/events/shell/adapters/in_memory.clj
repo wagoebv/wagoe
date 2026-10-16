@@ -80,6 +80,20 @@
                       (Executors/newSingleThreadExecutor)
                       (or history-limit default-history-limit)))
 
+(defn drain!
+  "Wait until every accepted event has reached its subscribers, then return
+   what was published to `topic` since the last drain, oldest first. For tests,
+   where asynchronous delivery makes an assertion a race (BOU-469). An event a
+   handler publishes while being waited for is waited for too."
+  [{:keys [state ^ExecutorService executor]} topic]
+  (loop [seen (:history @state)]
+    (.get (.submit executor ^Callable (fn [] nil)))
+    (when (not= seen (:history @state))
+      (recur (:history @state))))
+  (let [k       (keyword topic)
+        [old _] (swap-vals! state update :history dissoc k)]
+    (get-in old [:history k] [])))
+
 (defn stop!
   "Stop delivering and release the thread.
 

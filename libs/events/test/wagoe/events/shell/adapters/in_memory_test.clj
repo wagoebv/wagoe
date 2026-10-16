@@ -121,6 +121,22 @@
       (testing "and an untouched topic is empty rather than an error"
         (is (= [] (ports/history bus :never-used)))))))
 
+(deftest ^:unit drain-waits-for-delivery-and-returns-what-is-new
+  (with-bus
+    (fn [bus]
+      (let [received (atom [])]
+        ;; A handler that publishes again: drain! has to wait for that too.
+        (ports/subscribe! bus :orders (fn [e]
+                                        (Thread/sleep 50)
+                                        (swap! received conj (:type e))
+                                        (publisher/emit! bus :invoices :invoice/raised :test {})))
+        (publisher/emit! bus :orders :order/placed :test {:order-id 1})
+        (is (= [:order/placed] (map :type (in-memory/drain! bus :orders))))
+        (is (= [:order/placed] @received) "drain! returned before delivery")
+        (is (= [:invoice/raised] (map :type (in-memory/drain! bus :invoices))))
+        (testing "a second drain has nothing new"
+          (is (= [] (in-memory/drain! bus :orders))))))))
+
 (deftest ^:unit history-is-bounded
   ;; A process-local buffer with no bound is a memory leak that only appears in
   ;; the longest-running deployment.

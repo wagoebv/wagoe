@@ -378,7 +378,7 @@ jobs:
           - libs: [core, devtools, email, events, external, geo]
           - libs: [i18n, jobs, observability, payments, platform, push]
           - libs: [realtime, reports, scaffolder, search, shared-ui, storage]
-          - libs: [tenant, ui-style, user, wagoe-cli, wagoe-mcp, workflow]
+          - libs: [tenant, test, ui-style, user, wagoe-cli, wagoe-mcp, workflow]
 
     steps:
       - uses: actions/checkout@v6
@@ -826,6 +826,25 @@ jobs:
         env:
           JWT_SECRET: "ci-test-secret-minimum-32-characters"
         run: clojure -M:test :events
+
+  test-test-kit:
+    name: Test wagoe/test
+    runs-on: ubuntu-latest
+    needs: [warm-deps, changes]
+    if: needs.changes.outputs.code == 'true'
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Clojure + warm deps
+        uses: ./.github/actions/clojure-deps
+        with:
+          aliases: -M:test
+
+      - name: Run tests
+        env:
+          JWT_SECRET: "ci-test-secret-minimum-32-characters"
+        run: clojure -M:test :test
 
   test-jobs:
     name: Test wagoe/jobs
@@ -1612,7 +1631,7 @@ jobs:
     # always(): with the default, a failed job skips this one, and GitHub
     # counts a skipped required check as passing (BOU-615).
     if: always()
-    needs: [changes, warm-deps, checks, lint, first-run-smoke, build-ui-assets, docs-lint, command-smoke, i18n-scan, check-isolation-matrix, build-uberjar, test-tools, example-smoke, test-i18n, test-config, test-app, test-core, test-observability, test-platform, test-user, test-admin, test-ui-style, test-storage, test-cache, test-events, test-jobs, test-tenant, test-audience, test-devtools, test-email, test-realtime, test-workflow, test-search, test-mysql-suites, mysql-smoke, test-scaffolder, test-external, test-payments, test-push, test-calendar, test-reports, test-geo, test-ai, test-mcp, test-wagoe-cli, test-shared-ui, e2e]
+    needs: [changes, warm-deps, checks, lint, first-run-smoke, build-ui-assets, docs-lint, command-smoke, i18n-scan, check-isolation-matrix, build-uberjar, test-tools, example-smoke, test-i18n, test-config, test-app, test-core, test-observability, test-platform, test-user, test-admin, test-ui-style, test-storage, test-cache, test-events, test-test-kit, test-jobs, test-tenant, test-audience, test-devtools, test-email, test-realtime, test-workflow, test-search, test-mysql-suites, mysql-smoke, test-scaffolder, test-external, test-payments, test-push, test-calendar, test-reports, test-geo, test-ai, test-mcp, test-wagoe-cli, test-shared-ui, e2e]
 
     steps:
       - name: Every job passed, or was skipped on a docs-only change
@@ -1639,6 +1658,7 @@ jobs:
           echo "  - wagoe/storage"
           echo "  - wagoe/cache"
           echo "  - wagoe/events"
+          echo "  - wagoe/test"
           echo "  - wagoe/jobs"
           echo "  - wagoe/tenant"
           echo "  - wagoe/email"

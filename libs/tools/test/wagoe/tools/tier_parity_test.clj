@@ -75,7 +75,7 @@
   ;; absent from it cannot be added and carries no tier anywhere. Named rather
   ;; than merely counted, so adding a library makes this fail with the name.
   (let [known    (set (keys (catalogue-tiers)))
-        expected #{"scaffolder" "shared-ui" "tools" "wagoe-cli" "wagoe-mcp"}
+        expected #{"scaffolder" "shared-ui" "test" "tools" "wagoe-cli" "wagoe-mcp"}
         missing  (set/difference (set deploy/all-libs) known)]
     (is (= expected missing)
         (str "published libraries outside the catalogue changed: " (pr-str missing)))))
