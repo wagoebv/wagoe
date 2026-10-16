@@ -61,6 +61,32 @@
       (finally
         (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))
 
+(deftest ^:integration a-local-checkout-gets-the-module-from-the-same-checkout
+  ;; A Maven pin next to local libs mixes two Wagoes on one classpath (BOU-664).
+  (let [tmp (str (System/getProperty "java.io.tmpdir") "/wagoe-add-local-" (System/nanoTime))]
+    (try
+      (make-wagoe-project! tmp)
+      (spit (io/file tmp "deps.edn")
+            "{:deps {wagoe/core {:local/root \"../wagoe/libs/core\"}}}")
+      (testing "writes a :local/root entry beside the existing one"
+        (is (= :deps (add/patch-deps! tmp {:clojars 'com.wagoe/wagoe-payments :version "1.0.0"})))
+        (is (= {'wagoe/core     {:local/root "../wagoe/libs/core"}
+                'wagoe/payments {:local/root "../wagoe/libs/payments"}}
+               (:deps (clojure.edn/read-string (slurp (io/file tmp "deps.edn")))))))
+
+      (testing "and then sees it as present (BOU-662)"
+        (is (= {:local/root "../wagoe/libs/payments"}
+               (add/dep-coords (slurp (io/file tmp "deps.edn")) 'com.wagoe/wagoe-payments nil)))
+        (is (nil? (add/patch-deps! tmp {:clojars 'com.wagoe/wagoe-payments :version "1.0.0"}))))
+      (finally
+        (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))
+
+(deftest ^:unit a-maven-project-still-gets-a-maven-pin
+  (is (= "com.wagoe/wagoe-payments {:mvn/version \"1.0.0\"}"
+         (add/dep-entry
+          "{:deps {com.wagoe/wagoe-core {:mvn/version \"1.0.0\"}}}"
+          'com.wagoe/wagoe-payments "1.0.0"))))
+
 (deftest ^:integration a-dev-scoped-module-lands-in-the-repl-alias
   ;; devtools carries a dashboard and a Jetty adapter. In :deps it would be in
   ;; the uberjar of every project that ran `wagoe add devtools` (BOU-318).

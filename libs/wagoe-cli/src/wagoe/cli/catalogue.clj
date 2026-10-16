@@ -17,22 +17,32 @@
   []
   @catalogue-data)
 
+(defn read-clj
+  "`s` read with the Clojure reader, so bb.edn's `#()` and `#\"\"` parse."
+  [s]
+  (binding [*read-eval* false] (read-string s)))
+
+(defn wagoe-lib-name
+  "Short name (\"core\") of Wagoe deps entry `lib`, or nil. A local checkout
+   may name them `wagoe/core {:local/root ..}` (BOU-662)."
+  [lib coord]
+  (when (symbol? lib)
+    (case (namespace lib)
+      "com.wagoe" (second (re-matches #"wagoe-(.+)" (name lib)))
+      "wagoe"     (when (:local/root coord) (name lib))
+      nil)))
+
 (defn wagoe-deps
-  "Short names (\"core\", \"tools\") of the Wagoe libs in the :deps of EDN
-   file `f`, nil when it is missing, :unreadable when it will not parse.
-   A local checkout names them `wagoe/core {:local/root ..}` (BOU-662)."
+  "Short names of the Wagoe libs in the :deps of file `f`; empty when it is
+   missing or does not read."
   [f]
-  (when (.exists (io/file f))
-    (try
-      (set (keep (fn [[lib coord]]
-                   (when (symbol? lib)
-                     (case (namespace lib)
-                       "com.wagoe" (second (re-matches #"wagoe-(.+)" (name lib)))
-                       "wagoe"     (when (and (map? coord) (:local/root coord))
-                                     (name lib))
-                       nil)))
-                 (:deps (edn/read-string (slurp f)))))
-      (catch Exception _ :unreadable))))
+  (let [f (io/file f)]
+    (if (.exists f)
+      (try
+        (set (keep (fn [[lib coord]] (wagoe-lib-name lib coord))
+                   (:deps (read-clj (slurp f)))))
+        (catch Exception _ #{}))
+      #{})))
 
 (defn find-module
   "Find a module by name string. Returns the module map or nil."

@@ -81,8 +81,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
-- **`wagoe add` and `wagoe doctor` did not recognise a project on a local Wagoe checkout** (BOU-662).
-  Upgrade wagoe-cli if your deps name `wagoe/<lib> {:local/root ..}`.
+- **`wagoe add` and `wagoe doctor` did not recognise a project on a local Wagoe checkout** (BOU-662, BOU-664).
+  `wagoe add` now writes the module from that checkout; upgrade wagoe-cli if you use `:local/root`.
 - **MySQL timestamps read back without a zone, so APIs sent UTC as local time** (BOU-653).
   Upgrade if you run on MySQL.
 - **MySQL lost workflow timestamps and admin UUID types; PostgreSQL refused full-text search** (BOU-652).

@@ -10,11 +10,7 @@
 (defn wagoe-project?
   "True if dir contains a deps.edn depending on a Wagoe lib."
   [dir]
-  (let [f    (io/file dir "deps.edn")
-        deps (cat/wagoe-deps f)]
-    (if (= :unreadable deps)
-      (str/includes? (slurp f) "com.wagoe")
-      (boolean (seq deps)))))
+  (boolean (seq (cat/wagoe-deps (io/file dir "deps.edn")))))
 
 ;; ─── deps.edn patching ───────────────────────────────────────────────────────
 
@@ -30,14 +26,31 @@
 
    deps.edn is plain EDN, so this reads it. `:unreadable` when it will not
    parse: writing into a file we cannot read risks a duplicate key, and a
-   deps.edn with a duplicate key does not load at all."
+   deps.edn with a duplicate key does not load at all. A local checkout's
+   `wagoe/<lib> {:local/root ..}` counts as the module (BOU-662)."
   [content clojars scope]
   (try
-    (let [parsed (edn/read-string content)]
-      (if (= :dev scope)
-        (get-in parsed [:aliases :repl :extra-deps clojars])
-        (get-in parsed [:deps clojars])))
+    (let [parsed (cat/read-clj content)
+          short  (cat/wagoe-lib-name clojars nil)]
+      (some (fn [[lib coord]]
+              (when (= short (cat/wagoe-lib-name lib coord)) coord))
+            (get-in parsed (if (= :dev scope) [:aliases :repl :extra-deps] [:deps]))))
     (catch Exception _ :unreadable)))
+
+(defn dep-entry
+  "The deps.edn entry to write for `clojars`. A project on a local checkout
+   gets the module from the same checkout, named like its other Wagoe deps,
+   rather than a Maven pin (BOU-664)."
+  [content clojars version]
+  (let [short (cat/wagoe-lib-name clojars nil)]
+    (or (some (fn [[lib coord]]
+                (when-let [n (cat/wagoe-lib-name lib coord)]
+                  (when-let [[_ prefix] (some->> (:local/root coord)
+                                                 (re-matches (re-pattern (str "(.*/|)\\Q" n "\\E/?"))))]
+                    (str (if (= "wagoe" (namespace lib)) (symbol "wagoe" short) clojars)
+                         " {:local/root \"" prefix short "\"}"))))
+              (:deps (cat/read-clj content)))
+        (str clojars " {:mvn/version \"" version "\"}"))))
 
 (defn- code-only
   "`text` with strings and comments blanked, positions and newlines intact.
@@ -111,9 +124,8 @@
   [dir {:keys [clojars version scope]}]
   (let [f         (io/file dir "deps.edn")
         content   (slurp f)
-        coord-str (str clojars)
-        entry     (str coord-str " {:mvn/version \"" version "\"}")
-        existing  (dep-coords content clojars scope)]
+        existing  (dep-coords content clojars scope)
+        entry     (when-not existing (dep-entry content clojars version))]
     (cond
       (= :unreadable existing) :unreadable
       existing                 nil

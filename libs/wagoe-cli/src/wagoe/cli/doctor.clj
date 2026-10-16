@@ -218,11 +218,7 @@
 (defn wagoe-project?
   "True when `dir` is a project whose bb.edn pulls in wagoe-tools."
   [dir]
-  (let [f    (io/file dir "bb.edn")
-        deps (cat/wagoe-deps f)]
-    (if (= :unreadable deps)
-      (str/includes? (slurp f) "wagoe-tools")
-      (contains? deps "tools"))))
+  (contains? (cat/wagoe-deps (io/file dir "bb.edn")) "tools"))
 
 (defn print-help []
   (println (bold "wagoe doctor") " — check a project and say what to do next")
