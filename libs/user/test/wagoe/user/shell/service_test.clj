@@ -1,7 +1,6 @@
 (ns wagoe.user.shell.service-test
   (:require [wagoe.user.shell.auth :as auth-shell]
             [wagoe.user.shell.service :as sut]
-            [wagoe.cache.ports :as cache-ports]
             [wagoe.user.ports :as ports]
             [clojure.test :refer [deftest is testing]])
   (:import (java.time Instant)
@@ -51,28 +50,6 @@
   (find-audit-logs [_ _options] {:audit-logs [] :total-count 0})
   (find-audit-logs-by-user [_ _user-id _options] []))
 
-(defrecord CacheStub [state ops]
-  cache-ports/ICache
-  (get-value [_ key]
-    (swap! ops conj [:get key])
-    (get @state key))
-  (set-value! [_ key value]
-    (swap! ops conj [:set key value nil])
-    (swap! state assoc key value)
-    true)
-  (set-value! [_ key value ttl-seconds]
-    (swap! ops conj [:set key value ttl-seconds])
-    (swap! state assoc key value)
-    true)
-  (delete-key! [_ key]
-    (swap! ops conj [:delete key])
-    (swap! state dissoc key)
-    true)
-  (exists? [_ key]
-    (contains? @state key))
-  (ttl [_ _key] nil)
-  (expire! [_ _key _ttl-seconds] true))
-
 (deftest ^:unit validate-session-survives-nil-update-test
   (testing "a valid session is returned even when update-session returns nil"
     (let [user-id (UUID/randomUUID)
@@ -88,7 +65,6 @@
                    (->SessionRepoStub session)
                    nil
                    {}
-                   nil
                    nil)]
       (is (= "token-123"
              (:session-token (ports/validate-session service "token-123"))))
@@ -103,7 +79,6 @@
                    nil
                    (->AuditRepoStub)
                    {}
-                   nil
                    nil)]
       (with-redefs [sut/generate-user-id (fn [] #uuid "00000000-0000-0000-0000-000000000111")
                     sut/current-timestamp (fn [] (Instant/parse "2026-03-24T10:00:00Z"))
@@ -143,7 +118,6 @@
                    nil
                    (->AuditRepoStub)
                    {}
-                   nil
                    nil)]
       (with-redefs [auth-shell/authenticate-user
                     (fn [_auth-service email password login-context]
@@ -174,7 +148,6 @@
                    nil
                    (->AuditRepoStub)
                    {}
-                   nil
                    nil)]
       (with-redefs [sut/generate-user-id (fn [] #uuid "00000000-0000-0000-0000-000000000121")
                     sut/current-timestamp (fn [] (Instant/parse "2026-03-24T10:00:00Z"))
@@ -215,7 +188,6 @@
                    nil
                    (->AuditRepoStub)
                    {}
-                   nil
                    nil)]
       (with-redefs [auth-shell/authenticate-user
                     (fn [_auth-service email _password _login-context]
@@ -249,7 +221,6 @@
                    nil
                    (->AuditRepoStub)
                    {}
-                   nil
                    nil)]
       (with-redefs [auth-shell/authenticate-user
                     (fn [_auth-service _email _password _login-context]
@@ -274,7 +245,6 @@
                    nil
                    (->AuditRepoStub)
                    {}
-                   nil
                    nil)]
       (with-redefs [sut/generate-user-id (fn [] #uuid "00000000-0000-0000-0000-000000000131")
                     sut/current-timestamp (fn [] (Instant/parse "2026-03-24T10:00:00Z"))
@@ -310,7 +280,7 @@
                    (throw (org.postgresql.util.PSQLException.
                            "update or delete on table \"users\" violates foreign key constraint \"fk_tenant_memberships_user\" on table \"tenant_memberships\""
                            org.postgresql.util.PSQLState/FOREIGN_KEY_VIOLATION))))
-          service (sut/->UserService repo nil nil {} nil nil)]
+          service (sut/->UserService repo nil nil {} nil)]
       (try
         (ports/permanently-delete-user service user-id)
         (is false "Expected permanently-delete-user to throw")
@@ -318,40 +288,24 @@
           (is (= :hard-deletion-not-allowed (:type (ex-data ex)))))))))
 
 (deftest ^:unit user-query-operations-test
-  (testing "get-user-by-id strips password hash and caches the safe user"
+  (testing "get-user-by-id strips the password hash"
     (let [user-id (UUID/randomUUID)
           repo-state (atom {user-id {:id user-id
                                      :email "cache@example.nl"
                                      :password-hash "secret"
                                      :role :user
                                      :active true}})
-          cache-state (atom {})
-          cache-ops (atom [])
           service (sut/->UserService
                    (->UserRepoStub repo-state)
                    nil
                    nil
                    {}
-                   nil
-                   (->CacheStub cache-state cache-ops))]
+                   nil)]
       (is (= {:id user-id
               :email "cache@example.nl"
               :role :user
               :active true}
-             (ports/get-user-by-id service user-id)))
-      (is (= {:id user-id
-              :email "cache@example.nl"
-              :role :user
-              :active true}
-             (get @cache-state (str "user:" user-id))))
-      (is (some #(= [:set (str "user:" user-id)
-                     {:id user-id
-                      :email "cache@example.nl"
-                      :role :user
-                      :active true}
-                     300]
-                    %)
-                @cache-ops))))
+             (ports/get-user-by-id service user-id)))))
 
   (testing "get-user-by-email and list-users never return password hashes"
     (let [user-id (UUID/randomUUID)
@@ -368,18 +322,16 @@
                  (update-user [_ user-entity] user-entity)
                  (soft-delete-user [_ _user-id] true)
                  (hard-delete-user [_ _user-id] true))
-          service (sut/->UserService repo nil nil {} nil nil)]
+          service (sut/->UserService repo nil nil {} nil)]
       (is (= (dissoc user :password-hash)
              (ports/get-user-by-email service "safe@example.nl")))
       (is (= {:users [(dissoc user :password-hash)] :total-count 1}
              (ports/list-users service {:limit 10}))))))
 
 (deftest ^:unit user-mutation-operations-test
-  (testing "logout invalidates cache and writes an audit entry for an existing session"
+  (testing "logout writes an audit entry for an existing session"
     (let [user-id (UUID/randomUUID)
           session-id (UUID/randomUUID)
-          cache-state (atom {"session:token-1" {:cached true}})
-          cache-ops (atom [])
           audit-entries (atom [])
           user {:id user-id :email "logout@example.nl" :role :user :active true}
           session {:id session-id
@@ -399,19 +351,14 @@
                    (->SessionRepoStub session)
                    (->AuditRepoCapture audit-entries)
                    {}
-                   nil
-                   (->CacheStub cache-state cache-ops))]
+                   nil)]
       (is (= {:invalidated true :session-id session-id}
              (ports/logout-user service "token-1")))
-      (is (nil? (get @cache-state "session:token-1")))
-      (is (some #(= [:delete "session:token-1"] %) @cache-ops))
       (is (= 1 (count @audit-entries)))))
 
-  (testing "update-user-profile invalidates cached user and keeps audit actor context"
+  (testing "update-user-profile keeps audit actor context"
     (let [user-id (UUID/randomUUID)
           now (Instant/parse "2026-03-25T09:00:00Z")
-          cache-state (atom {(str "user:" user-id) {:cached true}})
-          cache-ops (atom [])
           audit-entries (atom [])
           existing-user {:id user-id
                          :name "Old Name"
@@ -427,8 +374,7 @@
                    nil
                    (->AuditRepoCapture audit-entries)
                    {}
-                   nil
-                   (->CacheStub cache-state cache-ops))]
+                   nil)]
       (with-redefs [sut/current-timestamp (fn [] now)]
         (sut/with-audit-context
           {:actor-id #uuid "00000000-0000-0000-0000-000000000901"
@@ -448,18 +394,14 @@
                             :deleted-at nil})]
               (is (= "New Name" (:name updated)))
               (is (= now (:updated-at (get @repo-state user-id))))
-              (is (nil? (get @cache-state (str "user:" user-id))))
-              (is (some #(= [:delete (str "user:" user-id)] %) @cache-ops))
               (is (= 1 (count @audit-entries)))
               (is (= #uuid "00000000-0000-0000-0000-000000000901"
                      (:actor-id (first @audit-entries))))
               (is (= "admin@example.nl"
                      (:actor-email (first @audit-entries))))))))))
 
-  (testing "deactivate-user invalidates cache and returns true"
+  (testing "deactivate-user returns true"
     (let [user-id (UUID/randomUUID)
-          cache-state (atom {(str "user:" user-id) {:cached true}})
-          cache-ops (atom [])
           audit-entries (atom [])
           user {:id user-id :email "deactivate@example.nl" :role :user :active true}
           service (sut/->UserService
@@ -474,11 +416,8 @@
                    nil
                    (->AuditRepoCapture audit-entries)
                    {}
-                   nil
-                   (->CacheStub cache-state cache-ops))]
+                   nil)]
       (is (= true (ports/deactivate-user service user-id)))
-      (is (nil? (get @cache-state (str "user:" user-id))))
-      (is (some #(= [:delete (str "user:" user-id)] %) @cache-ops))
       (is (= 1 (count @audit-entries))))))
 
 (deftest ^:unit change-password-test
@@ -502,7 +441,6 @@
                      (invalidate-all-user-sessions [_ _] 0))
                    (->AuditRepoCapture audit-entries)
                    {:password-policy {:min-length 8}}
-                   nil
                    nil)]
       (with-redefs [sut/current-timestamp (fn [] now)
                     auth-shell/verify-password (fn [plain hashed]
@@ -530,7 +468,6 @@
                      nil
                      (->AuditRepoStub)
                      {:password-policy {:min-length 8}}
-                     nil
                      nil)]
         (with-redefs [auth-shell/verify-password (fn [_ _] false)]
           (let [ex (is (thrown? clojure.lang.ExceptionInfo
@@ -546,7 +483,7 @@
   ;; (BOU-323).
   (let [user-id (UUID/randomUUID)
         state   (atom {user-id {:id user-id :email "a@example.nl" :active true}})
-        service (sut/->UserService (->UserRepoStub state) nil (->AuditRepoStub) {} nil nil)
+        service (sut/->UserService (->UserRepoStub state) nil (->AuditRepoStub) {} nil)
         retry   (Instant/parse "2026-08-21T10:15:00Z")]
     (with-redefs [auth-shell/authenticate-user
                   (fn [_ _ _ _]
@@ -572,7 +509,7 @@
     ;; from "MFA code required" to nil with every test still green.
     (let [user-id (UUID/randomUUID)
           state   (atom {user-id {:id user-id :email "a@example.nl" :active true}})
-          service (sut/->UserService (->UserRepoStub state) nil (->AuditRepoStub) {} nil nil)]
+          service (sut/->UserService (->UserRepoStub state) nil (->AuditRepoStub) {} nil)]
       (with-redefs [auth-shell/authenticate-user
                     (fn [_ _ _ _]
                       {:success? false

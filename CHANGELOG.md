@@ -83,6 +83,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **`:interceptors` and `:skip-interceptors?` on a path or parent route were ignored** (BOU-642); they now apply to its
   methods, like `:public`. A parent's `:skip-interceptors?` now drops CSRF and rate limiting from its children; check them.
+- **Revoked sessions and deactivated users stayed signed in**: until the cache expired with `:wagoe/cache` on, and for good when made inactive without a soft delete (BOU-663).
+  Upgrade if you use session authentication.
 - **`bb scaffold field` enums read back as strings** (BOU-656): the field now joins the repository's `enum-fields`.
   For an enum added before, add it to `enum-fields` in the entity's persistence namespace.
 - **A typed `ex-info` thrown from route `:middleware` answered 500** (BOU-659); it now answers its `:type`'s status.

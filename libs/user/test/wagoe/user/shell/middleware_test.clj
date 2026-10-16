@@ -141,10 +141,10 @@
         service #_{:clj-kondo/ignore [:missing-protocol-method]}
         (reify wagoe.user.ports/IUserService
           (validate-session [_ _] {:user-id 7})
-          (get-user-by-id [_ _] {:id 7 :email "s@b.c" :role :user}))
+          (get-user-by-id [_ _] {:id 7 :email "s@b.c" :role :user :active true}))
         handler ((sut/authenticate-if-present service) echo-handler)
         request (:body (handler {:uri "/x" :cookies {"session-token" {:value "tok"}}}))]
-    (is (= {:id 7 :email "s@b.c" :role :user} (:user request)))
+    (is (= {:id 7 :email "s@b.c" :role :user :active true} (:user request)))
     (is (= :session (:auth-type request)))))
 
 ;; ===========================================================================
@@ -157,7 +157,7 @@
   ;; :user. That was contained while authentication was per-route; BOU-373 put
   ;; this middleware on every request, which would have handed an MFA secret to
   ;; public handlers and to any application middleware downstream.
-  (let [stored  {:id 7 :email "s@b.c" :role :user
+  (let [stored  {:id 7 :email "s@b.c" :role :user :active true
                  :password-hash          "$2a$hash"
                  :mfa-secret             "JBSWY3DPEHPK3PXP"
                  :mfa-backup-codes       ["11111111" "22222222"]
@@ -189,7 +189,7 @@
       (let [service #_{:clj-kondo/ignore [:missing-protocol-method]}
                     (reify wagoe.user.ports/IUserService
                       (validate-session [_ t] (validate t))
-                      (get-user-by-id [_ _] {:id 7 :email "s@b.c" :role :user}))]
+                      (get-user-by-id [_ _] {:id 7 :email "s@b.c" :role :user :active true}))]
         (log-test/with-log
           ((wrap service) request)
           (is (seq (log-test/the-log)) "the attempt is still logged")
@@ -199,14 +199,14 @@
 (deftest ^:unit flexible-authentication-does-not-revalidate-an-authenticated-request
   ;; user, admin and workflow routes carry flexible-authentication-middleware.
   ;; With BOU-373 the global pass has already validated the same credentials by
-  ;; the time those run, and validate-session is not free: with the cache off it
+  ;; the time those run, and validate-session is not free: it
   ;; reads the session, writes the access time, then fetches the user. Doing it
   ;; twice per request doubles that for no gain.
   (let [calls   (atom 0)
         service #_{:clj-kondo/ignore [:missing-protocol-method]}
         (reify wagoe.user.ports/IUserService
           (validate-session [_ _] (swap! calls inc) {:user-id 7})
-          (get-user-by-id [_ _] {:id 7 :email "s@b.c" :role :user}))
+          (get-user-by-id [_ _] {:id 7 :email "s@b.c" :role :user :active true}))
         route   ((sut/flexible-authentication-middleware service) echo-handler)]
 
     (testing "already authenticated — the route-level pass is a no-op"

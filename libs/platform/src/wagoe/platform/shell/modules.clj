@@ -541,7 +541,7 @@
 
    `ctx` is what a module may need from the application and cannot know:
    `:config` (the whole loaded map), `:validation-config`, and `:enabled` — the
-   set of sibling modules that are on, so user-service can take a cache ref only
+   set of sibling modules that are on, so audience can take a cache ref only
    when there is a cache.
 
    `load-wiring!` and `resolve-var` are injected so this is testable without a
