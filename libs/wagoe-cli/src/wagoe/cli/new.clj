@@ -240,7 +240,7 @@
                           " config user.email you@example.com && git -C " project-name
                           " commit -m \"Initial commit\"")))))
       (println (str "\n✓ Project created: " project-name "/"))
-      (println "\nCore modules installed: core, observability, platform, user")
+      (println (str "\nCore modules installed: core, observability, platform" (when with-user? ", user")))
       (println "\nOptional modules available — add any with:\n")
       (doseq [{:keys [description add-command]} (take 6 (cat/optional-modules))]
         (println (format "  %-25s %s" add-command description)))

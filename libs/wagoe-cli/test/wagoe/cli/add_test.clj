@@ -389,6 +389,9 @@
         home (System/getProperty "user.dir")]
     (try
       (new/generate! tmp "shop" {:with-user? false})
+      ;; A project generated at an older release pins an older user.
+      (let [f (io/file tmp "deps.edn")]
+        (spit f (str/replace (slurp f) #"(wagoe-user\s+\{:mvn/version \")[^\"]+" (fn [[_ pre]] (str pre "0.0.1")))))
       (System/setProperty "user.dir" tmp)
       (let [out (with-out-str (add/-main ["user"]))]
         (is (not (str/includes? out "already installed")))

@@ -494,8 +494,8 @@
 (defn- module-entries
   "The framework modules `active` switches on, as [key lib] pairs.
 
-   `extra` names modules an application enables in code rather than in config —
-   `wagoe new --no-user` is a generated literal, not a config key."
+   `extra` names modules an application enables in code rather than in config;
+   projects generated before BOU-667 enable user this way."
   [active extra]
   (->> framework-modules
        (filter (fn [[k _]] (or (contains? extra k)

@@ -511,7 +511,10 @@
               ;; both use :wagoe.external/smtp).
               wired?       (installed? dir module dep-present?)]
           (cond
-            (and dep-present? existing-ver (not= existing-ver (:version module)))
+            ;; A core module's version moves with the rest of Wagoe, and
+            ;; switching it on touches config only (BOU-667).
+            (and dep-present? existing-ver (not= existing-ver (:version module))
+                 (not (:module-key module)))
             (do (println (str "Warning: " module-name " is already in deps.edn at version " existing-ver
                               " (catalogue version: " (:version module) ")."))
                 (println "Resolve the version conflict manually — no changes made."))

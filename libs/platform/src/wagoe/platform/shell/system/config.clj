@@ -13,7 +13,7 @@
    produced a module whose tables were never created.
 
    Usage:
-     (system-config (config/load-config) {:extra-modules #{:wagoe/user}})"
+     (system-config (config/load-config) {:base-ns \"shop\"})"
   (:require [wagoe.config :as config]
             [wagoe.platform.shell.database.migrations :as migrations]
             [wagoe.platform.shell.modules :as modules]
