@@ -40,17 +40,14 @@
   [config]
   (let [active (:active config)
         on?    #(contains? active %)]
-    (cond-> (assoc-in config [:active :wagoe/http :security :csrf :secret] csrf-secret)
+    (cond-> (reduce #(cond-> %1 (on? %2) (assoc-in [:active %2 :provider] :memory))
+                    (assoc-in config [:active :wagoe/http :security :csrf :secret] csrf-secret)
+                    [:wagoe/cache :wagoe/events :wagoe/realtime :wagoe/jobs])
       (on? :wagoe/h2)       (update-in [:active :wagoe/h2] assoc
                                        :memory false
                                        :db (str "mem:wagoe_test_" (System/nanoTime) ";DB_CLOSE_DELAY=-1"))
-      (on? :wagoe/cache)    (assoc-in [:active :wagoe/cache :provider] :memory)
-      (on? :wagoe/events)   (assoc-in [:active :wagoe/events :provider] :memory)
-      (on? :wagoe/realtime) (assoc-in [:active :wagoe/realtime :provider] :memory)
       ;; No worker threads: jobs run when the test calls run-pending-jobs!.
-      (on? :wagoe/jobs)     (update-in [:active :wagoe/jobs] assoc
-                                       :provider :memory
-                                       :workers (assoc (get-in active [:wagoe/jobs :workers]) :count 0))
+      (on? :wagoe/jobs)     (assoc-in [:active :wagoe/jobs :workers :count] 0)
       (and (on? :wagoe/tenant) (on? :wagoe/h2))
       (assoc-in [:active :wagoe/tenant :allow-h2?] true))))
 
@@ -65,15 +62,14 @@
 
    No HTTP port is bound; `client` calls the handler directly."
   [ig-config-or-opts]
-  (let [{:keys [ig-config profile] :or {profile :test} :as opts}
+  (let [{:keys [ig-config profile] tweak :config :or {profile :test tweak identity}}
         (if (map? ig-config-or-opts) ig-config-or-opts {:ig-config ig-config-or-opts})
-        tweak  (or (:config opts) identity)
         cfg    (in-process (tweak (config/load-config {:profile profile})))
         system (ig/init (dissoc (ig-config cfg) :wagoe/http-server))
         sent   (atom [])]
     (when-let [bus (get-in system [:wagoe/realtime :bus])]
       (realtime-ports/start-subscriber! bus (fn [envelope] (swap! sent conj envelope) 0)))
-    (vary-meta system assoc ::config cfg ::realtime-sent sent)))
+    (vary-meta system assoc ::realtime-sent sent)))
 
 (defn stop-system [system]
   (ig/halt! system))
@@ -133,8 +129,7 @@
   "The realtime envelopes sent since the last drain, oldest first:
    {:route :user|:role|:broadcast|:connection|:topic, :target …, :message …}."
   [system]
-  (let [[sent _] (reset-vals! (::realtime-sent (meta system)) [])]
-    sent))
+  (first (reset-vals! (::realtime-sent (meta system)) [])))
 
 ;; =============================================================================
 ;; Ring client
@@ -147,7 +142,6 @@
   ([system] (client system {}))
   ([system {:keys [headers]}]
    {:handler (:wagoe/http-handler system)
-    :secret  (get-in (meta system) [::config :active :wagoe/http :security :csrf :secret])
     :headers (or headers {})
     :cookies (atom {})}))
 
@@ -156,21 +150,20 @@
 (defn- form-string [m]
   (str/join "&" (for [[k v] m] (str (encode (name k)) "=" (encode v)))))
 
-(defn- random-string []
-  (let [bytes (byte-array 16)]
-    (.nextBytes (SecureRandom.) bytes)
-    (apply str (map #(format "%02x" %) bytes))))
+(def ^:private ^SecureRandom rng (SecureRandom.))
 
 (defn- csrf-header
   "A token bound to what the server binds it to: the session, else the
    pre-session cookie, which the client makes up when it has neither."
-  [{:keys [secret cookies]}]
+  [{:keys [cookies]}]
   (let [binding (or (get @cookies "session-token")
                     (get @cookies "csrf-session")
-                    (get (swap! cookies assoc "csrf-session" (random-string)) "csrf-session"))
+                    (let [id (str (random-uuid))]
+                      (swap! cookies assoc "csrf-session" id)
+                      id))
         nonce   (byte-array 16)]
-    (.nextBytes (SecureRandom.) nonce)
-    {csrf/header-name (csrf/generate-token secret (URLDecoder/decode ^String binding "UTF-8") nonce)}))
+    (.nextBytes rng nonce)
+    {csrf/header-name (csrf/generate-token csrf-secret (URLDecoder/decode ^String binding "UTF-8") nonce)}))
 
 (defn- remember-cookies! [cookies response]
   (let [set-cookie (get-in response [:headers "Set-Cookie"])]
@@ -179,9 +172,7 @@
                   [k v]          (str/split pair #"=" 2)
                   expired?       (or (str/blank? v)
                                      (some #(re-matches #"(?i)max-age=0" %) attrs))]]
-      (if expired?
-        (swap! cookies dissoc k)
-        (swap! cookies assoc k v)))))
+      (swap! cookies #(if expired? (dissoc % k) (assoc % k v))))))
 
 (defn request
   "Send `method` `uri` through the app's handler and return the Ring response,

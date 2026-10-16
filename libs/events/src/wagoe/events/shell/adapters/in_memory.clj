@@ -88,8 +88,9 @@
   [{:keys [state ^ExecutorService executor]} topic]
   (loop [seen (:history @state)]
     (.get (.submit executor ^Callable (fn [] nil)))
-    (when (not= seen (:history @state))
-      (recur (:history @state))))
+    (let [now (:history @state)]
+      (when-not (identical? seen now)
+        (recur now))))
   (let [k       (keyword topic)
         [old _] (swap-vals! state update :history dissoc k)]
     (get-in old [:history k] [])))

@@ -325,9 +325,12 @@
   (process-scheduled-jobs! queue)
   (let [state (create-worker-state :default)]
     (loop [n 0]
-      (let [ran (count (filter #(process-single-job! config queue store registry
-                                                     (assoc state :queue-name %))
-                               (ports/list-queues queue)))]
+      (let [ran (reduce (fn [ran q]
+                          (cond-> ran
+                            (process-single-job! config queue store registry (assoc state :queue-name q))
+                            inc))
+                        0
+                        (ports/list-queues queue))]
         (if (pos? ran) (recur (+ n ran)) n)))))
 
 ;; =============================================================================
