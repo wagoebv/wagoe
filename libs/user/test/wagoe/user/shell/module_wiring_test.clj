@@ -44,3 +44,20 @@
       (is (log-test/logged? 'wagoe.user.shell.module-wiring :warn #"DEPRECATED"))
       (is (log-test/logged? 'wagoe.user.shell.module-wiring :warn #":wagoe/user-repository"))
       (is (log-test/logged? 'wagoe.user.shell.module-wiring :warn #"removed in 2\.0")))))
+
+(deftest ^:unit oidc-is-wired-only-when-a-provider-is-named
+  (let [without (sut/ig-config nil {:config {}})
+        with    (sut/ig-config {:oidc {:providers {:google {:issuer "https://accounts.google.com"
+                                                            :client-id "app"}}}}
+                               {:config {}})]
+    (is (not (contains? (:components without) :wagoe/user-oidc)))
+    (is (= [(ig/ref :wagoe/user-routes)] (:routes without)))
+    (is (contains? (:components with) :wagoe/user-oidc))
+    (is (= [(ig/ref :wagoe/user-routes) (ig/ref :wagoe/user-oidc-routes)] (:routes with)))))
+
+(deftest ^:unit oidc-refuses-to-boot-misconfigured
+  (doseq [settings [{:providers {:google {:issuer "https://accounts.google.com" :client-id "app"}}}
+                    {:base-url "https://app.example.com"
+                     :providers {:google {:issuer "https://accounts.google.com"}}}]]
+    (is (thrown-with-msg? clojure.lang.ExceptionInfo #"OIDC"
+                          (ig/init-key :wagoe/user-oidc {:settings settings})))))

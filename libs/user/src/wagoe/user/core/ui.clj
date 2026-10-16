@@ -758,6 +758,15 @@
                       (ui/checkbox :remember (boolean (:remember data)))
                       nil)
        (ui/submit-button [:t :user/link-signin] {:loading-text [:t :user/button-signin-loading]})]
+      (when-let [providers (seq (:oidc-providers data))]
+        [:div.oidc-providers
+         [:p.auth-divider [:t :user/oidc-divider]]
+         (for [{:keys [id label]} providers]
+           [:a.button.secondary
+            {:href (str "/web/auth/oidc/" id "/start"
+                        (when (:return-to data)
+                          (str "?return-to=" (java.net.URLEncoder/encode ^String (:return-to data) "UTF-8"))))}
+            [:t :user/oidc-sign-in-with {:provider label}]])])
       [:div.auth-footer
        [:p [:t :user/text-no-account]]
        [:a.button.secondary {:href "/web/register"} [:t :user/button-create-account]]]]]))
@@ -770,9 +779,9 @@
      errors - validation errors (may be nil)
      opts   - page options (user context, flash messages, return-to URL, etc.)"
   [& [data errors opts]]
-  (let [data-with-return (if (:return-to opts)
-                           (assoc data :return-to (:return-to opts))
-                           data)]
+  (let [data-with-return (cond-> (or data {})
+                           (:return-to opts)      (assoc :return-to (:return-to opts))
+                           (:oidc-providers opts) (assoc :oidc-providers (:oidc-providers opts)))]
     (page-layout
      [:t :user/link-signin]
      [:div.login-page.auth-page
@@ -781,8 +790,43 @@
          [:img.auth-logo {:src logo-url :alt "" :style "height:48px; width:auto; display:block; margin:0 auto 12px;"}])
        [:h1 [:t :wagoe/app-name]]
        [:p [:t :user/login-subtitle]]]
+      (when-let [message (:error opts)]
+        (ui/error-message message))
       (login-form data-with-return errors)]
      opts)))
+
+(defn oidc-mfa-page
+  "The second-factor prompt after a provider sign-in. The pending sign-in is
+   in a cookie, so the form carries only the code."
+  [errors opts]
+  (page-layout
+   [:t :user/mfa-title]
+   [:div.mfa-login-page.auth-page
+    [:div#mfa-login-form {:class "auth-card ui-card"}
+     [:div.card-body
+      [:h2.auth-title (icons/icon :shield {:size 24}) [:span [:t :user/mfa-title]]]
+      [:p.auth-subtitle [:t :user/mfa-prompt]]
+      [:form {:method "post" :action "/web/auth/oidc/mfa" :class "form-card ui-form-shell"}
+       (csrf/hidden-field)
+       (ui/form-field :mfa-code [:t :user/mfa-code-label]
+                      [:input {:type "text" :id "mfa-code" :name "mfa-code"
+                               :autocomplete "one-time-code" :required true
+                               :autofocus true :class "mfa-code-input"}]
+                      (:mfa-code errors))
+       [:div.mfa-login-actions
+        (ui/submit-button [:t :user/button-verify] {:loading-text [:t :user/button-verify-loading]})
+        [:a.button.secondary {:href "/web/login"} [:t :common/button-cancel]]]]]]]
+   opts))
+
+(defn oidc-continue-page
+  "Body of the answer to a provider callback that signed someone in; the
+   handler's Refresh header moves the browser on."
+  [location]
+  (page-layout
+   [:t :user/link-signin]
+   [:div.auth-page
+    [:p [:a {:href location} [:t :user/oidc-continue]]]]
+   {}))
 
 ;; =============================================================================
 ;; MFA Login Form & Page

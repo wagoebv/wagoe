@@ -87,6 +87,54 @@ curl -X POST http://localhost:3000/api/auth/mfa/disable \
   -d '{"verificationCode": "123456"}'
 ----
 
+[#oidc]
+== Sign in with OpenID Connect
+
+Any OpenID Connect provider (Google, Microsoft Entra, Keycloak, Auth0, …) can sign
+people in to the web UI. Name each provider under `:wagoe/user`:
+
+[source,clojure]
+----
+:wagoe/user
+{:oidc {:base-url  "https://app.example.com"   ; where the provider redirects back
+        :providers {:google {:issuer        "https://accounts.google.com"
+                             :client-id     #env GOOGLE_CLIENT_ID
+                             :client-secret #env GOOGLE_CLIENT_SECRET
+                             :scopes        ["openid" "email" "profile"]  ; the default
+                             :label         "Google"                      ; button text
+                             :link-by-email? true                         ; the default
+                             :auto-create?   false}}}}                    ; the default
+----
+
+Register `<base-url>/web/auth/oidc/<provider>/callback` as the redirect URI at the
+provider. The login page then shows a "Sign in with Google" button.
+
+The flow is the authorization code flow with PKCE. The discovery document and the
+provider's signing keys are fetched and cached for an hour. The id token's signature,
+issuer, audience, expiry (60 seconds of clock skew allowed) and nonce are checked. The
+state, nonce and PKCE verifier travel in an encrypted cookie that expires after ten
+minutes, so any replica can finish a sign-in another one started.
+
+Which account a sign-in belongs to:
+
+. The account already linked to the token's issuer and subject. That link outlives an
+  email change at the provider.
+. Otherwise, with `:link-by-email?`, the account with the token's email, and only when
+  the provider marks that email verified. The link is stored from then on.
+. Otherwise, with `:auto-create?`, a new account with role `:default-role` (`:user`, or
+  `:viewer`; never `:admin`) and no usable password.
+. Otherwise the sign-in is refused.
+
+A successful sign-in opens the same database session a password login opens. The same
+account rules apply: a deactivated or locked account cannot sign in, and an account with
+MFA turned on is asked for its code after the provider. Wrong codes count towards the
+lockout.
+
+The cookie key derives from `JWT_SECRET`; set `:state-secret` under `:oidc` to use
+another. The client secret is sent with HTTP Basic; set `:token-endpoint-auth :post` on
+a provider that wants it in the form body. Leave `:client-secret` out for a public
+client.
+
 == Session management
 
 [source,bash]

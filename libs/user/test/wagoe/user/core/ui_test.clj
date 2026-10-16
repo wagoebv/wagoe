@@ -579,3 +579,10 @@
     (is (vector? (ui/users-table [])))
     (is (vector? (ui/create-user-form {} {})))
     (is (nil? (ui/user-validation-errors {})))))
+
+(deftest ^:unit login-page-offers-oidc-providers
+  (let [page (pr-str (ui/login-page {} {} {:return-to "/web/profile"
+                                           :oidc-providers [{:id "google" :label "Google"}]}))]
+    (is (str/includes? page "/web/auth/oidc/google/start?return-to=%2Fweb%2Fprofile"))
+    (is (str/includes? page "[:t :user/oidc-sign-in-with {:provider \"Google\"}]")))
+  (is (not (str/includes? (pr-str (ui/login-page {} {} {})) "/web/auth/oidc"))))

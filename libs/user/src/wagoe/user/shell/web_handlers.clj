@@ -18,6 +18,7 @@
             [wagoe.shared.ui.core.layout :as layout]
             [wagoe.shared.ui.core.validation :as validation]
             [wagoe.platform.shell.web.table :as web-table]
+            [wagoe.user.core.oidc :as oidc-core]
             [wagoe.user.core.password-policy :as password-policy]
             [wagoe.user.core.ui :as user-ui]
             [wagoe.user.core.profile-ui :as profile-ui]
@@ -27,6 +28,7 @@
             [wagoe.user.shell.auth :as auth]
             [wagoe.user.shell.middleware :as user-middleware]
             [wagoe.user.shell.mfa :as mfa]
+            [wagoe.user.shell.oidc :as oidc]
             [clojure.edn :as edn]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
@@ -415,7 +417,9 @@
           page-opts {:user (get request :user)
                      :flash (get request :flash)
                      :return-to return-to
-                     :logo-url (get-in config [:wagoe/settings :logo-url])}]
+                     :logo-url (get-in config [:wagoe/settings :logo-url])
+                     :oidc-providers (oidc-core/login-buttons
+                                      (get-in config [:active :wagoe/user :oidc :providers]))}]
       (html-response request (user-ui/login-page initial-data {} page-opts)))))
 
 (defn login-submit-handler
@@ -565,6 +569,115 @@
       (-> (response/redirect "/")
           (assoc :cookies {"session-token"
                            {:value "" :max-age 0 :path "/"}})))))
+
+;; =============================================================================
+;; OpenID Connect sign-in
+;; =============================================================================
+
+(def ^:private oidc-pending-cookie "oidc-pending")
+(def ^:private oidc-mfa-cookie "oidc-mfa")
+
+(defn- oidc-cookie
+  "A sealed sign-in cookie. Lax, because the provider's redirect back is a
+   cross-site navigation and a Strict cookie would not come with it."
+  [config value]
+  {:value value :http-only true :secure (secure-cookies? config) :same-site :lax
+   :path "/web/auth/oidc" :max-age oidc/pending-ttl-seconds})
+
+(def ^:private oidc-cookie-cleared {:value "" :max-age 0 :path "/web/auth/oidc"})
+
+(defn- login-context [request]
+  {:ip-address (:remote-addr request)
+   :user-agent (get-in request [:headers "user-agent"])})
+
+(defn- oidc-failure
+  "The login page again, saying why, for an :oidc/* error."
+  [request config {:keys [type] :as error}]
+  (log/warn "OIDC sign-in failed" (dissoc error :message))
+  (let [[status message] (case type
+                           :not-found                 [404 [:t :user/oidc-failed]]
+                           :oidc/no-account           [403 [:t :user/oidc-no-account]]
+                           :oidc/account-unavailable  [403 [:t :user/oidc-account-unavailable]]
+                           (:oidc/http-error :oidc/discovery-failed :oidc/token-exchange-failed)
+                           [502 [:t :user/oidc-failed]]
+                           [400 [:t :user/oidc-failed]])]
+    (-> (html-response request
+                       (user-ui/login-page {} {} {:error message
+                                                  :logo-url (get-in config [:wagoe/settings :logo-url])
+                                                  :oidc-providers (oidc-core/login-buttons
+                                                                   (get-in config [:active :wagoe/user :oidc :providers]))})
+                       status)
+        (assoc-in [:cookies oidc-pending-cookie] oidc-cookie-cleared)
+        (assoc-in [:cookies oidc-mfa-cookie] oidc-cookie-cleared))))
+
+(defn- oidc-signed-in
+  "Set the session cookie exactly as password login does, and move on."
+  [request config {:keys [user session return-to]}]
+  (let [default  (if (= :admin (:role user)) "/web/admin/users" "/web/dashboard")
+        location (safe-return-url return-to default)]
+    (-> (html-response request (user-ui/oidc-continue-page location) 200
+                       {"Refresh" (str "0;url=" location)})
+        (assoc-in [:cookies "session-token"]
+                  {:value (:session-token session) :http-only true
+                   :secure (secure-cookies? config) :same-site :strict :path "/"})
+        (assoc-in [:cookies oidc-pending-cookie] oidc-cookie-cleared)
+        (assoc-in [:cookies oidc-mfa-cookie] oidc-cookie-cleared))))
+
+(defn- oidc-outcome [request config result]
+  (cond
+    (:error result)
+    (oidc-failure request config (:error result))
+
+    (= :mfa-required (get-in result [:ok :outcome]))
+    (-> (html-response request (user-ui/oidc-mfa-page {} {}))
+        (assoc-in [:cookies oidc-pending-cookie] oidc-cookie-cleared)
+        (assoc-in [:cookies oidc-mfa-cookie] (oidc-cookie config (get-in result [:ok :cookie]))))
+
+    :else
+    (oidc-signed-in request config (:ok result))))
+
+(defn oidc-start-handler
+  "GET /web/auth/oidc/:provider/start - send the browser to the provider."
+  [oidc-client config]
+  (fn [request]
+    (let [return-to (get-in request [:query-params "return-to"])
+          result    (oidc/start oidc-client (get-in request [:path-params :provider])
+                                (when (redirect/local-path? return-to) return-to))]
+      (if (:error result)
+        (oidc-failure request config (:error result))
+        (-> (response/redirect (get-in result [:ok :location]))
+            (assoc-in [:cookies oidc-pending-cookie] (oidc-cookie config (get-in result [:ok :cookie]))))))))
+
+(defn oidc-callback-handler
+  "GET /web/auth/oidc/:provider/callback - finish the sign-in."
+  [oidc-client config]
+  (fn [request]
+    (try
+      (oidc-outcome request config
+                    (oidc/callback oidc-client
+                                   (get-in request [:path-params :provider])
+                                   (:query-params request)
+                                   (get-in request [:cookies oidc-pending-cookie :value])
+                                   (login-context request)))
+      (catch Exception e
+        (server-error-page request e "OIDC callback error")))))
+
+(defn oidc-mfa-handler
+  "POST /web/auth/oidc/mfa - the second factor after a provider sign-in."
+  [oidc-client config]
+  (fn [request]
+    (try
+      (let [result (oidc/complete-mfa oidc-client
+                                      (get-in request [:cookies oidc-mfa-cookie :value])
+                                      (get-in request [:form-params "mfa-code"])
+                                      (login-context request))]
+        (if (= :oidc/mfa-failed (get-in result [:error :type]))
+          (html-response request
+                         (user-ui/oidc-mfa-page {:mfa-code [[:t :user/oidc-mfa-invalid]]} {})
+                         401)
+          (oidc-outcome request config result)))
+      (catch Exception e
+        (server-error-page request e "OIDC MFA error")))))
 
 (defn register-page-handler
   "GET /web/register - render self-service registration page."

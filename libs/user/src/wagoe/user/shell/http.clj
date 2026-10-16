@@ -684,6 +684,29 @@
        :post {:handler (web-handlers/mfa-disable-handler user-service mfa-service config)
               :summary "Disable MFA"}}]]))
 
+(defn oidc-routes
+  "OpenID Connect sign-in, mounted under /web. Public: the provider's redirect
+   arrives before a session exists, and the sealed cookie is what ties each
+   step to the one before."
+  [oidc-client config]
+  {:api    []
+   :web    [["/auth/oidc/mfa"
+             {:no-doc true
+              :public true
+              :post   {:handler (web-handlers/oidc-mfa-handler oidc-client config)
+                       :summary "Second factor after an OIDC sign-in"}}]
+            ["/auth/oidc/:provider/start"
+             {:no-doc true
+              :public true
+              :get    {:handler (web-handlers/oidc-start-handler oidc-client config)
+                       :summary "Start an OIDC sign-in"}}]
+            ["/auth/oidc/:provider/callback"
+             {:no-doc true
+              :public true
+              :get    {:handler (web-handlers/oidc-callback-handler oidc-client config)
+                       :summary "OIDC redirect back from the provider"}}]]
+   :static []})
+
 (defn user-routes
   "This module's contribution to the application's route table.
 

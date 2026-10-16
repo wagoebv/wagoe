@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **Sign in with OpenID Connect** (BOU-447): authorization code with PKCE, a "Sign in with X" button per provider.
+  Configure providers under `:wagoe/user {:oidc …}`; see the authentication guide.
 - **MySQL 8 is supported** (BOU-574): a generated app boots, migrates and serves on it.
   Switch with `bb setup --database mysql`; tenancy needs PostgreSQL, push and seeds wait on BOU-657.
 - **`bb check:vulns`** (BOU-451): known vulnerabilities in every `deps.edn`, aliases included, from GitHub's advisory

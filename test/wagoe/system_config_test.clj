@@ -35,8 +35,13 @@
 (def ^:private enabled
   "A module's settings when this file switches every module on. Payments has
    no default provider, and this config has no profile to allow the mock
-   (BOU-564); it is only assembled, never started."
-  (fn [k] (get {:wagoe/payment-provider {:provider :stripe :api-key "sk" :webhook-secret "wh"}}
+   (BOU-564); it is only assembled, never started. User names an OIDC
+   provider, without which its sign-in components are not assembled."
+  (fn [k] (get {:wagoe/payment-provider {:provider :stripe :api-key "sk" :webhook-secret "wh"}
+                :wagoe/user {:enabled? true
+                             :oidc {:base-url  "https://app.example.com"
+                                    :providers {:example {:issuer    "https://idp.example.com"
+                                                          :client-id "app"}}}}}
                k {:enabled? true})))
 
 (defn- base-config
