@@ -97,6 +97,6 @@
                   ^Instant first-seen))))
 
 (deftest ^:security ^:unit the-user-service-is-not-handed-the-cache
-  (is (not (contains? (-> (wiring/ig-config nil {:config {}})
+  (is (not (contains? (-> (wiring/ig-config nil {:config {} :enabled #{:wagoe/cache}})
                           (get-in [:components :wagoe/user-service]))
                       :cache))))
