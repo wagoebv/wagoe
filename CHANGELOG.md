@@ -83,6 +83,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **`wagoe add` and `wagoe doctor` did not recognise a project on a local Wagoe checkout** (BOU-662, BOU-664).
   `wagoe add` now writes the module from that checkout; upgrade wagoe-cli if you use `:local/root`.
+- **`wagoe new` enabled user in code, so migrations skipped it and a fresh database had no `auth_users`** (BOU-667).
+  It now writes `:wagoe/user` into `:active`; in an existing project, run `wagoe add user`.
 - **The DB job queue could not ack jobs on PostgreSQL** (BOU-640): each finished job ran again once its lease expired.
   Upgrade if you use jobs `:provider :db` on PostgreSQL.
 - **Revoked sessions and deactivated users stayed signed in**: until the cache expired with `:wagoe/cache` on, and for good when made inactive without a soft delete (BOU-663).

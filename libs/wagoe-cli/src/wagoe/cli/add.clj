@@ -434,7 +434,8 @@
 ;; ─── AGENTS.md module blocks ──────────────────────────────────────────────
 
 (defn- extra-modules
-  "The keys in :extra-modules of the project's system_config.clj files."
+  "The keys in :extra-modules of the project's system_config.clj files, where
+   projects generated before BOU-667 switch user on."
   [dir]
   (let [src (io/file dir "src")]
     (set (for [f     (when (.isDirectory src) (file-seq src))
@@ -472,12 +473,8 @@
 (defn- module-table [modules]
   (str "| Module | Description | Command |\n"
        "|--------|-------------|---------|\n"
-       (apply str (for [{:keys [name description module-key]} modules]
-                    (str "| " name " | " description " | "
-                         (if module-key
-                           (str "add `" module-key "` to `:extra-modules` in system_config.clj")
-                           (str "`wagoe add " name "`"))
-                         " |\n")))))
+       (apply str (for [{:keys [name description]} modules]
+                    (str "| " name " | " description " | `wagoe add " name "` |\n")))))
 
 (defn render-module-blocks
   "`content` with the available- and installed-modules blocks rendered from
@@ -544,14 +541,13 @@
               ;; both use :wagoe.external/smtp).
               wired?       (installed? dir module dep-present?)]
           (cond
-            (and dep-present? existing-ver (not= existing-ver (:version module)))
+            ;; A core module's version moves with the rest of Wagoe, and
+            ;; switching it on touches config only (BOU-667).
+            (and dep-present? existing-ver (not= existing-ver (:version module))
+                 (not (:module-key module)))
             (do (println (str "Warning: " module-name " is already in deps.edn at version " existing-ver
                               " (catalogue version: " (:version module) ")."))
                 (println "Resolve the version conflict manually — no changes made."))
-
-            (and dep-present? (:module-key module) (not (switched-on? dir (:module-key module))))
-            (println (str "Module '" module-name "' is in deps.edn but switched off. Add "
-                          (:module-key module) " to :extra-modules in src/<project>/system_config.clj."))
 
             wired?
             (println (str "Module '" module-name "' is already installed."))
