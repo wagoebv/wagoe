@@ -43,6 +43,7 @@
             [wagoe.observability.errors.shell.adapters.sentry :as error-reporting-sentry]
             [wagoe.platform.shell.http.reitit-router :as reitit-router]
             [wagoe.platform.shell.http.interceptors :as http-interceptors]
+            [wagoe.platform.core.http.client-ip :as client-ip]
             [wagoe.platform.shell.http.versioning :as http-versioning]
             [wagoe.platform.shell.utils.port-manager :as port-manager]
             [wagoe.platform.shell.rpc.server :as rpc-server]
@@ -389,8 +390,8 @@
             (handler request))))])))
 
 (defn- security-config
-  "CSRF and rate-limit settings, and the two guards that refuse to boot without
-   them.
+  "CSRF, rate-limit and trusted-proxy settings, and the guards that refuse to
+   boot without them.
 
    Both are opt-in: a framework upgrade must not start 403-ing or 429-ing an
    application that was working. What is not optional is failing loudly when the
@@ -451,9 +452,15 @@
                              "falling back to a per-process counter. This is correct on a "
                              "single node only; across replicas each instance counts "
                              "independently, so the effective global limit is limit x N. "
-                             "Configure :wagoe/cache (Redis) for a shared limit."))))]
+                             "Configure :wagoe/cache (Redis) for a shared limit."))))
 
-    {:csrf csrf-config :rate-limit rate-limit-config}))
+        ;; An unparseable entry would trust nothing, or the wrong peer; refuse.
+        {cidrs :cidrs proxies-error :error} (client-ip/parse-trusted-proxies
+                                             (get-in config [:active :wagoe/http :trusted-proxies]))
+        _ (when proxies-error
+            (throw (ex-info (:message proxies-error) proxies-error)))]
+
+    {:csrf csrf-config :rate-limit rate-limit-config :trusted-proxies cidrs}))
 
 (defn- platform-routes
   "The endpoints every Wagoe application serves, whoever it is.
@@ -550,7 +557,8 @@
                            (or test-reset-routes []))
 
         {csrf-config :csrf
-         rate-limit-config :rate-limit} (security-config {:config config :cache cache})
+         rate-limit-config :rate-limit
+         trusted-proxies :trusted-proxies} (security-config {:config config :cache cache})
 
         system (interceptor-services
                 {:logger            logger
@@ -612,7 +620,9 @@
                           (catch Exception _
                             (log/debug "Request capture middleware not available, skipping")
                             versioned-handler))
-                        versioned-handler)]
+                        versioned-handler)
+        ;; Outermost, so everything downstream reads the same client address.
+        final-handler (http-interceptors/wrap-client-ip final-handler trusted-proxies)]
 
     (log/info "Top-level HTTP handler initialized successfully"
               {;; Counts rather than six named modules: this line named the

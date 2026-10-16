@@ -17,6 +17,7 @@
             [wagoe.shared.ui.core.components :as ui]
             [wagoe.shared.ui.core.layout :as layout]
             [wagoe.shared.ui.core.validation :as validation]
+            [wagoe.platform.core.http.client-ip :as client-ip]
             [wagoe.platform.shell.web.table :as web-table]
             [wagoe.user.core.oidc :as oidc-core]
             [wagoe.user.core.password-policy :as password-policy]
@@ -450,7 +451,7 @@
                          :password (get form-data "password")
                          :remember (boolean (get form-data "remember"))
                          :mfa-code (get form-data "mfa-code")
-                         :ip-address (:remote-addr request)
+                         :ip-address (client-ip/request-ip request)
                          :user-agent (get-in request [:headers "user-agent"])}
           [valid? validation-errors validated-data]
           (validate-request-data user-schema/LoginRequest prepared-data)
@@ -602,7 +603,7 @@
       (assoc-in [:cookies oidc-mfa-cookie] oidc-cookie-cleared)))
 
 (defn- login-context [request]
-  {:ip-address (:remote-addr request)
+  {:ip-address (client-ip/request-ip request)
    :user-agent (get-in request [:headers "user-agent"])})
 
 (defn- oidc-failure
@@ -760,7 +761,7 @@
                 auth-data {:email (:email user-result)
                            :password (get prepared-data :password)
                            :remember false
-                           :ip-address (:remote-addr request)
+                           :ip-address (client-ip/request-ip request)
                            :user-agent (get-in request [:headers "user-agent"])}
                 auth-result (user-ports/authenticate-user user-service auth-data)]
             (if (:authenticated auth-result)
