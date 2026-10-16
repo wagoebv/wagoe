@@ -81,8 +81,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
-- **Scaffolded tests that refer to other rows failed at random on foreign keys** (BOU-654).
-  In a generated project, set `:maximum-pool-size 1` in tests that run `SET REFERENTIAL_INTEGRITY FALSE`.
+- **On H2, `SET REFERENTIAL_INTEGRITY FALSE` was undone by the next pooled connection** (BOU-654), so scaffolded
+  tests failed at random on foreign keys. Upgrade; nothing to change.
 - **MySQL timestamps read back without a zone, so APIs sent UTC as local time** (BOU-653).
   Upgrade if you run on MySQL.
 - **MySQL lost workflow timestamps and admin UUID types; PostgreSQL refused full-text search** (BOU-652).

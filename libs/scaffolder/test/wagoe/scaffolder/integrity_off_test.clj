@@ -1,8 +1,5 @@
 (ns wagoe.scaffolder.integrity-off-test
-  "A generated test that refers to rows it does not create switches H2's
-   referential integrity off. Every connection the pool opens switches it back
-   on, so a second connection opened after that failed the insert at random
-   (BOU-654)."
+  "Integrity switched off stays off when the pool opens another connection (BOU-654)."
   (:require [clojure.test :refer [deftest is]]
             [wagoe.platform.database :as db]
             [wagoe.scaffolder.cli :as cli]

@@ -1110,13 +1110,6 @@ DROP TABLE IF EXISTS %s;
                  "          result (ports/create-" entity-lower " svc {:name \"Test\"})]\n"
                  "      (is (some? result)))))\n"))))))
 
-(defn- pool-size
-  "For a generated test's H2 pool. Each connection the pool opens switches
-   referential integrity back on for the whole database, so a test that
-   switches it off keeps to one connection (BOU-654)."
-  [integrity-off?]
-  (if integrity-off? 1 2))
-
 (defn- sample-value
   "A literal the field's column accepts and reads back unchanged, as source
    text, or nil for a type that does not read back as it was written."
@@ -1179,7 +1172,7 @@ DROP TABLE IF EXISTS %s;
           "  [f]\n"
           "  (let [ctx (db-factory/db-context {:adapter :h2\n"
           "                                    :database-path (str \"mem:\" (UUID/randomUUID))\n"
-          "                                    :pool {:minimum-idle 1 :maximum-pool-size " (pool-size relation?) "}})]\n"
+          "                                    :pool {:minimum-idle 1 :maximum-pool-size 2}})]\n"
           "    (try\n"
           "      (migrations/migrate-datasource! (:datasource ctx))\n"
           "      (f ctx)\n"
@@ -1400,7 +1393,7 @@ DROP TABLE IF EXISTS %s;
          "  [f]\n"
          "  (let [ctx (db-factory/db-context {:adapter :h2\n"
          "                                    :database-path (str \"mem:\" (UUID/randomUUID))\n"
-         "                                    :pool {:minimum-idle 1 :maximum-pool-size " (pool-size relation?) "}})]\n"
+         "                                    :pool {:minimum-idle 1 :maximum-pool-size 2}})]\n"
          "    (try\n"
          "      (migrations/migrate-datasource! (:datasource ctx))\n"
          (when relation?
@@ -2754,9 +2747,6 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s%s%s;%s"
                                                     "        (db/execute-ddl! ctx \"" integrity "\")\n")))
                                 (add-requires [['db (symbol "wagoe.platform.database")]])
                                 :content))
-            placed    (cond-> placed
-                        (and placed (str/includes? placed integrity))
-                        (str/replace ":maximum-pool-size 2}" (str ":maximum-pool-size " (pool-size true) "}")))
             placed    (if (and placed (not workflow?) (= :json (:field-type f)))
                         (left-out-of-round-trip placed k)
                         placed)
