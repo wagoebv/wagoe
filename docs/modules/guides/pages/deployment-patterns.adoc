@@ -127,6 +127,23 @@ The config includes:
 - 30-day cache for static assets
 - Connection keepalive to the app
 
+=== Client address behind a proxy
+
+Behind a proxy the TCP peer is the proxy. Rate limiting, login risk checks, sessions
+and the audit log then see every user as one address. List the proxies whose
+`X-Forwarded-For` you trust:
+
+[source,clojure]
+----
+:wagoe/http {:trusted-proxies ["127.0.0.1/32" "10.0.0.0/8" "fd00::/8"]}
+----
+
+When the peer is in one of these ranges, the client is the right-most
+`X-Forwarded-For` hop that is not. Otherwise the header is ignored, since any
+client can send it. The default is empty: trust nothing. Entries are IPv4 or
+IPv6 CIDRs, or bare addresses; an invalid one stops the boot. Handlers read the
+result as `:client-ip` on the request.
+
 == Cloud Platforms
 
 === Fly.io
