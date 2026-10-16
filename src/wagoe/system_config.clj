@@ -53,7 +53,7 @@
 (defn ig-config
   "The Integrant configuration for `config`."
   [config]
-  (-> (system/system-config config {:extra-modules #{:wagoe/user}})
+  (-> (system/system-config config)
       ;; Which of this application's entities the admin UI manages. The admin
       ;; module does not guess; the schemas are ours to name.
       (cond-> (get-in config [:active :wagoe/admin])
