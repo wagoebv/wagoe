@@ -197,7 +197,8 @@
         risk    (auth-core/analyze-login-risk user login-context
                                               (ports/find-sessions-by-user session-repository (:id user))
                                               now)]
-    (if link?
+    ;; Another tab may have linked it while this one waited for the second factor.
+    (if (and link? (nil? (ports/find-identity repo (:issuer identity) (:subject identity))))
       (ports/link-identity repo (assoc identity :user-id (:id user)))
       (ports/touch-identity repo (:issuer identity) (:subject identity) now))
     (ports/update-user user-repository (merge user (auth-core/prepare-successful-login-updates user now)))
@@ -221,12 +222,19 @@
     (if (and identity (nil? linked))
       ;; Linked to an account that has since been deleted.
       {:error {:type :oidc/account-unavailable :message "Account is not available"}}
-      (let [decision (oidc/resolve-account
-                      {:linked-user linked
-                       :email-user  (when (and email (nil? linked))
-                                      (ports/find-user-by-email user-repository email))
-                       :claims      claims
-                       :provider    p})]
+      (let [email-user (when (and email (nil? linked))
+                         ;; Emails are stored as registered; try the provider's casing first.
+                         (some #(ports/find-user-by-email user-repository %)
+                               (distinct [(:email claims) email])))
+            decision   (oidc/resolve-account
+                        {:linked-user        linked
+                         :email-user         email-user
+                         :email-user-linked? (boolean
+                                              (when email-user
+                                                (some #(= (:iss claims) (:issuer %))
+                                                      (ports/find-identities-by-user repo (:id email-user)))))
+                         :claims             claims
+                         :provider           p})]
         (case (:action decision)
           :login {:ok {:user (:user decision) :link? false}}
           :link  {:ok {:user (:user decision) :link? true}}
@@ -282,7 +290,8 @@
             claims (if (:error signed)
                      signed
                      (oidc/validate-claims (:ok signed)
-                                           {:issuer    (:issuer p)
+                                           ;; Exactly as discovery states it, trailing slash and all.
+                                           {:issuer    (:issuer (:ok d))
                                             :client-id (:client-id p)
                                             :nonce     (:nonce pending)
                                             :now-epoch (now-epoch)

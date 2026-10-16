@@ -42,6 +42,11 @@
 
 (def ^:dynamic *issuer* nil)
 
+(defn- stated-issuer
+  "The issuer as the provider writes it: some, like Auth0, end it with a slash."
+  []
+  (str *issuer* (when (:issuer-slash? @idp) "/")))
+
 (defn- json-response [body]
   {:status 200 :headers {"Content-Type" "application/json"} :body (json/generate-string body)})
 
@@ -62,7 +67,7 @@
       :else
       (let [now    (.getEpochSecond (Instant/now))
             claims ((:claims-fn @idp identity)
-                    {:iss *issuer* :aud "app" :sub (:sub @idp "sub-1")
+                    {:iss (stated-issuer) :aud "app" :sub (:sub @idp "sub-1")
                      :email (:email @idp "ada@example.com") :email_verified true
                      :name "Ada Lovelace" :nonce (:nonce grant) :iat now :exp (+ now 300)})]
         (json-response {:token_type "Bearer" :access_token "at"
@@ -73,7 +78,7 @@
   (swap! idp update-in [:hits (:uri request)] (fnil inc 0))
   (case (:uri request)
     "/.well-known/openid-configuration"
-    (json-response {:issuer *issuer*
+    (json-response {:issuer (stated-issuer)
                     :authorization_endpoint (str *issuer* "/authorize")
                     :token_endpoint (str *issuer* "/token")
                     :jwks_uri (str *issuer* "/jwks")})
@@ -202,6 +207,27 @@
     (testing "discovery and keys are fetched once"
       (is (= 1 (get-in @idp [:hits "/.well-known/openid-configuration"])))
       (is (= 1 (get-in @idp [:hits "/jwks"]))))))
+
+(deftest ^:integration issuer-with-a-trailing-slash
+  (let [a (app)]
+    (add-user! a)
+    (swap! idp assoc :issuer-slash? true)
+    (is (= "ada@example.com" (authenticated-as a (session-token (sign-in! a)))))))
+
+(deftest ^:integration an-email-registered-with-capitals-still-links
+  (let [a (app)]
+    (add-user! a :email "Ada@Example.com")
+    (swap! idp assoc :email "Ada@Example.com")
+    (is (= "Ada@Example.com" (authenticated-as a (session-token (sign-in! a)))))))
+
+(deftest ^:integration ^:security a-recycled-email-does-not-take-over-a-linked-account
+  (let [a (app :auto-create? true)]
+    (add-user! a)
+    (is (some? (session-token (sign-in! a))))
+    (swap! idp assoc :sub "sub-2")
+    (let [resp (sign-in! a)]
+      (is (= 403 (:status resp)))
+      (is (nil? (session-token resp))))))
 
 (deftest ^:integration ^:security return-to-is-kept-and-must-be-local
   (let [a (app)]

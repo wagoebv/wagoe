@@ -269,22 +269,23 @@
   "Which account this sign-in is.
 
    In order: the account already linked to (iss, sub); the account with the
-   token's verified email, when the provider allows linking by email; a new
-   account, when it allows creating one. Nothing else — an unverified email
-   never selects or creates an account.
+   token's verified email, when the provider allows linking by email and that
+   account has no link at this issuer yet — a second subject for the same email
+   is the address changing hands; a new account, when it allows creating one.
+   Nothing else — an unverified email never selects or creates an account.
 
    Returns one of
      {:action :login  :user u}
      {:action :link   :user u}
      {:action :create :user-data {…}}
      {:error {:type :oidc/no-account …}}"
-  [{:keys [linked-user email-user claims provider]}]
+  [{:keys [linked-user email-user email-user-linked? claims provider]}]
   (let [email (verified-email claims)]
     (cond
       linked-user
       {:action :login :user linked-user}
 
-      (and email-user email (:link-by-email? provider))
+      (and email-user email (:link-by-email? provider) (not email-user-linked?))
       {:action :link :user email-user}
 
       (and email (nil? email-user) (:auto-create? provider))

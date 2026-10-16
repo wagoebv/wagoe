@@ -99,6 +99,11 @@
                (get-in (sut/resolve-account {:email-user ada :claims c
                                              :provider (assoc provider :auto-create? true)})
                        [:error :type])))))
+    (testing "an account already linked at this issuer is not linked again by email"
+      (is (= :oidc/no-account
+             (get-in (sut/resolve-account {:email-user ada :email-user-linked? true :claims claims
+                                           :provider (assoc provider :auto-create? true)})
+                     [:error :type]))))
     (testing "linking by email can be switched off"
       (is (:error (sut/resolve-account {:email-user ada :claims claims
                                         :provider (assoc provider :link-by-email? false)}))))
