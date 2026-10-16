@@ -95,10 +95,12 @@
 
 (def ^:private tsvector-sql
   "SQL fragment that builds a weighted tsvector from the four weight columns."
-  (str "setweight(to_tsvector(language, coalesce(weight_a,'')), 'A') || "
-       "setweight(to_tsvector(language, coalesce(weight_b,'')), 'B') || "
-       "setweight(to_tsvector(language, coalesce(weight_c,'')), 'C') || "
-       "setweight(to_tsvector(language, coalesce(weight_d,'')), 'D')"))
+  ;; ::regconfig: the language is a text column, and to_tsvector takes a
+  ;; regconfig; PostgreSQL refused the call (BOU-652).
+  (str "setweight(to_tsvector(language::regconfig, coalesce(weight_a,'')), 'A') || "
+       "setweight(to_tsvector(language::regconfig, coalesce(weight_b,'')), 'B') || "
+       "setweight(to_tsvector(language::regconfig, coalesce(weight_c,'')), 'C') || "
+       "setweight(to_tsvector(language::regconfig, coalesce(weight_d,'')), 'D')"))
 
 (defn build-postgres-search-sql
   "Build a parameterized JDBC SQL vector for PostgreSQL FTS search.
@@ -121,7 +123,7 @@
      JDBC SQL vector [sql & params]"
   [index-id entity-type language query limit offset highlight? filters]
   (let [snippet-expr (if highlight?
-                       (str "ts_headline(d.language, d.content_all, q.tsq, "
+                       (str "ts_headline(d.language::regconfig, d.content_all, q.tsq, "
                             "'MaxWords=20,MinWords=5,StartSel=<b>,StopSel=</b>') AS snippet")
                        "NULL AS snippet")
         [filter-sql & filter-params] (build-filter-sql-postgres (or filters {}))
@@ -131,7 +133,7 @@
                  "  FROM search_documents "
                  "  WHERE index_id = ? AND entity_type = ? "
                  "), "
-                 "q AS (SELECT plainto_tsquery(?, ?) AS tsq) "
+                 "q AS (SELECT plainto_tsquery(?::regconfig, ?) AS tsq) "
                  "SELECT d.entity_type, d.entity_id, d.metadata, "
                  "  ts_rank(d.tsv, q.tsq) AS score, "
                  snippet-expr " "
@@ -161,7 +163,7 @@
                  "  FROM search_documents "
                  "  WHERE index_id = ? AND entity_type = ? "
                  "), "
-                 "q AS (SELECT plainto_tsquery(?, ?) AS tsq) "
+                 "q AS (SELECT plainto_tsquery(?::regconfig, ?) AS tsq) "
                  "SELECT count(*) AS cnt "
                  "FROM docs d, q "
                  "WHERE d.tsv @@ q.tsq "

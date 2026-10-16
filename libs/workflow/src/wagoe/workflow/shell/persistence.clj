@@ -11,7 +11,7 @@
             [clojure.edn :as edn])
   (:import [java.util Date UUID]
            [java.sql SQLException Timestamp]
-           [java.time Instant OffsetDateTime]))
+           [java.time Instant LocalDateTime OffsetDateTime ZoneOffset]))
 
 ;; =============================================================================
 ;; Type conversion helpers
@@ -30,6 +30,8 @@
   (condp instance? v
     Instant        v
     OffsetDateTime (.toInstant ^OffsetDateTime v)
+    ;; MySQL's DATETIME, written and read in UTC (BOU-652).
+    LocalDateTime  (.toInstant ^LocalDateTime v ZoneOffset/UTC)
     Date           (.toInstant ^Date v)
     Number         (Instant/ofEpochMilli (long v))
     String         (if-let [ms (parse-long v)]

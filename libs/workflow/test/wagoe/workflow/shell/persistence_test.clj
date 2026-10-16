@@ -1,8 +1,8 @@
 (ns wagoe.workflow.shell.persistence-test
   "Integration tests for WorkflowStore persistence layer.
 
-   Uses H2 in-memory database (PostgreSQL compatibility mode) to verify
-   all IWorkflowStore operations against a real JDBC datasource:
+   Runs on the engine WAGOE_TEST_DB names (H2 by default) to verify all
+   IWorkflowStore operations against a real JDBC datasource:
    - save-instance! / find-instance / find-instance-by-entity
    - update-instance-state!
    - save-audit-entry! / find-audit-log"
@@ -14,50 +14,26 @@
             [wagoe.platform.shell.database.migrations :as mig]
             [clojure.string :as str]
             [migratus.core :as migratus]
-            [next.jdbc :as jdbc]
-            [next.jdbc.connection :as connection])
+            [support.test-db :as test-db])
   (:import [java.util UUID]
-           [java.time Instant]
-           [com.zaxxer.hikari HikariDataSource]))
+           [java.time Instant]))
 
 ;; =============================================================================
 ;; Test database setup
 ;; =============================================================================
 
-(def ^:private test-datasource (atom nil))
 (def ^:private test-store (atom nil))
 
-(defn- setup-test-db []
-  (let [^HikariDataSource ds (connection/->pool
-                              com.zaxxer.hikari.HikariDataSource
-                              {:jdbcUrl  "jdbc:h2:mem:workflow-test;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;DB_CLOSE_DELAY=-1"
-                               :username "sa"
-                               :password ""})]
-    (reset! test-datasource ds)
-
-    ;; The shipped migrations, not a copy of their DDL.
-    (migratus/migrate {:store         :database
-                       :migration-dir (filterv #(str/includes? % "workflow")
-                                               (mig/discover-migration-dirs))
-                       :db            {:datasource ds}})
-
-    (reset! test-store (persistence/create-workflow-store ds))))
-
-(defn- teardown-test-db []
-  (when-let [ds @test-datasource]
-    (try
-      (jdbc/execute! ds ["DROP ALL OBJECTS"])
-      (.close ^HikariDataSource ds)
-      (catch Exception _e nil))
-    (reset! test-datasource nil)
-    (reset! test-store nil)))
-
 (defn- db-fixture [test-fn]
-  (setup-test-db)
-  (try
-    (test-fn)
-    (finally
-      (teardown-test-db))))
+  (test-db/with-db "workflow"
+    (fn [{:keys [datasource]}]
+      ;; The shipped migrations, not a copy of their DDL.
+      (migratus/migrate (mig/migratus-config datasource
+                                             (filterv #(str/includes? % "workflow")
+                                                      (mig/discover-migration-dirs))))
+      (reset! test-store (persistence/create-workflow-store datasource))
+      (try (test-fn)
+           (finally (reset! test-store nil))))))
 
 (use-fixtures :each db-fixture)
 

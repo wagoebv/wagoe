@@ -8,7 +8,8 @@
             [wagoe.admin.shell.schema-repository :as schema-repo]
             [wagoe.admin.shell.service :as admin-service]
             [wagoe.platform.database :as db]
-            [wagoe.platform.shell.adapters.database.factory :as db-factory]
+            [wagoe.platform.ports.database :as db-ports]
+            [support.test-db :as test-db]
             [wagoe.workflow.ports :as ports]
             [wagoe.workflow.shell.admin-adapter :as admin-adapter]
             [wagoe.workflow.shell.module-wiring]
@@ -22,20 +23,23 @@
 
 (def ^:private ^:dynamic *db* nil)
 
-(defn- h2 [db-name]
-  (let [ctx (db-factory/db-context {:adapter :h2 :database-path (str "mem:" db-name ";DB_CLOSE_DELAY=-1")})]
-    (ig/init-key :wagoe/workflow-db-schema {:ctx ctx :profile :test})
-    ctx))
+(defn- with-workflow-db
+  "`f` with a db-context on a fresh database that has workflow's tables."
+  [prefix f]
+  (test-db/with-db prefix
+    (fn [ctx]
+      (ig/init-key :wagoe/workflow-db-schema {:ctx ctx :profile :test})
+      (f ctx))))
 
 (use-fixtures :each
   (fn [f]
-    (let [ctx (h2 "workflow_admin_delete")]
-      (db/execute-update! ctx {:raw "CREATE TABLE wd_invoices (id UUID PRIMARY KEY, number VARCHAR(20),
-                                                               deleted_at TIMESTAMP)"})
-      (try (binding [*db* ctx] (f))
-           (finally
-             (db/execute-update! ctx {:raw "DROP ALL OBJECTS"})
-             (db-factory/close-db-context! ctx))))))
+    (with-workflow-db "workflow_admin_delete"
+      (fn [{:keys [adapter] :as ctx}]
+        (db/execute-update! ctx {:raw (str "CREATE TABLE wd_invoices (id "
+                                           (db-ports/column-type adapter :uuid) " PRIMARY KEY,"
+                                           " number VARCHAR(20), deleted_at "
+                                           (db-ports/column-type adapter :instant) " NULL)")})
+        (binding [*db* ctx] (f))))))
 
 (defn- invoice-with-workflow!
   "An invoice, and a workflow instance with one audit entry in `store`."
@@ -92,14 +96,11 @@
 (deftest ^:integration a-store-on-another-database-is-removed-after-the-fact
   ;; Not atomic, and documented as such: the admin's transaction cannot reach
   ;; another datasource.
-  (let [other (h2 "workflow_admin_delete_other")]
-    (try
+  (with-workflow-db "workflow_admin_delete_other"
+    (fn [other]
       (let [store (persistence/create-workflow-store (:datasource other))
             {:keys [id instance]} (invoice-with-workflow! store)]
         (is (true? (admin-ports/delete-entity (service false store) :wd-invoices id)))
         (is (nil? (invoice id)))
         (testing "the instance on the other database is still removed"
-          (is (nil? (ports/find-instance store instance)))))
-      (finally
-        (db/execute-update! other {:raw "DROP ALL OBJECTS"})
-        (db-factory/close-db-context! other)))))
+          (is (nil? (ports/find-instance store instance))))))))

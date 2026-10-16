@@ -14,7 +14,8 @@
   (:require [wagoe.admin.ports :as ports]
             [wagoe.admin.shell.service :as service]
             [wagoe.admin.shell.schema-repository :as schema-repo]
-            [wagoe.platform.shell.adapters.database.factory :as db-factory]
+            [support.test-db :as test-db]
+            [wagoe.platform.ports.database :as db-ports]
             [wagoe.platform.database :as db]
             [wagoe.observability.logging.shell.adapters.no-op :as logging-no-op]
             [wagoe.observability.errors.shell.adapters.no-op :as error-reporting-no-op]
@@ -25,11 +26,6 @@
 ;; =============================================================================
 ;; Harness
 ;; =============================================================================
-
-(def ^:private test-db-config
-  {:adapter :h2
-   :database-path "mem:admin_contract_test;DB_CLOSE_DELAY=-1"
-   :pool {:minimum-idle 1 :maximum-pool-size 3}})
 
 (def ^:private admin-config
   {:enabled?          true
@@ -44,37 +40,35 @@
 (defonce ^:dynamic *db-ctx* nil)
 (defonce ^:dynamic *admin-service* nil)
 
-(defn- create-table! [db-ctx]
-  (db/execute-update!
-   db-ctx
-   {:raw "CREATE TABLE IF NOT EXISTS contract_widgets (
-            id UUID PRIMARY KEY,
-            display_name VARCHAR(255) NOT NULL,
-            is_active BOOLEAN NOT NULL,
-            unit_price DECIMAL(10,2),
-            serial_number VARCHAR(100),
-            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP,
-            deleted_at TIMESTAMP)"}))
+(defn- create-table! [{:keys [adapter] :as db-ctx}]
+  (let [t #(db-ports/column-type adapter %)]
+    (db/execute-update!
+     db-ctx
+     {:raw (str "CREATE TABLE IF NOT EXISTS contract_widgets (
+                   id " (t :uuid) " PRIMARY KEY,
+                   display_name VARCHAR(255) NOT NULL,
+                   is_active " (t :boolean) " NOT NULL,
+                   unit_price DECIMAL(10,2),
+                   serial_number VARCHAR(100),
+                   created_at " (t :instant) " NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+                   updated_at " (t :instant) " NULL,
+                   deleted_at " (t :instant) " NULL)")})))
 
-(defn- setup! []
-  (let [db-ctx          (db-factory/db-context test-db-config)
-        logger          (logging-no-op/create-logging-component {})
-        error-reporter  (error-reporting-no-op/create-error-reporting-component {})
-        schema-provider (schema-repo/create-schema-repository db-ctx admin-config)
-        admin-service   (service/create-admin-service db-ctx schema-provider logger error-reporter admin-config)]
-    (create-table! db-ctx)
-    (alter-var-root #'*db-ctx* (constantly db-ctx))
-    (alter-var-root #'*admin-service* (constantly admin-service))))
-
-(defn- teardown! []
-  (when *db-ctx*
-    (db/execute-update! *db-ctx* {:raw "DROP TABLE IF EXISTS contract_widgets"})
-    (db-factory/close-db-context! *db-ctx*)
-    (alter-var-root #'*db-ctx* (constantly nil))
-    (alter-var-root #'*admin-service* (constantly nil))))
-
-(use-fixtures :once (fn [f] (setup!) (f) (teardown!)))
+(use-fixtures :once
+  (fn [f]
+    (test-db/with-db "admin_contract"
+      (fn [db-ctx]
+        (let [logger          (logging-no-op/create-logging-component {})
+              error-reporter  (error-reporting-no-op/create-error-reporting-component {})
+              schema-provider (schema-repo/create-schema-repository db-ctx admin-config)
+              admin-service   (service/create-admin-service db-ctx schema-provider logger error-reporter admin-config)]
+          (create-table! db-ctx)
+          (alter-var-root #'*db-ctx* (constantly db-ctx))
+          (alter-var-root #'*admin-service* (constantly admin-service))
+          (try (f)
+               (finally
+                 (alter-var-root #'*db-ctx* (constantly nil))
+                 (alter-var-root #'*admin-service* (constantly nil)))))))))
 (use-fixtures :each (fn [f]
                       (when *db-ctx*
                         (db/execute-update! *db-ctx* {:raw "DELETE FROM contract_widgets"}))
@@ -86,7 +80,7 @@
   [id]
   (jdbc/execute-one! (:datasource *db-ctx*)
                      ["SELECT display_name, is_active, unit_price, serial_number
-                         FROM contract_widgets WHERE id = ?" id]
+                         FROM contract_widgets WHERE id = ?" (str id)]
                      {:builder-fn rs/as-unqualified-lower-maps}))
 
 (defn- widget []
