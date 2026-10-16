@@ -99,7 +99,7 @@ for what is public API, what is internal, and how deprecations are announced.
 ### Fixed
 
 - **PDF reports wrote data unescaped: `&` failed the render, and markup in data was rendered and its URLs fetched** (BOU-675, security).
-  Templates that embed HTML strings must wrap them in `hiccup2.core/raw`; images load only from `data:` URIs.
+  Strings holding HTML or entities like `&nbsp;` must be wrapped in `hiccup2.core/raw`; images load only from `data:` URIs.
 - **A session request wrote `last_accessed_at` twice, and a database error during sign-in lookup answered 401** (BOU-666).
   The access time is now written at most once a minute; a lookup failure is a 500.
 - **Two admins demoting each other at once could leave none; an admin bulk delete of users could stop halfway** (BOU-673).

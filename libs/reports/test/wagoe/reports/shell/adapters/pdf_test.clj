@@ -115,7 +115,7 @@
     (is (re-find #"Ruimte & Wonen" (pdf-text (render-cell "Ruimte & Wonen"))))
     (is (re-find #"<b>bold</b>" (pdf-text (render-cell "<b>bold</b>")))))
   (testing "XML-illegal control characters are stripped"
-    (is (re-find #"ab" (pdf-text (render-cell "a\u0001\u001F\uD800b"))))))
+    (is (re-find #"abcd" (pdf-text (render-cell "a\u0001\u001F\uD800b\uDC00c\uFFFEd"))))))
 
 (deftest ^:integration ^:security pdf-fetches-no-external-resource-test
   (let [hits   (atom 0)
