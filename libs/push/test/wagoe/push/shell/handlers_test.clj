@@ -8,10 +8,7 @@
 
 (def ^:private test-secret "test-callback-secret-32chars!!!")
 
-(use-fixtures :each
-  (fn [f]
-    (binding [pt/*db* (pt/create-test-db)]
-      (f))))
+(use-fixtures :each pt/with-test-db)
 
 ;; --- Device Handlers ---
 

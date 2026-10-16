@@ -8,6 +8,8 @@
             [support.mysql :as mysql]
             [wagoe.jobs.ports :as jobs]
             [wagoe.jobs.shell.adapters.db :as jobs-db]
+            [wagoe.workflow.shell.entity-uuid :as entity-uuid]
+            [wagoe.workflow.shell.unique-instances :as unique-instances]
             [wagoe.workflow.ports :as workflow]
             [wagoe.workflow.shell.module-wiring]
             [wagoe.workflow.shell.persistence :as workflow-persistence])
@@ -65,3 +67,16 @@
                                         :created-at now :updated-at now})
         (is (= :draft (:current-state (workflow/find-instance store id))))
         (is (= :paid (:current-state (workflow/update-instance-state! store id :paid))))))))
+
+(deftest ^:integration boot-changes-are-looked-for-in-this-database-only
+  ;; A nil catalog searched every database on the server, so another
+  ;; database's workflow_instances silenced the "run migrate up" warning (BOU-660).
+  (with-mysql
+    (fn [other]
+      (ig/init-key :wagoe/workflow-db-schema {:ctx other :profile :test})
+      (is (entity-uuid/present? (:datasource other)))
+      (is (unique-instances/present? (:datasource other)))
+      (mysql/with-database "jw_this"
+        (fn [{:keys [datasource]}]
+          (is (not (entity-uuid/present? datasource)))
+          (is (not (unique-instances/present? datasource))))))))

@@ -2,31 +2,36 @@
   "Persistence shell for push notification device tokens and analytics events.
 
    Implements IDeviceTokenStore and IPushAnalyticsStore protocols against a
-   relational database via next.jdbc + HoneySQL.
+   db-context through platform's execution layer, which encodes each parameter
+   as the engine takes it.
 
-   Upsert strategy: attempt INSERT, catch duplicate-key violation, then UPDATE.
-   This approach is compatible with both H2 (tests) and PostgreSQL (production)
-   without requiring dialect-specific ON CONFLICT syntax."
+   Upsert strategy: attempt INSERT, catch the unique-key conflict, then UPDATE.
+   This needs no dialect-specific ON CONFLICT syntax."
   (:require [wagoe.push.ports :as ports]
             [wagoe.push.core.device :as device]
-            [next.jdbc :as jdbc]
-            [next.jdbc.result-set :as rs]
-            [honey.sql :as sql]
+            [wagoe.platform.database :as database]
             [honey.sql.helpers :as h])
-  (:import [java.sql SQLIntegrityConstraintViolationException]))
+  (:import [java.time Instant]))
 
 ;; =============================================================================
 ;; Shared Helpers
 ;; =============================================================================
 
-(def ^:private default-opts
-  {:builder-fn rs/as-unqualified-kebab-maps})
+(defn- ->instant
+  "PostgreSQL's driver cannot type a java.util.Date parameter; the execution
+   layer writes an Instant as each engine takes it."
+  [t]
+  (some-> t inst-ms Instant/ofEpochMilli))
 
-(defn- execute-one! [db sqlmap]
-  (jdbc/execute-one! db (sql/format sqlmap) default-opts))
+(defn- days-ago
+  "A cutoff encoded as the timestamps are written. A java.sql.Timestamp binds as
+   epoch millis on SQLite, which never compares below the ISO text stored there."
+  [days]
+  (.minus (Instant/now) (java.time.Duration/ofDays days)))
 
-(defn- execute! [db sqlmap]
-  (jdbc/execute! db (sql/format sqlmap) default-opts))
+(defn- unique-conflict? [e]
+  (= {:type :conflict :constraint :unique}
+     (select-keys (ex-data e) [:type :constraint])))
 
 ;; =============================================================================
 ;; DeviceTokenStore
@@ -40,18 +45,15 @@
         (dissoc :active))))
 
 (defn- insert-device-row! [db row]
-  (execute-one! db
-                (-> (h/insert-into :push-device-tokens)
-                    (h/values [row]))))
+  (database/execute-update! db
+                            (-> (h/insert-into :push-device-tokens)
+                                (h/values [row]))))
 
-(defn- update-device-row! [db token app-id active last-used-at device-name os-version]
-  (execute-one! db
-                (-> (h/update :push-device-tokens)
-                    (h/set {:active       active
-                            :last-used-at last-used-at
-                            :device-name  device-name
-                            :os-version   os-version})
-                    (h/where [:and [:= :token token] [:= :app-id app-id]]))))
+(defn- update-device-row! [db {:keys [token app-id] :as row}]
+  (database/execute-update! db
+                            (-> (h/update :push-device-tokens)
+                                (h/set (select-keys row [:active :last-used-at :device-name :os-version]))
+                                (h/where [:and [:= :token token] [:= :app-id app-id]]))))
 
 (defn- upsert-device! [db record]
   (let [row {:id          (:id record)
@@ -62,16 +64,14 @@
              :device-name (:device-name record)
              :os-version  (:os-version record)
              :active      true
-             :created-at  (:created-at record)
-             :last-used-at (:last-used-at record)}]
+             :created-at  (->instant (:created-at record))
+             :last-used-at (->instant (:last-used-at record))}]
     (try
       (insert-device-row! db row)
-      (catch SQLIntegrityConstraintViolationException _
+      (catch clojure.lang.ExceptionInfo e
+        (when-not (unique-conflict? e) (throw e))
         ;; Duplicate token+app_id — update active status and last-used
-        (update-device-row! db
-                            (:token record) (:app-id record)
-                            true (:last-used-at record)
-                            (:device-name record) (:os-version record))))))
+        (update-device-row! db row)))))
 
 (defrecord DeviceTokenStore [db]
   ports/IDeviceTokenStore
@@ -82,41 +82,39 @@
       record))
 
   (unregister-device! [_ user-id device-token]
-    (execute-one! db
-                  (-> (h/delete-from :push-device-tokens)
-                      (h/where [:and [:= :user-id user-id] [:= :token device-token]]))))
+    (database/execute-update! db
+                              (-> (h/delete-from :push-device-tokens)
+                                  (h/where [:and [:= :user-id user-id] [:= :token device-token]]))))
 
   (get-user-devices [_ user-id]
-    (->> (execute! db
-                   (-> (h/select :*)
-                       (h/from :push-device-tokens)
-                       (h/where [:and [:= :user-id user-id] [:= :active true]])))
+    (->> (database/execute-query! db
+                                  (-> (h/select :*)
+                                      (h/from :push-device-tokens)
+                                      (h/where [:and [:= :user-id user-id] [:= :active true]])))
          (mapv row->device)))
 
   (get-devices-by-platform [_ platform opts]
     (let [{:keys [limit offset] :or {limit 100 offset 0}} opts
           limit (min limit 1000)]
-      (->> (execute! db
-                     (-> (h/select :*)
-                         (h/from :push-device-tokens)
-                         (h/where [:and [:= :platform (name platform)] [:= :active true]])
-                         (h/limit limit)
-                         (h/offset offset)))
+      (->> (database/execute-query! db
+                                    (-> (h/select :*)
+                                        (h/from :push-device-tokens)
+                                        (h/where [:and [:= :platform (name platform)] [:= :active true]])
+                                        (h/limit limit)
+                                        (h/offset offset)))
            (mapv row->device))))
 
   (mark-token-invalid! [_ device-token]
-    (execute-one! db
-                  (-> (h/update :push-device-tokens)
-                      (h/set {:active false})
-                      (h/where [:= :token device-token]))))
+    (database/execute-update! db
+                              (-> (h/update :push-device-tokens)
+                                  (h/set {:active false})
+                                  (h/where [:= :token device-token]))))
 
   (cleanup-stale-tokens! [_ max-age-days]
-    (let [cutoff (java.sql.Timestamp/from
-                  (.minus (java.time.Instant/now)
-                          (java.time.Duration/ofDays max-age-days)))]
-      (execute-one! db
-                    (-> (h/delete-from :push-device-tokens)
-                        (h/where [:and [:= :active false] [:< :last-used-at cutoff]]))))))
+    (let [cutoff (days-ago max-age-days)]
+      (database/execute-update! db
+                                (-> (h/delete-from :push-device-tokens)
+                                    (h/where [:and [:= :active false] [:< :last-used-at cutoff]]))))))
 
 ;; =============================================================================
 ;; PushAnalyticsStore
@@ -126,17 +124,17 @@
   ports/IPushAnalyticsStore
 
   (record-send! [_ event]
-    (execute-one! db
-                  (-> (h/insert-into :push-analytics-events)
-                      (h/values [{:id                  (:id event)
-                                  :notification-id     (name (:notification-id event))
-                                  :device-token        (:device-token event)
-                                  :platform            (name (:platform event))
-                                  :event-type          (name (:event-type event))
-                                  :user-id             (:user-id event)
-                                  :provider-message-id (:provider-message-id event)
-                                  :error-message       (get-in event [:error :message])
-                                  :timestamp           (or (:timestamp event) (java.util.Date.))}]))))
+    (database/execute-update! db
+                              (-> (h/insert-into :push-analytics-events)
+                                  (h/values [{:id                  (:id event)
+                                              :notification-id     (name (:notification-id event))
+                                              :device-token        (:device-token event)
+                                              :platform            (name (:platform event))
+                                              :event-type          (name (:event-type event))
+                                              :user-id             (:user-id event)
+                                              :provider-message-id (:provider-message-id event)
+                                              :error-message       (get-in event [:error :message])
+                                              :timestamp           (or (->instant (:timestamp event)) (Instant/now))}]))))
 
   (record-delivery! [this event]
     (ports/record-send! this (assoc event :event-type :delivered)))
@@ -145,11 +143,11 @@
     (ports/record-send! this (assoc event :event-type :opened)))
 
   (get-push-stats [_ notification-id _opts]
-    (let [rows   (execute! db
-                           (-> (h/select :event-type [[:count :*] :cnt])
-                               (h/from :push-analytics-events)
-                               (h/where [:= :notification-id (name notification-id)])
-                               (h/group-by :event-type)))
+    (let [rows   (database/execute-query! db
+                                          (-> (h/select :event-type [[:count :*] :cnt])
+                                              (h/from :push-analytics-events)
+                                              (h/where [:= :notification-id (name notification-id)])
+                                              (h/group-by :event-type)))
           counts (reduce (fn [m {:keys [event-type cnt]}]
                            (assoc m (keyword event-type) cnt))
                          {:sent 0 :delivered 0 :opened 0 :failed 0}
@@ -157,9 +155,7 @@
       (assoc counts :notification-id notification-id)))
 
   (cleanup-old-events! [_ retention-days]
-    (let [cutoff (java.sql.Timestamp/from
-                  (.minus (java.time.Instant/now)
-                          (java.time.Duration/ofDays retention-days)))]
-      (execute-one! db
-                    (-> (h/delete-from :push-analytics-events)
-                        (h/where [:< :timestamp cutoff]))))))
+    (let [cutoff (days-ago retention-days)]
+      (database/execute-update! db
+                                (-> (h/delete-from :push-analytics-events)
+                                    (h/where [:< :timestamp cutoff]))))))
