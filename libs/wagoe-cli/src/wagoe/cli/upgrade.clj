@@ -11,7 +11,7 @@
 
 (def ^:private table-path "wagoe/cli/upgrades.edn")
 
-(def rewrite-kinds #{:config-key :config-value :ns-rename :fn-rename})
+(def ^:private rewrite-kinds #{:config-key :config-value :ns-rename :fn-rename})
 
 (defn load-table []
   (edn/read-string (slurp (io/resource table-path))))
@@ -54,10 +54,10 @@
   (reduce (fn [loc k] (or (some-> (key-loc loc k) z/right skip-uneval) (reduced nil))) loc path))
 
 (defn- edit-config
-  "`text` with `f` applied at the first location `path` reaches, else unchanged.
-   `f` returns a location, or nil to leave the text alone."
-  [text path f]
-  (or (some-> (z/of-string text) (path-loc path) f z/root-string) text))
+  "`root` with `f` applied at the first location `path` reaches, else unchanged.
+   `f` returns a location, or nil to leave it alone."
+  [root path f]
+  (or (some-> root (path-loc path) f z/root z/of-node) root))
 
 (defn- config-edits
   "Each rewrite in `table` as [path f], once per config section."
@@ -77,7 +77,9 @@
 (defn rewrite-config
   "`text` of a config.edn with every config rewrite in `table` applied."
   [table text]
-  (reduce (fn [text [path f]] (edit-config text path f)) text (config-edits table)))
+  (if-let [root (z/of-string text)]
+    (z/root-string (reduce (fn [root [path f]] (edit-config root path f)) root (config-edits table)))
+    text))
 
 ;; ─── Clojure source ──────────────────────────────────────────────────────────
 
@@ -105,32 +107,35 @@
   (let [new-ns  (symbol (namespace new-fn))
         aliases (set (keep :as specs))
         short   (symbol (last (str/split (str new-ns) #"\.")))]
-    (if-let [existing (some #(when (and (= new-ns (:lib %)) (:as %)) (:as %)) specs)]
+    (if-let [existing (some #(when (= new-ns (:lib %)) (:as %)) specs)]
       [(symbol (str existing) (name new-fn)) nil]
       (if (aliases short)
         [new-fn [new-ns]]
         [(symbol (str short) (name new-fn)) [new-ns :as short]]))))
 
-(defn- symbol-renames
+(defn- source-renames
+  "The table's ns and fn renames, each merged into one map."
+  [table]
+  {:ns-renames (apply merge (keep :ns-rename table))
+   :fn-renames (apply merge (keep :fn-rename table))})
+
+(defn- fn-renames-in
   "{old-symbol [new-symbol require-to-add-or-nil]} for one file, given its requires."
-  [table specs]
-  (let [ns-renames (apply merge (keep :ns-rename table))
-        fn-renames (apply merge (keep :fn-rename table))]
-    {:ns-renames ns-renames
-     :fns        (into {}
-                       (for [[old-fn new-fn] fn-renames
-                             :let [old-ns (symbol (namespace old-fn))]
-                             old (cons old-fn
-                                       (for [{:keys [lib as]} specs
-                                             :when (and as (= lib old-ns))]
-                                         (symbol (str as) (name old-fn))))]
-                         [old (if (= old old-fn)
-                                [new-fn nil]
-                                (target specs new-fn))]))}))
+  [fn-renames specs]
+  (into {}
+        (for [[old-fn new-fn] fn-renames
+              :let [old-ns (symbol (namespace old-fn))]
+              old (cons old-fn
+                        (for [{:keys [lib as]} specs
+                              :when (and as (= lib old-ns))]
+                          (symbol (str as) (name old-fn))))]
+          [old (if (= old old-fn)
+                 [new-fn nil]
+                 (target specs new-fn))])))
 
 (defn- rename-symbol
   "[new-symbol require-or-nil] for `sym`, or nil when nothing renames it."
-  [{:keys [ns-renames fns]} sym]
+  [ns-renames fns sym]
   (or (get fns sym)
       (when-let [new (get ns-renames sym)] [new nil])
       (when-let [new (some->> (namespace sym) symbol (get ns-renames))]
@@ -139,18 +144,18 @@
 (defn- add-requires
   "`text` with each libspec in `specs` appended to its ns form's :require."
   [text specs]
-  (reduce (fn [text spec]
-            (let [req    (require-loc (ns-form-loc (z/of-string text {:track-position? true})))
-                  indent (some-> req z/down z/right z/position second dec)]
-              (z/root-string
+  (let [req    (require-loc (ns-form-loc (z/of-string text {:track-position? true})))
+        indent (or (some-> req z/down z/right z/position second dec) 1)]
+    (z/root-string
+     (reduce (fn [req spec]
                (-> req
                    (z/append-child* (n/newlines 1))
-                   (z/append-child* (n/spaces (or indent 1)))
-                   (z/append-child* (n/coerce spec))))))
-          text specs))
+                   (z/append-child* (n/spaces indent))
+                   (z/append-child* (n/coerce spec))))
+             req specs))))
 
-(defn- referred-notices [table specs path]
-  (for [[old-fn new-fn] (apply merge (keep :fn-rename table))
+(defn- referred-notices [fn-renames specs path]
+  (for [[old-fn new-fn] fn-renames
         {:keys [lib refer]} specs
         :when (and (= lib (symbol (namespace old-fn)))
                    (or (= :all refer) (some #{(symbol (name old-fn))} refer)))]
@@ -160,24 +165,25 @@
   "{:text :notices} — `text` of a .clj(c) file with the ns and fn renames in
    `table` applied. `path` only labels the notices."
   [table text path]
-  (let [root    (z/of-string text)
-        specs   (when root (libspecs root))
-        renames (symbol-renames table specs)]
-    (if-not root
-      {:text text :notices []}
+  (if-let [root (z/of-string text)]
+    (let [{:keys [ns-renames fn-renames]} (source-renames table)
+          specs (libspecs root)
+          fns   (fn-renames-in fn-renames specs)]
       (loop [loc root, adds []]
         (if (z/end? loc)
-          (let [have (set (map :lib (libspecs (z/of-string (z/root-string loc)))))
+          (let [out  (z/root-string loc)
+                have (when (seq adds) (set (map :lib (libspecs (z/of-node (z/root loc))))))
                 adds (->> adds distinct (remove #(have (first %))))]
-            {:text    (cond-> (z/root-string loc)
+            {:text    (cond-> out
                         (and (seq adds) (require-loc (ns-form-loc root)))
                         (add-requires adds))
-             :notices (vec (referred-notices table specs path))})
+             :notices (vec (referred-notices fn-renames specs path))})
           (let [sym (when (= :token (z/tag loc)) (sexpr loc))
-                [new add] (when (symbol? sym) (rename-symbol renames sym))]
+                [new add] (when (symbol? sym) (rename-symbol ns-renames fns sym))]
             (if new
               (recur (z/next (z/replace loc new)) (cond-> adds add (conj add)))
-              (recur (z/next loc) adds))))))))
+              (recur (z/next loc) adds))))))
+    {:text text :notices []}))
 
 ;; ─── Unified diff ────────────────────────────────────────────────────────────
 
@@ -251,16 +257,19 @@
    {:changes [{:path :file :old :new}] :notices [...]}."
   [dir table]
   (let [configs (files-under (io/file dir "resources") #(= "config.edn" %))
-        sources (mapcat #(files-under (io/file dir %) (fn [n] (re-find #"\.cljc?$" n)))
-                        ["src" "test" "dev"])
+        sources (when (some (some-fn :ns-rename :fn-rename) table)
+                  (mapcat #(files-under (io/file dir %) (fn [n] (re-find #"\.cljc?$" n)))
+                          ["src" "test" "dev"]))
         results (concat
                  (for [f configs]
-                   (let [old (slurp f)] [f old {:text (rewrite-config table old) :notices []}]))
+                   (let [old (slurp f)]
+                     {:path (relative dir f) :file f :old old :new (rewrite-config table old)}))
                  (for [f sources]
-                   (let [old (slurp f)] [f old (rewrite-source table old (relative dir f))])))]
-    {:changes (vec (for [[f old {:keys [text]}] results :when (not= old text)]
-                     {:path (relative dir f) :file f :old old :new text}))
-     :notices (vec (mapcat (comp :notices #(nth % 2)) results))}))
+                   (let [old (slurp f), path (relative dir f)
+                         {:keys [text notices]} (rewrite-source table old path)]
+                     {:path path :file f :old old :new text :notices notices})))]
+    {:changes (into [] (comp (remove #(= (:old %) (:new %))) (map #(dissoc % :notices))) results)
+     :notices (into [] (mapcat :notices) results)}))
 
 ;; ─── Command ─────────────────────────────────────────────────────────────────
 

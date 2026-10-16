@@ -275,17 +275,23 @@
       (and (seq counted) (not= (+ 3 sum) (number total)))
       (conj (str "the list is said to be " total "; three frozen plus " sum " is " (+ 3 sum))))))
 
+(defn- report-findings
+  "Prints `findings` under a red `header`, then `footer`; returns whether any."
+  [header findings & footer]
+  (when (seq findings)
+    (println (ansi/red header))
+    (println)
+    (doseq [f findings] (println (str "  " f)))
+    (println)
+    (run! println footer))
+  (boolean (seq findings)))
+
 (defn- report-stability
   "Prints what the stability page gets wrong and returns whether it did."
   []
-  (let [findings (when (.exists (java.io.File. ^String stability-path))
-                   (stability-findings (slurp changelog-path) (slurp stability-path)))]
-    (when (seq findings)
-      (println (ansi/red (str stability-path " disagrees with " changelog-path ":")))
-      (println)
-      (doseq [f findings] (println (str "  " f)))
-      (println))
-    (boolean (seq findings))))
+  (report-findings (str stability-path " disagrees with " changelog-path ":")
+                   (when (.exists (java.io.File. ^String stability-path))
+                     (stability-findings (slurp changelog-path) (slurp stability-path)))))
 
 ;; =============================================================================
 ;; Rule 4 — `wagoe upgrade` knows every deprecation
@@ -308,15 +314,10 @@
 (defn- report-upgrades
   "Prints the deprecations `wagoe upgrade` does not know and returns whether any."
   []
-  (let [missing (deprecations-without-upgrade (slurp changelog-path)
-                                              (edn/read-string (slurp upgrades-path)))]
-    (when (seq missing)
-      (println (ansi/red (str "Deprecations with no entry in " upgrades-path ":")))
-      (println)
-      (doseq [t missing] (println (str "  " t)))
-      (println)
-      (println "Add a rewrite, or a :manual reason a rewrite cannot do it."))
-    (boolean (seq missing))))
+  (report-findings (str "Deprecations with no entry in " upgrades-path ":")
+                   (deprecations-without-upgrade (slurp changelog-path)
+                                                 (edn/read-string (slurp upgrades-path)))
+                   "Add a rewrite, or a :manual reason a rewrite cannot do it."))
 
 (defn- base-ref
   "What to compare against. `CHANGELOG_BASE` wins, so CI can name the PR base."
