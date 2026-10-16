@@ -11,11 +11,10 @@
   (str "jdbc:h2:" (:database-path db-config) ";" h2-connection-options))
 
 (defn session-statements
-  "UTC and foreign keys. Each runs on its own — see
-   common.adapter/run-session-statements!."
+  "UTC. Not REFERENTIAL_INTEGRITY: in H2 it is database-wide and on by
+   default, so setting it per connection undid a deliberate FALSE (BOU-654)."
   [_db-config]
-  [["SET TIME ZONE '+00:00'"]
-   ["SET REFERENTIAL_INTEGRITY TRUE"]])
+  [["SET TIME ZONE '+00:00'"]])
 
 (def pool-defaults
   "HikariCP defaults for an embedded database."
