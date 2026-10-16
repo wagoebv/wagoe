@@ -17,6 +17,34 @@
   []
   @catalogue-data)
 
+(defn read-clj
+  "`s` read with the Clojure reader, so bb.edn's `#()` and `#\"\"` parse. An
+   unknown tag reads as its value rather than failing the whole file."
+  [s]
+  (binding [*read-eval* false *default-data-reader-fn* (fn [_ v] v)] (read-string s)))
+
+(defn wagoe-lib-name
+  "Short name (\"core\") of Wagoe deps entry `lib`, or nil. A local checkout
+   may name them `wagoe/core {:local/root ..}` (BOU-662)."
+  [lib coord]
+  (when (symbol? lib)
+    (case (namespace lib)
+      "com.wagoe" (second (re-matches #"wagoe-(.+)" (name lib)))
+      "wagoe"     (when (:local/root coord) (name lib))
+      nil)))
+
+(defn wagoe-deps
+  "Short names of the Wagoe libs in the :deps of file `f`; empty when it is
+   missing or does not read."
+  [f]
+  (let [f (io/file f)]
+    (if (.exists f)
+      (try
+        (set (keep (fn [[lib coord]] (wagoe-lib-name lib coord))
+                   (:deps (read-clj (slurp f)))))
+        (catch Exception _ #{}))
+      #{})))
+
 (defn find-module
   "Find a module by name string. Returns the module map or nil."
   [module-name]

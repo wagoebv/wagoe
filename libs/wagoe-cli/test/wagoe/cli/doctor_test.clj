@@ -157,5 +157,11 @@
         (spit (io/file tmp "bb.edn")
               "{:deps {com.wagoe/wagoe-tools {:mvn/version \"1.0.0-beta-6\"}}}")
         (is (sut/wagoe-project? tmp)))
+
+      (testing "and one on a local checkout (BOU-662)"
+        (spit (io/file tmp "bb.edn")
+              "{:deps {wagoe/tools {:local/root \"../wagoe/libs/tools\"}}
+                :tasks {hi {:task (run! #(println %) [\"hi\"])}}}")
+        (is (sut/wagoe-project? tmp)))
       (finally
         (doseq [f (reverse (file-seq tmp))] (.delete f))))))
