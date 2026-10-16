@@ -1,8 +1,8 @@
 (ns wagoe.jobs.shell.adapters.db
   "Database-backed job queue (IJobQueue) on next.jdbc.
 
-   Lets an app run durable background jobs on its existing SQL database (H2 or
-   PostgreSQL) without standing up Redis, and survive a Redis outage. Implements
+   Lets an app run durable background jobs on its existing SQL database (H2,
+   PostgreSQL or MySQL) without standing up Redis, and survive a Redis outage. Implements
    the same reliable-dequeue contract as the Redis adapter:
 
    - `dequeue-job!` atomically claims the next ready row (sets status=processing,
@@ -15,7 +15,7 @@
    SELECT of the best candidate followed by a conditional `UPDATE ... WHERE
    status='ready'`. Concurrent workers that pick the same row have their UPDATEs
    serialized by the row lock — exactly one wins (update count 1); the losers
-   retry the next candidate. This runs identically on H2 and PostgreSQL, so the
+   retry the next candidate. This runs identically on H2, PostgreSQL and MySQL, so the
    reliability tests run on the default in-memory H2 test database.
 
    The authoritative job value is the JSON `payload` column (same wire format as
@@ -28,8 +28,11 @@
      `lease-ms` is reclaimed and may run again concurrently. Set `:lease-ms`
      comfortably above your longest job, and/or keep handlers idempotent.
      (Lease renewal is a possible future addition.)
-   - `payload` is `VARCHAR(1000000)`; keep serialized jobs under ~1 MB."
+   - `payload` is `VARCHAR(1000000)` (`LONGTEXT` on MySQL); keep serialized
+     jobs under ~1 MB."
   (:require [next.jdbc :as jdbc]
+            [wagoe.platform.database :as db]
+            [wagoe.platform.ports.database :as db-ports]
             [next.jdbc.result-set :as rs]
             [cheshire.core :as json]
             [clojure.string :as str]
@@ -81,48 +84,68 @@
 
 (defn- ts ^Timestamp [^Instant instant] (when instant (Timestamp/from instant)))
 
+;; Ids go as text: MySQL Java-serialises a UUID parameter, so a WHERE on it
+;; matched nothing, and PostgreSQL and H2 cast text to UUID (BOU-650).
+(defn- encode-params [sqlv] (mapv #(if (uuid? %) (str %) %) sqlv))
+
+(defn- execute-one! [conn sqlv & opts] (apply jdbc/execute-one! conn (encode-params sqlv) opts))
+
+(defn- execute! [conn sqlv & opts] (apply jdbc/execute! conn (encode-params sqlv) opts))
+
 ;; --- schema -----------------------------------------------------------------
 
-(declare create-job-store-table!)
+(defn- ddl-types
+  "Column types from the engine's adapter: MySQL has no UUID type, its VARCHAR
+   stops at 65535 bytes and its TIMESTAMP at whole seconds (BOU-650)."
+  [{:keys [adapter]}]
+  (assoc (if (= :mysql (db-ports/engine adapter))
+           {:payload (db-ports/column-type adapter :text) :ts (db-ports/column-type adapter :instant)}
+           {:payload "VARCHAR(1000000)" :ts "TIMESTAMP"})
+         :id (db-ports/column-type adapter :uuid)))
+
+(defn- create-job-store-table* [ctx {:keys [id payload ts]}]
+  (execute! (:datasource ctx)
+            [(format "CREATE TABLE IF NOT EXISTS job_store (
+                        id           %s PRIMARY KEY,
+                        job_type     VARCHAR(255),
+                        queue        VARCHAR(255),
+                        status       VARCHAR(20) NOT NULL,
+                        dead_letter  BOOLEAN NOT NULL DEFAULT FALSE,
+                        updated_at   %s NOT NULL,
+                        payload      %s NOT NULL)" id ts payload)])
+  (db/create-index-if-not-exists! ctx "ix_job_store_filters" :job_store [:status :job_type :queue])
+  (db/create-index-if-not-exists! ctx "ix_job_store_dead_letter" :job_store [:dead_letter :updated_at]))
+
+(defn create-job-store-table!
+  "Create the `job_store` table + its indexes if absent, on H2, PostgreSQL or
+   MySQL. Call once at startup, or ship as a migration."
+  [ds]
+  (let [ctx (db/context-of ds)]
+    (create-job-store-table* ctx (ddl-types ctx))))
 
 (defn create-jobs-table!
   "Create the `job_queue` table + ready-scan index if absent, and `job_store`
-   with it. Portable DDL (H2 + PostgreSQL). Call once at startup, or ship as a
+   with it, on H2, PostgreSQL or MySQL. Call once at startup, or ship as a
    migration.
 
    Both, because `enqueue-job!` writes a history row: a caller who created only
    the queue table would fail on the next insert (BOU-418 review)."
   [ds]
-  (create-job-store-table! ds)
-  (jdbc/execute! ds ["CREATE TABLE IF NOT EXISTS job_queue (
-                        id            UUID PRIMARY KEY,
-                        queue         VARCHAR(255) NOT NULL,
-                        priority_rank INT NOT NULL DEFAULT 2,
-                        status        VARCHAR(20) NOT NULL DEFAULT 'ready',
-                        execute_at    TIMESTAMP,
-                        locked_by     VARCHAR(255),
-                        locked_at     TIMESTAMP,
-                        payload       VARCHAR(1000000) NOT NULL,
-                        created_at    TIMESTAMP NOT NULL)"])
-  (jdbc/execute! ds ["CREATE INDEX IF NOT EXISTS ix_job_queue_ready
-                        ON job_queue (queue, status, priority_rank, created_at)"]))
-
-(defn create-job-store-table!
-  "Create the `job_store` table + its indexes if absent. Portable DDL
-   (H2 + PostgreSQL). Call once at startup, or ship as a migration."
-  [ds]
-  (jdbc/execute! ds ["CREATE TABLE IF NOT EXISTS job_store (
-                        id           UUID PRIMARY KEY,
-                        job_type     VARCHAR(255),
-                        queue        VARCHAR(255),
-                        status       VARCHAR(20) NOT NULL,
-                        dead_letter  BOOLEAN NOT NULL DEFAULT FALSE,
-                        updated_at   TIMESTAMP NOT NULL,
-                        payload      VARCHAR(1000000) NOT NULL)"])
-  (jdbc/execute! ds ["CREATE INDEX IF NOT EXISTS ix_job_store_filters
-                        ON job_store (status, job_type, queue)"])
-  (jdbc/execute! ds ["CREATE INDEX IF NOT EXISTS ix_job_store_dead_letter
-                        ON job_store (dead_letter, updated_at)"]))
+  (let [ctx                          (db/context-of ds)
+        {:keys [id payload ts] :as types} (ddl-types ctx)]
+    (create-job-store-table* ctx types)
+    (execute! ds [(format "CREATE TABLE IF NOT EXISTS job_queue (
+                             id            %s PRIMARY KEY,
+                             queue         VARCHAR(255) NOT NULL,
+                             priority_rank INT NOT NULL DEFAULT 2,
+                             status        VARCHAR(20) NOT NULL DEFAULT 'ready',
+                             execute_at    %s NULL,
+                             locked_by     VARCHAR(255),
+                             locked_at     %s NULL,
+                             payload       %s NOT NULL,
+                             created_at    %s NOT NULL)" id ts ts payload ts)])
+    (db/create-index-if-not-exists! ctx "ix_job_queue_ready" :job_queue
+                                    [:queue :status :priority_rank :created_at])))
 
 (defn- kw-name [x] (when x (name x)))
 
@@ -134,7 +157,7 @@
   (let [now  (ts (Instant/now))
         flag (boolean dead-letter?)
         n    (::jdbc/update-count
-              (jdbc/execute-one!
+              (execute-one!
                ds
                (if (nil? dead-letter?)
                  ["UPDATE job_store SET job_type = ?, queue = ?, status = ?,
@@ -147,7 +170,7 @@
                   (kw-name (or (:status job) :pending)) flag now
                   (serialize-job job) (:id job)])))]
     (when (zero? n)
-      (jdbc/execute-one!
+      (execute-one!
        ds
        ["INSERT INTO job_store (id, job_type, queue, status, dead_letter, updated_at, payload)
            VALUES (?,?,?,?,?,?,?)"
@@ -207,7 +230,7 @@
         scheduled? (some? (:execute-at job))
         status     (if scheduled? "scheduled" "ready")
         updated    (::jdbc/update-count
-                    (jdbc/execute-one!
+                    (execute-one!
                      connectable
                      ["UPDATE job_queue
                          SET queue = ?, priority_rank = ?, status = ?, execute_at = ?,
@@ -216,7 +239,7 @@
                       (name queue-name) (priority-rank (:priority job)) status
                       (ts (:execute-at job)) (serialize-job job) job-id]))]
     (when (zero? updated)
-      (jdbc/execute-one!
+      (execute-one!
        connectable
        ["INSERT INTO job_queue
            (id, queue, priority_rank, status, execute_at, payload, created_at)
@@ -265,7 +288,7 @@
     ;; Claim the best ready candidate; on a lost race (someone else claimed it
     ;; first) try the next one, until we win a row or the ready set is empty.
     (loop []
-      (if-let [cand (jdbc/execute-one!
+      (if-let [cand (execute-one!
                      ds
                      ["SELECT id, payload FROM job_queue
                         WHERE queue = ? AND status = 'ready'
@@ -273,7 +296,7 @@
                       (name queue-name)]
                      (opts))]
         (let [n (::jdbc/update-count
-                 (jdbc/execute-one!
+                 (execute-one!
                   ds
                   ["UPDATE job_queue SET status = 'processing', locked_by = ?, locked_at = ?
                       WHERE id = ? AND status = 'ready'"
@@ -289,15 +312,15 @@
     ;; again, unlocked — was deleted by the ack that followed it, and a job
     ;; another worker had reclaimed after a lease expiry was deleted out from
     ;; under it (BOU-418 review).
-    (jdbc/execute-one! ds ["DELETE FROM job_queue
-                              WHERE id = ? AND locked_by = ? AND status = 'processing'"
-                           job-id worker-id])
+    (execute-one! ds ["DELETE FROM job_queue
+                         WHERE id = ? AND locked_by = ? AND status = 'processing'"
+                      job-id worker-id])
     true)
 
   (reclaim-abandoned-jobs! [_ queue-name]
     (let [cutoff (ts (.minusMillis (Instant/now) (long lease-ms)))
           n (::jdbc/update-count
-             (jdbc/execute-one!
+             (execute-one!
               ds
               ["UPDATE job_queue
                   SET status = 'ready', locked_by = NULL, locked_at = NULL
@@ -307,7 +330,7 @@
       {:reclaimed n}))
 
   (peek-job [_ queue-name]
-    (some-> (jdbc/execute-one!
+    (some-> (execute-one!
              ds
              ["SELECT payload FROM job_queue
                 WHERE queue = ? AND status = 'ready'
@@ -319,10 +342,10 @@
 
   (delete-job! [_ job-id]
     (pos? (::jdbc/update-count
-           (jdbc/execute-one! ds ["DELETE FROM job_queue WHERE id = ?" job-id]))))
+           (execute-one! ds ["DELETE FROM job_queue WHERE id = ?" job-id]))))
 
   (queue-size [_ queue-name]
-    (-> (jdbc/execute-one!
+    (-> (execute-one!
          ds
          ["SELECT COUNT(*) AS n FROM job_queue WHERE queue = ? AND status = 'ready'"
           (name queue-name)]
@@ -330,13 +353,13 @@
         :n long))
 
   (list-queues [_]
-    (->> (jdbc/execute! ds ["SELECT DISTINCT queue FROM job_queue"] (opts))
+    (->> (execute! ds ["SELECT DISTINCT queue FROM job_queue"] (opts))
          (map (comp keyword :queue))
          vec))
 
   (process-scheduled-jobs! [_]
     (::jdbc/update-count
-     (jdbc/execute-one!
+     (execute-one!
       ds
       ["UPDATE job_queue SET status = 'ready'
           WHERE status = 'scheduled' AND execute_at <= ?"
@@ -356,7 +379,9 @@
 (defn create-db-job-queue
   "Create a DB-backed job queue over the given `next.jdbc` datasource `ds`.
    `:lease-ms` (default 60s) is the in-flight lease after which a claimed job is
-   reclaimable. Call `create-jobs-table!` once before use (or run the migration)."
+   reclaimable. Call `create-jobs-table!` once before use (or run the migration).
+   Ids go as text, so on PostgreSQL `ds` must be the platform's, whose URL sets
+   `stringtype=unspecified`."
   [ds & {:keys [lease-ms] :or {lease-ms default-lease-ms}}]
   (->DbJobQueue ds lease-ms))
 
@@ -377,8 +402,8 @@
     (upsert-job! ds job nil))
 
   (find-job [_ job-id]
-    (some-> (jdbc/execute-one! ds ["SELECT payload FROM job_store WHERE id = ?" job-id]
-                               (opts))
+    (some-> (execute-one! ds ["SELECT payload FROM job_store WHERE id = ?" job-id]
+                          (opts))
             :payload
             deserialize-job))
 
@@ -410,15 +435,15 @@
                     queue    (conj (kw-name queue)))
           sql     (str "SELECT payload FROM job_store"
                        (when (seq clauses) (str " WHERE " (str/join " AND " clauses))))]
-      (->> (jdbc/execute! ds (into [sql] params) (opts))
+      (->> (execute! ds (into [sql] params) (opts))
            (map (comp deserialize-job :payload))
            vec)))
 
   (failed-jobs [_ limit]
-    (->> (jdbc/execute! ds ["SELECT payload FROM job_store
-                               WHERE dead_letter = TRUE ORDER BY updated_at LIMIT ?"
-                            limit]
-                        (opts))
+    (->> (execute! ds ["SELECT payload FROM job_store
+                          WHERE dead_letter = TRUE ORDER BY updated_at LIMIT ?"
+                       limit]
+                   (opts))
          (map (comp deserialize-job :payload))
          vec))
 
