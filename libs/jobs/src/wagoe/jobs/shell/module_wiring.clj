@@ -58,8 +58,8 @@
                       {:type :wagoe/jobs-no-datasource})))
     ;; Idempotent DDL, so a fresh database needs no separate migration step and
     ;; an existing one is untouched.
+    ;; job_store too: create-jobs-table! makes both.
     (db/create-jobs-table! ds)
-    (db/create-job-store-table! ds)
     {:queue  (db/create-db-job-queue ds :lease-ms lease-ms)
      :store  (db/create-db-job-store ds)
      ;; No IJobStats for the DB backend; the two that have one expose it, and a

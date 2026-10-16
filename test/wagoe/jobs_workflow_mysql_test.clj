@@ -60,7 +60,16 @@
           (is (= 1 (jobs/queue-size q :default))))
         (testing "the store finds a job by its UUID"
           (is (= (:id low) (:id (jobs/find-job (jobs-db/create-db-job-store datasource)
-                                               (:id low))))))))))
+                                               (:id low))))))
+        (testing "a due scheduled job turns ready, compared on DATETIME(6)"
+          (jobs/schedule-job! q :later (job :normal) (.minusSeconds (Instant/now) 1))
+          (is (= 1 (jobs/process-scheduled-jobs! q)))
+          (is (= 1 (jobs/queue-size q :later))))
+        (testing "an expired claim is reclaimed"
+          (let [short-lease (jobs-db/create-db-job-queue datasource :lease-ms 1)]
+            (is (some? (jobs/dequeue-job! short-lease :later "w2")))
+            (Thread/sleep 20)
+            (is (= {:reclaimed 1} (jobs/reclaim-abandoned-jobs! short-lease :later)))))))))
 
 (deftest ^:integration workflows-boot-schema-runs-on-mysql
   (with-mysql

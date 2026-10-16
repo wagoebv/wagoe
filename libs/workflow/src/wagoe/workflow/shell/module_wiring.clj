@@ -80,9 +80,10 @@
   ;; The migration is PostgreSQL-shaped; `migrate up` rewrites it for MySQL,
   ;; and so must the boot. The rewrite drops IF NOT EXISTS from CREATE INDEX,
   ;; so an index left by the last boot counts as done (BOU-650).
-  (let [mysql? (= :mysql (db-ports/engine (:adapter ctx)))]
+  (let [mysql?   (= :mysql (db-ports/engine (:adapter ctx)))
+        execute! (if mysql? db/execute-ddl-if-absent! db/execute-ddl!)]
     (doseq [statement (cond-> (migration-statements) mysql? migration-sql/for-mysql)]
-      (db/execute-ddl-if-absent! ctx statement)))
+      (execute! ctx statement)))
   (let [ds (:datasource ctx)]
     (doseq [{:keys [what present? ensure!]} boot-changes]
       (cond

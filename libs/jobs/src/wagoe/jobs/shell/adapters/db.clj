@@ -1,8 +1,8 @@
 (ns wagoe.jobs.shell.adapters.db
   "Database-backed job queue (IJobQueue) on next.jdbc.
 
-   Lets an app run durable background jobs on its existing SQL database (H2 or
-   PostgreSQL) without standing up Redis, and survive a Redis outage. Implements
+   Lets an app run durable background jobs on its existing SQL database (H2,
+   PostgreSQL or MySQL) without standing up Redis, and survive a Redis outage. Implements
    the same reliable-dequeue contract as the Redis adapter:
 
    - `dequeue-job!` atomically claims the next ready row (sets status=processing,
@@ -15,7 +15,7 @@
    SELECT of the best candidate followed by a conditional `UPDATE ... WHERE
    status='ready'`. Concurrent workers that pick the same row have their UPDATEs
    serialized by the row lock — exactly one wins (update count 1); the losers
-   retry the next candidate. This runs identically on H2 and PostgreSQL, so the
+   retry the next candidate. This runs identically on H2, PostgreSQL and MySQL, so the
    reliability tests run on the default in-memory H2 test database.
 
    The authoritative job value is the JSON `payload` column (same wire format as
@@ -86,11 +86,11 @@
 
 ;; Ids go as text: MySQL Java-serialises a UUID parameter, so a WHERE on it
 ;; matched nothing, and PostgreSQL and H2 cast text to UUID (BOU-650).
-(defn- params [sqlv] (mapv #(if (uuid? %) (str %) %) sqlv))
+(defn- encode-params [sqlv] (mapv #(if (uuid? %) (str %) %) sqlv))
 
-(defn- execute-one! [conn sqlv & opts] (apply jdbc/execute-one! conn (params sqlv) opts))
+(defn- execute-one! [conn sqlv & opts] (apply jdbc/execute-one! conn (encode-params sqlv) opts))
 
-(defn- execute! [conn sqlv & opts] (apply jdbc/execute! conn (params sqlv) opts))
+(defn- execute! [conn sqlv & opts] (apply jdbc/execute! conn (encode-params sqlv) opts))
 
 ;; --- schema -----------------------------------------------------------------
 
@@ -98,10 +98,10 @@
   "Column types from the engine's adapter: MySQL has no UUID type, its VARCHAR
    stops at 65535 bytes and its TIMESTAMP at whole seconds (BOU-650)."
   [{:keys [adapter]}]
-  (if (= :mysql (db-ports/engine adapter))
-    {:id (db-ports/column-type adapter :uuid) :payload (db-ports/column-type adapter :text)
-     :ts (db-ports/column-type adapter :instant)}
-    {:id (db-ports/column-type adapter :uuid) :payload "VARCHAR(1000000)" :ts "TIMESTAMP"}))
+  (assoc (if (= :mysql (db-ports/engine adapter))
+           {:payload (db-ports/column-type adapter :text) :ts (db-ports/column-type adapter :instant)}
+           {:payload "VARCHAR(1000000)" :ts "TIMESTAMP"})
+         :id (db-ports/column-type adapter :uuid)))
 
 (defn- create-job-store-table* [ctx {:keys [id payload ts]}]
   (execute! (:datasource ctx)
@@ -313,8 +313,8 @@
     ;; another worker had reclaimed after a lease expiry was deleted out from
     ;; under it (BOU-418 review).
     (execute-one! ds ["DELETE FROM job_queue
-                              WHERE id = ? AND locked_by = ? AND status = 'processing'"
-                           job-id worker-id])
+                         WHERE id = ? AND locked_by = ? AND status = 'processing'"
+                      job-id worker-id])
     true)
 
   (reclaim-abandoned-jobs! [_ queue-name]
@@ -379,7 +379,9 @@
 (defn create-db-job-queue
   "Create a DB-backed job queue over the given `next.jdbc` datasource `ds`.
    `:lease-ms` (default 60s) is the in-flight lease after which a claimed job is
-   reclaimable. Call `create-jobs-table!` once before use (or run the migration)."
+   reclaimable. Call `create-jobs-table!` once before use (or run the migration).
+   Ids go as text, so on PostgreSQL `ds` must be the platform's, whose URL sets
+   `stringtype=unspecified`."
   [ds & {:keys [lease-ms] :or {lease-ms default-lease-ms}}]
   (->DbJobQueue ds lease-ms))
 
@@ -401,7 +403,7 @@
 
   (find-job [_ job-id]
     (some-> (execute-one! ds ["SELECT payload FROM job_store WHERE id = ?" job-id]
-                               (opts))
+                          (opts))
             :payload
             deserialize-job))
 
@@ -439,9 +441,9 @@
 
   (failed-jobs [_ limit]
     (->> (execute! ds ["SELECT payload FROM job_store
-                               WHERE dead_letter = TRUE ORDER BY updated_at LIMIT ?"
-                            limit]
-                        (opts))
+                          WHERE dead_letter = TRUE ORDER BY updated_at LIMIT ?"
+                       limit]
+                   (opts))
          (map (comp deserialize-job :payload))
          vec))
 
