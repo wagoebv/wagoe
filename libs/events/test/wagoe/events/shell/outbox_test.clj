@@ -161,4 +161,18 @@
   (let [c (:components (wiring/ig-config {:provider :memory :outbox {:poll-ms 500}} {}))]
     (is (= 500 (get-in c [:wagoe/events-outbox :poll-ms])))
     (is (= (ig/ref :wagoe/events) (get-in c [:wagoe/events-outbox :bus])))
-    (is (= (ig/ref :wagoe/db-context) (get-in c [:wagoe/events-outbox :db-ctx])))))
+    (is (= (ig/ref :wagoe/db-context) (get-in c [:wagoe/events-outbox :db-ctx])))
+    (is (= (ig/ref :wagoe/events-outbox) (get-in c [:wagoe/events-relay :outbox]))))
+  (testing ":relay? false writes to the outbox without relaying"
+    (is (= #{:wagoe/events :wagoe/events-outbox}
+           (set (keys (:components (wiring/ig-config {:provider :memory :outbox {:relay? false}} {}))))))))
+
+(deftest ^:integration purge-runs-at-most-once-per-interval
+  (with-outbox "outbox_purge_interval"
+    (fn [{:keys [ds]}]
+      (let [purge! #'outbox/purge-delivered!
+            at     (atom 0)]
+        (is (some? (purge! ds at 1000)) "first pass purges")
+        (is (nil? (purge! ds at 1000)) "the next within the interval does not")
+        (reset! at (- (System/currentTimeMillis) 2000))
+        (is (some? (purge! ds at 1000)))))))

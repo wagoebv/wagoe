@@ -111,7 +111,8 @@
 (defn create-outbox
   "An outbox over datasource `ds` that relays to `bus`. `opts` as `defaults`."
   [ds bus & [opts]]
-  (->EventOutbox ds bus (merge defaults opts) (str (random-uuid))))
+  (assoc (->EventOutbox ds bus (merge defaults opts) (str (random-uuid)))
+         :purged-at (atom 0)))
 
 ;; --- relay ------------------------------------------------------------------
 
@@ -148,16 +149,22 @@
                                  (System/currentTimeMillis)]
                                 ids))))
 
-(defn- purge-delivered! [ds retain-ms]
-  (jdbc/execute-one! ds ["DELETE FROM event_outbox WHERE delivered_ms < ?"
-                         (- (System/currentTimeMillis) retain-ms)]))
+(defn- purge-delivered!
+  "Delete rows delivered more than `retain-ms` ago, at most once per
+   `retain-ms` or hour, whichever is shorter: not a DELETE on every idle tick."
+  [ds purged-at retain-ms]
+  (let [now (System/currentTimeMillis)]
+    (when (>= (- now @purged-at) (min retain-ms (* 60 60 1000)))
+      (reset! purged-at now)
+      (jdbc/execute-one! ds ["DELETE FROM event_outbox WHERE delivered_ms < ?"
+                             (- now retain-ms)]))))
 
 (defn relay-once!
   "Publish up to `:batch-size` pending rows in order and mark them delivered.
    Stops at the first failed publish, so a later event never overtakes an
    earlier one; the failed row is retried next pass. Does nothing while
    another relay holds the lease. Returns the count delivered."
-  [{:keys [ds bus opts owner]}]
+  [{:keys [ds bus opts owner purged-at]}]
   (let [{:keys [batch-size retain-ms lease-ms]} opts]
     (if-not (claim-relay! ds owner lease-ms)
       0
@@ -172,9 +179,9 @@
                          []
                          rows)]
         (mark-delivered! ds ids)
-        ;; A short batch ends the tick's loop: purge once per tick, not per batch.
+        ;; Only once the backlog is drained.
         (when (< (count rows) batch-size)
-          (purge-delivered! ds retain-ms))
+          (purge-delivered! ds purged-at retain-ms))
         (count ids)))))
 
 (defn- relay-tick! [outbox]

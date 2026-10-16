@@ -145,6 +145,9 @@ in order and marks them delivered; delivered rows are deleted after
 - Relays on several replicas take turns through a lease row
   (`event_outbox_relay`), so one publishes at a time. Keep `:lease-ms` above
   the time one batch takes; `:relay? false` keeps a node out entirely.
+- The relay is its own component, `:wagoe/events-relay`, claimed by
+  `service events`; `:wagoe/events-outbox` is platform, so every service can
+  write to it. Delivered rows are purged at most once per `:retain-ms` or hour.
 
 ---
 
