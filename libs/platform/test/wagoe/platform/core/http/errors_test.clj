@@ -1,5 +1,6 @@
 (ns wagoe.platform.core.http.errors-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [clojure.string :as str]
+            [clojure.test :refer [deftest is testing]]
             [wagoe.platform.core.http.errors :as sut]))
 
 (deftest ^:unit the-body-is-one-shape
@@ -32,3 +33,27 @@
   (is (= :internal-error (sut/status->type 502)))
   (testing "a 4xx without a word of its own is the caller's input refused"
     (is (= :validation-error (sut/status->type 413)))))
+
+(deftest ^:unit a-handler-built-error-gets-the-correlation-id
+  ;; BOU-592: the workflow 422 built its own body and carried none.
+  (testing "a map body, its :type still a keyword"
+    (is (= "c-3" (get-in (sut/with-correlation-id
+                           {:status 422 :body {:error {:type :transition-not-found :message "No"}}}
+                           "c-3")
+                         [:body :error :correlation-id]))))
+  (testing "a body the handler encoded itself"
+    (let [r (sut/with-correlation-id {:status  404
+                                      :headers {"Content-Type" "application/json"}
+                                      :body    "{\"error\":{\"type\":\"not-found\",\"message\":\"Gone\"}}"}
+              "c-4")]
+      (is (str/includes? (:body r) "\"correlation-id\":\"c-4\""))))
+  (testing "left alone: one already there, a success, a page"
+    (is (= "mine" (get-in (sut/with-correlation-id
+                            {:status 400 :body {:error {:type "x" :message "y" :correlation-id "mine"}}}
+                            "c-5")
+                          [:body :error :correlation-id])))
+    (is (= {:status 200 :body {:error {:type "x"}}}
+           (sut/with-correlation-id {:status 200 :body {:error {:type "x"}}} "c-6")))
+    (is (= "<p>no</p>" (:body (sut/with-correlation-id
+                                {:status 404 :headers {"Content-Type" "text/html"} :body "<p>no</p>"}
+                                "c-7"))))))

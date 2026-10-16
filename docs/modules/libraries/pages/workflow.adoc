@@ -163,8 +163,9 @@ One the workflow does not make from the current state answers 422:
 
 [source,json]
 ----
-{"error": {"type":    "transition-not-found",
-           "message": "Transition 'paid' is not allowed from state 'entered'"}}
+{"error": {"type":           "transition-not-found",
+           "message":        "Transition 'paid' is not allowed from state 'entered'",
+           "correlation-id": "3f2b6c1e-8d4a-4e7b-9c1f-2a5d6e7f8a9b"}}
 ----
 
 An unknown instance is a 404 and a malformed body a 400, in the platform's error shape.

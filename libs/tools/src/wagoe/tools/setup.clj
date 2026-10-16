@@ -955,6 +955,11 @@
           :else        {:path rel :status :changed :content text :old old
                         :changes (:changes res)})))))
 
+(defn- written-prod
+  "The entry of `plan` that writes the prod config, if one does."
+  [plan]
+  (some #(when (and (= (conf-rel "prod") (:path %)) (#{:new :changed} (:status %))) %) plan))
+
 (defn- plan
   "Every file setup would touch for `spec`.
 
@@ -995,10 +1000,7 @@
                       (and (prod? env) (seq (:left-out carried)))
                       (assoc :changes (for [k (:left-out carried)]
                                         (str "leave out " k ": dev's provider is a stand-in; configure a real one")))))
-        redis?    (some (fn [{:keys [path status content]}]
-                          (and (= (conf-rel "prod") path) (#{:new :changed} status)
-                               (str/includes? content "#env REDIS_HOST")))
-                        configs)
+        redis?    (some-> (written-prod configs) :content (str/includes? "#env REDIS_HOST"))
         env-spec  (cond-> spec redis? (assoc :prod-redis? true))
         env-ex    (if (or existing? (read-target ".env.example"))
                     (let [p (plan-file ".env.example" nil #(merge-env-example %1 env-spec %2) false)]
@@ -1182,6 +1184,26 @@
 ;; Display summary
 ;; =============================================================================
 
+(defn written-providers
+  "`[key provider]` for each :active entry of config `text` that names a
+   provider, and each database it uses."
+  [text]
+  (let [active (some-> text read-edn first :active)]
+    (sort (for [[k v] (when (map? active) active)
+                :let [p (cond (and (map? v) (keyword? (:provider v))) (name (:provider v))
+                              (database-keys (str k))                 "database")]
+                :when p]
+            [k p]))))
+
+(defn- display-prod-providers
+  "What a prod config written now runs on. The box above says keep for what was
+   not asked, while prod's Redis was chosen for it (BOU-599)."
+  [spec plan]
+  (when-let [ps (and (:prod? spec) (seq (written-providers (:content (written-prod plan)))))]
+    (println (str "  " (bold "Prod runs on:")))
+    (doseq [[k p] ps]
+      (println (str "    " (format "%-26s" k) " " p)))))
+
 (defn- display-summary [spec plan]
   (let [shown #(if-some [v (get spec %)] (name v) "keep")]
     (println)
@@ -1194,6 +1216,7 @@
     (println (str (cyan "│") " Email:     " (bold (shown :email))))
     (println (str (cyan "│") " Admin UI:  " (case (:admin-ui spec) true (green "✓") false (red "✗") "keep")))
     (println (cyan "└───────────────────────────────────────────────────────┘"))
+    (display-prod-providers spec plan)
     (doseq [{:keys [path status changes reason]} plan]
       (println (str "  " (case status
                            :new       (green "create       ")

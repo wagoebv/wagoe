@@ -1,6 +1,7 @@
 (ns wagoe.tools.doctor-test
   (:require [clojure.java.io :as io]
             [clojure.set :as set]
+            [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [wagoe.tools.doctor :as doctor]))
 
@@ -461,6 +462,17 @@
             loadable (first (filter #(= :config-loadable (:id %)) results))]
         (is (= :pass (:level loadable))
             (str p " does not parse: " (:msg loadable)))))))
+
+(deftest ^:unit admin-parity-runs-only-for-the-profiles-it-compares
+  ;; Under --env prod it said "between dev and test" (BOU-597).
+  (let [ids #(set (map :id (doctor/run-checks % {})))]
+    (is (contains? (ids "dev") :admin-parity))
+    (is (not (contains? (ids "prod") :admin-parity)))))
+
+(deftest ^:unit errors-without-ci-say-the-exit-code-is-zero
+  (is (= "2 errors found, exit code 0. Pass --ci to exit non-zero on errors."
+         (doctor/ci-hint 2)))
+  (is (str/starts-with? (doctor/ci-hint 1) "1 error found")))
 
 (deftest ^:unit an-aero-tag-the-reader-has-never-heard-of-is-not-a-parse-failure
   ;; Aero has more tags than the table knows and can gain more. This parser

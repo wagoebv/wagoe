@@ -98,6 +98,12 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **Search suggestions read every row on PostgreSQL, and `_`/`%` in a query matched anything** (BOU-676).
   Run migrations for the trigram index; pg_trgm off the `search_path` now falls back to LIKE.
+- **JSON error bodies a handler built itself, and 404/405s, had no `correlation-id`** (BOU-592, BOU-596): the workflow
+  and scaffolded-transition 422s among them. The platform now adds it.
+- **`bb doctor` exited 0 on errors without saying so, and named dev and test under `--env prod`** (BOU-597): it now
+  says to pass `--ci`. `bb scaffold <cmd> --help` prints only the help (BOU-598).
+- **`bb setup --prod true` said "Cache: keep" while writing Redis** (BOU-599): the summary lists every provider prod gets.
+
 - **PostgreSQL `:application-name` and `:statement-timeout-ms` were ignored** (BOU-658). Upgrade; migrations, seeds and
   tenant provisioning run without the timeout, in-memory H2 migrations use `mem:wagoe`, and a config without `:pool` boots.
 - **Auth middleware answered 401 for what the handler threw** (BOU-682): a `:conflict` or database error behind JWT or
