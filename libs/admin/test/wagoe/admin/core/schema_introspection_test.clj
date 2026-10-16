@@ -42,6 +42,14 @@
       (is (= "varchar" (introspection/normalize-sql-type "VarChar")))
       (is (= "text" (introspection/normalize-sql-type "text"))))))
 
+(deftest ^:unit mysql-column-types-infer-their-meaning
+  ;; MySQL's column_type, not data_type, which says tinyint and char (BOU-649).
+  (is (= :boolean (introspection/infer-field-type "tinyint(1)")))
+  (is (= :uuid (introspection/infer-field-type "char(36)")))
+  (is (= :int (introspection/infer-field-type "tinyint(4)")) "a wider tinyint is a number")
+  (is (= :int (introspection/infer-field-type "bigint unsigned")))
+  (is (= :instant (introspection/infer-field-type "datetime(6)"))))
+
 (deftest ^:unit infer-field-type-test
   (testing "Field type inference from SQL types"
     (testing "String types"

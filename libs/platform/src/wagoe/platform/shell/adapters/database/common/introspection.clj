@@ -81,10 +81,12 @@
 (defn information-schema-table-info
   "Column information for `table-name`, per `information_schema`. See
    `information-schema-table-exists?` for `spec`; its `:generated-columns` are
-   the columns this engine reports identity and generated columns in."
-  [{:keys [schema honey generated-columns] :as spec} datasource table-name]
+   the columns this engine reports identity and generated columns in, and its
+   `:type-column` the one with the full type (default `data_type`)."
+  [{:keys [schema honey generated-columns type-column] :or {type-column :data_type} :as spec}
+   datasource table-name]
   (let [table-str     (table-key spec table-name)
-        columns-query {:select   (into [:column_name :data_type :is_nullable :column_default]
+        columns-query {:select   (into [:column_name type-column :is_nullable :column_default]
                                        generated-columns)
                        :from     [:information_schema.columns]
                        :where    [:and
@@ -105,7 +107,7 @@
         pk-columns    (set (map :column_name (rows datasource pk-query honey)))]
     (mapv (fn [col]
             {:name        (str/lower-case (:column_name col))
-             :type        (:data_type col)
+             :type        (get col type-column)
              :not-null    (= "NO" (:is_nullable col))
              :default     (:column_default col)
              :primary-key (contains? pk-columns (:column_name col))
