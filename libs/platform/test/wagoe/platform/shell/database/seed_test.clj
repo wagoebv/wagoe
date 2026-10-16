@@ -5,6 +5,7 @@
             [clojure.test :refer [deftest is testing]]
             [next.jdbc :as jdbc]
             [next.jdbc.result-set :as rs]
+            [wagoe.platform.shell.adapters.database.factory :as factory]
             [wagoe.platform.shell.database.seed :as sut])
   (:import [java.io File]))
 
@@ -105,7 +106,7 @@
                                                       (fn [m args] (swap! calls conj [m (first args)]))
                                                       (fn [_ r] r))
                                           r)))]
-        (is (:uuid-id? (#'sut/table-info proxy "invoices")))
+        (is (:uuid-id? (#'sut/table-info proxy (factory/adapter-for :h2) "invoices")))
         (let [asked (for [[m catalog] @calls :when (#{"getColumns" "getPrimaryKeys"} m)] catalog)]
           (is (seq asked))
           (is (every? #(= (.getCatalog c) %) asked) (pr-str @calls)))))))

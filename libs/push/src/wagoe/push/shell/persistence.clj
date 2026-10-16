@@ -43,13 +43,10 @@
                             (-> (h/insert-into :push-device-tokens)
                                 (h/values [row]))))
 
-(defn- update-device-row! [db token app-id active last-used-at device-name os-version]
+(defn- update-device-row! [db {:keys [token app-id] :as row}]
   (database/execute-update! db
                             (-> (h/update :push-device-tokens)
-                                (h/set {:active       active
-                                        :last-used-at last-used-at
-                                        :device-name  device-name
-                                        :os-version   os-version})
+                                (h/set (select-keys row [:active :last-used-at :device-name :os-version]))
                                 (h/where [:and [:= :token token] [:= :app-id app-id]]))))
 
 (defn- upsert-device! [db record]
@@ -68,10 +65,7 @@
       (catch clojure.lang.ExceptionInfo e
         (when-not (unique-conflict? e) (throw e))
         ;; Duplicate token+app_id — update active status and last-used
-        (update-device-row! db
-                            (:token record) (:app-id record)
-                            true (->instant (:last-used-at record))
-                            (:device-name record) (:os-version record))))))
+        (update-device-row! db row)))))
 
 (defrecord DeviceTokenStore [db]
   ports/IDeviceTokenStore

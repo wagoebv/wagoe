@@ -8,6 +8,7 @@
             [wagoe.platform.shell.adapters.database.common.execution :as execution]
             [wagoe.platform.shell.adapters.database.config :as db-config]
             [wagoe.platform.shell.adapters.database.factory :as factory]
+            [wagoe.platform.ports.database :as db-ports]
             [clojure.edn :as edn]
             [clojure.java.io :as io]
             [clojure.string :as str]
@@ -101,14 +102,15 @@
   "{:columns #{name} :uuid-id? bool} of `table`, or nil when the database does
    not know it. H2 keeps unquoted names upper-case, so that spelling is asked
    for too."
-  [^Connection c table]
+  [^Connection c adapter table]
   (let [md     (.getMetaData c)
         catalog (try (.getCatalog c) (catch Exception _ nil))
         schema (try (.getSchema c) (catch Exception _ nil))
         lc     #(some-> ^String % str/lower-case)
-        ;; MySQL has no uuid type: a uuid column is CHAR(36) there.
+        ;; Where the engine has no uuid type (MySQL: CHAR(36)), the adapter's.
+        uuid   (lc (db-ports/column-type adapter :uuid))
         type-of #(let [t (lc (.getString ^ResultSet % "TYPE_NAME"))]
-                   (if (and (= "char" t) (= 36 (.getInt ^ResultSet % "COLUMN_SIZE"))) "uuid" t))
+                   (if (#{t (str t "(" (.getInt ^ResultSet % "COLUMN_SIZE") ")")} uuid) "uuid" t))
         cols   (fn [t] (into {} (metadata-rows (.getColumns md catalog schema t "%")
                                                #(vector (lc (.getString ^ResultSet % "COLUMN_NAME"))
                                                         (type-of %)))))
@@ -143,9 +145,10 @@
     {:error err}
     (try
       (jdbc/with-transaction [tx ds]
-        (let [tables   (into {} (keep (fn [[t _]]
+        (let [adapter  (factory/adapter-for (factory/engine-of tx))
+              tables   (into {} (keep (fn [[t _]]
                                         (let [n (core-seed/table->name t)]
-                                          (some->> (table-info tx n) (vector n)))))
+                                          (some->> (table-info tx adapter n) (vector n)))))
                              (core-seed/entries data))
               resolved (core-seed/resolve-seed data {:tables tables
                                                      :now    (type-conversion/instant->string (Instant/now))
@@ -153,7 +156,6 @@
           (if-let [err (:error resolved)]
             {:error err}
             (let [plan    (core-seed/seed-plan (:ok resolved))
-                  adapter (factory/adapter-for (factory/engine-of tx))
                   detail  (mapv (fn [{:keys [table] :as entry}]
                                   {:table table
                                    :rows  (insert-table! tx adapter entry)})
