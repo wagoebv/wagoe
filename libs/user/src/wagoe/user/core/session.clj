@@ -19,6 +19,18 @@
     (.isBefore (:expires-at session) current-time) {:valid? false :reason :expired}
     :else {:valid? true}))
 
+;; A token is only as good as its user: a session or JWT is refused for the
+;; reasons login is (BOU-668).
+(defn account-refusal
+  "Why `user` (nil when gone) may not authenticate, or nil."
+  [user]
+  (cond
+    (nil? user)          :user-not-found
+    ;; Before :active: a soft delete clears that too, and a deleted account
+    ;; should not be reported as merely deactivated.
+    (:deleted-at user)   :user-deleted
+    (not (:active user)) :user-inactive))
+
 ;; Session creation helpers  
 (defn generate-session-token
   "Build a deterministic session token from a timestamp and nonce."

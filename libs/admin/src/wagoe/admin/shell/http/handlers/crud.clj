@@ -339,16 +339,12 @@
 
           ;; A rule the write broke, such as the last admin's role (BOU-665):
           ;; the form again, saying why.
-          [updated refusal] (when valid?
-                              (support/attempt #(ports/update-entity admin-service entity-name id form-data)))]
+          [updated-record refusal] (when valid?
+                                     (support/attempt #(ports/update-entity admin-service entity-name id form-data)))]
 
       (if (and valid? (not refusal))
         ; Update entity and re-render detail page with success flash
-        (let [updated-record updated
-              ;; A writer's update can take the record out of the list: the
-              ;; user service soft-deletes a deactivated user (BOU-665).
-              then-list?     (or then-list? (= :removed updated-record))
-              permissions    (permissions/get-entity-permissions user entity-name entity-config)
+        (let [permissions    (permissions/get-entity-permissions user entity-name entity-config)
               ctx             (when-not then-list?
                                 (support/build-entity-detail-opts admin-service schema-provider config entity-name entity-config updated-record request))]
 

@@ -51,6 +51,7 @@
  :common/audit-create       "Create"
  :common/audit-update       "Update"
  :common/audit-delete       "Delete"
+ :common/audit-permanent-delete "Permanent delete"
  :common/audit-activate     "Activate"
  :common/audit-deactivate   "Deactivate"
  :common/audit-login        "Login"
@@ -126,7 +127,7 @@
 
  :user/bulk-action-deactivate   "Deactivate"
  :user/bulk-action-activate     "Activate"
- :user/bulk-action-delete       "Delete Permanently"
+ :user/bulk-action-delete       "Delete"
  :user/bulk-action-role-admin   "Change Role to Admin"
  :user/bulk-action-role-user    "Change Role to User"
  :user/button-apply-bulk        "Apply to Selected"

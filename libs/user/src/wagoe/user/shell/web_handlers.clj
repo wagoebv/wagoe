@@ -864,17 +864,15 @@
               (user-ports/deactivate-user user-service uuid)))
 
           "activate"
-          (doseq [id-str ids]
-            (let [uuid (UUID/fromString id-str)
-                  user (user-ports/get-user-by-id user-service uuid)]
-              (when user
-                ;; Reactivate by updating with active=true and clearing deleted_at
-                (user-ports/update-user-profile user-service (assoc user :active true :deleted_at nil)))))
+          (doseq [id-str ids
+                  :let [uuid (UUID/fromString id-str)]
+                  :when (user-ports/get-user-by-id user-service uuid)]
+            (user-ports/update-user-profile user-service {:id uuid :active true}))
 
           "delete"
           (doseq [id-str ids]
             (let [uuid (UUID/fromString id-str)]
-              (user-ports/permanently-delete-user user-service uuid)))
+              (user-ports/delete-user user-service uuid)))
 
           "role-admin"
           (doseq [id-str ids
@@ -1078,9 +1076,9 @@
         (html-response request (ui/error-message "Invalid user ID") 400)))))
 
 (defn delete-user-htmx-handler
-  "HTMX handler for deactivating a user (DELETE /web/users/:id).
+  "HTMX handler for deleting a user (DELETE /web/users/:id).
    
-   Performs soft delete via deactivate-user.
+   A soft delete: the user leaves the list. Deactivating is an update.
    
    Args:
      user-service: User service instance
@@ -1093,14 +1091,16 @@
     (try
       (let [user-id (get-in request [:path-params :id])
             uuid (UUID/fromString user-id)]
-        (user-ports/deactivate-user user-service uuid)
+        (user-ports/delete-user user-service uuid)
         (html-response request (user-ui/user-deleted-success user-id)
                        200
                        {"HX-Trigger" "userDeleted"}))
       (catch IllegalArgumentException _
         (html-response request (ui/error-message "Invalid user ID") 400))
       (catch Exception e
-        (server-error request e "Error deactivating user")))))
+        (if (user-core/refusal? e)
+          (refused request e)
+          (server-error request e "Error deleting user"))))))
 
 (defn hard-delete-user-handler
   "Handler for permanently deleting a user (POST /web/users/:id/hard-delete).

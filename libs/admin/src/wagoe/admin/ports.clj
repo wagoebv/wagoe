@@ -243,8 +243,7 @@
               :active false}
 
      Returns:
-       Updated entity record with new updated-at timestamp, or :removed
-       when an entity writer's update took it out of the list (BOU-665)
+       Updated entity record with new updated-at timestamp
 
      Throws:
        - ExceptionInfo with :type :validation-error for invalid data
@@ -469,8 +468,7 @@
    :writer, so another module's rules apply. Refusals are typed ex-infos."
 
   (update-record! [this id changes]
-    "Apply `changes`, read-only fields removed. Returns :removed when the
-     record leaves the list, anything else otherwise.")
+    "Apply `changes`, read-only fields removed.")
 
   (delete-record! [this id opts]
     "Delete record `id`; opts {:soft? bool}. Returns true when deleted."))

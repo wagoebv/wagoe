@@ -51,6 +51,7 @@
  :common/audit-create       "Aanmaken"
  :common/audit-update       "Bijwerken"
  :common/audit-delete       "Verwijderen"
+ :common/audit-permanent-delete "Definitief verwijderen"
  :common/audit-activate     "Activeren"
  :common/audit-deactivate   "Deactiveren"
  :common/audit-login        "Inloggen"
@@ -126,7 +127,7 @@
 
  :user/bulk-action-deactivate   "Deactiveren"
  :user/bulk-action-activate     "Activeren"
- :user/bulk-action-delete       "Permanent verwijderen"
+ :user/bulk-action-delete       "Verwijderen"
  :user/bulk-action-role-admin   "Rol wijzigen naar admin"
  :user/bulk-action-role-user    "Rol wijzigen naar gebruiker"
  :user/button-apply-bulk        "Toepassen op geselecteerde"

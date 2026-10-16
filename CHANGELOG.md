@@ -89,6 +89,11 @@ for what is public API, what is internal, and how deprecations are announced.
 - **Entities without `:list-fields` get role-ordered default columns** (ADR-040): title, relations, status, enums,
   money, dates, then the rest, at most seven; UUIDs, long text and audit columns other than `created-at` are left out.
 
+### Deprecated
+
+- **`jwt-authentication-middleware` and `protect-with-jwt` without a user service** (BOU-682): they trust the token, so a
+  deactivated user passes. Pass the user service first; the 1-arity warns once and goes in 2.0.
+
 ### Fixed
 
 - **JSON error bodies a handler built itself, and 404/405s, had no `correlation-id`** (BOU-592, BOU-596): the workflow
@@ -97,6 +102,14 @@ for what is public API, what is internal, and how deprecations are announced.
   says to pass `--ci`. `bb scaffold <cmd> --help` prints only the help (BOU-598).
 - **`bb setup --prod true` said "Cache: keep" while writing Redis** (BOU-599): the summary lists every provider prod gets.
 
+- **Auth middleware answered 401 for what the handler threw** (BOU-682): a `:conflict` or database error behind JWT or
+  session auth is now its own status. Nothing to change.
+- **A permanent user delete was audited as `:delete`, like a soft one** (BOU-682); it is `:permanent-delete` now.
+  Run `bb migrate up` (or boot) to widen the audit table's action check.
+- **Deactivated users vanished from the admin list** (BOU-681): deactivating sets `active` only and keeps them listed; Delete, the bulk one included, soft-deletes.
+  Users deactivated before this stay hidden; restore one by clearing `deleted_at` in `auth_users`.
+- **A deactivated user's JWT, and `validate-session` for their session, still authenticated** (BOU-668); every auth path answers 401 now.
+  Calling `jwt-authentication-middleware` or `protect-with-jwt` yourself? Pass the user service first.
 - **On H2, `SET REFERENTIAL_INTEGRITY FALSE` was undone by the next pooled connection** (BOU-654), so scaffolded
   tests failed at random on foreign keys. Upgrade; nothing to change.
 - **The admin users page bypassed the user service** (BOU-665): no audit, no session end, no last-admin guard.
