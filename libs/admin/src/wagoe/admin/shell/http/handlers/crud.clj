@@ -340,7 +340,10 @@
           ;; A rule the write broke, such as the last admin's role (BOU-665):
           ;; the form again, saying why.
           [updated-record refusal] (when valid?
-                                     (support/attempt #(ports/update-entity admin-service entity-name id form-data)))]
+                                     (support/attempt #(ports/update-entity admin-service entity-name id form-data)))
+          ;; A value the database refused, such as a taken email: on its field.
+          rejected (some-> refusal support/rejection)
+          conflict (when-not rejected refusal)]
 
       (if (and valid? (not refusal))
         ; Update entity and re-render detail page with success flash
@@ -370,7 +373,7 @@
         ; Validation errors - re-render form with flash inside page content
         (let [permissions (permissions/get-entity-permissions user entity-name entity-config)
               errors      (log-rejected! entity-name entity-config
-                                         (merge (:errors validation-result) parse-errors))
+                                         (merge (:errors validation-result) parse-errors rejected))
               ctx         (support/build-entity-detail-opts admin-service schema-provider config entity-name entity-config merged request)]
 
           (-> (support/html-response request
@@ -378,15 +381,15 @@
                                       (admin-ui/entity-detail-page entity-name entity-config merged errors permissions
                                                                    (assoc (:page-opts ctx) :flash
                                                                           {:type :error
-                                                                           :message (if refusal
-                                                                                      (support/refusal-message request refusal)
+                                                                           :message (if conflict
+                                                                                      (support/refusal-message request conflict)
                                                                                       [:t :admin/flash-validation-errors])}))
                                       {:user user
                                        :current-entity entity-name
                                        :entities (:entities ctx)
                                        :entity-configs (:entity-configs ctx)
                                        :logo-url (:logo-url config)}))
-              (assoc :status (if refusal 409 422))))))))
+              (assoc :status (if conflict 409 422))))))))
 
 (defn validate-field-handler
   "POST /:entity/validate-field — one field's errors, as the form left it,

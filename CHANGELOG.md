@@ -98,6 +98,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **A session request wrote `last_accessed_at` twice, and a database error during sign-in lookup answered 401** (BOU-666).
+  The access time is now written at most once a minute; a lookup failure is a 500.
+- **Two admins demoting each other at once could leave none; an admin bulk delete of users could stop halfway** (BOU-673).
+  A custom `IEntityWriter` renames `delete-record!` to `delete-records!`; a custom `IUserRepository` adds `with-admins-locked`.
 - **`_` and `%` in admin, user, tenant and audience filters and `build-where` strings matched any character** (BOU-684).
   A `build-where` value meant as a pattern is now literal; call `(like adapter :email :starts-with q)` instead.
 - **A push token re-registered by another user kept notifying the first; broadcasts skipped devices** (BOU-683).

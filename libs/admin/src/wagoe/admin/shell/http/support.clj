@@ -396,12 +396,19 @@
   [e]
   (= :conflict (:type (ex-data e))))
 
+(defn rejection
+  "The field errors of `e`, a :validation-error naming its fields, such as a
+   value the database refused as taken; nil otherwise."
+  [e]
+  (let [{:keys [type errors]} (ex-data e)]
+    (when (= :validation-error type) (not-empty errors))))
+
 (defn attempt
-  "Call `f`: [result nil], or [nil e] when it throws a refusal."
+  "Call `f`: [result nil], or [nil e] when it throws a refusal or a rejection."
   [f]
   (try [(f) nil]
        (catch clojure.lang.ExceptionInfo e
-         (if (refusal? e) [nil e] (throw e)))))
+         (if (or (refusal? e) (rejection e)) [nil e] (throw e)))))
 
 (defn refusal-message
   "What to tell the user about refusal `e`: its :message-key translated, or

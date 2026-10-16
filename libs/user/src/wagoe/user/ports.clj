@@ -38,9 +38,14 @@
   (soft-delete-user [this user-id])
   ;; Sets :deleted-at, hiding the user from every other query. Returns boolean.
 
-  (hard-delete-user [this user-id]))
+  (hard-delete-user [this user-id])
   ;; Irreversible: removes the row and cascades. For GDPR erasure.
   ;; Returns boolean; throws a foreign-key error when references remain.
+
+  (with-admins-locked [this f]))
+  ;; Calls (f) in one transaction that first locks the admins' rows, so
+  ;; a last-admin guard and the write it allows cannot interleave with another
+  ;; (BOU-673). Returns what f returns.
 
 (defprotocol IUserSessionRepository
   "Session persistence. A session is active when it has not expired and has no
@@ -51,7 +56,7 @@
 
   (find-session-by-token [this session-token])
   ;; Returns the session entity, or nil when absent, expired or revoked.
-  ;; Side effect: bumps :last-accessed-at on a hit.
+  ;; Reads only; validate-session writes the access time.
 
   (find-sessions-by-user [this user-id])
   ;; Returns the user's active sessions, newest first.
@@ -173,6 +178,12 @@
   ;; Throws :user-not-found, :hard-deletion-not-allowed (another record still references the user),
   ;; and :conflict for your own or the last admin's account.
 
+  (delete-users [this user-ids opts])
+  ;; opts {:permanent? bool}. Deletes every user, as delete-user or
+  ;; permanently-delete-user would, or none: the admin guard judges the whole
+  ;; set first (BOU-673). Returns the ids deleted; unknown ids are skipped.
+  ;; Throws :conflict and :hard-deletion-not-allowed.
+
   (authenticate-user [this user-credentials])
   ;; user-credentials: {:email :password :ip-address :user-agent :mfa-code}
   ;; Returns, on success, {:authenticated true :user … :session …
@@ -184,8 +195,9 @@
   ;; Does not throw on a bad password — it returns the failure shape.
 
   (validate-session [this session-token])
-  ;; Returns the session with :last-accessed-at refreshed and its :user (no
-  ;; credentials), or nil when the token is unknown. Throws
+  ;; Returns the session and its :user (no credentials), or nil when the token
+  ;; is unknown. :last-accessed-at is written at most once a minute, so it may
+  ;; trail the request by that much. Throws
   ;; {:type :session-invalid :reason …} for a session that exists but no longer
   ;; validates, its user gone or inactive included, so middleware answers 401.
 

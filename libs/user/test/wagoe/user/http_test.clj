@@ -123,6 +123,9 @@
                       {:type :user-not-found
                        :user-id user-id}))))
 
+  (delete-users [_ user-ids _opts]
+    (filterv #(when (get @state %) (swap! state dissoc %)) user-ids))
+
   (authenticate-user [_ session-data]
     (let [session-id (UUID/randomUUID)
           now (Instant/now)
@@ -519,7 +522,8 @@
                   (create-user [_ _] nil)
                   (update-user [_ _] nil)
                   (soft-delete-user [_ _] nil)
-                  (hard-delete-user [_ _] nil))
+                  (hard-delete-user [_ _] nil)
+                  (with-admins-locked [_ f] (f)))
         svc     (mfa/create-mfa-service repo {})
         request {:user {:id (UUID/randomUUID)}
                  :body-params {:secret "S" :backupCodes ["a"] :verificationCode "000000"}}]

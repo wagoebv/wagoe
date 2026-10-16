@@ -258,7 +258,8 @@
                       (find-users [_ _] {:users [] :total-count 0})
                       (update-user [_ user] user)
                       (soft-delete-user [_ _] true)
-                      (hard-delete-user [_ _] true))
+                      (hard-delete-user [_ _] true)
+                      (with-admins-locked [_ f] (f)))
           ctx {:system {:user-repository user-repo}
                :result {:effects [{:type :persist-user
                                    :user {:id 1 :name "Test User"}}]}}
@@ -275,7 +276,8 @@
                          (find-users [_ _] {:users [] :total-count 0})
                          (update-user [_ user] user)
                          (soft-delete-user [_ _] true)
-                         (hard-delete-user [_ _] true))
+                         (hard-delete-user [_ _] true)
+                         (with-admins-locked [_ f] (f)))
           ctx {:system {:user-repository failing-repo}
                :result {:effects [{:type :persist-user
                                    :user {:id 1 :name "Test User"}}]}}

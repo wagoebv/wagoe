@@ -213,6 +213,18 @@
                                     last-accessed current-time)]
     (>= time-since-access threshold-seconds)))
 
+(defn session-access-write
+  "The session to write for an access at `current-time`, or nil when nothing
+   needs writing. The access time is display-only — no idle timeout reads it —
+   so it is rewritten at most once a minute; an extended expiry always is
+   (BOU-666)."
+  [session current-time]
+  (let [updated (update-session-access session current-time)]
+    (when (or (not= (:expires-at updated) (:expires-at session))
+              (nil? (:last-accessed-at session))
+              (should-update-access-time? session current-time {:access-update-threshold-minutes 1}))
+      updated)))
+
 (defn prepare-session-for-access-update
   "Pure function: Prepare session for access time update.
    

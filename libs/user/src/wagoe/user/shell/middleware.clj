@@ -111,27 +111,26 @@
   "`{:user u}` for the user a bearer token authenticates as `(user-of claims)`,
    or `{:refusal response}`, the 401 that refuses it."
   [user-of token request]
-  (try
-    ;; Destructured, not tested for truthiness. `validate-jwt-token`
-    ;; answers a map either way — `{:valid? false :error ...}` on failure —
-    ;; so `(if jwt-claims ...)` was always true: the rejection branch was
-    ;; unreachable and any Authorization header authenticated, including a
-    ;; token signed with somebody else's secret. `require-authenticated`
-    ;; passed too, because `{:id nil}` is still `some?`.
-    ;;
-    ;; The claims are inside `:claims`, and the id is `:sub` — a string, as
-    ;; `create-jwt-token` writes it — so reading `:user-id` off the wrapper
-    ;; produced `{:id nil :email nil :role nil}` even for a good token.
-    (let [{:keys [valid? claims]} (auth-shell/validate-jwt-token token)]
-      (if valid?
-        (let [user (user-of claims)]
-          (if (keyword? user)
-            {:refusal (create-unauthorized-response (refusal-messages user) user request)}
-            {:user user}))
-        {:refusal (create-unauthorized-response "Invalid JWT token" :invalid-jwt request)}))
-    (catch Exception ex
-      (log/warn ex "JWT validation failed")
-      {:refusal (create-unauthorized-response "JWT validation failed" :jwt-validation-error request)})))
+  ;; Destructured, not tested for truthiness. `validate-jwt-token`
+  ;; answers a map either way — `{:valid? false :error ...}` on failure —
+  ;; so `(if jwt-claims ...)` was always true: the rejection branch was
+  ;; unreachable and any Authorization header authenticated, including a
+  ;; token signed with somebody else's secret. `require-authenticated`
+  ;; passed too, because `{:id nil}` is still `some?`.
+  ;;
+  ;; The claims are inside `:claims`, and the id is `:sub` — a string, as
+  ;; `create-jwt-token` writes it — so reading `:user-id` off the wrapper
+  ;; produced `{:id nil :email nil :role nil}` even for a good token.
+  ;;
+  ;; No catch: a bad token is answered as a map, so what throws here is the
+  ;; user lookup, and a database error is a 5xx, not a 401 (BOU-666).
+  (let [{:keys [valid? claims]} (auth-shell/validate-jwt-token token)]
+    (if valid?
+      (let [user (user-of claims)]
+        (if (keyword? user)
+          {:refusal (create-unauthorized-response (refusal-messages user) user request)}
+          {:user user}))
+      {:refusal (create-unauthorized-response "Invalid JWT token" :invalid-jwt request)})))
 
 (defn- jwt-middleware
   "Authenticate a bearer token as `(user-of claims)`: a user, or the
@@ -188,22 +187,31 @@
   "`{:user u :session s}` for the session `token` names, or `{:refusal response}`,
    the 401 that refuses it."
   [user-service token request]
-  (try
-    (log/info "Validating session token" {:uri (:uri request)})
-    ;; validate-session refuses a gone or inactive user and hands back the
-    ;; one it read, so there is no second read here (BOU-668).
-    (if-let [{:keys [user] :as session} (ports/validate-session user-service token)]
-      (do
-        (log/info "Session validation successful" {:user-id (:user-id session)})
-        (if user
-          {:user (without-credentials user) :session (dissoc session :user)}
-          {:refusal (create-unauthorized-response "User not found" :user-not-found request)}))
-      (do
-        (log/info "Session invalid or expired" {:uri (:uri request)})
-        {:refusal (create-unauthorized-response "Invalid or expired session" :invalid-session request)}))
-    (catch Exception ex
-      (log/warn ex "Session validation failed" {:uri (:uri request)})
-      {:refusal (create-unauthorized-response "Session validation failed" :session-validation-error request)})))
+  (if (re-find #"\p{Cntrl}" token)
+    ;; No issued token has one, and PostgreSQL fails a query carrying a NUL:
+    ;; refused here, or any caller could turn a request into a 5xx.
+    {:refusal (create-unauthorized-response "Invalid or expired session" :invalid-session request)}
+    (try
+      (log/info "Validating session token" {:uri (:uri request)})
+      ;; validate-session refuses a gone or inactive user and hands back the
+      ;; one it read, so there is no second read here (BOU-668).
+      (if-let [{:keys [user] :as session} (ports/validate-session user-service token)]
+        (do
+          (log/info "Session validation successful" {:user-id (:user-id session)})
+          (if user
+            {:user (without-credentials user) :session (dissoc session :user)}
+            {:refusal (create-unauthorized-response "User not found" :user-not-found request)}))
+        (do
+          (log/info "Session invalid or expired" {:uri (:uri request)})
+          {:refusal (create-unauthorized-response "Invalid or expired session" :invalid-session request)}))
+      ;; Only a refused session is a 401. A failed lookup propagates to the error
+      ;; mapping as a 5xx: the caller is not unauthenticated, the store is down
+      ;; (BOU-666).
+      (catch clojure.lang.ExceptionInfo ex
+        (if (= :session-invalid (:type (ex-data ex)))
+          (do (log/info "Session refused" {:uri (:uri request) :reason (:reason (ex-data ex))})
+              {:refusal (create-unauthorized-response "Invalid or expired session" :invalid-session request)})
+          (throw ex))))))
 
 (defn session-authentication-middleware
   "Middleware that validates session tokens and updates session access time.

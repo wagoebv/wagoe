@@ -122,35 +122,57 @@
                                              :message    (ex-message x)}))))))
          (take-while some? (iterate ex-cause e)))))
 
-(defn- assert-admin-kept!
-  "Refuse a write that takes admin rights from `before` (`after` nil is a
-   delete) when the actor is that admin, or no other active admin remains."
-  [user-repository before after]
-  (when (user-core/removes-admin? before after)
-    (let [others (->> (:users (.find-users user-repository {:filter-role   :admin
+(defn- admin-refusal
+  "The :conflict refusing a write that takes admin rights from the `removed`
+   users: one of them is the actor, or no other active admin would remain.
+   Nil when it is allowed."
+  [user-repository removed]
+  (let [actor-id (:actor-id *audit-context*)
+        ids      (set (map :id removed))
+        others   (->> (:users (.find-users user-repository {:filter-role   :admin
                                                             :filter-active true
-                                                            :limit         2}))
-                      (remove #(= (:id before) (:id %)))
+                                                            :limit         (inc (count ids))}))
+                      (remove (comp ids :id))
                       count)]
-      (when-let [{:keys [error]} (user-core/admin-removal-refusal
-                                  (:actor-id *audit-context*) before others)]
-        (throw (ex-info (:message error) (assoc error :user-id (:id before))))))))
+    (some (fn [target]
+            (when-let [{:keys [error]} (user-core/admin-removal-refusal actor-id target others)]
+              (ex-info (:message error) (assoc error :user-id (:id target)))))
+          ;; Your own rights first: that is the refusal to name.
+          (sort-by #(not= actor-id (:id %)) removed))))
+
+(defn- locked-write!
+  "In one transaction holding the active admins' rows, call `plan` for
+   [removed write!] and run `write!`, refused first when it takes admin rights
+   from the `removed` users. The count and the write cannot interleave with
+   another's, so two admins demoting each other at once cannot leave none
+   (BOU-673)."
+  [user-repository plan]
+  ;; The refusal is thrown outside the transaction, which would log it as a
+  ;; failed one.
+  (let [{:keys [refusal result]}
+        (.with-admins-locked user-repository
+                             (fn []
+                               (let [[removed write!] (plan)]
+                                 (if-let [refusal (when (seq removed) (admin-refusal user-repository removed))]
+                                   {:refusal refusal}
+                                   {:result (write!)}))))]
+    (if refusal (throw refusal) result)))
 
 (defn- ends-sessions?
-  "Whether `after` changes `before`'s access: a delete (nil), a role change
-   (BOU-191) or a deactivation (BOU-665). A role `after` leaves out is kept."
+  "Whether `after` changes `before`'s access: a role change (BOU-191) or a
+   deactivation (BOU-665). A role `after` leaves out is kept."
   [before after]
-  (or (nil? after)
-      (and (:role after) (not= (:role before) (:role after)))
+  (or (and (:role after) (not= (:role before) (:role after)))
       (user-core/deactivates? before after)))
 
 (defn- change-access!
-  "Run `write!`, the change from `before` to `after` (nil: a delete): refused
-   by the admin guard, and ending the user's sessions when it changes their
+  "Run `write!`, the change from `before` to `after`: refused by the admin
+   guard, and ending the user's sessions when it changes their
    access. Returns what `write!` returned."
   [user-repository session-repository before after write!]
-  (when before (assert-admin-kept! user-repository before after))
-  (let [result (write!)]
+  (let [result (if (and before (user-core/removes-admin? before after))
+                 (locked-write! user-repository (constantly [[before] write!]))
+                 (write!))]
     (when (and result before (ends-sessions? before after))
       (.invalidate-all-user-sessions session-repository (:id before)))
     result))
@@ -165,6 +187,44 @@
                          (entry-fn actor-id actor-email user-id email ip-address user-agent)))
     (catch Exception e
       (println "WARN: Failed to create audit log:" (.getMessage e)))))
+
+(defn- delete-users!
+  "Delete `user-ids`, soft unless `permanent?`, in one transaction: all of
+   them or, when the admin guard refuses the set or a reference blocks one,
+   none. Returns the users deleted."
+  [{:keys [user-repository session-repository audit-repository]} user-ids permanent?]
+  (let [user-ids (vec (distinct user-ids))
+        ;; Read under the lock, so the guard judges the roles as they stand.
+        ;; find-user-by-id skips a soft-deleted user, whom erasure still
+        ;; removes, unaudited as before; no longer an admin, it needs no guard.
+        read-users #(into [] (keep (fn [id] (or (.find-user-by-id user-repository id) (when permanent? {:id id}))))
+                          user-ids)
+        delete! (fn [{:keys [id]}]
+                  (if permanent?
+                    (.hard-delete-user user-repository id)
+                    (when (.soft-delete-user user-repository id)
+                      (.invalidate-all-user-sessions session-repository id)
+                      true)))
+        deleted (when (seq user-ids)
+                  (try
+                    (locked-write! user-repository
+                                   #(let [users (read-users)]
+                                      [(filter (fn [u] (user-core/removes-admin? u nil)) users)
+                                       (fn [] (filterv delete! users))]))
+                    (catch Exception e
+                      (if (foreign-key-refusal? e)
+                        (throw (ex-info "Cannot permanently delete a user other records still reference"
+                                        {:type     :hard-deletion-not-allowed
+                                         :user-ids user-ids}
+                                        e))
+                        (throw e)))))]
+    (doseq [{:keys [id email]} deleted :when email]
+      (audit-quietly! audit-repository
+                      (if permanent?
+                        audit-core/permanently-delete-user-audit-entry
+                        audit-core/delete-user-audit-entry)
+                      id email))
+    (vec deleted)))
 
 ;; =============================================================================
 ;; Database-Agnostic User Service (I/O Shell Layer)
@@ -422,9 +482,10 @@
                                {:type :session-invalid
                                 :reason refusal})))
              ;; The user rides along, so the middleware need not read it again.
-             (let [updated-session-data (session-core/update-session-access session current-time)]
-               (assoc (or (.update-session session-repository updated-session-data)
-                          updated-session-data)
+             (let [to-write (session-core/session-access-write session current-time)]
+               (assoc (or (some->> to-write (.update-session session-repository))
+                          to-write
+                          session)
                       :user (user-core/without-credentials user)))))))
      {:system {:user-repository user-repository
                :session-repository session-repository
@@ -527,6 +588,15 @@
                               :original-data user-entity
                               :interface-type :cli}))))
 
+         ;; The database's refusal names no column on MySQL, so the email is
+         ;; checked first, in the shape the platform gives a named one; a form
+         ;; shows it on its field (BOU-673). The constraint stays the backstop.
+         (when-let [other (when (and old-user (not= (:email user-entity) (:email old-user)))
+                            (.find-user-by-email user-repository (:email user-entity)))]
+           (when (not= (:id other) (:id user-entity))
+             (throw (ex-info "Another record already has this email"
+                             {:type :conflict :constraint :unique :field :email}))))
+
          ;; 2. Stamp updated-at
          (let [current-time (current-timestamp)
                prepared-user (user-core/prepare-user-for-update user-entity current-time)
@@ -582,60 +652,34 @@
                :audit-repository audit-repository
                :auth-service auth-service}}))
 
-  (delete-user [_ user-id]
+  (delete-user [this user-id]
     (service-interceptors/execute-service-operation
      :delete-user
      {:user-id user-id}
      (fn [{:keys [params]}]
-       (let [user-id (:user-id params)
-             user    (.find-user-by-id user-repository user-id)
-             result  (when user
-                       (change-access! user-repository session-repository user nil
-                                       #(.soft-delete-user user-repository user-id)))]
-         (when result
-           (audit-quietly! audit-repository audit-core/delete-user-audit-entry user-id (:email user)))
-         (boolean result)))
+       (boolean (seq (delete-users! this [(:user-id params)] false))))
      {:system {:user-repository user-repository
                :session-repository session-repository
                :audit-repository audit-repository
                :auth-service auth-service}}))
 
-  (permanently-delete-user [_ user-id]
+  (permanently-delete-user [this user-id]
     (service-interceptors/execute-service-operation
      :permanently-delete-user
      {:user-id user-id}
      (fn [{:keys [params]}]
-       (let [user-id (:user-id params)
-             ;; Get user details before deletion for audit trail
-             user (.find-user-by-id user-repository user-id)
-             _ (when user (assert-admin-kept! user-repository user nil))
-             result (try
-                      (.hard-delete-user user-repository user-id)
-                      (catch Exception e
-                        (if (foreign-key-refusal? e)
-                          (throw (ex-info "Cannot permanently delete a user other records still reference"
-                                          {:type :hard-deletion-not-allowed
-                                           :user-id user-id}
-                                          e))
-                          (throw e))))]
+       (boolean (seq (delete-users! this [(:user-id params)] true))))
+     {:system {:user-repository user-repository
+               :session-repository session-repository
+               :audit-repository audit-repository
+               :auth-service auth-service}}))
 
-         ;; Create audit log entry
-         (when (and result user)
-           (try
-             (let [{:keys [actor-id actor-email ip-address user-agent]}
-                   (effective-audit-context {})
-                   audit-entry (audit-core/permanently-delete-user-audit-entry
-                                actor-id
-                                actor-email
-                                user-id
-                                (:email user)
-                                ip-address
-                                user-agent)]
-               (.create-audit-log audit-repository audit-entry))
-             (catch Exception e
-               (println "WARN: Failed to create audit log:" (.getMessage e)))))
-
-         (boolean result)))
+  (delete-users [this user-ids {:keys [permanent?]}]
+    (service-interceptors/execute-service-operation
+     :delete-users
+     {:user-ids user-ids}
+     (fn [{:keys [params]}]
+       (mapv :id (delete-users! this (:user-ids params) permanent?)))
      {:system {:user-repository user-repository
                :session-repository session-repository
                :audit-repository audit-repository

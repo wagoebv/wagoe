@@ -213,7 +213,8 @@
             (reify wagoe.user.ports/IUserService
               (validate-session [_ t] (validate t)))]
         (log-test/with-log
-          ((wrap service) request)
+          ;; A failed lookup propagates now (BOU-666).
+          (try ((wrap service) request) (catch clojure.lang.ExceptionInfo _))
           (is (seq (log-test/the-log)) "the attempt is still logged")
           (is (not-any? #(str/includes? (str (:message %)) prefix) (log-test/the-log))
               (str mw-label " middleware, " label ": token logged")))))))
@@ -279,6 +280,32 @@
             (is (= status (:status resp)))
             (is (not (log-test/logged? 'wagoe.user.shell.middleware :warn Throwable #"validation failed"))
                 "and it is not logged as an authentication failure")))))))
+
+(deftest ^:unit ^:security a-failed-lookup-is-not-a-401
+  ;; A database error while reading the session or the token's user answered
+  ;; 401, telling a signed-in user they were not (BOU-666).
+  (let [id      (java.util.UUID/randomUUID)
+        token   (wagoe.user.shell.auth/create-jwt-token {:id id :email "a@b.c" :role :user} 1)
+        down    (java.sql.SQLException. "connection refused")
+        service #_{:clj-kondo/ignore [:missing-protocol-method]}
+        (reify wagoe.user.ports/IUserService
+          (get-user-by-id [_ _] (throw down))
+          (validate-session [_ t]
+            (if (= t "revoked")
+              (throw (ex-info "Session invalid" {:type :session-invalid :reason :inactive}))
+              (throw down))))
+        jwt     {:uri "/api/x" :headers {"authorization" (str "Bearer " token)}}
+        session (fn [t] {:uri "/api/x" :cookies {"session-token" {:value t}}})]
+    (doseq [[label wrap request] [["jwt" #(sut/jwt-authentication-middleware service %) jwt]
+                                  ["session" #(sut/session-authentication-middleware service %) (session "tok")]
+                                  ["flexible, session" #((sut/flexible-authentication-middleware service) %) (session "tok")]
+                                  ["global, session" (sut/authenticate-if-present service) (session "tok")]]]
+      (testing label
+        (is (= 500 (:status (through-error-mapping (wrap echo-handler) request))))))
+    (testing "a refused session is still a 401"
+      (is (= 401 (:status ((sut/session-authentication-middleware service echo-handler) (session "revoked"))))))
+    (testing "a token no issued one looks like is a 401, never looked up"
+      (is (= 401 (:status ((sut/session-authentication-middleware service echo-handler) (session "%00"))))))))
 
 (deftest ^:unit the-claims-only-arity-warns-once
   (reset! @#'sut/claims-only-warned? false)

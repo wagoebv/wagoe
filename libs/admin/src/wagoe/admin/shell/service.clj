@@ -625,23 +625,24 @@
   (apply dissoc data (conj (:readonly-fields entity-config #{}) (:primary-key entity-config :id))))
 
 (defn- written-update!
-  "Update through `writer`, returning the record read back."
+  "Update through `writer`, returning the record read back. A duplicate is
+   shown on its field, as the SQL path shows it (BOU-673)."
   [svc writer entity-config entity-name id data]
-  (ports/update-record! writer id (writable-data entity-config data))
+  (try
+    (ports/update-record! writer id (writable-data entity-config data))
+    (catch clojure.lang.ExceptionInfo e
+      (throw (or (unique-violation e) e))))
   (ports/get-entity svc entity-name id))
 
 (defn- written-delete!
-  "Delete `ids` through `writer`, one at a time. Returns {:entity :id :prior}
-   per record deleted, like delete-records!."
+  "Delete `ids` through `writer`, all or none (BOU-673). Returns
+   {:entity :id :prior} per record deleted, like delete-records!."
   [{:keys [db-ctx schema-provider]} writer entity-config entity-name ids priors?]
   (let [priors (when priors?
                  (into {} (map (juxt #(str (get % (:primary-key entity-config :id))) identity))
-                       (live-records db-ctx schema-provider entity-name ids)))
-        opts   {:soft? (:soft-delete entity-config false)}]
-    (into []
-          (keep #(when (ports/delete-record! writer % opts)
-                   {:entity entity-name :id (str %) :prior (get priors (str %))}))
-          ids)))
+                       (live-records db-ctx schema-provider entity-name ids)))]
+    (mapv (fn [id] {:entity entity-name :id id :prior (get priors id)})
+          (ports/delete-records! writer ids {:soft? (:soft-delete entity-config false)}))))
 
 ;; =============================================================================
 ;; Admin Service Implementation

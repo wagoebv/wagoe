@@ -55,7 +55,9 @@
   (hard-delete-user [_ user-id]
     (boolean (when (get @state user-id)
                (swap! state dissoc user-id)
-               true))))
+               true)))
+
+  (with-admins-locked [_ f] (f)))
 
 (defrecord MemorySessionRepository [state]
   ports/IUserSessionRepository

@@ -15,6 +15,7 @@
 (defn- user-repo [state]
   (reify ports/IUserRepository
     (find-user-by-id [_ id] (get @state id))
+    (find-user-by-email [_ email] (some #(when (= email (:email %)) %) (vals @state)))
     (update-user [_ u] (swap! state assoc (:id u) u) u)))
 
 (defn- session-repo

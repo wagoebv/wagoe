@@ -377,7 +377,7 @@ For entities using `:query-overrides`, set `:soft-delete-table` to tell the serv
 
 ## Entity Writers
 
-`:writer :user` sends an entity's updates and deletes through `ports/IEntityWriter` instead of SQL; the shipped users config uses it, so the user service audits them, ends sessions and refuses removing your own or the last admin's rights (409). Has-many restricts and cascades do not run for such an entity.
+`:writer :user` sends an entity's updates and deletes through `ports/IEntityWriter` instead of SQL; the shipped users config uses it, so the user service audits them, ends sessions and refuses removing your own or the last admin's rights (409). A bulk delete deletes every record or none. Has-many restricts and cascades do not run for such an entity.
 
 ---
 
