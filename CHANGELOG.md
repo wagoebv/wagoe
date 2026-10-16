@@ -83,6 +83,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **On H2, `SET REFERENTIAL_INTEGRITY FALSE` was undone by the next pooled connection** (BOU-654), so scaffolded
   tests failed at random on foreign keys. Upgrade; nothing to change.
+- **A typed `ex-info` thrown from route `:middleware` answered 500** (BOU-659); it now answers its `:type`'s status.
+  Upgrade if your route middleware throws typed errors.
 - **MySQL timestamps read back without a zone, so APIs sent UTC as local time** (BOU-653).
   Upgrade if you run on MySQL.
 - **MySQL lost workflow timestamps and admin UUID types; PostgreSQL refused full-text search** (BOU-652).
