@@ -96,6 +96,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **One event the bus never accepts stalled the outbox relay for good; replica clock skew could split its lease** (BOU-679).
+  Dead-lettered after `:max-attempts` over `:dead-letter-after-ms` (10, 1h); the lease uses database time. See `outbox/requeue!`.
 - **Search suggestions read every row on PostgreSQL, and `_`/`%` in a query matched anything** (BOU-676).
   Run migrations for the trigram index; pg_trgm off the `search_path` now falls back to LIKE.
 - **Push device registration failed on MySQL and PostgreSQL, and seeds with timestamps or symbolic ids on MySQL** (BOU-657).

@@ -8,6 +8,7 @@
   [dialect jdbc-driver]
   (reify protocols/DBAdapter
     (dialect [_] dialect)
+    (now-ms-sql [_] nil)
     (jdbc-driver [_] jdbc-driver)
     (jdbc-url [_ _] nil)
     (pool-defaults [_] {})
