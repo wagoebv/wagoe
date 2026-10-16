@@ -14,6 +14,10 @@
    "typed ex-info mapped to a 4xx only (BOU-182)"
    ["libs/user/src/wagoe/user/shell/web_handlers.clj" 'user-facing-message]
    "typed ex-info the handlers throw with curated text"
+   ["libs/admin/src/wagoe/admin/shell/http/support.clj" 'refusal-message]
+   "a :conflict refusal only, its text written for the user (BOU-665)"
+   ["libs/user/src/wagoe/user/shell/web_handlers.clj" 'refused]
+   "a :conflict refusal only, its text written for the user (BOU-665)"
    ["libs/audience/src/wagoe/audience/shell/http.clj" 'handle-audience-error]
    "JSON, typed filter errors only"})
 
@@ -65,5 +69,5 @@
 
 (deftest ^:unit the-allowlist-is-not-stale
   (doseq [[[path var-name] _why] allowed]
-    (let [defined? (str/includes? (slurp path) (str "(defn- " var-name))]
+    (let [defined? (re-find (re-pattern (str "\\(defn-? " var-name "\\s")) (slurp path))]
       (is defined? (str path " no longer defines " var-name)))))

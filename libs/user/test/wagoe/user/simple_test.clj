@@ -17,20 +17,7 @@
       (is (:valid? result))
       (is (= user-data (:data result))))))
 
-(deftest ^:unit test-can-delete-user
-  (testing "Regular user can be deleted"
-    (let [user {:email "test@example.com" :role :user}
-          result (user-core/can-delete-user? user)]
-      (is (:allowed? result))))
-
-  (testing "System user cannot be deleted"
-    (let [system-user {:email "system@example.com" :role :user}
-          result (user-core/can-delete-user? system-user)]
-      (is (not (:allowed? result)))
-      (is (= :system-user (:reason result))))))
-
 (deftest ^:unit test-basic-functions-exist
   (testing "Core functions exist and can be called"
     (is (fn? user-core/validate-user-creation-request))
-    (is (fn? user-core/can-delete-user?))
     (is (fn? user-core/prepare-user-for-soft-deletion))))

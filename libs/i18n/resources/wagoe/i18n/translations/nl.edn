@@ -269,6 +269,8 @@
  :user/mfa-disable-prompt           "Om tweestapsverificatie uit te schakelen, bevestig uw wachtwoord:"
  :user/profile-page-title           "Profiel & beveiliging"
  :user/profile-label-sessions       "Sessies"
+ :user/refused-own-admin-rights     "U kunt uw eigen beheerdersrechten niet intrekken."
+ :user/refused-last-admin           "De laatste actieve beheerder kan de beheerdersrechten niet verliezen."
 
  ;; =============================================================================
  ;; Admin entiteit: Tenants

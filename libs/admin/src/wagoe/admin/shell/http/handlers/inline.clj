@@ -103,7 +103,8 @@
       (try
         ; Update single field
         (let [updated-record (ports/update-entity-field admin-service entity-name id field parsed-value)
-              new-value (get updated-record field)]
+              ;; :removed has no fields: show what was saved (BOU-665).
+              new-value (if (map? updated-record) (get updated-record field) parsed-value)]
 
           ; Return updated cell HTML with success indicator
           (-> (support/html-response request
@@ -112,18 +113,21 @@
               (ring-response/header "HX-Trigger" "entityUpdated")))
 
         (catch Exception e
-          (let [error-data (ex-data e)]
-            (if (= (:type error-data) :validation-error)
-              ; Return inline form with error message
-              (support/html-response request
-                                     (admin-ui/render-inline-edit-form-with-error
-                                      entity-name id field field-value field-config
-                                      (get-in error-data [:errors field] ["Validation failed"])
-                                      {:zone-id        (:input-zone zones)
-                                       :server-zone-id (:server-zone zones)
-                                       :offsets        (:offsets zones)}))
-              ; Re-throw other errors
-              (throw e)))))))))
+          (let [error-data (ex-data e)
+                form-with  #(support/html-response request
+                                                   (admin-ui/render-inline-edit-form-with-error
+                                                    entity-name id field field-value field-config %
+                                                    {:zone-id        (:input-zone zones)
+                                                     :server-zone-id (:server-zone zones)
+                                                     :offsets        (:offsets zones)}))]
+            (cond
+              (support/refusal? e)
+              (form-with [(support/refusal-message request e)])
+
+              (= (:type error-data) :validation-error)
+              (form-with (get-in error-data [:errors field] ["Validation failed"]))
+
+              :else (throw e)))))))))
 
 (defn cancel-inline-edit-handler
   "Handler for GET /:entity/:id/:field/cancel - cancels inline edit.
