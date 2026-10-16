@@ -478,9 +478,9 @@
                                          {:system system}))
         details (fn [system]
                   (get-in (json/parse-string
-                             (slurp (:body ((handler system) {:request-method :post :uri "/users"
-                                                              :headers {} :body-params {}})))
-                             true)
+                           (slurp (:body ((handler system) {:request-method :post :uri "/users"
+                                                            :headers {} :body-params {}})))
+                           true)
                           [:error :details]))]
     (is (= {:role ["missing required key"]}
            (details {:error-enricher (constantly {:code "WGE-201"}) :environment "dev"})))
@@ -805,6 +805,25 @@
               (ex-info "nope" {:type :not-found})
               {:headers {"x-correlation-id" "given-by-the-caller"}})]
     (is (= "given-by-the-caller" (get-in resp [:headers "X-Correlation-ID"])))))
+
+(deftest ^:unit a-typed-error-thrown-from-route-middleware-answers-its-status
+  ;; Route middleware runs outside the interceptor stack (BOU-659).
+  (let [throw-mw (fn [type] (fn [_handler] (fn [_req] (throw (ex-info "nope" {:type type})))))
+        ok       (fn [_] {:status 200 :body {}})
+        handler  (reitit/compile-routes
+                  [["/method" {:get {:handler ok :middleware [(throw-mw :not-found)]}}]
+                   ["/path" {:middleware [(throw-mw :forbidden)]
+                             :get        {:handler ok}}]]
+                  {:system {}})
+        call     #(handler {:request-method :get :uri %
+                            :headers {"x-correlation-id" "cid-1"}})]
+    (testing "on the method"
+      (let [resp (call "/method")]
+        (is (= 404 (:status resp)))
+        (is (= "not-found" (get-in (response-body-as-map resp) [:error :type])))
+        (is (= "cid-1" (get-in resp [:headers "X-Correlation-ID"])))))
+    (testing "on the path"
+      (is (= 403 (:status (call "/path")))))))
 
 ;; =============================================================================
 ;; Static asset caching (BOU-389)

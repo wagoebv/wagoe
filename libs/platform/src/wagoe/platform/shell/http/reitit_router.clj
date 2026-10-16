@@ -210,6 +210,16 @@
   []
   (errors/response 500 :internal-error "Internal Server Error"))
 
+(defn- typed-error-response
+  "The response the interceptor stack gives a typed ex-info, for one thrown
+   where that stack cannot catch it."
+  [system e request]
+  (let [ctx (assoc (http-interceptors/create-http-context request system) :exception e)]
+    (-> ctx
+        ((:error http-interceptors/http-error-handler))
+        ((:error http-interceptors/http-correlation-header))
+        http-interceptors/extract-response)))
+
 (defn- create-exception-middleware
   "Reitit exception middleware, placed between response formatting and request
    decoding.
@@ -226,7 +236,8 @@
    bodies are still negotiated like any other response.
 
    The typed errors the framework raises are handled by the interceptor stack
-   closer to the handler; what reaches here is what that stack cannot see."
+   closer to the handler. One thrown outside it, by route middleware, is mapped
+   here by that same stack's error handler (BOU-659)."
   [config]
   (let [system (or (:system config) {})
         log-error (fn [e request msg]
@@ -259,8 +270,10 @@
 
        ::exception/default
        (fn [e request]
-         (log-error e request "Unhandled exception at the HTTP boundary")
-         (server-error-response))}))))
+         (if (some? (:type (ex-data e)))
+           (typed-error-response system e request)
+           (do (log-error e request "Unhandled exception at the HTTP boundary")
+               (server-error-response))))}))))
 
 (def ^:private require-authentication
   "Refuses a request without a `:user`, unless the endpoint is `:public true`.
