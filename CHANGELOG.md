@@ -98,6 +98,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Tables from Malli schemas take their column types from the adapter's `column-type`** (BOU-610). On fresh H2
+  databases `:text` and `:map` columns are now `VARCHAR`, not `CLOB`; other engines are unchanged.
 - **Security: behind a proxy every client shared one rate-limit bucket and audit IP; X-Forwarded-For was trusted from anyone** (BOU-671).
   Set `:wagoe/http :trusted-proxies` to your proxies' CIDRs; read the address as `:client-ip`.
 - **PDF reports wrote data unescaped: `&` failed the render, and markup in data was rendered and its URLs fetched** (BOU-675, security).
