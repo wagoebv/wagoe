@@ -93,3 +93,47 @@
 
       :memory (in-memory/stop! bus)
       nil)))
+
+(defn- outbox-fn
+  "Resolved on use, so an application without `:outbox` never loads the outbox
+   or the database code it needs."
+  [sym]
+  (requiring-resolve (symbol "wagoe.events.shell.outbox" (name sym))))
+
+(defmethod ig/init-key :wagoe/events-outbox
+  [_ {:keys [bus db-ctx] :as config}]
+  (let [ds (:datasource db-ctx)]
+    (when-not ds
+      (throw (ex-info ":wagoe/events :outbox needs a :wagoe/db-context with a :datasource"
+                      {:type :configuration-error})))
+    ((outbox-fn 'create-outbox-table!) ds)
+    (let [o ((outbox-fn 'create-outbox) ds bus
+                                        (select-keys config (keys @(outbox-fn 'defaults))))]
+      (log/info "Event outbox initialized" (:opts o))
+      o)))
+
+;; Separate from the outbox so a service can write to it without relaying:
+;; the relay is claimed by `service events`, the outbox is platform.
+(defmethod ig/init-key :wagoe/events-relay
+  [_ {:keys [outbox]}]
+  ((outbox-fn 'start-relay!) outbox))
+
+(defmethod ig/halt-key! :wagoe/events-relay
+  [_ relay]
+  (when relay ((outbox-fn 'stop-relay!) relay)))
+
+(defn ig-config
+  "`:wagoe/events`, plus `:wagoe/events-outbox` and `:wagoe/events-relay` when
+   the settings carry `:outbox` (overrides of `outbox/defaults`; `{}` takes
+   them all). `:relay? false` leaves the relay out."
+  [settings _ctx]
+  (let [outbox (:outbox settings)]
+    {:components
+     (cond-> {:wagoe/events settings}
+       outbox
+       (assoc :wagoe/events-outbox (merge outbox
+                                          {:bus    (ig/ref :wagoe/events)
+                                           :db-ctx (ig/ref :wagoe/db-context)}))
+
+       (and outbox (not (false? (:relay? outbox))))
+       (assoc :wagoe/events-relay {:outbox (ig/ref :wagoe/events-outbox)}))}))

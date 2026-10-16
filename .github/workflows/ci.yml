@@ -1031,7 +1031,7 @@ jobs:
   # WAGOE_TEST_DB, and without a run here the MySQL support they prove is
   # claimed and never checked (BOU-652).
   test-mysql-suites:
-    name: Test admin, user, workflow, search on MySQL
+    name: Test admin, user, workflow, search, events outbox on MySQL (+ outbox on PG)
     runs-on: ubuntu-latest
     needs: [warm-deps, changes]
     if: needs.changes.outputs.code == 'true'
@@ -1062,6 +1062,18 @@ jobs:
           JWT_SECRET: "ci-test-secret-minimum-32-characters"
           WAGOE_TEST_DB: mysql
         run: clojure -M:test:test/pg :admin :user :workflow :search
+
+      - name: Run the events outbox on MySQL
+        env:
+          JWT_SECRET: "ci-test-secret-minimum-32-characters"
+          WAGOE_TEST_DB: mysql
+        run: clojure -M:test:test/pg :events --focus wagoe.events.shell.outbox-test
+
+      - name: Run the events outbox on PostgreSQL
+        env:
+          JWT_SECRET: "ci-test-secret-minimum-32-characters"
+          WAGOE_TEST_DB: pg
+        run: clojure -M:test:test/pg :events --focus wagoe.events.shell.outbox-test
 
   # A generated app on MySQL: wagoe new + scaffolded enum, belongs-to and
   # workflow, booted with :migrate-on-start? and driven over HTTP (BOU-653).

@@ -15,10 +15,9 @@
    redeliveries, unlike the stream entry id."
   (:require [wagoe.events.core.event :as event]
             [wagoe.events.ports :as ports]
-            [clojure.tools.logging :as log]
-            [cognitect.transit :as transit])
-  (:import (java.io ByteArrayInputStream ByteArrayOutputStream)
-           (java.util.concurrent Executors ExecutorService TimeUnit)
+            [wagoe.events.shell.codec :as codec]
+            [clojure.tools.logging :as log])
+  (:import (java.util.concurrent Executors ExecutorService TimeUnit)
            (redis.clients.jedis StreamEntryID)
            (redis.clients.jedis.params XAddParams XAutoClaimParams XPendingParams
                                        XReadGroupParams)
@@ -35,66 +34,6 @@
    it would lose the nesting and the types both."
   "envelope")
 
-(def ^:private write-handlers
-  "transit knows java.util.Date and not java.time.Instant.
-
-   `:published-at` is an Instant, and so is anything time-shaped a caller puts
-   in a payload, so without this every publish fails with \"Not supported:
-   class java.time.Instant\" — at the broker, which the in-memory adapter never
-   reaches. The two adapters agreed on everything except the one thing only a
-   real broker exercises."
-  {java.time.Instant
-   ;; ISO-8601, not epoch millis. `Instant/now` is microsecond-precision on a
-   ;; modern JVM — 2026-08-13T08:23:28.536003Z — and `.toEpochMilli` rounds
-   ;; that to .536, so every event's :published-at came back different from
-   ;; what was published, on every event rather than in some edge case. The
-   ;; in-memory adapter does not serialise, so it kept the original and the two
-   ;; disagreed. `.toString` and `Instant/parse` round-trip exactly.
-   (transit/write-handler "instant" #(.toString ^java.time.Instant %))
-
-   ;; What a database row carries (BOU-492). `.toString` and `parse`
-   ;; round-trip each of them exactly, zone id included.
-   java.time.OffsetDateTime (transit/write-handler "offset-date-time" str)
-   java.time.ZonedDateTime  (transit/write-handler "zoned-date-time" str)
-   java.time.LocalDate      (transit/write-handler "local-date" str)
-   java.time.LocalDateTime  (transit/write-handler "local-date-time" str)})
-
-(def ^:private default-write-handler
-  "Anything else goes as its `str`, so an unexpected type (a driver's PGobject
-   for jsonb) changes a value rather than losing the whole event."
-  (transit/write-handler "str" str))
-
-(def ^:private read-handlers
-  "Read an Instant back as an Instant.
-
-   Mapping it onto transit's built-in time type would hand the consumer a
-   java.util.Date instead, so a round trip would change the type of a value
-   nobody asked to convert."
-  {"instant" (transit/read-handler #(java.time.Instant/parse %))
-   "offset-date-time" (transit/read-handler #(java.time.OffsetDateTime/parse %))
-   "zoned-date-time"  (transit/read-handler #(java.time.ZonedDateTime/parse %))
-   "local-date"       (transit/read-handler #(java.time.LocalDate/parse %))
-   "local-date-time"  (transit/read-handler #(java.time.LocalDateTime/parse %))
-   "str"              (transit/read-handler identity)
-
-   ;; transit tags a PersistentList as "list" and its default reader hands back
-   ;; a LazySeq. The values are equal, so this is invisible to `=` — and not to
-   ;; `list?`, which a consumer that worked in development would then fail on
-   ;; in production. The tag is precise: only a PersistentList carries it.
-   "list"    (transit/read-handler #(apply list %))})
-
-(defn- encode
-  [event]
-  (let [out (ByteArrayOutputStream.)]
-    (transit/write (transit/writer out :json {:handlers        write-handlers
-                                              :default-handler default-write-handler}) event)
-    (.toString out "UTF-8")))
-
-(defn- decode
-  [^String s]
-  (transit/read (transit/reader (ByteArrayInputStream. (.getBytes s "UTF-8")) :json
-                                {:handlers read-handlers})))
-
 (defn- stream-key
   "The Redis stream name for `topic`.
 
@@ -104,9 +43,7 @@
    on the keyword itself and keeps them apart, so this is also the adapters
    disagreeing — the same shape of bug as transit not knowing Instant."
   [prefix topic]
-  (str prefix (if (keyword? topic)
-                (subs (str topic) 1)          ; :orders/placed -> "orders/placed"
-                (str topic))))
+  (str prefix (event/topic-name topic)))
 
 ;; =============================================================================
 ;; Consuming
@@ -175,7 +112,7 @@
 (defn- handle-entry!
   [pool stream group handler ^StreamEntry entry max-deliveries]
   (let [raw (get (.getFields entry) payload-field)
-        parsed (try (decode raw)
+        parsed (try (codec/decode raw)
                     (catch Exception e
                       (log/warn e "undecodable event on stream" {:stream stream})
                       nil))]
@@ -296,7 +233,7 @@
                          max-len (.maxLen (long max-len))
                          max-len (.approximateTrimming))]
             (str (.xadd jedis (stream-key prefix topic) params
-                        (java.util.HashMap. {payload-field (encode event)})))))
+                        (java.util.HashMap. {payload-field (codec/encode event)})))))
         (catch Exception e
           ;; Returned, not thrown: a failed analytics event should not roll
           ;; back the transaction that produced it. The caller decides.
@@ -382,7 +319,7 @@
     (with-open [jedis (.getResource pool)]
       (let [stream (stream-key prefix topic)
             decode-entry (fn [^StreamEntry e]
-                           (try (decode (get (.getFields e) payload-field))
+                           (try (codec/decode (get (.getFields e) payload-field))
                                 (catch Exception _ nil)))
             ;; `:since` filters on the envelope's :published-at, which is when
             ;; the publisher created the event — the same field, and the same
