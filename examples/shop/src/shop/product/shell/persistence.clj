@@ -2,14 +2,16 @@
   "Persistence layer for product module."
   (:require [shop.product.ports :as ports]
             [wagoe.platform.database :as db])
-  (:import [java.time Instant LocalDate]))
+  (:import [java.time Instant LocalDate LocalDateTime ZoneOffset]))
 
 (defn- date->iso
   "A DATE column as the schema's YYYY-MM-DD. Drivers return java.sql.Date,
-   whose JSON form depends on the JVM's time zone."
+   whose JSON form depends on the JVM's time zone. MySQL returns a DATETIME
+   without its zone; it was written in UTC, so it is read as UTC."
   [v]
   (cond (instance? java.sql.Date v) (str (.toLocalDate ^java.sql.Date v))
         (instance? LocalDate v) (str v)
+        (instance? LocalDateTime v) (.toInstant ^LocalDateTime v ZoneOffset/UTC)
         :else v))
 
 (def ^:private enum-fields
