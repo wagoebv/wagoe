@@ -28,6 +28,7 @@
 ** xref:libraries:push.adoc[push]
 ** xref:libraries:ai.adoc[ai]
 ** xref:libraries:devtools.adoc[devtools]
+** xref:libraries:test.adoc[test]
 ** xref:libraries:tools.adoc[tools]
 ** xref:libraries:cli.adoc[wagoe-cli]
 ** xref:libraries:mcp.adoc[wagoe-mcp]
