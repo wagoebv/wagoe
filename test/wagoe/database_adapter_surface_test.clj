@@ -379,17 +379,20 @@
 (deftest ^:integration mysql-reports-the-types-the-admin-reads
   ;; information_schema's data_type said tinyint and char; the admin took a
   ;; boolean for a number and a UUID for a string (BOU-649).
-  (if @mysql-up?
-    (let [ctx (factory/db-context (mysql-config))
-          ds  (:datasource ctx)]
-      (try
-        (jdbc/execute! ds ["DROP TABLE IF EXISTS admin_types"])
-        (jdbc/execute! ds [(str "CREATE TABLE admin_types (id CHAR(36) PRIMARY KEY,"
-                                " flag TINYINT(1), n BIGINT UNSIGNED, at DATETIME(6))")])
-        (let [types (into {} (map (juxt :name #(admin-introspection/infer-field-type (:type %))))
-                          (protocols/get-table-info (:adapter ctx) ds :admin_types))]
-          (is (= {"id" :uuid "flag" :boolean "n" :int "at" :instant} types)))
-        (finally
+  (let [reported {"id" "char(36)" "flag" "tinyint(1)" "n" "bigint unsigned" "at" "datetime(6)"}]
+    ;; Runs without MySQL too: kaocha fails a test that makes no assertion.
+    (is (= {"id" :uuid "flag" :boolean "n" :int "at" :instant}
+           (update-vals reported admin-introspection/infer-field-type)))
+    (if @mysql-up?
+      (let [ctx (factory/db-context (mysql-config))
+            ds  (:datasource ctx)]
+        (try
           (jdbc/execute! ds ["DROP TABLE IF EXISTS admin_types"])
-          (factory/close-db-context! ctx))))
-    (println "  note: MySQL not reachable — admin type detection unverified")))
+          (jdbc/execute! ds [(str "CREATE TABLE admin_types (id CHAR(36) PRIMARY KEY,"
+                                  " flag TINYINT(1), n BIGINT UNSIGNED, at DATETIME(6))")])
+          (is (= reported (into {} (map (juxt :name :type))
+                                (protocols/get-table-info (:adapter ctx) ds :admin_types))))
+          (finally
+            (jdbc/execute! ds ["DROP TABLE IF EXISTS admin_types"])
+            (factory/close-db-context! ctx))))
+      (println "  note: MySQL not reachable — column_type introspection unverified"))))

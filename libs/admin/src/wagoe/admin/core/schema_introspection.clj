@@ -23,7 +23,8 @@
 (def sql-type->field-type
   "Mapping from SQL/database types to logical field types.
 
-   Keys are lowercase type names as strings (normalized from database).
+   Keys are lowercase type names: a full type where the width means something
+   (`char(36)`, `tinyint(1)`), else the base type `normalize-sql-type` gives.
    Values are field type keywords used in entity configuration."
   {"uuid" :uuid
    "char(36)" :uuid           ; UUID as string in some databases
@@ -65,7 +66,8 @@
    "binary" :binary})
 
 (defn normalize-sql-type
-  "Normalize SQL type string to lowercase without size/precision.
+  "Normalize SQL type string to lowercase without size/precision, or MySQL's
+   unsigned/zerofill.
 
    Args:
      sql-type: String SQL type (e.g., 'VARCHAR(255)', 'DECIMAL(10,2)')

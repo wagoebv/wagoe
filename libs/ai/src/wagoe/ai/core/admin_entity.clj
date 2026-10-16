@@ -22,7 +22,8 @@
       #"^(TIMESTAMP|DATETIME)"                                :instant
       #"^DATE\b"                                              :date
       #"^(UUID\b|CHAR\(36\))"                                 :uuid
-      #"^(BOOL|TINYINT\(1\))"                                  :boolean
+      ;; MySQL drops the (1) from an unsigned TINYINT, which then reads as a number.
+      #"^(BOOL|TINYINT\(1\)(?!\s+(UNSIGNED|ZEROFILL)))" :boolean
       #"^(INT|INTEGER|BIGINT|SMALLINT|TINYINT|MEDIUMINT|SERIAL|BIGSERIAL)\b" :int
       #"^(DECIMAL|NUMERIC|REAL|DOUBLE|FLOAT|MONEY)"           :decimal
       #"^JSONB?\b"                                            :json
