@@ -31,6 +31,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **Choose where users land after signing in** (BOU-678): `:login-redirect` under `:wagoe/user`, a role map or a
+  function of the user. Unset, admins still land on `/web/admin/users`, others on `/web/dashboard`.
+- **Replace or drop the built-in `/web/dashboard`** (BOU-680): `:dashboard {:handler my.app/page}` or
+  `:dashboard false` under `:wagoe/user`, so an app can serve the path itself.
 - **Sign in with OpenID Connect** (BOU-447): authorization code with PKCE, a "Sign in with X" button per provider.
   Configure under `:wagoe/user {:oidc …}`; linking by email is opt-in and never reaches an admin.
 - **Live htmx updates over server-sent events** (BOU-464): `sse/sse-handler` streams `sse/push-fragment!` to `sse-swap`

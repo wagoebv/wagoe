@@ -25,6 +25,7 @@
                 ;; same intentional partial-stub pattern as the two above
                 wagoe.user.shell.auth-lockout-fixation-security-test {:linters {:missing-protocol-method {:level :off}}}
                 wagoe.user.shell.web-handlers-test {:linters {:missing-protocol-method {:level :off}}}
+                wagoe.user.shell.landing-test {:linters {:missing-protocol-method {:level :off}}}
                 wagoe.platform.shell.http.rate-limit-interceptor-test {:linters {:missing-protocol-method {:level :off}}}
                 wagoe.bench.hotpaths {:linters {:missing-protocol-method {:level :off}}}
                 wagoe.user.ports {:linters {:redefined-var {:level :off}}}

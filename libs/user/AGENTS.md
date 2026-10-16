@@ -312,6 +312,28 @@ The wizard accepts `--env dev|test|acc|prod` to pick the Aero config profile and
 
 ---
 
+## Landing Page and Dashboard
+
+Two `:wagoe/user` keys, both checked at boot; a bad value fails it.
+
+```clojure
+:wagoe/user
+{;; Where a signed-in user lands: paths by role, `:default` for the rest,
+ ;; merged over {:admin "/web/admin/users" :default "/web/dashboard"}.
+ :login-redirect {:user "/web/overzicht" :default "/web/overzicht"}
+ ;; or a function of the user, resolved at boot; nil or an off-site path
+ ;; means the default:   :login-redirect my.app.web/landing
+
+ ;; false: /web/dashboard is not mounted, so the app can route it.
+ ;; {:handler my.app.web/dashboard}: that Ring handler serves it, signed in.
+ :dashboard false}
+```
+
+`:login-redirect` applies to password login, MFA completion, OIDC sign-in and
+`/web` for a signed-in user. A safe `return-to` still wins. With
+`:dashboard false` and no `:login-redirect`, users land on `/web/dashboard`, so
+serve it or point the redirect elsewhere.
+
 ## Session Pruning
 
 An expired session is invisible to every read — `find-session-by-token` and
