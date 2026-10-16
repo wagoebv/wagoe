@@ -66,7 +66,7 @@
 
 (def ^:private xml-illegal-chars
   ;; Characters XML 1.0 forbids even as references; the parser rejects them.
-  #"[\x00-\x08\x0B\x0C\x0E-\x1F\uFFFE\uFFFF]")
+  #"[\x00-\x08\x0B\x0C\x0E-\x1F\uFFFE\uFFFF]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]")
 
 (defn- render-html
   [hiccup-form]
@@ -78,7 +78,7 @@
    named in its content (BOU-675)."
   (reify FSUriResolver
     (resolveURI [_ _base uri]
-      (when (and uri (str/starts-with? (str/lower-case uri) "data:"))
+      (when (and uri (.regionMatches ^String uri true 0 "data:" 0 5))
         uri))))
 
 ;; =============================================================================

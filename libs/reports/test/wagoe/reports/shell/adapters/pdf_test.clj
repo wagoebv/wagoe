@@ -102,18 +102,20 @@
   (with-open [doc (PDDocument/load pdf)]
     (.getText (PDFTextStripper.) doc)))
 
-(defn- render-cell [value]
+(defn- render-template [template data]
   (:bytes (ports/generate! (sut/create-pdf-generator)
-                           {:id :untrusted :type :pdf
-                            :template (fn [v] [:html [:body [:p v]]])}
-                           value {})))
+                           {:id :untrusted :type :pdf :template template}
+                           data {})))
+
+(defn- render-cell [value]
+  (render-template (fn [v] [:html [:body [:p v]]]) value))
 
 (deftest ^:integration ^:security pdf-escapes-data-test
   (testing "& and < in data render as text"
     (is (re-find #"Ruimte & Wonen" (pdf-text (render-cell "Ruimte & Wonen"))))
     (is (re-find #"<b>bold</b>" (pdf-text (render-cell "<b>bold</b>")))))
   (testing "XML-illegal control characters are stripped"
-    (is (re-find #"ab" (pdf-text (render-cell "a\u0001\u001Fb"))))))
+    (is (re-find #"ab" (pdf-text (render-cell "a\u0001\u001F\uD800b"))))))
 
 (deftest ^:integration ^:security pdf-fetches-no-external-resource-test
   (let [hits   (atom 0)
@@ -130,9 +132,6 @@
         (render-cell (str "<img src=\"" url "\">"))
         (is (zero? @hits)))
       (testing "a template's own img src is not fetched either"
-        (ports/generate! (sut/create-pdf-generator)
-                         {:id :raw :type :pdf
-                          :template (fn [_] [:html [:body [:img {:src url}]]])}
-                         nil {})
+        (render-template (fn [_] [:html [:body [:img {:src url}]]]) nil)
         (is (zero? @hits)))
       (finally (.stop server 0)))))
