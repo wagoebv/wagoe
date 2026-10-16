@@ -21,9 +21,10 @@
   [datasource]
   (with-open [^Connection c (jdbc/get-connection datasource)]
     (let [md (.getMetaData c)]
+      ;; This database's catalog: MySQL reads nil as every database on the server.
       (boolean
        (some (fn [t]
-               (with-open [rs (.getIndexInfo md nil nil t true false)]
+               (with-open [rs (.getIndexInfo md (.getCatalog c) nil t true false)]
                  (loop []
                    (when (.next rs)
                      (or (= index-name (some-> (.getString rs "INDEX_NAME") str/lower-case))

@@ -61,8 +61,8 @@ Add to `resources/conf/{env}/config.edn` and require `wagoe.push.shell.module-wi
                                :bundle-id #env WAG_PUSH_APNS_BUNDLE_ID
                                :sandbox?  false}
 
-:wagoe.push/device-store    {:db #ig/ref :wagoe/db}
-:wagoe.push/analytics-store {:db #ig/ref :wagoe/db}
+:wagoe.push/device-store    {:db #ig/ref :wagoe/db-context}
+:wagoe.push/analytics-store {:db #ig/ref :wagoe/db-context}
 
 :wagoe.push/service {:device-store    #ig/ref :wagoe.push/device-store
                         :analytics-store #ig/ref :wagoe.push/analytics-store
