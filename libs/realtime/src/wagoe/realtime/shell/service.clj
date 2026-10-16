@@ -23,7 +23,8 @@
             [wagoe.realtime.shell.bus.in-memory :as in-memory-bus]
             [wagoe.realtime.shell.delivery :as delivery]
             [clojure.tools.logging :as log])
-  (:import (java.time Instant)))
+  (:import (java.time Instant)
+           (java.util.concurrent.atomic AtomicInteger)))
 
 ;; =============================================================================
 ;; Helper Functions (External Dependencies)
@@ -57,7 +58,7 @@
 ;; Realtime Service (Shell Layer)
 ;; =============================================================================
 
-(defrecord RealtimeService [connection-registry jwt-verifier pubsub-manager logger error-reporter bus]
+(defrecord RealtimeService [connection-registry jwt-verifier pubsub-manager logger error-reporter bus stream-slots]
   ports/IRealtimeService
 
   (connect [_this ws-connection query-params]
@@ -156,13 +157,30 @@
      :error-reporter  error reporter (optional)
      :bus             IMessageBus (optional; defaults to a fresh
                       InMemoryMessageBus for single-node use)
+     :max-streams     concurrent SSE streams on this node, default 32 — each
+                      holds a server thread, and Jetty's pool defaults to 50
 
    On construction the service registers a node-local delivery-fn with the bus
    (start-subscriber!). Pass a shared bus to two services to relay between them."
   [connection-registry jwt-verifier
-   & {:keys [pubsub-manager logger error-reporter bus]}]
+   & {:keys [pubsub-manager logger error-reporter bus max-streams]}]
   (let [bus (or bus (in-memory-bus/create-in-memory-bus))
         svc (->RealtimeService connection-registry jwt-verifier
-                               pubsub-manager logger error-reporter bus)]
+                               pubsub-manager logger error-reporter bus
+                               {:open (AtomicInteger.) :limit (or max-streams 32)})]
     (ports/start-subscriber! bus (delivery/make-delivery-fn connection-registry pubsub-manager))
     svc))
+
+(defn acquire-stream!
+  "Take one of the node's SSE stream slots; false when all are taken. A service
+   without slots (another IRealtimeService) is uncapped."
+  [svc]
+  (if-let [{:keys [^AtomicInteger open limit]} (:stream-slots svc)]
+    (if (> (.incrementAndGet open) limit)
+      (do (.decrementAndGet open) false)
+      true)
+    true))
+
+(defn release-stream! [svc]
+  (when-let [{:keys [^AtomicInteger open]} (:stream-slots svc)]
+    (.decrementAndGet open)))

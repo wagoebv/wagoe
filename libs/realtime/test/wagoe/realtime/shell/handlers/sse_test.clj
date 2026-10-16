@@ -9,17 +9,19 @@
             [wagoe.realtime.shell.bus.in-memory :as in-memory-bus]
             [wagoe.realtime.shell.service :as service]
             [wagoe.realtime.shell.adapters.sse-adapter :as sse-adapter]
-            [wagoe.realtime.shell.handlers.sse :as sse])
+            [wagoe.realtime.shell.handlers.sse :as sse]
+            [wagoe.realtime.shell.module-wiring]
+            [integrant.core :as ig])
   (:import (java.io ByteArrayOutputStream IOException OutputStream)))
 
 (def user {:id #uuid "550e8400-e29b-41d4-a716-446655440000" :role :member})
 
 (defn- system
   ([] (system (in-memory-bus/create-in-memory-bus)))
-  ([bus]
+  ([bus & opts]
    (let [reg (registry/create-in-memory-registry)
          ps  (pubsub/create-pubsub-manager)]
-     {:service (service/create-realtime-service reg nil :pubsub-manager ps :bus bus)
+     {:service (apply service/create-realtime-service reg nil :pubsub-manager ps :bus bus opts)
       :registry reg
       :pubsub ps})))
 
@@ -119,19 +121,65 @@
     (is (empty? (ports/get-topic-subscribers pubsub "order:1")))
     (is (empty? (ports/get-topic-subscribers pubsub "order:2")))))
 
-(deftest ^:integration past-max-streams-answers-503
-  (let [{:keys [service]} (system)
-        opts    [:authorize-topic allow-orders :heartbeat-ms 20 :max-streams 1]
-        handler (apply sse/sse-handler service opts)
-        req     (request {"topic" "order:1"})
-        resp    (handler req)
-        client  (client-stream)
-        done    (future (ring-protocols/write-body-to-stream (:body resp) resp (:out client)))]
-    (is (= 200 (:status resp)))
-    (is (= 503 (:status (handler req))))
-    (reset! (:broken? client) true)
+(defn- stream-on [handler req]
+  (let [resp   (handler req)
+        client (client-stream)]
+    (assoc client :response resp
+           :done (future (ring-protocols/write-body-to-stream (:body resp) resp (:out client))))))
+
+(deftest ^:integration the-stream-cap-is-per-node-not-per-handler
+  (let [{:keys [service registry]} (system (in-memory-bus/create-in-memory-bus) :max-streams 1)
+        req   (request {"topic" "order:1"})
+        h1    (sse/sse-handler service :authorize-topic allow-orders :heartbeat-ms 20)
+        h2    (sse/sse-handler service :authorize-topic allow-orders :heartbeat-ms 20)
+        held  (stream-on h1 req)
+        _     (await-until #(= 1 (ports/connection-count registry)))
+        over  (stream-on h2 req)]
+    (is (not= ::timeout (deref (:done over) 2000 ::timeout)) "over the cap the body ends at once")
+    (is (= "retry: 10000\n\n" ((:text over))))
+    (is (= 1 (ports/connection-count registry)))
+    (reset! (:broken? held) true)
+    (deref (:done held) 2000 ::timeout)
+    (let [again (stream-on h2 req)]
+      (is (await-until #(= 1 (ports/connection-count registry))) "a closed stream frees its slot")
+      (reset! (:broken? again) true))))
+
+(deftest ^:integration a-response-never-written-holds-no-slot
+  (let [{:keys [service registry]} (system (in-memory-bus/create-in-memory-bus) :max-streams 1)
+        handler (sse/sse-handler service :authorize-topic allow-orders :heartbeat-ms 20)
+        req     (request {"topic" "order:1"})]
+    (dotimes [_ 3] (is (= 200 (:status (handler req)))))
+    (let [s (stream-on handler req)]
+      (is (await-until #(= 1 (ports/connection-count registry))))
+      (reset! (:broken? s) true))))
+
+(deftest ^:integration a-stream-closes-when-its-session-goes
+  (let [{:keys [service registry]} (system)
+        valid?  (atom true)
+        handler (sse/sse-handler service :authorize-topic allow-orders :heartbeat-ms 20
+                                 :revalidate (fn [_request] @valid?))
+        {:keys [done]} (stream-on handler (request {"topic" "order:1"}))]
+    (is (await-until #(= 1 (ports/connection-count registry))))
+    (Thread/sleep 60)
+    (is (not (realized? done)) "still open while the session is good")
+    (reset! valid? false)
     (is (not= ::timeout (deref done 2000 ::timeout)))
-    (is (= 200 (:status (handler req))) "a closed stream frees its slot")))
+    (is (zero? (ports/connection-count registry)))))
+
+(deftest ^:unit too-many-topics-is-a-400
+  (let [{:keys [service]} (system)
+        handler (sse/sse-handler service :authorize-topic allow-orders :max-topics 2)]
+    (is (= 200 (:status (handler (request {"topic" ["order:1" "order:2"]})))))
+    (is (= 400 (:status (handler (request {"topic" ["order:1" "order:2" "order:3"]})))))))
+
+(deftest ^:integration halting-realtime-closes-open-streams
+  (let [component (ig/init-key :wagoe/realtime {:provider :memory})
+        handler   (sse/sse-handler (:service component) :authorize-topic allow-orders)
+        {:keys [done]} (stream-on handler (request {"topic" "order:1"}))]
+    (is (await-until #(= 1 (ports/connection-count (:registry component)))))
+    (ig/halt-key! :wagoe/realtime component)
+    (is (not= ::timeout (deref done 2000 ::timeout)) "ends without waiting for a heartbeat")
+    (is (zero? (ports/connection-count (:registry component))))))
 
 (deftest ^:unit event-names
   (let [conn (sse-adapter/create-sse-connection (random-uuid) nil)]

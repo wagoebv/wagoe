@@ -9,6 +9,11 @@
    stream out and makes a dead client surface as a failed write."
   ": heartbeat\n\n")
 
+(def retry-later
+  "Tells EventSource to reconnect in 10 s; sent, then closed, when a node has
+   no stream slot free."
+  "retry: 10000\n\n")
+
 (defn format-event
   "One SSE event. Each line of `data` gets its own `data:` field, as the spec
    requires; the browser joins them back with newlines. A lone CR ends a line
@@ -48,10 +53,13 @@
 (defn subscription-decision
   "Decide whether `topics` may be streamed; `allowed?` answers per topic.
    Returns {:ok topics} or {:error {:type ... :message ...}}."
-  [topics allowed?]
+  [topics allowed? max-topics]
   (cond
     (empty? topics)
     {:error {:type :validation-error :message "At least one topic is required"}}
+
+    (> (count (distinct topics)) max-topics)
+    {:error {:type :validation-error :message (str "At most " max-topics " topics")}}
 
     (not-every? schema/valid-topic? topics)
     {:error {:type :validation-error :message "Invalid topic name"}}

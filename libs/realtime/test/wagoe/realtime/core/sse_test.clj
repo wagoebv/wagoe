@@ -19,12 +19,13 @@
     (is (nil? (sse/user-identity {:id "nope"})))))
 
 (deftest ^:unit subscription-decision
-  (let [decide #(sse/subscription-decision % (fn [t] (not= "secret" t)))]
+  (let [decide #(sse/subscription-decision % (fn [t] (not= "secret" t)) 2)]
     (is (= {:ok ["a" "b"]} (decide ["a" "b" "a"])))
     (testing "errors"
       (is (= :validation-error (get-in (decide []) [:error :type])))
       (is (= :validation-error (get-in (decide ["a" ""]) [:error :type])))
-      (is (= :forbidden (get-in (decide ["a" "secret"]) [:error :type]))))))
+      (is (= :forbidden (get-in (decide ["a" "secret"]) [:error :type])))
+      (is (= :validation-error (get-in (decide ["a" "b" "c"]) [:error :type])) "past max-topics"))))
 
 (deftest ^:unit request-topics
   (is (= ["a"] (sse/request-topics {"topic" "a"})))

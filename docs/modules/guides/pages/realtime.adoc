@@ -100,7 +100,29 @@ without it every topic is refused.
 
 Each open stream holds one server thread for as long as the page is open, and
 writes a heartbeat every 15 seconds; a closed tab is cleaned up at the next one.
-Past `:max-streams` (default 32, under Jetty's 50 threads) the handler answers 503.
+The `:wagoe/realtime` key caps streams per node with `:max-streams` (default
+32, under Jetty's 50 threads); a stream over the cap is told to retry in 10
+seconds. A handler accepts at most `:max-topics` (16) topics per stream.
+
+An open stream does not see a logout by itself. Pass `:revalidate`, asked every
+heartbeat, and the stream closes once it answers false; the browser reconnects
+and gets a 401:
+
+[source,clojure]
+----
+(require '[wagoe.user.ports :as user-ports]
+         '[wagoe.user.shell.middleware :as user-mw])
+
+(sse/sse-handler svc
+                 :authorize-topic may-see-topic?
+                 :revalidate (fn [request]
+                               (when-let [session (some->> (user-mw/extract-session-token request)
+                                                           (user-ports/validate-session user-service))]
+                                 (:active (user-ports/get-user-by-id user-service (:user-id session))))))
+----
+
+`validate-session` also refreshes the session's last access, so an open page
+keeps a sliding session alive.
 
 == Integrant configuration
 
