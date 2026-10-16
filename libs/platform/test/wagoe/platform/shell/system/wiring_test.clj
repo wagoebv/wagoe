@@ -637,6 +637,15 @@
   (testing "with no authentication wired, the guard is still installed"
     (is (= [] (get-in (router-config-from {}) [:authentication :middleware])))))
 
+(deftest ^:unit module-middleware-runs-before-the-apps-own
+  ;; Each module contributes a middleware fn or a seq of them; tenant's is a seq.
+  (let [tenant (fn [h] h)
+        guard  (fn [h] h)
+        mine   (fn [h] h)
+        stack  (:middleware (router-config-from {:module-middleware [[tenant] guard #'identity]
+                                                 :extra-middleware  [mine]}))]
+    (is (= [tenant guard #'identity mine] (take 4 stack)) "a var is one middleware, not a seq")))
+
 (defmethod ig/init-key ::probe [_ v] (assoc v :started true))
 (defmethod ig/halt-key! ::probe [_ _] nil)
 

@@ -114,7 +114,8 @@ bb scaffold entity \
   installs an `ig-config` and an `entity-wiring` multimethod, and replaces the
   one `:wagoe/<module>-routes` init-key so it mounts every entity's routes;
   that replacement is refused if the init-key was hand-edited. Later entities
-  append one `entity-wiring` method. No web page. `--no-http` (or `:http false`
+  append one `entity-wiring` method. That `ig-config` returns only what it adds;
+  discovery builds the four module keys under it. No web page. `--no-http` (or `:http false`
   in `:interfaces`) leaves out the http namespace and its routes;
   `--public-api` (`:public-api true`) serves them without a signed-in user.
 

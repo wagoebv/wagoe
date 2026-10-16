@@ -239,6 +239,8 @@ Wiring the first extra entity adds an `ig-config` and an `entity-wiring`
 multimethod to `module_wiring.clj`, and replaces its routes init-key with one
 that also mounts the extra entities' routes. If you have edited that init-key,
 the command refuses rather than drop your change. Later entities only append.
+The `ig-config` returns only what it adds to the four keys discovery builds;
+see the platform library's guide to add components or middleware of your own.
 
 A file it would write that already exists, or a name the module already
 defines, refuses the run and writes nothing.
