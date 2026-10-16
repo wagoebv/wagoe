@@ -5,36 +5,15 @@
    `bb test:services up`."
   (:require [clojure.test :refer [deftest is testing]]
             [integrant.core :as ig]
-            [next.jdbc :as jdbc]
+            [support.mysql :as mysql]
             [wagoe.jobs.ports :as jobs]
             [wagoe.jobs.shell.adapters.db :as jobs-db]
-            [wagoe.platform.shell.adapters.database.factory :as factory]
             [wagoe.workflow.ports :as workflow]
             [wagoe.workflow.shell.module-wiring]
             [wagoe.workflow.shell.persistence :as workflow-persistence])
   (:import [java.time Instant]))
 
-(def ^:private mysql-port
-  (parse-long (or (System/getenv "WAGOE_TEST_MYSQL_PORT") "3306")))
-
-(def ^:private mysql-password
-  (or (System/getenv "WAGOE_TEST_MYSQL_PASSWORD") "probe"))
-
-(defn- server []
-  (jdbc/get-datasource {:dbtype "mysql" :host "127.0.0.1" :port mysql-port
-                        :user "root" :password mysql-password}))
-
-(defn- with-mysql
-  "Run `f` with a db-context on a fresh database, dropped afterwards."
-  [f]
-  (let [dbname (str "jw_" (System/nanoTime))]
-    (jdbc/execute! (server) [(str "CREATE DATABASE " dbname)])
-    (let [ctx (factory/db-context
-               (factory/mysql-config "127.0.0.1" mysql-port dbname "root" mysql-password))]
-      (try (f ctx)
-           (finally
-             (factory/close-db-context! ctx)
-             (jdbc/execute! (server) [(str "DROP DATABASE " dbname)]))))))
+(def ^:private with-mysql (partial mysql/with-database "jw"))
 
 (defn- job [priority]
   {:id (random-uuid) :job-type :send-email :queue :default :priority priority

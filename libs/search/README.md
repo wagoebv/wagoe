@@ -137,12 +137,15 @@ No additional options are needed — the module auto-detects the database type.
 
 ## Database Schema
 
+Shipped as the library's migrations (`wagoe/search/migrations/`); `bb migrate up`
+creates it once search is enabled.
+
 ```sql
 CREATE TABLE search_documents (
-  id          TEXT NOT NULL PRIMARY KEY,
-  index_id    TEXT NOT NULL,
-  entity_type TEXT NOT NULL,
-  entity_id   TEXT NOT NULL,
+  id          VARCHAR(255) NOT NULL PRIMARY KEY,
+  index_id    VARCHAR(255) NOT NULL,
+  entity_type VARCHAR(255) NOT NULL,
+  entity_id   VARCHAR(255) NOT NULL,
   language    TEXT NOT NULL DEFAULT 'english',
   weight_a    TEXT NOT NULL DEFAULT '',
   weight_b    TEXT NOT NULL DEFAULT '',
@@ -150,7 +153,8 @@ CREATE TABLE search_documents (
   weight_d    TEXT NOT NULL DEFAULT '',
   content_all TEXT NOT NULL DEFAULT '',   -- all fields joined (LIKE fallback)
   metadata    TEXT,                       -- pr-str encoded EDN
-  updated_at  TEXT NOT NULL,
+  updated_at  VARCHAR(64) NOT NULL,
+  filters     TEXT,                       -- JSON of filter key/values
   UNIQUE (index_id, entity_id)
 );
 ```

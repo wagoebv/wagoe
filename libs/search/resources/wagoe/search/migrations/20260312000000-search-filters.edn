@@ -1,0 +1,6 @@
+;; The filters column. A table built by hand from the docs before search
+;; shipped its migrations may have it already, so it is added only when absent
+;; (BOU-651).
+{:ns      wagoe.search.shell.filters-column
+ :up-fn   "up"
+ :down-fn "down"}

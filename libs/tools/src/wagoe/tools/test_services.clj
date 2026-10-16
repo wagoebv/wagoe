@@ -55,6 +55,7 @@
                 "wagoe.database-adapter-contract-test"
                 "wagoe.jobs-workflow-mysql-test"
                 "wagoe.library-migrations-mysql-test"
+                "wagoe.search-mysql-test"
                 "wagoe.scaffolder.migration-dialects-test"]}])
 
 (defn reachable?
