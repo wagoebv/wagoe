@@ -71,16 +71,31 @@
                             {:token "dup-token" :platform :fcm :app-id "com.example"})
     (is (= 1 (count (ports/get-user-devices store user-id))))))
 
-(deftest ^:contract get-devices-by-platform-with-pagination
-  (let [store   (p/->DeviceTokenStore *db*)
-        user-id (random-uuid)]
+(deftest ^:contract re-registration-moves-the-token-and-returns-the-stored-id
+  ;; The conflict update kept the old user_id, and register returned a fresh id (BOU-683).
+  (let [store  (p/->DeviceTokenStore *db*)
+        alice  (random-uuid)
+        bob    (random-uuid)
+        device {:token "shared-token" :platform :fcm :app-id "com.example"}
+        alices (ports/register-device! store alice device)
+        bobs   (ports/register-device! store bob device)]
+    (is (= (:id alices) (:id bobs)))
+    (is (empty? (ports/get-user-devices store alice)))
+    (is (= ["shared-token"] (map :token (ports/get-user-devices store bob))))))
+
+(deftest ^:contract get-devices-by-platform-pages-by-id
+  ;; The broadcast test deactivates every device it reads, so it passes with :after-id ignored.
+  (let [store (p/->DeviceTokenStore *db*)]
     (doseq [i (range 5)]
-      (ports/register-device! store user-id
-                              {:token (str "fcm-" i) :platform :fcm :app-id (str "app-" i)}))
-    (let [page1 (ports/get-devices-by-platform store :fcm {:limit 2 :offset 0})
-          page2 (ports/get-devices-by-platform store :fcm {:limit 2 :offset 2})]
-      (is (= 2 (count page1)))
-      (is (= 2 (count page2))))))
+      (ports/register-device! store (random-uuid)
+                              {:token (str "fcm-" i) :platform :fcm :app-id "com.example"}))
+    (let [page1 (ports/get-devices-by-platform store :fcm {:limit 2})
+          page2 (ports/get-devices-by-platform store :fcm {:limit 2 :after-id (:id (peek page1))})
+          page3 (ports/get-devices-by-platform store :fcm {:limit 2 :after-id (:id (peek page2))})
+          ids   (map (comp str :id) (concat page1 page2 page3))]
+      (is (= [2 2 1] (map count [page1 page2 page3])))
+      (is (= (sort ids) ids) "ascending and without repeats across pages")
+      (is (= 5 (count (set ids)))))))
 
 (deftest ^:contract analytics-record-and-stats
   (let [store (p/->PushAnalyticsStore *db*)]

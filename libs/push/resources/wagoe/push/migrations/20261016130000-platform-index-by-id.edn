@@ -1,0 +1,4 @@
+;; Broadcast pages by id within a platform; this index serves that without a sort (BOU-683).
+{:ns      wagoe.push.shell.platform-index
+ :up-fn   "up"
+ :down-fn "down"}
