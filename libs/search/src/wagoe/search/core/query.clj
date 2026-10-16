@@ -181,7 +181,7 @@
      entity-type - string
      query       - string (partial user input)
      limit       - integer
-     threshold   - number (similarity threshold, e.g. 0.15)
+     threshold   - number (word_similarity threshold, e.g. 0.3)
      filters     - map of keyword->any (optional)
 
    Returns:

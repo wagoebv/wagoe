@@ -74,6 +74,13 @@
       (:metadata row)
       (assoc :metadata (edn/read-string (:metadata row))))))
 
+(defn- trigram-probe
+  "A fn answering whether pg_trgm is installed. Only a yes is kept: an
+   extension created after boot is picked up, and a failed read is not."
+  [datasource]
+  (let [installed (atom false)]
+    (fn [] (or @installed (reset! installed (trigram/installed? datasource))))))
+
 ;; =============================================================================
 ;; ISearchStore implementation
 ;; =============================================================================
@@ -158,11 +165,11 @@
     (log/debug "Suggesting documents"
                {:index-id index-id :entity-type entity-type :query query})
     (let [{:keys [limit threshold filters]
-           :or   {limit 5 threshold 0.15}} opts
+           :or   {limit 5 threshold 0.3}} opts
           idx     (kw->str index-id)
           et      (kw->str entity-type)
           sql-vec (cond
-                    (and full-text? @trigram?)
+                    (and full-text? (trigram?))
                     (qry/build-postgres-suggest-sql idx et query limit threshold filters)
                     full-text?
                     (qry/build-postgres-like-suggest-sql idx et query limit filters)
@@ -197,5 +204,4 @@
     (->SearchStore datasource
                    (contains? capabilities :full-text)
                    (contains? capabilities :on-conflict)
-                   ;; Read on first full-text suggest, by when the migrations have run.
-                   (delay (trigram/installed? datasource)))))
+                   (trigram-probe datasource))))

@@ -245,10 +245,15 @@
 
 (deftest ^:integration suggest-without-pg-trgm-test
   (testing "PostgreSQL without pg_trgm suggests by LIKE (BOU-661)"
-    (if-not (full-text?)
-      (is (not (full-text?)) "LIKE is already the only strategy here")
-      (let [{:keys [datasource]} @test-store
-            _                    (jdbc/execute! datasource ["DROP EXTENSION pg_trgm"])
-            [expected actual]    (tenant-1-suggestions
-                                  (persistence/create-search-store datasource @test-adapter))]
+    (let [{:keys [datasource]} @test-store]
+      (when (full-text?) (jdbc/execute! datasource ["DROP EXTENSION pg_trgm"]))
+      (let [[expected actual] (tenant-1-suggestions
+                               (persistence/create-search-store datasource @test-adapter))]
         (is (= expected actual))))))
+
+(deftest ^:integration suggest-typo-test
+  (testing "pg_trgm suggests through a typo, LIKE does not: the trigram path is the one taken"
+    (ports/upsert-document! @test-store (make-doc {:content-all "Widget Alpha"}))
+    (is (= (full-text?)
+           (boolean (seq (ports/suggest-documents @test-store :product-search :product
+                                                  "widgit" {:limit 5})))))))
