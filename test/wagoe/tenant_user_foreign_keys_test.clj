@@ -22,7 +22,7 @@
   (factory/db-context (factory/h2-config (str "mem:tenant_fk_" label "_" (System/nanoTime) ";DB_CLOSE_DELAY=-1"))))
 
 (defn- user-svc [ctx]
-  (user-service/->UserService (user-persistence/create-user-repository ctx) nil nil {} nil nil))
+  (user-service/->UserService (user-persistence/create-user-repository ctx) nil nil {} nil))
 
 (defn- engines []
   [[:postgresql (fn [] (let [pg (epg/start!) ctx (epg/db-context pg)]

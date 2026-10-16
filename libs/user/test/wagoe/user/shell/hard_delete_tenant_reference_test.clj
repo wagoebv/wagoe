@@ -27,7 +27,7 @@
                              user_id VARCHAR(36) NOT NULL REFERENCES users(id))"])
           (let [repo    (persistence/create-user-repository ctx)
                 user    (ports/create-user repo (user-entity))
-                service (sut/->UserService repo nil nil {} nil nil)]
+                service (sut/->UserService repo nil nil {} nil)]
             (jdbc/execute! (:datasource ctx) ["INSERT INTO tenant_memberships VALUES ('m1', ?)" (str (:id user))])
             (let [e (try (ports/permanently-delete-user service (:id user)) nil
                          (catch clojure.lang.ExceptionInfo e e))]
