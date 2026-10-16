@@ -117,6 +117,13 @@
         (when-not (done? (execution/reported e))
           (throw (ddl-error ctx without e)))))))
 
+(defn execute-ddl-if-absent!
+  "Run `statement`, counting \"already exists\" as done and logging it as
+   nothing: for boot DDL rewritten for an engine without IF NOT EXISTS, such
+   as a MySQL CREATE INDEX (BOU-650)."
+  [ctx statement]
+  (if-exists-ddl! ctx false nil statement constraint/already-exists?))
+
 (defn add-check-if-not-exists!
   "Add the named CHECK `clause` to `table` unless a constraint of that name is
    there. No engine takes IF NOT EXISTS here, so its duplicate counts as done

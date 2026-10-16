@@ -43,9 +43,9 @@
 (deftest ^:integration the-jobs-db-adapter-runs-on-mysql
   (with-mysql
     (fn [{:keys [datasource]}]
+      ;; Twice, as a restart does: the second finds tables and indexes there.
       (jobs-db/create-jobs-table! datasource)
-      (testing "a second boot finds the tables and indexes there"
-        (is (nil? (jobs-db/create-jobs-table! datasource))))
+      (jobs-db/create-jobs-table! datasource)
       (let [q    (jobs-db/create-db-job-queue datasource)
             low  (job :low)
             crit (job :critical)]

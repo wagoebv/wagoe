@@ -31,6 +31,8 @@
    - `payload` is `VARCHAR(1000000)` (`LONGTEXT` on MySQL); keep serialized
      jobs under ~1 MB."
   (:require [next.jdbc :as jdbc]
+            [wagoe.platform.database :as db]
+            [wagoe.platform.ports.database :as db-ports]
             [next.jdbc.result-set :as rs]
             [cheshire.core :as json]
             [clojure.string :as str]
@@ -86,79 +88,64 @@
 ;; matched nothing, and PostgreSQL and H2 cast text to UUID (BOU-650).
 (defn- params [sqlv] (mapv #(if (uuid? %) (str %) %) sqlv))
 
-(defn- execute-one!
-  ([conn sqlv] (jdbc/execute-one! conn (params sqlv)))
-  ([conn sqlv opts] (jdbc/execute-one! conn (params sqlv) opts)))
+(defn- execute-one! [conn sqlv & opts] (apply jdbc/execute-one! conn (params sqlv) opts))
 
-(defn- execute!
-  ([conn sqlv] (jdbc/execute! conn (params sqlv)))
-  ([conn sqlv opts] (jdbc/execute! conn (params sqlv) opts)))
+(defn- execute! [conn sqlv & opts] (apply jdbc/execute! conn (params sqlv) opts))
 
 ;; --- schema -----------------------------------------------------------------
 
-(declare create-job-store-table!)
+(defn- ddl-types
+  "Column types from the engine's adapter: MySQL has no UUID type, its VARCHAR
+   stops at 65535 bytes and its TIMESTAMP at whole seconds (BOU-650)."
+  [{:keys [adapter]}]
+  (if (= :mysql (db-ports/engine adapter))
+    {:id (db-ports/column-type adapter :uuid) :payload (db-ports/column-type adapter :text)
+     :ts (db-ports/column-type adapter :instant)}
+    {:id (db-ports/column-type adapter :uuid) :payload "VARCHAR(1000000)" :ts "TIMESTAMP"}))
 
-(defn- mysql? [ds]
-  (with-open [c (jdbc/get-connection ds)]
-    (= "MySQL" (.getDatabaseProductName (.getMetaData c)))))
+(defn- create-job-store-table* [ctx {:keys [id payload ts]}]
+  (execute! (:datasource ctx)
+            [(format "CREATE TABLE IF NOT EXISTS job_store (
+                        id           %s PRIMARY KEY,
+                        job_type     VARCHAR(255),
+                        queue        VARCHAR(255),
+                        status       VARCHAR(20) NOT NULL,
+                        dead_letter  BOOLEAN NOT NULL DEFAULT FALSE,
+                        updated_at   %s NOT NULL,
+                        payload      %s NOT NULL)" id ts payload)])
+  (db/create-index-if-not-exists! ctx "ix_job_store_filters" :job_store [:status :job_type :queue])
+  (db/create-index-if-not-exists! ctx "ix_job_store_dead_letter" :job_store [:dead_letter :updated_at]))
 
-(defn- column-types
-  "MySQL has no UUID type, and its VARCHAR stops at 65535 bytes (BOU-650)."
+(defn create-job-store-table!
+  "Create the `job_store` table + its indexes if absent, on H2, PostgreSQL or
+   MySQL. Call once at startup, or ship as a migration."
   [ds]
-  (if (mysql? ds)
-    {:id "CHAR(36)" :payload "LONGTEXT"}
-    {:id "UUID" :payload "VARCHAR(1000000)"}))
-
-(defn- create-index!
-  "`CREATE INDEX IF NOT EXISTS`, which MySQL does not have: there the index is
-   created and its duplicate-name error (1061) ignored."
-  [ds sql]
-  (if (mysql? ds)
-    (try (execute! ds [(str/replace sql "IF NOT EXISTS " "")])
-         (catch java.sql.SQLException e
-           (when-not (= 1061 (.getErrorCode e)) (throw e))))
-    (execute! ds [sql])))
+  (let [ctx (db/context-of ds)]
+    (create-job-store-table* ctx (ddl-types ctx))))
 
 (defn create-jobs-table!
   "Create the `job_queue` table + ready-scan index if absent, and `job_store`
-   with it. Portable DDL (H2, PostgreSQL, MySQL). Call once at startup, or ship
-   as a migration.
+   with it, on H2, PostgreSQL or MySQL. Call once at startup, or ship as a
+   migration.
 
    Both, because `enqueue-job!` writes a history row: a caller who created only
    the queue table would fail on the next insert (BOU-418 review)."
   [ds]
-  (create-job-store-table! ds)
-  (let [{:keys [id payload]} (column-types ds)]
-    (execute! ds [(str "CREATE TABLE IF NOT EXISTS job_queue (
-                               id            " id " PRIMARY KEY,
-                               queue         VARCHAR(255) NOT NULL,
-                               priority_rank INT NOT NULL DEFAULT 2,
-                               status        VARCHAR(20) NOT NULL DEFAULT 'ready',
-                               execute_at    TIMESTAMP NULL,
-                               locked_by     VARCHAR(255),
-                               locked_at     TIMESTAMP NULL,
-                               payload       " payload " NOT NULL,
-                               created_at    TIMESTAMP NOT NULL)")]))
-  (create-index! ds "CREATE INDEX IF NOT EXISTS ix_job_queue_ready
-                       ON job_queue (queue, status, priority_rank, created_at)"))
-
-(defn create-job-store-table!
-  "Create the `job_store` table + its indexes if absent. Portable DDL
-   (H2, PostgreSQL, MySQL). Call once at startup, or ship as a migration."
-  [ds]
-  (let [{:keys [id payload]} (column-types ds)]
-    (execute! ds [(str "CREATE TABLE IF NOT EXISTS job_store (
-                               id           " id " PRIMARY KEY,
-                               job_type     VARCHAR(255),
-                               queue        VARCHAR(255),
-                               status       VARCHAR(20) NOT NULL,
-                               dead_letter  BOOLEAN NOT NULL DEFAULT FALSE,
-                               updated_at   TIMESTAMP NOT NULL,
-                               payload      " payload " NOT NULL)")]))
-  (create-index! ds "CREATE INDEX IF NOT EXISTS ix_job_store_filters
-                       ON job_store (status, job_type, queue)")
-  (create-index! ds "CREATE INDEX IF NOT EXISTS ix_job_store_dead_letter
-                       ON job_store (dead_letter, updated_at)"))
+  (let [ctx                          (db/context-of ds)
+        {:keys [id payload ts] :as types} (ddl-types ctx)]
+    (create-job-store-table* ctx types)
+    (execute! ds [(format "CREATE TABLE IF NOT EXISTS job_queue (
+                             id            %s PRIMARY KEY,
+                             queue         VARCHAR(255) NOT NULL,
+                             priority_rank INT NOT NULL DEFAULT 2,
+                             status        VARCHAR(20) NOT NULL DEFAULT 'ready',
+                             execute_at    %s NULL,
+                             locked_by     VARCHAR(255),
+                             locked_at     %s NULL,
+                             payload       %s NOT NULL,
+                             created_at    %s NOT NULL)" id ts ts payload ts)])
+    (db/create-index-if-not-exists! ctx "ix_job_queue_ready" :job_queue
+                                    [:queue :status :priority_rank :created_at])))
 
 (defn- kw-name [x] (when x (name x)))
 

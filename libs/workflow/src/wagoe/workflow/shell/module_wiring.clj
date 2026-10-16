@@ -70,12 +70,6 @@
     :present? entity-uuid/present?
     :ensure!  entity-uuid/ensure-entity-uuid!}])
 
-(defn- index-exists?
-  "Whether `e` is MySQL refusing an index that is there: the rewrite drops
-   `IF NOT EXISTS` from CREATE INDEX, which MySQL lacks (BOU-650)."
-  [e]
-  (= 1061 (some-> ^java.sql.SQLException (ex-cause e) .getErrorCode)))
-
 (defn- initialize-workflow-schema!
   "Create workflow's tables at boot, for installations that never ran
    `migrate up`. Changing a table that exists is left to `migrate up` outside
@@ -84,12 +78,11 @@
   [ctx profile]
   (log/info "Initializing workflow schema")
   ;; The migration is PostgreSQL-shaped; `migrate up` rewrites it for MySQL,
-  ;; and the boot has to as well (BOU-650).
-  (doseq [statement (cond->> (migration-statements)
-                      (= :mysql (db-ports/engine (:adapter ctx))) (mapcat migration-sql/for-mysql))]
-    (try (db/execute-ddl! ctx statement)
-         (catch clojure.lang.ExceptionInfo e
-           (when-not (index-exists? e) (throw e)))))
+  ;; and so must the boot. The rewrite drops IF NOT EXISTS from CREATE INDEX,
+  ;; so an index left by the last boot counts as done (BOU-650).
+  (let [mysql? (= :mysql (db-ports/engine (:adapter ctx)))]
+    (doseq [statement (cond-> (migration-statements) mysql? migration-sql/for-mysql)]
+      (db/execute-ddl-if-absent! ctx statement)))
   (let [ds (:datasource ctx)]
     (doseq [{:keys [what present? ensure!]} boot-changes]
       (cond
