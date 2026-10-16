@@ -39,12 +39,11 @@
 ;; =============================================================================
 
 (defn- row->device
-  "MySQL and SQLite hand UUIDs back as text."
+  "MySQL and SQLite hand the id back as text."
   [row]
   (when row
     (-> row
         (update :id tc/string->uuid)
-        (update :user-id tc/string->uuid)
         (update :platform keyword)
         (assoc :active? (boolean (:active row)))
         (dissoc :active))))

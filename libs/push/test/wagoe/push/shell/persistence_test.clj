@@ -83,6 +83,20 @@
     (is (empty? (ports/get-user-devices store alice)))
     (is (= ["shared-token"] (map :token (ports/get-user-devices store bob))))))
 
+(deftest ^:contract get-devices-by-platform-pages-by-id
+  ;; The broadcast test deactivates every device it reads, so it passes with :after-id ignored.
+  (let [store (p/->DeviceTokenStore *db*)]
+    (doseq [i (range 5)]
+      (ports/register-device! store (random-uuid)
+                              {:token (str "fcm-" i) :platform :fcm :app-id "com.example"}))
+    (let [page1 (ports/get-devices-by-platform store :fcm {:limit 2})
+          page2 (ports/get-devices-by-platform store :fcm {:limit 2 :after-id (:id (peek page1))})
+          page3 (ports/get-devices-by-platform store :fcm {:limit 2 :after-id (:id (peek page2))})
+          ids   (map (comp str :id) (concat page1 page2 page3))]
+      (is (= [2 2 1] (map count [page1 page2 page3])))
+      (is (= (sort ids) ids) "ascending and without repeats across pages")
+      (is (= 5 (count (set ids)))))))
+
 (deftest ^:contract analytics-record-and-stats
   (let [store (p/->PushAnalyticsStore *db*)]
     (ports/record-send! store
