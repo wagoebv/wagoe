@@ -202,7 +202,7 @@ The `filters` column requires a migration on existing tables:
 ```sql
 ALTER TABLE search_documents ADD COLUMN filters TEXT;
 ```
-See `resources/migrations/20260312000000-search-filters.up.sql`.
+See `libs/search/resources/wagoe/search/migrations/20260312000000-search-filters.up.sql`.
 
 ---
 
