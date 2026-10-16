@@ -25,6 +25,7 @@
    :booleans           :native
    :string-match       :ilike
    :engine             :postgresql
+   :now-ms-sql         "CAST(EXTRACT(EPOCH FROM clock_timestamp()) * 1000 AS BIGINT)"
    :capabilities       #{:schemas :transactional-ddl :index-if-not-exists :column-if-not-exists
                          :full-text :on-conflict :row-locks :alter-foreign-key}
    :column-types       {:uuid "UUID" :instant "TIMESTAMP WITH TIME ZONE" :json "JSONB"

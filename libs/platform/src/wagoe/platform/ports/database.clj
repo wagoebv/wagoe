@@ -203,6 +203,10 @@
     "Which database this is: :postgresql, :mysql, :sqlite or :h2. Never nil.
      Ask this, not `dialect`, not the driver and not the product name (ADR-039).")
 
+  (now-ms-sql [this]
+    "A SQL expression for the database clock in epoch millis, for times every
+     replica must agree on, such as a lease expiry (BOU-679).")
+
   (capabilities [this]
     "The set of `capability-keywords` this database honours. The conformance
      suite checks each claim both ways (ADR-039).")

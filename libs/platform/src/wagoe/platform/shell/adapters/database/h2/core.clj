@@ -23,6 +23,7 @@
    :booleans           :native
    :string-match       :like
    :engine             :h2
+   :now-ms-sql         "DATEDIFF('MILLISECOND', TIMESTAMP WITH TIME ZONE '1970-01-01 00:00:00+00', CURRENT_TIMESTAMP)"
    :capabilities       #{:index-if-not-exists :column-if-not-exists :row-locks :alter-foreign-key}
    ;; VARCHAR, not CLOB or TEXT: those read back as a JdbcClob, not a String.
    :column-types       {:uuid "UUID" :instant "TIMESTAMP WITH TIME ZONE" :json "VARCHAR"

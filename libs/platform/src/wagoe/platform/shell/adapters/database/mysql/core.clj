@@ -27,6 +27,7 @@
    :booleans           :int
    :string-match       :like
    :engine             :mysql
+   :now-ms-sql         "CAST(UNIX_TIMESTAMP(NOW(3)) * 1000 AS SIGNED)"
    :capabilities       #{:row-locks :alter-foreign-key}
    ;; DATETIME(6): plain DATETIME drops fractional seconds (BOU-574).
    :column-types       {:uuid "CHAR(36)" :instant "DATETIME(6)" :json "JSON"

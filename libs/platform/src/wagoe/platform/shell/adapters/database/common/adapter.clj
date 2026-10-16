@@ -22,6 +22,7 @@
      :engine             :postgresql, :mysql, :sqlite or :h2
      :capabilities       a subset of protocols/capability-keywords
      :column-types       {logical-type DDL-type} for protocols/logical-column-types
+     :now-ms-sql         SQL for the database clock in epoch millis
      :on-connect         optional (fn [java.sql.Connection]), run on each new
                          connection after the session statements
      :param->db          optional (fn [value] -> value) for each query parameter
@@ -158,6 +159,8 @@
     ((:table-info spec) datasource table-name))
 
   (engine [_] (:engine spec))
+
+  (now-ms-sql [_] (:now-ms-sql spec))
 
   (capabilities [_] (:capabilities spec))
 
