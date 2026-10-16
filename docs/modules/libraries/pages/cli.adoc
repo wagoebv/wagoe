@@ -67,11 +67,8 @@ Measured on two projects generated side by side:
 | no
 |===
 
-The choice is the `:extra-modules` set in the generated
-`src/<your-project>/system_config.clj`: `#{:wagoe/user}` with the module, `#{}` without.
-Turning it back on later is editing one word, not regenerating the project. It
-is a set in code rather than a key in `config.edn` because the user module is
-not something an application switches per environment.
+The choice is the `:wagoe/user` key in each profile's `:active` map, where
+`migrate up` and the boot migration look for it. `wagoe add user` writes it back.
 A database is still configured either way; if the
 application needs no persistence at all, remove `:wagoe/sqlite` from
 `resources/conf/dev/config.edn` as well.
