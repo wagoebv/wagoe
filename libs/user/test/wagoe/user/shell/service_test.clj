@@ -421,6 +421,24 @@
       (is (= true (ports/deactivate-user service user-id)))
       (is (= 1 (count @audit-entries))))))
 
+(deftest ^:unit soft-and-permanent-deletes-audit-differently
+  ;; Both wrote :delete, so the log could not say whether a user was gone for
+  ;; good (BOU-682).
+  (let [actions (fn [delete!]
+                  (let [user-id (UUID/randomUUID)
+                        entries (atom [])
+                        service (sut/->UserService
+                                 (->UserRepoStub (atom {user-id {:id user-id :email "gone@example.nl"
+                                                                 :role :user :active true}}))
+                                 (->SessionRepoStub nil)
+                                 (->AuditRepoCapture entries)
+                                 {}
+                                 nil)]
+                    (is (true? (delete! service user-id)))
+                    (mapv :action @entries)))]
+    (is (= [:delete] (actions ports/delete-user)))
+    (is (= [:permanent-delete] (actions ports/permanently-delete-user)))))
+
 (deftest ^:unit change-password-test
   (testing "change-password updates the stored hash and records an audit entry"
     (let [user-id (UUID/randomUUID)

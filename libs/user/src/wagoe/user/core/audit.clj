@@ -136,8 +136,9 @@
    :result :success})
 
 (defn delete-user-audit-entry
-  "Create audit log entry for permanent user deletion.
-   
+  "Create audit log entry for a soft delete: the user is marked deleted and
+   can no longer sign in, the row stays.
+
    Args:
      actor-id: UUID of user who performed the action
      actor-email: Email of actor
@@ -145,7 +146,7 @@
      target-user-email: Email of user being deleted
      ip-address: Optional IP address
      user-agent: Optional user agent string
-     
+
    Returns:
      Audit log entity map"
   [actor-id actor-email target-user-id target-user-email ip-address user-agent]
@@ -155,10 +156,17 @@
    :target-user-id target-user-id
    :target-user-email target-user-email
    :changes {:deleted true}
-   :metadata {:permanent true}
    :ip-address ip-address
    :user-agent user-agent
    :result :success})
+
+(defn permanently-delete-user-audit-entry
+  "Audit log entry for a permanent delete: the user's rows are gone (BOU-682).
+   Same arguments as `delete-user-audit-entry`."
+  [actor-id actor-email target-user-id target-user-email ip-address user-agent]
+  (assoc (delete-user-audit-entry actor-id actor-email target-user-id target-user-email
+                                  ip-address user-agent)
+         :action :permanent-delete))
 
 (defn role-change-audit-entry
   "Create audit log entry for user role change.
