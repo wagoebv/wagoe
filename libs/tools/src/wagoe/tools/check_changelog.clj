@@ -302,12 +302,12 @@
 (defn deprecations-without-upgrade
   "Tickets of `### Deprecated` entries that no `upgrades` entry names, so
    `wagoe upgrade` neither rewrites them nor says why it cannot. An entry is
-   matched on the first ticket it cites."
+   matched on the first ticket it cites; one citing none is named by its first line."
   [changelog upgrades]
   (let [known (set (map :ticket upgrades))]
     (->> (re-seq deprecated-section-re changelog)
          (mapcat (fn [[_ section]] (rest (str/split section #"(?m)^- "))))
-         (keep #(re-find #"BOU-\d+" %))
+         (map #(or (re-find #"BOU-\d+" %) (first (str/split-lines %))))
          (remove known)
          distinct)))
 

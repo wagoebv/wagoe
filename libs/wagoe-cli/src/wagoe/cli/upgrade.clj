@@ -96,22 +96,27 @@
   (for [spec (some-> (require-loc (ns-form-loc loc)) sexpr rest)
         :when (and (vector? spec) (symbol? (first spec)) (even? (count (rest spec))))
         :let [opts (apply hash-map (rest spec))]]
-    {:lib (first spec) :as (or (:as opts) (:as-alias opts)) :refer (:refer opts)}))
+    {:lib (first spec) :as (:as opts) :as-alias (:as-alias opts) :refer (:refer opts)}))
 
 (defn- target
-  "How the file will spell `new-fn`: [symbol require-to-add-or-nil].
+  "How the file will spell `new-fn`: [symbol require-to-add-or-nil], given the
+   requires it has so far as {:lib :as :as-alias}. `qualified?` keeps the fully
+   qualified name.
 
    An alias it already has for the namespace, else the namespace's last segment
    when that alias is free, else the fully qualified name."
-  [specs new-fn]
-  (let [new-ns  (symbol (namespace new-fn))
-        aliases (set (keep :as specs))
-        short   (symbol (last (str/split (str new-ns) #"\.")))]
-    (if-let [existing (some #(when (= new-ns (:lib %)) (:as %)) specs)]
-      [(symbol (str existing) (name new-fn)) nil]
-      (if (aliases short)
-        [new-fn [new-ns]]
-        [(symbol (str short) (name new-fn)) [new-ns :as short]]))))
+  [specs new-fn qualified?]
+  (let [new-ns   (symbol (namespace new-fn))
+        mine     (filter #(= new-ns (:lib %)) specs)
+        existing (some :as mine)
+        taken    (set (mapcat (juxt :as :as-alias) specs))
+        short    (symbol (last (str/split (str new-ns) #"\.")))
+        full     [new-fn (when-not (some #(not (:as-alias %)) mine) {:lib new-ns})]]
+    (cond
+      qualified?    full
+      existing      [(symbol (str existing) (name new-fn)) nil]
+      (taken short) full
+      :else         [(symbol (str short) (name new-fn)) {:lib new-ns :as short}])))
 
 (defn- source-renames
   "The table's ns and fn renames, each merged into one map."
@@ -120,26 +125,34 @@
    :fn-renames (apply merge (keep :fn-rename table))})
 
 (defn- fn-renames-in
-  "{old-symbol [new-symbol require-to-add-or-nil]} for one file, given its requires."
+  "{old-symbol [new-symbol qualified?]} for one file, given its requires."
   [fn-renames specs]
   (into {}
         (for [[old-fn new-fn] fn-renames
               :let [old-ns (symbol (namespace old-fn))]
-              old (cons old-fn
-                        (for [{:keys [lib as]} specs
-                              :when (and as (= lib old-ns))]
-                          (symbol (str as) (name old-fn))))]
-          [old (if (= old old-fn)
-                 [new-fn nil]
-                 (target specs new-fn))])))
+              [old qualified?] (cons [old-fn true]
+                                     (for [{:keys [lib as]} specs
+                                           :when (and as (= lib old-ns))]
+                                       [(symbol (str as) (name old-fn)) false]))]
+          [old [new-fn qualified?]])))
 
-(defn- rename-symbol
-  "[new-symbol require-or-nil] for `sym`, or nil when nothing renames it."
-  [ns-renames fns sym]
-  (or (get fns sym)
-      (when-let [new (get ns-renames sym)] [new nil])
-      (when-let [new (some->> (namespace sym) symbol (get ns-renames))]
-        [(symbol (str new) (name sym)) nil])))
+(defn- rename-ns
+  "`sym` with its namespace, or itself, renamed; nil when nothing renames it."
+  [ns-renames sym]
+  (or (get ns-renames sym)
+      (some->> (namespace sym) symbol (get ns-renames) str (#(symbol % (name sym))))))
+
+(defn- needed-requires
+  "`adds` minus what `specs`, the requires after renaming, or an aliased add
+   already loads."
+  [specs adds]
+  (let [adds    (distinct adds)
+        aliased (set (keep #(when (:as %) (:lib %)) adds))]
+    (remove (fn [{:keys [lib as]}]
+              (if as
+                (some #(and (= lib (:lib %)) (= as (:as %))) specs)
+                (or (aliased lib) (some #(and (= lib (:lib %)) (not (:as-alias %))) specs))))
+            adds)))
 
 (defn- add-requires
   "`text` with each libspec in `specs` appended to its ns form's :require."
@@ -171,15 +184,16 @@
           fns   (fn-renames-in fn-renames specs)]
       (loop [loc root, adds []]
         (if (z/end? loc)
-          (let [out  (z/root-string loc)
-                have (when (seq adds) (set (map :lib (libspecs (z/of-node (z/root loc))))))
-                adds (->> adds distinct (remove #(have (first %))))]
-            {:text    (cond-> out
+          (let [adds (when (seq adds) (needed-requires (libspecs (z/of-node (z/root loc))) adds))]
+            {:text    (cond-> (z/root-string loc)
                         (and (seq adds) (require-loc (ns-form-loc root)))
-                        (add-requires adds))
+                        (add-requires (map (fn [{:keys [lib as]}] (cond-> [lib] as (conj :as as))) adds)))
              :notices (vec (referred-notices fn-renames specs path))})
           (let [sym (when (= :token (z/tag loc)) (sexpr loc))
-                [new add] (when (symbol? sym) (rename-symbol ns-renames fns sym))]
+                [new add] (when (symbol? sym)
+                            (if-let [[new-fn qualified?] (get fns sym)]
+                              (target (concat specs adds) new-fn qualified?)
+                              [(rename-ns ns-renames sym)]))]
             (if new
               (recur (z/next (z/replace loc new)) (cond-> adds add (conj add)))
               (recur (z/next loc) adds))))))
@@ -188,31 +202,41 @@
 ;; ─── Unified diff ────────────────────────────────────────────────────────────
 
 (defn- diff-ops
-  "Edit script from `a` to `b` as [[:= line] [:- line] [:+ line] ...]."
+  "Edit script from `a` to `b` as [[:= line] [:- line] [:+ line] ...].
+
+   Myers' O(ND) diff: an upgrade changes few lines, and a full LCS table took
+   minutes on a 3000-line file under Babashka."
   [a b]
-  (let [a (vec a), b (vec b)
-        pre  (count (take-while true? (map = a b)))
-        suf  (count (take-while true? (map = (rseq (subvec a pre)) (rseq (subvec b pre)))))
-        ma   (subvec a pre (- (count a) suf))
-        mb   (subvec b pre (- (count b) suf))
-        n    (count ma), m (count mb)
-        ;; lcs[i][j]: longest common subsequence of ma[i..] and mb[j..]
-        lcs  (let [t (make-array Long/TYPE (inc n) (inc m))]
-               (doseq [i (range (dec n) -1 -1), j (range (dec m) -1 -1)]
-                 (aset t i j (long (if (= (ma i) (mb j))
-                                     (inc (aget t (inc i) (inc j)))
-                                     (max (aget t (inc i) j) (aget t i (inc j)))))))
-               t)
-        mid  (loop [i 0, j 0, out []]
-               (cond
-                 (and (< i n) (< j m) (= (ma i) (mb j))) (recur (inc i) (inc j) (conj out [:= (ma i)]))
-                 (and (< i n) (or (= j m) (>= (aget lcs (inc i) j) (aget lcs i (inc j)))))
-                 (recur (inc i) j (conj out [:- (ma i)]))
-                 (< j m) (recur i (inc j) (conj out [:+ (mb j)]))
-                 :else out))]
-    (concat (map #(vector := %) (subvec a 0 pre))
-            mid
-            (map #(vector := %) (subvec a (- (count a) suf))))))
+  (let [a (vec a), b (vec b), n (count a), m (count b)
+        ;; furthest x on diagonal k = x - y, reached from k+1 (insert) or k-1 (delete)
+        from  (fn [v d k] (if (or (= k (- d)) (and (not= k d) (< (v (dec k)) (v (inc k)))))
+                            (inc k)
+                            (dec k)))
+        round (fn [v d]
+                (loop [k (- d), v v]
+                  (if (> k d)
+                    [v false]
+                    (let [x (loop [x (if (= (from v d k) (inc k)) (v (inc k)) (inc (v (dec k))))]
+                              (if (and (< x n) (< (- x k) m) (= (a x) (b (- x k)))) (recur (inc x)) x))
+                          v (assoc v k x)]
+                      (if (and (>= x n) (>= (- x k) m)) [v true] (recur (+ k 2) v))))))
+        ;; trace[d]: the frontier before round d
+        trace (loop [d 0, v {1 0}, trace []]
+                (let [[v' done?] (round v d)]
+                  (if done? (conj trace v) (recur (inc d) v' (conj trace v)))))]
+    (loop [d (dec (count trace)), x n, y m, out ()]
+      (if (neg? d)
+        out
+        (let [v  (trace d)
+              k  (- x y)
+              pk (from v d k)
+              px (v pk), py (- px pk)
+              snake (min (- x (max px 0)) (- y (max py 0)))
+              out (into out (map #(vector := (a %))) (range (dec x) (- x snake 1) -1))]
+          (recur (dec d) px py
+                 (cond (zero? d)         out
+                       (= (- x snake) px) (conj out [:+ (b py)])
+                       :else              (conj out [:- (a px)]))))))))
 
 (defn unified-diff
   "`old` → `new` as a unified diff with three lines of context."
@@ -252,6 +276,16 @@
   (str (.relativize (.toPath (.getCanonicalFile (io/file dir)))
                     (.toPath (.getCanonicalFile (io/file f))))))
 
+(defn- rewrite-file
+  "{:path :file :old :new :notices} for `f`, `rewrite` returning {:new :notices}.
+   A file that does not parse is left alone, with a notice."
+  [dir f rewrite]
+  (let [old (slurp f), path (relative dir f)]
+    (merge {:path path :file f :old old :new old :notices []}
+           (try (rewrite old path)
+                (catch Exception e
+                  {:notices [(str path ": not rewritten, it does not parse: " (ex-message e))]})))))
+
 (defn plan
   "What `table` would change under project `dir`:
    {:changes [{:path :file :old :new}] :notices [...]}."
@@ -262,12 +296,11 @@
                           ["src" "test" "dev"]))
         results (concat
                  (for [f configs]
-                   (let [old (slurp f)]
-                     {:path (relative dir f) :file f :old old :new (rewrite-config table old)}))
+                   (rewrite-file dir f (fn [old _] {:new (rewrite-config table old)})))
                  (for [f sources]
-                   (let [old (slurp f), path (relative dir f)
-                         {:keys [text notices]} (rewrite-source table old path)]
-                     {:path path :file f :old old :new text :notices notices})))]
+                   (rewrite-file dir f (fn [old path]
+                                         (let [{:keys [text notices]} (rewrite-source table old path)]
+                                           {:new text :notices notices})))))]
     {:changes (into [] (comp (remove #(= (:old %) (:new %))) (map #(dissoc % :notices))) results)
      :notices (into [] (mapcat :notices) results)}))
 

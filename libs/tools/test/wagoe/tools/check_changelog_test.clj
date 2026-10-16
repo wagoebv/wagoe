@@ -165,4 +165,7 @@
                        "- **An old function** (BOU-2).\n\n"
                        "### Fixed\n\n- **Unrelated** (BOU-3).\n")]
     (is (= ["BOU-2"] (sut/deprecations-without-upgrade changelog [{:ticket "BOU-1"}])))
-    (is (empty? (sut/deprecations-without-upgrade changelog [{:ticket "BOU-1"} {:ticket "BOU-2"}])))))
+    (is (empty? (sut/deprecations-without-upgrade changelog [{:ticket "BOU-1"} {:ticket "BOU-2"}])))
+    (is (= ["**No ticket**."]
+           (sut/deprecations-without-upgrade "### Deprecated\n\n- **No ticket**.\n" []))
+        "an entry citing no ticket cannot be matched, so it is reported")))

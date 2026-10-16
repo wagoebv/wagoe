@@ -94,6 +94,20 @@
       (is (= "(ns a\n  (:require [acme.adapters.db :as db]\n            [other.ports :as ports]\n            [acme.ports]))\n(acme.ports/enqueue! 1)\n"
              (:text (upgrade/rewrite-source table src "a.clj")))))))
 
+(deftest ^:unit fn-renames-never-leave-an-unresolved-or-doubled-alias
+  (let [table '[{:ticket "T" :since "1" :note "n"
+                 :fn-rename {acme.db/enqueue! acme.jobs.ports/enqueue!
+                             acme.old/put!    acme.cache.ports/put!}}]]
+    (testing "two new namespaces ending in the same segment"
+      (is (= "(ns a (:require [acme.db :as db] [acme.old :as c]\n                [acme.jobs.ports :as ports]\n                [acme.cache.ports]))\n(ports/enqueue! 1)\n(acme.cache.ports/put! 2)\n"
+             (:text (upgrade/rewrite-source table "(ns a (:require [acme.db :as db] [acme.old :as c]))\n(db/enqueue! 1)\n(c/put! 2)\n" "a.clj")))))
+    (testing "the new namespace is required, but under no alias"
+      (is (= "(ns a (:require [acme.db :as db] [acme.jobs.ports :refer [x]]\n                [acme.jobs.ports :as ports]))\n(ports/enqueue! 1)\n"
+             (:text (upgrade/rewrite-source table "(ns a (:require [acme.db :as db] [acme.jobs.ports :refer [x]]))\n(db/enqueue! 1)\n" "a.clj")))))
+    (testing "a fully qualified call requires the new namespace"
+      (is (= "(ns a (:require [acme.db]\n                [acme.jobs.ports]))\n(acme.jobs.ports/enqueue! 1)\n"
+             (:text (upgrade/rewrite-source table "(ns a (:require [acme.db]))\n(acme.db/enqueue! 1)\n" "a.clj")))))))
+
 (deftest ^:unit a-referred-fn-is-reported-not-rewritten
   (let [src "(ns a (:require [acme.adapters.db :refer [enqueue!]]))\n(enqueue! 1)\n"
         {:keys [text notices]} (upgrade/rewrite-source table src "src/a.clj")]
@@ -142,4 +156,8 @@
       (is (= (upgrade/rewrite-config table config) (slurp cfg)))
       (is (str/includes? (slurp src) "(ports/enqueue!   tx job)"))
       (is (empty? (:changes (upgrade/plan dir table))) "nothing left after --apply")
+      (spit (io/file dir "src/my/app/broken.clj") "(ns my.app.broken)\n(foo]\n")
+      (is (= ["src/my/app/broken.clj"]
+             (map #(first (str/split % #":")) (:notices (upgrade/plan dir table))))
+          "a file that does not parse is named, and the rest still planned")
       (finally (doseq [f (reverse (file-seq dir))] (.delete ^java.io.File f))))))
