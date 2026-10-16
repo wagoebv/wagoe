@@ -281,6 +281,9 @@
    [:username {:optional true} string?]
    [:password {:optional true} string?]
    [:connection-params {:optional true} map?]  ; For database-specific connection parameters
+   ;; PostgreSQL session settings; an #env string here would fail in the URL builder.
+   [:application-name {:optional true} string?]
+   [:statement-timeout-ms {:optional true} nat-int?]
    [:pool {:optional true} PoolConfig]])
 
 (def DBConfig

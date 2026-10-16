@@ -10,8 +10,9 @@
 
 (deftest ^:unit the-active-adapter-decides-the-db-spec
   (testing "sqlite"
-    (is (= {:adapter :sqlite :database-path "app.db" :pool nil}
-           (sut/db-spec {:active {:wagoe/sqlite {:db "app.db"}}}))))
+    (is (= {:adapter :sqlite :database-path "app.db"}
+           (sut/db-spec {:active {:wagoe/sqlite {:db "app.db"}}}))
+        "no :pool when none is set: `:pool nil` fails the db-config schema"))
 
   (testing "postgresql maps its own keys"
     (let [spec (sut/db-spec {:active {:wagoe/postgresql {:host "db" :port 5432
@@ -20,6 +21,13 @@
       (is (= :postgresql (:adapter spec)))
       (is (= "db" (:host spec)))
       (is (= "app" (:name spec)) "dbname is exposed as :name")))
+
+  (testing "postgresql session settings pass through (BOU-658)"
+    (let [spec (sut/db-spec {:active {:wagoe/postgresql {:host "db" :port 5432 :dbname "app"
+                                                         :application-name "billing"
+                                                         :statement-timeout-ms 0}}})]
+      (is (= "billing" (:application-name spec)))
+      (is (= 0 (:statement-timeout-ms spec)) "0 disables the timeout, so it must survive")))
 
   (testing "no adapter at all is an error, not a default"
     ;; Falling back to something would boot an application against a database
