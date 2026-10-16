@@ -83,6 +83,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **On H2, `SET REFERENTIAL_INTEGRITY FALSE` was undone by the next pooled connection** (BOU-654), so scaffolded
   tests failed at random on foreign keys. Upgrade; nothing to change.
+- **`bb scaffold field` enums read back as strings** (BOU-656): the field now joins the repository's `enum-fields`.
+  For an enum added before, add it to `enum-fields` in the entity's persistence namespace.
 - **A typed `ex-info` thrown from route `:middleware` answered 500** (BOU-659); it now answers its `:type`'s status.
   Upgrade if your route middleware throws typed errors.
 - **MySQL timestamps read back without a zone, so APIs sent UTC as local time** (BOU-653).

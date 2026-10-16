@@ -17,6 +17,7 @@
             [wagoe.platform.shell.database.migrations :as migrations]
             [wagoe.platform.shell.http.reitit-router :as reitit-router]
             [wagoe.scaffolder.cli :as cli]
+            [wagoe.scaffolder.core.generators :as generators]
             [wagoe.scaffolder.ports :as ports]
             [wagoe.scaffolder.shell.service :as service]))
 
@@ -944,23 +945,55 @@
     (testing "a field that is not a date: no warning"
       (is (not (warned? (add "Invoice" {:name :sku :type :string}) first-p))))))
 
-(deftest ^:unit an-enum-field-added-later-names-the-set-to-extend
-  ;; generate writes enum-fields from the fields it knows; one added later is
-  ;; not in it, and would be stored as a keyword (BOU-562).
-  (let [dir  (invoice-module! (temp-dir) "bou562add")
-        p    (io/file dir "src/bou562add/billing/shell/persistence.clj")
-        r    (ports/add-field svc {:module-name "billing" :base-ns "bou562add" :entity "Invoice"
-                                   :field {:name :status :type :enum :enum-values [:a :b]}
-                                   :output-dir (.getPath dir) :dry-run true})]
-    (is (some #(and (str/includes? % ":status") (str/includes? % "enum-fields")
-                    (str/includes? % (.getPath p)))
-              (:next-steps r))
-        (pr-str (:next-steps r)))
-    (testing "a field that is not an enum needs nothing in persistence"
-      (is (not-any? #(str/includes? % "persistence")
-                    (:next-steps (ports/add-field svc {:module-name "billing" :base-ns "bou562add"
-                                                       :entity "Invoice" :field {:name :sku :type :string}
-                                                       :output-dir (.getPath dir) :dry-run true})))))))
+(deftest ^:integration an-enum-field-added-later-reads-back-as-a-keyword
+  ;; generate writes enum-fields from the fields it knows; `field` has to add
+  ;; one it adds later, or the repository returns the stored string (BOU-656).
+  (let [dir (invoice-module! (temp-dir) "bou656")
+        add (fn [entity field]
+              (ports/add-field svc {:module-name "billing" :base-ns "bou656" :entity entity
+                                    :field field :output-dir (.getPath dir)}))]
+    (add-line-item! dir "bou656")
+    (doseq [entity ["Invoice" "InvoiceLineItem"]]
+      (let [r (add entity {:name :kind :type :enum :enum-values [:normal :credit]})]
+        (is (:success r) (pr-str r))
+        (is (not-any? #(str/includes? % "enum-fields") (:next-steps r)) (pr-str (:next-steps r)))))
+    (let [{:keys [fail error]} (load-and-test! dir)]
+      (is (= 0 fail error)))
+    (let [ctx  (h2-migrated dir "bou656")
+          at   (fn [n s] @(ns-resolve (symbol (str "bou656.billing." n)) s))
+          invs ((at "shell.persistence" 'create-repository) ctx)
+          line ((at "shell.invoice-line-item-persistence" 'create-repository) ctx)
+          inv  ((at "ports" 'create) invs {:id (random-uuid) :number "A-1" :kind :credit
+                                           :created-at (java.time.Instant/now)})
+          item ((at "ports" 'create-invoice-line-item-entity)
+                line {:id (random-uuid) :invoice-id (:id inv) :description "x" :quantity 1
+                      :kind :normal :created-at (java.time.Instant/now)})]
+      (try
+        (is (= :credit (:kind ((at "ports" 'find-by-id) invs (:id inv)))))
+        (is (= :normal (:kind ((at "ports" 'find-invoice-line-item-by-id) line (:id item)))))
+        (finally (db-factory/close-db-context! ctx))))
+    (testing "a persistence without enum-fields: the step names the file"
+      (let [dir (invoice-module! (temp-dir) "bou656old")
+            p   (io/file dir "src/bou656old/billing/shell/persistence.clj")]
+        (spit p (str/replace (slurp p) "enum-fields" "old-fields"))
+        (is (some #(and (str/includes? % ":status") (str/includes? % (.getPath p)))
+                  (:next-steps (ports/add-field svc {:module-name "billing" :base-ns "bou656old" :entity "Invoice"
+                                                     :field {:name :status :type :enum :enum-values [:a :b]}
+                                                     :output-dir (.getPath dir) :dry-run true}))))))
+    (testing "a field that is not an enum leaves persistence alone"
+      (let [r (ports/add-field svc {:module-name "billing" :base-ns "bou656" :entity "Invoice"
+                                    :field {:name :sku :type :string} :output-dir (.getPath dir) :dry-run true})]
+        (is (not-any? #(str/includes? % "persistence") (:next-steps r)))
+        (is (not-any? #(str/includes? (:path %) "persistence") (:files r)))))))
+
+(deftest ^:unit an-enum-field-joins-the-set-once
+  (let [kind {:name :kind :type :enum :enum-values [:a :b]}
+        add  #(generators/add-enum-field-to-persistence % kind)]
+    (is (= "(def ^:private enum-fields\n  \"Doc.\"\n  #{:kind})"
+           (add "(def ^:private enum-fields\n  \"Doc.\"\n  #{})")))
+    (is (= "(def ^:private enum-fields #{:status :kind})" (add "(def ^:private enum-fields #{:status})")))
+    (is (= "(def ^:private enum-fields #{:kind})" (add "(def ^:private enum-fields #{:kind})")))
+    (is (nil? (add "(def ^:private other #{})")))))
 
 ;; =============================================================================
 ;; The generated web page requires a signed-in user too (BOU-539 review)
