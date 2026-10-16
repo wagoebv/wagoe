@@ -710,9 +710,8 @@
 
 (defn wrap-client-ip
   "Sets `:client-ip` on the request: the peer, or the client behind it when the
-   peer is in `trusted-cidrs` (from `client-ip/parse-trusted-proxies`). The
-   platform installs it outermost; wrap a handler mounted in front of the
-   platform's with it too. Keeps the handler's metadata (`:reitit/router`)."
+   peer is in `trusted-cidrs` (from `client-ip/parse-trusted-proxies`). Keeps
+   the handler's metadata (`:reitit/router`)."
   [handler trusted-cidrs]
   (with-meta
     (fn [request]

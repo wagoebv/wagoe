@@ -34,17 +34,16 @@
 
 (defn- parse-ipv6 [s]
   (when-let [s (embedded-ipv4->hex (first (str/split s #"%" 2)))]
-    (let [halves (str/split s #"::" -1)
-          groups (case (count halves)
-                   1 (let [hs (hextets s)]
-                       (when (= 8 (count hs)) hs))
-                   2 (let [l (hextets (first halves))
-                           r (hextets (second halves))]
-                       (when (and l r (< (+ (count l) (count r)) 8))
-                         (concat l (repeat (- 8 (count l) (count r)) 0) r)))
-                   nil)]
-      (when groups
-        (vec (mapcat (fn [h] [(quot h 256) (mod h 256)]) groups))))))
+    (when-let [groups (let [halves (str/split s #"::" -1)]
+                        (case (count halves)
+                          1 (let [hs (hextets s)]
+                              (when (= 8 (count hs)) hs))
+                          2 (let [l (hextets (first halves))
+                                  r (hextets (second halves))]
+                              (when (and l r (< (+ (count l) (count r)) 8))
+                                (concat l (repeat (- 8 (count l) (count r)) 0) r)))
+                          nil))]
+      (vec (mapcat (fn [h] [(quot h 256) (mod h 256)]) groups)))))
 
 (defn- unwrap-ipv4-mapped [bs]
   (if (= [0 0 0 0 0 0 0 0 0 0 255 255] (subvec bs 0 12))
@@ -88,15 +87,17 @@
   "`{:cidrs [..]}` for the `:trusted-proxies` setting, or a configuration error
    naming the entries that are not CIDRs. Absent means trust nothing."
   [entries]
-  (let [bad (if (sequential? entries)
-              (vec (remove parse-cidr entries))
-              [entries])]
-    (if (and (some? entries) (seq bad))
+  (let [parsed (when (sequential? entries) (mapv parse-cidr entries))
+        bad    (cond
+                 (nil? entries)              []
+                 (not (sequential? entries)) [entries]
+                 :else                       (vec (keep-indexed #(when-not (parsed %1) %2) entries)))]
+    (if (seq bad)
       {:error {:type    :configuration-error
                :message (str ":wagoe/http :trusted-proxies must be a vector of IPv4/IPv6 "
                              "CIDRs such as \"10.0.0.0/8\"; not a CIDR: " (pr-str bad))
                :invalid bad}}
-      {:cidrs (mapv parse-cidr entries)})))
+      {:cidrs (or parsed [])})))
 
 (defn- in-cidr? [bs {cidr :bytes prefix :prefix}]
   (and (= (count bs) (count cidr))
@@ -109,7 +110,7 @@
                      (bit-and mask (nth cidr whole))))))))
 
 (defn- trusted? [cidrs bs]
-  (boolean (and bs (some #(in-cidr? bs %) cidrs))))
+  (boolean (some #(in-cidr? bs %) cidrs)))
 
 (defn client-ip
   "The client's address: `:remote-addr`, unless that is a trusted proxy, in
@@ -118,7 +119,7 @@
    was written by a proxy we trust. `cidrs` comes from `parse-trusted-proxies`."
   [request cidrs]
   (let [peer (:remote-addr request)]
-    (if-not (trusted? cidrs (parse-ip (host-part peer)))
+    (if-not (and (seq cidrs) (trusted? cidrs (parse-ip (host-part peer))))
       peer
       ;; Ring joins repeated headers with ",", so this reads all of them.
       (loop [hops    (some-> (get-in request [:headers "x-forwarded-for"])
