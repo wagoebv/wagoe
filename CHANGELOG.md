@@ -83,6 +83,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **On H2, `SET REFERENTIAL_INTEGRITY FALSE` was undone by the next pooled connection** (BOU-654), so scaffolded
   tests failed at random on foreign keys. Upgrade; nothing to change.
+- **`wagoe add` and `wagoe doctor` did not recognise a project on a local Wagoe checkout** (BOU-662, BOU-664).
+  `wagoe add` now writes the module from that checkout; upgrade wagoe-cli if you use `:local/root`.
 - **Search suggestions failed on PostgreSQL without `pg_trgm`** (BOU-661): a migration now creates it, and suggestions use LIKE where it may not.
   Run migrations if you use search on PostgreSQL; the default suggest `:threshold` is now 0.3 (word similarity).
 - **`:interceptors` and `:skip-interceptors?` on a path or parent route were ignored** (BOU-642); they now apply to its

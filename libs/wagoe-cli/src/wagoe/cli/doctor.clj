@@ -20,7 +20,8 @@
   (:require [clojure.edn :as edn]
             [clojure.java.io :as io]
             [clojure.string :as str]
-            [clojure.java.shell :as shell]))
+            [clojure.java.shell :as shell]
+            [wagoe.cli.catalogue :as cat]))
 
 ;; ─── Terminal ────────────────────────────────────────────────────────────────
 
@@ -217,9 +218,7 @@
 (defn wagoe-project?
   "True when `dir` is a project whose bb.edn pulls in wagoe-tools."
   [dir]
-  (let [f (io/file dir "bb.edn")]
-    (and (.exists f)
-         (str/includes? (slurp f) "wagoe-tools"))))
+  (contains? (cat/wagoe-deps (io/file dir "bb.edn")) "tools"))
 
 (defn print-help []
   (println (bold "wagoe doctor") " — check a project and say what to do next")
