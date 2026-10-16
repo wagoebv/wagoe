@@ -137,16 +137,17 @@
     (boolean (when (get @state [issuer subject]) (swap! state dissoc [issuer subject])))))
 
 (defn- app
-  [& {:as provider-opts}]
+  [& {:keys [auth-config] :as provider-opts}]
   (reset! idp {})
   (let [users      (mem/->MemoryUserRepository (atom {}))
         sessions   (mem/->MemorySessionRepository (atom {}))
         audit      (mem/->MemoryAuditRepository (atom []))
         identities (->MemoryIdentityRepository (atom {}))
-        auth-svc   (auth/create-authentication-service users sessions (mfa/create-mfa-service users {}) {})
+        auth-svc   (auth/create-authentication-service users sessions (mfa/create-mfa-service users {})
+                                                       (or auth-config {}))
         provider   (merge {:issuer *issuer* :client-id "app" :client-secret "app-secret"
                            :link-by-email? true}
-                          provider-opts)
+                          (dissoc provider-opts :auth-config))
         _          (swap! idp assoc :client-secret (:client-secret provider))
         settings   {:base-url  "http://localhost:3000"
                     :providers {:fake provider}}
@@ -387,3 +388,21 @@
     (let [ok (submit (str (otp/get-totp-token secret)))]
       (is (= "ada@example.com" (authenticated-as a (session-token ok))))
       (is (= 1 (count (ports/find-identities-by-user (:identities a) (:id ada))))))))
+
+(deftest ^:integration ^:security the-mfa-hook-decides-for-oidc-too
+  (testing "waived: an MFA user signs straight in, and keeps MFA on"
+    (let [seen (atom nil)
+          a    (app :auth-config {:mfa-required? (fn [_ ctx] (reset! seen ctx) false)})
+          ada  (add-user! a :mfa-enabled true :mfa-secret (mfa/generate-totp-secret))
+          resp (sign-in! a)]
+      (is (= "ada@example.com" (authenticated-as a (session-token resp))))
+      (is (str/blank? (get-in resp [:cookies "oidc-mfa" :value])) "no MFA step")
+      (is (true? (:mfa-enabled (ports/find-user-by-id (:users a) (:id ada)))))
+      (is (= "fake" (:provider @seen)) "the hook is told which provider")))
+  (testing "required: a user without MFA is refused, with no session"
+    (let [a    (app :auth-config {:mfa-required? (constantly true)})
+          ada  (add-user! a)
+          resp (sign-in! a)]
+      (is (= 403 (:status resp)))
+      (is (nil? (session-token resp)))
+      (is (empty? (ports/find-sessions-by-user (:sessions a) (:id ada)))))))

@@ -77,6 +77,32 @@ curl -X POST http://localhost:3000/api/auth/login \
   -d '{"email": "user@example.com", "password": "secret", "mfaCode": "123456"}'
 ----
 
+[#mfa-per-login]
+=== Deciding per login
+
+By default a login asks for a code exactly when the user turned MFA on. To decide
+per login, name a function under `:auth`:
+
+[source,clojure]
+----
+:wagoe/user {:auth {:mfa-required? my.app.auth/mfa-required?}}
+----
+
+[source,clojure]
+----
+;; Skip MFA on the office network, require it everywhere else.
+(defn mfa-required? [_user {:keys [ip-address]}]
+  (not (office-network? ip-address)))
+----
+
+It gets the user and the login context (`:ip-address`, `:user-agent`, and
+`:provider` for an OpenID Connect sign-in) and applies to password and OpenID
+Connect logins alike. Returning false waives the code; MFA stays on for the user.
+Returning true for a user without MFA refuses the login: enrolling needs a
+signed-in user, so they must sign in where MFA is not required, or ask an
+administrator. The symbol is resolved at boot, and one that does not resolve stops
+the boot. A function that throws fails the login.
+
 === Disable MFA
 
 [source,bash]
@@ -137,9 +163,9 @@ with that address. Multi-tenant issuer templates such as
 `https://login.microsoftonline.com/{tenantid}/v2.0` are refused; name one tenant.
 
 A successful sign-in opens the same database session a password login opens. The same
-account rules apply: a deactivated or locked account cannot sign in, and an account with
-MFA turned on is asked for its code after the provider. Wrong codes count towards the
-lockout.
+account rules apply: a deactivated or locked account cannot sign in, and MFA is asked
+for after the provider by the same rule as a password login (<<mfa-per-login>>). Wrong
+codes count towards the lockout.
 
 The cookie key derives from `JWT_SECRET`; set `:state-secret` under `:oidc` to use
 another. The client secret is sent with HTTP Basic; set `:token-endpoint-auth :post` on

@@ -534,6 +534,9 @@
                                     (= :mfa-verification-failed (:reason auth-result))
                                     "Invalid MFA code"
 
+                                    (= :mfa-enrolment-required (:reason auth-result))
+                                    [:t :user/mfa-enrolment-required]
+
                                     :else
                                     "Invalid email or password")]
                 (log/warn "Login failed" {:email (:email prepared-data)
@@ -615,6 +618,7 @@
                            :oidc/no-account           [403 [:t :user/oidc-no-account]]
                            :oidc/admin-link-refused   [403 [:t :user/oidc-admin-link-refused]]
                            :oidc/account-unavailable  [403 [:t :user/oidc-account-unavailable]]
+                           :oidc/mfa-enrolment-required [403 [:t :user/mfa-enrolment-required]]
                            (:oidc/http-error :oidc/discovery-failed :oidc/token-exchange-failed)
                            [502 [:t :user/oidc-failed]]
                            [400 [:t :user/oidc-failed]])]

@@ -256,7 +256,7 @@
 ;; =============================================================================
 
 (defn- base-graph
-  [config validation-config]
+  [config validation-config auth-config]
   {:components
    {:wagoe/user-db-schema     {:ctx (ig/ref :wagoe/db-context)}
     :wagoe/user-repository    {:ctx (ig/ref :wagoe/db-context)}
@@ -275,7 +275,7 @@
     :wagoe/auth-service       {:user-repository    (ig/ref :wagoe/user-repository)
                                :session-repository (ig/ref :wagoe/session-repository)
                                :mfa-service        (ig/ref :wagoe/mfa-service)
-                               :auth-config        {}}
+                               :auth-config        auth-config}
     :wagoe/user-service       {:user-repository    (ig/ref :wagoe/user-repository)
                                :session-repository (ig/ref :wagoe/session-repository)
                                :audit-repository   (ig/ref :wagoe/audit-repository)
@@ -309,10 +309,11 @@
 
    Called with the module's `:active` settings — nil when the user module is
    switched on in code rather than in config — and the context the application
-   supplies: `:config` and `:validation-config`. OIDC sign-in is wired only
-   when the settings name a provider under `[:oidc :providers]`."
+   supplies: `:config` and `:validation-config`. `:auth` becomes the auth
+   service's config. OIDC sign-in is wired only when the settings name a
+   provider under `[:oidc :providers]`."
   [settings {:keys [config validation-config]}]
-  (cond-> (base-graph config validation-config)
+  (cond-> (base-graph config validation-config (:auth settings {}))
     (seq (get-in settings [:oidc :providers]))
     (-> (update :components assoc
                 :wagoe/user-oidc        {:settings            (:oidc settings)

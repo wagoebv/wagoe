@@ -269,46 +269,58 @@
 
 (defn determine-mfa-requirement
   "Pure function: Determine MFA requirement for login attempt.
-   
+
    Args:
      user: User entity
      password-valid?: Boolean indicating if password was valid
      mfa-code: Optional MFA code provided
      risk-analysis: Risk analysis from authentication
-     
+     required?: Whether this login needs a second factor. The shell decides,
+                from the app's :mfa-required? hook; defaults to :mfa-enabled.
+
    Returns:
      {:requires-mfa? boolean
+      :requires-enrolment? boolean       ; required, but no factor to ask for
       :mfa-verified? boolean-or-pending  ; :pending when shell verification needed
       :allow-login? boolean-or-pending   ; :pending when shell verification needed
       :reason string}
-     
+
     Pure - MFA login flow decision logic."
-  [user password-valid? mfa-code _risk-analysis]
-  (cond
-    ;; Password invalid - don't proceed
-    (not password-valid?)
-    {:requires-mfa? false
-     :mfa-verified? false
-     :allow-login? false
-     :reason "Invalid password"}
+  ([user password-valid? mfa-code risk-analysis]
+   (determine-mfa-requirement user password-valid? mfa-code risk-analysis
+                              (boolean (should-require-mfa? user risk-analysis))))
+  ([user password-valid? mfa-code _risk-analysis required?]
+   (cond
+     ;; Password invalid - don't proceed
+     (not password-valid?)
+     {:requires-mfa? false
+      :mfa-verified? false
+      :allow-login? false
+      :reason "Invalid password"}
 
-    ;; MFA not enabled - allow login
-    (not (:mfa-enabled user))
-    {:requires-mfa? false
-     :mfa-verified? true
-     :allow-login? true
-     :reason "MFA not enabled"}
+     (not required?)
+     {:requires-mfa? false
+      :mfa-verified? true
+      :allow-login? true
+      :reason "MFA not required"}
 
-    ;; MFA enabled but no code provided - require MFA
-    (and (:mfa-enabled user) (nil? mfa-code))
-    {:requires-mfa? true
-     :mfa-verified? false
-     :allow-login? false
-     :reason "MFA code required"}
+     ;; Enrolling needs a signed-in user, so there is nothing to ask for.
+     (not (:mfa-enabled user))
+     {:requires-mfa? false
+      :requires-enrolment? true
+      :mfa-verified? false
+      :allow-login? false
+      :reason "MFA enrolment required"}
 
-    ;; MFA enabled and code provided - verification needed (done in shell)
-    (and (:mfa-enabled user) (some? mfa-code))
-    {:requires-mfa? true
-     :mfa-verified? :pending ; Actual verification in shell layer
-     :allow-login? :pending
-     :reason "MFA code verification pending"}))
+     (nil? mfa-code)
+     {:requires-mfa? true
+      :mfa-verified? false
+      :allow-login? false
+      :reason "MFA code required"}
+
+     ;; Code provided - verification needed (done in shell)
+     :else
+     {:requires-mfa? true
+      :mfa-verified? :pending ; Actual verification in shell layer
+      :allow-login? :pending
+      :reason "MFA code verification pending"})))

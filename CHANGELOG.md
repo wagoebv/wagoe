@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **Per-login MFA decision** (BOU-670): `:wagoe/user {:auth {:mfa-required? my.app/fn}}`, a `(fn [user login-context])`,
+  can waive or require MFA for password and OIDC logins. A user required to without MFA set up is refused.
 - **Sign in with OpenID Connect** (BOU-447): authorization code with PKCE, a "Sign in with X" button per provider.
   Configure under `:wagoe/user {:oidc …}`; linking by email is opt-in and never reaches an admin.
 - **Live htmx updates over server-sent events** (BOU-464): `sse/sse-handler` streams `sse/push-fragment!` to `sse-swap`

@@ -166,6 +166,24 @@
 
 (defrecord AuthenticationService [user-repository session-repository mfa-service auth-config])
 
+(defn- resolve-mfa-hook
+  "Config names the :mfa-required? hook as a symbol; resolve it once, at boot."
+  [hook]
+  (cond
+    (or (nil? hook) (fn? hook)) hook
+    (qualified-symbol? hook)
+    (let [v (try (requiring-resolve hook)
+                 (catch Exception e
+                   (throw (ex-info (str "Cannot load :mfa-required? " hook)
+                                   {:type :configuration-error :hook hook} e))))]
+      (if v
+        @v
+        (throw (ex-info (str "Cannot resolve :mfa-required? " hook)
+                        {:type :configuration-error :hook hook}))))
+    :else
+    (throw (ex-info ":mfa-required? must be a function or a qualified symbol"
+                    {:type :configuration-error :hook hook}))))
+
 (defn create-authentication-service
   "Factory function: Create authentication service instance.
    
@@ -173,12 +191,27 @@
      user-repository: IUserRepository implementation
      session-repository: IUserSessionRepository implementation
      mfa-service: MFAService implementation  
-     auth-config: Authentication configuration map
+     auth-config: Authentication configuration map. :mfa-required? is an
+                  optional (fn [user login-context] bool), or a symbol naming
+                  one; throws :configuration-error when it does not resolve.
      
    Returns:
      AuthenticationService instance"
   [user-repository session-repository mfa-service auth-config]
-  (->AuthenticationService user-repository session-repository mfa-service auth-config))
+  (->AuthenticationService user-repository session-repository mfa-service
+                           (cond-> auth-config
+                             (:mfa-required? auth-config)
+                             (update :mfa-required? resolve-mfa-hook))))
+
+(defn mfa-required?
+  "Whether this login needs a second factor: the app's :mfa-required? hook
+   when it set one, else whether the user turned MFA on. Shared by password
+   and OIDC sign-in."
+  [auth-service user login-context login-risk]
+  (boolean
+   (if-let [hook (get-in auth-service [:auth-config :mfa-required?])]
+     (hook user login-context)
+     (mfa-core/should-require-mfa? user login-risk))))
 
 (defn open-session!
   "Create the DB session for a user who has proven who they are, under the
@@ -217,7 +250,7 @@
      condition, and a caller that wants to escalate can rethrow the `:error`
      map as a typed `ex-info` without inventing a taxonomy. `:type` is one of
      `:validation-error`, `:authentication-failed`, `:mfa-required`,
-     `:mfa-verification-failed`; the authentication-failed case may carry
+     `:mfa-enrolment-required`, `:mfa-verification-failed`; the authentication-failed case may carry
      `:retry-after`.
 
      `:requires-mfa?` stays at the top level: it is not part of why the attempt
@@ -262,13 +295,11 @@
           mfa-code (:mfa-code login-context)
           mfa-requirement (when (and user password-valid?)
                             (mfa-core/determine-mfa-requirement
-                             user password-valid? mfa-code login-risk))
+                             user password-valid? mfa-code login-risk
+                             (mfa-required? auth-service user login-context login-risk)))
 
           ;; Step 7: Verify MFA code if provided
-          mfa-verification (when (and user
-                                      password-valid?
-                                      (:mfa-enabled user)
-                                      mfa-code)
+          mfa-verification (when (and (:requires-mfa? mfa-requirement) mfa-code)
                              (mfa-shell/verify-mfa-code mfa-service user mfa-code))
 
           ;; Step 8: Handle authentication result
@@ -300,6 +331,14 @@
                      {:success? false
                       :error {:type    :authentication-failed
                               :message "Invalid credentials"}})
+
+                   ;; Required, but the user has no second factor to give
+                   (:requires-enrolment? mfa-requirement)
+                   (do
+                     (log/warn "MFA required but not enrolled" {:email email})
+                     {:success? false
+                      :error {:type    :mfa-enrolment-required
+                              :message "MFA must be set up before signing in here"}})
 
                    ;; MFA required but not provided
                    (and (:requires-mfa? mfa-requirement)
@@ -342,14 +381,14 @@
                      (log/info "Authentication successful"
                                {:email email
                                 :risk-score (:risk-score login-risk)
-                                :mfa-used (:mfa-enabled user)
+                                :mfa-used (:requires-mfa? mfa-requirement)
                                 :session-duration (:session-duration-hours session-policy)})
 
                      {:success? true
                       :user (dissoc user :password-hash :mfa-secret :mfa-backup-codes) ; Don't return sensitive data
                       :session session
                       :risk-analysis login-risk
-                      :mfa-verified? (or (not (:mfa-enabled user)) (:valid? mfa-verification))
+                      :mfa-verified? (or (not (:requires-mfa? mfa-requirement)) (:valid? mfa-verification))
                       :requires-additional-verification? (:requires-additional-verification? session-policy)}))]
 
       result)))

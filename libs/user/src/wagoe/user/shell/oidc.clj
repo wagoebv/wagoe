@@ -275,15 +275,22 @@
   "Apply the account rules a password login applies, then either open the
    session or ask for the second factor."
   [client user sign-in login-context]
-  (let [allowed (auth-core/should-allow-login-attempt? user nil (Instant/now))]
+  (let [allowed   (auth-core/should-allow-login-attempt? user nil (Instant/now))
+        ;; The provider vouches for the person; the second factor is still
+        ;; ours to ask for, by the same rule as a password login.
+        required? (when (:allowed? allowed)
+                    (auth/mfa-required? (:auth-service client) user
+                                        (assoc login-context :provider (:provider-id sign-in)) nil))]
     (cond
       (not (:allowed? allowed))
       (do (audit! client user login-context (:provider-id sign-in) false (:reason allowed))
           {:error {:type :oidc/account-unavailable :message (:reason allowed)}})
 
-      ;; The provider vouches for the person; an account that turned on a
-      ;; second factor here still asks for it.
-      (:mfa-enabled user)
+      (and required? (not (:mfa-enabled user)))
+      (do (audit! client user login-context (:provider-id sign-in) false "MFA enrolment required")
+          {:error {:type :oidc/mfa-enrolment-required :message "MFA must be set up before signing in here"}})
+
+      required?
       {:ok {:outcome :mfa-required
             :user    user
             :cookie  (seal client :mfa (assoc sign-in :user-id (str (:id user))) pending-ttl-seconds)}}
