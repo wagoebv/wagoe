@@ -74,20 +74,14 @@
 
 (def ^:private searchable-envs #{"dev" "test" "local"})
 
-(defn getenv
-  "Indirection so tests can redef it."
-  [k]
-  (System/getenv k))
-
 (defn development-environment?
   "True when the app may search a port range instead of binding the exact port.
 
    `profile` is the config profile the app booted with, and wins. Without one,
-   WAG_ENV as the config loader reads it, defaulting to dev (BOU-530)."
+   the one the config loader would pick (BOU-530)."
   ([] (development-environment? nil))
   ([profile]
-   (contains? searchable-envs
-              (config/normalize-env (or (some-> profile name) (getenv "WAG_ENV") "dev")))))
+   (contains? searchable-envs (config/normalize-env (name (or profile (config/active-profile)))))))
 
 (defn- coerce-port
   "aero's #env yields a String, so a config without #long hands one down (BOU-251)."
