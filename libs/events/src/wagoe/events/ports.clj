@@ -58,3 +58,14 @@
      `opts` may carry `:limit` and `:since` (an instant). Returns a sequence,
      which may be empty — an empty history and no history are different things,
      and a backend that cannot answer should not implement this protocol."))
+
+(defprotocol ITransactionalPublisher
+  "Optional capability: publish inside the caller's database transaction, so
+   the event commits or rolls back with the business change (BOU-448).
+   Implemented by the outbox, not by a bus."
+
+  (publish-in-tx! [this tx topic event]
+    "Record `event` for `topic` on the open transaction `tx`; returns its `:id`.
+     Throws ex-info `{:type :validation-error}` when `tx` is not an open
+     transaction or the event is malformed: an ignored returned error would
+     commit the change without its event."))
