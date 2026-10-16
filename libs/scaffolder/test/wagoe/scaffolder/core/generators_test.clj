@@ -531,11 +531,11 @@
   (testing "generate-field-schema: the same rule at module generation"
     (let [ctx (template/build-field-context required-field)]
       (is (= "   [:sku :string]" (gen/generate-field-schema ctx)))
-      (is (= "   [:sku {:optional true} :string]" (gen/generate-field-schema ctx true)))))
+      (is (= "   [:sku {:optional true} :string]" (gen/generate-field-schema ctx :update)))))
 
   (testing "an already-optional field is unaffected either way"
     (let [ctx (template/build-field-context {:name :note :type :string :required false})]
-      (is (= (gen/generate-field-schema ctx) (gen/generate-field-schema ctx true))))))
+      (is (= (gen/generate-field-schema ctx) (gen/generate-field-schema ctx :update))))))
 
 (deftest ^:unit generated-update-schema-marks-fields-optional
   (testing "a generated module's update request accepts a partial"
