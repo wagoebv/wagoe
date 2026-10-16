@@ -61,4 +61,12 @@
    {:enabled? true}}
 
  :inactive
- {}}
+ { ;; MySQL 8 instead of SQLite: move this into :active and :wagoe/sqlite out.
+   ;; `bb setup --database mysql` writes an active one for you instead.
+   :wagoe/mysql
+   {:host              #or [#env MYSQL_HOST "localhost"]
+    :port              #or [#long #or [#env MYSQL_PORT 3306] 3306]
+    :dbname            #or [#env MYSQL_DB "wagoe_dev"]
+    :user              #or [#env MYSQL_USER "root"]
+    :password          #or [#env MYSQL_PASSWORD ""]
+    :migrate-on-start? true}}}

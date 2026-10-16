@@ -226,6 +226,13 @@
   (param->db [this value]
     "`value` as this engine takes it as a query parameter."))
 
+(defprotocol ResultDecoder
+  "Optional: an adapter that decodes what its driver returns, the read side of
+   ParamEncoder (BOU-653)."
+  (value-decoder [this]
+    "A fn decoding each value read from this engine, or nil when its values
+     need none."))
+
 (def capability-keywords
   "What a database may honour, each consumed somewhere (ADR-039):
 

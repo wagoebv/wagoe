@@ -12,6 +12,7 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 . "$REPO_ROOT/scripts/lib/log-excerpt.sh"
+. "$REPO_ROOT/scripts/lib/app-smoke.sh"
 
 fail() { echo; echo "EXAMPLE SMOKE FAILURE: $*"; exit 1; }
 ok()   { echo "  ok — $*"; }
@@ -39,31 +40,6 @@ APP_PID=$!
 cleanup() { kill "$APP_PID" 2>/dev/null || true; wait "$APP_PID" 2>/dev/null || true; }
 trap cleanup EXIT
 
-# Read the port the app reports rather than assuming one. The generated test
-# profile carries no :wagoe/http block, so HTTP_PORT does not reach it there and
-# the platform default applies — and the port manager may move off a taken port
-# anyway. Both would show up as "the app did not start" if this hardcoded 3000.
-# `:port` with the colon, deliberately: the port manager also logs the range it
-# searched — "searching ports 3000-3099" — and a looser pattern picks 3000 out
-# of that line even when the server ended up somewhere else. The last match
-# wins, because the manager logs the requested port before the bound one.
-wait_for_health() {
-  local log=$1
-  PORT=""
-  for _ in $(seq 1 90); do
-    PORT=$(grep -oE ':port +[0-9]{4,5}' "$log" 2>/dev/null \
-             | grep -oE '[0-9]{4,5}' | tail -1 || true)
-    if [ -n "$PORT" ] && curl -fsS -o /dev/null "http://localhost:$PORT/health" 2>/dev/null; then
-      break
-    fi
-    kill -0 "$APP_PID" 2>/dev/null || { log_excerpt "$log" 30; fail "the app exited during startup"; }
-    sleep 2
-  done
-  [ -n "$PORT" ] || { log_excerpt "$log" 30; fail "the app never reported a port"; }
-
-  curl -fsS -o /dev/null "http://localhost:$PORT/health" \
-    || { log_excerpt "$log" 30; fail "/health never answered — the app did not start"; }
-}
 wait_for_health /tmp/shop-smoke.log
 ok "boots on WAG_ENV=test with no external services"
 
@@ -80,11 +56,8 @@ CODE=$(curl -s -o /dev/null -w '%{http_code}' -X POST \
             --data-urlencode "name=Smoke" --data-urlencode "email=smoke@example.test" \
             --data-urlencode "password=Example-pass-1" "http://localhost:$PORT/web/register")
 [ "$CODE" = "303" ] || { log_excerpt /tmp/shop-smoke.log 30; fail "POST /web/register answered $CODE, expected 303"; }
-LOGIN=$(curl -sS -X POST -H "Content-Type: application/json" \
-             -d '{"email":"smoke@example.test","password":"Example-pass-1"}' \
-             "http://localhost:$PORT/api/v1/auth/login")
-TOKEN=$(echo "$LOGIN" | grep -oE '"jwt-token":"[^"]+"' | cut -d'"' -f4 || true)
-[ -n "$TOKEN" ] || fail "POST /api/v1/auth/login returned no jwt-token: '$LOGIN'"
+TOKEN=$(login_token "http://localhost:$PORT" smoke@example.test Example-pass-1)
+[ -n "$TOKEN" ] || fail "POST /api/v1/auth/login returned no jwt-token"
 AUTH=(-H "Authorization: Bearer $TOKEN")
 
 # The point of the example: the scaffolded module serves a request. Asserting

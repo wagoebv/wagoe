@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **MySQL 8 is supported** (BOU-574): a generated app boots, migrates and serves on it.
+  Switch with `bb setup --database mysql`; tenancy needs PostgreSQL, push and seeds wait on BOU-657.
 - **`bb check:vulns`** (BOU-451): known vulnerabilities in every `deps.edn`, aliases included, from GitHub's advisory
   database. Runs weekly and on PRs that change a `deps.edn`; coverage now runs on every push to main.
 - **`DBAdapter` answers `engine`, `capabilities`, `column-type` and `like`** (BOU-450, ADR-039). Ask these instead of
@@ -79,6 +81,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **MySQL timestamps read back without a zone, so APIs sent UTC as local time** (BOU-653).
+  Upgrade if you run on MySQL.
 - **MySQL lost workflow timestamps and admin UUID types; PostgreSQL refused full-text search** (BOU-652).
   Upgrade if you run workflow or the admin on MySQL, or search on PostgreSQL.
 - **Search did not run on MySQL, and generated apps had no search table** (BOU-651).

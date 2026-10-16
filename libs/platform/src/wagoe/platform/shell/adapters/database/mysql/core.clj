@@ -23,6 +23,7 @@
    :pool               connection/pool-defaults
    :session-statements connection/session-statements
    :param->db          connection/param->db
+   :db->value          connection/db->value
    :booleans           :int
    :string-match       :like
    :engine             :mysql

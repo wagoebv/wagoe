@@ -24,7 +24,8 @@
      :column-types       {logical-type DDL-type} for protocols/logical-column-types
      :on-connect         optional (fn [java.sql.Connection]), run on each new
                          connection after the session statements
-     :param->db          optional (fn [value] -> value) for each query parameter"
+     :param->db          optional (fn [value] -> value) for each query parameter
+     :db->value          optional (fn [value] -> value) for each value read"
   (:require [wagoe.core.utils.type-conversion :as tc]
             [wagoe.platform.ports.database :as protocols]
             [clojure.tools.logging :as log]
@@ -160,7 +161,10 @@
   (like [_ field pattern] (case-insensitive-like (:string-match spec) field pattern))
 
   protocols/ParamEncoder
-  (param->db [_ value] ((:param->db spec identity) value)))
+  (param->db [_ value] ((:param->db spec identity) value))
+
+  protocols/ResultDecoder
+  (value-decoder [_] (:db->value spec)))
 
 (defn new-adapter
   "Build the adapter described by `spec`. See this namespace's docstring."
