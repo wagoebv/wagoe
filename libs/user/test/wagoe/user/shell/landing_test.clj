@@ -6,6 +6,7 @@
             [wagoe.user.ports :as ports]
             [wagoe.user.shell.http :as http]
             [wagoe.user.shell.landing :as landing]
+            [wagoe.user.shell.module-wiring :as wiring-user]
             [wagoe.user.shell.web-handlers :as web-handlers]))
 
 (defn- config [user-settings]
@@ -89,14 +90,20 @@
     (is (= :configuration-error
            (:type (ex-data (try (landing/prepare (config settings)) nil
                                 (catch Exception e e)))))
-        (pr-str settings))))
+        (pr-str settings)))
+  (testing "the module wiring checks them, so boot stops"
+    (is (thrown? clojure.lang.ExceptionInfo
+                 (wiring-user/ig-config nil {:config (config {:dashboard "off"})}))))
+  (testing "a namespace that does not load keeps its cause"
+    (is (some? (ex-cause (try (landing/prepare (config {:login-redirect 'no.such.ns/landing})) nil
+                              (catch Exception e e)))))))
 
 ;; =============================================================================
 ;; /web/dashboard
 ;; =============================================================================
 
 (defn- user-web-routes [settings]
-  (:web (http/user-routes (reify ports/IUserService) nil (config settings))))
+  (:web (http/user-routes (reify ports/IUserService) nil (landing/prepare (config settings)))))
 
 (defn- dashboard-route [settings]
   (first (filter #(= "/dashboard" (first %)) (user-web-routes settings))))

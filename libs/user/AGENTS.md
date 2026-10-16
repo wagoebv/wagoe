@@ -332,7 +332,8 @@ Two `:wagoe/user` keys, both checked at boot; a bad value fails it.
 `:login-redirect` applies to password login, MFA completion, OIDC sign-in and
 `/web` for a signed-in user. A safe `return-to` still wins. With
 `:dashboard false` and no `:login-redirect`, users land on `/web/dashboard`, so
-serve it or point the redirect elsewhere.
+serve it or point the redirect elsewhere. The shared layouts' logo and "back"
+links still point at `/web/dashboard` either way.
 
 ## Session Pruning
 

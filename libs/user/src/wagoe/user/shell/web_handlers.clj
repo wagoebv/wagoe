@@ -258,18 +258,18 @@
 (defn home-page-handler
   "Handler for the home/landing page (GET /).
 
-   Redirects authenticated users to their landing page, unauthenticated to /web.
+   Redirects authenticated users to /web/dashboard, unauthenticated to /web.
 
    Args:
      config: Application configuration map
 
    Returns:
      Ring handler function"
-  [config]
+  [_config]
   (fn [request]
     (let [user (:user request)]
       (if user
-        (response/redirect (landing/path-for config user))
+        (response/redirect "/web/dashboard")
         (response/redirect "/web")))))
 
 (defn web-root-page-handler

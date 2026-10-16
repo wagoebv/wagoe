@@ -694,24 +694,23 @@
    arrives before a session exists, and the sealed cookie is what ties each
    step to the one before."
   [oidc-client config]
-  (let [config (landing/prepare config)]
-    {:api    []
-     :web    [["/auth/oidc/mfa"
-               {:no-doc true
-                :public true
-                :post   {:handler (web-handlers/oidc-mfa-handler oidc-client config)
-                         :summary "Second factor after an OIDC sign-in"}}]
-              ["/auth/oidc/:provider/start"
-               {:no-doc true
-                :public true
-                :get    {:handler (web-handlers/oidc-start-handler oidc-client config)
-                         :summary "Start an OIDC sign-in"}}]
-              ["/auth/oidc/:provider/callback"
-               {:no-doc true
-                :public true
-                :get    {:handler (web-handlers/oidc-callback-handler oidc-client config)
-                         :summary "OIDC redirect back from the provider"}}]]
-     :static []}))
+  {:api    []
+   :web    [["/auth/oidc/mfa"
+             {:no-doc true
+              :public true
+              :post   {:handler (web-handlers/oidc-mfa-handler oidc-client config)
+                       :summary "Second factor after an OIDC sign-in"}}]
+            ["/auth/oidc/:provider/start"
+             {:no-doc true
+              :public true
+              :get    {:handler (web-handlers/oidc-start-handler oidc-client config)
+                       :summary "Start an OIDC sign-in"}}]
+            ["/auth/oidc/:provider/callback"
+             {:no-doc true
+              :public true
+              :get    {:handler (web-handlers/oidc-callback-handler oidc-client config)
+                       :summary "OIDC redirect back from the provider"}}]]
+   :static []})
 
 (defn user-routes
   "This module's contribution to the application's route table.
@@ -720,8 +719,7 @@
    :web    mounted under /web, and absent when the web UI is switched off
    :static nothing — user's assets are served at handler level"
   [user-service mfa-service config]
-  (let [config          (landing/prepare config)
-        web-ui-enabled? (get-in config [:active :wagoe/settings :features :user-web-ui :enabled?] true)]
+  (let [web-ui-enabled? (get-in config [:active :wagoe/settings :features :user-web-ui :enabled?] true)]
     {:api    (api-routes user-service mfa-service)
      :web    (when web-ui-enabled? (web-routes user-service mfa-service config))
      :static []}))

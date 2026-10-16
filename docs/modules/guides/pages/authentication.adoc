@@ -168,6 +168,8 @@ to the default. It applies to password login, the MFA step, OpenID Connect sign-
 `:dashboard false` leaves `/web/dashboard` to the application; `{:handler sym}` serves
 that Ring handler there instead, behind the same sign-in check. Both keys are checked at
 boot: a path off this site, an unknown role or a symbol that does not resolve stops it.
+The logo and "back" links in the built-in layouts still point at `/web/dashboard`, so
+with `:dashboard false` the application should serve that path.
 
 == Session management
 

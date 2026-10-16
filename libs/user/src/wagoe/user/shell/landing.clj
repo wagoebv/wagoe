@@ -2,9 +2,9 @@
   "The `:login-redirect` and `:dashboard` settings of `:wagoe/user`: checked
    and resolved at boot, read when a user signs in."
   (:require [clojure.tools.logging :as log]
-            [malli.core :as m]
             [malli.error :as me]
             [wagoe.core.utils.redirect :as redirect]
+            [wagoe.core.validation :as cv]
             [wagoe.user.core.landing :as landing]
             [wagoe.user.schema :as user-schema]))
 
@@ -15,7 +15,11 @@
   "The function `x` names, or `x` itself when it is one already."
   [k x]
   (if (symbol? x)
-    (let [v (try (requiring-resolve x) (catch Exception _ nil))]
+    (let [v (try (requiring-resolve x)
+                 (catch Exception e
+                   (throw (ex-info (str ":wagoe/user " k " names " x ", whose namespace does not load")
+                                   {:type :configuration-error :key k :symbol x}
+                                   e))))]
       (when-not v
         (throw (ex-info (str ":wagoe/user " k " names " x ", which does not resolve")
                         {:type :configuration-error :key k :symbol x})))
@@ -24,13 +28,14 @@
 
 (defn prepare
   "`config` with `:login-redirect` and `:dashboard` checked and their symbols
-   resolved. Throws :configuration-error on a bad value, so boot fails."
+   resolved. Throws :configuration-error on a bad value, so boot fails. The
+   module wiring calls it once; handlers expect its output."
   [config]
   (let [s (settings config)]
-    (when-let [explanation (m/explain user-schema/UserLandingSettings (or s {}))]
-      (throw (ex-info (str "Invalid :wagoe/user settings: "
-                           (pr-str (me/humanize explanation)))
-                      {:type :configuration-error :errors (me/humanize explanation)})))
+    (when-let [explanation (cv/explain user-schema/UserLandingSettings (or s {}))]
+      (let [errors (me/humanize explanation)]
+        (throw (ex-info (str "Invalid :wagoe/user settings: " (pr-str errors))
+                        {:type :configuration-error :errors errors}))))
     (cond-> config
       (:login-redirect s)
       (update-in [:active :wagoe/user :login-redirect] #(resolve-fn :login-redirect %))
@@ -43,8 +48,8 @@
    on this site — nil included — falls back to the defaults."
   [config user]
   (let [r (:login-redirect (settings config))]
-    (if (or (fn? r) (symbol? r))
-      (let [path ((resolve-fn :login-redirect r) user)]
+    (if (fn? r)
+      (let [path (r user)]
         (if (redirect/local-path? path)
           path
           (do (when (some? path)
@@ -60,5 +65,5 @@
   (let [d (:dashboard (settings config))]
     (cond
       (false? d) nil
-      (map? d)   (resolve-fn :dashboard (:handler d))
+      (map? d)   (:handler d)
       :else      (default))))
