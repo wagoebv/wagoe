@@ -8,7 +8,8 @@
    Filter support: callers may pass a :filters map of keyword->string pairs.
    Filter values are matched against the JSON \"filters\" column using
    DB-appropriate JSON path syntax."
-  (:require [wagoe.search.core.index :as index]
+  (:require [wagoe.platform.ports.database :as db-ports]
+            [wagoe.search.core.index :as index]
             [clojure.string :as str]))
 
 ;; =============================================================================
@@ -212,14 +213,12 @@
 ;; Fallback SQL builders (H2 / SQLite)
 ;; =============================================================================
 
-(def ^:private like-clause "LOWER(content_all) LIKE ? ESCAPE '!'")
+(def ^:private like-clause (str "LOWER(content_all) LIKE ? ESCAPE '" db-ports/like-escape "'"))
 
-(defn- like-pattern
-  "A LIKE pattern containing `query`, lowercased, for like-clause. % and _ in
-   the query match themselves, escaped with !; not backslash, which MySQL
-   string literals would need doubled (BOU-676)."
+(defn- fallback-pattern
+  "A LIKE pattern containing `query`, lowercased, for like-clause (BOU-676)."
   [query]
-  (str "%" (str/replace (str/lower-case (or (sanitize-query query) "")) #"[!%_]" "!$0") "%"))
+  (db-ports/like-pattern :contains (str/lower-case (or (sanitize-query query) ""))))
 
 (defn build-fallback-search-sql
   "Build a parameterized JDBC SQL vector for LIKE-based fallback search.
@@ -237,7 +236,7 @@
    Returns:
      JDBC SQL vector [sql & params]"
   [index-id entity-type query limit offset filters]
-  (let [pattern (like-pattern query)
+  (let [pattern (fallback-pattern query)
         [filter-sql & filter-params] (build-filter-sql-fallback (or filters {}))
         sql (str "SELECT entity_type, entity_id, metadata, "
                  "  1.0 AS score, "
@@ -262,7 +261,7 @@
    Returns:
      JDBC SQL vector [sql & params]"
   [index-id entity-type query filters]
-  (let [pattern (like-pattern query)
+  (let [pattern (fallback-pattern query)
         [filter-sql & filter-params] (build-filter-sql-fallback (or filters {}))
         sql (str "SELECT count(*) AS cnt "
                  "FROM search_documents "
@@ -274,7 +273,7 @@
 (defn- like-suggest-sql
   [build-filter-sql index-id entity-type query limit filters]
   (let [[filter-sql & filter-params] (build-filter-sql (or filters {}))
-        pattern (like-pattern query)
+        pattern (fallback-pattern query)
         sql (str "SELECT entity_type, entity_id, metadata, "
                  "  0.5 AS score, "
                  "  NULL AS snippet "

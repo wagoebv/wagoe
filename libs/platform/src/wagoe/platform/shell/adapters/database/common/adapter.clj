@@ -54,7 +54,7 @@
 ;; WHERE building
 ;; =============================================================================
 
-(defn case-insensitive-like
+(defn- like-ignoring-case
   "`field` LIKE `pattern`, ignoring case. ILIKE where the engine has it;
    elsewhere both sides lowered, since H2's LIKE is case-sensitive (ADR-039).
    The pattern is lowered in SQL too: the JVM's locale folds differently (a
@@ -64,6 +64,14 @@
   (if (= :ilike string-match)
     [:ilike field pattern]
     [:like [:lower field] [:lower pattern]]))
+
+(defn case-insensitive-like
+  "`field` LIKE `value`, literally and ignoring case, where `mode` puts it (see
+   `protocols/like-pattern`, BOU-684)."
+  [string-match field mode value]
+  [:escape
+   (like-ignoring-case string-match field (protocols/like-pattern mode value))
+   [:inline protocols/like-escape]])
 
 (defn build-where-clause
   "Build a WHERE fragment from `filters`, in this engine's terms.
@@ -77,7 +85,7 @@
     (let [conditions (for [[field value] filters
                            :when (some? value)]
                        (cond
-                         (string? value)  (case-insensitive-like string-match field (str "%" value "%"))
+                         (string? value)  (case-insensitive-like string-match field :contains value)
                          (vector? value)  [:in field value]
                          (boolean? value) [:= field (boolean->db booleans value)]
                          :else            [:= field value]))]
@@ -161,7 +169,8 @@
         (throw (ex-info (str "No column type for " logical)
                         {:type :validation-error :logical logical}))))
 
-  (like [_ field pattern] (case-insensitive-like (:string-match spec) field pattern))
+  (like [_ field pattern] (like-ignoring-case (:string-match spec) field pattern))
+  (like [_ field mode value] (case-insensitive-like (:string-match spec) field mode value))
 
   protocols/ParamEncoder
   (param->db [_ value] ((:param->db spec identity) value))

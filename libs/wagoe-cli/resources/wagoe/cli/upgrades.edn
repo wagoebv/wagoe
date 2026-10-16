@@ -30,4 +30,9 @@
  {:ticket "BOU-682"
   :since  "1.0.2"
   :note   "wagoe.user.shell.middleware/jwt-authentication-middleware and protect-with-jwt without a user service."
-  :manual "Pass the user service as the first argument: (jwt-authentication-middleware user-service handler). A rewrite has no user service to pass."}]
+  :manual "Pass the user service as the first argument: (jwt-authentication-middleware user-service handler). A rewrite has no user service to pass."}
+
+ {:ticket "BOU-684"
+  :since  "1.0.2"
+  :note   "wagoe.platform.ports.database/like with a LIKE pattern."
+  :manual "Pass a mode and the raw value: (like adapter :email :contains q). A rewrite cannot tell which % are wildcards."}]

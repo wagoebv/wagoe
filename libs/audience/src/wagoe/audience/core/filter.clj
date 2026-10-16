@@ -7,6 +7,7 @@
    raises the typed error at the HTTP boundary, so the multimethods below assume
    a known filter type and a supported operator and never throw — their unknown
    branches fail safe (nil / a false predicate)."
+  (:require [clojure.string :as str])
   (:import [java.util.regex Pattern]))
 
 ;; =============================================================================
@@ -25,12 +26,11 @@
    :contains :like})
 
 (defn- sql-op
-  "Return the HoneySQL operator for a filter :op keyword.
-   For :contains, the value is wrapped in % wildcards."
+  "Return the HoneySQL operator for a filter :op keyword. `field-clause` builds
+   the :contains pattern itself."
   [op value]
   (case op
     :in       [:in value]
-    :contains [:like (str "%" value "%")]
     [(get sql-ops op :=) value]))
 
 (defn- days-ago-instant
@@ -53,10 +53,15 @@
   (.toInstant (.atStartOfDay (.minusDays now (long days)) java.time.ZoneOffset/UTC)))
 
 (defn- field-clause
-  "Build a HoneySQL clause [op field value] for a field-based filter."
+  "Build a HoneySQL clause [op field value] for a field-based filter. :contains
+   escapes % _ and ! in the value with !, as
+   `wagoe.platform.ports.database/like-pattern` does; this library does not
+   depend on platform (BOU-684)."
   [{:keys [field op value]}]
-  (let [[honey-op honey-val] (sql-op op value)]
-    [honey-op field honey-val]))
+  (if (= :contains op)
+    [:escape [:like field (str "%" (str/replace (str value) #"[!%_]" "!$0") "%")] [:inline "!"]]
+    (let [[honey-op honey-val] (sql-op op value)]
+      [honey-op field honey-val])))
 
 ;; =============================================================================
 ;; filter->sql multimethod

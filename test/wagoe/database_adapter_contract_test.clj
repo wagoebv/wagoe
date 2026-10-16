@@ -151,7 +151,7 @@
                                   (db/execute-query! ctx {:select [:id] :from [:people] :where where}))))
         a   (adapter ctx)
         got {:build-where (ids (protocols/build-where a {:name "JOHN"}))
-             :like        (ids (protocols/like a :name "%OHN%"))}]
+             :like        (ids (protocols/like a :name :contains "OHN"))}]
     (when-not (= {:build-where #{1 2} :like #{1 2}} got)
       (str "matched " (pr-str got)))))
 
@@ -162,9 +162,29 @@
   (let [a   (adapter ctx)
         hit (fn [where] (seq (db/execute-query! ctx {:select [:id] :from [:names_u] :where where})))
         got {:build-where (boolean (hit (protocols/build-where a {:name "ÉLODIE"})))
-             :like        (boolean (hit (protocols/like a :name "%élodie%")))}]
+             :like        (boolean (hit (protocols/like a :name :contains "élodie")))}]
     (when-not (= {:build-where true :like true} got)
       (str "a stored \"Élodie\" matched " (pr-str got)))))
+
+(defn- like-wildcards-are-literal
+  "% _ and ! in a `like` value match only themselves (BOU-684)."
+  [ctx]
+  (ddl! ctx "DROP TABLE IF EXISTS wild")
+  (ddl! ctx "CREATE TABLE wild (id INTEGER NOT NULL PRIMARY KEY, name VARCHAR(20))")
+  (db/execute-update! ctx {:insert-into :wild
+                           :values [{:id 1 :name "a_b"} {:id 2 :name "axb"} {:id 3 :name "50%"}
+                                    {:id 4 :name "500"} {:id 5 :name "hi!"} {:id 6 :name "a!_b"}]})
+  (let [a   (adapter ctx)
+        ids (fn [where]
+              (set (map #(val (first %))
+                        (db/execute-query! ctx {:select [:id] :from [:wild] :where where}))))
+        got {"_"     (ids (protocols/like a :name :contains "a_b"))
+             "%"     (ids (protocols/like a :name :ends-with "%"))
+             "!"     (ids (protocols/like a :name :contains "!"))
+             "!_"    (ids (protocols/like a :name :starts-with "a!_"))
+             "where" (ids (protocols/build-where a {:name "0%"}))}]
+    (when-not (= {"_" #{1} "%" #{3} "!" #{5 6} "!_" #{6} "where" #{3}} got)
+      (str "matched " (pr-str got)))))
 
 (defn- strings-ignore-case-in-any-locale
   "A Turkish JVM lowers \"ID\" to \"ıd\"; the database lowers it to \"id\". The
@@ -179,7 +199,7 @@
       (let [a   (adapter ctx)
             hit (fn [where] (seq (db/execute-query! ctx {:select [:id] :from [:codes_tr] :where where})))]
         (when-not (and (hit (protocols/build-where a {:code "ID"}))
-                       (hit (protocols/like a :code "%ID%")))
+                       (hit (protocols/like a :code :contains "ID")))
           "\"ID\" did not match a stored \"ID-7\" under a Turkish locale"))
       (finally (Locale/setDefault default)))))
 
@@ -425,6 +445,7 @@
     :clock/now-ms              clock-in-epoch-millis
     :strings/ignore-case       strings-ignore-case
     :strings/any-locale        strings-ignore-case-in-any-locale
+    :strings/like-literal      like-wildcards-are-literal
     :strings/unicode           strings-ignore-unicode-case
     :connections/session       every-connection-is-set-up
     :ddl/index-twice           index-twice

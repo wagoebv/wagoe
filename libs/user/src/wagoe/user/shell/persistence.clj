@@ -463,7 +463,7 @@
 
           ;; Handle email LIKE separately (on auth_users table)
           where-parts (if-let [pattern (:filter-email-contains options)]
-                        (conj where-parts [:like :a.email (str "%" pattern "%")])
+                        (conj where-parts (protocols/like (:adapter ctx) :a.email :contains pattern))
                         where-parts)
 
           where-clause (when (seq where-parts)
@@ -1016,10 +1016,10 @@
                              (conj [:= :result (name filter-result)])
 
                              filter-target-email
-                             (conj (protocols/like (:adapter ctx) :target_user_email (str "%" filter-target-email "%")))
+                             (conj (protocols/like (:adapter ctx) :target_user_email :contains filter-target-email))
 
                              filter-actor-email
-                             (conj (protocols/like (:adapter ctx) :actor_email (str "%" filter-actor-email "%")))
+                             (conj (protocols/like (:adapter ctx) :actor_email :contains filter-actor-email))
 
                              filter-created-after
                              (conj [:>= :created_at (type-conversion/instant->string filter-created-after)])

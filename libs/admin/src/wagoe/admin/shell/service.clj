@@ -124,15 +124,12 @@
 
    Example:
      (build-search-where postgres-adapter john [:email :name])
-     => [:or [:ilike :email percent-john-percent]
-             [:ilike :name percent-john-percent]]"
+     => [:or (like adapter :email :contains john)
+             (like adapter :name :contains john)]"
   [adapter search-term search-fields]
   (when (and search-term (seq search-fields))
-    (let [search-pattern (str "%" search-term "%")]
-      (vec (cons :or
-                 (mapv (fn [field]
-                         (db-ports/like adapter field search-pattern))
-                       search-fields))))))
+    (vec (cons :or
+               (mapv #(db-ports/like adapter % :contains search-term) search-fields)))))
 
 (defn build-filter-where
   "Build WHERE clause for field-specific filters.
@@ -170,9 +167,7 @@
                                 :gte         [:>= field value]
                                 :lt          [:< field value]
                                 :lte         [:<= field value]
-                                :contains    (db-ports/like adapter field (str "%" value "%"))
-                                :starts-with (db-ports/like adapter field (str value "%"))
-                                :ends-with   (db-ports/like adapter field (str "%" value))
+                                (:contains :starts-with :ends-with) (db-ports/like adapter field op value)
                                 :in          [:in field (vec values)]
                                 :not-in      [:not-in field (vec values)]
                                 :is-null     [:= field nil]

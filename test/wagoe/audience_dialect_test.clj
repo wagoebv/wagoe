@@ -216,6 +216,25 @@
                 (is (= #{"stale"} (ids {:type :account-tenure :op :gte :value 30})))))
             (finally (stop!))))))))
 
+(deftest ^:integration contains-matches-wildcards-literally
+  ;; "a_b" matched "axb" and "%" matched everyone (BOU-684).
+  (doseq [[label make] (backends)]
+    (testing label
+      (let [[ds stop!] (make)]
+        (try
+          (jdbc/execute! ds ["DROP TABLE IF EXISTS contains_users"])
+          (jdbc/execute! ds ["CREATE TABLE contains_users (id VARCHAR(64) PRIMARY KEY, city VARCHAR(64))"])
+          (doseq [[id city] [["u" "a_b"] ["x" "axb"] ["p" "50%"]]]
+            (jdbc/execute! ds ["INSERT INTO contains_users (id, city) VALUES (?,?)" id city]))
+          (let [source (user-sql/create-sql-user-data-source ds :contains_users)
+                ids    #(set (ports/query-users-sql
+                              source
+                              (audience-filter/filter->sql {:type :demographics :field :city
+                                                            :op :contains :value %})))]
+            (is (= #{"u"} (ids "a_b")))
+            (is (= #{"p"} (ids "%"))))
+          (finally (stop!)))))))
+
 (deftest ^:integration an-audience-it-cannot-evaluate-is-refused
   ;; The compiler reports a filter it can express neither way; the service must
   ;; refuse rather than evaluate what is left. A definition whose only filter is
