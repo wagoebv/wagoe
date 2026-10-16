@@ -2,6 +2,7 @@
   (:require
    [malli.core :as m]
    [malli.transform :as mt]
+   [wagoe.core.utils.redirect :as redirect]
    [wagoe.core.utils.type-conversion :as type-conversion]
    [wagoe.core.utils.case-conversion :as case-conversion]))
 
@@ -382,6 +383,36 @@
      :uuid {:compile (fn [_schema _options] type-conversion/uuid->string)}
      :inst {:compile (fn [_schema _options] type-conversion/instant->string)}
      :enum {:compile (fn [_schema _options] type-conversion/keyword->string)}}}))
+
+;; =============================================================================
+;; Module Settings (:wagoe/user)
+;; =============================================================================
+
+(def LocalPath
+  [:and :string [:fn {:error/message "must be a path on this site, like /web/home"}
+                 redirect/local-path?]])
+
+(def LoginRedirect
+  "Where a user lands after signing in: paths by role (`:default` for the
+   rest), or a function of the user — a symbol in EDN. `:multi` so a bad value
+   gets one message, not one per alternative."
+  [:multi {:dispatch #(cond (map? %) :map (fn? %) :fn :else :symbol)}
+   [:map [:map-of [:enum :admin :user :viewer :default] LocalPath]]
+   [:fn fn?]
+   [:symbol [:fn {:error/message "should be a role map, like {:user \"/web/home\"}, or a qualified function symbol"}
+             qualified-symbol?]]])
+
+(def Dashboard
+  "`false` leaves /web/dashboard to the application; `{:handler sym}` serves
+   that Ring handler there instead of the built-in page."
+  [:multi {:dispatch map?}
+   [true [:map {:closed true} [:handler [:or qualified-symbol? fn?]]]]
+   [false [:boolean {:error/message "should be false, or {:handler my.app/page}"}]]])
+
+(def UserLandingSettings
+  [:map
+   [:login-redirect {:optional true} LoginRedirect]
+   [:dashboard {:optional true} Dashboard]])
 
 (def ^:private user-validator (m/validator User))
 (def ^:private user-explainer (m/explainer User))
