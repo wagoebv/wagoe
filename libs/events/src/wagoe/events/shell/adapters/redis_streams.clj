@@ -43,9 +43,7 @@
    on the keyword itself and keeps them apart, so this is also the adapters
    disagreeing — the same shape of bug as transit not knowing Instant."
   [prefix topic]
-  (str prefix (if (keyword? topic)
-                (subs (str topic) 1)          ; :orders/placed -> "orders/placed"
-                (str topic))))
+  (str prefix (event/topic-name topic)))
 
 ;; =============================================================================
 ;; Consuming

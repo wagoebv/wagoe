@@ -30,7 +30,7 @@
             fail (atom false)
             {:keys [seen bus]} (recording-bus fail)]
         (outbox/create-outbox-table! ds)
-        (f {:ctx ctx :ds ds :seen seen :fail fail
+        (f {:ctx ctx :ds ds :seen seen :fail fail :bus bus
             :outbox (outbox/create-outbox ds bus {:retain-ms 60000})})))))
 
 (defn- event [n] (publisher/build :order/placed :orders {:n n} {:tenant-id "t1"}))
@@ -116,6 +116,21 @@
         (is (= 1 (outbox/relay-once! outbox)))
         (is (= 0 (:n (jdbc/execute-one! ds ["SELECT COUNT(*) AS n FROM event_outbox"]
                                         {:builder-fn rs/as-unqualified-lower-maps}))))))))
+
+(deftest ^:integration one-relay-at-a-time
+  (with-outbox "outbox_lease"
+    (fn [{:keys [ds bus seen outbox]}]
+      (let [other (outbox/create-outbox ds bus)]
+        (is (= 0 (outbox/relay-once! outbox)) "takes the lease")
+        (jdbc/with-transaction [tx ds]
+          (ports/publish-in-tx! outbox tx :orders (event 1)))
+        (is (= 0 (outbox/relay-once! other)) "lease held elsewhere")
+        (is (= 1 (outbox/relay-once! outbox)))
+        (outbox/stop-relay! (outbox/start-relay! outbox))
+        (jdbc/with-transaction [tx ds]
+          (ports/publish-in-tx! outbox tx :orders (event 2)))
+        (is (= 1 (outbox/relay-once! other)) "released on stop")
+        (is (= 2 (count @seen)))))))
 
 (deftest ^:integration the-relay-delivers-on-its-own
   (with-outbox "outbox_relay"

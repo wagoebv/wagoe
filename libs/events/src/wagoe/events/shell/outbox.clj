@@ -7,13 +7,13 @@
    it delivered. A relay that dies between publish and mark publishes the row
    again: delivery is at-least-once, and consumers dedupe on `:id` (BOU-448).
 
-   Every relay running against one database publishes every pending row, so
-   two relays mean duplicates. Run it on one node and set `:relay? false` on
-   the rest; idempotent consumers make duplicates harmless, not free.
+   Relays on several replicas take turns through a lease row in
+   `event_outbox_relay`, so one publishes at a time and order holds.
 
    Times are epoch-millis BIGINTs and ids text, so the same SQL runs on H2,
    PostgreSQL, MySQL and SQLite without per-engine encoding."
-  (:require [next.jdbc :as jdbc]
+  (:require [clojure.string :as str]
+            [next.jdbc :as jdbc]
             [next.jdbc.result-set :as rs]
             [clojure.tools.logging :as log]
             [wagoe.events.core.event :as event]
@@ -28,13 +28,21 @@
   {:poll-ms    1000
    :batch-size 100
    :retain-ms  (* 24 60 60 1000)
+   :lease-ms   30000
    :relay?     true})
 
 ;; --- schema -----------------------------------------------------------------
 
+(defn- seed-relay-lease! [ds]
+  (when-not (jdbc/execute-one! ds ["SELECT name FROM event_outbox_relay WHERE name = 'relay'"])
+    (try
+      (jdbc/execute-one! ds ["INSERT INTO event_outbox_relay (name, owner, until_ms) VALUES ('relay', NULL, 0)"])
+      ;; Another replica seeded it first.
+      (catch java.sql.SQLException _))))
+
 (defn create-outbox-table!
-  "Create `event_outbox` and its index if absent. Called at boot by the
-   `:wagoe/events-outbox` component."
+  "Create `event_outbox`, its index and the relay lease row if absent. Called
+   at boot by the `:wagoe/events-outbox` component."
   [ds]
   (let [ctx (db/context-of ds)]
     (jdbc/execute! ds [(format "CREATE TABLE IF NOT EXISTS event_outbox (
@@ -45,7 +53,12 @@
                                   delivered_ms BIGINT NULL)"
                                (db-ports/column-type (:adapter ctx) :text))])
     (db/create-index-if-not-exists! ctx "ix_event_outbox_pending" :event_outbox
-                                    [:delivered_ms :seq])))
+                                    [:delivered_ms :seq])
+    (jdbc/execute! ds ["CREATE TABLE IF NOT EXISTS event_outbox_relay (
+                          name     VARCHAR(64) PRIMARY KEY,
+                          owner    VARCHAR(36) NULL,
+                          until_ms BIGINT NOT NULL)"])
+    (seed-relay-lease! ds)))
 
 ;; --- write side -------------------------------------------------------------
 
@@ -74,10 +87,10 @@
 (defn- insert-row! [conn topic event]
   (jdbc/execute-one! conn ["INSERT INTO event_outbox (id, seq, topic, envelope) VALUES (?,?,?,?)"
                            (str (random-uuid)) (next-seq)
-                           (if (keyword? topic) (subs (str topic) 1) (str topic))
+                           (event/topic-name topic)
                            (codec/encode {:topic topic :event event})]))
 
-(defrecord EventOutbox [ds bus opts state]
+(defrecord EventOutbox [ds bus opts owner]
   ports/ITransactionalPublisher
   (publish-in-tx! [_ tx topic event]
     (let [conn    (open-connection tx)
@@ -92,7 +105,7 @@
 (defn create-outbox
   "An outbox over datasource `ds` that relays to `bus`. `opts` as `defaults`."
   [ds bus & [opts]]
-  (->EventOutbox ds bus (merge defaults opts) (atom {})))
+  (->EventOutbox ds bus (merge defaults opts) (str (random-uuid))))
 
 ;; --- relay ------------------------------------------------------------------
 
@@ -108,33 +121,55 @@
     (catch Exception e
       {:error {:type :events/publish-failed :message (ex-message e)}})))
 
-(defn- mark-delivered! [ds id]
-  (jdbc/execute-one! ds ["UPDATE event_outbox SET delivered_ms = ? WHERE id = ?"
-                         (System/currentTimeMillis) id]))
+(defn- claim-relay!
+  "Take or renew the relay lease for `owner`; true when held. A relay paused
+   past `lease-ms` may overlap the next owner for one batch: duplicates, no loss."
+  [ds owner lease-ms]
+  (let [now (System/currentTimeMillis)]
+    (= 1 (::jdbc/update-count
+          (jdbc/execute-one! ds ["UPDATE event_outbox_relay SET owner = ?, until_ms = ?
+                                   WHERE name = 'relay' AND (until_ms < ? OR owner = ?)"
+                                 owner (+ now lease-ms) now owner])))))
+
+(defn- release-relay! [ds owner]
+  (jdbc/execute-one! ds ["UPDATE event_outbox_relay SET until_ms = 0
+                           WHERE name = 'relay' AND owner = ?" owner]))
+
+(defn- mark-delivered! [ds ids]
+  (when (seq ids)
+    (jdbc/execute-one! ds (into [(str "UPDATE event_outbox SET delivered_ms = ? WHERE id IN ("
+                                      (str/join "," (repeat (count ids) "?")) ")")
+                                 (System/currentTimeMillis)]
+                                ids))))
 
 (defn- purge-delivered! [ds retain-ms]
   (jdbc/execute-one! ds ["DELETE FROM event_outbox WHERE delivered_ms < ?"
                          (- (System/currentTimeMillis) retain-ms)]))
 
 (defn relay-once!
-  "Publish up to `:batch-size` pending rows in order and mark each delivered.
+  "Publish up to `:batch-size` pending rows in order and mark them delivered.
    Stops at the first failed publish, so a later event never overtakes an
-   earlier one; the failed row is retried next pass. Returns the count
-   delivered."
-  [{:keys [ds bus opts]}]
-  (let [{:keys [batch-size retain-ms]} opts
-        delivered (reduce (fn [n row]
-                            (let [result (publish-row bus row)]
-                              (if (:error result)
-                                (do (log/warn "outbox relay: publish failed, retrying next pass"
-                                              {:id (:id row) :error (:error result)})
-                                    (reduced n))
-                                (do (mark-delivered! ds (:id row))
-                                    (inc n)))))
-                          0
-                          (pending ds batch-size))]
-    (purge-delivered! ds retain-ms)
-    delivered))
+   earlier one; the failed row is retried next pass. Does nothing while
+   another relay holds the lease. Returns the count delivered."
+  [{:keys [ds bus opts owner]}]
+  (let [{:keys [batch-size retain-ms lease-ms]} opts]
+    (if-not (claim-relay! ds owner lease-ms)
+      0
+      (let [rows (pending ds batch-size)
+            ids  (reduce (fn [ids row]
+                           (let [result (publish-row bus row)]
+                             (if (:error result)
+                               (do (log/warn "outbox relay: publish failed, retrying next pass"
+                                             {:id (:id row) :error (:error result)})
+                                   (reduced ids))
+                               (conj ids (:id row)))))
+                         []
+                         rows)]
+        (mark-delivered! ds ids)
+        ;; A short batch ends the tick's loop: purge once per tick, not per batch.
+        (when (< (count rows) batch-size)
+          (purge-delivered! ds retain-ms))
+        (count ids)))))
 
 (defn- relay-tick! [outbox]
   (try
@@ -145,19 +180,19 @@
       (log/error t "outbox relay pass failed"))))
 
 (defn start-relay!
-  "Poll every `:poll-ms`. Returns `outbox` with its executor."
+  "Poll every `:poll-ms`. Returns `outbox` with its `:executor`."
   [outbox]
   (let [ex (Executors/newSingleThreadScheduledExecutor)
         ms (long (get-in outbox [:opts :poll-ms]))]
     (.scheduleWithFixedDelay ex ^Runnable #(relay-tick! outbox) ms ms TimeUnit/MILLISECONDS)
-    (swap! (:state outbox) assoc :executor ex)
-    outbox))
+    (assoc outbox :executor ex)))
 
 (defn stop-relay!
-  "Stop polling. Rows not yet relayed stay pending for the next start."
-  [outbox]
-  (when-let [^ScheduledExecutorService ex (:executor @(:state outbox))]
+  "Stop polling and hand the lease to the next relay. Rows not yet relayed stay
+   pending."
+  [{:keys [ds owner] :as outbox}]
+  (when-let [^ScheduledExecutorService ex (:executor outbox)]
     (.shutdown ex)
     (when-not (.awaitTermination ex 5 TimeUnit/SECONDS)
       (.shutdownNow ex))
-    (swap! (:state outbox) dissoc :executor)))
+    (release-relay! ds owner)))
