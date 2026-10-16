@@ -79,6 +79,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Jobs `:provider :db` and workflow did not boot on MySQL** (BOU-650): their boot DDL was PostgreSQL-shaped.
+  Both now boot, and boot again; no action needed.
 - **MySQL refused instants, lost UUID lookups and read every boolean as false** (BOU-648): they now round-trip.
   New tables get `DATETIME(6)`; existing `DATETIME` columns still round to whole seconds.
 - **MySQL `:connection-params` and `:sql-mode` were ignored** (BOU-647): both config paths dropped them.

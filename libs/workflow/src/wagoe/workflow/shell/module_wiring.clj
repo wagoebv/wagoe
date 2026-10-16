@@ -24,7 +24,9 @@
      Returns {:api [...] :web [...] :static []} for composition
      by the HTTP handler."
   (:require [integrant.core :as ig]
+            [wagoe.platform.core.database.migration-sql :as migration-sql]
             [wagoe.platform.database :as db]
+            [wagoe.platform.ports.database :as db-ports]
             [wagoe.workflow.shell.registry :as registry]
             [wagoe.workflow.shell.persistence :as persistence]
             [wagoe.workflow.shell.service :as service]
@@ -48,7 +50,9 @@
   []
   (->> (str/split (slurp (migration-resource "20260926100000-workflow-tables.up.sql"))
                   #"--;;")
-       (map str/trim)
+       ;; Without its comment lines, as migratus runs it: the MySQL rewrite
+       ;; reads a statement from its first word (BOU-650).
+       (map #(str/trim (str/replace % #"(?m)^\s*--.*$" "")))
        (remove str/blank?)))
 
 (def ^:private altering-profiles
@@ -66,6 +70,12 @@
     :present? entity-uuid/present?
     :ensure!  entity-uuid/ensure-entity-uuid!}])
 
+(defn- index-exists?
+  "Whether `e` is MySQL refusing an index that is there: the rewrite drops
+   `IF NOT EXISTS` from CREATE INDEX, which MySQL lacks (BOU-650)."
+  [e]
+  (= 1061 (some-> ^java.sql.SQLException (ex-cause e) .getErrorCode)))
+
 (defn- initialize-workflow-schema!
   "Create workflow's tables at boot, for installations that never ran
    `migrate up`. Changing a table that exists is left to `migrate up` outside
@@ -73,8 +83,13 @@
    through a migration. There the boot warns about what is missing and goes on."
   [ctx profile]
   (log/info "Initializing workflow schema")
-  (doseq [statement (migration-statements)]
-    (db/execute-ddl! ctx statement))
+  ;; The migration is PostgreSQL-shaped; `migrate up` rewrites it for MySQL,
+  ;; and the boot has to as well (BOU-650).
+  (doseq [statement (cond->> (migration-statements)
+                      (= :mysql (db-ports/engine (:adapter ctx))) (mapcat migration-sql/for-mysql))]
+    (try (db/execute-ddl! ctx statement)
+         (catch clojure.lang.ExceptionInfo e
+           (when-not (index-exists? e) (throw e)))))
   (let [ds (:datasource ctx)]
     (doseq [{:keys [what present? ensure!]} boot-changes]
       (cond
