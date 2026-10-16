@@ -18,15 +18,43 @@
         (persistence/initialize-user-schema! db-ctx)
         (binding [*ctx* db-ctx] (f))))))
 
+(defn- service []
+  (let [repo (persistence/create-user-repository *ctx*)]
+    [repo (user-service/create-user-service
+           repo
+           (persistence/create-session-repository *ctx*)
+           (persistence/create-audit-repository *ctx* {:default-limit 20 :max-limit 100})
+           {} nil)]))
+
+(defn- user! [repo email role]
+  (.create-user repo {:email email :name email :role role :active true
+                      :password-hash "bcrypt+sha512$test"}))
+
+(defn- bulk [svc ids action]
+  ((web-handlers/bulk-update-users-htmx-handler svc {})
+   {:request-method :post
+    :uri            "/web/users/bulk"
+    :form-params    {"user-ids" (mapv str ids) "action" action}}))
+
+(deftest ^:integration a-bulk-role-change-sends-only-the-role
+  ;; Writing back the whole cached user failed validation on its empty fields.
+  (let [[repo svc] (service)
+        _boss (user! repo "boss@example.com" :admin)
+        u     (user! repo "u@example.com" :user)
+        resp  (bulk svc [(:id u)] "role-admin")]
+    (is (= 200 (:status resp)))
+    (is (= :admin (:role (user-ports/get-user-by-id svc (:id u)))))))
+
+(deftest ^:integration a-bulk-demote-of-the-last-admin-gets-409
+  (let [[repo svc] (service)
+        boss (user! repo "boss@example.com" :admin)
+        resp (bulk svc [(:id boss)] "role-user")]
+    (is (= 409 (:status resp)))
+    (is (= :admin (:role (user-ports/get-user-by-id svc (:id boss)))))))
+
 (deftest ^:integration an-admin-demoting-themselves-gets-409
-  (let [repo    (persistence/create-user-repository *ctx*)
-        svc     (user-service/create-user-service
-                 repo
-                 (persistence/create-session-repository *ctx*)
-                 (persistence/create-audit-repository *ctx* {:default-limit 20 :max-limit 100})
-                 {} nil)
-        new!    #(.create-user repo {:email % :name % :role :admin :active true
-                                     :password-hash "bcrypt+sha512$test"})
+  (let [[repo svc] (service)
+        new!    #(user! repo % :admin)
         boss    (new! "boss@example.com")
         _other  (new! "other@example.com")
         handler (middleware/flexible-authentication-middleware

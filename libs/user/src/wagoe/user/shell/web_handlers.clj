@@ -766,17 +766,11 @@
 
           "role-admin"
           (doseq [id-str ids]
-            (let [uuid (UUID/fromString id-str)
-                  user (user-ports/get-user-by-id user-service uuid)]
-              (when user
-                (user-ports/update-user-profile user-service (assoc user :role :admin)))))
+            (user-ports/update-user-profile user-service {:id (UUID/fromString id-str) :role :admin}))
 
           "role-user"
           (doseq [id-str ids]
-            (let [uuid (UUID/fromString id-str)
-                  user (user-ports/get-user-by-id user-service uuid)]
-              (when user
-                (user-ports/update-user-profile user-service (assoc user :role :user)))))
+            (user-ports/update-user-profile user-service {:id (UUID/fromString id-str) :role :user}))
 
           (throw (ex-info "Unsupported bulk action"
                           {:type :bad-request
