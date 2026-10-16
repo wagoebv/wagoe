@@ -37,7 +37,8 @@
   (get-user-devices [this user-id]
     "All active devices for user.")
   (get-devices-by-platform [this platform opts]
-    "All devices for platform. opts: {:limit n :offset n}. Used by broadcast.")
+    "Active devices for platform, ordered by id. opts: {:limit n :after-id id}:
+     keyset paging, so deactivating a device mid-broadcast shifts no page.")
   (mark-token-invalid! [this device-token]
     "Flag token as invalid after provider rejection.")
   (cleanup-stale-tokens! [this max-age-days]

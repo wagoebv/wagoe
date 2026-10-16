@@ -100,6 +100,8 @@ for what is public API, what is internal, and how deprecations are announced.
   The access time is now written at most once a minute; a lookup failure is a 500.
 - **Two admins demoting each other at once could leave none; an admin bulk delete of users could stop halfway** (BOU-673).
   A custom `IEntityWriter` renames `delete-record!` to `delete-records!`; a custom `IUserRepository` adds `with-admins-locked`.
+- **A push token re-registered by another user kept notifying the first; broadcasts skipped devices** (BOU-683).
+  Run migrations; `get-devices-by-platform` now pages with `:after-id` instead of `:offset`.
 - **One event the bus never accepts stalled the outbox relay for good; replica clock skew could split its lease** (BOU-679).
   Dead-lettered after `:max-attempts` over `:dead-letter-after-ms` (10, 1h); the lease uses database time. See `outbox/requeue!`.
 - **Search suggestions read every row on PostgreSQL, and `_`/`%` in a query matched anything** (BOU-676).
