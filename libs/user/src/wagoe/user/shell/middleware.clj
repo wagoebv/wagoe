@@ -187,27 +187,31 @@
   "`{:user u :session s}` for the session `token` names, or `{:refusal response}`,
    the 401 that refuses it."
   [user-service token request]
-  (try
-    (log/info "Validating session token" {:uri (:uri request)})
-    ;; validate-session refuses a gone or inactive user and hands back the
-    ;; one it read, so there is no second read here (BOU-668).
-    (if-let [{:keys [user] :as session} (ports/validate-session user-service token)]
-      (do
-        (log/info "Session validation successful" {:user-id (:user-id session)})
-        (if user
-          {:user (without-credentials user) :session (dissoc session :user)}
-          {:refusal (create-unauthorized-response "User not found" :user-not-found request)}))
-      (do
-        (log/info "Session invalid or expired" {:uri (:uri request)})
-        {:refusal (create-unauthorized-response "Invalid or expired session" :invalid-session request)}))
-    ;; Only a refused session is a 401. A failed lookup propagates to the error
-    ;; mapping as a 5xx: the caller is not unauthenticated, the store is down
-    ;; (BOU-666).
-    (catch clojure.lang.ExceptionInfo ex
-      (if (= :session-invalid (:type (ex-data ex)))
-        (do (log/info "Session refused" {:uri (:uri request) :reason (:reason (ex-data ex))})
-            {:refusal (create-unauthorized-response "Invalid or expired session" :invalid-session request)})
-        (throw ex)))))
+  (if (re-find #"\p{Cntrl}" token)
+    ;; No issued token has one, and PostgreSQL fails a query carrying a NUL:
+    ;; refused here, or any caller could turn a request into a 5xx.
+    {:refusal (create-unauthorized-response "Invalid or expired session" :invalid-session request)}
+    (try
+      (log/info "Validating session token" {:uri (:uri request)})
+      ;; validate-session refuses a gone or inactive user and hands back the
+      ;; one it read, so there is no second read here (BOU-668).
+      (if-let [{:keys [user] :as session} (ports/validate-session user-service token)]
+        (do
+          (log/info "Session validation successful" {:user-id (:user-id session)})
+          (if user
+            {:user (without-credentials user) :session (dissoc session :user)}
+            {:refusal (create-unauthorized-response "User not found" :user-not-found request)}))
+        (do
+          (log/info "Session invalid or expired" {:uri (:uri request)})
+          {:refusal (create-unauthorized-response "Invalid or expired session" :invalid-session request)}))
+      ;; Only a refused session is a 401. A failed lookup propagates to the error
+      ;; mapping as a 5xx: the caller is not unauthenticated, the store is down
+      ;; (BOU-666).
+      (catch clojure.lang.ExceptionInfo ex
+        (if (= :session-invalid (:type (ex-data ex)))
+          (do (log/info "Session refused" {:uri (:uri request) :reason (:reason (ex-data ex))})
+              {:refusal (create-unauthorized-response "Invalid or expired session" :invalid-session request)})
+          (throw ex))))))
 
 (defn session-authentication-middleware
   "Middleware that validates session tokens and updates session access time.

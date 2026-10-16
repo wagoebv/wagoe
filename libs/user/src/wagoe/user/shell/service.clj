@@ -141,19 +141,21 @@
           (sort-by #(not= actor-id (:id %)) removed))))
 
 (defn- locked-write!
-  "Run `write!` in one transaction holding the active admins' rows, refused
-   first when it takes admin rights from the `removed` users. The count and
-   the write cannot interleave with another's, so two admins demoting each
-   other at once cannot leave none (BOU-673)."
-  [user-repository removed write!]
+  "In one transaction holding the active admins' rows, call `plan` for
+   [removed write!] and run `write!`, refused first when it takes admin rights
+   from the `removed` users. The count and the write cannot interleave with
+   another's, so two admins demoting each other at once cannot leave none
+   (BOU-673)."
+  [user-repository plan]
   ;; The refusal is thrown outside the transaction, which would log it as a
   ;; failed one.
   (let [{:keys [refusal result]}
         (.with-admins-locked user-repository
                              (fn []
-                               (if-let [refusal (when (seq removed) (admin-refusal user-repository removed))]
-                                 {:refusal refusal}
-                                 {:result (write!)})))]
+                               (let [[removed write!] (plan)]
+                                 (if-let [refusal (when (seq removed) (admin-refusal user-repository removed))]
+                                   {:refusal refusal}
+                                   {:result (write!)}))))]
     (if refusal (throw refusal) result)))
 
 (defn- ends-sessions?
@@ -169,7 +171,7 @@
    access. Returns what `write!` returned."
   [user-repository session-repository before after write!]
   (let [result (if (and before (user-core/removes-admin? before after))
-                 (locked-write! user-repository [before] write!)
+                 (locked-write! user-repository (constantly [[before] write!]))
                  (write!))]
     (when (and result before (ends-sessions? before after))
       (.invalidate-all-user-sessions session-repository (:id before)))
@@ -191,25 +193,29 @@
    them or, when the admin guard refuses the set or a reference blocks one,
    none. Returns the users deleted."
   [{:keys [user-repository session-repository audit-repository]} user-ids permanent?]
-  (let [;; find-user-by-id skips a soft-deleted user, whom erasure still
+  (let [user-ids (vec (distinct user-ids))
+        ;; Read under the lock, so the guard judges the roles as they stand.
+        ;; find-user-by-id skips a soft-deleted user, whom erasure still
         ;; removes, unaudited as before; no longer an admin, it needs no guard.
-        users   (into [] (keep #(or (.find-user-by-id user-repository %) (when permanent? {:id %})))
-                      (distinct user-ids))
+        read-users #(into [] (keep (fn [id] (or (.find-user-by-id user-repository id) (when permanent? {:id id}))))
+                          user-ids)
         delete! (fn [{:keys [id]}]
                   (if permanent?
                     (.hard-delete-user user-repository id)
                     (when (.soft-delete-user user-repository id)
                       (.invalidate-all-user-sessions session-repository id)
                       true)))
-        deleted (when (seq users)
+        deleted (when (seq user-ids)
                   (try
-                    (locked-write! user-repository (filter #(user-core/removes-admin? % nil) users)
-                                   #(filterv delete! users))
+                    (locked-write! user-repository
+                                   #(let [users (read-users)]
+                                      [(filter (fn [u] (user-core/removes-admin? u nil)) users)
+                                       (fn [] (filterv delete! users))]))
                     (catch Exception e
                       (if (foreign-key-refusal? e)
                         (throw (ex-info "Cannot permanently delete a user other records still reference"
                                         {:type     :hard-deletion-not-allowed
-                                         :user-ids (mapv :id users)}
+                                         :user-ids user-ids}
                                         e))
                         (throw e)))))]
     (doseq [{:keys [id email]} deleted :when email]

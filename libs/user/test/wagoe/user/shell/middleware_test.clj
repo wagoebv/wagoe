@@ -303,7 +303,9 @@
       (testing label
         (is (= 500 (:status (through-error-mapping (wrap echo-handler) request))))))
     (testing "a refused session is still a 401"
-      (is (= 401 (:status ((sut/session-authentication-middleware service echo-handler) (session "revoked"))))))))
+      (is (= 401 (:status ((sut/session-authentication-middleware service echo-handler) (session "revoked"))))))
+    (testing "a token no issued one looks like is a 401, never looked up"
+      (is (= 401 (:status ((sut/session-authentication-middleware service echo-handler) (session "%00"))))))))
 
 (deftest ^:unit the-claims-only-arity-warns-once
   (reset! @#'sut/claims-only-warned? false)

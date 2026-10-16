@@ -937,9 +937,14 @@
      (fn [{:keys [params]}]
        (let [session-entity (:session-entity params)
              db-session (session-entity->db session-entity)
-             query {:update :user_sessions
-                    :set (dissoc db-session :id)
-                    :where [:= :id (type-conversion/uuid->string (:id session-entity))]}
+             id-match   [:= :id (type-conversion/uuid->string (:id session-entity))]
+             ;; A session read as live must not overwrite a revocation that
+             ;; landed since the read (BOU-666).
+             query (if (:revoked-at session-entity)
+                     {:update :user_sessions :set (dissoc db-session :id) :where id-match}
+                     {:update :user_sessions
+                      :set    (dissoc db-session :id :revoked_at)
+                      :where  [:and id-match [:is :revoked_at nil]]})
              affected-rows (db/execute-update! ctx query)]
          (when (> affected-rows 0)
            session-entity)))

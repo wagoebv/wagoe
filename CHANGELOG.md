@@ -99,7 +99,7 @@ for what is public API, what is internal, and how deprecations are announced.
 - **A session request wrote `last_accessed_at` twice, and a database error during sign-in lookup answered 401** (BOU-666).
   The access time is now written at most once a minute; a lookup failure is a 500.
 - **Two admins demoting each other at once could leave none; an admin bulk delete of users could stop halfway** (BOU-673).
-  Upgrade; nothing to change.
+  A custom `IEntityWriter` renames `delete-record!` to `delete-records!`; a custom `IUserRepository` adds `with-admins-locked`.
 - **Search suggestions read every row on PostgreSQL, and `_`/`%` in a query matched anything** (BOU-676).
   Run migrations for the trigram index; pg_trgm off the `search_path` now falls back to LIKE.
 - **Push device registration failed on MySQL and PostgreSQL, and seeds with timestamps or symbolic ids on MySQL** (BOU-657).

@@ -205,6 +205,19 @@
       (is (nil? (ports/find-session-by-token @session-repo token))
           "revoked session is excluded"))))
 
+(deftest ^:contract an-access-write-does-not-undo-a-revocation
+  ;; validate-session reads, then writes the access time; a revocation in
+  ;; between must hold (BOU-666).
+  (let [uid   (new-user-id)
+        token (str "tok-" (UUID/randomUUID))]
+    (ports/create-session @session-repo
+                          {:user-id uid :session-token token
+                           :expires-at (.plusSeconds (Instant/now) 3600)})
+    (let [read (ports/find-session-by-token @session-repo token)]
+      (ports/invalidate-session @session-repo token)
+      (is (nil? (ports/update-session @session-repo (assoc read :last-accessed-at (Instant/now)))))
+      (is (nil? (ports/find-session-by-token @session-repo token)) "still revoked"))))
+
 (deftest ^:contract expired-session-not-returned
   (testing "find-session-by-token ignores expired sessions"
     (let [uid   (new-user-id)

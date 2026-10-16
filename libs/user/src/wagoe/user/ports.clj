@@ -195,9 +195,9 @@
   ;; Does not throw on a bad password — it returns the failure shape.
 
   (validate-session [this session-token])
-  ;; Returns the session with :last-accessed-at refreshed (written at most once
-  ;; a minute) and its :user (no
-  ;; credentials), or nil when the token is unknown. Throws
+  ;; Returns the session and its :user (no credentials), or nil when the token
+  ;; is unknown. :last-accessed-at is written at most once a minute, so it may
+  ;; trail the request by that much. Throws
   ;; {:type :session-invalid :reason …} for a session that exists but no longer
   ;; validates, its user gone or inactive included, so middleware answers 401.
 
