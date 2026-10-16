@@ -81,6 +81,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **Search did not run on MySQL, and generated apps had no search table** (BOU-651): the search library now ships its
   migrations, with MySQL-indexable keys. Run `bb migrate up` once search is enabled.
+- **Jobs `:provider :db` and workflow did not boot on MySQL** (BOU-650): their boot DDL was PostgreSQL-shaped.
+  Both now boot, and boot again; no action needed.
 - **The admin took MySQL booleans for numbers and UUIDs for strings** (BOU-649): it now reads `column_type`.
   `TINYINT(1)` is a checkbox and `CHAR(36)` a UUID field, on SQLite too; no action needed.
 - **MySQL refused instants, lost UUID lookups and read every boolean as false** (BOU-648): they now round-trip.

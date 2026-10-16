@@ -114,6 +114,10 @@
   "Create an index unless it is already there."
   schema/create-index-if-not-exists!)
 
+(def execute-ddl-if-absent!
+  "Run DDL, counting \"already exists\" as done."
+  schema/execute-ddl-if-absent!)
+
 (def drop-index-if-exists!
   "Drop an index if it is there."
   schema/drop-index-if-exists!)
