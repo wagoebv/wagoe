@@ -3,6 +3,7 @@
    default HTTP pipeline. Verifies opt-in enforcement, the 429 response, the
    in-memory fallback, and a limit shared across replicas via a single cache."
   (:require [wagoe.cache.ports :as cache-ports]
+            [wagoe.platform.core.http.client-ip :as client-ip]
             [wagoe.platform.shell.http.interceptors :as itc]
             [clojure.test :refer [deftest testing is use-fixtures]]))
 
@@ -91,6 +92,25 @@
                      (:status (run replica-b ip))]] ; 6 -> over
       (is (= [200 200 200 200 429 429] codes)
           "combined limit of 4 enforced regardless of which replica served the request"))))
+
+(deftest ^:unit ^:security buckets-by-client-behind-a-trusted-proxy
+  (let [system  {:rate-limit {:enabled? true :limit 1 :window-ms 60000}}
+        trusted (:cidrs (client-ip/parse-trusted-proxies ["10.0.0.0/8"]))
+        handler (itc/wrap-client-ip
+                 (fn [req]
+                   (itc/run-http-interceptors (fn [_] {:status 200 :headers {} :body "ok"})
+                                              [itc/http-rate-limit-protection] req system))
+                 trusted)
+        call    (fn [peer xff]
+                  (:status (handler {:request-method :get :uri "/api/v1/thing" :remote-addr peer
+                                     :headers {"x-forwarded-for" xff}})))]
+    (testing "two clients behind one trusted proxy get a bucket each"
+      (is (= [200 200 429] [(call "10.0.0.2" "198.51.100.1")
+                            (call "10.0.0.2" "198.51.100.2")
+                            (call "10.0.0.2" "198.51.100.1")])))
+    (testing "an untrusted peer cannot dodge its bucket with a forged header"
+      (is (= [200 429] [(call "203.0.113.77" "198.51.100.3")
+                        (call "203.0.113.77" "198.51.100.4")])))))
 
 (deftest ^:unit ^:security wired-into-default-stack
   (testing "the config-driven limiter is part of the default HTTP interceptor stack"

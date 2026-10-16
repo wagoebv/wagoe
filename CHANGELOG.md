@@ -98,6 +98,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Security: behind a proxy every client shared one rate-limit bucket and audit IP; X-Forwarded-For was trusted from anyone** (BOU-671).
+  Set `:wagoe/http :trusted-proxies` to your proxies' CIDRs; read the address as `:client-ip`.
 - **PDF reports wrote data unescaped: `&` failed the render, and markup in data was rendered and its URLs fetched** (BOU-675, security).
   Strings holding HTML or entities like `&nbsp;` must be wrapped in `hiccup2.core/raw`; images load only from `data:` URIs.
 - **A scaffolded field's `default=` was unreachable from the wizards and `bb scaffold ai`, and stayed required on create**
