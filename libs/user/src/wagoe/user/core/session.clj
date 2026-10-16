@@ -26,8 +26,10 @@
   [user]
   (cond
     (nil? user)          :user-not-found
-    (not (:active user)) :user-inactive
-    (:deleted-at user)   :user-deleted))
+    ;; Before :active: a soft delete clears that too, and a deleted account
+    ;; should not be reported as merely deactivated.
+    (:deleted-at user)   :user-deleted
+    (not (:active user)) :user-inactive))
 
 ;; Session creation helpers  
 (defn generate-session-token

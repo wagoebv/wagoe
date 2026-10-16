@@ -155,6 +155,17 @@
       (.invalidate-all-user-sessions session-repository (:id before)))
     result))
 
+(defn- audit-quietly!
+  "Record `entry-fn`'s audit entry for `user-id`; a failed write warns and does
+   not undo the change."
+  [audit-repository entry-fn user-id email]
+  (try
+    (let [{:keys [actor-id actor-email ip-address user-agent]} (effective-audit-context {})]
+      (.create-audit-log audit-repository
+                         (entry-fn actor-id actor-email user-id email ip-address user-agent)))
+    (catch Exception e
+      (println "WARN: Failed to create audit log:" (.getMessage e)))))
+
 ;; =============================================================================
 ;; Database-Agnostic User Service (I/O Shell Layer)
 ;; =============================================================================
@@ -556,29 +567,15 @@
              ;; Get user details before deactivation for audit trail
              user (.find-user-by-id user-repository user-id)
              ;; :active only, never :deleted-at: a deactivated user stays
-             ;; listed and can be reactivated (BOU-681).
-             after  (assoc user :active false)
+             ;; listed and can be reactivated (BOU-681). Only that column is
+             ;; written, so a concurrent password or MFA change is not undone.
+             after  {:id user-id :active false}
              result (when user
                       (change-access! user-repository session-repository user after
                                       #(.update-user user-repository
                                                      (user-core/prepare-user-for-update after (current-timestamp)))))]
-
-         ;; Create audit log entry
          (when result
-           (try
-             (let [{:keys [actor-id actor-email ip-address user-agent]}
-                   (effective-audit-context {})
-                   audit-entry (audit-core/deactivate-user-audit-entry
-                                actor-id
-                                actor-email
-                                user-id
-                                (:email user)
-                                ip-address
-                                user-agent)]
-               (.create-audit-log audit-repository audit-entry))
-             (catch Exception e
-               (println "WARN: Failed to create audit log:" (.getMessage e)))))
-
+           (audit-quietly! audit-repository audit-core/deactivate-user-audit-entry user-id (:email user)))
          (boolean result)))
      {:system {:user-repository user-repository
                :session-repository session-repository
@@ -596,13 +593,7 @@
                        (change-access! user-repository session-repository user nil
                                        #(.soft-delete-user user-repository user-id)))]
          (when result
-           (try
-             (let [{:keys [actor-id actor-email ip-address user-agent]} (effective-audit-context {})]
-               (.create-audit-log audit-repository
-                                  (audit-core/delete-user-audit-entry
-                                   actor-id actor-email user-id (:email user) ip-address user-agent)))
-             (catch Exception e
-               (println "WARN: Failed to create audit log:" (.getMessage e)))))
+           (audit-quietly! audit-repository audit-core/delete-user-audit-entry user-id (:email user)))
          (boolean result)))
      {:system {:user-repository user-repository
                :session-repository session-repository

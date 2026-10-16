@@ -43,9 +43,9 @@
     (when-not (get @state (:id user-entity))
       (throw (ex-info "User not found"
                       {:type :user-not-found :user-id (:id user-entity)})))
+    ;; Merged, as the database writes only the columns it is given.
     (let [user (assoc user-entity :updated-at (Instant/now))]
-      (swap! state assoc (:id user) user)
-      user))
+      (get (swap! state update (:id user) merge user) (:id user))))
 
   (soft-delete-user [_ user-id]
     (boolean (when (get @state user-id)

@@ -752,11 +752,10 @@
               (user-ports/deactivate-user user-service uuid)))
 
           "activate"
-          (doseq [id-str ids]
-            (let [uuid (UUID/fromString id-str)
-                  user (user-ports/get-user-by-id user-service uuid)]
-              (when user
-                (user-ports/update-user-profile user-service (assoc user :active true)))))
+          (doseq [id-str ids
+                  :let [uuid (UUID/fromString id-str)]
+                  :when (user-ports/get-user-by-id user-service uuid)]
+            (user-ports/update-user-profile user-service {:id uuid :active true}))
 
           "delete"
           (doseq [id-str ids]
