@@ -566,7 +566,7 @@
        :delete {:handler (web-handlers/delete-user-htmx-handler user-service config)
                 :interceptors ['wagoe.user.shell.http-interceptors/require-authenticated
                                'wagoe.user.shell.http-interceptors/require-admin]
-                :summary "Deactivate user (HTMX)"}}]
+                :summary "Delete user (HTMX)"}}]
      ["/users/:id/hard-delete"
       {:no-doc     true
        :middleware [auth-middleware]

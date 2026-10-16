@@ -101,6 +101,10 @@
                          :user-id user-id})))))
 
   (deactivate-user [_ user-id]
+    (boolean (when (get @state user-id)
+               (swap! state assoc-in [user-id :active] false))))
+
+  (delete-user [_ user-id]
     (let [existing (get @state user-id)]
       (if existing
         (do
@@ -789,7 +793,7 @@
                     (get-user-by-email [_ _] nil)
                     (list-users [_ _] nil)
                     (update-user-profile [_ _] nil)
-                    (deactivate-user [_ _]
+                    (delete-user [_ _]
                       (throw (Exception. "Cannot delete user with active sessions")))
                     (permanently-delete-user [_ _] nil)
                     (authenticate-user [_ _] nil)
