@@ -359,6 +359,12 @@
       (column-default field-def)
       (assoc :sql-default (column-default field-def))
 
+      ;; The column fills itself, so a create may leave it out (BOU-537).
+      ;; Only an explicit default: a required enum's implicit one is there for
+      ;; the admin form, and the API still asks for it.
+      (some? (:default field-def))
+      (assoc :field-default? true)
+
       relation?
       (assoc :references     (:references field-def)
              :relation-table (relation-table (:references field-def)

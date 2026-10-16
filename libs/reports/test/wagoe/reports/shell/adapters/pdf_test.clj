@@ -3,7 +3,11 @@
    Generates real PDF bytes — verifies %%PDF- magic bytes."
   (:require [wagoe.reports.shell.adapters.pdf :as sut]
             [wagoe.reports.ports :as ports]
-            [clojure.test :refer [deftest is testing]]))
+            [clojure.test :refer [deftest is testing]])
+  (:import [com.sun.net.httpserver HttpHandler HttpServer]
+           [java.net InetSocketAddress]
+           [org.apache.pdfbox.pdmodel PDDocument]
+           [org.apache.pdfbox.text PDFTextStripper]))
 
 ;; =============================================================================
 ;; Helpers
@@ -89,3 +93,45 @@
     (let [gen    (sut/create-pdf-generator)
           result (ports/generate! gen sample-template-report sample-data {})]
       (is (= :pdf (:type result))))))
+
+;; =============================================================================
+;; Untrusted data (BOU-675)
+;; =============================================================================
+
+(defn- pdf-text [^bytes pdf]
+  (with-open [doc (PDDocument/load pdf)]
+    (.getText (PDFTextStripper.) doc)))
+
+(defn- render-template [template data]
+  (:bytes (ports/generate! (sut/create-pdf-generator)
+                           {:id :untrusted :type :pdf :template template}
+                           data {})))
+
+(defn- render-cell [value]
+  (render-template (fn [v] [:html [:body [:p v]]]) value))
+
+(deftest ^:integration ^:security pdf-escapes-data-test
+  (testing "& and < in data render as text"
+    (is (re-find #"Ruimte & Wonen" (pdf-text (render-cell "Ruimte & Wonen"))))
+    (is (re-find #"<b>bold</b>" (pdf-text (render-cell "<b>bold</b>")))))
+  (testing "XML-illegal control characters are stripped"
+    (is (re-find #"abcd" (pdf-text (render-cell "a\u0001\u001F\uD800b\uDC00c\uFFFEd"))))))
+
+(deftest ^:integration ^:security pdf-fetches-no-external-resource-test
+  (let [hits   (atom 0)
+        server (doto (HttpServer/create (InetSocketAddress. "127.0.0.1" 0) 0)
+                 (.createContext "/" (reify HttpHandler
+                                       (handle [_ exchange]
+                                         (swap! hits inc)
+                                         (.sendResponseHeaders exchange 404 -1)
+                                         (.close exchange))))
+                 (.start))
+        url    (str "http://127.0.0.1:" (.getPort (.getAddress server)) "/x.png")]
+    (try
+      (testing "markup in data is not parsed, so its URL is not fetched"
+        (render-cell (str "<img src=\"" url "\">"))
+        (is (zero? @hits)))
+      (testing "a template's own img src is not fetched either"
+        (render-template (fn [_] [:html [:body [:img {:src url}]]]) nil)
+        (is (zero? @hits)))
+      (finally (.stop server 0)))))

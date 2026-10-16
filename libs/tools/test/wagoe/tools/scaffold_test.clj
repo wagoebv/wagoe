@@ -391,10 +391,32 @@
 
 (deftest ^:unit a-wizard-prints-the-command-it-runs-as-bb-scaffold
   (let [out (with-out-str
-              (with-in-str "shop\nShop\ny\ny\nname\n1\ny\nn\n\nn\n"
+              (with-in-str "shop\nShop\ny\ny\nname\n1\ny\nn\n\n\nn\n"
                 (scaffold/wizard-generate)))]
     (is (str/includes? out "Command: bb scaffold generate --module-name shop"))
     (is (not (str/includes? out "cli-entry")))))
+
+(deftest ^:unit the-wizards-ask-for-a-default
+  ;; BOU-537: only the flag and the field spec could set one.
+  (testing "generate"
+    (let [out (with-out-str
+                (with-in-str "shop\nShop\ny\ny\nlink\n1\ny\nn\nhttps://x.org\n\nn\n"
+                  (scaffold/wizard-generate)))]
+      (is (str/includes? out "--field 'link:string:required:default='\\''https://x.org'\\'''") out)))
+  (testing "field"
+    (let [out (with-out-str
+                (with-in-str "shop\nShop\nqty\n3\ny\nn\n1\nn\nn\n"
+                  (scaffold/wizard-field)))]
+      (is (str/includes? out "--default 1") out))))
+
+(deftest ^:unit a-default-with-a-colon-is-quoted-in-the-spec
+  (is (= "qty:int:required:default=1"
+         (scaffold/field->spec {:name "qty" :type "int" :required true :default 1})))
+  (is (= "link:string:default='https://x.org'"
+         (scaffold/field->spec {:name "link" :type "string" :default "https://x.org"})))
+  (is (= "q:string:default=''x'"
+         (scaffold/field->spec {:name "q" :type "string" :default "'x"}))
+      "a leading quote would read as an unclosed one"))
 
 (deftest ^:unit a-printed-command-can-be-pasted
   ;; Joined unquoted, `>` in a workflow spec became a redirect and a spaced
