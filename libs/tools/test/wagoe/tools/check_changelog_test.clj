@@ -158,3 +158,14 @@
 (deftest ^:unit the-shipped-stability-page-agrees-with-the-changelog
   (is (empty? (sut/stability-findings (slurp "CHANGELOG.md")
                                       (slurp "docs/modules/ROOT/pages/stability.adoc")))))
+
+(deftest ^:unit every-deprecation-has-an-upgrade-entry
+  (let [changelog (str "## [Unreleased]\n\n### Deprecated\n\n"
+                       "- **Old provider names** (BOU-1). See BOU-9.\n\n"
+                       "- **An old function** (BOU-2).\n\n"
+                       "### Fixed\n\n- **Unrelated** (BOU-3).\n")]
+    (is (= ["BOU-2"] (sut/deprecations-without-upgrade changelog [{:ticket "BOU-1"}])))
+    (is (empty? (sut/deprecations-without-upgrade changelog [{:ticket "BOU-1"} {:ticket "BOU-2"}])))
+    (is (= ["**No ticket**."]
+           (sut/deprecations-without-upgrade "### Deprecated\n\n- **No ticket**.\n" []))
+        "an entry citing no ticket cannot be matched, so it is reported")))

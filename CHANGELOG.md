@@ -31,6 +31,16 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **Sign in with OpenID Connect** (BOU-447): authorization code with PKCE, a "Sign in with X" button per provider.
+  Configure under `:wagoe/user {:oidc …}`; linking by email is opt-in and never reaches an admin.
+- **Live htmx updates over server-sent events** (BOU-464): `sse/sse-handler` streams `sse/push-fragment!` to `sse-swap`
+  elements; the htmx `sse` extension ships in every bundle. Custom `IRealtimeService`s need `connect-identified`.
+- **`com.wagoe/wagoe-test`, a test kit for apps** (BOU-469): `with-test-system`, a Ring client with session + CSRF,
+  test tenants, `run-pending-jobs!`, `drain-events!`, `drain-realtime!`. Add it to `:test`; see `libs/test/README.md`.
+- **`wagoe upgrade`** (BOU-470) rewrites deprecated config values, keys and names, keeping formatting.
+  It prints a diff by default; `--apply` writes. What it cannot rewrite it lists.
+- **Transactional outbox for events** (BOU-448): `publish-in-tx!` commits an event with your transaction; a relay
+  publishes it at least once. Opt in with `:outbox {}` under `:wagoe/events`.
 - **MySQL 8 is supported** (BOU-574): a generated app boots, migrates and serves on it.
   Switch with `bb setup --database mysql`; tenancy needs PostgreSQL, push and seeds wait on BOU-657.
 - **`bb check:vulns`** (BOU-451): known vulnerabilities in every `deps.edn`, aliases included, from GitHub's advisory

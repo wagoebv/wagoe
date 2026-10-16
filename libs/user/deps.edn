@@ -20,6 +20,8 @@
          ring/ring-core {:mvn/version "1.15.5"}
          com.github.seancorfield/next.jdbc {:mvn/version "1.3.1118"}
          buddy/buddy-core {:mvn/version "1.12.0-430"}
+         ;; wagoe.user.shell.oidc: discovery, key sets and the token exchange.
+         clj-http/clj-http {:mvn/version "3.13.1"}
 
          ;; Authentication
          buddy/buddy-hashers     {:mvn/version "2.0.167"}

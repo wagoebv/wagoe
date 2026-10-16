@@ -27,6 +27,7 @@ A port is for getting an answer; this is for the other case.
 | **Consumer groups** | `:redis` | Each event reaches exactly one member of a group, and every group |
 | **Dead-letter** | `:redis` | After `:max-deliveries` an event is moved to `<stream>:dead` rather than stalling its topic |
 | **History** | both | `IEventHistory` replays what a topic has seen — within stream retention, or the in-process buffer |
+| **Transactional outbox** | both | `publish-in-tx!` commits the event with your transaction; a relay publishes it at least once. Opt in with `:outbox {}` — see AGENTS.md |
 
 Under `:memory` there is no acknowledgement and no retry: a handler that throws
 is logged and the event is dropped, and nothing survives the process. That is

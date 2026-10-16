@@ -33,8 +33,8 @@ Bundle vars — each a vector of `/`-rooted asset paths, in load order:
 | `base-css` | `:base` | pico → wagoe-tokens → tokens-openprops → app |
 | `pilot-css` | `:pilot` | wagoe-tokens → app → daisy-admin |
 | `admin-pilot-css` | `:admin-pilot` | fonts → wagoe-tokens → admin → app → daisy-admin → wagoe-admin |
-| `base-js` / `pilot-js` | `:base` / `:pilot` | theme → components → alpine → htmx (`pilot-js` aliases `base-js`) |
-| `admin-pilot-js` | `:admin-pilot` | theme → components → admin-ux → alpine → htmx → forms → keyboard |
+| `base-js` / `pilot-js` | `:base` / `:pilot` | theme → components → alpine → htmx → htmx-ext-sse → forms (`pilot-js` aliases `base-js`) |
+| `admin-pilot-js` | `:admin-pilot` | theme → components → admin-ux → alpine → htmx → htmx-ext-sse → forms → keyboard |
 
 Lookup functions:
 
@@ -63,7 +63,8 @@ Recommended bundle per page type:
   (wagoe.org tokens and the admin display-role styles, ADR-040), `fonts.css`, and
   `vendor/open-props/*`.
 - **JS** (`js/`): `theme.js`, `components.js`, `admin-ux.js`, `forms.js`,
-  `keyboard.js`, `init.js`, plus vendored `alpine.min.js` and `htmx.min.js`.
+  `keyboard.js`, `init.js`, plus vendored `alpine.min.js`, `htmx.min.js` and
+  `htmx-ext-sse.min.js` (htmx's `sse` extension, 2.2.4; must load after htmx).
 - **Fonts** (`fonts/`): DM Sans, Inter, Space Grotesk + JetBrains Mono woff2.
 - **Assets** (`assets/`): Wagoe light/dark logo + icon PNGs.
 - **Tailwind source** (`resources/tailwind/admin-pilot.css`): input compiled to

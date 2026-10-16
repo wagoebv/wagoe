@@ -17,6 +17,7 @@
 (ns wagoe.tools.check-changelog
   (:require [clojure.string :as str]
             [babashka.process :as process]
+            [clojure.edn :as edn]
             [edamame.core :as e]
             [wagoe.tools.ansi :as ansi]))
 
@@ -274,17 +275,49 @@
       (and (seq counted) (not= (+ 3 sum) (number total)))
       (conj (str "the list is said to be " total "; three frozen plus " sum " is " (+ 3 sum))))))
 
+(defn- report-findings
+  "Prints `findings` under a red `header`, then `footer`; returns whether any."
+  [header findings & footer]
+  (when (seq findings)
+    (println (ansi/red header))
+    (println)
+    (doseq [f findings] (println (str "  " f)))
+    (println)
+    (run! println footer))
+  (boolean (seq findings)))
+
 (defn- report-stability
   "Prints what the stability page gets wrong and returns whether it did."
   []
-  (let [findings (when (.exists (java.io.File. ^String stability-path))
-                   (stability-findings (slurp changelog-path) (slurp stability-path)))]
-    (when (seq findings)
-      (println (ansi/red (str stability-path " disagrees with " changelog-path ":")))
-      (println)
-      (doseq [f findings] (println (str "  " f)))
-      (println))
-    (boolean (seq findings))))
+  (report-findings (str stability-path " disagrees with " changelog-path ":")
+                   (when (.exists (java.io.File. ^String stability-path))
+                     (stability-findings (slurp changelog-path) (slurp stability-path)))))
+
+;; =============================================================================
+;; Rule 4 — `wagoe upgrade` knows every deprecation
+;; =============================================================================
+
+(def upgrades-path "libs/wagoe-cli/resources/wagoe/cli/upgrades.edn")
+
+(defn deprecations-without-upgrade
+  "Tickets of `### Deprecated` entries that no `upgrades` entry names, so
+   `wagoe upgrade` neither rewrites them nor says why it cannot. An entry is
+   matched on the first ticket it cites; one citing none is named by its first line."
+  [changelog upgrades]
+  (let [known (set (map :ticket upgrades))]
+    (->> (re-seq deprecated-section-re changelog)
+         (mapcat (fn [[_ section]] (rest (str/split section #"(?m)^- "))))
+         (map #(or (re-find #"BOU-\d+" %) (first (str/split-lines %))))
+         (remove known)
+         distinct)))
+
+(defn- report-upgrades
+  "Prints the deprecations `wagoe upgrade` does not know and returns whether any."
+  []
+  (report-findings (str "Deprecations with no entry in " upgrades-path ":")
+                   (deprecations-without-upgrade (slurp changelog-path)
+                                                 (edn/read-string (slurp upgrades-path)))
+                   "Add a rewrite, or a :manual reason a rewrite cannot do it."))
 
 (defn- base-ref
   "What to compare against. `CHANGELOG_BASE` wins, so CI can name the PR base."
@@ -345,7 +378,8 @@
     (let [changed     (changed-since base)
           missing     (verdict changed (opted-out? base))
           undocumented (report-deprecations)
-          unstable    (report-stability)]
+          unstable    (report-stability)
+          unupgraded  (report-upgrades)]
       (when missing
         (let [{:keys [files]} missing]
           (when undocumented (println))
@@ -359,7 +393,7 @@
           (println (str "framework will notice. If they will notice nothing, say so with "
                         opt-out-marker))
           (println "in a commit message on this branch.")))
-      (if (or missing undocumented unstable)
+      (if (or missing undocumented unstable unupgraded)
         (System/exit 1)
         (do
           (println (ansi/green (str changelog-path " is up to date with this branch, "

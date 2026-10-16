@@ -53,7 +53,7 @@
 (defn ig-config
   "The Integrant configuration for `config`."
   [config]
-  (-> (system/system-config config {:extra-modules #{:wagoe/user}})
+  (-> (system/system-config config)
       ;; Which of this application's entities the admin UI manages. The admin
       ;; module does not guess; the schemas are ours to name.
       (cond-> (get-in config [:active :wagoe/admin])
@@ -92,7 +92,9 @@
                      ;; Its timer belongs to whoever owns user_sessions, so a
                      ;; service that does not run the user module does not also
                      ;; prune its table (BOU-429).
-                     :wagoe/session-pruner]
+                     :wagoe/session-pruner
+                     :wagoe/user-identity-repository
+                     :wagoe/user-oidc :wagoe/user-oidc-routes]
               ;; What this module offers the rest of a split deployment. Only
               ;; served when it is run as a service *and* :wagoe/rpc is
               ;; configured — a `server` boot never starts the listener.
@@ -149,6 +151,10 @@
 
    :storage  {:keys [:wagoe/storage-routes]}
 
+   ;; The outbox relay, not the outbox: any service may write an event in its
+   ;; transaction, one place needs to publish them (BOU-448).
+   :events   {:keys [:wagoe/events-relay]}
+
    ;; Offered over RPC: sending a notification is a thing other services do,
    ;; and the alternative is every one of them holding FCM and APNs
    ;; credentials.
@@ -188,6 +194,7 @@
    a change to each module, not to this table (BOU-426)."
   {:admin    "a UI. Nothing in a deployment calls the admin service; people call its pages"
    :jobs     "this entry claims :wagoe/job-workers, a worker pool. The queue other services enqueue on is platform, in-process everywhere (BOU-424)"
+   :events   "this entry claims :wagoe/events-relay, the outbox relay. The bus and the outbox are platform"
    :storage  "this entry claims :wagoe/storage-routes. :wagoe/storage itself is platform, so a service that stores a file already has one"
    :ai       "its provider talks to an external API; a second hop through RPC buys nothing"
    :workflow "component is a map of {:store :registry :engine}; IWorkflowEngine has no key of its own"

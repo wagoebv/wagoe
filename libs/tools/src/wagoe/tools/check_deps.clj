@@ -252,6 +252,7 @@
    "reitit.swagger"         'metosin/reitit-swagger
    "rewrite-clj"            'rewrite-clj/rewrite-clj
    "ring.adapter.jetty"     'ring/ring-jetty-adapter
+   "ring.core"              'ring/ring-core
    "ring.middleware"        'ring/ring-core
    "ring.util"              'ring/ring-core
    "ring.websocket"         'ring/ring-core

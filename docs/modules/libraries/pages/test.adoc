@@ -1,0 +1,81 @@
+= test
+:description: Test kit for Wagoe applications: boot the app's own system with in-process adapters, a Ring client with session and CSRF, deterministic jobs, events and realtime.
+
+Integration tests for your application without reverse-engineering its wiring.
+The kit boots your own Integrant system on the `test` profile, keeps cache,
+events, realtime and jobs in process, and makes the asynchronous parts
+deterministic. Incubating: the API may still change.
+
+== Coordinates
+
+Test-only, so it goes in the `:test` alias:
+
+[source,clojure]
+----
+:test {:extra-deps {com.wagoe/wagoe-test {:mvn/version "1.0.1"}}}
+----
+
+== Key namespaces
+
+[cols="1,3",options="header"]
+|===
+| Namespace | Purpose
+
+| `wagoe.test`
+| The whole kit: test system, Ring client, tenant fixture, job and event helpers.
+|===
+
+== Usage
+
+[source,clojure]
+----
+(ns my-app.orders-test
+  (:require [clojure.test :refer [deftest is]]
+            [my-app.system-config :as app]
+            [wagoe.test :as t]))
+
+(deftest placing-an-order
+  (t/with-test-system [sys app/ig-config]
+    (let [c (t/client sys)]
+      (t/sign-in! c "ann@example.com" "Passw0rd-for-Ann!")
+      (is (= 201 (:status (t/request c :post "/api/v1/orders" {:json {:sku "x"}}))))
+      (is (= 1 (t/run-pending-jobs! sys)))
+      (is (= [:order/placed] (map :type (t/drain-events! sys :orders)))))))
+----
+
+== Helpers
+
+[cols="1,3",options="header"]
+|===
+| Helper | What it does
+
+| `with-test-system`, `start-system`, `stop-system`
+| Boot your `ig-config` on the test config. No port is bound and each system
+  gets its own H2 database. Jobs run with no worker threads. Pass
+  `{:ig-config f :config tweak}` to change the config before boot.
+
+| `client`, `request`
+| A Ring client on your handler. Keeps cookies and sends a valid CSRF token with
+  every POST, PUT, PATCH and DELETE. `request` takes `:form`, `:json`, `:body`,
+  `:query` and `:headers`.
+
+| `sign-in!`
+| Signs in through `/web/login`, as a browser does. Throws if no session came back.
+
+| `with-test-tenant`, `call-with-tenant`
+| A tenant for the body, deleted with its schema afterwards. Send
+  `{"x-tenant-slug" (:slug tenant)}` with `(client sys {:headers ...})`.
+
+| `run-pending-jobs!`
+| Runs every due job on the test's thread, including jobs those jobs enqueue.
+  Returns how many ran.
+
+| `drain-events!`
+| Events published to a topic since the last drain, after every subscriber has
+  handled them.
+
+| `drain-realtime!`
+| Realtime envelopes sent since the last drain: `{:route :target :message}`.
+|===
+
+Both macros bind like `let`; the jar exports that to clj-kondo.

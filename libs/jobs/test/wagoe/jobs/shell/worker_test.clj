@@ -476,3 +476,27 @@
     (is (seq (:stacktrace failure)))
     (is (not (.contains (pr-str failure) "alice@example.com")))))
 
+(deftest ^:unit run-pending-runs-due-jobs-on-the-calling-thread
+  (let [{:keys [queue store]} *system*
+        threads (atom #{})]
+    (ports/register-handler! *registry* :test-job
+                             (fn [args]
+                               (swap! threads conj (Thread/currentThread))
+                               ;; A job that enqueues another runs in the same call.
+                               (when (= "first" (:value args))
+                                 (ports/enqueue-job! queue :mail
+                                                     (create-test-job {:args {:value "second"}}))
+                                 ;; Due already, but parked in the scheduled set.
+                                 (ports/enqueue-job! queue :default
+                                                     (assoc (create-test-job {:args {:value "due"}})
+                                                            :execute-at (Instant/now))))
+                               {:success? true}))
+    (ports/enqueue-job! queue :default (create-test-job {:args {:value "first"}}))
+    (ports/enqueue-job! queue :default
+                        (assoc (create-test-job {:args {:value "later"}})
+                               :execute-at (.plusSeconds (Instant/now) 3600)))
+    (is (= 3 (worker/run-pending! {} queue store *registry*)))
+    (is (= #{(Thread/currentThread)} @threads))
+    (testing "a job scheduled for later stays queued"
+      (is (zero? (worker/run-pending! {} queue store *registry*))))))
+

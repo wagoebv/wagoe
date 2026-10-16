@@ -47,6 +47,7 @@
    "/js/components.js"
    "/js/alpine.min.js"
    "/js/htmx.min.js"
+   "/js/htmx-ext-sse.min.js"
    "/js/forms.js"])
 
 (def pilot-js
@@ -62,6 +63,7 @@
    "/js/admin-ux.js"
    "/js/alpine.min.js"
    "/js/htmx.min.js"
+   "/js/htmx-ext-sse.min.js"
    "/js/forms.js"
    "/js/keyboard.js"]) ;; forms.js is also in base-js; the two bundles are alternatives, not layers
 

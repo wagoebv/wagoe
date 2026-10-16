@@ -60,6 +60,7 @@
    - users: Tenant-specific user profiles (name, role, avatar, preferences)
    - user_sessions: User authentication sessions
    - user_audit_log: Audit trail for user operations
+   - user_identities: OpenID Connect (issuer, subject) links to users
 
    Includes indexes for:
    - Foreign keys (user_id)
@@ -89,7 +90,10 @@
                                       {"auth_users" user-schema/AuthUser
                                        "users" user-schema/TenantUser
                                        "user_sessions" user-schema/UserSession
-                                       "user_audit_log" user-schema/UserAuditLog})
+                                       "user_audit_log" user-schema/UserAuditLog
+                                       "user_identities" user-schema/UserIdentity})
+  (db/create-index-if-not-exists! ctx "uk_user_identities_issuer_subject" :user_identities
+                                  [:issuer :subject] {:unique? true})
 
   ;; Retire any MFA rows still holding a pre-encryption plaintext secret. After
   ;; the tables, which add the mfa columns an older auth_users lacks.
@@ -723,6 +727,10 @@
          ;; Must delete from users first (child with FK constraint)
          (db/with-transaction [tx ctx]
            (let [user-id-str (type-conversion/uuid->string user-id)
+
+                 ;; Sign-in links are personal data too.
+                 _ (db/execute-update! tx {:delete-from :user_identities
+                                           :where [:= :user_id user-id-str]})
 
                  ;; Delete from users table first (FK constraint)
                  profile-query {:delete-from :users

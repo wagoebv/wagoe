@@ -12,6 +12,8 @@ Authentication and authorization domain: user lifecycle, credentials, sessions/t
 |-----------|---------|
 | `wagoe.user.core.user` | Pure user-domain business logic |
 | `wagoe.user.core.mfa` | Pure MFA setup/verification logic |
+| `wagoe.user.core.oidc` | Pure OIDC decisions: id-token claims, callback state, account linking |
+| `wagoe.user.shell.oidc` | OIDC code flow with PKCE: discovery, JWKS, token exchange, sign-in |
 | `wagoe.user.shell.service` | Service-layer orchestration, validation, and `*audit-context*` binding |
 | `wagoe.user.shell.http` | Auth/user HTTP handlers |
 | `wagoe.user.shell.http-interceptors` | Auth, authorization, and audit interceptors |
