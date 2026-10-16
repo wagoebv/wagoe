@@ -113,12 +113,14 @@
 
         (catch Exception e
           (let [error-data (ex-data e)]
-            (if (= (:type error-data) :validation-error)
+            (if (#{:validation-error :conflict} (:type error-data))
               ; Return inline form with error message
               (support/html-response request
                                      (admin-ui/render-inline-edit-form-with-error
                                       entity-name id field field-value field-config
-                                      (get-in error-data [:errors field] ["Validation failed"])
+                                      (if (support/refusal? e)
+                                        [(support/refusal-message request e)]
+                                        (get-in error-data [:errors field] ["Validation failed"]))
                                       {:zone-id        (:input-zone zones)
                                        :server-zone-id (:server-zone zones)
                                        :offsets        (:offsets zones)}))

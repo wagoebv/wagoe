@@ -183,6 +183,16 @@
   (when (contains? #{:bad-request :user-exists} (:type (ex-data e)))
     (ex-message e)))
 
+(defn- refusal?
+  "Whether `e` is a write the admin guard refused (BOU-665)."
+  [e]
+  (and (= :conflict (:type (ex-data e))) (:message-key (ex-data e))))
+
+(defn- refused
+  "A refused write: 409, saying why."
+  [request e]
+  (html-response request (ui/error-message [:t (:message-key (ex-data e))]) 409))
+
 (defn- mfa-error-message
   "What to show for a failed MFA result. `:cannot-*` carries the core's reason;
    the `:mfa-*-failed` types mean an exception, which mfa.clj has logged."
@@ -782,9 +792,10 @@
 
       (catch clojure.lang.ExceptionInfo e
         (let [data (ex-data e)]
-          (if (= (:type data) :bad-request)
-            (html-response request (ui/error-message (user-facing-message e)) 400)
-            (server-error request e "Bulk user operation failed"))))
+          (cond
+            (= :bad-request (:type data)) (html-response request (ui/error-message (user-facing-message e)) 400)
+            (refusal? e)                  (refused request e)
+            :else                         (server-error request e "Bulk user operation failed"))))
 
       (catch Exception e
         (server-error request e "Unexpected error in bulk-update-users-htmx-handler")))))
@@ -949,6 +960,10 @@
                               "✓ User updated successfully"]})
                    200
                    {"HX-Trigger" "userUpdated"}))))
+            (catch clojure.lang.ExceptionInfo e
+              (if (refusal? e)
+                (refused request e)
+                (server-error request e "Error updating user")))
             (catch Exception e
               (server-error request e "Error updating user")))))
       (catch IllegalArgumentException _

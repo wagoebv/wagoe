@@ -62,3 +62,11 @@
           calls (atom [])]
       (is (some? (ports/update-user-profile (service state calls) (assoc (base-user) :email "changed@example.io"))))
       (is (empty? @calls) "no session invalidation when the role is unchanged"))))
+
+(deftest ^:security ^:unit deactivation-invalidates-sessions
+  ;; BOU-665: a deactivated user kept every live session.
+  (testing "unchecking active ends the user's sessions"
+    (let [state (atom {uid (base-user)})
+          calls (atom [])]
+      (ports/update-user-profile (service state calls) (assoc (base-user) :active false))
+      (is (= [uid] @calls)))))

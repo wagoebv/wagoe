@@ -114,6 +114,20 @@
                                              :message    (ex-message x)}))))))
          (take-while some? (iterate ex-cause e)))))
 
+(defn- assert-admin-kept!
+  "Refuse a write that takes admin rights from `before` (`after` nil is a
+   delete) when the actor is that admin, or no other active admin remains."
+  [user-repository before after]
+  (when (user-core/removes-admin? before after)
+    (let [others (->> (:users (.find-users user-repository {:filter-role   :admin
+                                                            :filter-active true
+                                                            :limit         2}))
+                      (remove #(= (:id before) (:id %)))
+                      count)]
+      (when-let [{:keys [error]} (user-core/admin-removal-refusal
+                                  (:actor-id *audit-context*) before others)]
+        (throw (ex-info (:message error) (assoc error :user-id (:id before))))))))
+
 ;; =============================================================================
 ;; Database-Agnostic User Service (I/O Shell Layer)
 ;; =============================================================================
@@ -488,6 +502,9 @@
                               :original-data user-entity
                               :interface-type :cli}))))
 
+         (when old-user
+           (assert-admin-kept! user-repository old-user user-entity))
+
          ;; 2. Prepare user with updated timestamp and handle active/deleted_at
          (let [current-time (current-timestamp)
                prepared-user (user-core/prepare-user-for-update user-entity current-time)
@@ -520,9 +537,11 @@
            ;; forces a fresh session rather than silently upgrading a live one.
            ;; Guard on (:role updated-user) so a partial update that omits :role
            ;; is not mistaken for a demotion-to-nil and does not churn sessions.
+           ;; A deactivation ends them too (BOU-665).
            (when (and updated-user old-user
-                      (:role updated-user)
-                      (not= (:role old-user) (:role updated-user)))
+                      (or (and (:role updated-user)
+                               (not= (:role old-user) (:role updated-user)))
+                          (user-core/deactivates? old-user user-entity)))
              (.invalidate-all-user-sessions session-repository (:id updated-user)))
 
            ;; Remove sensitive data before returning
@@ -540,11 +559,15 @@
        (let [user-id (:user-id params)
              ;; Get user details before deactivation for audit trail
              user (.find-user-by-id user-repository user-id)
+             _ (when user (assert-admin-kept! user-repository user nil))
              result (.soft-delete-user user-repository user-id)]
 
          ;; Invalidate user cache on deactivation
          (when (and result cache)
            (cache-ports/delete-key! cache (str "user:" user-id)))
+
+         (when result
+           (.invalidate-all-user-sessions session-repository user-id))
 
          ;; Create audit log entry
          (when (and result user)
@@ -576,6 +599,7 @@
        (let [user-id (:user-id params)
              ;; Get user details before deletion for audit trail
              user (.find-user-by-id user-repository user-id)
+             _ (when user (assert-admin-kept! user-repository user nil))
              result (try
                       (.hard-delete-user user-repository user-id)
                       (catch Exception e

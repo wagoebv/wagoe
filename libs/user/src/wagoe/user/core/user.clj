@@ -194,6 +194,43 @@
       ;; No active field provided, just return base update
       base-update)))
 
+(defn- active-admin? [user]
+  (and (= :admin (keyword (:role user)))
+       (not (false? (:active user)))
+       (nil? (:deleted-at user))))
+
+(defn removes-admin?
+  "Whether `after` takes an active admin's rights away from `before`: a
+   demotion, a deactivation, or, with `after` nil, a delete. A key `after`
+   leaves out keeps its value."
+  [before after]
+  (boolean (and (active-admin? before)
+                (or (nil? after) (not (active-admin? (merge before after)))))))
+
+(defn deactivates?
+  "Whether `after` deactivates the active user `before`."
+  [before after]
+  (and (not (false? (:active before)))
+       (contains? after :active)
+       (false? (:active after))))
+
+(defn admin-removal-refusal
+  "Why taking admin rights from `target` is refused, or nil: no admin removes
+   their own, and the last active admin keeps theirs (BOU-665)."
+  [actor-id target other-active-admins]
+  (cond
+    (= actor-id (:id target))
+    {:error {:type        :conflict
+             :reason      :own-admin-rights
+             :message-key :user/refused-own-admin-rights
+             :message     "You cannot remove your own admin rights"}}
+
+    (zero? other-active-admins)
+    {:error {:type        :conflict
+             :reason      :last-admin
+             :message-key :user/refused-last-admin
+             :message     "The last active admin cannot lose admin rights"}}))
+
 ;; =============================================================================
 ;; User Query Business Logic
 ;; =============================================================================

@@ -14,7 +14,13 @@
   ;; mfa-enabled is controlled by the MFA enrollment flow, not the generic edit form.
   :table-name      :users
   :soft-delete     true
-  :readonly-fields #{:id :mfa-enabled :created-at :updated-at}
+  ;; tenant-id, login-count and last-login are the user module's to write.
+  :readonly-fields #{:id :mfa-enabled :created-at :updated-at
+                     :tenant-id :login-count :last-login}
+
+  ;; Updates and deletes go through the user service, so they are audited,
+  ;; end the user's sessions where they should, and keep one admin (BOU-665).
+  :writer          :user
 
   ;; Split-table update: fields listed under :secondary-fields are written to
   ;; :secondary-table instead of the primary :table-name.  Both UPDATEs run in

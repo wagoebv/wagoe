@@ -334,6 +334,7 @@
               :list-fields :detail-fields :search-fields :editable-fields
               :hide-fields :readonly-fields :field-order :default-sort
               :default-sort-dir :soft-delete :create-redirect-url
+              [:writer :keyword]
               [:fields [:map-of :keyword FieldOverride]]
               [:field-groups [:sequential (closed-map :id :label :fields)]]
               [:has-many [:sequential HasManyEntry]]

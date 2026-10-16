@@ -81,6 +81,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **The admin users page bypassed the user service** (BOU-665): no audit, no session end, no last-admin guard.
+  Add `:writer :user`, and `:tenant-id :login-count :last-login` to `:readonly-fields`, in your `admin/users.edn`.
 - **A typed `ex-info` thrown from route `:middleware` answered 500** (BOU-659); it now answers its `:type`'s status.
   Upgrade if your route middleware throws typed errors.
 - **MySQL timestamps read back without a zone, so APIs sent UTC as local time** (BOU-653).

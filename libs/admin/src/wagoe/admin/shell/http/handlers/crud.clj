@@ -334,11 +334,23 @@
 
           merged   (merge existing form-data)
 
-          validation-result (ports/validate-entity-data admin-service entity-name merged)]
+          validation-result (ports/validate-entity-data admin-service entity-name merged)
+          valid?            (and (:valid? validation-result) (empty? parse-errors))
 
-      (if (and (:valid? validation-result) (empty? parse-errors))
+          ;; A rule the write broke, such as the last admin's role (BOU-665):
+          ;; the form again, saying why.
+          updated  (when valid?
+                     (try (ports/update-entity admin-service entity-name id form-data)
+                          (catch clojure.lang.ExceptionInfo e
+                            (if (support/refusal? e) e (throw e)))))
+          refusal  (when (instance? clojure.lang.ExceptionInfo updated) updated)]
+
+      (if (and valid? (not refusal))
         ; Update entity and re-render detail page with success flash
-        (let [updated-record (ports/update-entity admin-service entity-name id form-data)
+        (let [updated-record updated
+              ;; A writer's update can take the record out of the list: the
+              ;; user service soft-deletes a deactivated user (BOU-665).
+              then-list?     (or then-list? (nil? updated-record))
               permissions    (permissions/get-entity-permissions user entity-name entity-config)
               ctx             (when-not then-list?
                                 (support/build-entity-detail-opts admin-service schema-provider config entity-name entity-config updated-record request))]
@@ -373,13 +385,15 @@
                                       (admin-ui/entity-detail-page entity-name entity-config merged errors permissions
                                                                    (assoc (:page-opts ctx) :flash
                                                                           {:type :error
-                                                                           :message [:t :admin/flash-validation-errors]}))
+                                                                           :message (if refusal
+                                                                                      (support/refusal-message request refusal)
+                                                                                      [:t :admin/flash-validation-errors])}))
                                       {:user user
                                        :current-entity entity-name
                                        :entities (:entities ctx)
                                        :entity-configs (:entity-configs ctx)
                                        :logo-url (:logo-url config)}))
-              (assoc :status 422)))))))
+              (assoc :status (if refusal 409 422))))))))
 
 (defn validate-field-handler
   "POST /:entity/validate-field — one field's errors, as the form left it,

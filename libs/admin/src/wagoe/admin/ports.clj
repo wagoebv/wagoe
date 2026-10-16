@@ -460,6 +460,25 @@
      own, after the fact. `tx` may be nil. Returns the number removed."))
 
 ;; =============================================================================
+;; Entity Writer Port (BOU-665)
+;; =============================================================================
+
+(defprotocol IEntityWriter
+  "Writes for an entity whose rules live in another module. An entity whose
+   config names a writer under :writer is updated and deleted through it, not
+   with SQL, so that module's audit, session and guard rules apply. Refusals
+   are typed ex-infos; one carrying :message-key is shown translated."
+
+  (update-record! [this actor id changes]
+    "Apply `changes` ({field value}, read-only fields already removed) to
+     record `id`. `actor` is the signed-in user: {:id :email :ip-address
+     :user-agent}, or nil outside a request. The admin reads the record back.")
+
+  (delete-record! [this actor id opts]
+    "Delete record `id`; opts {:soft? bool} from the entity config. Returns
+     true when a record was deleted."))
+
+;; =============================================================================
 ;; List Overview Port (ADR-040)
 ;; =============================================================================
 

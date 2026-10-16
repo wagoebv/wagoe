@@ -567,7 +567,7 @@
              ;; Update auth_users
              (when has-auth-updates?
                (let [db-auth (-> auth-updates
-                                 (update :active #(when % (protocols/boolean->db adapter %)))
+                                 (update :active #(when (some? %) (protocols/boolean->db adapter %)))
                                  (update :updated-at type-conversion/instant->string)
                                  (update :deleted-at type-conversion/instant->string)
                                  (update :mfa-enabled-at type-conversion/instant->string)
@@ -623,7 +623,7 @@
            (cond
              has-auth-updates?
              (let [db-auth (-> auth-updates
-                               (update :active #(when % (protocols/boolean->db adapter %)))
+                               (update :active #(when (some? %) (protocols/boolean->db adapter %)))
                                (update :updated-at type-conversion/instant->string)
                                (update :deleted-at type-conversion/instant->string)
                                (update :mfa-enabled-at type-conversion/instant->string)

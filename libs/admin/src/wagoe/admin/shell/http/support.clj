@@ -389,6 +389,20 @@
         ([k _params] (name k))
         ([k _params _n] (name k)))))
 
+(defn refusal?
+  "Whether `e` is a write refused by a rule (:conflict, 409): shown to the
+   user, not raised."
+  [e]
+  (= :conflict (:type (ex-data e))))
+
+(defn refusal-message
+  "What to tell the user about refusal `e`: its :message-key translated, or
+   its message."
+  [request e]
+  (if-let [k (:message-key (ex-data e))]
+    ((t-fn request) k)
+    (ex-message e)))
+
 (defn html-response
   "Create HTML response with standard headers, resolving [:t ...] i18n markers.
 

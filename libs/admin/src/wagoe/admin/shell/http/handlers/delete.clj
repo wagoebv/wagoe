@@ -26,17 +26,13 @@
 (defn- refused
   "A delete the service refused (a has-many :min, BOU-563): 409, and a toast
    saying why, with nothing swapped into the page."
-  [e]
+  [request e]
   (-> (ring-response/response "")
       (ring-response/status 409)
       (ring-response/header "HX-Reswap" "none")
       (ring-response/header "HX-Trigger"
                             (str "{\"showToast\":{\"type\":\"error\",\"message\":\""
-                                 (escape-json-string (ex-message e)) "\"}}"))))
-
-(defn- refusal?
-  [e]
-  (= :conflict (:type (ex-data e))))
+                                 (escape-json-string (support/refusal-message request e)) "\"}}"))))
 
 (defn delete-entity-handler
   "Handler for deleting entity.
@@ -63,12 +59,12 @@
           ; Delete entity (soft or hard, as configured), with its children
           deleted? (try (ports/delete-entity admin-service entity-name id)
                         (catch clojure.lang.ExceptionInfo e
-                          (if (refusal? e) e (throw e))))
+                          (if (support/refusal? e) e (throw e))))
           safe-return-to (support/safe-return-to request)]
 
       (cond
         (instance? clojure.lang.ExceptionInfo deleted?)
-        (refused deleted?)
+        (refused request deleted?)
 
         deleted?
         ; Success - redirect back to return_to (parent context) or entity list
@@ -149,7 +145,7 @@
           result (try (when (and ids (seq ids))
                         (ports/bulk-delete-entities admin-service entity-name ids))
                       (catch clojure.lang.ExceptionInfo e
-                        (if (refusal? e) e (throw e))))]
+                        (if (support/refusal? e) e (throw e))))]
       (if (instance? clojure.lang.ExceptionInfo result)
-        (refused result)
+        (refused request result)
         (bulk-delete-response request admin-service entity-name entity-config config user result)))))

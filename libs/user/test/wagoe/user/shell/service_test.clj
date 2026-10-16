@@ -471,7 +471,8 @@
                      (update-user [_ user-entity] user-entity)
                      (soft-delete-user [_ id] (= id user-id))
                      (hard-delete-user [_ _user-id] true))
-                   nil
+                   ;; Deactivation ends the user's sessions (BOU-665).
+                   (->SessionRepoStub nil)
                    (->AuditRepoCapture audit-entries)
                    {}
                    nil
