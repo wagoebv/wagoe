@@ -93,7 +93,10 @@ Converts field values to weighted content columns (pure — `wagoe.search.core.i
 
 Suggestions on PostgreSQL use pg_trgm `word_similarity`. A migration creates
 the extension; where the migration user may not, it logs a warning and
-suggestions use LIKE until it exists (BOU-661).
+suggestions use LIKE until it exists (BOU-661). They query with `<%`, served
+by a GIN `gin_trgm_ops` index a later migration builds when pg_trgm is there;
+an extension created after that migration needs the index built by hand. pg_trgm
+in a schema off the `search_path` makes the store fall back to LIKE (BOU-676).
 
 `create-search-store` takes the adapter: `:full-text` picks the query and
 `:on-conflict` the upsert (ADR-039).

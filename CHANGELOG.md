@@ -96,6 +96,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Search suggestions read every row on PostgreSQL, and `_`/`%` in a query matched anything** (BOU-676).
+  Run migrations for the trigram index; pg_trgm off the `search_path` now falls back to LIKE.
 - **Push device registration failed on MySQL and PostgreSQL, and seeds with timestamps or symbolic ids on MySQL** (BOU-657).
   Upgrade; nothing to change.
 - **On MySQL, workflow's "run `bb migrate up`" warning was skipped when another database had the column** (BOU-660).

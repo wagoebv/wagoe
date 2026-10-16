@@ -5,6 +5,8 @@
             [next.jdbc :as jdbc]
             [wagoe.platform.database :as db]))
 
+(def index-name "idx_search_documents_content_trgm")
+
 (defn installed?
   "Whether pg_trgm is installed in this PostgreSQL database."
   [connectable]
@@ -20,3 +22,28 @@
         (catch java.sql.SQLException e
           (log/warn "pg_trgm not created; search suggestions use LIKE until a superuser runs CREATE EXTENSION pg_trgm"
                     {:error (db/loggable-message e)}))))))
+
+(defn index-up
+  "Migratus entry point: the trigram index suggestions use. Outside a
+   transaction, since a failed statement would abort it and the warning
+   below could not stand in for the index."
+  [config]
+  (let [conn (db/migration-connectable config)]
+    (when (= :postgresql (db/engine-of conn))
+      (if-not (installed? conn)
+        (log/warn "pg_trgm not installed; after CREATE EXTENSION pg_trgm, create the trigram index by hand"
+                  {:index index-name})
+        (try
+          (jdbc/execute! conn [(str "CREATE INDEX IF NOT EXISTS " index-name
+                                    " ON search_documents USING GIN (content_all gin_trgm_ops)")])
+          (catch java.sql.SQLException e
+            ;; 42704: pg_trgm in a schema off the search_path, gin_trgm_ops not found.
+            (when-not (= "42704" (.getSQLState e)) (throw e))
+            (log/warn "Trigram index not created; search suggestions read every row"
+                      {:error (db/loggable-message e)})))))))
+
+(defn index-down
+  "Migratus entry point."
+  [config]
+  (db/drop-index-if-exists! (db/context-of (db/migration-connectable config))
+                            index-name :search_documents))

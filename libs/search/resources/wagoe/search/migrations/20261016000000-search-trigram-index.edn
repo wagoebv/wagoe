@@ -1,0 +1,5 @@
+;; GIN trigram index for suggestions on PostgreSQL, where pg_trgm is installed (BOU-676).
+{:ns           wagoe.search.shell.trigram
+ :up-fn        "index-up"
+ :down-fn      "index-down"
+ :transaction? false}
