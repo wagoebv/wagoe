@@ -155,6 +155,8 @@ This is the full schema for a single entity config file. All keys are optional u
 
   :soft-delete     true               ; true = set deleted_at on delete; default false = hard delete
   :primary-key     :id                ; Primary key field (default: :id)
+  :writer          :user              ; update and delete through a module's
+                                      ; IEntityWriter, not SQL (see Entity Writers)
   :permissions     {:create false}    ; No "New" button, create refused: another
                                       ; module creates these (e.g. tenants)
   :workflow        {:entity-type :invoice}  ; show the wagoe.workflow state of each
@@ -370,6 +372,12 @@ A has-many restricts by default, configured or detected: while it has rows, dele
 With `:on-delete :cascade` on the entry, children follow their parent instead, in one transaction: a restrict anywhere below rolls back the whole delete. A hard delete removes them first, so the foreign key needs no `ON DELETE CASCADE`. A soft delete sets `deleted_at` on the children that have the column and leaves the others. Each removed row, children included, publishes its own `:admin/entity-deleted`.
 
 For entities using `:query-overrides`, set `:soft-delete-table` to tell the service which table to `UPDATE` on delete (defaults to the primary table in `:from`).
+
+---
+
+## Entity Writers
+
+`:writer :user` sends an entity's updates and deletes through `ports/IEntityWriter` instead of SQL; the shipped users config uses it, so the user service audits them, ends sessions and refuses removing your own or the last admin's rights (409). Has-many restricts and cascades do not run for such an entity.
 
 ---
 

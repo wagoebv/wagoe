@@ -15,6 +15,7 @@
    [wagoe.admin.schema :as admin-schema]
    [wagoe.admin.shell.schema-repository :as schema-repo]
    [wagoe.admin.shell.service :as service]
+   [wagoe.admin.shell.user-writer :as user-writer]
    [wagoe.admin.shell.http :as http]
    [wagoe.admin.shell.http.support :as support]))
 
@@ -58,9 +59,14 @@
 ;; =============================================================================
 
 (defmethod ig/init-key :wagoe/admin-service
-  [_ {:keys [db-ctx schema-provider logger error-reporter config event-publisher workflows]}]
+  [_ {:keys [db-ctx schema-provider logger error-reporter config event-publisher workflows]
+       users :user-service}]
   (service/create-admin-service db-ctx schema-provider logger error-reporter config
-                                event-publisher workflows))
+                                event-publisher workflows
+                                ;; An entity config says `:writer :user` to be written
+                                ;; through the user service (BOU-665).
+                                (when users
+                                  {:user (user-writer/create-user-writer users)})))
 
 (defmethod ig/halt-key! :wagoe/admin-service
   [_ _admin-service]
@@ -155,6 +161,7 @@
                                             :schema-provider (ig/ref :wagoe/admin-schema-provider)
                                             :logger          (ig/ref :wagoe/logging)
                                             :error-reporter  (ig/ref :wagoe/error-reporting)
+                                            :user-service    (ig/ref :wagoe/user-service)
                                             :config          settings}
                                      ;; Only when configured: a ref to an absent
                                      ;; component fails the boot (BOU-492).
