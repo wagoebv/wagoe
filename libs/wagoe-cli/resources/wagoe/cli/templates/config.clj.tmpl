@@ -40,16 +40,10 @@
   [config]
   (-> (system/system-config
        config
-       ;; The user module — auth, sessions, MFA, audit trail, and the four
-       ;; tables behind them. Switched on in code rather than in config because
-       ;; it is not something you turn on per environment; `wagoe new --no-user`
-       ;; writes an empty set here.
-       ;;
        ;; :base-ns is where your own modules live. A `:wagoe/product` key in
        ;; config.edn resolves to `{{project-ns}}.product.shell.module-wiring`
        ;; — the config key names the module, this names the code.
-       {:extra-modules {{user-modules}}
-        :base-ns       "{{project-ns}}"})
+       {:base-ns "{{project-ns}}"})
 
       ;; Which of your entities the admin UI manages. The admin module does not
       ;; guess — add a Malli schema per table you want administered.
