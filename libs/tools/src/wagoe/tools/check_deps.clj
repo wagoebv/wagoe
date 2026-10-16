@@ -245,6 +245,7 @@
    "next.jdbc"              'com.github.seancorfield/next.jdbc
    "reitit.coercion.malli"  'metosin/reitit-malli
    "reitit.core"            'metosin/reitit-core
+   "reitit.middleware"      'metosin/reitit-core
    "reitit.ring.middleware" 'metosin/reitit-middleware
    "reitit.ring"            'metosin/reitit-ring
    "reitit.swagger-ui"      'metosin/reitit-swagger-ui
