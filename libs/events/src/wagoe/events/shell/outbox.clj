@@ -34,11 +34,14 @@
 ;; --- schema -----------------------------------------------------------------
 
 (defn- seed-relay-lease! [ds]
-  (when-not (jdbc/execute-one! ds ["SELECT name FROM event_outbox_relay WHERE name = 'relay'"])
-    (try
-      (jdbc/execute-one! ds ["INSERT INTO event_outbox_relay (name, owner, until_ms) VALUES ('relay', NULL, 0)"])
-      ;; Another replica seeded it first.
-      (catch java.sql.SQLException _))))
+  (let [seeded? #(jdbc/execute-one! ds ["SELECT name FROM event_outbox_relay WHERE name = 'relay'"])]
+    (when-not (seeded?)
+      (try
+        (jdbc/execute-one! ds ["INSERT INTO event_outbox_relay (name, owner, until_ms) VALUES ('relay', NULL, 0)"])
+        ;; Another replica seeded it first. Anything else would leave no row,
+        ;; and a relay that can never claim the lease delivers nothing, silently.
+        (catch java.sql.SQLException e
+          (when-not (seeded?) (throw e)))))))
 
 (defn create-outbox-table!
   "Create `event_outbox`, its index and the relay lease row if absent. Called
@@ -77,9 +80,10 @@
 (defn- open-connection
   "The connection behind `tx` when it is an open transaction: a next.jdbc tx,
    or the platform's tx context. A datasource is refused because it would
-   succeed — autocommitting the row and reopening the dual-write window."
+   succeed — autocommitting the row and reopening the dual-write window.
+   `:connectable` unwraps `jdbc/with-transaction+options`."
   [tx]
-  (let [conn (if (map? tx) (:datasource tx) tx)]
+  (let [conn (if (map? tx) (or (:datasource tx) (:connectable tx)) tx)]
     (when (and (instance? java.sql.Connection conn)
                (not (.getAutoCommit ^java.sql.Connection conn)))
       conn)))
@@ -96,6 +100,8 @@
     (let [conn    (open-connection tx)
           problem (or (when-not conn "publish-in-tx! needs an open transaction, not a datasource")
                       (event/topic-problem topic)
+                      (when (< 255 (count (event/topic-name topic)))
+                        "Topic must be at most 255 characters, the event_outbox.topic column")
                       (event/event-problem event))]
       (when problem
         (throw (ex-info problem {:type :validation-error :topic topic})))
@@ -173,8 +179,10 @@
 
 (defn- relay-tick! [outbox]
   (try
-    ;; A full batch means more may be waiting.
-    (while (= (get-in outbox [:opts :batch-size]) (relay-once! outbox)))
+    ;; A full batch means more may be waiting. `pos?` keeps a :batch-size of 0
+    ;; from spinning.
+    (while (let [n (relay-once! outbox)]
+             (and (pos? n) (= n (get-in outbox [:opts :batch-size])))))
     (catch Throwable t
       ;; Caught, or the scheduler cancels every later run.
       (log/error t "outbox relay pass failed"))))
@@ -193,6 +201,9 @@
   [{:keys [ds owner] :as outbox}]
   (when-let [^ScheduledExecutorService ex (:executor outbox)]
     (.shutdown ex)
-    (when-not (.awaitTermination ex 5 TimeUnit/SECONDS)
-      (.shutdownNow ex))
-    (release-relay! ds owner)))
+    ;; Released only once no pass is running: handing over mid-batch would let
+    ;; the next relay publish alongside this one. Otherwise the lease expires.
+    (when (or (.awaitTermination ex 5 TimeUnit/SECONDS)
+              (do (.shutdownNow ex)
+                  (.awaitTermination ex 1 TimeUnit/SECONDS)))
+      (release-relay! ds owner))))

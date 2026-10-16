@@ -94,6 +94,15 @@
       (is (= 1 (outbox/relay-once! outbox)))
       (is (= {:n 1} (:payload (second (first @seen))))))))
 
+(deftest ^:integration options-wrapped-transaction-is-accepted
+  (with-outbox "outbox_options_tx"
+    (fn [{:keys [ds seen outbox]}]
+      ;; What jdbc/with-transaction+options binds: the tx wrapped in options.
+      (jdbc/with-transaction [tx ds]
+        (ports/publish-in-tx! outbox (jdbc/with-options tx {}) :orders (event 1)))
+      (is (= 1 (outbox/relay-once! outbox)))
+      (is (= 1 (count @seen))))))
+
 (deftest ^:integration refuses-what-would-lose-the-event
   (with-outbox "outbox_refuse"
     (fn [{:keys [ds outbox]}]
