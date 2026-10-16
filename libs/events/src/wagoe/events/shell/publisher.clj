@@ -27,3 +27,8 @@
   "Build and publish in one step, for the common case."
   [bus topic type source payload & [context]]
   (ports/publish! bus topic (build type source payload context)))
+
+(defn emit-in-tx!
+  "`emit!` through the outbox, inside the open transaction `tx` (BOU-448)."
+  [outbox tx topic type source payload & [context]]
+  (ports/publish-in-tx! outbox tx topic (build type source payload context)))
