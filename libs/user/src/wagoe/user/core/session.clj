@@ -85,6 +85,24 @@
       (assoc updated-session :expires-at (calculate-session-expiry current-time false))
       updated-session)))
 
+(def access-write-interval-seconds
+  "How stale :last-accessed-at may get before a request writes it again."
+  60)
+
+(defn session-access-write
+  "The session to write for an access at `current-time`, or nil when nothing
+   needs writing. The access time is display-only — no idle timeout reads it —
+   so it is rewritten at most once a minute; an extended expiry always is
+   (BOU-666)."
+  [session current-time]
+  (let [updated (update-session-access session current-time)
+        last-at (:last-accessed-at session)]
+    (when (or (not= (:expires-at updated) (:expires-at session))
+              (nil? last-at)
+              (>= (.between java.time.temporal.ChronoUnit/SECONDS last-at current-time)
+                  access-write-interval-seconds))
+      updated)))
+
 (defn should-cleanup-session?
   "Return true if session has been expired longer than the grace period."
   [session current-time cleanup-policy]

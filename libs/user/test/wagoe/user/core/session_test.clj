@@ -167,6 +167,17 @@
       ;; should-extend-session? fires → expires-at is recalculated
       (is (.isAfter (:expires-at updated) expires-in-1h)))))
 
+(deftest ^:unit session-access-write-test
+  (testing "nothing to write within a minute of the last access"
+    (is (nil? (session/session-access-write (make-session) (.plusSeconds now 59)))))
+  (testing "the access time after a minute"
+    (is (= (.plusSeconds now 60)
+           (:last-accessed-at (session/session-access-write (make-session) (.plusSeconds now 60))))))
+  (testing "an extended expiry, however recent the access"
+    (let [sess (make-session {:expires-at (.plusSeconds now 3600)})]
+      (is (.isAfter (:expires-at (session/session-access-write sess (.plusSeconds now 1)))
+                    (:expires-at sess))))))
+
 ;; =============================================================================
 ;; should-cleanup-session?
 ;; =============================================================================

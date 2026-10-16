@@ -10,6 +10,7 @@
             [wagoe.admin.shell.schema-repository :as schema-repo]
             [wagoe.admin.shell.service :as service]
             [wagoe.admin.shell.user-writer :as user-writer]
+            [wagoe.events.ports :as events]
             [wagoe.observability.errors.shell.adapters.no-op :as error-reporting-no-op]
             [wagoe.observability.logging.shell.adapters.no-op :as logging-no-op]
             [wagoe.test.logging :refer [with-silent-logging]]
@@ -33,7 +34,7 @@
         (persistence/initialize-user-schema! db-ctx)
         (binding [*ctx* db-ctx] (f))))))
 
-(defn- system []
+(defn- system [& [publisher]]
   (let [repo     (persistence/create-user-repository *ctx*)
         sessions (persistence/create-session-repository *ctx*)
         audit    (persistence/create-audit-repository *ctx* {:default-limit 20 :max-limit 100})
@@ -51,8 +52,16 @@
                 *ctx* schema
                 (logging-no-op/create-logging-component {})
                 (error-reporting-no-op/create-error-reporting-component {})
-                config nil nil
+                config publisher nil
                 {:user (user-writer/create-user-writer users)})}))
+
+(defn- recording-publisher
+  "A publisher that keeps what it is handed, in an atom."
+  []
+  (let [seen (atom [])]
+    {:seen      seen
+     :publisher (reify events/IEventPublisher
+                  (publish! [_ _ event] (swap! seen conj event) (:id event)))}))
 
 (defn- user! [{:keys [repo sessions]} email role]
   (let [user (.create-user repo {:email email :name email :role role :active true
@@ -174,3 +183,69 @@
     (is (= 409 (:status resp)))
     (is (str/includes? (str (:body resp)) "refused-last-admin")
         "the refusal is named in the form (the key, without a catalogue)")))
+
+(deftest ^:integration a-deactivation-publishes-entity-updated
+  (let [{:keys [seen publisher]} (recording-publisher)
+        {:keys [admin] :as sys}  (system publisher)
+        _ (user! sys "boss@example.com" :admin)
+        u (user! sys "u@example.com" :user)]
+    (ports/update-entity admin :users (:id u) {:active false})
+    (let [event (last @seen)]
+      (is (= :admin/entity-updated (:type event)))
+      (is (= (:id u) (get-in event [:payload :id])))
+      (is (false? (get-in event [:payload :attrs :active]))))))
+
+(deftest ^:integration a-refused-bulk-delete-deletes-none
+  ;; Checked over the whole set: one at a time, the first two admins went
+  ;; before the third was refused (BOU-673).
+  (let [{:keys [seen publisher]} (recording-publisher)
+        {:keys [admin users] :as sys} (system publisher)
+        admins (mapv #(user! sys (str "a" % "@example.com") :admin) (range 3))
+        u      (user! sys "u@example.com" :user)]
+    (is (= [:conflict :last-admin]
+           ((juxt :type :reason) (refusal #(ports/bulk-delete-entities admin :users (map :id (conj admins u)))))))
+    (is (every? #(user-ports/get-user-by-id users (:id %)) (conj admins u)) "none deleted")
+    (is (empty? @seen) "and nothing published")
+    (testing "an allowed set is deleted, with an event for each"
+      (is (= 3 (:success-count (ports/bulk-delete-entities admin :users (map :id (conj (pop admins) u))))))
+      (is (= #{(:id (first admins)) (:id (second admins)) (:id u)}
+             (set (map #(get-in % [:payload :id]) @seen))))
+      (is (every? #(= :admin/entity-deleted (:type %)) @seen)))))
+
+(deftest ^:integration a-duplicate-email-is-a-field-error
+  (let [{:keys [admin schema config] :as sys} (system)
+        boss    (user! sys "boss@example.com" :admin)
+        u       (user! sys "u@example.com" :user)
+        handler (crud/update-entity-handler admin schema config)
+        resp    (with-silent-logging
+                  (handler {:request-method :put
+                            :uri            (str "/web/admin/users/" (:id u))
+                            :user           boss
+                            :path-params    {:entity "users" :id (str (:id u))}
+                            :form-params    {"email" "boss@example.com"}}))]
+    (is (= 422 (:status resp)) "the form again")
+    (is (re-find #"has-errors\"><label for=\"email\"" (str (:body resp))) "on the email field")))
+
+(deftest ^:integration two-admins-demoting-each-other-leave-one
+  ;; The guard counted, then wrote, outside a transaction: run together, both
+  ;; counts saw the other admin and both demotions went through (BOU-673).
+  (let [{:keys [users] :as sys} (system)
+        a (user! sys "a@example.com" :admin)
+        b (user! sys "b@example.com" :admin)
+        demote (fn [actor target start]
+                 (future
+                   @start
+                   (try (as actor #(user-ports/update-user-profile users {:id (:id target) :role :user}))
+                        :demoted
+                        (catch clojure.lang.ExceptionInfo e (:reason (ex-data e))))))]
+    (with-silent-logging
+      (dotimes [_ 20]
+        (let [start   (promise)
+              results [(demote a b start) (demote b a start)]]
+          (deliver start true)
+          (is (= #{:demoted :last-admin} (set (map deref results))))
+          (is (= 1 (count (:users (user-ports/list-users users {:filter-role :admin :filter-active true}))))
+              "one admin remains")
+          ;; Promote both back for the next round.
+          (doseq [u [a b]]
+            (.update-user (:repo sys) {:id (:id u) :role :admin})))))))

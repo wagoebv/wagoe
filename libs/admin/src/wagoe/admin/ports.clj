@@ -470,8 +470,9 @@
   (update-record! [this id changes]
     "Apply `changes`, read-only fields removed.")
 
-  (delete-record! [this id opts]
-    "Delete record `id`; opts {:soft? bool}. Returns true when deleted."))
+  (delete-records! [this ids opts]
+    "Delete records `ids`, all or none; opts {:soft? bool}. Returns the ids
+     deleted, as strings."))
 
 ;; =============================================================================
 ;; List Overview Port (ADR-040)

@@ -27,10 +27,10 @@
     (user-ports/update-user-profile
      user-service (assoc (user-changes changes) :id (type-conversion/string->uuid id))))
 
-  (delete-record! [_ id {:keys [soft?]}]
-    (if soft?
-      (user-ports/delete-user user-service (type-conversion/string->uuid id))
-      (user-ports/permanently-delete-user user-service (type-conversion/string->uuid id)))))
+  (delete-records! [_ ids {:keys [soft?]}]
+    (mapv str (user-ports/delete-users user-service
+                                       (keep #(type-conversion/string->uuid (str %)) ids)
+                                       {:permanent? (not soft?)}))))
 
 (defn create-user-writer
   "A writer for the users entity, through `user-service`."

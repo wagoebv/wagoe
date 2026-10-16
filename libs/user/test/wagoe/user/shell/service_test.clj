@@ -34,7 +34,8 @@
     (swap! state assoc (:id user-entity) user-entity)
     user-entity)
   (soft-delete-user [_ _user-id] true)
-  (hard-delete-user [_ _user-id] true))
+  (hard-delete-user [_ _user-id] true)
+  (with-admins-locked [_ f] (f)))
 
 (defrecord AuditRepoStub []
   ports/IUserAuditRepository
@@ -70,6 +71,33 @@
              (:session-token (ports/validate-session service "token-123"))))
       (is (= user-id
              (:user-id (ports/validate-session service "token-123")))))))
+
+(deftest ^:unit validate-session-writes-the-access-time-at-most-once-a-minute
+  ;; find-session-by-token wrote last_accessed_at, then validate-session wrote
+  ;; the session again: two writes on every request (BOU-666).
+  (let [user-id (UUID/randomUUID)
+        now     (Instant/now)
+        writes  (fn [session]
+                  (let [written (atom [])
+                        repo    #_{:clj-kondo/ignore [:missing-protocol-method]}
+                        (reify ports/IUserSessionRepository
+                          (find-session-by-token [_ _] session)
+                          (update-session [_ s] (swap! written conj s) s))
+                        service (sut/->UserService (->UserRepoStub (atom {user-id {:id user-id :active true}}))
+                                                   repo nil {} nil)]
+                    (ports/validate-session service "token")
+                    @written))
+        session (fn [accessed-ago expires-in]
+                  {:id (UUID/randomUUID) :user-id user-id :session-token "token"
+                   :created-at (.minusSeconds now 7200)
+                   :last-accessed-at (some->> accessed-ago (.minusSeconds now))
+                   :expires-at (.plusSeconds now expires-in)})]
+    (is (empty? (writes (session 10 86400))) "accessed 10 s ago: no write")
+    (is (= 1 (count (writes (session 120 86400)))) "two minutes ago: one")
+    (is (= 1 (count (writes (session nil 86400)))) "never accessed: one")
+    (let [[written] (writes (session 10 3600))]
+      (is (some? written) "near expiry: extended, whatever the access time")
+      (is (.isAfter ^Instant (:expires-at written) (.plusSeconds now 3600))))))
 
 (deftest ^:unit register-or-authenticate-user-test
   (testing "registers a brand new user when email does not exist yet"
@@ -279,7 +307,8 @@
                  (hard-delete-user [_ _user-id]
                    (throw (org.postgresql.util.PSQLException.
                            "update or delete on table \"users\" violates foreign key constraint \"fk_tenant_memberships_user\" on table \"tenant_memberships\""
-                           org.postgresql.util.PSQLState/FOREIGN_KEY_VIOLATION))))
+                           org.postgresql.util.PSQLState/FOREIGN_KEY_VIOLATION)))
+                 (with-admins-locked [_ f] (f)))
           service (sut/->UserService repo nil nil {} nil)]
       (try
         (ports/permanently-delete-user service user-id)
@@ -321,7 +350,8 @@
                  (create-user [_ user-entity] user-entity)
                  (update-user [_ user-entity] user-entity)
                  (soft-delete-user [_ _user-id] true)
-                 (hard-delete-user [_ _user-id] true))
+                 (hard-delete-user [_ _user-id] true)
+                 (with-admins-locked [_ f] (f)))
           service (sut/->UserService repo nil nil {} nil)]
       (is (= (dissoc user :password-hash)
              (ports/get-user-by-email service "safe@example.nl")))
@@ -347,7 +377,8 @@
                      (create-user [_ user-entity] user-entity)
                      (update-user [_ user-entity] user-entity)
                      (soft-delete-user [_ _user-id] true)
-                     (hard-delete-user [_ _user-id] true))
+                     (hard-delete-user [_ _user-id] true)
+                     (with-admins-locked [_ f] (f)))
                    (->SessionRepoStub session)
                    (->AuditRepoCapture audit-entries)
                    {}
@@ -412,7 +443,8 @@
                      (create-user [_ user-entity] user-entity)
                      (update-user [_ user-entity] user-entity)
                      (soft-delete-user [_ id] (= id user-id))
-                     (hard-delete-user [_ _user-id] true))
+                     (hard-delete-user [_ _user-id] true)
+                     (with-admins-locked [_ f] (f)))
                    ;; Deactivation ends the user's sessions (BOU-665).
                    (->SessionRepoStub nil)
                    (->AuditRepoCapture audit-entries)

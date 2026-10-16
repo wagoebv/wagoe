@@ -21,6 +21,7 @@
    - Clean boundary between functional and imperative code"
   (:require [wagoe.core.utils.type-conversion :as type-conversion]
             [wagoe.platform.database :as db]
+            [next.jdbc.transaction :as jdbc-tx]
             [wagoe.platform.ports.database :as protocols]
             [wagoe.user.ports :as ports]
             [wagoe.user.schema :as user-schema]
@@ -771,6 +772,18 @@
          user-entity))
      {:db-ctx ctx}))
 
+  (with-admins-locked [_ f]
+    ;; A no-op write rather than SELECT … FOR UPDATE: it locks the rows on
+    ;; PostgreSQL, MySQL and H2 alike, and takes SQLite's write lock. A second
+    ;; caller waits here, holding nothing, then counts what the first
+    ;; committed. One table and no subquery: a subquery's shared locks
+    ;; deadlocked two callers on MySQL. A write in `f` that opens its own
+    ;; transaction joins this one rather than committing it early.
+    (binding [jdbc-tx/*nested-tx* :ignore]
+      (db/with-transaction [tx ctx]
+        (db/execute-update! tx {:update :users :set {:role :role} :where [:= :role "admin"]})
+        (f))))
+
   (soft-delete-user [_ user-id]
     (persistence-interceptors/execute-persistence-operation
      :soft-delete-user
@@ -862,14 +875,9 @@
                             [:> :expires_at (type-conversion/instant->string now)]
                             [:is :revoked_at nil]]}
              result (db/execute-one! ctx query)]
-         (when result
-           (let [update-query {:update :user_sessions
-                               :set {:last_accessed_at (type-conversion/instant->string now)}
-                               :where [:= :session_token session-token]}]
-             (db/execute-update! ctx update-query))
-           (-> result
-               db->session-entity
-               (assoc :last-accessed-at now)))))
+         ;; A read only: validate-session decides whether the access is worth
+         ;; a write (BOU-666).
+         (some-> result db->session-entity)))
      {:db-ctx ctx}))
 
   (find-sessions-by-user [_ user-id]

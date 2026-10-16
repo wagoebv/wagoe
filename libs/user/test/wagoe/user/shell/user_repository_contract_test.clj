@@ -190,7 +190,8 @@
       (is (= uid (:user-id fetched)) "user-id survives round-trip")
       (is (= token (:session-token fetched)))
       (is (= "203.0.113.7" (:ip-address fetched)))
-      (is (some? (:last-accessed-at fetched)) "find bumps last-accessed-at"))))
+      (is (nil? (:last-accessed-at fetched))
+          "find only reads; validate-session writes the access time (BOU-666)"))))
 
 (deftest ^:contract session-invalidate-hides-from-find
   (testing "invalidate-session makes the token un-findable"

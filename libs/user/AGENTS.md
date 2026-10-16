@@ -110,7 +110,8 @@ Signing keys:
 ;; Authentication — delegates to auth-service, creates session and audit log
 (authenticate-user service {:email "..." :password "..."})
 
-;; Session validation — reads the database every time, updates access time
+;; Session validation — reads the database every time; writes the access time
+;; at most once a minute, or when it extends the expiry (BOU-666)
 (validate-session service session-token)
 
 ;; Logout — invalidates session, creates audit log
@@ -231,6 +232,10 @@ export JWT_SECRET="dev-secret-at-least-32-characters-long-here"
 Session tokens are stored in the database. Sessions and users are never cached, so a revoked session or deactivated user is refused on the next request (BOU-663).
 
 `deactivate-user` sets `active` false and the user stays listed; `delete-user` sets `deleted_at` and hides them. Both end sessions and keep the last admin (BOU-681).
+
+The last-admin guard counts and writes in one transaction that holds the admin rows, so two admins demoting each other cannot leave none. `delete-users` judges the whole set first and deletes all or none (BOU-673).
+
+A database error while reading a session or a token's user is a 500, not a 401: only a refused credential is (BOU-666).
 
 ---
 

@@ -55,7 +55,9 @@
         true)
 
       (hard-delete-user [_ _user-id]
-        true))))
+        true)
+
+      (with-admins-locked [_ f] (f)))))
 
 ;; =============================================================================
 ;; TOTP Secret Generation Tests
