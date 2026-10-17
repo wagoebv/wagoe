@@ -21,6 +21,10 @@ application's job, not this library's.
 | `wagoe.config`
 | `load-config` plus typed accessors for the database, HTTP, observability and
   user-validation sections.
+
+| `wagoe.config.secrets`
+| The `#secret` reader, the `ISecretSource` protocol, and redaction for anything
+  that displays config.
 |===
 
 == Usage
@@ -63,6 +67,67 @@ short spellings — `production` and `prod` name the same directory.
 | Observability adapters. Each defaults rather than throwing — an absent
   optional section is normal.
 |===
+
+== Secrets
+
+`#secret` reads a value through a secret source instead of straight from the
+environment:
+
+[source,clojure]
+----
+{:password #secret "DB_PASSWORD"                 ; the default source, :env
+ :api-key  #secret [:file "stripe-key"]          ; /run/secrets/stripe-key, trimmed
+ :token    #or [#secret "API_TOKEN" "dev-token"]} ; a default for dev
+----
+
+Two sources are built in. `:env` reads an environment variable. `:file` reads
+a file in `/run/secrets`, where Docker and Kubernetes mount secrets; set
+`WAGOE_SECRETS_DIR` to read another directory. Leading and trailing whitespace
+is trimmed.
+
+A secret that no source has, or that is blank, fails `load-config` with a
+`:configuration-error` naming the secret and its source. The value never
+appears in an error. Inside `#or` a missing secret is nil instead, so the next
+value is used.
+
+Pass `:default-secret-source` to make bare names read another source:
+
+[source,clojure]
+----
+(config/load-config {:default-secret-source :file})
+----
+
+=== Redaction
+
+Every value a `#secret` resolved to is redacted by value, whatever key it sits
+under: `(wagoe.config.secrets/redact x)` replaces it with
+`<secret source:name>`. The devtools config page and the REPL `(config :section)`
+helper show placeholders, and Apply on the config page writes the real value
+back.
+
+=== Adding a source
+
+A source is anything implementing `ISecretSource`. `fetch-secret` returns the
+value, or nil when the source does not have it. Throw when the source cannot
+be reached, so boot fails instead of running without the secret. Wagoe ships
+no Vault, SOPS or cloud adapter; a Vault one is a few lines:
+
+[source,clojure]
+----
+(require '[wagoe.config :as config]
+         '[wagoe.config.secrets :as secrets])
+
+(defrecord VaultSource [client mount]
+  secrets/ISecretSource
+  (fetch-secret [_ secret-name]
+    ;; my-vault/read-secret stands in for your Vault client
+    (get-in (my-vault/read-secret client (str mount "/" secret-name)) [:data :value])))
+
+(config/load-config {:secret-sources {:vault (->VaultSource client "secret/my-app")}})
+----
+
+and the config names it with `#secret [:vault "db-password"]`. A source under
+`:env` or `:file` replaces the built-in one.
 
 == Why it is a library
 

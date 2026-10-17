@@ -1,5 +1,6 @@
 (ns wagoe.devtools.shell.dashboard.pages.config-test
   (:require [clojure.test :refer [deftest testing is]]
+            [wagoe.config.secrets :as secrets]
             [wagoe.devtools.shell.dashboard.pages.config :as config-page]
             [clojure.string :as str]))
 
@@ -61,3 +62,27 @@
         (is (str/includes? html "config-apply"))
         (is (str/includes? html "config-preview"))
         (is (not (str/includes? html "readonly")))))))
+
+(defn- resolve-test-secret!
+  "A value read through #secret, as `load-config` would have read it."
+  [secret-name value]
+  (secrets/resolve-secret {:secret-sources {:test (reify secrets/ISecretSource
+                                                    (fetch-secret [_ _] value))}}
+                          [:test secret-name]))
+
+(deftest ^:unit secret-values-are-redacted-and-apply-restores-them
+  ;; Real values are shown so Apply can write them back, but a #secret value
+  ;; sits under any key — a DSN, a URL — so it is redacted by value.
+  (let [dsn  (resolve-test-secret! "dsn" "postgres://app:dashb0ard-pw@db/app")
+        cfg  {:wagoe/db {:url dsn :host "localhost"}}
+        html (config-page/render {:config cfg :config-editable? true})]
+    (is (not (str/includes? html "dashb0ard-pw")))
+    (is (str/includes? html "&lt;secret test:dsn&gt;"))
+    (is (str/includes? html "localhost") "everything else is still shown")
+    (testing "the placeholder an edit sends back is the value again"
+      (is (= {:url dsn :host "localhost"}
+             (config-page/parse-edited-value "{:url \"<secret test:dsn>\" :host \"localhost\"}" nil))))
+    (testing "the preview does not print it either"
+      (is (not (str/includes? (config-page/render-preview-fragment
+                               :wagoe/db (:wagoe/db cfg) "{:url \"<secret test:dsn>\" :host \"other\"}")
+                              "dashb0ard-pw"))))))

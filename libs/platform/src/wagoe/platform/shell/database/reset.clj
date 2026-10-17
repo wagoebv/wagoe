@@ -186,10 +186,11 @@
     (db-config/config->db-config k v)))
 
 (defn- read-leniently
-  "`url` read with each #env unset — a developer's machine has no prod
-   secrets — and #long of nothing nothing, for when Aero cannot."
+  "`url` read with each #env and #secret unset — a developer's machine has no
+   prod secrets — and #long of nothing nothing, for when Aero cannot."
   [url]
-  (edn/read-string {:readers {'env  (constantly nil)
+  (edn/read-string {:readers {'env    (constantly nil)
+                              'secret (constantly nil)
                               'or   #(first (remove nil? %))
                               'long #(cond (number? %) (long %) (string? %) (parse-long %) :else nil)}
                     :default (fn [_ v] v)}
