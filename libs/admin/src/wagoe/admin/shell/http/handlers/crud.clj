@@ -238,11 +238,11 @@
                   ;; 409, as on update (BOU-712).
                   conflict? (support/refusal? e)
                   ;; A refused child row carries its errors on the row.
-                  field-errors (cond
-                                 refused?  (log-rejected! entity-name entity-config
-                                                          (if (:child (ex-data e)) {} (:errors (ex-data e))))
-                                 conflict? (log-rejected! entity-name entity-config
-                                                          (or (support/conflict-errors e) {})))
+                  field-errors (when (or refused? conflict?)
+                                 (log-rejected! entity-name entity-config
+                                                (cond (:child (ex-data e)) {}
+                                                      refused?             (:errors (ex-data e))
+                                                      :else                (support/conflict-errors e))))
                   _ (when-not (or refused? conflict?)
                       (log/error e "Failed to create entity" {:entity entity-name}))
                   nested (cond-> nested (and nested refused?) (nested-refusal e))

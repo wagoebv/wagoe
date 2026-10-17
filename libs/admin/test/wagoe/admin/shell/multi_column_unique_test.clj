@@ -19,7 +19,7 @@
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing use-fixtures]]
             [clojure.tools.logging :as log]
-            [clojure.tools.logging.impl :as log-impl])
+            [clojure.tools.logging.test :as log-test])
   (:import [java.io File]))
 
 (def ^:private admin-config
@@ -87,20 +87,12 @@
    :i18n/catalogue i18n-catalogue
    :i18n/default-locale :en})
 
-(defn- capturing-factory [out]
-  (let [logger (reify log-impl/Logger
-                 (enabled? [_ _] true)
-                 (write! [_ level _ msg] (swap! out conj [level (str msg)])))]
-    (reify log-impl/LoggerFactory
-      (name [_] "capture")
-      (get-logger [_ _] logger))))
-
 (defn- logged
-  "[response errors], `errors` what was logged at ERROR while `f` ran."
+  "[result errors], `errors` the messages logged at ERROR while `f` ran."
   [f]
-  (let [out (atom [])
-        res (binding [log/*logger-factory* (capturing-factory out)] (f))]
-    [res (filterv #(= :error (first %)) @out)]))
+  (let [the-log (log-test/atomic-log log-test/->LogEntry)
+        res     (binding [log/*logger-factory* (log-test/logger-factory the-log (constantly true))] (f))]
+    [res (into [] (comp (filter #(= :error (:level %))) (map :message)) (log-test/entries the-log))]))
 
 (defn- marked? [body field]
   (boolean (re-find (re-pattern (str "has-errors\"><label for=\"" field "\"")) body)))
@@ -109,7 +101,7 @@
   (doseq [[backend db-ctx] @backends
           :let [{:keys [schema svc]} (system db-ctx)
                 k     (str "welcome-" (name backend))
-                taken (ports/create-entity svc :templates {:template-key k :domain-id "d1" :slug (str k "-1")})
+                _     (ports/create-entity svc :templates {:template-key k :domain-id "d1" :slug (str k "-1")})
                 other (ports/create-entity svc :templates {:template-key k :domain-id "d2" :slug (str k "-2")})]]
     (testing (str backend)
       (testing "the platform names both columns"
@@ -143,8 +135,7 @@
           (is (= [] errors))
           (is (str/includes? body "Another record already has these values"))
           (is (marked? body "template-key"))
-          (is (marked? body "domain-id")))))
-    (is (some? taken))))
+          (is (marked? body "domain-id")))))))
 
 (deftest ^:integration a-duplicate-in-one-column-is-still-a-422-on-it
   (doseq [[backend db-ctx] @backends

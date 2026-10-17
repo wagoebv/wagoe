@@ -103,12 +103,10 @@
    :error (fn [{:keys [operation-name context exception] :as ctx}]
             ;; A typed refusal, such as a taken key, is the caller's to
             ;; answer, not a fault: logged at its status's level (BOU-712).
-            (let [level (problem/status-log-level (first (problem/exception-status exception {})))]
-              (if (= :error level)
-                (log/error exception (str "Database operation failed: " operation-name)
-                           (pii/redact-for-log context))
-                (log/logp level (str "Database operation refused: " operation-name)
-                          (pii/redact-for-log context))))
+            (let [level (problem/exception-log-level exception {})]
+              (log/log level (when (= :error level) exception)
+                       (print-str (str "Database operation failed: " operation-name)
+                                  (pii/redact-for-log context))))
             ctx)})
 
 (def persistence-error-handling

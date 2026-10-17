@@ -68,6 +68,21 @@
         result (first (rows datasource query honey))]
     (> (get result :table_count 0) 0)))
 
+(defn information-schema-key-columns
+  "The columns of index `key-name` on `table-name`, in key order, per
+   `information_schema.statistics` (MySQL's)."
+  [{:keys [schema honey] :as spec} datasource table-name key-name]
+  (mapv :column_name
+        (rows datasource
+              {:select   [[:column_name :column_name]]
+               :from     [:information_schema.statistics]
+               :where    [:and
+                          (in-schema schema :table_schema (table-key spec table-name))
+                          [:= :table_name (table-key spec table-name)]
+                          [:= :index_name key-name]]
+               :order-by [:seq_in_index]}
+              honey)))
+
 (defn- generated-column?
   "Whether the database fills this column itself. Their column_default is
    NULL, so without this an identity column reads as one an INSERT must supply.
