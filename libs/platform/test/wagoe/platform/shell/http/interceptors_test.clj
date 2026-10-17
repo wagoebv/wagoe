@@ -378,7 +378,7 @@
 
 (defn- recording-logger [entries]
   (reify log-ports/ILogger
-    (log* [_ _ _ _ _] nil)
+    (log* [_ l m c _] (swap! entries conj {:level l :event m :data c}))
     (trace [_ _] nil) (trace [_ _ _] nil)
     (debug [_ _] nil) (debug [_ _ _] nil)
     (info [_ _] nil) (info [_ m c] (swap! entries conj {:level :info :event m :data c}))
@@ -409,6 +409,13 @@
         (is (= level (:level entry)))
         (is (= {:status status :error-type type :correlation-id "cid-704"}
                (select-keys (:data entry) [:status :error-type :correlation-id])))))))
+
+(deftest ^:unit a-redirect-is-logged-as-one
+  (let [[entry :as entries] (error-log-entries
+                             (ex-info "go" {:type :redirect :location "/login"}))]
+    (is (= 1 (count entries)))
+    (is (= [:info "HTTP request redirected" 302]
+           [(:level entry) (:event entry) (get-in entry [:data :status])]))))
 
 (deftest ^:unit a-server-error-is-logged-at-error
   (doseq [ex [(RuntimeException. "boom")

@@ -41,3 +41,18 @@
           (is (not (str/includes? text "MFASECRETVALUE")) (str label ": mfa secret recorded"))
           (is (not (str/includes? text "PLAINPASSWORD")) (str label ": password recorded"))
           (is (not (str/includes? text "924613")) (str label ": mfa code recorded")))))))
+
+(deftest ^:unit a-typed-client-error-fails-the-operation-below-error
+  ;; BOU-704: the user service's :forbidden was logged at ERROR here.
+  (doseq [[type level] [[:forbidden :warn] [:not-found :info] [:internal-error :error]]]
+    (let [levels (atom [])
+          logger #_{:clj-kondo/ignore [:missing-protocol-method]}
+          (reify log-ports/ILogger
+            (info [_ m _] (when (str/includes? m "failed") (swap! levels conj :info)))
+            (warn [_ m _] (when (str/includes? m "failed") (swap! levels conj :warn)))
+            (error [_ m _] (when (str/includes? m "failed") (swap! levels conj :error))))]
+      (try
+        (si/execute-service-operation :get-user {} (fn [_] (throw (ex-info "no" {:type type})))
+                                      {:logger logger})
+        (catch clojure.lang.ExceptionInfo _))
+      (is (= [level] @levels) (str type)))))

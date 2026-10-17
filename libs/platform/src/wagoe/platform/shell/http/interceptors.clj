@@ -339,15 +339,18 @@
             (when-let [logger (:logger system)]
               (let [status (or (:status response)
                                (first (problem-details/exception-status exception {})))
-                    level  (problem-details/status-log-level status)
-                    log    ({:error log-ports/error :warn log-ports/warn} level log-ports/info)]
-                (log logger (if (= :error level) "HTTP request failed" "HTTP request refused")
-                     {:method (:request-method request)
-                      :uri (:uri request)
-                      :status status
-                      :error-type (:type (ex-data exception))
-                      :error (.getMessage ^Throwable exception)
-                      :correlation-id correlation-id})))
+                    level  (problem-details/status-log-level status)]
+                (log-ports/log* logger level
+                                (cond (= :error level) "HTTP request failed"
+                                      (< status 400)   "HTTP request redirected"
+                                      :else            "HTTP request refused")
+                                {:method (:request-method request)
+                                 :uri (:uri request)
+                                 :status status
+                                 :error-type (:type (ex-data exception))
+                                 :error (.getMessage ^Throwable exception)
+                                 :correlation-id correlation-id}
+                                nil)))
             ctx)})
 
 (def http-metrics-buckets
