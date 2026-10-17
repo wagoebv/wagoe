@@ -128,6 +128,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **An app migration sharing an id with a library's silently never ran, or the library's didn't** (BOU-717). Boot and
+  `migrate up` now refuse; rename yours and see the migrations guide. Skipped session-token hashing reruns at boot.
 - **Admin: a duplicate on a unique key over several columns marked no field, and a create logged an ERROR** (BOU-712).
   Both fields are marked with a 409 now; a `:conflict` carries the key's columns as `:fields`.
 - **iCal export named a TZID without its VTIMEZONE, so Outlook could misread times** (BOU-719). Export now adds one

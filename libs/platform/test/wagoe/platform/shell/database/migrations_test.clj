@@ -4,6 +4,7 @@
             [wagoe.platform.shell.adapters.database.factory :as db-factory]
             [wagoe.platform.database :as db]
             [clojure.java.io :as io]
+            [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [migratus.core :as migratus]
             [migratus.migrations :as migratus-migrations]
@@ -913,3 +914,82 @@
              (getConnection [_] (throw (java.sql.SQLException. "down"))))]
     (is (thrown-with-msg? java.sql.SQLException #"down"
                           (migrations/migratus-config ds ["migrations/"])))))
+
+(defn- with-two-migration-dirs
+  "Call `f` with an app and a library directory, each holding one migration
+   with the id given, and a fresh H2 behind the CLI's config lookup."
+  [app-id lib-id f]
+  (let [root (io/file "target" (str "bou717-" (System/nanoTime)))]
+    (try
+      (let [app (migration-dir! root app-id "app_table")
+            lib (migration-dir! root lib-id "lib_table")
+            ctx (db-factory/db-context {:adapter :h2
+                                        :database-path (str "mem:dup_" (System/nanoTime)
+                                                            ";DB_CLOSE_DELAY=-1")})]
+        (try
+          (with-redefs [migrations/shadowed-migration-dirs (fn ([] nil) ([_ _] nil))
+                        migrations/discover-migration-dirs (fn [] [app lib])
+                        migrations/manifest-urls           (fn [] [])
+                        db-config/get-active-db-config     (fn [] {:datasource (:datasource ctx)})
+                        db-config/load-config              (fn [_] {:active {}})]
+            (f ctx app lib))
+          (finally (db-factory/close-db-context! ctx))))
+      (finally
+        (doseq [file (reverse (file-seq root))] (.delete ^java.io.File file))))))
+
+(deftest ^:integration a-shared-migration-id-stops-boot-and-migrate
+  ;; migratus kept one of the two and recorded the id as done, so the other
+  ;; never ran and nothing said so (BOU-717).
+  (with-two-migration-dirs 20261017120000 20261017120000
+    (fn [ctx app lib]
+      (doseq [[label run] [["migrate up" migrations/migrate]
+                           ["boot"       #(migrations/migrate-datasource! (:datasource ctx))]]]
+        (let [e (is (thrown? clojure.lang.ExceptionInfo (run)) label)]
+          (is (= :duplicate-migration-id (:type (ex-data e))) label)
+          (is (str/includes? (ex-message e) (str app "20261017120000-app_table")) label)
+          (is (str/includes? (ex-message e) (str lib "20261017120000-lib_table")) label)
+          (is (re-find #"new id" (ex-message e)) (str label ": says how to fix it"))))
+      (is (not (db/table-exists? ctx :app_table)) "nothing ran")
+      (is (not (db/table-exists? ctx :lib_table)) "nothing ran"))))
+
+(deftest ^:integration distinct-migration-ids-migrate
+  (with-two-migration-dirs 20261017120000 20261017120001
+    (fn [ctx app lib]
+      (is (= {} (migrations/duplicate-migration-ids [app lib])))
+      (migrations/migrate-datasource! (:datasource ctx))
+      (is (db/table-exists? ctx :app_table))
+      (is (db/table-exists? ctx :lib_table)))))
+
+(deftest ^:unit a-nested-duplicate-is-reported-where-it-lives
+  (let [root (io/file "target" (str "bou717-nested-" (System/nanoTime)))]
+    (try
+      (let [app (migration-dir! root 20261017120000 "app_table")
+            lib (str (.getPath (io/file root "lib")) "/")]
+        (spit (doto (io/file lib "tenant" "20261017120000-x.up.sql") io/make-parents) "SELECT 1")
+        (is (= {20261017120000 [(str app "20261017120000-app_table")
+                                (str lib "tenant/20261017120000-x")]}
+               (migrations/duplicate-migration-ids [app lib]))))
+      (finally
+        (doseq [file (reverse (file-seq root))] (.delete ^java.io.File file))))))
+
+(deftest ^:integration a-shared-migration-id-is-found-in-a-jar
+  ;; An uberjar is how production boots: the ids come from jar entries there.
+  (with-temp-dir
+    (fn [root]
+      (let [tree (io/file root "tree")
+            jar  (io/file root "app.jar")]
+        (doseq [d ["bou717a/migrations" "bou717b/migrations"]]
+          (spit (doto (io/file tree d "20261017120000-x.up.sql") io/make-parents) "SELECT 1"))
+        (jar-dir! tree jar)
+        (let [cl     (java.net.URLClassLoader. (into-array java.net.URL [(io/as-url jar)])
+                                               (ClassLoader/getPlatformClassLoader))
+              thread (Thread/currentThread)
+              prev   (.getContextClassLoader thread)]
+          (try
+            (.setContextClassLoader thread cl)
+            (is (= {20261017120000 ["bou717a/migrations/20261017120000-x"
+                                    "bou717b/migrations/20261017120000-x"]}
+                   (migrations/duplicate-migration-ids ["bou717a/migrations" "bou717b/migrations"])))
+            (finally
+              (.setContextClassLoader thread prev)
+              (.close cl))))))))
