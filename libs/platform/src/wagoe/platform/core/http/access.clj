@@ -52,3 +52,10 @@
   "Whether the signed-in user has the global admin role."
   [request]
   (= :admin (some-> (get-in request [:user :role]) keyword)))
+
+(defn platform-admin?
+  "Whether `user` is an admin outside any tenant, whom platform-wide pages such
+   as the audit trail admit. The role may be a string in an older session."
+  [user]
+  (and (= :admin (some-> (:role user) keyword))
+       (nil? (:tenant-id user))))

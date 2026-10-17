@@ -6,6 +6,7 @@
   (:require [wagoe.platform.core.database.constraint :as constraint]
             [wagoe.platform.core.http.problem-details :as problem]
             [wagoe.platform.core.database.query :as core-query]
+            [wagoe.platform.shell.adapters.database.common.connection :as connection]
             [wagoe.platform.shell.database.validation :as core-validation]
             [wagoe.core.utils.type-conversion :as type-conversion]
             [wagoe.platform.ports.database :as protocols]
@@ -18,7 +19,10 @@
             [clojure.walk :as walk]
             [next.jdbc :as jdbc]
             [next.jdbc.result-set :as rs])
-  (:import [java.sql SQLException]))
+  (:import [com.zaxxer.hikari HikariDataSource]
+           [java.sql Connection SQLException]
+           [java.util Collections WeakHashMap]
+           [javax.sql DataSource]))
 
 ;; =============================================================================
 ;; Context Validation (Re-exported from core)
@@ -176,6 +180,52 @@
    transaction a refused write aborted."
   nil)
 
+(def ^:private key-columns-cache
+  "Per database, key columns by [table key], so a refusal looks them up once.
+   Weak on the datasource, so a closed pool's entries go with it."
+  (Collections/synchronizedMap (WeakHashMap.)))
+
+(def ^:private key-columns-per-db 512)
+
+(defn- cached-key-columns
+  "The cached columns of [table key] `k` in database `db`, or `(lookup)`'s,
+   remembered. A database's entries are dropped when it has too many."
+  [db k lookup]
+  (let [m (or (.get ^java.util.Map key-columns-cache db) {})]
+    (if (contains? m k)
+      (get m k)
+      (let [cols (lookup)]
+        (.put ^java.util.Map key-columns-cache db (assoc (if (< (count m) key-columns-per-db) m {}) k cols))
+        cols))))
+
+(def ^:private borrow-timeout-ms
+  "How long a refusal in a transaction waits for a second connection to read
+   a key's columns on. It already holds one, so out of a full pool it would
+   wait the pool's whole timeout (Hikari's 30 s)."
+  1000)
+
+(defn- borrow
+  "A connection to read the catalog on: outside the pool when `ds` is one, so
+   it waits on no other caller. Throws after `borrow-timeout-ms`; one that
+   arrives later is closed."
+  ^Connection [^DataSource ds]
+  (let [state (atom ::waiting)
+        ready (promise)]
+    (future
+      (try
+        (let [c (if (instance? HikariDataSource ds)
+                  (connection/unpooled-connection ds)
+                  (.getConnection ds))]
+          (when-not (compare-and-set! state ::waiting c)
+            (.close ^Connection c)))
+        (catch Exception e (compare-and-set! state ::waiting e)))
+      (deliver ready true))
+    (deref ready borrow-timeout-ms nil)
+    (if (compare-and-set! state ::waiting ::gave-up)
+      (throw (SQLException. "No connection to read a key's columns on"))
+      (let [c @state]
+        (if (instance? Exception c) (throw c) c)))))
+
 (defn- named-columns
   "`v`, a unique violation, with the columns of key `key-name` read from the
    database when the driver's message did not name them. Only a key on the
@@ -196,9 +246,17 @@
              (not (str/starts-with? (str (:detail reported)) "Key (")))
       (try
         (let [adapter (:adapter ctx)
-              ds      (or (when (= :postgresql (protocols/engine adapter)) *outside-datasource*)
-                          (current-datasource ctx))]
-          (constraint/with-columns v (protocols/key-columns adapter ds (if schema (keyword schema table) table) index)))
+              db      (or *outside-datasource* (current-datasource ctx))
+              ds      (if (= :postgresql (protocols/engine adapter)) db (current-datasource ctx))
+              table   (if schema (keyword schema table) table)]
+          (constraint/with-columns
+            v
+            (cached-key-columns
+             db [table index]
+             #(if (and *transaction-datasource* (instance? DataSource ds))
+                (with-open [conn (borrow ds)]
+                  (protocols/key-columns adapter conn table index))
+                (protocols/key-columns adapter ds table index)))))
         (catch Exception e
           (log/debug "Could not read the columns of a key" {:key key-name :error (ex-message e)})
           v)
