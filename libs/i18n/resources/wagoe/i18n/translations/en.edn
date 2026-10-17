@@ -560,6 +560,19 @@
  :calendar/tz-utc           "UTC"
  :calendar/button-prev-month "Previous month"
  :calendar/button-next-month "Next month"
+ :calendar/all-day          "All day"
+ :calendar/month-january    "January"
+ :calendar/month-february   "February"
+ :calendar/month-march      "March"
+ :calendar/month-april      "April"
+ :calendar/month-may        "May"
+ :calendar/month-june       "June"
+ :calendar/month-july       "July"
+ :calendar/month-august     "August"
+ :calendar/month-september  "September"
+ :calendar/month-october    "October"
+ :calendar/month-november   "November"
+ :calendar/month-december   "December"
 
  ;; =============================================================================
  ;; Workflow module
