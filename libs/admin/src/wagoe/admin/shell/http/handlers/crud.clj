@@ -403,10 +403,10 @@
               (assoc :status (if conflict 409 422))))))))
 
 (defn validate-field-handler
-  "POST /:entity/validate-field — one field's errors, as the form left it,
-   when the user leaves the field: the whole form is validated the way a save
-   would be (an edit as the record it would leave behind), and only the left
-   field's messages come back. Empty when it is fine. Nothing is written."
+  "POST /:entity/validate-field — the field named `__field`, rendered again
+   with its errors, when the user changes it: the whole form is validated the
+   way a save would be (an edit as the record it would leave behind), and only
+   that field comes back, to replace itself. Nothing is written."
   [admin-service schema-provider config]
   (fn [request]
     (let [user          (support/require-admin-user! request)
@@ -415,19 +415,27 @@
                           (throw (ex-info "Unknown entity" {:type :not-found :entity-name entity-name})))
           entity-config (ports/get-entity-config schema-provider entity-name)
           submitted     (submitted-params request)
-          field         (some-> (get submitted "__field") keyword)
           id            (not-empty (get submitted "__id"))
           _             (if id
                           (shell-permissions/assert-can-edit-entity! user entity-name entity-config)
                           (shell-permissions/assert-can-create-entity! user entity-name entity-config))
+          form-cfg      (cond-> entity-config (nil? id) introspection/for-create)
+          field         (some #(when (= (name %) (get submitted "__field")) %) (:editable-fields form-cfg))
+          _             (when-not field
+                          (throw (ex-info "No such field on the form"
+                                          {:type :validation-error :field (get submitted "__field")})))
           [zones params] (support/form-zone-options config request
                                                     (dissoc submitted "__field" "__id" "__then"))
-          form-cfg      (cond-> entity-config (nil? id) introspection/for-create)
           [form-data parse-errors] (support/parse-form-params-checked params form-cfg zones)
           existing      (when id (ports/get-entity admin-service entity-name id))
           result        (ports/validate-entity-data admin-service entity-name (merge existing form-data))
-          errors        (get (merge (:errors result) parse-errors) field)]
+          errors        (get (merge (:errors result) parse-errors) field)
+          ;; A value that did not parse is shown as it was typed.
+          value         (if (contains? parse-errors field) (get params (name field)) (get form-data field))
+          options       (support/field-options admin-service schema-provider config entity-name field form-data)
+          cfg           (-> form-cfg
+                            (admin-ui/with-field-options (when options {field options}))
+                            (admin-ui/with-live-validation entity-name id))]
       (support/html-response request
-                             (if (and field (seq errors))
-                               (ui/field-errors (ui/field-error-id field) errors)
-                               "")))))
+                             (admin-ui/render-field-widget field value (get-in cfg [:fields field]) errors
+                                                           (support/display-options config request))))))

@@ -843,6 +843,27 @@
                             :widget :select
                             :options options}]))))))
 
+(defn constraints-from-input-attrs
+  "Partial field configs from the HTML attributes a Malli schema implies
+   (`wagoe.shared.ui.core.form/attrs-by-field`): length or value bounds as
+   :min/:max, a regex as :pattern, and the email and url widgets. Whether a
+   field is required stays the database's call.
+
+   Example:
+     (constraints-from-input-attrs {:email {:type \"email\" :maxlength 320}})
+     ;=> {:email {:max 320 :widget :email-input}}"
+  [attrs-by-field]
+  (into {}
+        (for [[field {:keys [type minlength maxlength min max pattern]}] attrs-by-field
+              :let [cfg (cond-> {}
+                          (or minlength min) (assoc :min (or minlength min))
+                          (or maxlength max) (assoc :max (or maxlength max))
+                          pattern            (assoc :pattern pattern)
+                          (= "email" type)   (assoc :widget :email-input)
+                          (= "url" type)     (assoc :widget :url-input))]
+              :when (seq cfg)]
+          [field cfg])))
+
 ;; =============================================================================
 ;; Relationship Detection (Week 2)
 ;; =============================================================================

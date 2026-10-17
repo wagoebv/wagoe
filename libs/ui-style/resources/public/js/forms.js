@@ -8,8 +8,10 @@
 (function() {
   'use strict';
 
-  // Any one of these marks a body as a re-rendered form rather than an error page.
-  const FORM_MARKERS = '.field-errors, .validation-errors, .form-field';
+  // Any one of these marks a body as an answer meant for the page: a re-rendered
+  // form, or the message `ui/error-message` renders, which carries none of the
+  // form markup and was thrown away.
+  const FORM_MARKERS = '.field-errors, .validation-errors, .form-field, .alert-error';
 
   // htmx marks [45].. as `swap: false` — right for a 500 or a 404, wrong for a
   // failed form POST, which this application answers with the same form
@@ -30,6 +32,9 @@
     // fields render the second.
     const body = event.detail.xhr.responseText || '';
     if (!body) return;
+    // A whole page is never a fragment: swapped into a target it would nest a
+    // second <html>, <head> and set of scripts inside this one.
+    if (/^\s*(<!doctype|<html)/i.test(body)) return;
     const parsed = new DOMParser().parseFromString(body, 'text/html');
     if (!parsed.querySelector(FORM_MARKERS)) return;
 

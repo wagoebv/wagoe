@@ -8,6 +8,7 @@
             [wagoe.admin.core.forms :as forms]
             [wagoe.admin.core.schema-introspection :as introspection]
             [wagoe.shared.ui.core.components :as ui]
+            [wagoe.shared.ui.core.form :as form]
             [wagoe.shared.ui.core.icons :as icons]
             [clojure.string :as str]))
 
@@ -214,9 +215,28 @@
   ([field-name value field-config errors]
    (render-field-widget field-name value field-config errors nil))
   ([field-name value field-config errors display]
-   ;; Ties the input to its error container for screen readers (BOU-398).
-   (cond-> (field-widget field-name value field-config errors display)
-     (seq errors) (ui/describe-input field-name (ui/field-error-id field-name)))))
+   (let [{:keys [url vals]} (:validate field-config)]
+     (cond-> (field-widget field-name value field-config errors display)
+       url          (form/with-live-validation field-name url vals)
+       ;; Ties the input to its error container for screen readers (BOU-398).
+       (seq errors) (ui/describe-input field-name (ui/field-error-id field-name))))))
+
+(defn with-live-validation
+  "`entity-config` with each field the user can change set to be checked on
+   the server when it changes: the form posts to validate-field, which answers
+   with the field again. `record-id` is nil on a create form."
+  [entity-config entity-name record-id]
+  (let [url  (str "/web/admin/" (name entity-name) "/validate-field")
+        vals (when record-id {"__id" (str record-id)})]
+    (update entity-config :fields
+            (fn [fields]
+              (reduce-kv (fn [acc k cfg]
+                           (assoc acc k (cond-> cfg
+                                          (not (or (:readonly cfg)
+                                                   (#{:hidden :file-input} (:widget cfg))))
+                                          (assoc :validate {:url url :vals vals}))))
+                         {}
+                         (or fields {}))))))
 
 ;; =============================================================================
 ;; Field Grouping Helpers
@@ -435,12 +455,14 @@
      If :field-groups is configured, renders fields in grouped sections.
      Otherwise, renders flat list of editable fields."
   [entity-name entity-config record errors _permissions & [cancel-url display prefill nested]]
-  (let [entity-config (cond-> entity-config (nil? record) introspection/for-create)
+  (let [primary-key (:primary-key entity-config :id)
+        record-id (get record primary-key)
+        entity-config (cond-> entity-config
+                        (nil? record) introspection/for-create
+                        true          (with-live-validation entity-name record-id))
         editable-fields (:editable-fields entity-config)
         values (or record prefill)
         field-groups (compute-field-groups entity-config)
-        primary-key (:primary-key entity-config :id)
-        record-id (get record primary-key)
         is-edit? (some? record)
         form-action-base (if is-edit?
                            (str "/web/admin/" (name entity-name) "/" record-id)
@@ -466,9 +488,6 @@
      (merge {hx-attr form-action
              :hx-target "body"
              :hx-swap "outerHTML"
-             ;; A field is checked when it is left (admin-ux.js)
-             :data-validate-url (str "/web/admin/" (name entity-name) "/validate-field")
-             :data-record-id (when is-edit? (str record-id))
              ;; Dirty tracking and ⌘S / Ctrl+S for the save bar (admin-ux.js)
              :x-data "dirtyForm"
              :x-on:input "track()"
@@ -650,7 +669,7 @@
        [:a.button.secondary {:href (base/filtered-list-url entity fk-param (:parent-id relationship))}
         [:t :admin/relationship-view-all {:label label}]])]))
 
-(defn- with-field-options
+(defn with-field-options
   "`entity-config` with each field in `field-options` rendered as a select
    over them, unless the config chose a widget other than a text input."
   [entity-config field-options]
