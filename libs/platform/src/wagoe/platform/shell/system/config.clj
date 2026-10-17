@@ -35,10 +35,11 @@
   "The components every Wagoe application has, whatever it enables.
 
    `http-extras` carries what the modules contributed to `:wagoe/http-handler`
-   by name — tenant's `:extra-middleware`, user's `:user-service`. Routes are
+   by name — tenant's `:tenant-service`, user's `:user-service`. Routes are
    not among them: they arrive as `module-routes`, one collection, so platform
-   holds no list of which modules may serve HTTP (BOU-330)."
-  [config http-extras module-routes]
+   holds no list of which modules may serve HTTP (BOU-330), and neither is
+   middleware: each module's `:extra-middleware` arrives in `module-middleware`."
+  [config http-extras module-routes module-middleware]
   (let [active   (:active config)
         ;; The port strategy decides by profile: prod binds exactly (BOU-566).
         http-cfg (cond-> (config/http-config config)
@@ -57,6 +58,8 @@
              ;; generated module, so they reach it as a collection; without
              ;; this a scaffolded module initialises and serves nothing.
              :module-routes   module-routes
+             ;; Each module's `:extra-middleware`, in the same order.
+             :module-middleware module-middleware
              :router          (ig/ref :wagoe/router)
              :logger          (ig/ref :wagoe/logging)
              :metrics-emitter (ig/ref :wagoe/metrics)
@@ -106,7 +109,7 @@
          ;; feature the config asks for and does not get, and it used to say
          ;; nothing at all (BOU-477).
          _          (modules/assert-every-key-claimed! active known)
-         {:keys [components http routes job-handlers]}
+         {:keys [components http middleware routes job-handlers]}
          (modules/framework-module-config
           active
           {:config            config
@@ -119,6 +122,7 @@
          ;; a discovered module with a graph of its own need not have routes.
          {discovered          :components
           discovered-http     :http
+          discovered-mw       :middleware
           discovered-routes   :routes
           discovered-handlers :job-handlers}
          (modules/discover-module-config
@@ -130,14 +134,15 @@
          (log/info (str "Dev dashboard is off: it runs under the dev profile only, and this is "
                         (name profile) "."))))
      ;; Framework modules first, then the scaffolded ones — the order routes are
-     ;; concatenated in and mounted.
+     ;; concatenated in and mounted, and middleware is applied in.
      (cond-> (merge (core-components config
                                      (modules/merge-http http :discovered discovered-http)
                                      ;; distinct: a module may name its
                                      ;; `-routes` ref and match the convention
                                      (into [] (distinct)
                                            (concat routes discovered-routes
-                                                   (modules/discovered-route-refs active known discovered))))
+                                                   (modules/discovered-route-refs active known discovered)))
+                                     (into middleware discovered-mw))
                     components
                     discovered)
        ;; Handlers reach the registry only when the jobs module is on. Assoc'ing

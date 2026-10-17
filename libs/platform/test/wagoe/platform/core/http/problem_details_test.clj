@@ -15,8 +15,8 @@
   [& {:keys [user-id tenant-id headers uri method]}]
   {:request-method (or method :get)
    :uri (or uri "/api/users")
+   :client-ip "192.168.1.100"
    :headers (merge {"user-agent" "test-agent/1.0"
-                    "x-forwarded-for" "192.168.1.100"
                     "x-trace-id" (str (UUID/randomUUID))
                     "x-request-id" (str (UUID/randomUUID))}
                    (when user-id {"x-user-id" (str user-id)})
@@ -62,14 +62,12 @@
       (is (= "POST" (:method context)))
       (is (= "/api/test" (:uri context)))))
 
-  (testing "handles x-forwarded-for header variations"
-    (let [request-single-ip (assoc-in (create-test-request) [:headers "x-forwarded-for"] "10.0.0.1")
-          request-multiple-ips (assoc-in (create-test-request) [:headers "x-forwarded-for"] "10.0.0.1, 192.168.1.1")
-          context-single (pd/request->context* request-single-ip)
-          context-multiple (pd/request->context* request-multiple-ips)]
-
-      (is (= "10.0.0.1" (:ip-address context-single)))
-      (is (= "10.0.0.1" (:ip-address context-multiple))))))
+  (testing "the IP is the request's resolved :client-ip, never X-Forwarded-For"
+    (let [spoofed {:remote-addr "203.0.113.9"
+                   :headers     {"x-forwarded-for" "10.0.0.1"}}]
+      (is (= "203.0.113.9" (:ip-address (pd/request->context* spoofed))))
+      (is (= "198.51.100.7"
+             (:ip-address (pd/request->context* (assoc spoofed :client-ip "198.51.100.7"))))))))
 
 (deftest ^:unit test-cli-context
   (testing "creates CLI context with environment info"

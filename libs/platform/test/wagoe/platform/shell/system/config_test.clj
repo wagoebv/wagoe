@@ -143,3 +143,26 @@
       (let [c (sut/system-config (assoc (config) :wagoe/profile profile))]
         (is (false? (:request-capture? (:wagoe/http-handler c)))
             (str profile " must not capture requests"))))))
+
+(deftest ^:integration an-app-modules-middleware-reaches-the-handler
+  ;; An application module had no way to add middleware: wiring it meant
+  ;; editing system_config.clj, and adding its one component meant restating
+  ;; the four keys discovery builds.
+  (let [c (sut/system-config (config :wagoe/guards {:enabled? true}) {:base-ns "acme"})]
+    (testing "its ig-config names one component, and the scaffold keys are still built"
+      (is (every? (set (keys c))
+                  [:wagoe/guards :wagoe/guards-repository :wagoe/guards-service
+                   :wagoe/guards-routes :wagoe/guards-http-middleware]))
+      (is (= {:ctx (ig/ref :wagoe/db-context)} (:wagoe/guards-repository c))))
+
+    (testing "its :extra-middleware is handed to the handler"
+      (is (= [(ig/ref :wagoe/guards-http-middleware)]
+             (get-in c [:wagoe/http-handler :module-middleware]))))
+
+    (testing "and runs on a request"
+      (let [system (ig/init c [:wagoe/http-handler])]
+        (try
+          (is (= "on" (get-in ((:wagoe/http-handler system)
+                               {:request-method :get :uri "/health" :headers {}})
+                              [:headers "X-Guard"])))
+          (finally (ig/halt! system)))))))

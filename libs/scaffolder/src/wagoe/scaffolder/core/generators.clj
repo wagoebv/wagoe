@@ -1906,7 +1906,7 @@ DROP TABLE IF EXISTS %s;
 ;; =============================================================================
 ;;
 ;; Platform discovery builds a scaffolded module from four keys, one service
-;; and one routes contribution, unless the wiring namespace defines `ig-config`.
+;; and one routes contribution, and merges the wiring's `ig-config` over them.
 ;; So the first further entity installs, once: an `ig-config` that adds
 ;; :wagoe/<m>-entities, and a routes init-key that adds those entities' API
 ;; routes to the module's. The routes init-key is the one form replaced rather
@@ -2027,10 +2027,11 @@ DROP TABLE IF EXISTS %s;
          "    (and (some? v) (not (false? (:enabled? v))))))\n"
          "\n"
          "(defn ig-config\n"
-         "  \"This module's Integrant graph: the four keys platform discovery would\n"
-         "   build, plus " (k "-entities") ". With the workflow module on, the services\n"
-         "   get it, and the event bus the admin publishes to when both are on.\"\n"
-         "  [settings {:keys [config]}]\n"
+         "  \"What this module adds to the four keys platform discovery builds:\n"
+         "   " (k "-entities") ", handed to the service and the routes. With the\n"
+         "   workflow module on, the services get it, and the event bus the admin\n"
+         "   publishes to when both are on.\"\n"
+         "  [_settings {:keys [config]}]\n"
          "  (let [workflow (when (switched-on? config :wagoe/workflow)\n"
          "                   {:workflow (ig/ref :wagoe/workflow)\n"
          "                    :events   (when (and (switched-on? config :wagoe/events)\n"
@@ -2038,22 +2039,12 @@ DROP TABLE IF EXISTS %s;
          "                                (ig/ref :wagoe/events))})]\n"
          "    {:components\n"
          "     (cond->\n"
-         "      {" (k "-repository") "\n"
-         "      {:ctx (ig/ref :wagoe/db-context)}\n"
-         "      " (k "-service") "\n"
-         "      (merge {:repository (ig/ref " (k "-repository") ")\n"
-         "              :entities   (ig/ref " (k "-entities") ")}\n"
-         "             workflow)\n"
+         "      {" (k "-service") "\n"
+         "      (merge {:entities (ig/ref " (k "-entities") ")} workflow)\n"
          "      " (k "-entities") "\n"
          "      (merge {:ctx (ig/ref :wagoe/db-context)} workflow)\n"
          "      " (k "-routes") "\n"
-         "      {:service  (ig/ref " (k "-service") ")\n"
-         "       :entities (ig/ref " (k "-entities") ")\n"
-         "       :config   settings}\n"
-         "      " (k "") "\n"
-         "      {:enabled? true\n"
-         "       :service  (ig/ref " (k "-service") ")\n"
-         "       :routes   (ig/ref " (k "-routes") ")}}\n"
+         "      {:entities (ig/ref " (k "-entities") ")}}\n"
          "      workflow\n"
          "      (assoc " (k "-seed") " {:service  (ig/ref " (k "-service") ")\n"
          "                               :entities (ig/ref " (k "-entities") ")})\n"
@@ -2157,7 +2148,7 @@ DROP TABLE IF EXISTS %s;
         svc-wanted  (z/sexpr (form-of service-init-form? base))]
     (cond
       (contains? (defined-symbols source) 'ig-config)
-      {:error "it already defines ig-config, so the module builds its own graph"}
+      {:error "it already defines ig-config, which wiring an entity would replace"}
 
       (or (nil? loc) (not= expected (z/sexpr loc)))
       {:error (str "its :wagoe/" module-name "-routes init-key is not the one bb scaffold"

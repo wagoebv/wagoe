@@ -116,10 +116,10 @@
                 (get-in ig-config [:wagoe/http-handler :module-routes])))
       (is (some #{(ig/ref :wagoe/tenant-routes)}
                 (get-in ig-config [:wagoe/http-handler :module-routes])))
-      ;; Tenant/membership middleware is no longer built inside http-handler; it is
-      ;; injected via :extra-middleware from the tenant lib's component.
-      (is (= (ig/ref :wagoe/tenant-http-middleware)
-             (get-in ig-config [:wagoe/http-handler :extra-middleware])))
+      ;; Tenant/membership middleware is no longer built inside http-handler; the
+      ;; tenant lib's component arrives with every module's middleware.
+      (is (= [(ig/ref :wagoe/tenant-http-middleware)]
+             (get-in ig-config [:wagoe/http-handler :module-middleware])))
       (is (not (contains? (:wagoe/http-handler ig-config) :membership-service))))
 
     (testing "the tenant-http-middleware component wires the services it needs"

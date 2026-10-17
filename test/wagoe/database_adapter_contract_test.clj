@@ -120,6 +120,11 @@
    :unicode   [:text "Zoë — 東京 🚀" identity identity]
    :long-text [:text (apply str (repeat 70000 "x")) identity identity]
    :json      [:json {"a" [1 2] "b" "ü"} json/generate-string json-decode]
+   :string    [:string (apply str "Zoë " (repeat 250 "x")) identity identity]
+   :int       [:int Integer/MAX_VALUE identity identity]
+   :bigint    [:bigint Long/MAX_VALUE identity identity]
+   :double    [:double 1.0E-300 identity identity]
+   :enum      [:enum "permanent-delete" identity identity]
    :nil-uuid  [:uuid nil identity tc/string->uuid]})
 
 (defn- round-trip-case [k]
