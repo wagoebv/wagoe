@@ -132,20 +132,17 @@
          (<= 0 (:prefix cidr) (* 8 (count (:bytes cidr)))))
     cidr))
 
-(defn in-network?
-  "True when `ip` lies in `cidr`. Both may be strings or the values of
-   `parse-ip` / `parse-cidr`, and are read exactly as the trust walk reads them:
-   a port, brackets or a zone id are ignored, and an IPv4-mapped IPv6 address
-   is its IPv4 address. Anything that does not parse, nil included, is false."
-  [ip cidr]
-  (let [bs (->ip ip)
-        c  (->cidr cidr)]
-    (boolean (and bs c (in-cidr? bs c)))))
-
 (defn in-any?
-  "True when `ip` lies in one of `cidrs`; see `in-network?`."
+  "True when `ip` lies in one of `cidrs`, each read as the trust walk reads it
+   (strings or `parse-ip` / `parse-cidr` values). Anything unparseable, nil
+   included, is false."
   [ip cidrs]
   (boolean (some->> (->ip ip) (trusted? (keep ->cidr cidrs)))))
+
+(defn in-network?
+  "True when `ip` lies in `cidr`; see `in-any?`."
+  [ip cidr]
+  (in-any? ip [cidr]))
 
 (defn client-ip
   "The client's address: `:remote-addr`, unless that is a trusted proxy, in
@@ -158,9 +155,11 @@
     (if-not (and (seq cidrs) (trusted? cidrs (parse-ip (host-part peer))))
       peer
       ;; Ring joins repeated headers with ",", so this reads all of them.
-      (loop [hops    (some-> (get-in request [:headers "x-forwarded-for"])
-                             (str/split #",")
-                             reverse)
+      ;; Empty elements are ignored, as RFC 9110 §5.6.1 requires.
+      (loop [hops    (some->> (get-in request [:headers "x-forwarded-for"])
+                              (re-seq #"[^,]+")
+                              (remove str/blank?)
+                              reverse)
              nearest peer]
         (if-let [hop (first hops)]
           (let [addr (host-part hop)

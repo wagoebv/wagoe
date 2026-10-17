@@ -65,8 +65,12 @@
       (is (= "198.51.100.7"
              (client-ip/client-ip (req "::ffff:10.0.0.5" "198.51.100.7:8080") trusted))))
     (testing "a malformed hop where the walk stops leaves the client unknown, not the proxy (BOU-695)"
-      (doseq [xff ["unknown" "198.51.100.7, garbage, 10.0.0.9" "1.2.3.4%:a" "" " , ,"]]
+      (doseq [xff ["unknown" "198.51.100.7, garbage, 10.0.0.9" "1.2.3.4%:a"]]
         (is (nil? (client-ip/client-ip (req "10.0.0.5" xff) trusted)) xff)))
+    (testing "empty list elements are ignored"
+      (is (= "198.51.100.7" (client-ip/client-ip (req "10.0.0.5" "198.51.100.7,,10.0.0.9, ") trusted)))
+      (doseq [xff ["" " , ,"]]
+        (is (= "10.0.0.5" (client-ip/client-ip (req "10.0.0.5" xff) trusted)) xff)))
     (testing "a malformed hop left of the client does not matter"
       (is (= "198.51.100.7" (client-ip/client-ip (req "10.0.0.5" "unknown, 198.51.100.7") trusted))))
     (testing "a trusted peer with no header, or every hop trusted"
