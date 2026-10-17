@@ -94,7 +94,13 @@
                   (let [{:keys [status body]} (request! app :get uri)]
                     (is (= 200 status))
                     (is (str/includes? (str body) "acme"))
-                    (is (not (str/includes? (str body) "/web/admin/tenants/new")))))))))))))
+                    (is (not (str/includes? (str body) "/web/admin/tenants/new"))))))
+              (testing "an edit leaves the slug alone: it names the schema"
+                (request! app :put (str "/web/admin/tenants/" id)
+                          {"slug" "acme-renamed" "name" "Acme 2" "status" "active"})
+                (is (= {:slug "acme" :name "Acme 2"}
+                       (db/execute-one! ctx {:select [:slug :name] :from [:tenants]
+                                             :where [:= :id id]})))))))))))
 
 (deftest ^:integration deleting-a-tenant-its-users-reference-is-refused
   ;; Users are a detected child of tenants, and a user can belong to more than
