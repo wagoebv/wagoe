@@ -129,28 +129,28 @@
    alone). UPDATE-then-INSERT rather than MERGE or ON CONFLICT: those spell
    differently on H2 and PostgreSQL, and this adapter's contract is portable SQL."
   [ds job dead-letter?]
-  (let [now  (ts (Instant/now))
-        flag (boolean dead-letter?)
-        n    (::jdbc/update-count
+  (let [now     (ts (Instant/now))
+        flag    (boolean dead-letter?)
+        payload (codec/encode-job job)
+        n       (::jdbc/update-count
               (execute-one!
                ds
                (if (nil? dead-letter?)
                  ["UPDATE job_store SET job_type = ?, queue = ?, status = ?,
                      updated_at = ?, payload = ? WHERE id = ?"
                   (kw-name (:job-type job)) (kw-name (:queue job))
-                  (kw-name (or (:status job) :pending)) now (codec/encode-job job) (:id job)]
+                  (kw-name (or (:status job) :pending)) now payload (:id job)]
                  ["UPDATE job_store SET job_type = ?, queue = ?, status = ?,
                      dead_letter = ?, updated_at = ?, payload = ? WHERE id = ?"
                   (kw-name (:job-type job)) (kw-name (:queue job))
-                  (kw-name (or (:status job) :pending)) flag now
-                  (codec/encode-job job) (:id job)])))]
+                  (kw-name (or (:status job) :pending)) flag now payload (:id job)])))]
     (when (zero? n)
       (execute-one!
        ds
        ["INSERT INTO job_store (id, job_type, queue, status, dead_letter, updated_at, payload)
            VALUES (?,?,?,?,?,?,?)"
         (:id job) (kw-name (:job-type job)) (kw-name (:queue job))
-        (kw-name (or (:status job) :pending)) flag now (codec/encode-job job)]))
+        (kw-name (or (:status job) :pending)) flag now payload]))
     job))
 
 ;; --- adapter ----------------------------------------------------------------
@@ -204,6 +204,7 @@
   (let [job-id     (:id job)
         scheduled? (some? (:execute-at job))
         status     (if scheduled? "scheduled" "ready")
+        payload    (codec/encode-job job)
         updated    (::jdbc/update-count
                     (execute-one!
                      connectable
@@ -212,7 +213,7 @@
                              payload = ?, locked_by = NULL, locked_at = NULL
                          WHERE id = ?"
                       (name queue-name) (priority-rank (:priority job)) status
-                      (ts (:execute-at job)) (codec/encode-job job) job-id]))]
+                      (ts (:execute-at job)) payload job-id]))]
     (when (zero? updated)
       (execute-one!
        connectable
@@ -221,7 +222,7 @@
            VALUES (?,?,?,?,?,?,?)"
         job-id (name queue-name) (priority-rank (:priority job)) status
         (ts (:execute-at job))
-        (codec/encode-job job)
+        payload
         (ts (:created-at job))]))
     ;; And into the store, on the same connectable — so a transactional enqueue
     ;; commits the history row with the business change too. Without this the

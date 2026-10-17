@@ -1,7 +1,7 @@
 (ns wagoe.jobs.shell.adapters.codec-test
   (:require [clojure.test :refer [deftest is testing]]
             [wagoe.jobs.shell.adapters.codec :as codec])
-  (:import [java.time Instant ZoneId]))
+  (:import [java.time Duration Instant YearMonth ZoneId]))
 
 (def legacy-json
   "A job as the :db and :redis queues wrote it before BOU-689."
@@ -20,7 +20,10 @@
              :args       {:report-id :sales
                           :zone-id   (ZoneId/of "Europe/Amsterdam")
                           :at        (Instant/parse "2026-10-17T08:23:28.536003Z")
-                          :user-id   (random-uuid)}
+                          :user-id   (random-uuid)
+                          :offset    (ZoneId/of "+02:00")
+                          :every     (Duration/ofMinutes 90)
+                          :month     (YearMonth/of 2026 10)}
              :created-at (Instant/now)}]
     (is (= job (codec/decode-job (codec/encode-job job))))))
 
