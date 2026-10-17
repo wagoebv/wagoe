@@ -51,6 +51,11 @@
         (#{401 403} status) :warn
         :else               :info))
 
+(defn exception-log-level
+  "The level `ex` is logged at: its status's (`status-log-level`)."
+  [ex error-mappings]
+  (status-log-level (first (exception-status ex error-mappings))))
+
 (defn exception->problem-body
   "The error body for `ex`, in the framework's one shape (BOU-586):
 
