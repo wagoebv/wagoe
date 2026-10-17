@@ -267,6 +267,23 @@
                    {:wagoe/visits {:enabled? true}} #{} "acme" (constantly true)
                    (constantly (constantly {:auth {:login-redirect :r}}))))))))
 
+(deftest ^:unit search-indexes-are-collected-one-module-each
+  (let [{:keys [search]} (assemble {:wagoe/tenant {} :wagoe/search {}}
+                                   {'wagoe.tenant.shell.module-wiring {:search {:a :ta}}
+                                    'wagoe.search.shell.module-wiring {:search {:b :sb}}})]
+    (is (= {:a :ta :b :sb} search)))
+  (testing "two modules defining one index fail rather than overwrite"
+    (let [e (is (thrown? clojure.lang.ExceptionInfo
+                         (assemble {:wagoe/tenant {} :wagoe/search {}}
+                                   {'wagoe.tenant.shell.module-wiring {:search {:a :ta}}
+                                    'wagoe.search.shell.module-wiring {:search {:a :sb}}})))]
+      (is (= :a (:key (ex-data e))))))
+  (testing "and a discovered module's are collected the same way"
+    (is (= {:c :r}
+           (:search (sut/discover-module-config
+                     {:wagoe/visits {:enabled? true}} #{} "acme" (constantly true)
+                     (constantly (constantly {:search {:c :r}}))))))))
+
 (deftest ^:unit a-module-sees-which-of-its-peers-are-on
   ;; audience takes a cache ref only when there is a cache to ref; without
   ;; this the config carries a dangling ref and the boot fails. Any module

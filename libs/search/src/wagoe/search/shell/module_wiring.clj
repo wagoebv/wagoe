@@ -4,7 +4,9 @@
    Config keys:
 
    :wagoe/search
-     {:db-ctx (ig/ref :wagoe/db-context)}
+     {:db-ctx      (ig/ref :wagoe/db-context)
+      :indexes     {index-id definition}   ; from config.edn
+      :contributed {index-id definition}}  ; modules' :search parts
 
      Returns {:store <ISearchStore> :engine <ISearchEngine>}
 
@@ -14,16 +16,24 @@
      Returns {:api [...] :web [...] :static []} for composition
      by the HTTP handler."
   (:require [integrant.core :as ig]
+            [wagoe.search.core.index :as index]
             [wagoe.search.shell.persistence :as persistence]
             [wagoe.search.shell.service :as service]
             [wagoe.search.shell.http :as search-http]
             [clojure.tools.logging :as log]))
 
+(defn- definitions!
+  [indexes contributed]
+  (let [{:keys [definitions error]} (index/collect-definitions indexes contributed)]
+    (when error
+      (throw (ex-info (:message error) error)))
+    definitions))
+
 (defmethod ig/init-key :wagoe/search
-  [_ {:keys [db-ctx]}]
+  [_ {:keys [db-ctx indexes contributed]}]
   (log/info "Initializing search component")
   (let [store  (persistence/create-search-store (:datasource db-ctx) (:adapter db-ctx))
-        engine (service/create-search-service store)]
+        engine (service/create-search-service store (definitions! indexes contributed))]
     (log/info "Search component initialized" (select-keys store [:full-text? :on-conflict?]))
     {:store  store
      :engine engine}))
@@ -58,8 +68,9 @@
 
 (defn ig-config
   "This module's Integrant entries, for `wagoe.platform.shell.system.config`."
-  [_settings _ctx]
+  [settings _ctx]
   {:components
-   {:wagoe/search        {:db-ctx (ig/ref :wagoe/db-context)}
+   {:wagoe/search        (cond-> {:db-ctx (ig/ref :wagoe/db-context)}
+                           (:indexes settings) (assoc :indexes (:indexes settings)))
     :wagoe/search-routes {:search-service (ig/ref :wagoe/search)}}
    :routes [(ig/ref :wagoe/search-routes)]})
