@@ -46,19 +46,19 @@ curl -X POST http://localhost:3000/api/v1/users \
   -H "Content-Type: application/json" \
   -d '{"email": "user@example.com", "password": "SecurePass123!", "role": "user"}'
 
-# 2. Login — returns accessToken. Wrong credentials answer 401, a locked
+# 2. Login — returns jwtToken. Wrong credentials answer 401, a locked
 #    account 429 with Retry-After; 200 with requiresMfa means resend with mfaCode.
 curl -X POST http://localhost:3000/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email": "user@example.com", "password": "SecurePass123!"}'
 
 # 3. Use token on protected endpoints
-curl -H "Authorization: Bearer <accessToken>" \
+curl -H "Authorization: Bearer <jwtToken>" \
   http://localhost:3000/api/v1/users
 
 # 4. Logout (invalidates session)
 curl -X POST http://localhost:3000/api/v1/auth/logout \
-  -H "Authorization: Bearer <accessToken>"
+  -H "Authorization: Bearer <jwtToken>"
 ```
 
 ### Token model — DB sessions are canonical

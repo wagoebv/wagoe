@@ -848,8 +848,7 @@
    :enter (fn [context]
             (let [session-data (:session-data context)
                   service (ctx/get-service context)
-                  updated-context (ctx/add-breadcrumb context :operation :user-authenticate-start
-                                                      {:email (:email session-data)})]
+                  updated-context (ctx/add-breadcrumb context :operation :user-authenticate-start {})]
               (try
                 (assoc updated-context :session (ports/authenticate-user service session-data))
                 (catch Exception ex
@@ -866,11 +865,12 @@
 
 (defn- login-refusal
   "The error response for a refused login (BOU-691). Unknown email, wrong
-   password and an inactive account get the same 401, so the body never says
-   whether the account exists."
+   password and an inactive account get the same 401; a lockout, which does
+   reveal the account, a 429. Only a lockout carries :retry-after, whatever
+   its :reason says."
   [{:keys [reason message retry-after]} correlation-id]
   (let [opts {:correlation-id correlation-id}]
-    (case reason
+    (case (if retry-after :account-locked reason)
       :account-locked
       (let [secs (some-> retry-after seconds-until)]
         (cond-> (errors/response 429 :account-locked "Too many failed attempts, try again later"

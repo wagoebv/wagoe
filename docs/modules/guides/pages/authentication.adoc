@@ -49,6 +49,9 @@ standard shape (`{"error": {"type", "message", "correlation-id"}}`):
 | 200 with `"requiresMfa": true`
 | The password was right; send it again with `mfaCode`.
 
+| 400 `validation-error`
+| The body is malformed or the email is not a valid address.
+
 | 401 `unauthorized`
 | Wrong email or password. The body is the same whether or not the account exists.
 
@@ -59,7 +62,7 @@ standard shape (`{"error": {"type", "message", "correlation-id"}}`):
 | MFA is required and the user has not enrolled.
 
 | 429 `account-locked`
-| Too many failed attempts. `Retry-After` gives the seconds to wait.
+| Too many failed attempts. `Retry-After` gives the seconds to wait. Unlike the 401, this tells the caller the account exists.
 |===
 
 == Protected routes

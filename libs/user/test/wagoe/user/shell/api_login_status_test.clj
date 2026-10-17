@@ -7,6 +7,7 @@
             [wagoe.user.shell.auth :as auth]
             [wagoe.user.shell.cli :as cli]
             [wagoe.user.shell.http :as user-http]
+            [wagoe.user.shell.interceptors :as user-interceptors]
             [wagoe.user.shell.in-memory-repository-test :as mem]
             [wagoe.user.shell.service :as service])
   (:import [java.time Duration Instant]))
@@ -92,6 +93,15 @@
         (let [resp (post handler {:email "bob@x.org" :password password})]
           (is (= 200 (:status resp)))
           (is (string? (get-in resp [:body :sessionToken]))))))))
+
+(deftest ^:unit a-lockout-auth-shell-reports-is-still-a-429
+  ;; A lockout set by a concurrent request reaches us as :authentication-failed.
+  (let [enter (:enter user-interceptors/format-session-creation-response)
+        resp  (:response (enter {:correlation-id "c"
+                                 :session {:authenticated false :reason :authentication-failed
+                                           :retry-after (.plus (Instant/now) (Duration/ofMinutes 5))}}))]
+    (is (= 429 (:status resp)))
+    (is (some? (get-in resp [:headers "Retry-After"])))))
 
 (deftest ^:unit the-cli-has-no-session-create
   ;; It took --user-id, which is not a credential, so it could only fail.
