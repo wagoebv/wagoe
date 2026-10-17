@@ -52,19 +52,28 @@
                (re-find #"insert or update on table" message) false
                :else (and table target (not= (str/lower-case table) target))))))
 
+(defn with-columns
+  "`v` naming the key's `columns`: `:field` for one, `:fields` for several
+   (BOU-712). Unchanged when any of them is not a plain identifier."
+  [v columns]
+  (let [fields (mapv redaction/column->field columns)]
+    (cond
+      (or (empty? fields) (some nil? fields)) v
+      (= 1 (count fields))                    (assoc v :field (first fields))
+      :else                                   (assoc v :fields fields))))
+
 (defn violation
   "`{:kind :unique|:foreign-key :field kw}` for a unique or foreign-key
-   violation, `:field` only when the driver names one column, and
-   `:referenced? true` when the refused row is one another still references;
-   nil for any other failure."
+   violation, `:field` when the driver names one column, `:fields` when it
+   names several, and `:referenced? true` when the refused row is one another
+   still references; nil for any other failure."
   [{:keys [message detail authored?] :as reported}]
   ;; A RAISE claiming a key's state is not one: its author wrote it (BOU-635).
   (when-let [k (when-not authored? (kind reported))]
     ;; PostgreSQL names the column in its Detail, which `reported` keeps apart.
-    (let [text  (str message "\n" detail)
-          field (some #(some-> (re-find % text) second redaction/column->field) column-patterns)]
-      (cond-> {:kind k}
-        field (assoc :field field)
+    (let [text    (str message "\n" detail)
+          columns (some #(some-> (re-find % text) second (str/split #",")) column-patterns)]
+      (cond-> (with-columns {:kind k} columns)
         (and (= :foreign-key k) (still-referenced? reported)) (assoc :referenced? true)))))
 
 (defn already-exists?

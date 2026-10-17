@@ -36,6 +36,9 @@
    :table-exists?      (partial introspection/information-schema-table-exists?
                                 introspection-spec)
    :table-info         (partial introspection/information-schema-table-info
+                                introspection-spec)
+   ;; Its unique violation names the key, not the columns (BOU-712).
+   :key-columns        (partial introspection/information-schema-key-columns
                                 introspection-spec)})
 
 (defn new-adapter

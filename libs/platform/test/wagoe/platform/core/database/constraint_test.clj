@@ -25,11 +25,24 @@
     (is (= {:kind :unique}
            (constraint/violation {:sql-state "23000" :error-code 1062
                                   :message "Duplicate entry 'A-1' for key 'invoices.number'"}))))
-  (testing "a key over several columns names none"
-    (is (= {:kind :unique}
+  (testing "a key over several columns names each of them (BOU-712)"
+    (is (= {:kind :unique :fields [:invoice-id :position]}
            (constraint/violation {:message "[SQLITE_CONSTRAINT_UNIQUE] A UNIQUE constraint failed (UNIQUE constraint failed: lines.invoice_id, lines.position)"})))
+    (is (= {:kind :unique :fields [:invoice-id :position]}
+           (constraint/violation {:sql-state "23505" :message "Detail: Key (invoice_id, position)=(x, 1) already exists."})))
+    (is (= {:kind :unique :fields [:invoice-id :position]}
+           (constraint/violation {:sql-state "23505" :error-code 23505
+                                  :message "Unique index or primary key violation: \"PUBLIC.UQ_LINES_INDEX_4 ON PUBLIC.LINES(INVOICE_ID NULLS FIRST, POSITION NULLS FIRST) VALUES ( /* 2 */ 'x', 1 )\""}))))
+  (testing "a key on an expression names no field"
     (is (= {:kind :unique}
-           (constraint/violation {:sql-state "23505" :message "Detail: Key (invoice_id, position)=(x, 1) already exists."})))))
+           (constraint/violation {:sql-state "23505" :message "Detail: Key (lower(email), tenant_id)=(a, 1) already exists."})))))
+
+(deftest ^:unit with-columns-names-one-field-or-several
+  (is (= {:kind :unique :field :number} (constraint/with-columns {:kind :unique} ["NUMBER"])))
+  (is (= {:kind :unique :fields [:template-key :domain-id]}
+         (constraint/with-columns {:kind :unique} ["template_key" "domain_id"])))
+  (is (= {:kind :unique} (constraint/with-columns {:kind :unique} nil)))
+  (is (= {:kind :unique} (constraint/with-columns {:kind :unique} ["a" "lower(b)"]))))
 
 (deftest ^:unit foreign-key-violations-by-driver
   (is (= {:kind :foreign-key}
