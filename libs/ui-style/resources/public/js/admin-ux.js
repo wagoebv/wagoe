@@ -134,8 +134,10 @@ document.addEventListener('alpine:init', function () {
         };
         window.addEventListener('beforeunload', this.onUnload);
         this.$nextTick(function () { self.focusFirst(); });
-        // Submitting is not leaving with unsaved changes
-        this.$root.addEventListener('htmx:beforeRequest', function () {
+        // Submitting is not leaving with unsaved changes. A field checking
+        // itself on the server is not submitting.
+        this.$root.addEventListener('htmx:beforeRequest', function (event) {
+          if (event.detail.elt !== self.$root) return;
           window.removeEventListener('beforeunload', self.onUnload);
         });
       },

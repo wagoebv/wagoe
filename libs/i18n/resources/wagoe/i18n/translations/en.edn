@@ -71,6 +71,8 @@
  :validation/too-long      "At most {max} characters"
  :validation/too-small     "At least {min}"
  :validation/too-large     "At most {max}"
+ :validation/greater-than  "More than {min}"
+ :validation/less-than     "Less than {max}"
  :validation/not-a-number  "Must be a number"
  :validation/pattern       "Not in the expected format"
  :validation/not-an-option "Not one of the options"

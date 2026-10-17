@@ -107,8 +107,15 @@
           {}
           leaves))
 
-(defn- regex-source [s]
-  (some-> (first (m/children s)) str))
+(defn- regex-source
+  "The regex of an :re schema, when it is anchored at both ends. malli matches
+   with re-find, an HTML pattern the whole value: unanchored, the browser would
+   refuse values the server accepts."
+  [s]
+  (let [src (some-> (first (m/children s)) str)]
+    (when (and src (str/starts-with? src "^") (str/ends-with? src "$")
+               (not (str/ends-with? src "\\$")))
+      src)))
 
 (def ^:private text-types
   "Input types that take minlength, maxlength and pattern."
@@ -200,10 +207,10 @@
       [:t :validation/too-long {:max max}]
       (and (or (number-type? t) (comparators t)) (not (number? value)))
       [:t :validation/not-a-number]
-      (and (number? value) (or (= :>= t) (= :> t)))
-      [:t :validation/too-small {:min (first (m/children schema))}]
-      (and (number? value) (or (= :<= t) (= :< t)))
-      [:t :validation/too-large {:max (first (m/children schema))}]
+      (and (number? value) (= :>= t)) [:t :validation/too-small {:min (first (m/children schema))}]
+      (and (number? value) (= :> t))  [:t :validation/greater-than {:min (first (m/children schema))}]
+      (and (number? value) (= :<= t)) [:t :validation/too-large {:max (first (m/children schema))}]
+      (and (number? value) (= :< t))  [:t :validation/less-than {:max (first (m/children schema))}]
       (and (number? value) min (< value min)) [:t :validation/too-small {:min min}]
       (and (number? value) max (> value max)) [:t :validation/too-large {:max max}]
       (= :re t)                 [:t :validation/pattern]
@@ -240,6 +247,8 @@
    :validation/too-long      "At most {max} characters"
    :validation/too-small     "At least {min}"
    :validation/too-large     "At most {max}"
+   :validation/greater-than  "More than {min}"
+   :validation/less-than     "Less than {max}"
    :validation/not-a-number  "Must be a number"
    :validation/pattern       "Not in the expected format"
    :validation/not-an-option "Not one of the options"
@@ -297,7 +306,8 @@
 
 (defn- display-value [v]
   (cond (nil? v)     ""
-        (keyword? v) (name v)
+        ;; With its namespace: the string decoder reads "a/b" back as :a/b
+        (keyword? v) (subs (str v) 1)
         :else        (str v)))
 
 (defn- control

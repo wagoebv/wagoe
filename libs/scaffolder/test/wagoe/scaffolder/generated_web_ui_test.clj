@@ -244,6 +244,21 @@
         (is (= "/web/gadgets" (get headers "Location")))
         (is (= [{:title "Kettle" :qty 3}] (created)))))))
 
+(deftest ^:unit an-error-with-no-field-is-shown-above-the-form
+  ;; A :json field is a map, which the form has no field for, and is required
+  ;; on create: its error would otherwise appear nowhere.
+  (let [ctx (template/build-module-context
+             {:module-name "crate"
+              :base-ns     "wagoe"
+              :entities    [{:name   "Crate"
+                             :fields [{:name :label :type :string}
+                                      {:name :meta :type :json}]}]})]
+    (eval-source! (gen/generate-schema-file ctx))
+    (eval-source! (gen/generate-ui-file ctx)))
+  (let [page ((resolve 'wagoe.crate.core.ui/crate-new-page) {} {:meta [[:t :validation/required]]} {})
+        html (str (h/html page))]
+    (is (str/includes? html "<p>Meta: Required</p>") html)))
+
 (deftest ^:unit the-field-endpoint-is-csrf-protected
   ;; A /web POST like any other, so the platform's CSRF check covers it.
   (let [secret  "test-secret"

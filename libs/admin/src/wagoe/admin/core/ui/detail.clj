@@ -489,7 +489,8 @@
              :x-on:change "track()"
              :x-on:keydown.meta.s.window.prevent "save()"
              :x-on:keydown.ctrl.s.window.prevent "save()"
-             "hx-on::afterRequest" (str "if (event.detail.successful) { localStorage.setItem('"
+             ;; The form's own save only: a field's live check bubbles up here too
+             "hx-on::afterRequest" (str "if (event.detail.successful && event.detail.elt === this) { localStorage.setItem('"
                                         optional-details-key
                                         "', 'false'); }")}
             ;; After a successful edit, push the same URL (including return_to) so the

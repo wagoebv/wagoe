@@ -719,8 +719,10 @@
   (let [entities       (ports/list-available-entities schema-provider)
         entity-configs (into {} (map (fn [e] [e (ports/get-entity-config schema-provider e)])) entities)]
     (when-let [parent (get (parent-entities entity-name entity-configs) field)]
+      ;; Only `field` editable, so a second key to the same parent is not read
       (get (foreign-key-options admin-service config
-                                (select-keys entity-configs [entity-name parent])
+                                (-> (select-keys entity-configs [entity-name parent])
+                                    (assoc-in [entity-name :editable-fields] [field]))
                                 entity-name values)
            field))))
 

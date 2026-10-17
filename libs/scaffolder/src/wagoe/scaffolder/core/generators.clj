@@ -562,15 +562,21 @@ DROP TABLE IF EXISTS %s;
          "  \"The create form: `values` as submitted, `errors` by field. A plain form\n"
          "   post, so it works without JavaScript.\"\n"
          "  [values errors opts]\n"
-         "  (layout/page-layout\n"
-         "   \"" title "\"\n"
-         "   [:div.page\n"
-         "    [:h1 \"" title "\"]\n"
-         "    (form/form {:method \"post\" :action \"/web/" entity-plural "\"}\n"
-         "               (for [field (form/field-keys schema/Create" entity-name "Request)]\n"
-         "                 (" entity-lower "-field field values errors))\n"
-         "               [:button {:type \"submit\"} \"Create\"])]\n"
-         "   opts))\n")))
+         "  (let [fields (form/field-keys schema/Create" entity-name "Request)]\n"
+         "    (layout/page-layout\n"
+         "     \"" title "\"\n"
+         "     [:div.page\n"
+         "      [:h1 \"" title "\"]\n"
+         "      ;; A key the form has no field for, such as a map: its error shows here.\n"
+         "      (when-let [other (not-empty (apply dissoc errors fields))]\n"
+         "        [:div.validation-errors\n"
+         "         (for [[k msgs] other, msg msgs]\n"
+         "           [:p (form/label-text k) \": \" (form/plain msg)])])\n"
+         "      (form/form {:method \"post\" :action \"/web/" entity-plural "\"}\n"
+         "                 (for [field fields]\n"
+         "                   (" entity-lower "-field field values errors))\n"
+         "                 [:button {:type \"submit\"} \"Create\"])]\n"
+         "     opts)))\n")))
 
 ;; =============================================================================
 ;; Service File Generator

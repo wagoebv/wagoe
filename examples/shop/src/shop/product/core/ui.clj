@@ -34,12 +34,18 @@
   "The create form: `values` as submitted, `errors` by field. A plain form
    post, so it works without JavaScript."
   [values errors opts]
-  (layout/page-layout
-   "New product"
-   [:div.page
-    [:h1 "New product"]
-    (form/form {:method "post" :action "/web/products"}
-               (for [field (form/field-keys schema/CreateProductRequest)]
-                 (product-field field values errors))
-               [:button {:type "submit"} "Create"])]
-   opts))
+  (let [fields (form/field-keys schema/CreateProductRequest)]
+    (layout/page-layout
+     "New product"
+     [:div.page
+      [:h1 "New product"]
+      ;; A key the form has no field for, such as a map: its error shows here.
+      (when-let [other (not-empty (apply dissoc errors fields))]
+        [:div.validation-errors
+         (for [[k msgs] other, msg msgs]
+           [:p (form/label-text k) ": " (form/plain msg)])])
+      (form/form {:method "post" :action "/web/products"}
+                 (for [field fields]
+                   (product-field field values errors))
+                 [:button {:type "submit"} "Create"])]
+     opts)))

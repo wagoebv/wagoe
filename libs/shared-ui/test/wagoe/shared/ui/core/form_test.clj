@@ -28,7 +28,9 @@
            (form/input-attrs schema :name))))
   (testing "a regex is the pattern of a text field"
     (is (= {:type "text" :required true :pattern "^[A-Z]{3}$"}
-           (form/input-attrs schema :code))))
+           (form/input-attrs schema :code)))
+    (is (nil? (:pattern (form/input-attrs [:map [:c [:re #"\d"]]] :c)))
+        "malli finds an unanchored regex anywhere; a pattern must match it all"))
   (testing "email and url by name, any type by :html/type"
     (is (= "email" (:type (form/input-attrs schema :email))))
     (is (= "url" (:type (form/input-attrs schema :homepage-url))))
@@ -122,6 +124,19 @@
     (let [html (str (h/html (form/field schema :paid {:value "true" :validate-url "/v"})))]
       (is (str/includes? html "type=\"hidden\" value=\"false\""))
       (is (re-find #"<input checked[^>]*hx-post=\"/v\"[^>]*type=\"checkbox\"" html)))))
+
+(deftest ^:unit exclusive-bounds-say-so
+  (is (= {:n [[:t :validation/greater-than {:min 0}]]}
+         (:errors (form/validate [:map [:n [:> 0]]] {"n" "0"}))))
+  (is (= {:n [[:t :validation/less-than {:max 10}]]}
+         (:errors (form/validate [:map [:n [:< 10]]] {"n" "10"})))))
+
+(deftest ^:unit a-namespaced-enum-round-trips
+  (let [s [:map [:status [:enum :order/open :order/paid]]]]
+    (is (str/includes? (str (h/html (form/field s :status {:value :order/paid})))
+                       "<option selected=\"selected\" value=\"order/paid\">"))
+    (is (= {:data {:status :order/paid} :errors nil}
+           (form/validate s {"status" "order/paid"})))))
 
 (deftest ^:unit live-attrs-carry-extra-values
   (is (= "{\"__field\":\"name\",\"__id\":\"42\"}"
