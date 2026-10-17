@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **Recurring jobs** (BOU-452): `:recurring {:nightly-report {:cron "0 2 * * *"}}` under `:wagoe/jobs`; one replica
+  enqueues each tick. `enqueue-once!` and `:wagoe/idempotency-store` make a repeated enqueue a no-op.
 - **`#secret` config reader** (BOU-455): reads env vars or mounted files (`#secret [:file "db-password"]`), takes custom
   sources such as Vault, and redacts values in devtools. See the config library page.
 - **CSV reports** (BOU-674): `:type :csv` renders the first `:table` section as RFC 4180 text, formula cells neutralised.

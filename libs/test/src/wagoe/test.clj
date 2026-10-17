@@ -53,10 +53,11 @@
       (assoc-in [:active :wagoe/tenant :allow-h2?] true))))
 
 (defn- without-workers
-  "No worker threads: jobs run when the test calls run-pending-jobs!. Set on the
-   Integrant map, so it holds when the app enables jobs in code."
+  "No worker threads and no recurring-job ticker: jobs run when the test calls
+   run-pending-jobs!. Set on the Integrant map, so it holds when the app
+   enables jobs in code."
   [ig-map]
-  (cond-> (dissoc ig-map :wagoe/http-server)
+  (cond-> (dissoc ig-map :wagoe/http-server :wagoe/job-scheduler)
     (contains? ig-map :wagoe/job-workers) (assoc-in [:wagoe/job-workers :workers :count] 0)))
 
 (defn- drop-h2!
