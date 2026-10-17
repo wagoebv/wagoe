@@ -106,7 +106,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **Security: the rate limiter keyed on an unchecked `X-Api-Key`, so a caller could dodge its limit or drain another's** (BOU-690).
   Buckets are now the signed-in user, else the client IP; the header is ignored.
-- **Security: public `POST /api/v1/sessions` accepted `{userId}` with no password** (BOU-690). It now answers 400; send email and password.
+- **`POST /api/v1/sessions` accepted a `{userId}` body it could never sign in with** (BOU-690). It now answers 400; send email and password.
+- **`POST /api/v1/auth/login` and `/api/v1/sessions` dropped `mfaCode`, so an MFA user could not sign in over the API** (BOU-690). No action needed.
 - **Tables from Malli schemas take their column types from the adapter's `column-type`** (BOU-610). On fresh H2
   databases `:text` and `:map` columns are now `VARCHAR`, not `CLOB`; other engines are unchanged.
 - **Security: behind a proxy every client shared one rate-limit bucket and audit IP; X-Forwarded-For was trusted from anyone** (BOU-671).

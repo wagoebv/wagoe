@@ -724,11 +724,9 @@
 ;; ==============================================================================
 
 (defn get-client-id
-  "The rate-limit bucket: the signed-in user, set by the authentication
-   middleware that runs before this, else the client IP. Never a request
-   header: an unchecked `X-Api-Key` let a caller pick a fresh bucket per
-   request, or drain another client's (BOU-690). The prefixes keep a user id
-   from landing in an IP's bucket."
+  "The rate-limit bucket: the signed-in user (authentication runs first), else
+   the client IP, prefixed so one cannot land in the other's bucket. Never a
+   request header: an unchecked `X-Api-Key` let a caller pick or drain a bucket (BOU-690)."
   [request]
   (if-let [user-id (get-in request [:user :id])]
     (str "user:" user-id)

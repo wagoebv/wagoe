@@ -10,6 +10,7 @@
    validated at the router level, not here."
   (:require [wagoe.user.shell.http :as user-http]
             [wagoe.user.shell.mfa :as mfa]
+            [wagoe.user.shell.auth :as auth]
             [wagoe.user.ports :as ports]
             [wagoe.user.shell.service :as service]
             [wagoe.user.shell.in-memory-repository-test :as mem]
@@ -65,8 +66,8 @@
 
   (claim-user-identity [_ {:keys [user-data login-context]}]
     (let [result (.register-or-authenticate-user ^wagoe.user.ports.IUserService _
-                                               user-data
-                                               login-context)]
+                                                 user-data
+                                                 login-context)]
       (assoc result :mode (if (:created? result) :registered :authenticated))))
 
   (get-user-by-id [_ user-id]
@@ -386,16 +387,18 @@
 
 (deftest ^:contract ^:security a-user-id-alone-never-creates-a-session
   ;; POST /sessions is public and accepted {userId} with no password (BOU-690).
-  (let [sessions (atom {})
-        svc      (service/create-user-service (mem/->MemoryUserRepository (atom {}))
-                                              (mem/->MemorySessionRepository sessions)
-                                              (mem/->MemoryAuditRepository (atom []))
-                                              {}
-                                              nil)
-        user     (ports/register-user svc {:email "bob@x.org" :name "Bob"
-                                           :password "Correct-Horse-9" :role :user})
-        response ((user-http/create-session-handler svc)
-                  {:parameters {:body {:userId (str (:id user))}}})]
+  (let [sessions  (atom {})
+        users     (mem/->MemoryUserRepository (atom {}))
+        session-r (mem/->MemorySessionRepository sessions)
+        ;; A real auth service, so a session could be minted if validation let one through.
+        svc       (service/create-user-service users session-r
+                                               (mem/->MemoryAuditRepository (atom []))
+                                               {}
+                                               (auth/create-authentication-service users session-r nil {}))
+        user      (ports/register-user svc {:email "bob@x.org" :name "Bob"
+                                            :password "Correct-Horse-9" :role :user})
+        response  ((user-http/create-session-handler svc)
+                   {:parameters {:body {:userId (str (:id user))}}})]
     (is (= 400 (:status response)))
     (is (= "validation-error" (get-in response [:body :error :type])))
     (is (nil? (get-in response [:body :sessionToken])))
@@ -405,7 +408,9 @@
                         (some (fn [[path data]] (when (= "/sessions" path) data)))
                         :post :parameters :body)]
         (is (not (m/validate schema {:userId (str (:id user))})))
-        (is (m/validate schema {:email "bob@x.org" :password "Correct-Horse-9"}))))))
+        (is (m/validate schema {:email "bob@x.org" :password "Correct-Horse-9"}))
+        (is (m/validate schema {:email "bob@x.org" :password "Correct-Horse-9" :mfaCode "123456"})
+            "coercion strips undeclared keys; an MFA user needs mfaCode to get through")))))
 
 (deftest ^:contract test-validate-session-handler
   (testing "GET /sessions/:token - Valid session"
@@ -458,7 +463,6 @@
       ;; Verify session is invalidated
       (let [invalidated-session (ports/validate-session service (:session-token session))]
         (is (nil? invalidated-session))))))
-
 
 ;; =============================================================================
 ;; MFA endpoints — the wire shape across the ADR-036 migration (BOU-323)
