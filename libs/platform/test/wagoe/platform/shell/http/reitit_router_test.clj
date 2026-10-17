@@ -6,6 +6,7 @@
             [clojure.test :refer [deftest testing is]]
             [reitit.core :as r]
             [reitit.ring.middleware.multipart :as multipart]
+            [wagoe.observability.errors.ports :as error-ports]
             [wagoe.observability.logging.ports :as log-ports]
             [ring.util.codec :as codec]
             [ring.util.request :as ring-request]))
@@ -824,6 +825,19 @@
                    {:system {:logger logger}})
           status  (:status (handler {:request-method :get :uri "/x" :headers {}}))]
       (is (= [[level "HTTP request refused" status]] @entries) (str type)))))
+
+(deftest ^:unit only-a-typed-server-error-from-route-middleware-is-reported
+  (doseq [[type reported] [[:forbidden 0] [:configuration-error 1]]]
+    (let [captured (atom 0)
+          reporter #_{:clj-kondo/ignore [:missing-protocol-method]}
+          (reify error-ports/IErrorReporter
+            (capture-exception [_ _ _] (swap! captured inc)))
+          handler  (reitit/compile-routes
+                    [["/x" {:get {:handler    (fn [_] {:status 200 :body {}})
+                                  :middleware [(fn [_] (fn [_] (throw (ex-info "nope" {:type type}))))]}}]]
+                    {:system {:error-reporter reporter}})]
+      (handler {:request-method :get :uri "/x" :headers {}})
+      (is (= reported @captured) (str type)))))
 
 ;; =============================================================================
 ;; Static asset caching (BOU-389)

@@ -200,9 +200,11 @@
                    {:correlation-id correlation-id}))
 
 (def ^:private typed-error-interceptors
-  "Logged at its status's level (BOU-714), without the received/completed lines."
+  "Logged at its status's level, and a 5xx reported (BOU-714), without the
+   received/completed lines."
   [http-interceptors/http-correlation-header
    (select-keys http-interceptors/http-request-logging [:name :error])
+   (select-keys http-interceptors/http-error-reporting [:name :error])
    http-interceptors/http-error-handler])
 
 (defn- typed-error-response

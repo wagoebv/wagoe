@@ -322,7 +322,7 @@
 (defn- server-error?
   "A 5xx or untyped error: the server's fault, not the client's (BOU-714)."
   [status]
-  (= :error (problem-details/status-log-level status)))
+  (>= status 500))
 
 (def http-request-logging
   "Logs HTTP requests at entry and completion.

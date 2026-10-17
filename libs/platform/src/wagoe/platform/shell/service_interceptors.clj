@@ -156,7 +156,7 @@
    ;; nothing was ever reported.
    :error (fn [{:keys [operation-name params system context] error :exception :as ctx}]
             (when-let [error-reporter (:error-reporter system)]
-              (when (and error (= :error (problem-details/exception-log-level error {})))
+              (when (and error (>= (first (problem-details/exception-status error {})) 500))
                 ;; Add error breadcrumb
                 (error-reporting/add-breadcrumb
                  error-reporter
@@ -165,8 +165,9 @@
                  :error
                  (pii/redact-for-log (merge context params {:error-message (redaction/loggable-message error)})))
 
-                ;; Report application error
-                (error-reporting/report-application-error
+                ;; A failing reporter must not replace the operation's own
+                ;; exception, nor skip the logging and metrics after this.
+                (error-reporting/report-and-continue
                  error-reporter
                  (redaction/redacted-exception error)
                  (str "Service operation failed: " operation-name)
