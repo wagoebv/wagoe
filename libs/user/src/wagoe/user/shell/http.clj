@@ -428,20 +428,14 @@
      ["/sessions"
       {:public true
        :post {:handler    (create-session-handler user-service)
-              :summary    "Create session (login by user ID)"
+              :summary    "Create session with email/password"
               :tags       ["sessions"]
-              :parameters {:body [:or
-                                  [:map {:closed true}
-                                   [:userId :string]
-                                   [:deviceInfo {:optional true} [:map
-                                                                  [:userAgent {:optional true} :string]
-                                                                  [:ipAddress {:optional true} :string]]]]
-                                  [:map {:closed true}
-                                   [:email :string]
-                                   [:password :string]
-                                   [:deviceInfo {:optional true} [:map
-                                                                  [:userAgent {:optional true} :string]
-                                                                  [:ipAddress {:optional true} :string]]]]]}}}]
+              :parameters {:body [:map {:closed true}
+                                  [:email :string]
+                                  [:password :string]
+                                  [:deviceInfo {:optional true} [:map
+                                                                 [:userAgent {:optional true} :string]
+                                                                 [:ipAddress {:optional true} :string]]]]}}}]
      ;; The token in the path is the credential.
      ["/sessions/:token"
       {:public true

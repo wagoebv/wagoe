@@ -112,6 +112,31 @@
       (is (= [200 429] [(call "203.0.113.77" "198.51.100.3")
                         (call "203.0.113.77" "198.51.100.4")])))))
 
+;; BOU-690: the limiter keyed on an unchecked X-Api-Key before the IP.
+(deftest ^:unit ^:security ignores-the-x-api-key-header
+  (let [system {:rate-limit {:enabled? true :limit 2 :window-ms 60000}}
+        call   (fn [ip api-key]
+                 (:status (itc/run-http-interceptors
+                           (fn [_] {:status 200 :headers {} :body "ok"})
+                           [itc/http-rate-limit-protection]
+                           {:request-method :get :uri "/api/v1/thing" :remote-addr ip
+                            :headers {"x-api-key" api-key}}
+                           system)))]
+    (testing "a fresh random key per request does not reset the caller's bucket"
+      (is (= [200 200 429]
+             (vec (repeatedly 3 #(call "198.51.100.10" (str (random-uuid))))))))
+    (testing "a key equal to another client's IP leaves that client's bucket alone"
+      (is (= [200 200 429] (vec (repeatedly 3 #(call "198.51.100.11" "198.51.100.12")))))
+      (is (= 200 (call "198.51.100.12" nil))))))
+
+(deftest ^:unit ^:security buckets-a-signed-in-user-apart-from-ips
+  (is (= "user:42" (itc/get-client-id {:user {:id 42} :remote-addr "10.0.0.1"})))
+  (is (= "ip:10.0.0.1" (itc/get-client-id {:remote-addr "10.0.0.1"
+                                           :headers {"x-api-key" "k"}})))
+  (testing "a user id shaped like an IP cannot share that IP's bucket"
+    (is (not= (itc/get-client-id {:user {:id "10.0.0.1"}})
+              (itc/get-client-id {:remote-addr "10.0.0.1"})))))
+
 (deftest ^:unit ^:security wired-into-default-stack
   (testing "the config-driven limiter is part of the default HTTP interceptor stack"
     (is (some #(= % itc/http-rate-limit-protection) itc/default-http-interceptors))))

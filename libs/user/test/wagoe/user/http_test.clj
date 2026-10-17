@@ -14,6 +14,7 @@
             [wagoe.user.shell.service :as service]
             [wagoe.user.shell.in-memory-repository-test :as mem]
             [clojure.test :refer [deftest testing is]]
+            [malli.core :as m]
             [cheshire.core :as json])
   (:import [java.util UUID]
            [java.time Instant]))
@@ -383,21 +384,28 @@
 ;; Session Handler Tests
 ;; =============================================================================
 
-(deftest ^:contract test-create-session-handler
-  (testing "POST /sessions - Create session successfully"
-    (let [service (create-mock-service)
-          user-id (UUID/randomUUID)
-          handler (user-http/create-session-handler service)
-          request {:parameters
-                   {:body {:userId (str user-id)
-                           :deviceInfo {:userAgent "Mozilla/5.0"
-                                        :ipAddress "192.168.1.1"}}}}
-          response (handler request)]
-
-      (is (= 200 (:status response)))
-      (is (some? (get-in response [:body :sessionToken])))
-      (is (some? (get-in response [:body :expiresAt])))
-      (is (= (str user-id) (get-in response [:body :userId]))))))
+(deftest ^:contract ^:security a-user-id-alone-never-creates-a-session
+  ;; POST /sessions is public and accepted {userId} with no password (BOU-690).
+  (let [sessions (atom {})
+        svc      (service/create-user-service (mem/->MemoryUserRepository (atom {}))
+                                              (mem/->MemorySessionRepository sessions)
+                                              (mem/->MemoryAuditRepository (atom []))
+                                              {}
+                                              nil)
+        user     (ports/register-user svc {:email "bob@x.org" :name "Bob"
+                                           :password "Correct-Horse-9" :role :user})
+        response ((user-http/create-session-handler svc)
+                  {:parameters {:body {:userId (str (:id user))}}})]
+    (is (= 400 (:status response)))
+    (is (= "validation-error" (get-in response [:body :error :type])))
+    (is (nil? (get-in response [:body :sessionToken])))
+    (is (empty? @sessions))
+    (testing "the route's body schema refuses it before the handler runs"
+      (let [schema (->> (user-http/api-routes svc nil)
+                        (some (fn [[path data]] (when (= "/sessions" path) data)))
+                        :post :parameters :body)]
+        (is (not (m/validate schema {:userId (str (:id user))})))
+        (is (m/validate schema {:email "bob@x.org" :password "Correct-Horse-9"}))))))
 
 (deftest ^:contract test-validate-session-handler
   (testing "GET /sessions/:token - Valid session"
