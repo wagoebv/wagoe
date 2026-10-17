@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **CSV reports** (BOU-674): `:type :csv` renders the first `:table` section as RFC 4180 text, formula cells neutralised.
+  Pass `:bom? true` for Excel.
 - **App modules can add HTTP middleware and components** (BOU-672): an `ig-config` returns only what it adds to the
   scaffold's four keys, and its `:http :extra-middleware` runs after the framework modules'. See the platform guide.
 - **Choose where users land after signing in** (BOU-678): `:login-redirect` under `:wagoe/user`, a role map or a
@@ -106,6 +108,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Reports needed a shell require, and `generate-async` lost its output** (BOU-674). `:wagoe/reports` is now a
+  `ReportServiceProtocol` and async output is stored and mailed. Call the port; `service/generate-async` is gone.
 - **Tables from Malli schemas take their column types from the adapter's `column-type`** (BOU-610). On fresh H2
   databases `:text` and `:map` columns are now `VARCHAR`, not `CLOB`; other engines are unchanged.
 - **Security: behind a proxy every client shared one rate-limit bucket and audit IP; X-Forwarded-For was trusted from anyone** (BOU-671).

@@ -171,7 +171,7 @@
 
    :realtime {:keys [:wagoe/realtime]}
 
-   :reports  {:keys [:wagoe/reports]}
+   :reports  {:keys [:wagoe/reports :wagoe.reports/job-handlers]}
 
    :ai       {:keys [:wagoe/ai-service]}
 
@@ -203,7 +203,7 @@
    :calendar "component is a map; CalendarAdapterProtocol has no key of its own"
    :geo      "component is a map; GeoProviderProtocol has no key of its own"
    :realtime "component is a map; IRealtimeService has no key of its own"
-   :reports  "component is a map; ReportGeneratorProtocol has no key of its own"})
+   :reports  "report definitions carry functions (:template, :data-source), which do not cross the wire"})
 
 (defn service-catalogue
   "The service catalogue for `config`: the framework's, plus the app's own.

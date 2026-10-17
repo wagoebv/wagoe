@@ -1,139 +1,122 @@
 (ns wagoe.reports.shell.jobs-integration
-  "Optional integration with wagoe-jobs for async report generation.
+  "Async report generation on wagoe-jobs, with optional storage and email.
 
-   This namespace provides async report generation via the jobs module.
-   The jobs module is an OPTIONAL dependency — add it to your deps.edn:
-
-     {:deps {com.wagoe/wagoe-jobs {:mvn/version \"0.1.0\"}}}
-
-   If the jobs module is not available, async functions will throw descriptive
-   errors with :type :missing-dependency.
-
-   Usage:
-     ;; Queue report for async generation
-     (queue-report-job! report-def {:invoice-id 42})
-
-     ;; Register report job handler with jobs module
-     (register-report-job-handler! job-registry)
-
-   The job handler will:
-     - Resolve data via :data-source (if defined)
-     - Generate the report bytes
-     - Optionally store via wagoe-storage (:storage-key in opts)
-     - Optionally send an email notification (:notify-email in opts)"
+   jobs, storage and email are optional companions, so their functions are
+   resolved at call time rather than required: reports works without them, and
+   a request that needs one that is not enabled fails with :missing-dependency."
   (:require [wagoe.reports.ports :as ports]
-            [wagoe.reports.shell.adapters.excel :as excel]
-            [wagoe.reports.shell.adapters.pdf :as pdf]
-            [wagoe.reports.shell.adapters.word :as word]
-            [wagoe.reports.core.report :as core]
-            [clojure.stacktrace]
+            [wagoe.reports.shell.registry :as registry]
             [clojure.tools.logging :as log]))
 
+(def job-type
+  "The job type `generate-async` enqueues and `process-report-job` handles."
+  :reports/generate)
+
+(def ^:private content-types
+  {:pdf   "application/pdf"
+   :excel "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+   :word  "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+   :csv   "text/csv; charset=UTF-8"})
+
+(defn- missing-dependency [module needed-for]
+  (ex-info (str needed-for " needs " module ", which is not enabled. Add :wagoe/"
+                module " to :active, or drop the option.")
+           {:type :missing-dependency :module (str "wagoe-" module) :required-for needed-for}))
+
+(defn- check-companions!
+  "Throw when an option asks for a module the service was not given. Run at
+   enqueue and again in the worker, which may be configured differently."
+  [{:keys [file-storage email-sender]} {:keys [storage-key notify-email]}]
+  (when (and storage-key (not file-storage))
+    (throw (missing-dependency "storage" ":storage-key")))
+  (when (and notify-email (not email-sender))
+    (throw (missing-dependency "email" ":notify-email"))))
+
+(defn- opts->job
+  "The :db and :redis queues store args as JSON, so a ZoneId would not encode."
+  [opts]
+  (cond-> opts (:zone-id opts) (update :zone-id str)))
+
+(defn- job->opts [opts]
+  (cond-> opts (string? (:zone-id opts)) (update :zone-id #(java.time.ZoneId/of %))))
+
 ;; =============================================================================
-;; Job Queue Integration
+;; Enqueue
 ;; =============================================================================
 
 (defn queue-report-job!
-  "Queue a report for async generation via wagoe-jobs.
-
-   Args:
-     report-def - ReportDefinition map (from defreport or plain map)
-     opts       - Options forwarded to the job handler:
-                  :notify-email - Email address for completion notification
-                  :storage-key  - Object key for wagoe-storage output
-                  + any other opts passed to generate
-
-   Returns job-id (UUID string).
-
-   Throws ex-info with :type :missing-dependency if wagoe-jobs is unavailable."
-  [report-def opts]
-  (if-let [enqueue-fn (requiring-resolve 'wagoe.jobs.ports/enqueue-job!)]
-    (let [job {:job-type :generate-report
-               :args     {:report-def report-def
-                          :opts       opts}
-               :priority :normal
-               :metadata {:report-id   (:id report-def)
-                          :report-type (:type report-def)}}]
-      (log/info "Queueing report for async generation via jobs module"
-                {:report-id   (:id report-def)
-                 :report-type (:type report-def)})
-      (enqueue-fn nil :reports job))
-    (throw (ex-info "Jobs module not available. Add com.wagoe/wagoe-jobs to deps.edn"
-                    {:type          :missing-dependency
-                     :module        "wagoe-jobs"
-                     :required-for  "Async report generation"
-                     :documentation "https://github.com/wagoebv/wagoe/tree/main/libs/jobs"}))))
+  "Enqueue registered report `report-id` on the service's job queue, failing
+   the request rather than the job when a module the opts need is missing."
+  [{:keys [job-queue queue-name] :as service} report-id opts]
+  (when-not job-queue
+    (throw (missing-dependency "jobs" "Async report generation")))
+  (check-companions! service opts)
+  (let [report-def (registry/registered-report report-id)
+        ;; A non-nil queue means wagoe-jobs is loaded. Its core builds the job
+        ;; map: push hand-built one and the DB adapter threw (BOU-418).
+        create-job (requiring-resolve 'wagoe.jobs.core.job/create-job)
+        enqueue!   (requiring-resolve 'wagoe.jobs.ports/enqueue-job!)
+        job        (create-job {:job-type job-type
+                                :queue    queue-name
+                                :args     {:report-id report-id :opts (opts->job opts)}
+                                :metadata {:report-id report-id :report-type (:type report-def)}}
+                               (random-uuid)
+                               (java.time.Instant/now))]
+    (log/info "Queueing report" {:report-id report-id :queue queue-name :job-id (:id job)})
+    (enqueue! job-queue queue-name job)
+    (:id job)))
 
 ;; =============================================================================
-;; Report Job Processor
+;; Job handler
 ;; =============================================================================
+
+(defn- store!
+  [file-storage storage-key {:keys [bytes type filename]}]
+  ((requiring-resolve 'wagoe.storage.ports/store-file)
+   file-storage
+   {:bytes bytes :content-type (content-types type)}
+   {:filename filename :path storage-key}))
+
+(defn- notify!
+  "Mail the link when the output was stored somewhere reachable, else the file."
+  [email-sender from to report-id {:keys [bytes type filename]} stored]
+  (let [send! (requiring-resolve 'wagoe.email.ports/send-email!)
+        url   (:url stored)
+        sent  (send! email-sender
+                     (cond-> {:id         (random-uuid)
+                              :to         [to]
+                              :from       from
+                              :subject    (str "Report ready: " filename)
+                              :body       (str "Your report " (name report-id)
+                                               (if url (str " is ready:\n\n" url "\n") " is attached.\n"))
+                              :created-at (java.util.Date.)}
+                       (not url) (assoc :attachments [{:filename     filename
+                                                       :content-type (content-types type)
+                                                       :content      bytes}])))]
+    (when-not (:success? sent)
+      (throw (ex-info (str "Report " report-id " was generated but the notification failed")
+                      {:type :internal-error :report-id report-id :error (:error sent)})))))
 
 (defn process-report-job
-  "Job handler for generating reports.
+  "Handle a :reports/generate job: generate, then store and mail as asked.
 
-   Called by the jobs module worker pool. Generates the report, optionally
-   stores via wagoe-storage, and optionally sends an email notification.
-
-   Job args structure:
-     :report-def - ReportDefinition map
-     :opts       - Options map (may include :notify-email, :storage-key)
-
-   Returns:
-     {:success? true  :result {:report-id :k :filename \"f.pdf\" :bytes N}}
-     {:success? false :error  {:message \"...\" :type \"ReportJobError\"}}"
-  [job-args]
-  (try
-    (let [{:keys [report-def opts]} job-args
-          _ (log/debug "Processing report job"
-                       {:report-id   (:id report-def)
-                        :report-type (:type report-def)})
-          generator (case (:type report-def)
-                      :pdf   (pdf/create-pdf-generator)
-                      :excel (excel/create-excel-generator)
-                      :word  (word/create-word-generator))
-          data      (core/resolve-data report-def opts)
-          result    (ports/generate! generator report-def data opts)]
-      (log/info "Report job completed successfully"
-                {:report-id (:id report-def)
-                 :filename  (:filename result)
-                 :bytes     (count (:bytes result))})
-      {:success? true
-       :result   {:report-id (:id report-def)
-                  :filename  (:filename result)
-                  :bytes     (count (:bytes result))}})
-    (catch Exception e
-      (log/error e "Report job threw exception"
-                 {:report-id       (get-in job-args [:report-def :id])
-                  :error-message   (.getMessage e)})
-      {:success? false
-       :error    {:message    (.getMessage e)
-                  :type       :report-job-error
-                  :stacktrace (with-out-str (clojure.stacktrace/print-stack-trace e))}})))
-
-;; =============================================================================
-;; Registration
-;; =============================================================================
-
-(defn register-report-job-handler!
-  "Register the :generate-report job handler with wagoe-jobs.
-
-   After registration, jobs with :job-type :generate-report will be processed
-   by process-report-job.
-
-   Args:
-     job-registry - IJobRegistry instance from wagoe-jobs
-
-   Returns :generate-report (the job-type keyword).
-
-   Throws ex-info with :type :missing-dependency if wagoe-jobs is unavailable."
-  [job-registry]
-  (if-let [register-fn (requiring-resolve 'wagoe.jobs.ports/register-handler!)]
-    (do
-      (log/info "Registering report job handler with jobs module"
-                {:job-type :generate-report})
-      (register-fn job-registry :generate-report process-report-job))
-    (throw (ex-info "Jobs module not available. Add com.wagoe/wagoe-jobs to deps.edn"
-                    {:type          :missing-dependency
-                     :module        "wagoe-jobs"
-                     :required-for  "Report job handler registration"
-                     :documentation "https://github.com/wagoebv/wagoe/tree/main/libs/jobs"}))))
+   `service` is the ReportServiceProtocol that queued it, carrying
+   `:file-storage`, `:email-sender` and `:from` when configured. Throws on
+   failure; the worker records it and retries."
+  [{:keys [file-storage email-sender from] :as service} {:keys [report-id opts]}]
+  (check-companions! service opts)
+  ;; JSON-backed queues return keyword values as strings.
+  (let [report-id (keyword report-id)
+        opts      (job->opts opts)
+        {:keys [storage-key notify-email]} opts
+        output (ports/generate service (registry/registered-report report-id) opts)
+        stored (when storage-key (store! file-storage storage-key output))]
+    (when notify-email
+      (notify! email-sender from notify-email report-id output stored))
+    (log/info "Report job completed" {:report-id report-id :stored (:key stored)})
+    {:success? true
+     :result   (cond-> {:report-id report-id
+                        :filename  (:filename output)
+                        :bytes     (count (:bytes output))}
+                 stored       (assoc :storage-key (:key stored) :url (:url stored))
+                 notify-email (assoc :notified notify-email))}))
