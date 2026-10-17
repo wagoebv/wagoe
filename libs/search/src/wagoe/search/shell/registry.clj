@@ -4,7 +4,7 @@
    Hand definitions to `:wagoe/search` instead — under `:indexes` in config or
    a module's `:search` part — and bind them with
    `wagoe.search.core.index/defsearch`. The search service still reads this
-   registry for an id its component does not hold, and logs once when it does.
+   registry for an id its component does not hold, and logs once per such id.
 
    Key functions:
    - defsearch macro       — define and register an index
@@ -20,7 +20,7 @@
 
 (defonce ^:private registry (atom {}))
 
-(defonce ^:private warned? (atom false))
+(defonce ^:private warned (atom #{}))
 
 (defn register-search!
   "Register a SearchDefinition in the global registry.
@@ -65,10 +65,10 @@
 
 (defn fallback
   "The definition registered for `index-id`, or nil. Logs a deprecation
-   warning the first time it finds one."
+   warning the first time it finds each one, so every index left to move is named."
   [index-id]
   (when-let [definition (get-search index-id)]
-    (when (compare-and-set! warned? false true)
+    (when-not (contains? (first (swap-vals! warned conj index-id)) index-id)
       (log/warn (str "Search index " index-id " comes from wagoe.search.shell.registry,"
                      " which is deprecated. Hand it to :wagoe/search under :indexes,"
                      " or as a module's :search part.")))

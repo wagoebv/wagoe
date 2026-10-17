@@ -37,8 +37,8 @@ and an admin UI — all wired in via a single Integrant key.
 ```
 
 or put the same map in config, under `:wagoe/search :indexes`. The search API
-and admin pages serve an index only with `:api? true`, or an `:api` map whose
-`:authorize` hook, `(fn [request definition])`, accepts the request; any other
+and admin pages serve an index only with `:api? true`, or an `:api`
+`:authorize` fn, `(fn [request definition])`, accepts the request; any other
 index answers 404.
 
 ### 2. Index Documents

@@ -16,9 +16,9 @@
    take the admin role (BOU-568).
 
    Search, suggest and the admin pages serve only an index whose definition
-   opts in with `:api? true` or an `:api` map, and whose `:api :authorize`
-   hook, when set, accepts the request. Any other index answers 404, as an
-   unknown one does, so a caller cannot tell the two apart.
+   opts in with `:api? true` or an `:api :authorize` fn; a hook, when set, must
+   accept the request. Any other index answers 404, as an unknown one does, so
+   a caller cannot tell the two apart.
 
    An index whose definition lists `:tenant-id` among its `:filters` is
    tenant-scoped. A search of one reads the request's resolved tenant, and only
@@ -75,8 +75,9 @@
   "Whether `definition` is served to `request`."
   [request definition]
   (and (index/api-enabled? definition)
+       ;; fn?, not ifn?: a keyword hook would return its default, the definition.
        (if-let [authorize (get-in definition [:api :authorize])]
-         (boolean (authorize request definition))
+         (and (fn? authorize) (boolean (authorize request definition)))
          true)))
 
 (defn- served!
@@ -273,7 +274,8 @@
   (let [index-id    (keyword (get-in request [:path-params :index-id]))
         form-params (get-in request [:form-params] {})
         query       (get form-params "query" "")
-        results     (ports/search engine (:id (served! engine request index-id)) query
+        definition  (served! engine request index-id)
+        results     (ports/search engine (:id definition) query
                                   {:limit 20 :highlight? true})]
     {:status  200
      :headers {"Content-Type" "text/html; charset=utf-8"}

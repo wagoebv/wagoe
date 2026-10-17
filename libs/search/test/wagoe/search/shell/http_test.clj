@@ -107,6 +107,8 @@
 
 (def ^:private definitions
   {:private  {:id :private :entity-type :note}
+   ;; An :api map without an :authorize fn fails closed.
+   :misspelt {:id :misspelt :entity-type :note :api {:authorise (constantly true)}}
    :products {:id :products :entity-type :product :api? true}
    :orders   {:id :orders :entity-type :order
               :api {:authorize (fn [request _] (= :admin (get-in request [:user :role])))}}})
@@ -118,7 +120,7 @@
         call  (served calls definitions)
         body  (fn [r] (slurp (:body r)))]
     (testing "an index without :api? answers 404 on search and suggest, and is never run"
-      (doseq [uri ["/search/private" "/search/private/suggest"]]
+      (doseq [uri ["/search/private" "/search/private/suggest" "/search/misspelt"]]
         (let [r (call :post uri "{\"query\":\"secret\"}" member)]
           (is (= 404 (:status r)) uri)
           (is (= "not-found" (error-type r)) uri)))

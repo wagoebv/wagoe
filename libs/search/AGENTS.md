@@ -75,7 +75,7 @@ indexes, so tests need no fixture.
 
 `wagoe.search.shell.registry/defsearch` still works: the service reads that
 global registry for an id its component lacks, and logs a deprecation warning
-once.
+once per id.
 
 ### Which indexes the HTTP API serves
 
@@ -285,8 +285,8 @@ Before rc-4, or if you would rather not commit the imports, keep the rule local:
 
 ### 1. An index is not searchable over HTTP
 
-Search and suggest answer 404 for an index without `:api? true` or an `:api`
-map. That is the default; opt in per index.
+Search and suggest answer 404 for an index without `:api? true` or an
+`:api :authorize` fn. That is the default; opt in per index.
 
 Code still on the deprecated `wagoe.search.shell.registry` shares one global
 atom across tests; reset it with `registry/clear-registry!`, or move the

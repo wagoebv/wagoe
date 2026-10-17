@@ -21,9 +21,10 @@
 
 (defn api-enabled?
   "True when the generic search API may serve `definition`: it sets `:api? true`
-   or an `:api` map (which may hold an `:authorize` hook)."
+   or an `:api :authorize` fn. An `:api` map without one serves nothing, so a
+   misspelt key fails closed."
   [definition]
-  (or (true? (:api? definition)) (map? (:api definition))))
+  (or (true? (:api? definition)) (fn? (get-in definition [:api :authorize]))))
 
 (defn collect-definitions
   "The definitions a search component holds: `indexes` from its config and
