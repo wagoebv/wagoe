@@ -16,7 +16,8 @@
   (reify ports/IUserRepository
     (find-user-by-id [_ id] (get @state id))
     (find-user-by-email [_ email] (some #(when (= email (:email %)) %) (vals @state)))
-    (update-user [_ u] (swap! state assoc (:id u) u) u)))
+    (update-user [_ u] (swap! state update (:id u) merge u) u)
+    (with-admins-locked [_ f] (f))))
 
 (defn- session-repo
   "Records every invalidate-all-user-sessions call into `calls`."
@@ -71,3 +72,16 @@
           calls (atom [])]
       (ports/update-user-profile (service state calls) (assoc (base-user) :active false))
       (is (= [uid] @calls)))))
+
+(deftest ^:unit a-partial-edit-writes-only-its-own-keys
+  ;; Writing back the role read before the edit undid a concurrent promotion,
+  ;; past the admin guard (BOU-685).
+  (let [state  (atom {uid (base-user)})
+        writes (atom [])
+        repo   (reify ports/IUserRepository
+                 (find-user-by-id [_ id] (get @state id))
+                 (find-user-by-email [_ _] nil)
+                 (update-user [_ u] (swap! writes conj u) u))
+        svc    (sut/->UserService repo (session-repo (atom [])) (audit-repo) {} nil)]
+    (is (= "New Name" (:name (ports/update-user-profile svc {:id uid :name "New Name"}))))
+    (is (= [#{:id :name :updated-at}] (map (comp set keys) @writes)))))

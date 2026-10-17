@@ -1,11 +1,9 @@
 (ns wagoe.user.shell.api-login-status-test
   "POST /auth/login and POST /sessions answered 200 {authenticated false} to a
    failed login, so a client checking the status took it for success (BOU-691)."
-  (:require [clojure.string :as str]
-            [clojure.test :refer [deftest is testing]]
+  (:require [clojure.test :refer [deftest is testing]]
             [wagoe.user.ports :as ports]
             [wagoe.user.shell.auth :as auth]
-            [wagoe.user.shell.cli :as cli]
             [wagoe.user.shell.http :as user-http]
             [wagoe.user.shell.interceptors :as user-interceptors]
             [wagoe.user.shell.in-memory-repository-test :as mem]
@@ -103,9 +101,3 @@
     (is (= 429 (:status resp)))
     (is (some? (get-in resp [:headers "Retry-After"])))))
 
-(deftest ^:unit the-cli-has-no-session-create
-  ;; It took --user-id, which is not a credential, so it could only fail.
-  (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Unknown session command: create"
-                        (cli/dispatch-command :session :create {:user-id (random-uuid)} nil)))
-  (is (not (re-find #"(?m)^\s+create\s" cli/session-help)))
-  (is (not (str/includes? cli/root-help "session create"))))

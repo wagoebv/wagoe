@@ -213,7 +213,7 @@
           context        (create-interceptor-context :session-validate user-service request)
 
           ;; Create the interceptor pipeline for session validation
-          pipeline       (user-interceptors/create-session-validation-pipeline :http)
+          pipeline       (user-interceptors/create-session-validation-pipeline)
 
           ;; Execute the pipeline
           result-context (interceptor/run-pipeline context pipeline)]
@@ -229,7 +229,7 @@
           context        (create-interceptor-context :session-invalidate user-service request)
 
           ;; Create the interceptor pipeline for session invalidation
-          pipeline       (user-interceptors/create-session-invalidation-pipeline :http)
+          pipeline       (user-interceptors/create-session-invalidation-pipeline)
 
           ;; Execute the pipeline
           result-context (interceptor/run-pipeline context pipeline)]

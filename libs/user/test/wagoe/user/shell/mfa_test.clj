@@ -37,8 +37,7 @@
           @user-state))
 
       (update-user [_ user]
-        (reset! user-state user)
-        @user-state)
+        (swap! user-state merge user))
 
       (find-user-by-email [_ email]
         (when (= email (:email @user-state))

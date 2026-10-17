@@ -217,24 +217,6 @@
    "Expires"       "0"
    "Vary"          "HX-Request"})
 
-(defn- remove-nil-values
-  "Remove keys with nil values from a map.
-   
-   This is needed because optional schema fields like :boolean or :int
-   don't accept nil values - they must either be present with the correct
-   type or completely absent from the map.
-   
-   Fields with [:maybe ...] in the schema CAN have nil values and should
-   be kept (e.g., :mfa-secret, :updated-at, :deleted-at).
-   
-   Args:
-     m: Map to filter
-     
-   Returns:
-     Map with nil values removed"
-  [m]
-  (into {} (filter (fn [[_ v]] (some? v)) m)))
-
 (defn- build-user-list-opts
   "Build list-users options from table query and search filters.
 
@@ -1491,12 +1473,10 @@
                          (profile-ui/profile-edit-form (merge current-user prepared-data) validation-errors)
                          400)
           (try
-            ;; Get existing user and update
-            (let [user (user-ports/get-user-by-id user-service user-id)
-                  ;; Remove nil values to avoid schema validation errors for optional fields
-                  clean-user (remove-nil-values user)
-                  updated-user (user-ports/update-user-profile user-service
-                                                               (merge clean-user prepared-data))]
+            ;; Only the edited field: a role or active read before a concurrent
+            ;; demotion or deactivation would undo it (BOU-685).
+            (let [updated-user (user-ports/update-user-profile user-service
+                                                               (assoc prepared-data :id user-id))]
               ;; Return success with updated info card
               (html-response request
                              (profile-ui/profile-info-fragment updated-user)))
@@ -1565,9 +1545,9 @@
                            :language    (get form-data "language")}]
         (if-let [user (user-ports/get-user-by-id user-service user-id)]
           (try
-            ;; Remove nil values to avoid schema validation errors for optional fields
+            ;; Only the edited fields, as in the profile edit (BOU-685).
             (let [updated-user (user-ports/update-user-profile
-                                user-service (merge (remove-nil-values user) prepared-data))]
+                                user-service (assoc prepared-data :id user-id))]
               (html-response request (profile-ui/preferences-fragment updated-user)))
             (catch clojure.lang.ExceptionInfo e
               (if (= :validation-error (:type (ex-data e)))
