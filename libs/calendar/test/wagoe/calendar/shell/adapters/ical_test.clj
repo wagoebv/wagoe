@@ -3,9 +3,10 @@
   (:require [wagoe.calendar.shell.service :as service]
             [clojure.test :refer [deftest is testing]]
             [clojure.string :as str])
-  (:import [java.time Instant]
+  (:import [java.time Duration Instant LocalDateTime ZoneId ZoneOffset]
            [java.io StringReader]
            [net.fortuna.ical4j.data CalendarBuilder]
+           [net.fortuna.ical4j.model.component Observance VTimeZone]
            [net.fortuna.ical4j.util CompatibilityHints]))
 
 ;; =============================================================================
@@ -367,3 +368,95 @@
   (testing "an unknown :timezone is a validation error, not a ZoneRulesException"
     (is (= {:type :validation-error :field :timezone :value "Mars/Olympus"}
            (export-error [(assoc appointment :timezone "Mars/Olympus")])))))
+
+;; =============================================================================
+;; Export: VTIMEZONE from java.time zone rules (BOU-720)
+;; =============================================================================
+
+(defn- vtimezone-blocks [ical]
+  (re-seq #"(?s)BEGIN:VTIMEZONE.*?END:VTIMEZONE\r\n" ical))
+
+(defn- at ^Instant [tzid local]
+  (.toInstant (.atZone (LocalDateTime/parse local) (ZoneId/of tzid))))
+
+(deftest ^:integration export-zone-ical4j-lacks-test
+  (let [tz   "America/Coyhaique"            ; added in tzdata 2025b
+        mk   (fn [local] {:id (random-uuid) :title "Visit" :timezone tz
+                          :start (at tz local) :end (.plusSeconds (at tz local) 3600)})
+        evs  [(mk "2024-07-10T10:00") (mk "2024-12-10T10:00")]  ; -04, then -03
+        ical (service/export-ical evs)]
+    (testing "written in its own zone, at the local time, not in UTC"
+      (is (str/includes? ical "DTSTART;TZID=America/Coyhaique:20240710T100000"))
+      (is (str/includes? ical "DTSTART;TZID=America/Coyhaique:20241210T100000"))
+      (is (str/includes? ical "TZOFFSETFROM:-0400\r\nTZOFFSETTO:-0300")))
+    (testing "round trip keeps the instants"
+      (is (= (map :start evs) (map :start (service/import-ical ical)))))
+    (testing "strict ical4j parsing and validation pass"
+      (is (empty? (strict-validation-entries ical))))))
+
+(deftest ^:integration export-vtimezone-shape-test
+  (let [ical  (service/export-ical [appointment recurring-meeting])
+        [vtz] (vtimezone-blocks ical)]
+    (testing "the JVM's zone under its own name, not a link target"
+      (is (str/includes? vtz "TZID:Europe/Amsterdam\r\n"))
+      (is (not (str/includes? ical "Brussels"))))
+    (testing "current rules as RRULEs, without the zone's history"
+      (is (str/includes? vtz "RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=-1SU"))
+      (is (str/includes? vtz "RRULE:FREQ=YEARLY;BYMONTH=10;BYDAY=-1SU"))
+      (is (< (count vtz) 500)))))
+
+(deftest ^:integration export-zone-without-dst-test
+  (testing "a fixed offset is one STANDARD observance"
+    (let [[vtz] (vtimezone-blocks (service/export-ical [(assoc appointment :timezone "Etc/GMT-5")]))]
+      (is (= 1 (count (re-seq #"BEGIN:STANDARD" vtz))))
+      (is (str/includes? vtz "TZOFFSETFROM:+0500\r\nTZOFFSETTO:+0500"))
+      (is (not (str/includes? vtz "DAYLIGHT")))))
+  (testing "a zone that dropped DST long ago keeps only its last change"
+    (let [ical  (service/export-ical [(assoc appointment :timezone "Asia/Tokyo")])
+          [vtz] (vtimezone-blocks ical)]
+      (is (= 1 (count (re-seq #"BEGIN:(STANDARD|DAYLIGHT)" vtz))))
+      (is (str/includes? ical "DTSTART;TZID=Asia/Tokyo:20260310T180000")))))
+
+(defn- onsets
+  "[instant offset] for each onset of each observance in `vtz` up to `end`,
+   expanded as RFC 5545 says. Not ical4j's ZoneRulesBuilder: that reads
+   BYDAY=2SU as the Sunday on or after the 2nd."
+  [^VTimeZone vtz ^LocalDateTime end]
+  (sort-by first
+           (for [^Observance o (.getAll (.getComponentList vtz))
+                 :let [start (.getDate (.getRequiredProperty o "DTSTART"))
+                       from  (.getOffset (.getRequiredProperty o "TZOFFSETFROM"))
+                       to    (.getOffset (.getRequiredProperty o "TZOFFSETTO"))
+                       rrule (.orElse (.getProperty o "RRULE") nil)]
+                 ^LocalDateTime d (if rrule (.getDates (.getRecur rrule) start start end) [start])]
+             [(.toInstant d from) to])))
+
+(defn- offset-mismatches
+  "Instants in `samples` where the exported VTIMEZONE for `tzid` and java.time
+   disagree about the UTC offset."
+  [tzid event samples]
+  (let [cal   (.build (CalendarBuilder.) (StringReader. (service/export-ical [(assoc event :timezone tzid)])))
+        vtz   (first (filter #(instance? VTimeZone %) (.getComponents cal)))
+        ons   (onsets vtz (LocalDateTime/parse "2032-01-01T00:00"))
+        rules (.getRules (ZoneId/of tzid))]
+    (remove (fn [^Instant i]
+              (= (.getOffset rules i)
+                 (second (last (take-while #(not (.isAfter ^Instant (first %) i)) ons)))))
+            samples)))
+
+(deftest ^:integration export-every-zone-offsets-test
+  (let [weekly (assoc recurring-meeting :id (random-uuid))
+        old    (assoc appointment :start (Instant/parse "1985-06-01T10:00:00Z")
+                      :end (Instant/parse "1985-06-01T11:00:00Z"))
+        every  (fn [^Instant from n] (map #(.plus from (Duration/ofHours (* 37 %))) (range n)))
+        ;; ical4j registers the zones of calendars it parsed, as ical4j~<uuid>
+        zones  (remove #(or (str/starts-with? % "ical4j")
+                            (= ZoneOffset/UTC (.normalized (ZoneId/of %))))
+                       (sort (ZoneId/getAvailableZoneIds)))
+        bad    (fn [event samples]
+                 (for [z zones :let [b (offset-mismatches z event samples)] :when (seq b)]
+                   [z (first b)]))]
+    (testing "a recurring event: offsets agree from a year before it, years on"
+      (is (empty? (bad weekly (every (Instant/parse "2025-03-02T08:00:00Z") 1200)))))
+    (testing "a single event decades ago: offsets agree a year either side"
+      (is (empty? (bad old (every (Instant/parse "1984-06-01T10:00:00Z") 470)))))))

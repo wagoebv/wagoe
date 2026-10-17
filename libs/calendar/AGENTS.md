@@ -170,7 +170,9 @@ shell require, so `bb check:ports` stays green.
 
 ;; Custom PRODID
 (cal/export-ical calendar events {:product-id "-//MyApp//EN"})
-;; Each zone used gets a VTIMEZONE; UTC is written as Z. Two events with
+;; Each zone used gets a VTIMEZONE, built from java.time's zone rules and
+;; covering a year either side of the events (from then on, for a recurring
+;; one); UTC is written as Z. Two events with
 ;; one :id are a :validation-error (UID must be unique), so export a series
 ;; with its :recurrence, not the occurrences expand-event returns.
 
