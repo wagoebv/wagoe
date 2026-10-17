@@ -35,4 +35,9 @@
  {:ticket "BOU-684"
   :since  "1.0.2"
   :note   "wagoe.platform.ports.database/like with a LIKE pattern."
-  :manual "Pass a mode and the raw value: (like adapter :email :contains q). A rewrite cannot tell which % are wildcards."}]
+  :manual "Pass a mode and the raw value: (like adapter :email :contains q). A rewrite cannot tell which % are wildcards."}
+
+ {:ticket "BOU-705"
+  :since  "1.0.2"
+  :note   "wagoe.search.shell.registry: defsearch, register-search! and the global registry."
+  :manual "Bind definitions with wagoe.search.core.index/defsearch and hand them to :wagoe/search, under :indexes in config or a module's :search part. A rewrite cannot tell which module owns an index."}]
