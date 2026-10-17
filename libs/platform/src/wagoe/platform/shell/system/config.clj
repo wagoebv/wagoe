@@ -90,6 +90,16 @@
       (log/warn (str "The " lib " module is enabled in code, not in :active, so its migrations"
                      " do not run. Add its key to :active in config.edn.")))))
 
+(defn- with-auth-hooks
+  "`ig-config` with the modules' `:auth` hooks handed to the user module, which
+   runs them. Throws when it is off: the hooks would never be called."
+  [ig-config auth]
+  (if (contains? ig-config :wagoe/auth-hooks)
+    (assoc-in ig-config [:wagoe/auth-hooks :contributed] auth)
+    (throw (ex-info (str "Modules contribute " (vec (keys auth)) " under :auth, but the user"
+                         " module, which runs sign-in hooks, is not enabled.")
+                    {:type :configuration-error :keys (vec (keys auth))}))))
+
 (defn system-config
   "The Integrant configuration for `config`.
 
@@ -109,7 +119,7 @@
          ;; feature the config asks for and does not get, and it used to say
          ;; nothing at all (BOU-477).
          _          (modules/assert-every-key-claimed! active known)
-         {:keys [components http middleware routes job-handlers]}
+         {:keys [components http auth middleware routes job-handlers]}
          (modules/framework-module-config
           active
           {:config            config
@@ -122,11 +132,13 @@
          ;; a discovered module with a graph of its own need not have routes.
          {discovered          :components
           discovered-http     :http
+          discovered-auth     :auth
           discovered-mw       :middleware
           discovered-routes   :routes
           discovered-handlers :job-handlers}
          (modules/discover-module-config
-          active known base-ns modules/require-wiring! requiring-resolve)]
+          active known base-ns modules/require-wiring! requiring-resolve)
+         auth (modules/merge-auth auth :discovered discovered-auth)]
      (warn-code-enabled-migrations! active extra-modules)
      ;; Said once, so nobody looks for it on :9999 in prod (BOU-588).
      (when-let [profile (:wagoe/profile config)]
@@ -156,4 +168,7 @@
        ;; switches on, the set `migrate up` reads, so the two agree (BOU-579).
        (:migrate-on-start? (config/db-spec config))
        (assoc-in [:wagoe/db-context :migrate-libraries]
-                 (modules/enabled-libraries active))))))
+                 (modules/enabled-libraries active))
+
+       (seq auth)
+       (with-auth-hooks auth)))))

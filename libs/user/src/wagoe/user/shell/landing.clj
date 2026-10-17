@@ -4,9 +4,11 @@
   (:require [clojure.tools.logging :as log]
             [malli.error :as me]
             [wagoe.core.utils.redirect :as redirect]
+            [wagoe.config :as wagoe-config]
             [wagoe.core.validation :as cv]
             [wagoe.shared.ui.core.home :as home]
             [wagoe.user.core.landing :as landing]
+            [wagoe.user.shell.hooks :as hooks]
             [wagoe.user.schema :as user-schema]))
 
 (defn- settings [config]
@@ -15,20 +17,16 @@
 (defn- resolve-fn
   "The function `x` names, or `x` itself when it is one already."
   [k x]
-  (if (symbol? x)
-    (let [v (try (requiring-resolve x)
-                 (catch Exception e
-                   (throw (ex-info (str ":wagoe/user " k " names " x ", whose namespace does not load")
-                                   {:type :configuration-error :key k :symbol x}
-                                   e))))]
-      (when-not v
-        (throw (ex-info (str ":wagoe/user " k " names " x ", which does not resolve")
-                        {:type :configuration-error :key k :symbol x})))
-      (when-not (fn? @v)
-        (throw (ex-info (str ":wagoe/user " k " names " x ", which is not a function")
-                        {:type :configuration-error :key k :symbol x})))
-      @v)
-    x))
+  (let [v (if (symbol? x)
+            (try (wagoe-config/resolve-symbol x)
+                 (catch clojure.lang.ExceptionInfo e
+                   (throw (ex-info (str ":wagoe/user " k ": " (ex-message e))
+                                   (assoc (ex-data e) :key k) e))))
+            x)]
+    (when-not (fn? v)
+      (throw (ex-info (str ":wagoe/user " k " names " x ", which is not a function")
+                      {:type :configuration-error :key k :symbol x})))
+    v))
 
 (defn prepare
   "`config` with `:login-redirect`, `:dashboard` and `:home` checked and the
@@ -42,19 +40,27 @@
                         {:type :configuration-error :errors errors}))))
     (cond-> config
       (:login-redirect s)
-      (update-in [:active :wagoe/user :login-redirect] #(resolve-fn :login-redirect %))
+      (update-in [:active :wagoe/user :login-redirect] #(if (map? %) % (hooks/as-fn :login-redirect %)))
 
       (map? (:dashboard s))
       (update-in [:active :wagoe/user :dashboard :handler] #(resolve-fn :dashboard %)))))
 
+(defn with-hooks
+  "`config` with the `:login-redirect` the auth hooks settled on, which may be
+   a module's rather than the one config set."
+  [config hooks]
+  (cond-> config
+    (:login-redirect hooks) (assoc-in [:active :wagoe/user :login-redirect] (:login-redirect hooks))))
+
 (defn path-for
-  "Where `user` lands after signing in. A function's answer that is not a path
-   on this site — nil included — falls back to the defaults, as does one that
-   throws: by then the session exists, and a 500 would strand it."
-  [config user]
+  "Where `user` lands after signing in. A function gets the user and
+   `login-context` (`:ip-address`, `:user-agent`, `:request`). Its answer that
+   is not a path on this site — nil included — falls back to the defaults, as
+   does one that throws: by then the session exists, and a 500 would strand it."
+  [config user login-context]
   (let [r (:login-redirect (settings config))]
-    (if (fn? r)
-      (let [path (try (r user)
+    (if (and r (not (map? r)))
+      (let [path (try (r user login-context)
                       (catch Exception e
                         (log/warn e ":login-redirect threw; using the default")
                         nil))]

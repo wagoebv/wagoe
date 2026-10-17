@@ -249,6 +249,24 @@
     (is (= [:search-mw :tenant-mw] middleware) "sorted by module key, like routes")
     (is (= {:tenant-service :ts} http) "and every other :http key is still a slot")))
 
+(deftest ^:unit auth-hooks-are-collected-one-module-each
+  (let [{:keys [auth]} (assemble {:wagoe/tenant {} :wagoe/search {}}
+                                 {'wagoe.tenant.shell.module-wiring {:auth {:mfa-required? :t}}
+                                  'wagoe.search.shell.module-wiring {:auth {:login-redirect :s}}})]
+    (is (= {:mfa-required? :t :login-redirect :s} auth)))
+  (testing "two modules setting one hook fail rather than overwrite"
+    (let [e (is (thrown? clojure.lang.ExceptionInfo
+                         (assemble {:wagoe/tenant {} :wagoe/search {}}
+                                   {'wagoe.tenant.shell.module-wiring {:auth {:mfa-required? :t}}
+                                    'wagoe.search.shell.module-wiring {:auth {:mfa-required? :s}}})))]
+      (is (= :wagoe/module-key-conflict (:type (ex-data e))))
+      (is (= :mfa-required? (:key (ex-data e))))))
+  (testing "and a discovered module's are collected the same way"
+    (is (= {:login-redirect :r}
+           (:auth (sut/discover-module-config
+                   {:wagoe/visits {:enabled? true}} #{} "acme" (constantly true)
+                   (constantly (constantly {:auth {:login-redirect :r}}))))))))
+
 (deftest ^:unit a-module-sees-which-of-its-peers-are-on
   ;; audience takes a cache ref only when there is a cache to ref; without
   ;; this the config carries a dangling ref and the boot fails. Any module

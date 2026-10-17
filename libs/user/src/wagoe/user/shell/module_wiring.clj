@@ -8,6 +8,7 @@
             [wagoe.user.shell.auth-persistence :as auth-persistence]
             [wagoe.user.shell.service :as user-service]
             [wagoe.user.shell.auth :as user-auth]
+            [wagoe.user.shell.hooks :as hooks]
             [wagoe.user.shell.identity-persistence :as identity-persistence]
             [wagoe.user.shell.landing :as landing]
             [wagoe.user.shell.mfa :as user-mfa]
@@ -103,14 +104,19 @@
 ;; Authentication Service
 ;; =============================================================================
 
+(defmethod ig/init-key :wagoe/auth-hooks
+  [_ {:keys [configured contributed]}]
+  (hooks/prepare configured contributed))
+
 (defmethod ig/init-key :wagoe/auth-service
-  [_ {:keys [user-repository session-repository mfa-service auth-config]}]
+  [_ {:keys [user-repository session-repository mfa-service auth-config hooks]}]
   (log/info "Initializing authentication service")
   ;; Fail fast: a missing or too-short JWT_SECRET aborts boot here rather than
   ;; surfacing on the first authentication request.
   (user-auth/validate-jwt-secret!)
   (let [service (user-auth/create-authentication-service
-                 user-repository session-repository mfa-service auth-config)]
+                 user-repository session-repository mfa-service
+                 (merge auth-config (select-keys hooks [:mfa-required?])))]
     (log/info "Authentication service initialized")
     service))
 
@@ -139,12 +145,12 @@
 ;; =============================================================================
 
 (defmethod ig/init-key :wagoe/user-routes
-  [_ {:keys [user-service mfa-service config email-sender]}]
+  [_ {:keys [user-service mfa-service config email-sender hooks]}]
   (log/info "Initializing user module routes"
             {:email-sender? (some? email-sender)})
   (require 'wagoe.user.shell.http)
   (let [user-routes-fn (ns-resolve 'wagoe.user.shell.http 'user-routes)
-        config-with-email (cond-> (or config {})
+        config-with-email (cond-> (landing/with-hooks (or config {}) hooks)
                             email-sender
                             (assoc :email-sender email-sender
                                    :welcome-email-from (get-in config [:active :wagoe.external/smtp :from])
@@ -252,9 +258,9 @@
    (assoc opts :secret (or (:state-secret settings) (user-auth/get-jwt-secret)))))
 
 (defmethod ig/init-key :wagoe/user-oidc-routes
-  [_ {:keys [oidc config]}]
+  [_ {:keys [oidc config hooks]}]
   (require 'wagoe.user.shell.http)
-  ((ns-resolve 'wagoe.user.shell.http 'oidc-routes) oidc config))
+  ((ns-resolve 'wagoe.user.shell.http 'oidc-routes) oidc (landing/with-hooks config hooks)))
 
 ;; =============================================================================
 ;; Module graph
@@ -277,10 +283,14 @@
                                                           {:default-limit 20 :max-limit 100})}
     :wagoe/mfa-service        {:user-repository (ig/ref :wagoe/user-repository)
                                :mfa-config      {}}
+    ;; Platform adds the modules' :auth part as :contributed.
+    :wagoe/auth-hooks         {:configured {:mfa-required?  (:mfa-required? auth-config)
+                                            :login-redirect (get-in config [:active :wagoe/user :login-redirect])}}
     :wagoe/auth-service       {:user-repository    (ig/ref :wagoe/user-repository)
                                :session-repository (ig/ref :wagoe/session-repository)
                                :mfa-service        (ig/ref :wagoe/mfa-service)
-                               :auth-config        auth-config}
+                               :auth-config        (dissoc auth-config :mfa-required?)
+                               :hooks              (ig/ref :wagoe/auth-hooks)}
     :wagoe/user-service       {:user-repository    (ig/ref :wagoe/user-repository)
                                :session-repository (ig/ref :wagoe/session-repository)
                                :audit-repository   (ig/ref :wagoe/audit-repository)
@@ -292,6 +302,7 @@
     :wagoe/user-routes        {:user-service (ig/ref :wagoe/user-service)
                                :mfa-service  (ig/ref :wagoe/mfa-service)
                                :email-sender (ig/ref :wagoe/email)
+                               :hooks        (ig/ref :wagoe/auth-hooks)
                                :config       config}
 
     :wagoe/user-http-middleware {:user-service (ig/ref :wagoe/user-service)}
@@ -318,7 +329,8 @@
    switched on in code rather than in config — and the context the application
    supplies: `:config` and `:validation-config`. OIDC sign-in is wired only
    when the settings name a provider under `[:oidc :providers]`. `:auth` becomes
-   the auth service's config.
+   the auth service's config, its `:mfa-required?` going through
+   `:wagoe/auth-hooks`, where platform adds the hooks modules contribute.
 
    `:login-redirect`, `:dashboard` and `:home` are checked and resolved here,
    once, so a bad value fails boot whichever components start."
@@ -332,5 +344,6 @@
                                            :audit-repository    (ig/ref :wagoe/audit-repository)
                                            :identity-repository (ig/ref :wagoe/user-identity-repository)}
                   :wagoe/user-oidc-routes {:oidc   (ig/ref :wagoe/user-oidc)
+                                           :hooks  (ig/ref :wagoe/auth-hooks)
                                            :config config})
           (update :routes conj (ig/ref :wagoe/user-oidc-routes))))))

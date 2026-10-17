@@ -131,6 +131,21 @@ signed-in user, so they must sign in where MFA is not required, or ask an
 administrator. The symbol is resolved at boot, and one that does not resolve stops
 the boot. A function that throws fails the login.
 
+A hook that needs one of your components, say the allowed networks kept in the
+database, comes from an application module instead. Its `ig-config` contributes it:
+
+[source,clojure]
+----
+(defn ig-config [_settings _ctx]
+  {:components {:wagoe/office-networks {:db (ig/ref :wagoe/db-context)}}
+   :auth       {:mfa-required? (ig/ref :wagoe/office-networks)}})
+----
+
+The component is a function of the same two arguments, or implements
+`wagoe.user.ports/IMfaPolicy`. Each system runs its own, so a test system and a dev
+system in one JVM do not share state. Setting the hook both in config and from a
+module, or from two modules, stops the boot.
+
 WARNING: Behind a reverse proxy, set `:wagoe/http :trusted-proxies` before keying a
 hook on `:ip-address`; without it every login carries the proxy's address.
 
@@ -219,8 +234,10 @@ After signing in, an administrator lands on `/web/admin/users` and everyone else
 
 `:login-redirect` is a map of role to path (`:default` covers roles it does not name,
 and unnamed keys keep the defaults above), or a symbol naming a function of the user
-that returns a path. A function that returns nil or a path off this site sends the user
-to the default. It applies to password login, the MFA step, OpenID Connect sign-in and
+and the login context (`:ip-address`, `:user-agent`, `:request`) that returns a path.
+An application module can contribute it as `:auth {:login-redirect (ig/ref …)}`, a
+function or a `wagoe.user.ports/ILoginRedirect`, the same way as `:mfa-required?`. A
+function that returns nil or a path off this site sends the user to the default. It applies to password login, the MFA step, OpenID Connect sign-in and
 `/web` for someone already signed in. A `return-to` on this site still wins.
 
 `:dashboard false` leaves `/web/dashboard` to the application; `{:handler sym}` serves
