@@ -252,12 +252,13 @@ migration sets:
 `wagoe.tenant.shell.tenant-migrations` drives the tenant set:
 
 ```clojure
-(tenant-migrations/migrate-tenant! db-cfg "tenant_acme_corp")   ; one schema
-(tenant-migrations/migrate-all-tenants! db-cfg schemas)         ; fan out
+(tenant-migrations/migrate-tenant! db-ctx "tenant_acme_corp")   ; one schema
+(tenant-migrations/migrate-all-tenants! db-ctx schemas)         ; fan out
 ```
 
-Each tenant run pins `currentSchema` to the tenant schema **only** (no `,public`
-fallback) so migratus keeps a per-tenant ledger. Consequences:
+`db-ctx` is the boot `:wagoe/db-context`. Each run opens its own connection with
+search_path set to the tenant schema **only** (no `,public` fallback) so
+migratus keeps a per-tenant ledger. Consequences:
 
 - Put only **tenant-scoped** DDL in `migrations-tenant/` — it may not reference
   shared tables that live in `public` (there is no `public` in the search_path).

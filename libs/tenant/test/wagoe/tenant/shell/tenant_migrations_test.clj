@@ -3,8 +3,7 @@
 
    Proves the BOU-159 acceptance: provision two tenant schemas, run a tenant
    migration, and confirm each schema gets the change with its own ledger."
-  (:require [wagoe.platform.database :as db-config]
-            [wagoe.tenant.shell.provisioning :as provisioning]
+  (:require [wagoe.tenant.shell.provisioning :as provisioning]
             [wagoe.tenant.shell.tenant-migrations :as tmig]
             [clojure.test :refer [deftest is testing use-fixtures]]
             [next.jdbc :as jdbc]
@@ -12,16 +11,11 @@
 
 (def ^:private test-migration-dir "migrations-tenant-test")
 
-(def ^:private pg-instance (atom nil))
+(def ^:private db-ctx (atom nil))
 
-(defn- with-pg [f]
-  (let [pg (epg/start!)]
-    (reset! pg-instance pg)
-    (try (f) (finally (epg/stop! pg) (reset! pg-instance nil)))))
+(use-fixtures :once (epg/with-embedded-pg #(reset! db-ctx %)))
 
-(use-fixtures :once with-pg)
-
-(defn- ds [] (epg/datasource @pg-instance))
+(defn- ds [] (:datasource @db-ctx))
 
 (defn- create-schema! [schema]
   (jdbc/execute! (ds) [(str "CREATE SCHEMA IF NOT EXISTS " schema)]))
@@ -41,8 +35,7 @@
     (create-schema! "tenant_alpha")
     (create-schema! "tenant_beta")
 
-    (let [result (tmig/migrate-all-tenants! (epg/db-config @pg-instance)
-                                            ["tenant_alpha" "tenant_beta"]
+    (let [result (tmig/migrate-all-tenants! @db-ctx ["tenant_alpha" "tenant_beta"]
                                             test-migration-dir)]
       (is (= #{"tenant_alpha" "tenant_beta"} (set (:schemas-migrated result))))
       (is (empty? (:errors result))))
@@ -57,9 +50,15 @@
       (is (not (table-in-schema? "public" "widgets"))
           "tenant migration must not leak into public"))
 
+    (testing "the pool's connections keep the default search_path (BOU-694)"
+      (let [conns (vec (repeatedly 3 #(jdbc/get-connection (:datasource @db-ctx))))]
+        (try
+          (is (every? #(= "public" (:s (jdbc/execute-one! % ["SELECT current_schema() AS s"])))
+                      conns))
+          (finally (run! #(.close ^java.sql.Connection %) conns)))))
+
     (testing "re-running is idempotent (already-applied migrations are skipped)"
-      (let [again (tmig/migrate-all-tenants! (epg/db-config @pg-instance)
-                                             ["tenant_alpha" "tenant_beta"]
+      (let [again (tmig/migrate-all-tenants! @db-ctx ["tenant_alpha" "tenant_beta"]
                                              test-migration-dir)]
         (is (empty? (:errors again)))
         (is (= 1 (ledger-count "tenant_alpha")))
@@ -67,10 +66,8 @@
 
 (deftest ^:integration provision-tenant-runs-migrations-test
   (testing "provisioning a new tenant runs the tenant migration set into its schema"
-    (with-redefs [db-config/get-active-db-config (constantly (epg/db-config @pg-instance))
-                  tmig/default-tenant-migration-dir test-migration-dir]
-      (let [ctx    (epg/db-context @pg-instance)
-            result (provisioning/provision-tenant! ctx {:schema-name "tenant_gamma"})]
+    (with-redefs [tmig/default-tenant-migration-dir test-migration-dir]
+      (let [result (provisioning/provision-tenant! @db-ctx {:schema-name "tenant_gamma"})]
         (is (:success? result))
         (is (= "tenant_gamma" (:schema-name result)))
         (is (table-in-schema? "tenant_gamma" "widgets")

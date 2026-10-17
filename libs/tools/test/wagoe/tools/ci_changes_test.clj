@@ -26,7 +26,9 @@
    "libs/wagoe-cli/test/wagoe/cli/new_test.clj"
    "checks CLAUDE.md in a generated project"
    "libs/storage/test/wagoe/storage/schema_test.clj"
-   "reads libs/storage's READMEs, not the root one"})
+   "reads libs/storage's READMEs, not the root one"
+   "libs/storage/test/wagoe/storage/readme_test.clj"
+   "checks the calls in libs/storage's READMEs resolve"})
 
 (def ^:private docs-only-names
   #"dev-docs|(CHANGELOG|README|UPGRADING|CONTRIBUTING|BUILD|CLAUDE)\.md")

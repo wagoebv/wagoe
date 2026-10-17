@@ -211,9 +211,9 @@
    set into it, so new tenants converge on the same migration path used to keep
    existing tenants up to date. Replaces copying table structure from public,
    which only ever copied whole tables and never picked up column/index deltas."
-  [schema-name]
+  [ctx schema-name]
   (assert-safe-schema-name! schema-name)
-  (tenant-migrations/migrate-tenant! (db/get-active-db-config) schema-name))
+  (tenant-migrations/migrate-tenant! ctx schema-name))
 
 (defn- validate-provisioning
   "Validate that tenant schema was provisioned successfully.
@@ -339,7 +339,7 @@
         (create-schema! ctx schema-name)
 
         ;; Build the schema by running the tenant-scoped migration set into it
-        (populate-tenant-schema! schema-name)
+        (populate-tenant-schema! ctx schema-name)
 
         ;; Validate
         (let [validation (validate-provisioning ctx schema-name)]

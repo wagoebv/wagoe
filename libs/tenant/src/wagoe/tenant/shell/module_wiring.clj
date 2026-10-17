@@ -1,6 +1,5 @@
 (ns wagoe.tenant.shell.module-wiring
-  (:require [wagoe.platform.database :as db-config]
-            [wagoe.tenant.shell.invite-persistence :as invite-persistence]
+  (:require [wagoe.tenant.shell.invite-persistence :as invite-persistence]
             [wagoe.tenant.shell.invite-service :as invite-service]
             [wagoe.tenant.shell.membership-middleware :as membership-mw]
             [wagoe.tenant.shell.membership-persistence :as membership-persistence]
@@ -27,8 +26,7 @@
   (try
     (let [schemas (provisioning/list-tenant-schemas ctx)]
       (when (seq schemas)
-        (let [{:keys [errors]} (tenant-migrations/migrate-all-tenants!
-                                (db-config/get-active-db-config) schemas)]
+        (let [{:keys [errors]} (tenant-migrations/migrate-all-tenants! ctx schemas)]
           (when (seq errors)
             (log/error "Some tenant schemas failed to migrate on startup" {:errors errors})))))
     (catch Exception e

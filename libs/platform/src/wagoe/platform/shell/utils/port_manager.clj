@@ -72,16 +72,13 @@
    (some #(System/getenv %)
          ["CONTAINER" "DOCKER_CONTAINER" "KUBERNETES_SERVICE_HOST"])))
 
-(def ^:private searchable-envs #{"dev" "test" "local"})
-
 (defn development-environment?
   "True when the app may search a port range instead of binding the exact port.
 
    `profile` is the config profile the app booted with, and wins. Without one,
    the one the config loader would pick (BOU-530)."
   ([] (development-environment? nil))
-  ([profile]
-   (contains? searchable-envs (config/normalize-env (name (or profile (config/active-profile)))))))
+  ([profile] (config/dev-like? profile)))
 
 (defn- coerce-port
   "aero's #env yields a String, so a config without #long hands one down (BOU-251)."
