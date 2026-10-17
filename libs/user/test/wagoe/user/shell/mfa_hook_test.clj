@@ -2,18 +2,19 @@
   "The :mfa-required? hook decides per password login whether a second
    factor is asked for."
   (:require [clojure.test :refer [deftest is testing use-fixtures]]
-            [one-time.core :as otp]
             [wagoe.platform.core.http.client-ip :as client-ip]
             [wagoe.user.ports :as ports]
             [wagoe.user.shell.auth :as auth]
             [wagoe.user.shell.in-memory-repository-test :as mem]
             [wagoe.user.shell.interceptors :as interceptors]
-            [wagoe.user.shell.mfa :as mfa]))
+            [wagoe.user.shell.mfa :as mfa]
+            [wagoe.user.totp-clock :as totp-clock]))
 
 (use-fixtures :each
   (fn [t]
     (with-redefs [auth/get-jwt-secret (constantly "test-secret-minimum-32-characters-long-for-testing")]
-      (t))))
+      (t)))
+  totp-clock/frozen)
 
 (def ^:private password "Correct-Horse-Battery-1!")
 
@@ -37,7 +38,7 @@
   (let [secret (mfa/generate-totp-secret)
         with   (setup {} :mfa-enabled true :mfa-secret secret)]
     (is (= :mfa-required (get-in (login with) [:error :type])))
-    (is (:success? (login with {:mfa-code (str (otp/get-totp-token secret))}))))
+    (is (:success? (login with {:mfa-code (totp-clock/code secret)}))))
   (is (:success? (login (setup {})))))
 
 (deftest ^:unit ^:security hook-waives-mfa-without-turning-it-off
