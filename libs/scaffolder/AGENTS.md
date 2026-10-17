@@ -492,7 +492,7 @@ Configure the provider via environment variables: `ANTHROPIC_API_KEY`, `OPENAI_A
 | `--field` | — | Repeatable: `name:type[:values=a,b,c][:references=entity][:on-delete=x][:required|:optional][:unique][:indexed][:default=v]` |
 | `--workflow` | — | `'field:first>second>...'`, quoted: the status as a forward-only workflow |
 | `--[no-]http` | true | Generate the HTTP (REST API) routes |
-| `--[no-]web` | true | Generate the Web UI: `core/ui.clj`, `shell/web_handlers.clj`, and the module's `:web` route contribution |
+| `--[no-]web` | true | Generate the Web UI — a list page and a create form validated per field — in `core/ui.clj`, `shell/web_handlers.clj`, and the module's `:web` route contribution |
 | `--public-api` | false | API routes and web page open to anyone; by default they require a signed-in user |
 | `--output-dir` | `.` | Output directory |
 | `--force` | false | Overwrite existing files |

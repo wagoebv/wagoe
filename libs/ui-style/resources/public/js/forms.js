@@ -32,9 +32,9 @@
     // fields render the second.
     const body = event.detail.xhr.responseText || '';
     if (!body) return;
-    // A whole page is never a fragment: swapped into a target it would nest a
-    // second <html>, <head> and set of scripts inside this one.
-    if (/^\s*(<!doctype|<html)/i.test(body)) return;
+    // A whole page only replaces the body (admin forms target it). Swapped into
+    // any other target it would nest a second <html>, <head> and set of scripts.
+    if (/^\s*(<!doctype|<html)/i.test(body) && event.detail.target !== document.body) return;
     const parsed = new DOMParser().parseFromString(body, 'text/html');
     if (!parsed.querySelector(FORM_MARKERS)) return;
 

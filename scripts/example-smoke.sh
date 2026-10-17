@@ -116,6 +116,21 @@ case "$WEB" in
 esac
 ok "the web page redirects a signed-out visitor, and shows a signed-in one the rows"
 
+# The create form validates a field on the server when it changes, and the
+# whole form again when it is posted without JavaScript.
+FIELD=$(curl -fsS "${AUTH[@]}" -X POST -H "HX-Request: true" \
+             --data-urlencode "__field=price" --data-urlencode "price=abc" \
+             "http://localhost:$PORT/web/products/validate") \
+  || { log_excerpt /tmp/shop-smoke.log 30; fail "POST /web/products/validate did not answer"; }
+case "$FIELD" in
+  *'id="price-field"'*"Must be a number"*) ;;
+  *) fail "/web/products/validate returned '$FIELD', not the price field with its error" ;;
+esac
+CODE=$(curl -s -o /dev/null -w '%{http_code}' "${AUTH[@]}" -X POST \
+            --data-urlencode "name=Mug" --data-urlencode "sku=M-1" "http://localhost:$PORT/web/products")
+[ "$CODE" = "303" ] || fail "POST /web/products with a valid form answered $CODE, expected 303"
+ok "the create form checks a field as it changes, and saves a valid form"
+
 # The uberjar is how a generated project ships. On Linux this cannot catch the
 # macOS LICENSE collision (BOU-549) — new_test.clj guards that — but it proves
 # the template's build produces a jar that boots.

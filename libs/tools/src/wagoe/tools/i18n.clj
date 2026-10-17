@@ -37,6 +37,7 @@
         wagoe-dirs (when wagoe-root
                      [(str wagoe-root "/libs/user/src")
                       (str wagoe-root "/libs/admin/src")
+                      (str wagoe-root "/libs/shared-ui/src")
                       (str wagoe-root "/libs/search/src")
                       (str wagoe-root "/libs/calendar/src")
                       (str wagoe-root "/libs/workflow/src")])]

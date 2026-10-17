@@ -8,7 +8,6 @@
    [wagoe.admin.core.permissions :as permissions]
    [wagoe.admin.shell.permissions :as shell-permissions]
    [wagoe.admin.shell.http.support :as support]
-   [wagoe.shared.ui.core.components :as ui]
    [clojure.tools.logging :as log]
    [ring.util.response :as ring-response]))
 
