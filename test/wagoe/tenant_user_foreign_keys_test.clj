@@ -64,7 +64,8 @@
   (into {} (map (juxt :conname :convalidated))
         (jdbc/execute! (:datasource ctx)
                        [(str "SELECT conname, convalidated FROM pg_constraint"
-                             " WHERE contype = 'f' AND confrelid = 'auth_users'::regclass")]
+                             " WHERE contype = 'f' AND confrelid = 'auth_users'::regclass"
+                             " AND conname LIKE 'fk_tenant%'")]
                        {:builder-fn rs/as-unqualified-lower-maps})))
 
 (def ^:private all-valid

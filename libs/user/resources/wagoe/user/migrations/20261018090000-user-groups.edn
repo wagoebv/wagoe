@@ -1,0 +1,6 @@
+;; user_groups, user_group_members and user_group_grants, and the audit
+;; actions they record, on a database an earlier migration already ran on.
+;; The same idempotent definition: only what is missing is created.
+{:ns      wagoe.user.shell.user-tables
+ :up-fn   "up"
+ :down-fn "down"}

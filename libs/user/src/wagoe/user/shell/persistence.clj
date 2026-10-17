@@ -161,7 +161,10 @@
    "users"           user-schema/TenantUser
    "user_sessions"   user-schema/UserSession
    "user_audit_log"  user-schema/UserAuditLog
-   "user_identities" user-schema/UserIdentity})
+   "user_identities" user-schema/UserIdentity
+   "user_groups"        user-schema/UserGroup
+   "user_group_members" user-schema/UserGroupMember
+   "user_group_grants"  user-schema/UserGroupGrant})
 
 (defn initialize-user-schema!
   "Initialize database schema for user entities using Malli schema definitions.
@@ -172,6 +175,7 @@
    - user_sessions: User authentication sessions
    - user_audit_log: Audit trail for user operations
    - user_identities: OpenID Connect (issuer, subject) links to users
+   - user_groups, user_group_members, user_group_grants: groups and their grants
 
    Includes indexes for:
    - Foreign keys (user_id)
@@ -200,6 +204,8 @@
   (db/initialize-tables-from-schemas! ctx tables)
   (db/create-index-if-not-exists! ctx "uk_user_identities_issuer_subject" :user_identities
                                   [:issuer :subject] {:unique? true})
+  (db/create-index-if-not-exists! ctx "uk_user_group_members_group_user" :user_group_members
+                                  [:group_id :user_id] {:unique? true})
   (widen-audit-action-check! ctx)
   (hash-plaintext-session-tokens! ctx)
 
@@ -881,6 +887,11 @@
 
                  ;; Sign-in links are personal data too.
                  _ (db/execute-update! tx {:delete-from :user_identities
+                                           :where [:= :user_id user-id-str]})
+
+                 ;; The key cascades, but SQLite enforces keys only on
+                 ;; connections that ask.
+                 _ (db/execute-update! tx {:delete-from :user_group_members
                                            :where [:= :user_id user-id-str]})
 
                  ;; Delete from users table first (FK constraint)

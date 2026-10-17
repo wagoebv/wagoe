@@ -15,6 +15,9 @@
   ;; `wagoe.tenant.shell.persistence/initialize-tenant-schema!`.
   ["user_sessions"
    "user_audit_log"
+   "user_group_grants"
+   "user_group_members"
+   "user_groups"
    "tenant_memberships"
    "tenant_member_invites"
    "users"

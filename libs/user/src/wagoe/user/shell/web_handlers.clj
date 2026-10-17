@@ -129,7 +129,7 @@
   []
   (java.time.ZoneId/systemDefault))
 
-(defn- html-response
+(defn html-response
   "Create HTML response map, resolving any [:t ...] i18n markers in the Hiccup tree.
 
    Args:

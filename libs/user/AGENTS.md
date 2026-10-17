@@ -17,7 +17,8 @@ Authentication and authorization domain: user lifecycle, credentials, sessions/t
 | `wagoe.user.shell.service` | Service-layer orchestration, validation, and `*audit-context*` binding |
 | `wagoe.user.shell.http` | Auth/user HTTP handlers |
 | `wagoe.user.shell.http-interceptors` | Auth, authorization, and audit interceptors |
-| `wagoe.user.ports` | `IUserRepository`, `IUserSessionRepository`, `IUserAuditRepository`, `IUserService` protocols |
+| `wagoe.user.ports` | `IUserRepository`, `IUserSessionRepository`, `IUserAuditRepository`, `IUserService`, `IUserGroupRepository`, `IUserGroupService` protocols |
+| `wagoe.user.core.group` | Pure grant checks: `holds?`, `grants-for`, `authorized?`, `grant-refusal` |
 | `wagoe.user.schema` | Malli schemas for User, Session, and request/response types |
 
 ---
@@ -374,6 +375,28 @@ so two of them deleting the same rows is that DELETE twice.
 
 A revoked session is pruned on the same terms as any other: revoking hides it,
 expiry plus retention removes it.
+
+## Groups and grants
+
+`:wagoe/user-group-service` implements `IUserGroupService`: groups, members, and
+grants of `{:permission kw :scope map}`. `(user-grants svc user)` reads a user's
+grants through their groups on every call; `wagoe.user.core.group` has `holds?`,
+`grants-for` and `authorized?`. The admin pages are `/web/admin/groups`
+(`group-routes`, mounted beside the admin UI, admins only).
+
+- `:wagoe/user {:groups {:permissions <schema> :scope <schema>}}`, Malli or a
+  symbol naming one, resolved in `ig-config`; a bad one fails boot. Grants that do
+  not fit are refused with `:validation-error` and `:field`.
+- Audit is per user: `:group-join`/`:group-leave` for the member,
+  `:grant-add`/`:grant-remove` for every member, so a grant changed in an empty
+  group writes nothing. A join lists the group's grants.
+- Tables `user_groups`, `user_group_members`, `user_group_grants`. Keys cascade from
+  `auth_users` and `user_groups` (`:references` on the schema field); the
+  repository deletes explicitly too, for SQLite connections without foreign keys.
+  `scope` is EDN text (`:column-type :text`); `edn-value?` refuses what would not
+  read back, an `Instant` for one.
+- A soft-deleted user drops out of `find-user-grants` and member lists, and keeps
+  their memberships for a restore.
 
 ## The library's own tables
 

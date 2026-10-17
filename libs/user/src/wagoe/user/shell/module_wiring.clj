@@ -10,6 +10,8 @@
             [wagoe.user.shell.auth :as user-auth]
             [wagoe.user.shell.hooks :as hooks]
             [wagoe.user.shell.identity-persistence :as identity-persistence]
+            [wagoe.user.shell.group-persistence :as group-persistence]
+            [wagoe.user.shell.group-service :as group-service]
             [wagoe.user.shell.landing :as landing]
             [wagoe.user.shell.mfa :as user-mfa]
             [wagoe.user.shell.oidc :as oidc]
@@ -263,11 +265,28 @@
   ((ns-resolve 'wagoe.user.shell.http 'oidc-routes) oidc (landing/with-hooks config hooks)))
 
 ;; =============================================================================
+;; Groups
+;; =============================================================================
+
+(defmethod ig/init-key :wagoe/user-group-repository
+  [_ {:keys [ctx]}]
+  (group-persistence/create-group-repository ctx))
+
+(defmethod ig/init-key :wagoe/user-group-service
+  [_ {:keys [group-repository user-repository audit-repository settings]}]
+  (group-service/create-group-service group-repository user-repository audit-repository settings))
+
+(defmethod ig/init-key :wagoe/user-group-routes
+  [_ {:keys [user-service group-service]}]
+  (require 'wagoe.user.shell.http)
+  ((ns-resolve 'wagoe.user.shell.http 'group-routes) user-service group-service))
+
+;; =============================================================================
 ;; Module graph
 ;; =============================================================================
 
 (defn- base-graph
-  [config validation-config auth-config]
+  [config validation-config auth-config group-settings]
   {:components
    {:wagoe/user-db-schema     {:ctx (ig/ref :wagoe/db-context)}
     :wagoe/user-repository    {:ctx (ig/ref :wagoe/db-context)}
@@ -305,6 +324,14 @@
                                :hooks        (ig/ref :wagoe/auth-hooks)
                                :config       config}
 
+    :wagoe/user-group-repository {:ctx (ig/ref :wagoe/db-context)}
+    :wagoe/user-group-service {:group-repository (ig/ref :wagoe/user-group-repository)
+                               :user-repository  (ig/ref :wagoe/user-repository)
+                               :audit-repository (ig/ref :wagoe/audit-repository)
+                               :settings         group-settings}
+    :wagoe/user-group-routes  {:user-service  (ig/ref :wagoe/user-service)
+                               :group-service (ig/ref :wagoe/user-group-service)}
+
     :wagoe/user-http-middleware {:user-service (ig/ref :wagoe/user-service)}
     :wagoe/user-home-middleware {:config config}
     :wagoe/admin-only-middleware {:user-service (ig/ref :wagoe/user-service)}}
@@ -320,7 +347,7 @@
    :http   {:user-service     (ig/ref :wagoe/user-service)
             :auth-middleware  (ig/ref :wagoe/user-http-middleware)
             :extra-middleware (ig/ref :wagoe/user-home-middleware)}
-   :routes [(ig/ref :wagoe/user-routes)]})
+   :routes [(ig/ref :wagoe/user-routes) (ig/ref :wagoe/user-group-routes)]})
 
 (defn ig-config
   "This module's Integrant entries, for `wagoe.platform.shell.system.config`.
@@ -333,10 +360,12 @@
    `:wagoe/auth-hooks`, where platform adds the hooks modules contribute.
 
    `:login-redirect`, `:dashboard` and `:home` are checked and resolved here,
-   once, so a bad value fails boot whichever components start."
+   once, so a bad value fails boot whichever components start, as are the
+   `:groups` schemas."
   [settings {:keys [config validation-config]}]
   (let [config (landing/prepare config)]
-    (cond-> (base-graph config validation-config (:auth settings {}))
+    (cond-> (base-graph config validation-config (:auth settings {})
+                        (group-service/prepare-settings (:groups settings)))
       (seq (get-in settings [:oidc :providers]))
       (-> (update :components assoc
                   :wagoe/user-oidc        {:settings            (:oidc settings)

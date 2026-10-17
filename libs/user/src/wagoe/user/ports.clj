@@ -132,6 +132,55 @@
   (unlink-identity [this issuer subject]))
   ;; Removes the link. Returns boolean.
 
+(defprotocol IUserGroupRepository
+  "Groups, their members and their grants. A group is {:id :name :description
+   :created-at :updated-at}; a grant {:id :group-id :permission :scope
+   :created-at}. Deleting a group or a user removes their memberships and,
+   with a group, its grants."
+
+  (find-group [this group-id])
+  ;; Returns the group, or nil.
+
+  (find-groups [this])
+  ;; Every group by name, each with :member-count and :grant-count.
+
+  (insert-group [this group])
+  ;; Generates :id and :created-at. Returns the stored group.
+
+  (modify-group [this group])
+  ;; Takes :id and :name, and :description when it is to change. Returns the
+  ;; stored group, or nil.
+
+  (remove-group [this group-id])
+  ;; Removes the group, its memberships and grants. Returns boolean.
+
+  (find-members [this group-id])
+  ;; The group's users, {:id :email :name}, by email. Soft-deleted users are
+  ;; left out.
+
+  (insert-member [this group-id user-id])
+  ;; Returns true, or false when the user was a member already.
+
+  (remove-member [this group-id user-id])
+  ;; Returns boolean.
+
+  (find-grants [this group-id])
+  ;; The group's grants, oldest first.
+
+  (insert-grant [this grant])
+  ;; grant: {:group-id :permission :scope}. Generates :id and :created-at.
+  ;; Returns the stored grant.
+
+  (remove-grant [this group-id grant-id])
+  ;; Returns boolean.
+
+  (find-user-grants [this user-id])
+  ;; The grants of every group the user is in, each with :group-name. None for
+  ;; a soft-deleted user.
+
+  (find-user-groups [this user-id]))
+  ;; The groups the user is in, by name. None for a soft-deleted user.
+
 ;; =============================================================================
 ;; Service
 ;; =============================================================================
@@ -241,6 +290,48 @@
   ;; Verifies the current password, checks the new one against policy, rehashes,
   ;; revokes every session (BOU-191) and audits. Returns true.
   ;; Throws :user-not-found, :invalid-current-password, :password-policy-violation.
+
+(defprotocol IUserGroupService
+  "Groups of users and the permissions they grant. Joining, leaving and a
+   changed grant are audited for each user whose rights change. Nothing is
+   cached: `user-grants` reads the database, so a change applies to the next
+   request. The :admin role is separate and needs no group. Throws ex-infos
+   carrying :type: :validation-error, :not-found."
+
+  (list-groups [this])
+  ;; Every group by name, with :member-count and :grant-count.
+
+  (get-group [this group-id])
+  ;; The group with its :members and :grants, or nil.
+
+  (create-group [this group])
+  ;; group: {:name :description}. Returns the stored group.
+
+  (update-group [this group])
+  ;; group: {:id :name :description}. Returns the stored group.
+
+  (delete-group [this group-id])
+  ;; Removes the group, auditing each member's leaving. Returns boolean.
+
+  (add-group-member [this group-id user-id])
+  ;; Returns true, or false when the user was a member already.
+
+  (remove-group-member [this group-id user-id])
+  ;; Returns boolean.
+
+  (add-group-grant [this group-id grant])
+  ;; grant: {:permission kw :scope map}, checked against the declared
+  ;; `:wagoe/user :groups` schemas. Returns the stored grant.
+
+  (remove-group-grant [this group-id grant-id])
+  ;; Returns boolean.
+
+  (user-grants [this user])
+  ;; user: a user map or id. The grants the user holds through their groups,
+  ;; for wagoe.user.core.group/holds?, grants-for and authorized?.
+
+  (user-groups [this user]))
+  ;; user: a user map or id. The groups the user is in.
 
 ;; =============================================================================
 ;; Sign-in hooks

@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **User groups with scoped permission grants** (BOU-701): manage them at `/web/admin/groups`, check them with
+  `(user-grants svc user)` from `:wagoe/user-group-service`. Declare permissions and scope under `:wagoe/user :groups`.
 - **App modules can contribute sign-in hooks** (BOU-697): `:auth {:mfa-required? (ig/ref …)}`, or `:login-redirect`,
   from an `ig-config`. `:login-redirect` functions now take `[user login-context]`, which has the client IP and request.
 - **`client-ip/in-network?` and `in-any?`** (BOU-693): match an address against CIDRs exactly as the trust walk does.

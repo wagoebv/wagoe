@@ -127,9 +127,13 @@
   (str "chk_" table-name "_" column-name))
 
 (defn- column-type
-  "The SQL type of a field: its :db-type, or the one its Malli type maps to."
+  "The SQL type of a field: its :db-type, the adapter's for its :column-type
+   (a `logical-column-types` keyword, for a value stored other than as its
+   Malli type suggests), or the one its Malli type maps to."
   [ctx {:keys [type properties]}]
-  (or (:db-type properties) (malli-type->column-type ctx type)))
+  (or (:db-type properties)
+      (some->> (:column-type properties) (protocols/column-type (:adapter ctx)))
+      (malli-type->column-type ctx type)))
 
 (defn- column-default
   "The DEFAULT clause of a field: only a required `active` boolean has one."
@@ -181,6 +185,20 @@
   {"auth_users"    [["uk_auth_users_email" ["email"]]]
    "user_sessions" [["uk_user_sessions_token" ["session_token"]]]})
 
+(defn- foreign-key-constraints
+  "A FOREIGN KEY to `<table>(id)` for each field whose properties say
+   `:references <table>`, with `:on-delete :cascade` (or `:set-null`) when
+   given. Only a table being created gets one: an existing table is not
+   altered."
+  [table-name field-infos]
+  (for [{:keys [name properties]} field-infos
+        :let [{:keys [references on-delete]} properties]
+        :when references]
+    (str "CONSTRAINT fk_" table-name "_" (col-name name)
+         " FOREIGN KEY (" (col-name name) ") REFERENCES " (clojure.core/name references) "(id)"
+         (when on-delete
+           (str " ON DELETE " (str/upper-case (str/replace (clojure.core/name on-delete) "-" " ")))))))
+
 (defn- generate-table-constraints
   "Generate table-level constraints (unique, foreign keys) based on table name and fields.
    
@@ -191,25 +209,12 @@
    Returns:
      Vector of constraint definition strings"
   [table-name field-infos]
-  (let [; Find foreign key fields (fields ending with -id but not id itself)
-        _fk-fields (filter #(and (not= (:name %) "id")
-                                 (str/ends-with? (:name %) "-id"))
-                           field-infos)]
-    (vec (concat
-          ; Foreign key constraints - DISABLED FOR NOW
-          ; (uncomment when tenant table is implemented)
-          ; (map (fn [{:keys [name]}]
-          ;        (let [ref-table (str/replace name #"-id$" "s") ; user-id -> users
-          ;              constraint-name (str "fk_" table-name "_" (col-name name))]
-          ;          (str "CONSTRAINT " constraint-name
-          ;               " FOREIGN KEY (" (col-name name)
-          ;               ") REFERENCES " ref-table "(id) ON DELETE CASCADE")))
-          ;      fk-fields)
-          []
+  (vec (concat
+        (foreign-key-constraints table-name field-infos)
 
-          ; Table-specific unique constraints
-          (for [[constraint-name columns] (table-unique-keys table-name)]
-            (str "CONSTRAINT " constraint-name " UNIQUE(" (str/join ", " columns) ")"))))))
+        ; Table-specific unique constraints
+        (for [[constraint-name columns] (table-unique-keys table-name)]
+          (str "CONSTRAINT " constraint-name " UNIQUE(" (str/join ", " columns) ")")))))
 
 (defn generate-table-ddl
   "Generate CREATE TABLE DDL from Malli schema definition.
@@ -386,6 +391,26 @@
 ;; Schema Initialization
 ;; =============================================================================
 
+(defn- referenced-tables
+  "The tables `malli-schema`'s fields name under `:references`."
+  [malli-schema]
+  (into #{} (keep #(some-> (get-in % [:properties :references]) name))
+        (keep extract-field-info (rest malli-schema))))
+
+(defn- creation-order
+  "`schema-definitions` as [table schema] pairs, each after the tables in the
+   map it references, so its foreign keys have something to point at."
+  [schema-definitions]
+  (loop [pending (vec schema-definitions) done [] created #{}]
+    (if (empty? pending)
+      done
+      (let [ready? (fn [[t s]] (every? #(or (created %) (= % t) (not (contains? schema-definitions %)))
+                                       (referenced-tables s)))
+            [ready waiting] ((juxt filter remove) ready? pending)]
+        (if (empty? ready)
+          (into done waiting)
+          (recur (vec waiting) (into done ready) (into created (map first ready))))))))
+
 (defn initialize-tables-from-schemas!
   "Initialize database tables and indexes from a map of Malli schema definitions.
    
@@ -413,7 +438,7 @@
     ; a no-op, so add the fields the schema gained since, and re-apply named enum
     ; CHECK constraints to keep initialization idempotent (and to heal H2's
     ; in-memory reconnect corruption).
-    (doseq [[table-name malli-schema] schema-definitions]
+    (doseq [[table-name malli-schema] (creation-order schema-definitions)]
       (let [existed? (db-core/table-exists? ctx table-name)
             ddl (generate-table-ddl ctx table-name malli-schema)]
         (log/debug "Creating table" {:table table-name :ddl ddl :existed? existed?})
