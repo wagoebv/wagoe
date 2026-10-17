@@ -50,6 +50,7 @@
             [wagoe.platform.core.http.client-ip :as client-ip]
             [wagoe.platform.core.http.errors :as errors]
             [wagoe.platform.core.http.problem-details :as problem-details]
+            [wagoe.platform.shell.reported-errors :as reported-errors]
             [buddy.core.nonce :as nonce]
             [buddy.core.codecs :as codecs]
             [wagoe.config :as config]
@@ -313,6 +314,17 @@
 ;; HTTP-Specific Interceptors
 ;; ==============================================================================
 
+(defn- error-status
+  "The status a failed request answers: the error handler's, else the
+   problem-details mapping's."
+  [{:keys [response exception]}]
+  (or (:status response) (first (problem-details/exception-status exception {}))))
+
+(defn- server-error?
+  "A 5xx or untyped error: the server's fault, not the client's (BOU-714)."
+  [status]
+  (>= status 500))
+
 (def http-request-logging
   "Logs HTTP requests at entry and completion.
 
@@ -335,10 +347,9 @@
                                :status (:status response)
                                :correlation-id correlation-id}))
             ctx)
-   :error (fn [{:keys [request response system correlation-id exception] :as ctx}]
+   :error (fn [{:keys [request system correlation-id exception] :as ctx}]
             (when-let [logger (:logger system)]
-              (let [status (or (:status response)
-                               (first (problem-details/exception-status exception {})))
+              (let [status (error-status ctx)
                     level  (problem-details/status-log-level status)]
                 (log-ports/log* logger level
                                 (cond (= :error level) "HTTP request failed"
@@ -451,13 +462,18 @@
    :error (fn [{:keys [system exception] :as ctx}]
             (when-let [tracer (:tracer system)]
               (when-let [span (get-in ctx [:tracing :span])]
-                (when exception
-                  (tracing-ports/record-exception! tracer span (redaction/redacted-exception exception)))
+                (let [status (error-status ctx)]
+                  (tracing-ports/set-attributes! tracer span {:http.response.status_code status})
+                  ;; Recording marks the span errored, which the OTel HTTP
+                  ;; conventions reserve for a server span's 5xx (BOU-714).
+                  (when (and exception (server-error? status))
+                    (tracing-ports/record-exception! tracer span (redaction/redacted-exception exception))))
                 (tracing-ports/end-span! tracer span)))
             ctx)})
 
 (def http-error-reporting
-  "Captures HTTP exceptions and reports them to error tracking."
+  "Reports a 5xx or untyped exception to error tracking. A typed 4xx is the
+   client's, and only logged (BOU-714)."
   {:name :http-error-reporting
    :enter (fn [{:keys [request system correlation-id] :as ctx}]
             (when-let [error-reporter (:error-reporter system)]
@@ -471,17 +487,19 @@
                 :correlation-id correlation-id}))
             ctx)
    :error (fn [{:keys [request exception system correlation-id] :as ctx}]
-            (when-let [error-reporter (:error-reporter system)]
+            (when-let [error-reporter (and (server-error? (error-status ctx)) (:error-reporter system))]
               ;; Redacted here too, for a reporter or tracer that is not
               ;; observability's own: those redact themselves (BOU-633).
-              (error-reporting/report-application-error
-               error-reporter
-               (redaction/redacted-exception exception)
-               "HTTP request failed"
-               {:context "http-request"
-                :method (name (:request-method request))
-                :uri (:uri request)
-                :correlation-id correlation-id}))
+              (reported-errors/report-once!
+               exception
+               #(error-reporting/report-application-error
+                 error-reporter
+                 (redaction/redacted-exception exception)
+                 "HTTP request failed"
+                 {:context "http-request"
+                  :method (name (:request-method request))
+                  :uri (:uri request)
+                  :correlation-id correlation-id})))
             ctx)})
 
 (defn- add-correlation-id [{:keys [correlation-id] :as ctx}]

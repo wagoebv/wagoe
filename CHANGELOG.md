@@ -130,6 +130,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **A refused key's field could be read from the value sent, and none was named on non-English PostgreSQL or MySQL 5.7
   with mixed-case tables** (BOU-721). Columns are now read only from the driver's key list, or else the catalog.
+- **A typed 4xx reached the error tracker and marked its trace span errored** (BOU-714). Only 5xx and untyped errors
+  do now; service operations report their 5xx, which they never did. Nothing to change.
 - **iCal export wrote zones ical4j lacks (America/Coyhaique) in UTC, and each zone's full history** (BOU-720).
   VTIMEZONEs now come from the JVM's tz rules, trimmed to the years the feed's events cover.
 - **Admin dashboard linked to Groups and Audit with the user web UI switched off** (BOU-713). It now shows a card only

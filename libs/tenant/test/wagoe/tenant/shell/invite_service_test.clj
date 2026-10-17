@@ -1,5 +1,5 @@
 (ns wagoe.tenant.shell.invite-service-test
-  (:require [wagoe.observability.errors.ports :as error-ports]
+  (:require [wagoe.observability.errors.shell.adapters.no-op :as no-op-errors]
             [wagoe.observability.logging.shell.adapters.no-op :as no-op-logging]
             [wagoe.observability.metrics.ports :as metrics-ports]
             [wagoe.tenant.ports :as ports]
@@ -32,18 +32,7 @@
     Object
     (toString [_] "MockMetricsEmitter")))
 
-(def mock-error-reporter
-  (reify
-    error-ports/IErrorContext
-    (add-breadcrumb! [_ _breadcrumb] nil)
-    (with-context [_ _context-map f] (f))
-    (clear-breadcrumbs! [_] nil)
-    (set-user! [_ _user-info] nil)
-    (set-tags! [_ _tags] nil)
-    (set-extra! [_ _extra] nil)
-    (current-context [_] {})
-    Object
-    (toString [_] "MockErrorReporter")))
+(def mock-error-reporter (no-op-errors/create-error-reporting-component {}))
 
 (defrecord MockInviteRepository [state]
   ports/ITenantInviteRepository

@@ -8,6 +8,7 @@
             [wagoe.observability.errors.ports :as error-reporting]
             [wagoe.platform.core.http.errors :as errors]
             [wagoe.observability.core.sql-redaction :as redaction]
+            [wagoe.platform.shell.reported-errors :as reported-errors]
             [clojure.string :as str])
   (:import [java.util UUID]
            [java.time Instant]))
@@ -119,12 +120,14 @@
   {:name :error-capture
    :error (fn [{:keys [op correlation-id system exception] :as ctx}]
             (when-let [error-reporter (:error-reporter system)]
-              (error-reporting/capture-exception
-               error-reporter
-               (redaction/redacted-exception exception)
-               {:operation (subs (str op) 1) ; Remove the leading colon 
-                :correlation-id correlation-id
-                :context-keys (keys (dissoc ctx :system :exception))}))
+              (reported-errors/report-once!
+               exception
+               #(error-reporting/capture-exception
+                 error-reporter
+                 (redaction/redacted-exception exception)
+                 {:operation (subs (str op) 1) ; Remove the leading colon
+                  :correlation-id correlation-id
+                  :context-keys (keys (dissoc ctx :system :exception))})))
             ctx)})
 
 (defn- json-safe

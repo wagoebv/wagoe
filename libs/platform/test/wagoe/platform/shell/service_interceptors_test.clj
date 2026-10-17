@@ -3,6 +3,7 @@
             [clojure.test :refer [deftest is]]
             [wagoe.observability.errors.ports :as error-ports]
             [wagoe.observability.logging.ports :as log-ports]
+            [wagoe.platform.shell.http.interceptors :as http-interceptors]
             [wagoe.platform.shell.service-interceptors :as si]))
 
 (defn- recording-system
@@ -56,3 +57,46 @@
                                       {:logger logger})
         (catch clojure.lang.ExceptionInfo _))
       (is (= [level] @levels) (str type)))))
+
+(deftest ^:unit only-a-server-error-reaches-the-error-tracker
+  ;; BOU-714: and before it, nothing did — the reporter read the wrong key.
+  (doseq [[ex reported?] [[(ex-info "no" {:type :validation-error}) false]
+                          [(ex-info "no" {:type :forbidden}) false]
+                          [(ex-info "no" {:type :not-found}) false]
+                          [(ex-info "no" {:type :conflict}) false]
+                          [(ex-info "no" {:type :internal-error}) true]
+                          [(RuntimeException. "no") true]]]
+    (let [captured (atom 0)
+          reporter #_{:clj-kondo/ignore [:missing-protocol-method]}
+          (reify
+            error-ports/IErrorReporter
+            (capture-exception [_ _ _] (swap! captured inc))
+            error-ports/IErrorContext
+            (add-breadcrumb! [_ _] nil))]
+      (try
+        (si/execute-service-operation :get-user {} (fn [_] (throw ex))
+                                      {:error-reporter reporter})
+        (catch Exception _))
+      (is (= (if reported? 1 0) @captured) (str ex)))))
+
+(deftest ^:unit a-service-5xx-in-a-request-is-reported-once
+  ;; The service reports it, then the HTTP layer sees the same throwable (BOU-714).
+  (let [captured (atom [])
+        reporter #_{:clj-kondo/ignore [:missing-protocol-method]}
+        (reify
+          error-ports/IErrorReporter
+          (capture-exception [_ e _] (swap! captured conj (ex-message e)))
+          error-ports/IErrorContext
+          (add-breadcrumb! [_ _] nil))
+        system   {:error-reporter reporter}
+        request! (fn [msg]
+                   (http-interceptors/run-http-interceptors
+                    (fn [_] (si/execute-service-operation
+                             :get-user {} (fn [_] (throw (RuntimeException. ^String msg))) system))
+                    http-interceptors/default-http-interceptors
+                    {:request-method :get :uri "/x" :headers {}}
+                    system))]
+    (is (= 500 (:status (request! "first"))))
+    (is (= 1 (count @captured)) "once, not by the service and again by the HTTP layer")
+    (request! "second")
+    (is (= 2 (count @captured)) "a different exception is reported too")))
