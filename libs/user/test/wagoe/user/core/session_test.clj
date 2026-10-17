@@ -233,7 +233,14 @@
     (let [sess (make-session {:ip-address "1.2.3.4"})
           prev [(make-session {:ip-address "1.2.3.4"})]
           result (session/detect-suspicious-activity? sess prev)]
-      (is (not (contains? (set (:reasons result)) :ip-change))))))
+      (is (not (contains? (set (:reasons result)) :ip-change)))))
+
+  (testing "two unresolved IPs are a change, not the same address (BOU-695)"
+    (let [result (session/detect-suspicious-activity? (make-session {:ip-address nil})
+                                                      [(make-session {:ip-address nil})])]
+      (is (contains? (set (:reasons result)) :ip-change)))
+    (is (false? (session/is-same-device? {:ip-address nil :user-agent "ua"}
+                                         {:ip-address nil :user-agent "ua"})))))
 
 ;; =============================================================================
 ;; calculate-session-risk-score

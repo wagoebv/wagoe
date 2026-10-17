@@ -113,11 +113,16 @@
   (filter #(should-cleanup-session? % current-time {:cleanup-grace-period-days 7}) sessions))
 
 ;; Security functions
+(defn same-ip?
+  "Equal and known: two unresolved client addresses are not the same one."
+  [a b]
+  (and (some? a) (= a b)))
+
 (defn detect-suspicious-activity?
   "Detect suspicious patterns (IP change, concurrent sessions) between current and previous sessions."
   [session previous-sessions]
   (let [ip-changes (and (seq previous-sessions)
-                        (not= (:ip-address session) (:ip-address (first previous-sessions))))
+                        (not (same-ip? (:ip-address session) (:ip-address (first previous-sessions)))))
         concurrent-sessions (> (count previous-sessions) 0)
         reasons (cond-> []
                   ip-changes (conj :ip-change)
@@ -182,7 +187,7 @@
 (defn is-same-device?
   "Check if two device-info maps represent the same device (same IP and similar user-agent)."
   [device1 device2]
-  (and (= (:ip-address device1) (:ip-address device2))
+  (and (same-ip? (:ip-address device1) (:ip-address device2))
        (or (= (:user-agent device1) (:user-agent device2))
            ;; Allow minor version differences in user agent
            (let [ua1-base (str/replace (:user-agent device1) #"/[0-9.]+" "")

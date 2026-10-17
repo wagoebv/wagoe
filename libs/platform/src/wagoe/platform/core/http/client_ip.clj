@@ -115,31 +115,66 @@
 (defn- trusted? [cidrs bs]
   (boolean (some #(in-cidr? bs %) cidrs)))
 
+(defn- ->ip
+  "Bytes for an address string, read as a hop is (port and brackets allowed),
+   or for bytes from `parse-ip`; nil otherwise."
+  [ip]
+  (cond
+    (string? ip) (parse-ip (host-part ip))
+    (and (vector? ip) (#{4 16} (count ip)) (every? #(and (int? %) (<= 0 % 255)) ip))
+    (cond-> ip (= 16 (count ip)) unwrap-ipv4-mapped)))
+
+(defn- ->cidr [cidr]
+  (cond
+    (string? cidr) (parse-cidr cidr)
+    ;; As parse-cidr returns it: an IPv4-mapped range already folded.
+    (and (map? cidr) (some? (:bytes cidr)) (= (:bytes cidr) (->ip (:bytes cidr))) (int? (:prefix cidr))
+         (<= 0 (:prefix cidr) (* 8 (count (:bytes cidr)))))
+    cidr))
+
+(defn in-any?
+  "True when `ip` lies in one of `cidrs`, each read as the trust walk reads it
+   (strings or `parse-ip` / `parse-cidr` values). Anything unparseable, nil
+   included, is false."
+  [ip cidrs]
+  (boolean (some->> (->ip ip) (trusted? (keep ->cidr cidrs)))))
+
+(defn in-network?
+  "True when `ip` lies in `cidr`; see `in-any?`."
+  [ip cidr]
+  (in-any? ip [cidr]))
+
 (defn client-ip
   "The client's address: `:remote-addr`, unless that is a trusted proxy, in
-   which case the right-most X-Forwarded-For hop that is not one. A malformed
-   hop ends the walk at the nearest trusted address, since nothing to its left
-   was written by a proxy we trust. `cidrs` comes from `parse-trusted-proxies`."
+   which case the right-most X-Forwarded-For hop that is not one. Nil when the
+   hop the walk stops at is not an address (`unknown`): the proxy's own address
+   would put an outside client inside the proxy's network. `cidrs` comes from
+   `parse-trusted-proxies`."
   [request cidrs]
   (let [peer (:remote-addr request)]
     (if-not (and (seq cidrs) (trusted? cidrs (parse-ip (host-part peer))))
       peer
       ;; Ring joins repeated headers with ",", so this reads all of them.
-      (loop [hops    (some-> (get-in request [:headers "x-forwarded-for"])
-                             (str/split #",")
-                             reverse)
+      ;; Empty elements are ignored, as RFC 9110 §5.6.1 requires.
+      (loop [hops    (some->> (get-in request [:headers "x-forwarded-for"])
+                              (re-seq #"[^,]+")
+                              (remove str/blank?)
+                              reverse)
              nearest peer]
         (if-let [hop (first hops)]
           (let [addr (host-part hop)
                 bs   (parse-ip addr)]
             (cond
-              (nil? bs)           nearest
+              (nil? bs)           nil
               (trusted? cidrs bs) (recur (rest hops) addr)
               :else               addr))
           nearest)))))
 
 (defn request-ip
-  "The client address resolved on the request, or the peer when the request did
-   not pass through the client-ip middleware."
+  "The client address resolved on the request; nil when the middleware could
+   not resolve one. The peer only when the request did not pass through the
+   client-ip middleware."
   [request]
-  (or (:client-ip request) (:remote-addr request)))
+  (if (contains? request :client-ip)
+    (:client-ip request)
+    (:remote-addr request)))

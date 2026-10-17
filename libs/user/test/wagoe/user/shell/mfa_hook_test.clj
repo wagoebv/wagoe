@@ -3,6 +3,7 @@
    factor is asked for."
   (:require [clojure.test :refer [deftest is testing use-fixtures]]
             [one-time.core :as otp]
+            [wagoe.platform.core.http.client-ip :as client-ip]
             [wagoe.user.ports :as ports]
             [wagoe.user.shell.auth :as auth]
             [wagoe.user.shell.in-memory-repository-test :as mem]
@@ -30,7 +31,7 @@
   (auth/authenticate-user svc "ada@example.com" password
                           (merge {:ip-address "10.0.0.5" :user-agent "test"} ctx)))
 
-(def ^:private outside-office? (fn [_user ctx] (not (.startsWith ^String (:ip-address ctx) "10."))))
+(def ^:private outside-office? (fn [_user ctx] (not (client-ip/in-any? (:ip-address ctx) ["10.0.0.0/8"]))))
 
 (deftest ^:unit ^:security default-asks-only-users-with-mfa
   (let [secret (mfa/generate-totp-secret)
@@ -49,7 +50,9 @@
     (testing "MFA stays enabled in the database"
       (is (true? (:mfa-enabled (ports/find-user-by-id users (:id user))))))
     (testing "outside it is still asked for"
-      (is (= :mfa-required (get-in (login s {:ip-address "203.0.113.7"}) [:error :type]))))))
+      (is (= :mfa-required (get-in (login s {:ip-address "203.0.113.7"}) [:error :type]))))
+    (testing "and so is a client the proxy did not name (BOU-695)"
+      (is (= :mfa-required (get-in (login s {:ip-address nil}) [:error :type]))))))
 
 (deftest ^:unit ^:security hook-requiring-mfa-refuses-a-user-without-it
   (let [{:keys [svc user]} (setup {:mfa-required? outside-office?})
