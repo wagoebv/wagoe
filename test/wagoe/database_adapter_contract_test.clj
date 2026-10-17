@@ -332,6 +332,37 @@
                                                             :values [{:id (str (UUID/randomUUID)) :tone "neon"}]}))))
           "a value outside the enum was accepted"))))
 
+(def ^:private long-value
+  "Ten bcrypt-hashed backup codes as JSON are about 650 characters (BOU-715)."
+  (json/generate-string (repeat 10 (apply str "$2a$12$" (repeat 53 "x")))))
+
+(defn- stored-value [ctx table]
+  (val (first (first (db/execute-query! ctx {:select [:v] :from [table]})))))
+
+(defn- collections-hold-long-values
+  "A collection field's column holds more than 255 characters (BOU-715)."
+  [ctx]
+  (ddl! ctx "DROP TABLE IF EXISTS coll_cols")
+  (db/initialize-tables-from-schemas! ctx {"coll_cols" [:map [:id :uuid] [:v [:vector :string]]]})
+  (or (attempt #(db/execute-update! ctx {:insert-into :coll_cols :values [{:id (str (UUID/randomUUID)) :v long-value}]}))
+      (when-not (= long-value (stored-value ctx :coll_cols)) "the value came back changed")))
+
+(defn- short-columns-are-widened
+  "A VARCHAR(255) column whose field now asks for more is widened on the next
+   initialisation, its rows and NOT NULL kept (BOU-715)."
+  [ctx]
+  (ddl! ctx "DROP TABLE IF EXISTS short_cols")
+  (db/initialize-tables-from-schemas! ctx {"short_cols" [:map [:id :uuid] [:v :string]]})
+  (db/execute-update! ctx {:insert-into :short_cols :values [{:id (str (UUID/randomUUID)) :v "kept"}]})
+  (let [later {"short_cols" [:map [:id :uuid] [:v [:vector :string]]]}]
+    (or (attempt #(dotimes [_ 2] (db/initialize-tables-from-schemas! ctx later)))
+        (when-not (= "kept" (stored-value ctx :short_cols)) "the row did not survive")
+        (attempt #(db/execute-update! ctx {:update :short_cols :set {:v long-value}}))
+        (when-not (= long-value (stored-value ctx :short_cols)) "the long value came back changed")
+        (when (nil? (attempt #(db/execute-update! ctx {:insert-into :short_cols
+                                                       :values [{:id (str (UUID/randomUUID)) :v nil}]})))
+          "NOT NULL was lost"))))
+
 (defn- unique-index-on-duplicates
   "A unique index the rows break is a :conflict naming the table, not a raw
    driver error."
@@ -457,6 +488,8 @@
     :ddl/if-exists-twice       ddl-twice
     :ddl/schema-fields-added   schema-fields-reach-an-existing-table
     :ddl/added-enum-enforced   an-added-enum-is-enforced
+    :ddl/collections-long      collections-hold-long-values
+    :ddl/short-columns-widened short-columns-are-widened
     :ddl/search-path           columns-follow-search-path
     :ddl/unique-over-duplicates unique-index-on-duplicates
     :transactions/rollback     rollback-undoes

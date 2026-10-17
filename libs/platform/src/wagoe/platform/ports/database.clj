@@ -194,7 +194,9 @@
        - :primary-key - boolean
        - :generated - boolean: the database fills it (identity,
          auto-increment, rowid, or a computed column)
-       
+       - :max-length - a character column's declared length, or nil (always
+         nil on SQLite, which enforces none)
+
      Example:
        (get-table-info sqlite-adapter ds :users)
        ;; => [{:name \"id\" :type \"TEXT\" :not-null true :primary-key true} ...]")
@@ -273,6 +275,10 @@
      :alter-foreign-key     ALTER TABLE … ADD CONSTRAINT … FOREIGN KEY"
   #{:schemas :transactional-ddl :index-if-not-exists :column-if-not-exists
     :full-text :on-conflict :row-locks :alter-foreign-key})
+
+(def default-string-length
+  "How long `column-type` makes a :string given no length."
+  255)
 
 (def logical-column-types
   "What `column-type` answers for."

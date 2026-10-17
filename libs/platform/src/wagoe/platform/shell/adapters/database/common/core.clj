@@ -80,6 +80,7 @@
 (def create-index-if-not-exists! schema/create-index-if-not-exists!)
 (def add-columns-if-not-exist! schema/add-columns-if-not-exist!)
 (def add-check-if-not-exists! schema/add-check-if-not-exists!)
+(def widen-column! schema/widen-column!)
 
 ;; =============================================================================
 ;; Query Building and Formatting (Re-exported from utils)

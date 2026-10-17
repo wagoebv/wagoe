@@ -82,7 +82,7 @@
        [:tenant-id {:optional true} [:maybe :uuid]]
        [:name [:string {:min 1 :max 255}]]
        [:role [:enum :admin :user :viewer]]
-       [:avatar-url {:optional true} :string]
+       [:avatar-url {:optional true :column-type :text} :string]
        [:login-count {:optional true} :int]
        [:last-login {:optional true} inst?]]
       (into user-preferences-flat-fields)
@@ -136,7 +136,7 @@
    [:created-at inst?]
    [:last-accessed-at {:optional true} [:maybe inst?]]
    [:revoked-at {:optional true} [:maybe inst?]]
-   [:user-agent {:optional true} :string]
+   [:user-agent {:optional true :column-type :text} :string]
    [:ip-address {:optional true} [:maybe :string]]])
 
 (def UserIdentity
@@ -214,9 +214,9 @@
    [:changes {:optional true} [:maybe :map]] ; Map of changed fields: {:field "name" :old "John" :new "Jane"}
    [:metadata {:optional true} [:maybe :map]] ; Additional context: {:bulk-count 5, :reason "security"}
    [:ip-address {:optional true} [:maybe :string]]
-   [:user-agent {:optional true} [:maybe :string]]
+   [:user-agent {:optional true :column-type :text} [:maybe :string]]
    [:result [:enum :success :failure]]
-   [:error-message {:optional true} [:maybe :string]] ; Error details if result is :failure
+   [:error-message {:optional true :column-type :text} [:maybe :string]] ; Error details if result is :failure
    [:created-at inst?]])
 
 ;; =============================================================================
