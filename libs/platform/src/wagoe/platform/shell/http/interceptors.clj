@@ -244,21 +244,12 @@
         (falsy-config-values token) false
         :else nil))))
 
-(def ^:private dev-like-environments
-  #{"dev" "test" "local"})
-
-(defn- detect-environment
-  "The profile the app booted with, else `wagoe.config/active-profile`."
-  [system]
-  (config/normalize-env
-   (name (or (:environment system)
-             (get-in system [:config :environment])
-             (config/active-profile)))))
-
 (defn- dev-like?
-  "True when the runtime environment is one people develop against."
+  "True when the profile the app booted with, else the active one, is one
+   people develop against."
   [system]
-  (boolean (dev-like-environments (detect-environment system))))
+  (config/dev-like? (or (:environment system)
+                        (get-in system [:config :environment]))))
 
 (defn dev-error-info
   "WGE code, category and fix for `exception`, or nil.
@@ -292,12 +283,11 @@
   [system]
   (let [override (or (System/getenv "WAGOE_ENFORCE_TYPED_ERRORS")
                      (System/getProperty "wagoe.enforceTypedErrors"))
-        parsed-override (parse-boolean-config override)
-        env (detect-environment system)]
+        parsed-override (parse-boolean-config override)]
     (if (some? parsed-override)
       parsed-override
       ;; Default: enforce in dev-like environments, skip in production
-      (dev-like-environments env))))
+      (dev-like? system))))
 
 (defn- respond-missing-error-type
   "Emit a diagnostic response for ex-info missing :type."

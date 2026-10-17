@@ -47,6 +47,13 @@
   ([] (active-profile (System/getenv "WAG_ENV")))
   ([wag-env] (or (named-profile wag-env) :dev)))
 
+(defn dev-like?
+  "Whether `profile` (keyword or string) is one people develop against: dev,
+   test or local. Nil asks about `active-profile`."
+  ([] (dev-like? nil))
+  ([profile]
+   (contains? #{"dev" "test" "local"} (normalize-env (name (or profile (active-profile)))))))
+
 (defn- url-exists? [^java.net.URL url]
   (try (with-open [_ (.openStream url)] true)
        (catch java.io.IOException _ false)))

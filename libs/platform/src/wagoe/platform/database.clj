@@ -16,11 +16,11 @@
    HoneySQL map against a JDBC connection, and the differences between engines
    live behind the `DBAdapter` port. A second protocol here would name a seam
    nothing implements — the mistake ADR-037 removed."
-  (:require [wagoe.platform.shell.adapters.database.common.execution :as execution]
+  (:require [wagoe.platform.shell.adapters.database.common.connection :as connection]
+            [wagoe.platform.shell.adapters.database.common.execution :as execution]
             [wagoe.observability.core.sql-redaction :as redaction]
             [wagoe.platform.shell.adapters.database.common.schema :as schema]
             [wagoe.platform.shell.adapters.database.common.utils :as utils]
-            [wagoe.platform.shell.adapters.database.config :as config]
             [wagoe.platform.shell.adapters.database.factory :as factory]
             [wagoe.platform.shell.adapters.database.utils.schema :as schema-utils]
             [wagoe.platform.shell.database.migrations :as migrations]))
@@ -166,16 +166,15 @@
   execution/db-context?)
 
 ;; =============================================================================
-;; Configuration
+;; Connections
 ;; =============================================================================
 
-(def get-active-db-config
-  "The database configuration the application is running on.
-
-   Published because tenant provisioning needs it to open a connection to a
-   second database — the one case where a module legitimately asks what it is
-   connected to."
-  config/get-active-db-config)
+(defn unpooled-connection
+  "A new connection to the database `ctx` is connected to, outside its pool.
+   Tenant migrations need one: they set search_path for the whole session,
+   which must not go back to the pool. The caller closes it."
+  ^java.sql.Connection [ctx]
+  (connection/unpooled-connection (:datasource ctx)))
 
 ;; =============================================================================
 ;; Schema creation from Malli

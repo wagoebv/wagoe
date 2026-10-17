@@ -7,13 +7,13 @@
    public but not in existing tenants, and queries executed under the tenant
    search_path fail with missing relation/column errors (the drift this fixes).
 
-   Each tenant run pins the JDBC connection's search_path to the tenant schema
-   via the PostgreSQL `currentSchema` connection property, so migratus creates
-   its own `schema_migrations` ledger inside that schema and applies DDL there.
+   Each tenant run pins search_path on a connection of its own to the tenant
+   schema, so migratus creates its own `schema_migrations` ledger inside that
+   schema and applies DDL there.
 
    Because migrations run once per tenant schema, tenant-run migrations must be
    idempotent / tenant-scoped."
-  (:require [wagoe.platform.database :as db-config]
+  (:require [wagoe.platform.database :as db]
             [wagoe.tenant.core.tenant :as tenant-core]
             [clojure.tools.logging :as log]
             [migratus.core :as migratus]))
@@ -24,46 +24,46 @@
    separate from the public `migrations/` set, which runs once against public."
   "migrations-tenant")
 
-(defn tenant-migratus-config
-  "Migratus config that applies migrations inside a single tenant schema.
+(defn- with-tenant-connection
+  "Call (f conn) on a connection of its own to the database `ctx` uses, with
+   search_path the tenant schema ONLY and no statement timeout, since
+   migrations run long (BOU-658).
 
-   Pins `currentSchema` to the tenant schema ONLY (no `,public` fallback). This
-   is deliberate: with a `<schema>,public` search_path migratus's
+   Tenant-only, no `,public` fallback: with one, migratus's
    `CREATE TABLE IF NOT EXISTS schema_migrations` resolves to the existing
-   `public.schema_migrations`, so every tenant would share the public ledger and
-   the second tenant would skip migrations it never actually ran. Tenant-only
-   search_path gives each schema its own ledger and full isolation.
+   `public.schema_migrations`, every tenant shares the public ledger, and the
+   second tenant skips migrations it never ran. So migrations run here may only
+   reference tables in the tenant schema.
 
-   The consequence: migrations run here must be tenant-scoped — they may only
-   reference tables that exist in the tenant schema. Point `:migration-dir` at a
-   tenant-scoped migration set, not the full public migration set."
-  [db-cfg schema-name migration-dir]
-  {:store                :database
-   :migration-dir        migration-dir
-   :init-in-transaction? false
-   :migration-table-name "schema_migrations"
-   :db                   {:dbtype        "postgresql"
-                          :host          (:host db-cfg)
-                          :port          (:port db-cfg)
-                          :dbname        (:name db-cfg)
-                          :user          (:username db-cfg)
-                          :password      (:password db-cfg)
-                          :currentSchema schema-name}})
+   Outside the pool, so the session settings close with the connection instead
+   of reaching the application's next query."
+  [ctx schema-name f]
+  (with-open [conn (db/unpooled-connection ctx)]
+    (with-open [st (.createStatement conn)]
+      (.execute st (str "SET search_path TO " schema-name))
+      (.execute st "SET statement_timeout = 0"))
+    (f conn)))
 
 (defn migrate-tenant!
-  "Run all pending tenant-scoped migrations inside one tenant schema.
-
-   `db-cfg` is a database config map (as from `get-active-db-config`) carrying
-   :host/:port/:name/:username/:password. `migration-dir` is a classpath-relative
-   tenant migration directory. Throws on a malformed schema name."
-  ([db-cfg schema-name]
-   (migrate-tenant! db-cfg schema-name default-tenant-migration-dir))
-  ([db-cfg schema-name migration-dir]
+  "Run all pending tenant-scoped migrations inside one tenant schema of the
+   database `ctx` (the boot `:wagoe/db-context`) is connected to.
+   `migration-dir` is a classpath-relative tenant migration directory. Throws on
+   a malformed schema name."
+  ([ctx schema-name]
+   (migrate-tenant! ctx schema-name default-tenant-migration-dir))
+  ([ctx schema-name migration-dir]
    (when-not (tenant-core/valid-schema-name? schema-name)
      (throw (ex-info "Unsafe tenant schema name"
                      {:type :validation-error :schema-name schema-name})))
    (log/info "Migrating tenant schema" {:schema schema-name :migration-dir migration-dir})
-   (migratus/migrate (tenant-migratus-config db-cfg schema-name migration-dir))
+   (with-tenant-connection ctx schema-name
+     (fn [conn]
+       (migratus/migrate {:store                :database
+                          :migration-dir        migration-dir
+                          :init-in-transaction? false
+                          :migration-table-name "schema_migrations"
+                          :db                   {:connection          conn
+                                                 :managed-connection? true}})))
    schema-name))
 
 (defn migrate-all-tenants!
@@ -73,14 +73,13 @@
    returns {:schemas-migrated [...] :errors {schema-name message}}. Callers get
    the schema list from `provisioning/list-tenant-schemas` (kept out of this ns
    to avoid a dependency cycle with provisioning)."
-  ([schemas] (migrate-all-tenants! (db-config/get-active-db-config) schemas))
-  ([db-cfg schemas] (migrate-all-tenants! db-cfg schemas default-tenant-migration-dir))
-  ([db-cfg schemas migration-dir]
+  ([ctx schemas] (migrate-all-tenants! ctx schemas default-tenant-migration-dir))
+  ([ctx schemas migration-dir]
    (log/info "Fanning out migrations to tenant schemas" {:count (count schemas)})
    (reduce
     (fn [acc schema]
       (try
-        (migrate-tenant! db-cfg schema migration-dir)
+        (migrate-tenant! ctx schema migration-dir)
         (update acc :schemas-migrated conj schema)
         (catch Exception e
           (log/error e "Tenant migration failed" {:schema schema})

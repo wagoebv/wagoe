@@ -175,7 +175,7 @@
           executed-ddl (atom [])]
       (with-redefs [wagoe.tenant.shell.provisioning/schema-exists? (constantly false)
                     wagoe.tenant.shell.provisioning/create-schema! (fn [_ _] nil)
-                    wagoe.tenant.shell.provisioning/populate-tenant-schema! (fn [_]
+                    wagoe.tenant.shell.provisioning/populate-tenant-schema! (fn [_ _]
                                                                                  (throw (ex-info "migrate boom" {})))
                     wagoe.platform.database/execute-ddl! (fn [_ sql]
                                                                                          (swap! executed-ddl conj sql))]

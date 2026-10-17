@@ -72,7 +72,8 @@ File upload and storage functionality for the Wagoe framework. Supports local fi
 ### 2. S3 Storage
 
 ```clojure
-(require '[wagoe.storage.shell.adapters.s3 :as s3])
+(require '[wagoe.storage.shell.adapters.s3 :as s3]
+         '[wagoe.storage.shell.adapters.image-processor :as img])
 
 ;; Create S3 storage adapter
 (def storage
