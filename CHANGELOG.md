@@ -39,6 +39,8 @@ for what is public API, what is internal, and how deprecations are announced.
   function of the user. Unset, admins still land on `/web/admin/users`, others on `/web/dashboard`.
 - **Replace or drop the built-in `/web/dashboard`** (BOU-680): `:dashboard {:handler my.app/page}` or
   `:dashboard false` under `:wagoe/user`, so an app can serve the path itself.
+- **Set where layouts link home** (BOU-688): `:home` under `:wagoe/user` sets the logo, back and dashboard links.
+  Unset, they point at `/web/dashboard`, or `/web` with `:dashboard false`.
 - **Per-login MFA decision** (BOU-670): `:wagoe/user {:auth {:mfa-required? my.app/fn}}`, a `(fn [user login-context])`,
   can waive or require MFA for password and OIDC logins. A user required to without MFA set up is refused.
 - **Sign in with OpenID Connect** (BOU-447): authorization code with PKCE, a "Sign in with X" button per provider.
@@ -111,6 +113,9 @@ for what is public API, what is internal, and how deprecations are announced.
 - **Migrate, seed and reset picked their profile from `-Denv`, `ENV` or `ENVIRONMENT`; a blank `WAG_ENV` failed the boot** (BOU-686).
   Everything reads `WAG_ENV` now, blank meaning dev. Set it where you relied on the others, `clojure -M:prod:migrate` included.
 - **The storage README documented config keys the module never reads** (BOU-646). It is `{:provider :local :root …}`; see the README.
+- **`POST /api/v1/auth/login` and `/api/v1/sessions` answered 200 to a failed login** (BOU-691). Wrong credentials now
+  answer 401 and a locked account 429, in the standard error shape; check the status, not `authenticated`.
+- **`wagoe session create --user-id` could never create a session, and is removed** (BOU-691). Log in through the API.
 - **Job args came back as strings on the `:db` and `:redis` queues: keywords, UUIDs, instants** (BOU-689). Jobs are stored
   as transit, which older workers cannot read: upgrade them together. Old jobs keep string args, so convert only strings.
 - **Security: the rate limiter keyed on an unchecked `X-Api-Key`, so a caller could dodge its limit or drain another's** (BOU-690).

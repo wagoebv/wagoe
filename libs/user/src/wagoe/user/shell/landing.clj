@@ -1,10 +1,11 @@
 (ns wagoe.user.shell.landing
-  "The `:login-redirect` and `:dashboard` settings of `:wagoe/user`: checked
-   and resolved at boot, read when a user signs in."
+  "The `:login-redirect`, `:dashboard` and `:home` settings of `:wagoe/user`:
+   checked and resolved at boot, read when a user signs in or a page renders."
   (:require [clojure.tools.logging :as log]
             [malli.error :as me]
             [wagoe.core.utils.redirect :as redirect]
             [wagoe.core.validation :as cv]
+            [wagoe.shared.ui.core.home :as home]
             [wagoe.user.core.landing :as landing]
             [wagoe.user.schema :as user-schema]))
 
@@ -30,8 +31,8 @@
     x))
 
 (defn prepare
-  "`config` with `:login-redirect` and `:dashboard` checked and their symbols
-   resolved. Throws :configuration-error on a bad value, so boot fails. The
+  "`config` with `:login-redirect`, `:dashboard` and `:home` checked and the
+   symbols resolved. Throws :configuration-error on a bad value, so boot fails. The
    module wiring calls it once; handlers expect its output."
   [config]
   (let [s (settings config)]
@@ -74,3 +75,14 @@
       (false? d) nil
       (map? d)   (:handler d)
       :else      (default))))
+
+(defn wrap-home
+  "Middleware binding the layouts' home path for each request. Identity when
+   the settings leave it at the default."
+  [config]
+  (if-let [path (landing/home-path (settings config))]
+    (fn [handler]
+      (fn [request]
+        (binding [home/*path* path]
+          (handler request))))
+    identity))
