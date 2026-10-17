@@ -78,6 +78,7 @@ curl -X DELETE http://localhost:3000/api/auth/sessions/{session-id} \
 * `JWT_SECRET` must be set (minimum 32 characters)
 * Internal keys use `:password-hash` (kebab-case), never `:password_hash`
 * Account lockout is enforced after repeated failed logins
+* `:wagoe/settings {:features {:user-web-ui {:enabled? false}}}` (`WAG_WEB_UI_ENABLED=false`) drops the HTML pages for an API-only deployment; see xref:guides:authentication.adoc#web-ui-off[what it removes]
 
 == Testing
 
