@@ -68,18 +68,14 @@
                                  "2026-03-10T23:30:00Z"
                                  "Europe/Amsterdam"
                                  "Midnight Event")
-          events [late-event]]
+          spanned (#'sut/with-spans [late-event] "Europe/Amsterdam")]
 
       ;; Should NOT appear on March 10 in Amsterdam timezone
-      (is (empty? (#'sut/events-on-date events
-                                        (LocalDate/of 2026 3 10)
-                                        "Europe/Amsterdam"))
+      (is (empty? (#'sut/on-date spanned (LocalDate/of 2026 3 10)))
           "Event at 23:00 UTC should NOT appear on March 10 in Amsterdam (it's March 11 locally)")
 
       ;; Should appear on March 11 in Amsterdam timezone
-      (is (= 1 (count (#'sut/events-on-date events
-                                            (LocalDate/of 2026 3 11)
-                                            "Europe/Amsterdam")))
+      (is (= 1 (count (#'sut/on-date spanned (LocalDate/of 2026 3 11))))
           "Event at 23:00 UTC should appear on March 11 in Amsterdam (00:00+01:00 locally)"))))
 
 (deftest ^:unit week-view-timezone-test
@@ -215,11 +211,12 @@
                                (LocalDate/of 2026 3 29)))
             "previous week shows nothing")))
     (testing "an event that started before the week shows from its first day"
-      (let [week (sut/week-view (LocalDate/of 2026 4 6)
-                                [(make-event "2026-03-20T00:00:00Z" "2026-04-08T00:00:00Z" "UTC" "Long")])]
-        (is (= ["Long"] (titles-on (week-row week :div.week-all-day) (LocalDate/of 2026 4 6))))
-        (is (= ["Long"] (titles-on (week-row week :div.week-all-day) (LocalDate/of 2026 4 7))))
-        (is (empty? (titles-on (week-row week :div.week-all-day) (LocalDate/of 2026 4 8))))))))
+      (let [all-day (week-row (sut/week-view (LocalDate/of 2026 4 6)
+                                             [(make-event "2026-03-20T00:00:00Z" "2026-04-08T00:00:00Z" "UTC" "Long")])
+                              :div.week-all-day)]
+        (is (= ["Long"] (titles-on all-day (LocalDate/of 2026 4 6))))
+        (is (= ["Long"] (titles-on all-day (LocalDate/of 2026 4 7))))
+        (is (empty? (titles-on all-day (LocalDate/of 2026 4 8))))))))
 
 (deftest ^:unit multi-day-edges-test
   (testing "an event ending at midnight does not spill into the next day"

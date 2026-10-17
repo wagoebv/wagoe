@@ -34,10 +34,12 @@
   [^Instant instant ^String timezone]
   (.atZone instant (ZoneId/of timezone)))
 
+(def ^:private ^DateTimeFormatter hh-mm (DateTimeFormatter/ofPattern "HH:mm"))
+
 (defn- format-time
   "Format a ZonedDateTime as HH:mm."
   [^ZonedDateTime zdt]
-  (.format zdt (DateTimeFormatter/ofPattern "HH:mm")))
+  (.format zdt hh-mm))
 
 (defn- days-in-month
   "Return the number of days in the given year/month."
@@ -64,24 +66,23 @@
         end   (some-> ^Instant (:end ev) (.minusNanos 1) (instant->local-date tz))]
     [start (if (and end (.isAfter ^LocalDate end start)) end start)]))
 
-(defn- events-on-date
-  "Return events from coll that cover the given LocalDate in the given timezone."
-  [events ^LocalDate date ^String timezone]
-  (filter (fn [ev]
-            (let [[^LocalDate from ^LocalDate to] (event-span ev timezone)]
-              (not (or (.isBefore date from) (.isAfter date to)))))
-          events))
+(defn- with-spans
+  "Pair each event with its span, computed once per view rather than per cell."
+  [events timezone]
+  (mapv (fn [ev] [ev (event-span ev timezone)]) events))
 
-(defn- spans-days?
-  "True for all-day events and events that run past their start date."
-  [ev timezone]
-  (or (boolean (:all-day? ev))
-      (let [[from to] (event-span ev timezone)] (not= from to))))
+(defn- on-date
+  "Events from with-spans pairs that cover date."
+  [spanned ^LocalDate date]
+  (keep (fn [[ev [^LocalDate from ^LocalDate to]]]
+          (when-not (or (.isBefore date from) (.isAfter date to)) ev))
+        spanned))
 
 (defn- label
-  "A [:t key] marker, or its translation when the caller passed a :t fn."
+  "A [:t key] marker, or its translation when the caller passed a :t fn.
+   A key t does not know renders as its name, as wagoe.i18n.shell.render does."
   [t k]
-  (if t (t k) [:t k]))
+  (if t (or (t k) (name k)) [:t k]))
 
 (def ^:private month-keys
   [:calendar/month-january :calendar/month-february :calendar/month-march
@@ -92,6 +93,11 @@
 (def ^:private day-keys
   [:calendar/day-mon :calendar/day-tue :calendar/day-wed :calendar/day-thu
    :calendar/day-fri :calendar/day-sat :calendar/day-sun])
+
+(def ^:private day-letter-keys
+  [:calendar/day-letter-m :calendar/day-letter-t :calendar/day-letter-w
+   :calendar/day-letter-t :calendar/day-letter-f :calendar/day-letter-s
+   :calendar/day-letter-s])
 
 (defn- month-name
   "Month name for a 1-based month int, as a marker or translated by t."
@@ -140,9 +146,9 @@
   "Badge for ev drawn on date: the time shows only on the day the event starts."
   [ev ^LocalDate date timezone opts]
   (event-badge ev timezone
-               (assoc opts :show-time?
-                      (and (not (:all-day? ev))
-                           (.isEqual date (instant->local-date (:start ev) timezone))))))
+               (cond-> opts
+                 (not (.isEqual date (instant->local-date (:start ev) timezone)))
+                 (assoc :show-time? false))))
 
 (defn day-cell
   "Render a single day cell in a calendar grid.
@@ -218,7 +224,8 @@
                       (if (pos? remainder)
                         (concat all-cells (repeat (- 7 remainder) nil))
                         all-cells))
-         weeks      (partition 7 padded)]
+         weeks      (partition 7 padded)
+         spanned    (with-spans events timezone)]
      [:div {:class "calendar-month"}
       [:div.calendar-header
        [:span.month-title (month-name t month) " " year]]
@@ -233,9 +240,7 @@
           (for [date week]
             (if (nil? date)
               [:div.day-cell.filler]
-              (day-cell date
-                        (events-on-date events date timezone)
-                        opts)))])]])))
+              (day-cell date (on-date spanned date) opts)))])]])))
 
 ;; =============================================================================
 ;; week-view
@@ -265,7 +270,15 @@
           :or   {timezone "UTC"}} opts
          week-dates (map #(.plusDays start-date %) (range 7))
          hours      (range 24)
-         {spanning true timed false} (group-by #(spans-days? % timezone) events)]
+         ;; All-day and multi-day events go in the all-day row; the rest are
+         ;; bucketed by the [date hour] they start in.
+         {spanning true timed false}
+         (group-by (fn [[ev [from to]]] (or (boolean (:all-day? ev)) (not= from to)))
+                   (with-spans events timezone))
+         by-hour    (group-by (fn [[ev]]
+                                (let [zdt (instant->zdt (:start ev) timezone)]
+                                  [(.toLocalDate zdt) (.getHour zdt)]))
+                              timed)]
      [:div {:class "calendar-week"}
       ;; Column headers
       [:div.week-header
@@ -282,7 +295,7 @@
        (for [date week-dates]
          [:div {:class "week-cell"
                 :data-date (str date)}
-          (for [ev (events-on-date spanning date timezone)]
+          (for [ev (on-date spanning date)]
             (badge-on-date ev date timezone opts))])]
       ;; Hour rows
       [:div.week-body
@@ -290,16 +303,11 @@
          [:div.hour-row
           [:div.time-label (format "%02d:00" hour)]
           (for [date week-dates]
-            (let [day-events (filter (fn [ev]
-                                       (let [ev-zdt (instant->zdt (:start ev) timezone)]
-                                         (and (.isEqual (.toLocalDate ev-zdt) date)
-                                              (= hour (.getHour ev-zdt)))))
-                                     timed)]
-              [:div {:class "week-cell"
-                     :data-date (str date)
-                     :data-hour hour}
-               (for [ev day-events]
-                 (event-badge ev timezone opts))]))])]])))
+            [:div {:class "week-cell"
+                   :data-date (str date)
+                   :data-hour hour}
+             (for [[ev] (get by-hour [date hour])]
+               (event-badge ev timezone opts))])])]])))
 
 ;; =============================================================================
 ;; mini-calendar
@@ -352,9 +360,7 @@
       [:div.mini-grid
        ;; Day-of-week header (single letter)
        [:div.mini-row.header-row
-        (for [k [:calendar/day-letter-m :calendar/day-letter-t :calendar/day-letter-w
-                 :calendar/day-letter-t :calendar/day-letter-f :calendar/day-letter-s
-                 :calendar/day-letter-s]]
+        (for [k day-letter-keys]
           [:div.mini-day-header (label t k)])]
        ;; Week rows
        (for [week weeks]
