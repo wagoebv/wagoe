@@ -19,7 +19,9 @@
             [wagoe.platform.database :as db]
             [wagoe.observability.logging.shell.adapters.no-op :as logging-no-op]
             [wagoe.observability.errors.shell.adapters.no-op :as error-reporting-no-op]
-            [wagoe.test.logging :refer [with-silent-logging]]
+            [wagoe.test.logging :refer [logged-errors with-silent-logging]]
+            [wagoe.admin.shell.http.handlers.crud :as crud]
+            [wagoe.i18n.shell.catalogue :as catalogue]
             [clojure.test :refer [deftest is testing use-fixtures]])
   (:import [java.util UUID]
            [java.time Instant]))
@@ -247,3 +249,25 @@
                                  {:select [:*] :from [:plain_items] :where [:= :id id]})]
         (is (= "Gadget" (:name row)))
         (is (= 10 (:quantity row)))))))
+
+(def ^:private i18n-catalogue
+  (catalogue/create-map-catalogue (catalogue/load-catalogue "wagoe/i18n/translations")))
+
+(deftest ^:integration an-edit-on-a-taken-key-in-the-secondary-table-is-refused-on-its-field
+  ;; The unique key is on the secondary table's email (BOU-721).
+  (let [id    (insert-split-user! "mine@example.com" "Mine")
+        _     (insert-split-user! "taken@example.com" "Other")
+        sp    (schema-repo/create-schema-repository *db-ctx* admin-config)
+        [response errors] (logged-errors #((crud/update-entity-handler *admin-service* sp admin-config)
+                                           {:request-method      :put
+                                            :uri                 (str "/web/admin/test-profiles/" id)
+                                            :user                {:id (UUID/randomUUID) :role :admin :active true}
+                                            :path-params         {:entity "test-profiles" :id (str id)}
+                                            :form-params         {"email" "taken@example.com" "name" "Renamed"}
+                                            :i18n/catalogue      i18n-catalogue
+                                            :i18n/default-locale :en}))
+        body  (str (:body response))]
+    (is (= 422 (:status response)))
+    (is (= [] errors))
+    (is (re-find #"has-errors\"><label for=\"email\"" body) "the email field is marked")
+    (is (= "Mine" (:name (fetch-profile-row id))) "the primary table's write rolled back")))

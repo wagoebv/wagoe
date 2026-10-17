@@ -121,7 +121,9 @@ A write that a unique or foreign key refuses is a 409 `conflict`, on H2,
 SQLite, PostgreSQL and MySQL alike: `wagoe.platform.database` throws it, so every
 generated repository gets it. `details` names the constraint and the key's
 columns: `field` for one, `fields` for several. Nothing else of the driver's
-text is sent.
+text is sent. Where the driver does not name the columns (MySQL, or PostgreSQL
+with `lc_messages` other than English) they are read from the catalog; a key on
+an expression names none.
 
 [source,json]
 ----

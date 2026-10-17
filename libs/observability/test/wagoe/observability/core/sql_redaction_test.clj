@@ -40,6 +40,9 @@
       "MySQL foreign key")
   (is (= "invoices.number" (redaction/constraint-name {:message "Duplicate entry 'A-1' for key 'invoices.number'"}))
       "MySQL unique")
+  (is (= "invoices.number"
+         (redaction/constraint-name {:message "Duplicate entry 'x constraint \"users_email\"' for key 'users.email' for key 'invoices.number'"}))
+      "MySQL unique: the key after the value, not one the value names")
   (is (nil? (redaction/constraint-name {:message "[SQLITE_CONSTRAINT_UNIQUE] A UNIQUE constraint failed (UNIQUE constraint failed: invoices.number)"}))
       "SQLite names none"))
 
@@ -51,7 +54,7 @@
       "PostgreSQL's whole row")
   (is (= "Integrity constraint violated (SQLState 23000, constraint invoices.number)"
          (redaction/redacted-message {:sql-state "23000" :error-code 1062
-                                       :message "Duplicate entry 'alice@example.com' for key 'invoices.number'"}))
+                                      :message "Duplicate entry 'alice@example.com' for key 'invoices.number'"}))
       "MySQL's duplicate")
   (is (= "Invalid data (SQLState 22P02)"
          (redaction/redacted-message {:sql-state "22P02" :message "ERROR: invalid input syntax for type uuid: \"alice\""})))
@@ -87,11 +90,11 @@
   (testing "MySQL"
     (is (= "Database error (SQLState HY000, code 1366)"
            (redaction/redacted-message {:sql-state "HY000" :error-code 1366
-                                         :message "Incorrect integer value: 'alice' for column 'age' at row 1"})))
+                                        :message "Incorrect integer value: 'alice' for column 'age' at row 1"})))
     (is (nil? (redaction/redacted-message {:sql-state "42S02" :error-code 1146 :message "Table 'app.users' doesn't exist"})))
     (is (= "Database error (SQLState 42000, code 1064)"
            (redaction/redacted-message {:sql-state "42000" :error-code 1064
-                                         :message "You have an error in your SQL syntax; check the manual near ''alice@example.com', 3)' at line 1"}))
+                                        :message "You have an error in your SQL syntax; check the manual near ''alice@example.com', 3)' at line 1"}))
         "a syntax error quotes the statement, parameters filled in"))
   (testing "H2"
     (is (= "Invalid data (SQLState 22018)"

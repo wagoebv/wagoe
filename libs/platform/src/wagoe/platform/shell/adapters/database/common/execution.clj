@@ -170,21 +170,35 @@
                (not referenced?) (merge (select-keys v [:field :fields])))
              e)))
 
+(def ^:dynamic ^:private *outside-datasource*
+  "The datasource the outermost transaction took its connection from. A key's
+   columns are read there on PostgreSQL, which refuses every statement in a
+   transaction a refused write aborted."
+  nil)
+
 (defn- named-columns
   "`v`, a unique violation, with the columns of key `key-name` read from the
    database when the driver's message did not name them. Only a key on the
    statement's table: the message quotes the values sent, so its key name
-   may be one a caller wrote."
-  [ctx sql key-name {:keys [kind field fields] :as v}]
+   may be one a caller wrote. PostgreSQL reports the schema and table apart."
+  [ctx sql key-name {:keys [schema] :as reported} {:keys [kind field fields] :as v}]
   (let [target        (constraint/statement-table sql)
-        [table index] (when key-name
+        [table index] (cond
+                        (nil? key-name)   nil
+                        (:table reported) [(:table reported) key-name]
+                        :else
                         (if-let [i (str/last-index-of key-name ".")]
                           [(subs key-name 0 i) (subs key-name (inc i))]
                           [target key-name]))]
     (if (and (= :unique kind) (not (or field fields)) table
-             (= target (str/lower-case table)))
+             (= target (str/lower-case table))
+             ;; An English Detail that named no field is a key on an expression.
+             (not (str/starts-with? (str (:detail reported)) "Key (")))
       (try
-        (constraint/with-columns v (protocols/key-columns (:adapter ctx) (current-datasource ctx) table index))
+        (let [adapter (:adapter ctx)
+              ds      (or (when (= :postgresql (protocols/engine adapter)) *outside-datasource*)
+                          (current-datasource ctx))]
+          (constraint/with-columns v (protocols/key-columns adapter ds (if schema (keyword schema table) table) index)))
         (catch Exception e
           (log/debug "Could not read the columns of a key" {:key key-name :error (ex-message e)})
           v)
@@ -201,8 +215,8 @@
         sql      (first sql-query)
         cause    (redacted-cause e r)
         key-name (some-> r redaction/constraint-name)]
-    (when-let [v (some->> (some-> r (assoc :target (constraint/statement-table sql)) constraint/violation)
-                          (named-columns ctx sql key-name))]
+    (when-let [v (some->> (some-> r (assoc :target (constraint/statement-table sql) :engine (protocols/engine (:adapter ctx))) constraint/violation)
+                          (named-columns ctx sql key-name r))]
       (log/info (str what " refused by a constraint")
                 {:adapter adapter-dialect :sql sql :violation v :constraint-name key-name})
       (throw (conflict v sql cause)))
@@ -397,7 +411,8 @@
 
     (try
       (jdbc/with-transaction [tx-conn (current-datasource ctx)]
-        (binding [*transaction-datasource* tx-conn]
+        (binding [*transaction-datasource* tx-conn
+                  *outside-datasource*     (or *outside-datasource* (current-datasource ctx))]
           (let [tx-ctx (assoc ctx :datasource tx-conn)
                 start-time (System/currentTimeMillis)
                 results (mapv (fn [query-map]
@@ -448,7 +463,8 @@
     (add-database-breadcrumb "transaction" :start operation-details)
 
     (jdbc/with-transaction [tx-conn (current-datasource ctx)]
-      (binding [*transaction-datasource* tx-conn]
+      (binding [*transaction-datasource* tx-conn
+                *outside-datasource*     (or *outside-datasource* (current-datasource ctx))]
         (try
           (let [tx-ctx (assoc ctx :datasource tx-conn)
                 result (f tx-ctx)

@@ -128,6 +128,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **A refused key's field could be read from the value sent, and none was named on non-English PostgreSQL or MySQL 5.7
+  with mixed-case tables** (BOU-721). Columns are now read only from the driver's key list, or else the catalog.
 - **Creating a tenant with a 57–100 character slug failed with a 500** (BOU-716): its schema name passed PostgreSQL's
   63 bytes. Such slugs are now a validation error, and the admin no longer edits a slug.
 - **A typed 4xx reached the error tracker and marked its trace span errored** (BOU-714). Only 5xx and untyped errors

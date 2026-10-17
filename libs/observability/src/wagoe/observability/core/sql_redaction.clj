@@ -41,9 +41,11 @@
         (some #(some-> (re-find % (str message)) second column->field) not-null-patterns))))
 
 (def ^:private name-patterns
-  [#"constraint \"([\w$.]+)\""              ; PostgreSQL
+  ;; MySQL's unique first: it ends the message, after the value it quotes,
+  ;; which may hold anything the other patterns look for.
+  [#"for key '([\w$.]+)'$"                  ; MySQL unique
+   #"constraint \"([\w$.]+)\""              ; PostgreSQL
    #"CONSTRAINT `([\w$.]+)`"                ; MySQL foreign key
-   #"for key '([\w$.]+)'"                   ; MySQL unique
    #"violation: \"(?:\w+\.)?(\w+)[: ]"])    ; H2
 
 (defn constraint-name
@@ -121,7 +123,7 @@
   (when (= "org.postgresql.util.PSQLException" (.getName (class se)))
     (try
       (when-let [m (Reflector/invokeInstanceMethod se "getServerErrorMessage" (object-array 0))]
-        (into {} (for [[k getter] {:detail "getDetail" :table "getTable"
+        (into {} (for [[k getter] {:detail "getDetail" :schema "getSchema" :table "getTable"
                                    :constraint "getConstraint" :column "getColumn"
                                    :routine "getRoutine"}
                        :let [v (Reflector/invokeInstanceMethod m getter (object-array 0))]

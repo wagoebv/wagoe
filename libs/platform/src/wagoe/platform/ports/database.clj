@@ -204,7 +204,8 @@
   (key-columns [this datasource table-name key-name]
     "The columns of key `key-name` on `table-name`, in key order, or nil where
      the driver's refusal names them itself. MySQL's names only the key
-     (BOU-712).")
+     (BOU-712); PostgreSQL's names them in a Detail that follows lc_messages
+     (BOU-721).")
 
   (engine [this]
     "Which database this is: :postgresql, :mysql, :sqlite or :h2. Never nil.
