@@ -128,6 +128,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **`metrics.ports/increment` and `observe` recorded nothing** (BOU-454): they now register the metric on first use, so
+  platform operation and user auth metrics reach the active provider.
+- **Sentry ignored its filter, `:sample-rate`, `:enabled` and runtime config changes** (BOU-454). All now apply per
+  event; `:filtering` and `add-filter-rule!` drop or sample events. See the observability guide.
 - **A typo'd job type in `:wagoe/jobs :recurring` enqueued jobs nothing ran, silently** (BOU-700). The ticker now
   warns, naming the type and the known handlers.
 - **A refused key's field could be read from the value sent, and none was named on non-English PostgreSQL or MySQL 5.7

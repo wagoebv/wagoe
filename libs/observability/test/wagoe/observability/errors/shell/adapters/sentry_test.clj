@@ -123,11 +123,46 @@
         (is (boolean? (ports/should-report-message? filter "test message" :error {}))))
 
       (testing "sample-rate returns configured rate"
-        (is (= 1.0 (ports/sample-rate filter Exception))))
+        (is (= 1.0 (ports/sample-rate filter Exception)))))))
 
-      (testing "filter rule operations don't throw"
-        (is (nil? (ports/add-filter-rule! filter {:type :exception})))
-        (is (boolean? (ports/remove-filter-rule! filter "test-id")))))))
+(deftest ^:unit filter-rules-decide-what-is-reported
+  (let [f (sentry-adapter/create-sentry-error-filter
+           {:filtering {:min-severity :warning
+                        :exclude-exceptions ["java.io.IOException"]
+                        :exclude-messages ["healthcheck"]}})]
+    (testing ":filtering config"
+      (is (false? (ports/should-report? f (java.io.IOException. "pipe") {})))
+      (is (true? (ports/should-report? f (IllegalStateException. "x") {})))
+      (is (false? (ports/should-report-message? f "healthcheck failed" :error {})))
+      (is (false? (ports/should-report-message? f "noise" :info {})))
+      (is (true? (ports/should-report-message? f "real" :error {}))))
+
+    (testing "a rule added at runtime applies, and can be removed"
+      (let [id (ports/add-filter-rule! f {:type :exception :pattern #"timeout" :action :ignore})]
+        (is (string? id))
+        (is (false? (ports/should-report? f (RuntimeException. "read timeout") {})))
+        (is (true? (ports/remove-filter-rule! f id)))
+        (is (false? (ports/remove-filter-rule! f id)))
+        (is (true? (ports/should-report? f (RuntimeException. "read timeout") {})))))
+
+    (testing ":report wins over min-severity; the first matching rule decides"
+      (ports/add-filter-rule! f {:id "audit" :type :message :pattern "audit" :action :report})
+      (is (true? (ports/should-report-message? f "audit trail" :debug {}))))
+
+    (testing "context rules take a function"
+      (ports/add-filter-rule! f {:type :context :pattern #(= "t-1" (:tenant-id %)) :action :ignore})
+      (is (false? (ports/should-report? f (Exception. "x") {:tenant-id "t-1"})))
+      (is (true? (ports/should-report? f (Exception. "x") {:tenant-id "t-2"}))))
+
+    (testing "sample-rate per exception type"
+      (ports/add-filter-rule! f {:type :exception :pattern "ArithmeticException" :action :sample :sample-rate 0.25})
+      (is (= 0.25 (ports/sample-rate f ArithmeticException)))
+      (is (= 0.0 (ports/sample-rate f java.io.IOException)))
+      (is (= 1.0 (ports/sample-rate f Exception))))
+
+    (testing "a malformed rule is refused"
+      (is (thrown? clojure.lang.ExceptionInfo
+                   (ports/add-filter-rule! f {:type :exception :action :drop :pattern "x"}))))))
 
 ;; =============================================================================
 ;; Error Reporting Configuration Tests
@@ -159,11 +194,11 @@
           (is (= 0.5 (ports/get-sample-rate config)))))
 
       (testing "reporting enabled/disabled management"
-        (is (nil? (ports/reporting-enabled? config))) ; initially nil
-        (is (nil? (ports/enable-reporting! config)))
-        (is (true? (ports/reporting-enabled? config)))
+        (is (true? (ports/reporting-enabled? config)) "on unless :enabled is false")
         (is (true? (ports/disable-reporting! config)))
-        (is (false? (ports/reporting-enabled? config)))))))
+        (is (false? (ports/reporting-enabled? config)))
+        (is (false? (ports/enable-reporting! config)))
+        (is (true? (ports/reporting-enabled? config)))))))
 
 ;; =============================================================================
 ;; Component Integration Tests
@@ -359,3 +394,61 @@
     (is (some? (:throwable event)))
     (is (not-any? #(.contains (str (ex-message %)) "alice@example.com")
                   (take-while some? (iterate ex-cause (:throwable event)))))))
+
+;; =============================================================================
+;; The component's runtime settings reach what is sent
+;; =============================================================================
+
+(defn- with-sent-events
+  "Run f with a stubbed Sentry client; the events sent."
+  [config f]
+  (let [sent (atom [])]
+    (with-redefs [sentry/init! (fn [& _] nil)
+                  sentry/send-event (fn [event] (swap! sent conj event) nil)]
+      (f (sentry-adapter/create-sentry-error-reporting-component config))
+      @sent)))
+
+(deftest ^:unit runtime-settings-reach-the-reporter
+  (testing "disabled sends nothing"
+    (is (empty? (with-sent-events test-config
+                  (fn [c]
+                    (ports/disable-reporting! c)
+                    (is (nil? (ports/capture-exception c (Exception. "x"))))
+                    (is (nil? (ports/capture-message c "m" :error))))))))
+
+  (testing "sample rate 0 sends nothing; 1 sends everything"
+    (is (empty? (with-sent-events (assoc test-config :sample-rate 0.0)
+                  #(dotimes [_ 20] (ports/capture-exception % (Exception. "x"))))))
+    (is (= 20 (count (with-sent-events test-config
+                       #(dotimes [_ 20] (ports/capture-exception % (Exception. "x"))))))))
+
+  (testing "set-sample-rate! applies at runtime"
+    (is (empty? (with-sent-events test-config
+                  (fn [c]
+                    (ports/set-sample-rate! c 0.0)
+                    (ports/capture-exception c (Exception. "x")))))))
+
+  (testing "a filtered event is not sent"
+    (is (empty? (with-sent-events (assoc test-config :filtering {:exclude-exceptions ["IllegalStateException"]})
+                  #(ports/capture-exception % (IllegalStateException. "x"))))))
+
+  (testing "environment and release go on every event, and follow runtime changes"
+    (let [[before after] (with-sent-events test-config
+                           (fn [c]
+                             (ports/capture-message c "one" :error)
+                             (ports/set-environment! c "staging")
+                             (ports/set-release! c "2.0.0")
+                             (ports/capture-message c "two" :error)))]
+      (is (= ["test" "test-1.0.0"] ((juxt :environment :release) before)))
+      (is (= ["staging" "2.0.0"] ((juxt :environment :release) after)))))
+
+  (testing "a filter rule that throws does not cost the report"
+    (is (= 1 (count (with-sent-events test-config
+                      (fn [c]
+                        (ports/add-filter-rule! c {:type :context :action :ignore
+                                                   :pattern (fn [_] (throw (RuntimeException. "bad rule")))})
+                        (ports/capture-exception c (Exception. "x"))))))))
+
+  (testing "an unknown event type is not sent"
+    (is (empty? (with-sent-events test-config
+                  #(is (nil? (ports/capture-event % {:type :bogus}))))))))

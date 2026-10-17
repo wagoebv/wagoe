@@ -33,6 +33,12 @@
 ;; Helper Functions
 ;; =============================================================================
 
+(defn- route-label
+  "The matched route template, not the URI: a URI carries ids, and a metric
+   label per id grows without bound."
+  [request]
+  (or (get-in request [:reitit.core/match :template]) "unmatched"))
+
 (defn- get-user
   "Extracts the authenticated user from the normalized request shape.
 
@@ -366,7 +372,7 @@
                 ;; Increment successful action metric
                 (when-let [metrics (:metrics-emitter system)]
                   (metrics/increment metrics "http.actions.success"
-                                     {:action (:uri request)
+                                     {:action (route-label request)
                                       :method (name (:request-method request))})))
               ctx))})
 
@@ -403,7 +409,7 @@
                 (metrics/increment metrics (if success?
                                              "http.actions.success"
                                              "http.actions.failure")
-                                   {:action (:uri request)
+                                   {:action (route-label request)
                                     :method (name (:request-method request))}))
               ctx))})
 

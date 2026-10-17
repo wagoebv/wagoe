@@ -3,6 +3,8 @@
             [clojure.test :refer [deftest is]]
             [wagoe.observability.errors.ports :as error-ports]
             [wagoe.observability.logging.ports :as log-ports]
+            [wagoe.observability.metrics.ports :as metrics-ports]
+            [wagoe.observability.metrics.shell.adapters.prometheus :as prom]
             [wagoe.platform.shell.http.interceptors :as http-interceptors]
             [wagoe.platform.shell.service-interceptors :as si]))
 
@@ -100,3 +102,17 @@
     (is (= 1 (count @captured)) "once, not by the service and again by the HTTP layer")
     (request! "second")
     (is (= 2 (count @captured)) "a different exception is reported too")))
+
+(deftest ^:unit service-operations-are-counted-and-timed
+  (let [m      (prom/create-metrics-component {})
+        system (assoc (recording-system (atom [])) :metrics-emitter m)
+        total  #(reduce + 0 (vals (:series (metrics-ports/get-metric-values m %))))]
+    (si/execute-service-operation :get-user {:user-id 7} (constantly {:ok true}) system)
+    (try (si/execute-service-operation :get-user {} (fn [_] (throw (ex-info "boom" {:type :internal-error}))) system)
+         (catch clojure.lang.ExceptionInfo _))
+    (is (= 2 (total "get-user-attempted")))
+    (is (= 1 (total "get-user-successful")))
+    (is (= 1 (total "get-user-failed")))
+    (is (= [{:operation-type "get-user"}]
+           (keys (:series (metrics-ports/get-metric-values m "service-operation-duration"))))
+        "no user id in the labels")))

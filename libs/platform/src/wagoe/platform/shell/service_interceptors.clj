@@ -26,7 +26,7 @@
             [wagoe.core.utils.pii-redaction :as pii]
             [wagoe.observability.logging.core :as logging]
             [wagoe.observability.logging.ports :as log-ports]
-            [wagoe.observability.metrics.core :as metrics]
+            [wagoe.observability.metrics.ports :as metrics]
             [wagoe.observability.errors.core :as error-reporting]
             [wagoe.platform.core.http.problem-details :as problem-details]
             [wagoe.platform.shell.reported-errors :as reported-errors]
@@ -109,44 +109,25 @@
             ctx)})
 
 (def service-operation-metrics
-  "Handles service operation metrics collection."
+  "Counts attempts, successes and failures per operation, and records duration.
+   Labels stay bounded: no user or tenant id."
   {:name :service-operation-metrics
-   :enter (fn [{:keys [operation-name params system] :as ctx}]
+   :enter (fn [{:keys [operation-name system] :as ctx}]
             (when-let [metrics-emitter (:metrics-emitter system)]
-              ;; Track operation attempt
-              (metrics/increment-counter
-               metrics-emitter
-               (str operation-name "-attempted")
-               (select-keys params [:tenant-id :user-id])))
+              (metrics/increment metrics-emitter (str operation-name "-attempted") {}))
             ctx)
-   :leave (fn [{:keys [operation-name params system timing] :as ctx}]
+   :leave (fn [{:keys [operation-name system timing] :as ctx}]
             (when-let [metrics-emitter (:metrics-emitter system)]
-              (let [start-time (:start timing)
-                    duration-ms (when start-time
-                                  (/ (- (System/nanoTime) start-time) 1e6))
-                    tags (select-keys params [:tenant-id :user-id])]
-
-                ;; Record latency
-                (when duration-ms
-                  (metrics/time-with-histogram
-                   metrics-emitter
-                   "service-operation-duration"
-                   (merge tags {:operation-type operation-name})
-                   (constantly nil))) ; No-op since we have the duration
-
-                ;; Record success
-                (metrics/increment-counter
-                 metrics-emitter
-                 (str operation-name "-successful")
-                 tags)))
+              (when-let [start-time (:start timing)]
+                (metrics/observe metrics-emitter "service-operation-duration"
+                                 (/ (- (System/nanoTime) start-time) 1e6)
+                                 {:operation-type operation-name}))
+              (metrics/increment metrics-emitter (str operation-name "-successful") {}))
             ctx)
-   :error (fn [{:keys [operation-name params system] :as ctx}]
+   :error (fn [{:keys [operation-name system] :as ctx}]
             (when-let [metrics-emitter (:metrics-emitter system)]
-              (metrics/increment-counter
-               metrics-emitter
-               (str operation-name "-failed")
-               (merge (select-keys params [:tenant-id :user-id])
-                      {:reason "system-error"})))
+              (metrics/increment metrics-emitter (str operation-name "-failed")
+                                 {:reason "system-error"}))
             ctx)})
 
 (def service-error-handling

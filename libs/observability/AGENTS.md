@@ -15,9 +15,50 @@ Cross-cutting observability for services and persistence layers: structured logg
 | `wagoe.observability.metrics.ports` | `IMetricsRegistry`, `IMetricsEmitter` protocols |
 | `wagoe.observability.tracing.ports` | `ITracer` protocol (spans) |
 | `wagoe.observability.tracing.core` | `with-span` macro |
-| `wagoe.observability.shell.service-interceptors` | Service-layer operation wrappers |
-| `wagoe.observability.shell.persistence-interceptors` | Persistence-layer query wrappers |
-| `wagoe.observability.shell.adapters.*` | Provider implementations (no-op, Datadog, Sentry) |
+| `wagoe.observability.<signal>.shell.adapters.*` | Provider implementations — see the matrix below |
+
+---
+
+## What Works, Per Provider
+
+One Integrant key per signal; `:provider` picks the adapter, and an unknown one
+logs a warning and falls back to `:no-op`.
+
+| Signal | Key | `:no-op` | console | OTel (`:otlp`) | Sentry | Datadog |
+|--------|-----|----------|---------|----------------|--------|---------|
+| Logging | `:wagoe/logging` | drops | `:stdout` (text/JSON); `:slf4j` (Logback) | — no log export | — | adapter exists (`create-datadog-logging-component`), not selectable in config |
+| Metrics | `:wagoe/metrics` | drops | — (`:prometheus` serves `GET /metrics`) | push over OTLP/HTTP | — | `:datadog-statsd` (UDP) |
+| Tracing | `:wagoe/tracing` | records nothing | `:logging` (span start/end in logs) | export over OTLP/HTTP | — | via an OTel collector |
+| Errors | `:wagoe/error-reporting` | drops | — | — | `:sentry` | — |
+
+Limits: `:otlp` metrics are push-only (`export-metrics` throws; `get-metric-values`,
+`reset-metrics!`, `set-export-interval!` do nothing). `:prometheus` summaries keep
+sum and count, no quantiles. Logs carry no trace ids unless you put them in the
+context.
+
+### Metrics: register before you emit
+
+Every adapter drops an emission to an unregistered handle. Register once
+(`register-counter!` etc.) and emit to the handle, or use
+`metrics.ports/increment` / `observe`, which register a counter / histogram on
+first use. The `metrics.core` helpers (`increment-counter`, `observe-histogram`,
+…) do not register. Keep label values bounded — never a user id or raw URI.
+
+### Sentry
+
+Honoured config: `:dsn`, `:environment`, `:release`, `:server-name`, `:debug`,
+`:traces-sample-rate` (client init); `:sample-rate`, `:enabled`, `:filtering
+{:min-severity :exclude-exceptions :exclude-messages}`, `:redact` (per event).
+Other schema keys (rate limits, retries, `:before-send`, …) are not read.
+
+The component's `IErrorFilter` and `IErrorReportingConfig` share one settings
+atom with the reporter, so `add-filter-rule!`, `set-sample-rate!`,
+`set-environment!`, `set-release!` and `disable-reporting!` apply to the next
+event. Rules: `{:type :exception|:message|:context :pattern string|regex|fn
+:action :ignore|:sample|:report :sample-rate r :id optional}`; first match wins;
+`add-filter-rule!` returns the id. Pure matching lives in
+`wagoe.observability.errors.core` (`filter-decision`). A rule that throws is
+logged and the event is reported.
 
 ---
 
@@ -28,7 +69,7 @@ The recommended way to add observability is to wrap operations with interceptors
 ### Service Layer
 
 ```clojure
-(require '[wagoe.observability.shell.service-interceptors :as service-interceptors])
+(require '[wagoe.platform.shell.service-interceptors :as service-interceptors])
 
 ;; Wrap each service method call
 (defn create-user [this user-data]
@@ -50,7 +91,7 @@ The interceptor automatically:
 ### Persistence Layer
 
 ```clojure
-(require '[wagoe.observability.shell.persistence-interceptors :as persistence-interceptors])
+(require '[wagoe.platform.shell.persistence-interceptors :as persistence-interceptors])
 
 ;; Wrap each database call
 (defn find-user-by-email [this email]
@@ -266,37 +307,27 @@ only the endpoint changes.
 
 ### no-op (Development and Tests)
 
-The default provider — all operations are silent. No configuration required.
+The default for every signal. No configuration beyond `{:provider :no-op}`.
+
+### Datadog metrics
 
 ```clojure
-;; resources/conf/dev/config.edn
-{:wagoe/observability
- {:logger         {:type :no-op}
-  :error-reporter {:type :no-op}
-  :metrics        {:type :no-op}}}
-```
-
-### Datadog
-
-```clojure
-;; resources/conf/prod/config.edn
-{:wagoe/observability
- {:metrics {:type    :datadog
-            :api-key #env DATADOG_API_KEY
-            :host    #env ["DATADOG_HOST" "datadoghq.com"]
-            :tags    {:env #env WAG_ENV
-                      :service "wagoe"}}}}
+:wagoe/metrics {:provider :datadog-statsd
+                :host     #or [#env DD_AGENT_HOST "127.0.0.1"]
+                :port     8125
+                :service  "wagoe"}
 ```
 
 ### Sentry
 
 ```clojure
-;; resources/conf/prod/config.edn
-{:wagoe/observability
- {:error-reporter {:type  :sentry
-                   :dsn   #env SENTRY_DSN
-                   :env   #env WAG_ENV
-                   :release #env APP_VERSION}}}
+:wagoe/error-reporting {:provider    :sentry
+                        :dsn         #env SENTRY_DSN
+                        :environment "prod"
+                        :release     #env APP_RELEASE
+                        :sample-rate 1.0
+                        :filtering   {:min-severity :warning
+                                      :exclude-exceptions ["java.io.IOException"]}}
 ```
 
 ---
