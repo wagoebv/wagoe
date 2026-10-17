@@ -80,8 +80,7 @@
    `wagoe.config.secrets`."
   ([resource profile] (read-config-resource resource profile {}))
   ([resource profile opts]
-   (let [config (aero/read-config resource (merge (select-keys opts [:secret-sources :default-secret-source])
-                                                  {:profile profile :resolver include-resolver}))]
+   (let [config (aero/read-config resource (assoc opts :profile profile :resolver include-resolver))]
      (when-let [missing (seq (missing-includes config))]
        (throw (ex-info (str "Config include not found: " (str/join ", " missing)
                             " (included from " resource ")")

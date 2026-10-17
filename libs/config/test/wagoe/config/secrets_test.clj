@@ -65,6 +65,11 @@
       (is (re-find #"gone" (ex-message e)))
       (is (re-find (re-pattern (java.util.regex.Pattern/quote dir)) (ex-message e)))))
 
+  (testing "a malformed reference is refused"
+    (doseq [form ["42" "[:file]" "[:file \"a\" \"b\"]" "[\"file\" \"a\"]"]]
+      (is (= :configuration-error (:type (ex-data (thrown #(read-edn (str "{:pw #secret " form "}"))))))
+          form)))
+
   (testing "an unknown source is named"
     (is (re-find #":nope" (ex-message (thrown #(read-edn "{:pw #secret [:nope \"x\"]}")))))))
 

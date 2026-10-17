@@ -51,7 +51,8 @@
   "Parse config.edn with a minimal reader that replaces Aero tags with placeholders."
   [config-text]
   (let [readers {'env      (fn [v] (str "ENV:" v))
-                 'or       (fn [v] (if (vector? v) (last v) v))
+                 'secret   (fn [v] (str "SECRET:" v))
+                 'or      (fn [v] (if (vector? v) (last v) v))
                  'long     (fn [v] (if (number? v) v 0))
                  'merge    (fn [v] (if (vector? v) (apply merge v) v))
                  'include  (fn [_v] {})

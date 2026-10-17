@@ -56,17 +56,12 @@
 (defn- secret-ref
   "[source-key name] from a #secret form."
   [form default-source]
-  (cond
-    (or (string? form) (symbol? form))
-    [default-source (str form)]
-
-    (and (vector? form) (= 2 (count form)) (keyword? (first form))
-         (or (string? (second form)) (symbol? (second form))))
-    [(first form) (str (second form))]
-
-    :else
-    (throw (ex-info (str "#secret takes a name or [:source \"name\"], not " (pr-str form))
-                    {:type :configuration-error :form form}))))
+  (let [[source-key secret-name] (if (vector? form) form [default-source form])]
+    (if (and (keyword? source-key) (or (string? secret-name) (symbol? secret-name))
+             (or (not (vector? form)) (= 2 (count form))))
+      [source-key (str secret-name)]
+      (throw (ex-info (str "#secret takes a name or [:source \"name\"], not " (pr-str form))
+                      {:type :configuration-error :form form})))))
 
 (defn- label [source-key secret-name]
   (str (name source-key) ":" secret-name))
@@ -101,6 +96,7 @@
   (resolve-secret opts form))
 
 (defn- placeholder [l] (str "<secret " l ">"))
+(def ^:private placeholder-re #"<secret (.+)>")
 
 (defn redact
   "`x` with every value a #secret resolved to replaced by `<secret source:name>`."
@@ -115,6 +111,6 @@
   [x]
   (let [values @resolved]
     (walk/postwalk #(or (when (string? %)
-                          (some-> (re-matches #"<secret (.+)>" %) second values))
+                          (some-> (re-matches placeholder-re %) second values))
                         %)
                    x)))
