@@ -23,8 +23,8 @@ communication channels (SMTP, IMAP, Twilio) but not payments.
 | `wagoe.payments.schema` | Malli schemas: `CheckoutRequest`, `CheckoutResult`, `OffSessionPaymentRequest`, `OffSessionPaymentResult`, `PaymentStatusResult`, `ExpireCheckoutResult`, `WebhookResult` |
 | `wagoe.payments.core.provider` | Pure helpers: `cents->euro`, `normalize-event-type`, status mappers |
 | `wagoe.payments.shell.adapters.mock` | Mock adapter — auto-approves, no network calls |
-| `wagoe.payments.shell.adapters.mollie` | Mollie PSP adapter (hato HTTP client) |
-| `wagoe.payments.shell.adapters.stripe` | Stripe PSP adapter (hato + HMAC webhook verification) |
+| `wagoe.payments.shell.adapters.mollie` | Mollie PSP adapter (clj-http) |
+| `wagoe.payments.shell.adapters.stripe` | Stripe PSP adapter (clj-http + HMAC webhook verification) |
 | `wagoe.payments.shell.module-wiring` | Integrant `init-key` / `halt-key!` |
 
 ---
@@ -42,7 +42,7 @@ communication channels (SMTP, IMAP, Twilio) but not payments.
 ;;        :webhook-url  string       ; optional; Mollie uses this
 ;;        :metadata     map          ; optional; passed through to PSP
 ;;        :setup-future-usage :off-session|:on-session ; optional; store mandate
-;;                                   ; Mock/Stripe only; Mollie throws {:type :not-implemented}
+;;                                   ; Mollie: sequenceType=first, creates a customer if needed
 ;;        :customer-email       string  ; optional
 ;;        :provider-customer-id string} ; optional; reuse existing PSP customer
 ;; Returns: {:checkout-url string :provider-checkout-id string
@@ -58,14 +58,13 @@ communication channels (SMTP, IMAP, Twilio) but not payments.
 ;;        :metadata     map                   ; optional
 ;;        :idempotency-key string}            ; optional; retry-safe charge identity
 ;; Returns: {:provider-payment-id string :status :pending|:paid|:failed}
-;; Implemented by Mock and Stripe; Mollie throws {:type :not-implemented}
 ;;
 ;; Idempotency (consumer pattern): pass :idempotency-key = the *stable business
 ;; identity* of the charge — the same logical charge must always produce the same
 ;; key (e.g. "incasso-<subscription>-<period>"), never a random UUID. A retry
 ;; after a crash/lost response then returns the original charge instead of
-;; double-charging. Stripe sends it as the Idempotency-Key header; the Mock
-;; remembers keys in-memory and replays the first result; Mollie ignores it.
+;; double-charging. Stripe and Mollie send it as the Idempotency-Key header; the
+;; Mock remembers keys in-memory and replays the first result.
 
 (get-payment-status [this provider-checkout-id])
 ;; Stripe accepts both cs_... (Checkout Session) and pi_... (PaymentIntent)
@@ -77,7 +76,7 @@ communication channels (SMTP, IMAP, Twilio) but not payments.
 
 (expire-checkout-session [this provider-checkout-id])
 ;; Returns: {:provider-checkout-id string :status :expired}
-;; Implemented by Mock and Stripe; Mollie throws {:type :not-implemented}
+;; Mollie cancels the open payment instead; its webhook then reports :payment.cancelled
 
 (verify-webhook-signature [this raw-body headers])
 ;; Returns: boolean
@@ -145,7 +144,10 @@ Which id appears where:
 - `verify-webhook-signature` → always `true`; real verification happens via `get-payment-status`
 - Status mapping: `"paid"` → `:payment.paid`, `"failed"` → `:payment.failed`, `"canceled"/"cancelled"` → `:payment.cancelled`, `"expired"` → `:payment.expired`
 - Requires `:api-key` and `:webhook-base-url`
-- No mandate support yet: `create-checkout-session` with `:setup-future-usage` throws `{:type :not-implemented}` (sequenceType=first pending), as do `create-off-session-payment` and `expire-checkout-session`
+- **Mandates**: `create-checkout-session` with `:setup-future-usage` sends `sequenceType=first` with a `customerId` — `:provider-customer-id`, or a customer created from `:customer-email`. Once paid, `get-payment-status` returns `:provider-customer-id` (`cst_…`) and `:provider-payment-method-id` (the mandate, `mdt_…`)
+- **Off-session**: `POST /v2/payments` with `sequenceType=recurring`, `customerId` and optional `mandateId`; `:idempotency-key` goes in the `Idempotency-Key` header. Usually `:pending` (SEPA settles later, via the webhook). A 422 (no valid mandate) throws `{:type :internal-error}`
+- **Expire**: `DELETE /v2/payments/<id>` cancels the open payment; a payment Mollie will not cancel throws
+- **Webhook**: a status with no `payment.*` outcome (`open`, `pending`) returns `:event-type nil`; a payment that cannot be fetched throws, so Mollie retries
 
 ### Stripe (`:stripe`)
 - REST API: `https://api.stripe.com/v1` (Checkout Sessions + PaymentIntents)
@@ -278,6 +280,11 @@ Always verify the signature before processing:
 clojure -M:test :payments        # All payments tests
 clojure -M:test :payments --focus-meta :unit  # Pure core functions only
 ```
+
+`adapter_surface_test.clj` runs one port contract against Mock, Stripe and
+Mollie, each against a fake of its PSP's HTTP API. A behaviour one adapter cannot
+express is a nil in its fixture, not a missing case. Add a port method or an
+adapter there first.
 
 Use the `:mock` provider in all tests — no PSP credentials required.
 

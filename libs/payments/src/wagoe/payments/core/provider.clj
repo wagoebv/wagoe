@@ -55,6 +55,50 @@
   (normalize-event-type event-type :stripe))
 
 ;; =============================================================================
+;; Mollie — request shaping and recurring status
+;; =============================================================================
+
+(defn- mollie-amount [amount-cents currency]
+  {:currency (str/upper-case (or currency "EUR"))
+   :value    (cents->euro amount-cents)})
+
+(defn mollie-checkout-payload
+  "Body for POST /v2/payments that starts a hosted checkout. A
+   :customer-id makes it the first payment of a mandate (sequenceType=first).
+   The internal :checkout-id is merged last so user metadata cannot clobber it."
+  [{:keys [amount-cents currency description redirect-url metadata]}
+   {:keys [checkout-id webhook-url customer-id]}]
+  (cond-> {:amount      (mollie-amount amount-cents currency)
+           :description description
+           :redirectUrl redirect-url
+           :webhookUrl  webhook-url
+           :metadata    (merge metadata {:checkout-id checkout-id})}
+    customer-id (assoc :customerId customer-id :sequenceType "first")))
+
+(defn mollie-recurring-payload
+  "Body for POST /v2/payments that charges a stored mandate. Without
+   :provider-payment-method-id Mollie picks the customer's valid mandate."
+  [{:keys [amount-cents currency description provider-customer-id
+           provider-payment-method-id metadata]}
+   webhook-url]
+  (cond-> {:amount       (mollie-amount amount-cents currency)
+           :description  description
+           :customerId   provider-customer-id
+           :sequenceType "recurring"
+           :webhookUrl   webhook-url}
+    provider-payment-method-id (assoc :mandateId provider-payment-method-id)
+    (seq metadata)             (assoc :metadata metadata)))
+
+(defn mollie-recurring-status
+  "Map a just-created recurring payment's Mollie status onto the off-session
+   contract (:pending|:paid|:failed). A charge that ended without money is :failed."
+  [status]
+  (case status
+    "paid"                         :paid
+    ("failed" "canceled" "expired") :failed
+    :pending))
+
+;; =============================================================================
 ;; Stripe — id dispatch & expandable fields
 ;; =============================================================================
 

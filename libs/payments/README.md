@@ -1,6 +1,6 @@
 # wagoe/payments
 
-[![Status](https://img.shields.io/badge/status-incubating-yellow)]()
+[![Status](https://img.shields.io/badge/status-stable-brightgreen)]()
 [![Clojure](https://img.shields.io/badge/clojure-1.12+-blue)]()
 [![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
 [![Clojars Project](https://img.shields.io/clojars/v/com.wagoe/wagoe-payments.svg)](https://clojars.org/com.wagoe/wagoe-payments)
@@ -89,7 +89,7 @@ Other protocol methods: `create-off-session-payment`, `get-payment-status`,
 | Provider | Key | Required credentials | Env vars | Notes |
 |----------|-----|----------------------|----------|-------|
 | **Mock** | `:mock` | none | — | Auto-approves; no network calls. Refused outside the dev and test profiles |
-| **Mollie** | `:mollie` | `:api-key`, `:webhook-base-url` | `MOLLIE_API_KEY`, `APP_BASE_URL` | Form-POST webhook, no HMAC; off-session/expiry throw `:not-implemented` |
+| **Mollie** | `:mollie` | `:api-key`, `:webhook-base-url` | `MOLLIE_API_KEY`, `APP_BASE_URL` | Form-POST webhook, no HMAC; mandates via `sequenceType` first/recurring |
 | **Stripe** | `:stripe` | `:api-key`, `:webhook-secret` | `STRIPE_API_KEY`, `STRIPE_WEBHOOK_SECRET` | HMAC-SHA256 webhooks; full off-session + expiry support |
 
 A configured provider missing a required credential (e.g. a forgotten env var

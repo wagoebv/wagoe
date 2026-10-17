@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **Mollie recurring payments and checkout expiry; `payments` is now stable** (BOU-453): mandates via `:setup-future-usage`,
+  `create-off-session-payment` and `expire-checkout-session` work on Mollie. One contract sweep now covers Mock, Stripe and Mollie.
 - **Outbound webhooks: `com.wagoe/wagoe-webhooks`** (BOU-472): bus events go to subscriber URLs, signed, retried as jobs,
   per tenant, logged in the admin. Enable `:wagoe/webhooks` beside `:wagoe/jobs`; receivers use `verify-signature`.
 - **Form fields from malli schemas, checked by the server as you type** (BOU-465): `wagoe.shared.ui.core.form`.
@@ -132,6 +134,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Mollie webhooks for an open payment returned 500**, so Mollie retried them (BOU-453). They now return
+  `:event-type nil`, and checkout metadata can no longer overwrite the correlation id.
 - **`metrics.ports/increment` and `observe` recorded nothing** (BOU-454): they now register the metric on first use, so
   platform operation and user auth metrics reach the active provider.
 - **Sentry ignored its filter, `:sample-rate`, `:enabled` and runtime config changes** (BOU-454). All now apply per
