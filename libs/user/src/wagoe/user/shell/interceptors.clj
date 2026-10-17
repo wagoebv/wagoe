@@ -730,8 +730,9 @@
                   updated-context (ctx/add-breadcrumb context :operation :user-update-apply-start
                                                       {:user-id user-id
                                                        :update-fields (keys update-data)})
-                  ;; Merge updates into existing user
-                  user-entity (merge existing-user update-data)]
+                  ;; Only the given fields: a role or active read before a
+                  ;; concurrent change would undo it (BOU-685).
+                  user-entity (assoc update-data :id (:id existing-user))]
 
               (try
                 (let [updated-user (user-service/with-audit-context

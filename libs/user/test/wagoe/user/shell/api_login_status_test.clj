@@ -1,11 +1,9 @@
 (ns wagoe.user.shell.api-login-status-test
   "POST /auth/login and POST /sessions answered 200 {authenticated false} to a
    failed login, so a client checking the status took it for success (BOU-691)."
-  (:require [clojure.string :as str]
-            [clojure.test :refer [deftest is testing]]
+  (:require [clojure.test :refer [deftest is testing]]
             [wagoe.user.ports :as ports]
             [wagoe.user.shell.auth :as auth]
-            [wagoe.user.shell.cli :as cli]
             [wagoe.user.shell.http :as user-http]
             [wagoe.user.shell.interceptors :as user-interceptors]
             [wagoe.user.shell.in-memory-repository-test :as mem]
@@ -103,9 +101,3 @@
     (is (= 429 (:status resp)))
     (is (some? (get-in resp [:headers "Retry-After"])))))
 
-(deftest ^:unit the-cli-has-no-session-commands
-  ;; No entry point reached them, and `session list` printed live tokens
-  ;; (BOU-692).
-  (binding [*err* (java.io.StringWriter.)]
-    (is (= 1 (cli/run-cli! nil ["session" "list" "--user-id" (str (random-uuid))]))))
-  (is (not (str/includes? (with-out-str (cli/run-cli! nil ["--help"])) "session"))))

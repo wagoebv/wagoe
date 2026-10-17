@@ -224,13 +224,12 @@
             (let [current-time (Instant/now)
                   hashed-codes (mapv mfa-crypto/hash-backup-code backup-codes)
                   updates (mfa-core/prepare-mfa-enablement
-                           user secret hashed-codes current-time)
-                  updated-user (merge user updates)]
+                           user secret hashed-codes current-time)]
               (log/info "Updating user with MFA"
                         {:user-id (:id user)
-                         :mfa-enabled (:mfa-enabled updated-user)
-                         :has-secret (boolean (:mfa-secret updated-user))
-                         :backup-codes-count (count (:mfa-backup-codes updated-user))})
+                         :mfa-enabled (:mfa-enabled updates)
+                         :has-secret (boolean (:mfa-secret updates))
+                         :backup-codes-count (count (:mfa-backup-codes updates))})
               (.update-user user-repository (assoc updates :id (:id user)))
               {:success? true})
             ;; Invalid verification code
