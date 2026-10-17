@@ -397,6 +397,20 @@
       (is (= "0;url=/web/overzicht" (get-in ok [:headers "Refresh"])) "lands per :login-redirect")
       (is (= 1 (count (ports/find-identities-by-user (:identities a) (:id ada))))))))
 
+(deftest ^:integration ^:security wrong-mfa-codes-lock-the-account
+  ;; As on the password form (BOU-698): the lockout ends the flow, the right
+  ;; code included.
+  (let [a      (app :auth-config {:max-failed-attempts 3})
+        secret (mfa/generate-totp-secret)
+        ada    (add-user! a :mfa-enabled true :mfa-secret secret)
+        cookie (get-in (sign-in! a) [:cookies "oidc-mfa" :value])
+        submit #((:mfa a) (request {:cookies {"oidc-mfa" {:value cookie}} :form-params {"mfa-code" %}}))]
+    (is (= [401 401 401] (mapv #(:status (submit %)) ["000000" "WRONG-BACKUP-CODE" "000000"])))
+    (is (some? (:lockout-until (ports/find-user-by-id (:users a) (:id ada)))))
+    (let [resp (submit (str (otp/get-totp-token secret)))]
+      (is (= 403 (:status resp)))
+      (is (nil? (session-token resp))))))
+
 (deftest ^:integration ^:security the-mfa-hook-decides-for-oidc-too
   (testing "waived: an MFA user signs straight in, and keeps MFA on"
     (let [seen (atom nil)

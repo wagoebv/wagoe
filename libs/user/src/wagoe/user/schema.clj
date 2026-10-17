@@ -156,7 +156,7 @@
    value added here needs the check widened on existing databases, as
    `:permanent-delete` did (BOU-682)."
   [:create :update :delete :permanent-delete :activate :deactivate :role-change
-   :bulk-action :login :logout])
+   :bulk-action :login :logout :session-revoked])
 
 (def UserAuditLog
   "Schema for User Audit Log entity - tracks all user-related actions for compliance and security.

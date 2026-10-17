@@ -56,6 +56,7 @@
  :common/audit-deactivate   "Deactiveren"
  :common/audit-login        "Inloggen"
  :common/audit-logout       "Uitloggen"
+ :common/audit-session-revoked "Sessie ingetrokken"
  :common/audit-role-change  "Rolwijziging"
  :common/audit-bulk-action  "Bulkactie"
  :common/audit-all-results  "Alle resultaten"

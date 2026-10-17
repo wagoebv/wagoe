@@ -56,6 +56,7 @@
  :common/audit-deactivate   "Deactivate"
  :common/audit-login        "Login"
  :common/audit-logout       "Logout"
+ :common/audit-session-revoked "Session revoked"
  :common/audit-role-change  "Role Change"
  :common/audit-bulk-action  "Bulk Action"
  :common/audit-all-results  "All Results"

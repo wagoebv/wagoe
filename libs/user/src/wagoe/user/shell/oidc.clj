@@ -21,8 +21,7 @@
             [wagoe.user.core.mfa :as mfa-core]
             [wagoe.user.core.oidc :as oidc]
             [wagoe.user.ports :as ports]
-            [wagoe.user.shell.auth :as auth]
-            [wagoe.user.shell.mfa :as mfa])
+            [wagoe.user.shell.auth :as auth])
   (:import (java.net URLEncoder)
            (java.nio.charset StandardCharsets)
            (java.time Instant)))
@@ -353,7 +352,7 @@
   "Finish a sign-in that stopped for the second factor."
   [client mfa-cookie code login-context]
   (let [sign-in (unseal client :mfa mfa-cookie)
-        {:keys [user-repository mfa-service]} (:auth-service client)
+        {:keys [user-repository]} (:auth-service client)
         user    (some->> (:user-id sign-in) parse-uuid (ports/find-user-by-id user-repository))
         allowed (when user (auth-core/should-allow-login-attempt? user nil (Instant/now)))]
     (cond
@@ -364,17 +363,14 @@
       {:error {:type :oidc/account-unavailable :message (:reason allowed)}}
 
       :else
-      (let [check (when-not (str/blank? code) (mfa/verify-mfa-code mfa-service user code))]
+      (let [check (auth/verify-second-factor! (:auth-service client) user code (Instant/now))]
         (if (:valid? check)
           (let [user (if (:used-backup-code? check)
                        (do (ports/update-user user-repository (assoc (:updates check) :id (:id user)))
                            (merge user (:updates check)))
                        user)]
             (finish! client user sign-in login-context))
-          ;; Wrong codes count towards the lockout, as they do on the password form.
-          (do (auth/record-failed-login! user-repository (get-in client [:auth-service :auth-config])
-                                         (:id user) (Instant/now))
-              (audit! client user login-context (:provider-id sign-in) false "Invalid MFA code")
+          (do (audit! client user login-context (:provider-id sign-in) false "Invalid MFA code")
               {:error {:type :oidc/mfa-failed :message "Invalid MFA code"}}))))))
 
 ;; =============================================================================

@@ -22,7 +22,7 @@
             sessions (persistence/create-session-repository ctx)
             audit    (persistence/create-audit-repository ctx {:default-limit 20})
             auth-svc (auth/create-authentication-service users sessions nil auth-config)]
-        (f {:ctx ctx :users users
+        (f {:ctx ctx :users users :audit audit
             :service (service/create-user-service users sessions audit {} auth-svc)})))))
 
 (defn- create-user! [users]
@@ -67,6 +67,29 @@
         (is (some? (ports/validate-session service session-token)) "another user's id revokes nothing")
         (is (true? (:invalidated (ports/revoke-user-session service (:id user) (:id session)))))
         (is (nil? (ports/validate-session service session-token)))))))
+
+(deftest ^:integration ^:security a-revoked-session-is-audited-with-who-revoked-it
+  ;; It was audited as the user logging out, with no actor (BOU-698).
+  (with-service "revoke_audit" {}
+    (fn [{:keys [users audit service]}]
+      (let [user  (create-user! users)
+            admin (create-user! users)
+            revoke! (fn [actor]
+                      (let [{:keys [session]} (login service user password)]
+                        (service/with-audit-context {:actor-id (:id actor) :actor-email (:email actor)
+                                                     :ip-address "198.51.100.7"}
+                          #(ports/revoke-user-session service (:id user) (:id session)))
+                        session))]
+        (doseq [[who actor] {"by an admin" admin "by the user" user}]
+          (testing who
+            (let [session (revoke! actor)
+                  entry   (->> (:audit-logs (ports/find-audit-logs audit {:limit 50}))
+                               (filter #(= (str (:id session)) (get-in % [:metadata :session-id])))
+                               first)]
+              (is (= :session-revoked (:action entry)))
+              (is (= [(:id actor) (:email actor)] [(:actor-id entry) (:actor-email entry)]))
+              (is (= (:id user) (:target-user-id entry)))
+              (is (= "198.51.100.7" (:ip-address entry)) "the actor's address, not the device's"))))))))
 
 (deftest ^:integration ^:security an-upgrade-hashes-a-plaintext-session-in-place
   (with-service "token_upgrade" {}

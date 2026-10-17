@@ -1176,6 +1176,7 @@
                   :activate :success
                   :login :info
                   :logout :neutral
+                  :session-revoked :warning
                   :role-change :warning
                   :bulk-action :info
                   :neutral)]
@@ -1416,6 +1417,7 @@
       [:option {:value "deactivate" :selected (= "deactivate" (:action filters))} [:t :common/audit-deactivate]]
       [:option {:value "login" :selected (= "login" (:action filters))} [:t :common/audit-login]]
       [:option {:value "logout" :selected (= "logout" (:action filters))} [:t :common/audit-logout]]
+      [:option {:value "session-revoked" :selected (= "session-revoked" (:action filters))} [:t :common/audit-session-revoked]]
       [:option {:value "role-change" :selected (= "role-change" (:action filters))} [:t :common/audit-role-change]]
       [:option {:value "bulk-action" :selected (= "bulk-action" (:action filters))} [:t :common/audit-bulk-action]]]]
 

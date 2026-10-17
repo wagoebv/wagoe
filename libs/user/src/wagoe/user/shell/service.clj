@@ -737,9 +737,11 @@
      (fn [{:keys [params]}]
        (let [{:keys [user-id session-id]} params]
          (if (.invalidate-user-session session-repository user-id session-id)
-           ;; No IP or agent: those of the device would misattribute who
-           ;; revoked it.
-           (do (audit-logout! user-repository audit-repository {:user-id user-id})
+           ;; The actor and their IP, not the revoked device's (BOU-698).
+           (do (when-let [user (.find-user-by-id user-repository user-id)]
+                 (audit-quietly! audit-repository
+                                 (partial audit-core/session-revoked-audit-entry session-id)
+                                 user-id (:email user)))
                {:invalidated true})
            {:invalidated false})))
      {:system {:user-repository user-repository
