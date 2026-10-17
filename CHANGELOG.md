@@ -128,6 +128,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **Security: the search API served every index to any signed-in user** (BOU-706). An index is now served only with
   `:api? true` or an `:api {:authorize …}` hook; apps relying on `/api/v1/search/:index-id` must add `:api? true`.
+- **A typed 4xx thrown by a handler or service was logged at ERROR** (BOU-704). It is now INFO, or WARN for 401/403; 5xx and
+  untyped errors stay ERROR. Re-check alerts that keyed on "HTTP request failed".
+- **Static assets had no Content-Type** (BOU-710). They now carry one from the extension, plus
+  `X-Content-Type-Options: nosniff`.
 - **Security: two parallel logins could spend one MFA backup code** (BOU-708). Spending is a conditional write; the
   loser counts as a wrong code. Custom repositories add `consume-backup-code`.
 - **Security: revoking all of a user's sessions wrote no audit entry** (BOU-708). It writes one `:session-revoked`;

@@ -43,6 +43,14 @@
       (get (merge default-error-mappings error-mappings) ex-type [500 "Internal Server Error"])
       [500 "Internal Server Error"])))
 
+(defn status-log-level
+  "The level an error answered with `status` is logged at: a 4xx is the
+   client's, not a fault (BOU-704). 401/403 at :warn, worth seeing in bulk."
+  [status]
+  (cond (>= status 500)     :error
+        (#{401 403} status) :warn
+        :else               :info))
+
 (defn exception->problem-body
   "The error body for `ex`, in the framework's one shape (BOU-586):
 
