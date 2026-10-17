@@ -205,10 +205,11 @@
               {:type :exception | :message | :context
                :pattern regex | string | predicate-fn
                :action :ignore | :sample | :report
-               :sample-rate float (for :sample action)}
+               :sample-rate float (for :sample action)
+               :id optional; replaces a rule with the same id}
      
      Returns:
-       nil (side effect only)")
+       The rule id")
 
   (remove-filter-rule! [this rule-id]
     "Remove a filtering rule.

@@ -477,6 +477,87 @@
     (< (- current-time last-report-time) suppress-window)))
 
 ;; =============================================================================
+;; Filter Rules
+;; =============================================================================
+
+(def ^:private level-rank
+  {:trace 0 :debug 0 :info 1 :warning 2 :warn 2 :error 3 :fatal 4 :critical 4})
+
+(defn below-min-severity?
+  "True when `level` ranks below `min-severity`. An unknown or nil level counts
+   as info, which is what Sentry receives for it; no minimum is never below."
+  [level min-severity]
+  (let [floor (level-rank min-severity)
+        rank  (level-rank level 1)]
+    (boolean (and floor (< rank floor)))))
+
+(defn filtering->rules
+  "The :ignore rules a :filtering config implies, one per
+   :exclude-exceptions and :exclude-messages entry. None when :enabled is false."
+  [{:keys [enabled exclude-exceptions exclude-messages]}]
+  (letfn [(ignore [type patterns]
+            (map (fn [p] {:id (str "exclude-" (name type) ":" p) :type type :pattern p :action :ignore})
+                 patterns))]
+    (if (false? enabled)
+      []
+      (vec (concat (ignore :exception exclude-exceptions) (ignore :message exclude-messages))))))
+
+(defn- class-names [^Class c]
+  #{(.getName c) (.getSimpleName c)})
+
+(defn- rule-matches?
+  "Whether `rule` applies to `event` ({:kind :exception|:message, :exception,
+   :message, :level, :context}). A string names an exception class (full or
+   simple name) or is a substring of a message; a regex is searched in
+   \"<class>: <message>\" or in the message; a function receives the
+   exception and context, or the message, level and context. A :context rule
+   takes a function of the context."
+  [{:keys [type pattern]} {:keys [kind exception message level context]}]
+  (cond
+    (= :context type) (boolean (and (fn? pattern) (pattern context)))
+    (not= type kind)  false
+    (= :exception kind)
+    (cond
+      (fn? pattern)     (boolean (pattern exception context))
+      (string? pattern) (contains? (class-names (class exception)) pattern)
+      (instance? java.util.regex.Pattern pattern)
+      (boolean (re-find pattern (str (.getName (class exception)) ": " (ex-message exception))))
+      :else false)
+    :else
+    (cond
+      (fn? pattern)     (boolean (pattern message level context))
+      (string? pattern) (str/includes? (str message) pattern)
+      (instance? java.util.regex.Pattern pattern) (boolean (re-find pattern (str message)))
+      :else false)))
+
+(defn- rule-rate
+  "The sample rate a rule's action means: :ignore 0, :report 1, :sample its rate."
+  [{:keys [action sample-rate]}]
+  (case action
+    :ignore 0.0
+    :report 1.0
+    :sample (or sample-rate 1.0)
+    nil))
+
+(defn filter-decision
+  "The sample rate the first rule matching `event` sets, or nil when none matches."
+  [rules event]
+  (some #(when (rule-matches? % event) (rule-rate %)) rules))
+
+(defn type-sample-rate
+  "Sample rate for `exception-type` (a Class, or a class name as string or
+   keyword): from the first :exception rule naming it, else `default-rate`."
+  [rules exception-type default-rate]
+  (let [names (if (class? exception-type)
+                (class-names exception-type)
+                #{(name exception-type)})]
+    (or (some (fn [{:keys [type pattern] :as rule}]
+                (when (and (= :exception type) (string? pattern) (names pattern))
+                  (rule-rate rule)))
+              rules)
+        default-rate)))
+
+;; =============================================================================
 ;; Configuration Helpers
 ;; =============================================================================
 

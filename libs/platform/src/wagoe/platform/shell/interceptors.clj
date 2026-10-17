@@ -97,7 +97,7 @@
 
                 ;; Record latency
                 (when duration-ms
-                  (metrics/observe metric-collector (str op-name ".latency.ms") duration-ms {}))
+                  (metrics/observe metric-collector (str op-name ".latency.seconds") (/ duration-ms 1000.0) {}))
 
                 ;; Record success/failure
                 (if success?

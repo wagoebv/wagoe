@@ -310,17 +310,26 @@
 ;; Convenience Functions
 ;; =============================================================================
 
+(defn- ensure-registered!
+  "Register `metric-name` on first use. Every adapter drops emissions to an
+   unregistered handle, so without this a convenience call records nothing.
+   Locked so two first uses do not both register: datadog resets on re-register."
+  [collector metric-name register!]
+  (when (and (satisfies? IMetricsRegistry collector)
+             (nil? (get-metric collector metric-name)))
+    (locking collector
+      (when (nil? (get-metric collector metric-name))
+        (register! collector)))))
+
 (defn increment
-  "Convenience function for incrementing counters.
-   For now, this is a no-op placeholder until metrics infrastructure is set up."
-  [_metrics-collector _metric-name _tags]
-  ;; TODO: Implement when metrics infrastructure is available
-  nil)
+  "Increment counter `metric-name` by 1, registering it on first use."
+  [collector metric-name tags]
+  (ensure-registered! collector metric-name #(register-counter! % metric-name "" {}))
+  (inc-counter! collector metric-name 1 (or tags {})))
 
 (defn observe
-  "Convenience function for observing histogram/summary values.
-   For now, this is a no-op placeholder until metrics infrastructure is set up."
-  [_metrics-collector _metric-name _value _tags]
-  ;; TODO: Implement when metrics infrastructure is available
-  nil)
-
+  "Record `value` in histogram `metric-name`, registering it on first use with
+   the adapter's default buckets."
+  [collector metric-name value tags]
+  (ensure-registered! collector metric-name #(register-histogram! % metric-name "" nil {}))
+  (observe-histogram! collector metric-name value (or tags {})))

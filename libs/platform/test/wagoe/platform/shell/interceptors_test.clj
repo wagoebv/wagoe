@@ -5,7 +5,9 @@
             [wagoe.core.interceptor :as ic]
             [wagoe.user.ports]
             [wagoe.observability.logging.ports]
-            [wagoe.observability.errors.ports])
+            [wagoe.observability.errors.ports]
+            [wagoe.observability.metrics.ports :as metrics-ports]
+            [wagoe.observability.metrics.shell.adapters.prometheus :as prom])
   (:import [java.time Instant]))
 
 ;; Mock implementations for testing
@@ -31,13 +33,12 @@
       {:log-entries log-entries})))
 
 (defn mock-metrics
-  "Simple mock for metrics system. Since metrics/increment and metrics/observe 
-   are currently no-ops, this just returns a simple tracking map."
+  "A real in-memory metrics component, so a test can read back what was recorded."
   []
-  (let [metrics-data (atom [])]
-    (with-meta
-      {:type :mock-metrics}
-      {:data metrics-data})))
+  (prom/create-metrics-component {}))
+
+(defn- counter-total [metrics metric-name]
+  (reduce + 0 (vals (:series (metrics-ports/get-metric-values metrics metric-name)))))
 
 (defn mock-error-reporter []
   (let [errors (atom [])]
@@ -53,9 +54,6 @@
 
 (defn get-log-entries [mock-logger]
   @(:log-entries (meta mock-logger)))
-
-(defn get-metrics-data [mock-metrics]
-  @(:data (meta mock-metrics)))
 
 (defn get-captured-errors [mock-error-reporter]
   @(:errors (meta mock-error-reporter)))
@@ -170,10 +168,9 @@
           ctx {:op :test/operation :system {:metrics metrics}}
           result-ctx ((:enter interceptors/metrics-start) ctx)]
 
-      ;; Should add timing information
       (is (number? (get-in result-ctx [:timing :start])))
-      ;; Metrics calls are currently no-ops, so we just ensure no errors
-      (is (= ctx (dissoc result-ctx :timing)))))
+      (is (= ctx (dissoc result-ctx :timing)))
+      (is (= 1 (counter-total metrics "operation.attempt")))))
 
   (testing "metrics-complete records success and latency"
     (let [metrics (mock-metrics)
@@ -183,9 +180,10 @@
                :timing {:start start-time}
                :result {:status :success}}
           result-ctx ((:leave interceptors/metrics-complete) ctx)]
-
-      ;; Context should be unchanged (metrics functions are no-ops)
-      (is (= ctx result-ctx))))
+      (is (= ctx result-ctx))
+      (is (= 1 (counter-total metrics "operation.success")))
+      (is (= 1 (-> (metrics-ports/get-metric-values metrics "operation.latency.seconds")
+                   :series vals first :count)))))
 
   (testing "metrics-complete records errors"
     (let [metrics (mock-metrics)
@@ -194,17 +192,15 @@
                :timing {:start (System/nanoTime)}
                :result {:status :error}}
           result-ctx ((:leave interceptors/metrics-complete) ctx)]
-
-      ;; Context should be unchanged (metrics functions are no-ops)
-      (is (= ctx result-ctx))))
+      (is (= ctx result-ctx))
+      (is (= 1 (counter-total metrics "operation.error")))))
 
   (testing "metrics-error records failures"
     (let [metrics (mock-metrics)
           ctx {:op :test/operation :system {:metrics metrics}}
           result-ctx ((:error interceptors/metrics-error) ctx)]
-
-      ;; Context should be unchanged (metrics functions are no-ops)
-      (is (= ctx result-ctx)))))
+      (is (= ctx result-ctx))
+      (is (= 1 (counter-total metrics "operation.failure"))))))
 
 ;; Error Handling Interceptor Tests
 
@@ -412,9 +408,7 @@
         (is (some #(= "operation-start" (:event %)) logs))
         (is (some #(= "operation-success" (:event %)) logs)))
 
-      ;; Metrics are currently no-ops, so we just verify no crashes occurred
-      ;; and that the metrics object exists in the system
-      (is (some? metrics))
+      (is (= 1 (counter-total metrics "operation.success")))
 
       ;; No errors should be captured
       (is (empty? (get-captured-errors error-reporter))))))

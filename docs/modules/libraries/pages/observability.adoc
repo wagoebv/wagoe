@@ -1,73 +1,124 @@
 = observability
 :description: Cross-cutting observability with logging, metrics, tracing, and error reporters.
 
-Cross-cutting observability for services and persistence layers:
-structured logging, metrics, tracing breadcrumbs, and pluggable error reporting adapters.
+Logging, metrics, tracing and error reporting behind ports, so a service
+depends on a protocol and the provider is chosen in config.
 
-== Key namespaces
+== What works, per provider
 
-[cols="1,3",options="header"]
+Each signal has its own Integrant key; `:provider` picks the adapter. An
+unknown provider logs a warning and falls back to `:no-op`.
+
+[cols="1,1,3",options="header"]
 |===
-| Namespace | Purpose
+| Signal | `:provider` | What it does
 
-| `wagoe.observability.logging.ports`
-| Logging protocol used by shell/service layers for structured events
+.3+| Logging +
+`:wagoe/logging`
+| `:no-op` | Drops everything.
+| `:stdout` | Writes text or JSON lines to standard output (`:format`, `:colors`, `:level`).
+| `:slf4j` | Logs through `clojure.tools.logging` to Logback; `:level` is applied to Logback too.
 
-| `wagoe.observability.metrics.ports`
-| Metrics protocol for counters, gauges, and timing instrumentation
+.4+| Metrics +
+`:wagoe/metrics`
+| `:no-op` | Drops everything.
+| `:prometheus` | In-memory registry; `GET /metrics` serves the Prometheus text format.
+| `:otlp` | Pushes to an OpenTelemetry collector over OTLP/HTTP every `:interval-ms`.
+| `:datadog-statsd` | Sends DogStatsD lines over UDP to a Datadog agent (`:host`, `:port`).
 
-| `wagoe.observability.*.shell.adapters.*`
-| Pluggable providers: no-op (default), Datadog, Sentry
+.3+| Tracing +
+`:wagoe/tracing`
+| `:no-op` | Records nothing.
+| `:logging` | Logs span start, end and duration. Not exported.
+| `:otlp` | Exports spans to an OpenTelemetry collector over OTLP/HTTP.
+
+.2+| Error reporting +
+`:wagoe/error-reporting`
+| `:no-op` | Drops everything.
+| `:sentry` | Sends exceptions and messages to Sentry, redacted, filtered and sampled.
 |===
 
-== Usage pattern
+What does not exist:
 
-Use observability ports from services/adapters:
+* No OpenTelemetry log export. Logs go to stdout or Logback; ship them with your
+  log collector. Logs carry no trace or span ids unless you put them in the context.
+* No Datadog logging, tracing or error provider in config. Datadog takes
+  traces and metrics through an OpenTelemetry collector (`:otlp`).
+  `wagoe.observability.logging.shell.adapters.datadog/create-datadog-logging-component`
+  exists, but `:wagoe/logging` cannot select it.
+* No Sentry tracing or metrics. Sentry is error reporting only.
+
+Provider limits:
+
+* `:otlp` metrics are push-only: `export-metrics` throws, and `get-metric-values`,
+  `reset-metrics!` and `set-export-interval!` do nothing. `flush!` forces an export.
+* `:prometheus` keeps summaries as sum and count; quantiles are not computed.
+
+== Metrics
+
+Register a metric, then emit to its handle. An emission to a handle that was
+never registered is dropped by every provider.
 
 [source,clojure]
 ----
-(require '[wagoe.observability.logging.ports :as log-ports]
-         '[wagoe.observability.metrics.ports :as metrics-ports])
+(require '[wagoe.observability.metrics.ports :as metrics])
 
-;; Service layer — automatic logging, metrics, error reporting
-(defn create-user [this user-data]
-  (log-ports/info logger
-                  {:event :create-user
-                   :email (:email user-data)})
-  (metrics-ports/increment-counter! metrics :users.created 1)
-  (let [user (user-core/prepare-user user-data)]
-    (.create-user repository user)))
-
-;; Persistence layer — automatic query telemetry
-(defn find-user-by-email [ctx email]
-  (let [start (System/nanoTime)
-        result (jdbc/execute-one! ctx query)]
-    (metrics-ports/record-timing! metrics :users.find-by-email.ns (- (System/nanoTime) start))
-    result))
+(def orders (metrics/register-counter! m :orders.placed "Orders placed" {}))
+(metrics/inc-counter! m orders 1 {:channel "web"})
 ----
 
-== Benefits
+`metrics/increment` and `metrics/observe` register a counter or histogram on
+first use, so they need no registration step:
 
-* Consistent error handling and logging across all libraries
-* Automatic metrics collection per operation
-* Automatic breadcrumbs for error tracking
-* ~50% code reduction compared to manual instrumentation
+[source,clojure]
+----
+(metrics/increment m "orders.placed" {:channel "web"})
+(metrics/observe m "checkout.ms" 12.5 {})
+----
 
-== Adapters
+Keep label values bounded: a label per user id or URL makes a series per value.
 
-[cols="1,2",options="header"]
-|===
-| Adapter | When to use
+== Error reporting with Sentry
 
-| `no-op` (default)
-| Development and tests
+[source,clojure]
+----
+:wagoe/error-reporting
+{:provider    :sentry
+ :dsn         #env SENTRY_DSN
+ :environment "prod"
+ :release     #env APP_RELEASE
+ :sample-rate 1.0                  ; fraction of events sent
+ :filtering   {:min-severity       :warning              ; messages below are dropped
+               :exclude-exceptions ["java.io.IOException"] ; class name, full or simple
+               :exclude-messages   ["healthcheck"]}}       ; substring
+----
 
-| `datadog`
-| Production metrics and APM
+The platform reports HTTP 5xx errors only, once each. Context, tags and extra
+are PII-redacted, and database values quoted in exception messages are removed.
 
-| `sentry`
-| Production error tracking
-|===
+The component also implements `IErrorFilter` and `IErrorReportingConfig`, and
+changes through either apply to the next event:
+
+[source,clojure]
+----
+(require '[wagoe.observability.errors.ports :as errors])
+
+(errors/add-filter-rule! reporter {:type :exception :pattern #"timeout" :action :ignore})
+(errors/add-filter-rule! reporter {:type :message :pattern "audit" :action :report})
+(errors/add-filter-rule! reporter {:type :exception :pattern "ArithmeticException"
+                                   :action :sample :sample-rate 0.1})
+(errors/set-sample-rate! reporter 0.5)
+(errors/disable-reporting! reporter)
+----
+
+The first matching rule decides. A string pattern names an exception class or
+is a substring of a message; a regex is searched in `"<class>: <message>"` or in
+the message; a function gets the exception and context, or the message, level
+and context. A `:context` rule takes a function of the context.
+`add-filter-rule!` returns the rule id for `remove-filter-rule!`.
+
+Other keys in the Sentry config schema, such as rate limits, retries and
+`:before-send`, are not read.
 
 == Testing
 

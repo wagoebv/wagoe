@@ -132,6 +132,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **`metrics.ports/increment` and `observe` recorded nothing** (BOU-454): they now register the metric on first use, so
+  platform operation and user auth metrics reach the active provider.
+- **Sentry ignored its filter, `:sample-rate`, `:enabled` and runtime config changes** (BOU-454). All now apply per
+  event; `:filtering` and `add-filter-rule!` drop or sample events. See the observability guide.
 - **An htmx 400 answered with `ui/error-message` was dropped, and a whole page could be swapped into a fragment**
   (BOU-385, BOU-387). `forms.js` now swaps the first and skips the second. Form-wide `[:p]` errors are styled (BOU-397).
 - **Navigation linked Audit, Profile and Login with the user web UI off, and a tenant admin's dashboard to Audit's
