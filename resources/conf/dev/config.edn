@@ -290,8 +290,8 @@
    :host        #or [#env DD_AGENT_HOST "127.0.0.1"]
    :port        #or [#env DD_DOGSTATSD_PORT 8125]
    :service     "wagoe"
-   :environment #or [#env WAG_ENV "production"]
-   :global-tags ["service:wagoe" "environment:production"]}
+   :environment "development"
+   :global-tags ["service:wagoe" "environment:development"]}
 
   :wagoe/logging-with-file
   {:provider :file

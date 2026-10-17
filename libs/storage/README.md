@@ -28,7 +28,6 @@ File storage abstraction with local filesystem and S3 backends, including upload
 | **S3 Adapter** | AWS S3 integration for production |
 | **Upload Validation** | File type, size, and content validation |
 | **Image Processing** | Basic resize and thumbnail generation |
-| **Path Generation** | Configurable path strategies (date-based, UUID, etc.) |
 
 ## Requirements
 
@@ -38,54 +37,7 @@ File storage abstraction with local filesystem and S3 backends, including upload
 
 ## Quick Start
 
-### Local Storage
-
-```clojure
-(ns myapp.storage
-  (:require [wagoe.storage.shell.adapters.local :as local]))
-
-;; Create local storage adapter
-(def store (local/create-adapter
-  {:base-path "/var/uploads"
-   :url-prefix "/uploads"}))
-
-;; Store file
-(storage/put store "avatars/user-123.jpg" file-bytes)
-;; => {:path "avatars/user-123.jpg" :size 12345 :url "/uploads/avatars/user-123.jpg"}
-
-;; Get file
-(storage/get store "avatars/user-123.jpg")
-;; => #<byte[] ...>
-
-;; Delete file
-(storage/delete store "avatars/user-123.jpg")
-
-;; Check existence
-(storage/exists? store "avatars/user-123.jpg")
-;; => true
-```
-
-### S3 Storage
-
-```clojure
-(ns myapp.storage
-  (:require [wagoe.storage.shell.adapters.s3 :as s3]))
-
-;; Create S3 storage adapter
-(def store (s3/create-adapter
-  {:bucket "my-app-uploads"
-   :region "us-east-1"
-   :access-key #env AWS_ACCESS_KEY
-   :secret-key #env AWS_SECRET_KEY
-   :url-prefix "https://my-app-uploads.s3.amazonaws.com"}))
-
-;; Same API as local storage
-(storage/put store "avatars/user-123.jpg" file-bytes
-  {:content-type "image/jpeg"
-   :acl :public-read})
-```
-
-### Configuration
+### 1. Configure
 
 `:wagoe/storage` in `:active`, chosen by `:provider` (default `:local`). The
 full set of keys is in [src/wagoe/storage/README.md](src/wagoe/storage/README.md#configuration).
@@ -100,124 +52,94 @@ full set of keys is in [src/wagoe/storage/README.md](src/wagoe/storage/README.md
                 :region #env AWS_REGION}
 ```
 
-### Upload Validation
+The component's value is `{:provider <kw> :storage <IFileStorage> :service
+<IStorageService>}`. Take it into your own component with
+`(ig/ref :wagoe/storage)` and call the ports on `:storage`.
+
+### 2. Store, read, sign, delete
 
 ```clojure
-(ns myapp.uploads
-  (:require [wagoe.storage.core.validation :as v]))
+(ns myapp.avatars
+  (:require [wagoe.storage.core.validation :as validation]
+            [wagoe.storage.ports :as storage]))
 
-;; Define allowed uploads
-(def image-rules
-  {:allowed-types #{"image/jpeg" "image/png" "image/gif" "image/webp"}
-   :max-size (* 5 1024 1024)  ; 5 MB
-   :min-size 100})            ; 100 bytes
+(defn save-avatar!
+  "`store` is the :wagoe/storage component."
+  [store user-id ^bytes jpeg]
+  (let [file  {:bytes jpeg :content-type "image/jpeg"}
+        meta  {:filename (str user-id ".jpg") :path "avatars"}
+        check (validation/validate-file file meta {:max-size      (* 2 1024 1024)
+                                                   :allowed-types ["image/jpeg" "image/png"]})]
+    (if (:valid? check)
+      (storage/store-file (:storage store) file meta)
+      check)))
+;; => {:key "avatars/42.jpg" :url ... :size 12345 :content-type "image/jpeg" :stored-at #inst ...}
+;;    or {:valid? false :errors [{:code :file-too-large ...}]}
 
-;; Validate upload
-(v/validate-upload file-data image-rules)
-;; => {:valid? true} or {:valid? false :error "File too large"}
+(defn avatar [store user-id]
+  (storage/retrieve-file (:storage store) (str "avatars/" user-id ".jpg")))
+;; => {:bytes ... :content-type "image/jpeg" :size 12345}, or nil
 
-;; Validate with detailed errors
-(v/validate-upload! file-data image-rules)
-;; Throws ex-info on validation failure
+(defn forget-avatar! [store user-id]
+  (let [fs  (:storage store)
+        key (str "avatars/" user-id ".jpg")]
+    (when (storage/file-exists? fs key)
+      (storage/delete-file fs key))))
+
+;; A link that expires in an hour; nil when the adapter cannot sign.
+(defn avatar-link [store user-id]
+  (storage/generate-signed-url (:storage store) (str "avatars/" user-id ".jpg") 3600))
 ```
 
-### Path Generation
+### 3. At the REPL, without Integrant
 
 ```clojure
-(ns myapp.paths
-  (:require [myapp.storage.path :as path]))
+(require '[wagoe.storage.shell.adapters.local :as local]
+         '[wagoe.storage.ports :as storage])
 
-;; Date-based paths (good for many files)
-(path/generate :date-based {:prefix "uploads" :extension "jpg"})
-;; => "uploads/2024/01/15/a1b2c3d4.jpg"
+(def fs (local/create-local-storage {:base-path "/tmp/uploads"}))
 
-;; UUID-based paths
-(path/generate :uuid {:prefix "avatars" :extension "jpg"})
-;; => "avatars/550e8400-e29b-41d4-a716-446655440000.jpg"
-
-;; Custom path
-(path/generate :custom {:template "users/{user-id}/avatar.{ext}"
-                        :user-id "123"
-                        :ext "jpg"})
-;; => "users/123/avatar.jpg"
+(storage/store-file fs {:bytes (.getBytes "hi") :content-type "text/plain"}
+                    {:filename "hello.txt"})
 ```
+
+`wagoe.storage.shell.adapters.s3/create-s3-storage` and
+`wagoe.storage.shell.adapters.gcs/create-gcs-storage` take the same keys as the
+config entry.
 
 ### Image Processing
 
 ```clojure
 (ns myapp.images
-  (:require [wagoe.storage.ports :as storage-ports]))
+  (:require [wagoe.storage.shell.adapters.image-processor :as img]
+            [wagoe.storage.ports :as storage]))
 
-;; Resize image (via configured image processor)
-(storage-ports/resize-image image-processor file-bytes {:width 200 :height 200})
+(def processor (img/create-image-processor {}))
 
-;; Generate thumbnail
-(storage-ports/create-thumbnail image-processor file-bytes 100)
-
-;; Get image metadata
-(storage-ports/get-image-info image-processor file-bytes)
-;; => {:width 1920 :height 1080}
+(defn thumbnails [image-bytes]
+  {:small  (storage/create-thumbnail processor image-bytes 100)
+   :banner (storage/resize-image processor image-bytes {:width 1200})
+   :info   (storage/get-image-info processor image-bytes)})
+;; :info => {:width 1920 :height 1080 :format "jpg" :size 245678}
 ```
 
-### HTTP Upload Handler
+### HTTP routes
 
-```clojure
-(ns myapp.handlers
-  (:require [wagoe.storage.ports :as storage-ports]
-            [wagoe.storage.core.validation :as v]))
-
-(defn upload-avatar [request]
-  (let [file (get-in request [:multipart-params "file"])
-        user-id (get-in request [:session :user-id])]
-    
-    ;; Validate
-    (v/validate-upload! file {:allowed-types #{"image/jpeg" "image/png"}
-                              :max-size (* 2 1024 1024)})
-    
-    ;; Store
-    (let [path (str "avatars/" user-id ".jpg")
-          result (storage-ports/put storage path (:tempfile file))]
-      {:status 200
-       :body {:url (:url result)}})))
-```
+Upload, download, delete and signed-URL endpoints mount only with
+`:expose-http? true`; see [src/wagoe/storage/README.md](src/wagoe/storage/README.md#http-routes).
 
 ## Module Structure
 
 ```
 libs/storage/src/wagoe/storage/
-├── core/
-│   ├── validation.clj       # Upload validation (pure)
-│   ├── path.clj             # Path generation (pure)
-│   └── image.clj            # Image utilities (pure)
-├── ports.clj                # Storage protocol
+├── core/validation.clj      # Upload validation, filename sanitising (pure)
+├── ports.clj                # IFileStorage, IImageProcessor
+├── schema.clj               # Malli schemas: file data, metadata, config
 └── shell/
-    ├── adapters/
-    │   ├── local.clj        # Local filesystem adapter
-    │   └── s3.clj           # AWS S3 adapter
-    └── module-wiring.clj    # Integrant config
-```
-
-## Storage Protocol
-
-```clojure
-(defprotocol StorageAdapter
-  (put [this path data] [this path data opts]
-    "Store data at path, returns {:path :size :url}")
-  
-  (get [this path]
-    "Retrieve data from path, returns bytes or nil")
-  
-  (delete [this path]
-    "Delete data at path, returns true/false")
-  
-  (exists? [this path]
-    "Check if path exists, returns true/false")
-  
-  (list-files [this prefix]
-    "List files with prefix, returns seq of paths")
-  
-  (url [this path]
-    "Get public URL for path"))
+    ├── adapters/            # local, s3, gcs, image-processor
+    ├── service.clj          # validate-then-store service
+    ├── http_handlers.clj    # optional routes
+    └── module_wiring.clj    # Integrant :wagoe/storage, :wagoe/storage-routes
 ```
 
 ## Dependencies

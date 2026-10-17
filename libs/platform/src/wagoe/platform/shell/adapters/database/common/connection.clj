@@ -115,3 +115,15 @@
       (log/info "Closing database connection pool" {:pool-name pool-name})
       (.close ^HikariDataSource datasource)
       (log/info "Database connection pool closed" {:pool-name pool-name}))))
+
+(defn unpooled-connection
+  "A new connection from the data source `pool` opens its own with: same URL,
+   credentials and session settings, but not part of the pool. For session
+   state that must not reach other callers, such as a tenant migration's
+   search_path. The caller closes it."
+  ^Connection [pool]
+  (if (instance? HikariDataSource pool)
+    (.getConnection (.getDataSource ^HikariDataSource pool))
+    (throw (ex-info "Not a connection pool; cannot open a connection outside it"
+                    {:type :configuration-error
+                     :datasource-class (some-> pool class .getName)}))))
