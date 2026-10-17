@@ -603,15 +603,12 @@
                :interceptors ['wagoe.user.shell.http-interceptors/require-authenticated
                               'wagoe.user.shell.http-interceptors/require-self-or-admin]
                :summary "Revoke all user sessions"}}]
-      ["/sessions/revoke"
+      ["/users/:id/sessions/:session-id/revoke"
        {:no-doc     true
         :middleware [auth-middleware]
         :post {:handler (web-handlers/revoke-session-handler user-service config)
-               :summary "Revoke specific session"}}]
-      ["/sessions/:token/revoke"
-       {:no-doc     true
-        :middleware [auth-middleware]
-        :post {:handler (web-handlers/revoke-session-handler user-service config)
+               :interceptors ['wagoe.user.shell.http-interceptors/require-authenticated
+                              'wagoe.user.shell.http-interceptors/require-self-or-admin]
                :summary "Revoke specific session"}}]
       ;; Audit trail routes
       ["/audit"

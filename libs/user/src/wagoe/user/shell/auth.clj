@@ -13,6 +13,7 @@
   (:require [wagoe.config :as wagoe-config]
             [wagoe.user.core.authentication :as auth-core]
             [wagoe.user.core.mfa :as mfa-core]
+            [wagoe.user.ports :as ports]
             [wagoe.user.shell.mfa :as mfa-shell]
             [buddy.hashers :as hashers]
             [buddy.sign.jwt :as jwt]
@@ -229,6 +230,16 @@
                                                 :ip-address    (:ip-address login-context)})]
                   (assoc session :jwt-token (create-jwt-token user hours))))}))
 
+(defn record-failed-login!
+  "Count a failed attempt for `user-id` and lock the account when that count
+   reaches the limit. The count comes from the increment itself, not from the
+   user read before it, so parallel failures each count (BOU-696)."
+  [user-repository auth-config user-id current-time]
+  (when-let [n (ports/increment-failed-login-count user-repository user-id)]
+    (let [{:keys [lockout-until]} (auth-core/calculate-failed-login-consequences n auth-config current-time)]
+      (when lockout-until
+        (ports/update-user user-repository {:id user-id :lockout-until lockout-until})))))
+
 (defn authenticate-user
   "Coordinate user authentication with all security checks including MFA.
    
@@ -318,11 +329,8 @@
 
                    ;; Password verification failed
                    (not password-valid?)
-                   (let [failure-updates (auth-core/calculate-failed-login-consequences
-                                          user auth-config current-time)]
-                     ;; Only the changed keys: the role and active read above
-                     ;; may be stale (BOU-685).
-                     (.update-user user-repository (assoc failure-updates :id (:id user)))
+                   (do
+                     (record-failed-login! user-repository auth-config (:id user) current-time)
                      (log/warn "Authentication failed - invalid password" {:email email})
                      {:success? false
                       :error {:type    :authentication-failed

@@ -103,28 +103,22 @@
 ;; =============================================================================
 
 (deftest ^:unit calculate-failed-login-consequences-test
-  (testing "increments failed-login-count"
-    (let [result (auth/calculate-failed-login-consequences active-user login-config now)]
-      (is (= 1 (:failed-login-count result)))))
+  (testing "reports the count it is given: the increment already happened"
+    (is (= 1 (:failed-login-count (auth/calculate-failed-login-consequences 1 login-config now)))))
 
   (testing "sets should-alert? when threshold is reached"
-    (let [user (assoc active-user :failed-login-count 2) ; 2 failures, next makes 3 = alert-threshold
-          result (auth/calculate-failed-login-consequences user login-config now)]
-      (is (true? (:should-alert? result)))))
+    (is (true? (:should-alert? (auth/calculate-failed-login-consequences 3 login-config now)))))
 
   (testing "does not set should-alert? below threshold"
-    (let [result (auth/calculate-failed-login-consequences active-user login-config now)]
-      (is (false? (:should-alert? result)))))
+    (is (false? (:should-alert? (auth/calculate-failed-login-consequences 1 login-config now)))))
 
-  (testing "sets lockout-until when max attempts exceeded"
-    (let [user (assoc active-user :failed-login-count 4) ; 4 failures, next (5) = max
-          result (auth/calculate-failed-login-consequences user login-config now)]
+  (testing "sets lockout-until when max attempts reached"
+    (let [result (auth/calculate-failed-login-consequences 5 login-config now)]
       (is (some? (:lockout-until result)))
       (is (.isAfter (:lockout-until result) now))))
 
   (testing "does not set lockout-until below max attempts"
-    (let [result (auth/calculate-failed-login-consequences active-user login-config now)]
-      (is (nil? (:lockout-until result))))))
+    (is (nil? (:lockout-until (auth/calculate-failed-login-consequences 4 login-config now))))))
 
 ;; =============================================================================
 ;; prepare-successful-login-updates

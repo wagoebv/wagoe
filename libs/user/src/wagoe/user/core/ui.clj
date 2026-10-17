@@ -1056,16 +1056,16 @@
   "Single row in the sessions table.
    
    Args:
-     session       - session map with :token, :ip-address, :user-agent, :created-at, :last-active
-     current-token - the current session token (to mark current session)
-     user-id       - user ID for action URLs
+     session            - session map with :id, :ip-address, :user-agent, :created-at, :last-accessed-at
+     current-session-id - id of the session making the request (marked current)
+     user-id            - user ID for action URLs
      
    Returns:
      Hiccup table row
      
    Pure: true"
-  [session current-token user-id current-time zone-id]
-  (let [is-current? (= (:session-token session) current-token)]
+  [session current-session-id user-id current-time zone-id]
+  (let [is-current? (and (some? current-session-id) (= (:id session) current-session-id))]
     [:tr {:class (when is-current? "current-session")}
      [:td
       [:strong (parse-user-agent (:user-agent session))]
@@ -1077,11 +1077,9 @@
      [:td
       (when-not is-current?
         [:form {:method "post"
-                :action "/web/sessions/revoke"
+                :action (str "/web/users/" user-id "/sessions/" (:id session) "/revoke")
                 :class "session-revoke-form"}
          (csrf/hidden-field)
-         [:input {:type "hidden" :name "session-token" :value (:session-token session)}]
-         [:input {:type "hidden" :name "user-id" :value user-id}]
          [:button.button.secondary.small
           {:type "submit"
            :onclick "return confirm('Revoke this session? The device will need to sign in again.');"}
@@ -1092,14 +1090,14 @@
    
    Args:
      sessions      - collection of session maps
-     current-token - the current session token
+     current-session-id - id of the session making the request
      user-id       - user ID for action URLs
      
    Returns:
      Hiccup table
      
    Pure: true"
-  [sessions current-token user-id current-time zone-id]
+  [sessions current-session-id user-id current-time zone-id]
   (if (empty? sessions)
     [:div.empty-state.card [:t :user/sessions-empty-state]]
     [:div.sessions-table-shell
@@ -1114,7 +1112,7 @@
          [:th [:t :common/column-actions]]]]
        [:tbody
         (for [session sessions]
-          (session-row session current-token user-id current-time zone-id))]])]))
+          (session-row session current-session-id user-id current-time zone-id))]])]))
 
 (defn user-sessions-page
   "Complete page for managing user sessions.
@@ -1122,14 +1120,14 @@
    Args:
      user          - user map
      sessions      - collection of session maps
-     current-token - the current session token
+     current-session-id - id of the session making the request
      opts          - page options (user context, flash messages, etc.)
      
    Returns:
      Complete page hiccup
      
    Pure: false"
-  [user sessions current-token opts]
+  [user sessions current-session-id opts]
   (let [current-time (:current-time opts)
         zone-id (:zone-id opts)]
     (page-layout
@@ -1150,7 +1148,7 @@
             {:type "submit"
              :onclick "return confirm('Revoke all other sessions? This will log out all other devices.');"}
             [:t :user/button-revoke-all-others]]])]]
-      (sessions-list sessions current-token (:id user) current-time zone-id)]
+      (sessions-list sessions current-session-id (:id user) current-time zone-id)]
      opts)))
 
 ;; =============================================================================

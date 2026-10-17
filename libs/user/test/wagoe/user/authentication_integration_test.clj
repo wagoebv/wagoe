@@ -90,15 +90,13 @@
   (testing "calculate-failed-login-consequences"
     (let [current-time (Instant/now)]
 
-      (testing "increments failed login count"
-        (let [user-with-failures (assoc test-user :failed-login-count 2)
-              result (auth-core/calculate-failed-login-consequences user-with-failures test-login-config current-time)]
+      (testing "alerts at the threshold"
+        (let [result (auth-core/calculate-failed-login-consequences 3 test-login-config current-time)]
           (is (= 3 (:failed-login-count result)))
           (is (:should-alert? result))))
 
       (testing "locks account after max attempts"
-        (let [user-with-max-failures (assoc test-user :failed-login-count 4)
-              result (auth-core/calculate-failed-login-consequences user-with-max-failures test-login-config current-time)]
+        (let [result (auth-core/calculate-failed-login-consequences 5 test-login-config current-time)]
           (is (= 5 (:failed-login-count result)))
           (is (:lockout-until result))
           (is (:should-alert? result))))))

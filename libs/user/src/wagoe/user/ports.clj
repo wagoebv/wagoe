@@ -36,6 +36,10 @@
   ;; entity leaves the rest as stored. Sets :updated-at.
   ;; Returns the stored entity; throws {:type :user-not-found} when absent.
 
+  (increment-failed-login-count [this user-id])
+  ;; Adds one to :failed-login-count in a single write, so parallel failures
+  ;; each count (BOU-696). Returns the new count, or nil when absent.
+
   (soft-delete-user [this user-id])
   ;; Sets :deleted-at, hiding the user from every other query. Returns boolean.
 
@@ -53,7 +57,9 @@
    :revoked-at; every read here filters on both."
 
   (create-session [this session-entity])
-  ;; Generates :id and :session-token when absent. Returns the stored entity.
+  ;; Generates :id when absent. Returns the entity with its plaintext
+  ;; :session-token, the only time it is handed out: the database adapter
+  ;; stores a hash, and its reads return no :session-token (BOU-696).
 
   (find-session-by-token [this session-token])
   ;; Returns the session entity, or nil when absent, expired or revoked.
@@ -211,6 +217,10 @@
 
   (get-user-sessions [this user-id])
   ;; Returns the user's active sessions, newest first.
+
+  (revoke-user-session [this user-id session-id])
+  ;; Revokes one of the user's sessions, named by id, and audits a logout.
+  ;; Returns {:invalidated boolean}; false when the user holds no such session.
 
   (list-audit-logs [this options])
   ;; options as IUserAuditRepository/find-audit-logs.

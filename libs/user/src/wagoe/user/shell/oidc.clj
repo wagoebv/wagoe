@@ -372,10 +372,8 @@
                        user)]
             (finish! client user sign-in login-context))
           ;; Wrong codes count towards the lockout, as they do on the password form.
-          (do (ports/update-user user-repository
-                                 (assoc (auth-core/calculate-failed-login-consequences
-                                         user (get-in client [:auth-service :auth-config]) (Instant/now))
-                                        :id (:id user)))
+          (do (auth/record-failed-login! user-repository (get-in client [:auth-service :auth-config])
+                                         (:id user) (Instant/now))
               (audit! client user login-context (:provider-id sign-in) false "Invalid MFA code")
               {:error {:type :oidc/mfa-failed :message "Invalid MFA code"}}))))))
 

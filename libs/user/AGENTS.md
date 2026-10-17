@@ -69,7 +69,8 @@ The module carries **two** token mechanisms; know which you are using:
   are the **canonical, horizontally-safe** mechanism. They are stored, so they
   can be **revoked immediately** (logout, `invalidate-session`,
   `invalidate-all-user-sessions`) and any replica validates them against the DB.
-  Prefer these for request authentication.
+  Prefer these for request authentication. The table holds each token's
+  SHA-256, never the token; the UI names sessions by id (BOU-696).
 - **Stateless HS256 JWTs** (`auth/create-jwt-token` / `validate-jwt-token`) are
   **not stored** and therefore **cannot be revoked before expiry** — a logout
   does not invalidate an outstanding JWT. Use only for short-lived, stateless

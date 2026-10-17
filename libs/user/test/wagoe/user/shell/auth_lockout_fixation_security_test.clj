@@ -43,7 +43,9 @@
                            (when (= email (:email @state)) @state))
                          (update-user [_ entity]
                            (swap! state merge entity)
-                           @state))
+                           @state)
+                         (increment-failed-login-count [_ _]
+                           (:failed-login-count (swap! state update :failed-login-count (fnil inc 0)))))
    :session-repository (reify ports/IUserSessionRepository
                          (find-sessions-by-user [_ _] [])
                          (create-session [_ s] s))
@@ -124,8 +126,10 @@
                                (find-user-by-email [_ email] (ports/find-user-by-email repo email))
                                (update-user [_ entity]
                                  (swap! writes conj entity)
-                                 (ports/update-user repo entity))))))]
+                                 (ports/update-user repo entity))
+                               (increment-failed-login-count [_ id]
+                                 (ports/increment-failed-login-count repo id))))))]
     (is (false? (:success? (login svc "wrong-password"))))
     (is (true? (:success? (login svc correct-password))))
-    (is (= 2 (count @writes)))
+    (is (= 1 (count @writes)) "a failure below the limit only increments")
     (is (not-any? #(or (contains? % :role) (contains? % :active)) @writes))))

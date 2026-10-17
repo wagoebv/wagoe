@@ -132,20 +132,27 @@
         (is (re-find #"audit-action-badge" html))))))
 
 (deftest ^:unit session-row-test
-  (testing "posts revoke action to stable endpoint with token in hidden field"
-    (let [session  {:session-token    "abc/def+ghi=="
+  (testing "names the session by id and never carries a token (BOU-696)"
+    (let [session-id (java.util.UUID/randomUUID)
+          session  {:id               session-id
+                    :session-token    "abc_def-ghi"
                     :user-agent       "Mozilla/5.0 Chrome"
                     :ip-address       "127.0.0.1"
                     :created-at       (java.time.Instant/parse "2026-03-19T08:00:00Z")
                     :last-accessed-at (java.time.Instant/parse "2026-03-19T08:00:00Z")}
           current-time (java.time.Instant/parse "2026-03-19T10:00:00Z")
           zone-id (java.time.ZoneId/of "UTC")
-          row      (ui/session-row session "different-current-token" "user-123" current-time zone-id)
-          row-html (str row)]
-      (is (re-find #"/web/sessions/revoke" row-html))
-      (is (re-find #":name \"session-token\"" row-html))
-      (is (re-find #"abc/def\+ghi==" row-html))
-      (is (re-find #"2 hours ago" row-html)))))
+          row-html (str (ui/session-row session (java.util.UUID/randomUUID) "user-123" current-time zone-id))]
+      (is (re-find (re-pattern (str "/web/users/user-123/sessions/" session-id "/revoke")) row-html))
+      (is (not (re-find #"abc_def-ghi" row-html)))
+      (is (re-find #"2 hours ago" row-html))))
+
+  (testing "the current session is marked and offers no revoke"
+    (let [session-id (java.util.UUID/randomUUID)
+          row-html (str (ui/session-row {:id session-id} session-id "user-123"
+                                        (java.time.Instant/now) (java.time.ZoneId/of "UTC")))]
+      (is (re-find #"Current Session" row-html))
+      (is (not (re-find #"/revoke" row-html))))))
 
 (deftest ^:unit parse-user-agent-test
   (testing "browser and device are markers, not English"

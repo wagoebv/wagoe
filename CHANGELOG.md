@@ -108,6 +108,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Security: session tokens were stored in plaintext, so a read of `user_sessions` was a login** (BOU-696). Only their
+  SHA-256 is stored now; boot or `migrate up` hashes existing rows in place, so nobody is signed out.
+- **Security: parallel wrong passwords counted as one, so lockout came late** (BOU-696). The count is incremented in the
+  database. Custom `IUserRepository` implementations must add `increment-failed-login-count`.
 - **A concurrent promotion, demotion or deactivation could be undone past the last-admin guard** (BOU-685). Role and
   active changes decide under the admin lock; edits and logins write only their own fields. No action needed.
 - **`wagoe session list` and `session invalidate` were unreachable, and are removed** (BOU-692). A role change or

@@ -47,6 +47,11 @@
     (let [user (assoc user-entity :updated-at (Instant/now))]
       (get (swap! state update (:id user) merge user) (:id user))))
 
+  (increment-failed-login-count [_ user-id]
+    (when (get @state user-id)
+      (get-in (swap! state update-in [user-id :failed-login-count] (fnil inc 0))
+              [user-id :failed-login-count])))
+
   (soft-delete-user [_ user-id]
     (boolean (when (get @state user-id)
                (swap! state assoc-in [user-id :deleted-at] (Instant/now))
