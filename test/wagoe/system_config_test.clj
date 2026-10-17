@@ -37,9 +37,11 @@
    no default provider, and this config has no profile to allow the mock
    (BOU-564); it is only assembled, never started. The events outbox is opt-in,
    so it is switched on here to be assembled at all (BOU-448). User names an
-   OIDC provider, without which its sign-in components are not assembled."
+   OIDC provider, without which its sign-in components are not assembled.
+   Webhooks names a topic, without which it does not subscribe to the bus."
   (fn [k] (get {:wagoe/payment-provider {:provider :stripe :api-key "sk" :webhook-secret "wh"}
                 :wagoe/events           {:provider :memory :outbox {}}
+                :wagoe/webhooks         {:topics [:orders/placed]}
                 :wagoe/user             {:enabled? true
                                          :oidc {:base-url  "https://app.example.com"
                                                 :providers {:example {:issuer    "https://idp.example.com"

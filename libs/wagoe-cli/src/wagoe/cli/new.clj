@@ -92,6 +92,7 @@
                      :jobs-version               (:version (cat/find-module "jobs"))
                      :realtime-version           (:version (cat/find-module "realtime"))
                      :push-version               (:version (cat/find-module "push"))
+                     :webhooks-version           (:version (cat/find-module "webhooks"))
                      :audience-version           (:version (cat/find-module "audience"))
                      :geo-version                (:version (cat/find-module "geo"))
                      :reports-version            (:version (cat/find-module "reports"))

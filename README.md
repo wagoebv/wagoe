@@ -75,7 +75,7 @@ exist and CI calls them directly; you do not need to know which is which.
 
 ## Why Wagoe?
 
-**For developers:** 32 independently-publishable libraries on Clojars — use just `wagoe-core` for validation utilities, or go full-stack with JWT + MFA auth, auto-generated CRUD UIs, background jobs, multi-tenancy, real-time WebSockets, and more. Every library follows the same FC/IS structure, making any Wagoe codebase instantly familiar.
+**For developers:** 33 independently-publishable libraries on Clojars — use just `wagoe-core` for validation utilities, or go full-stack with JWT + MFA auth, auto-generated CRUD UIs, background jobs, multi-tenancy, real-time WebSockets, and more. Every library follows the same FC/IS structure, making any Wagoe codebase instantly familiar.
 
 **Ship faster:** The scaffolder generates fully structured modules (entity + routes + tests) in seconds. The admin UI auto-generates CRUD interfaces from your schema — no manual forms. Built-in observability, RFC 5988 pagination, and declarative interceptors mean you write business logic, not plumbing. AI tooling (`bb scaffold ai`, and the experimental `bb ai gen-tests` and `bb ai sql`) handles the repetitive parts.
 
@@ -128,7 +128,7 @@ Each library also has its own `AGENTS.md` with library-specific documentation.
 
 ## Libraries
 
-Wagoe is a monorepo of **32 independently publishable libraries**, application and development tooling alike:
+Wagoe is a monorepo of **33 independently publishable libraries**, application and development tooling alike:
 
 | Library | Description |
 |---------|-------------|
@@ -156,6 +156,7 @@ Wagoe is a monorepo of **32 independently publishable libraries**, application a
 | [i18n](libs/i18n/) | Marker-based internationalisation with translation catalogues |
 | [push](libs/push/) | Multi-platform push notifications: FCM (Firebase) + APNs (Apple) |
 | [audience](libs/audience/) | Rule-based audience segmentation with SQL + predicate pipeline |
+| [webhooks](libs/webhooks/) | Outbound webhooks: signed, retried, per-tenant delivery of bus events |
 | [ui-style](libs/ui-style/) | Shared UI style bundles, design tokens, CSS/JS assets |
 | [shared-ui](libs/shared-ui/) | Shared Hiccup primitives: forms, tables, layouts, modals, icons |
 | [devtools](libs/devtools/) | Dev-only: error pipeline, dev dashboard, REPL power tools, guidance engine |

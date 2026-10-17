@@ -38,7 +38,9 @@
            "libs/push/resources"                            ;; Push resources
            "libs/test/src" "libs/test/test"                ;; Test kit for apps (BOU-469)
            "libs/audience/src" "libs/audience/test"        ;; Phase 21: Audience
-           "libs/audience/resources"]                      ;; Audience migrations
+           "libs/audience/resources"                       ;; Audience migrations
+           "libs/webhooks/src" "libs/webhooks/test"        ;; Outbound webhooks
+           "libs/webhooks/resources"]                      ;; webhook migrations + admin entities
 
  :deps    {org.clojure/clojure                        {:mvn/version "1.12.6"}
            ;; cheshire brings jackson-core and -databind below 2.22.3: CVE-2026-89407, CVE-2026-89425, CVE-2026-91776, CVE-2026-91777 (BOU-618).

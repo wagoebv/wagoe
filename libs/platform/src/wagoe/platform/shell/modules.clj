@@ -438,7 +438,7 @@
         (map (juxt #(keyword "wagoe" %) identity))
         ["email" "i18n" "user" "cache" "tenant" "admin" "workflow" "search" "events"
          "push" "audience" "storage" "jobs" "realtime" "reports" "calendar"
-         "ui-style"]))
+         "ui-style" "webhooks"]))
 
 (def always-on-modules
   "Modules every application gets whether or not its config mentions them.

@@ -9,7 +9,7 @@ absent — the ordering is the useful part.
 
 == Where we are
 
-Thirty-two libraries are published on Clojars under `com.wagoe`, versioned in
+Thirty-three libraries are published on Clojars under `com.wagoe`, versioned in
 lockstep. The framework is feature-complete for the applications it targets; the
 remaining work is about trust rather than capability.
 
@@ -161,7 +161,6 @@ promise; `2.0` is where the things that cannot are collected.
 * A realtime-to-UI bridge: SSE plus out-of-band fragment responses
 * A test kit for consumer applications — test system, test tenant, Ring client,
   job draining
-* Outbound webhooks: signed, retried, per-tenant
 * GDPR data export per user and per tenant, and retention policies
 
 === Ongoing through 1.x

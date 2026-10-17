@@ -1,7 +1,7 @@
 = Library Overview
-:description: All 32 independently publishable Wagoe libraries, application and tooling alike.
+:description: All 33 independently publishable Wagoe libraries, application and tooling alike.
 
-Wagoe is a monorepo of 32 libraries published to Clojars under the `com.wagoe`
+Wagoe is a monorepo of 33 libraries published to Clojars under the `com.wagoe`
 group.
 Every library follows the same FC/IS structure, making the codebase instantly familiar across libraries.
 
@@ -96,6 +96,9 @@ Every library follows the same FC/IS structure, making the codebase instantly fa
 
 | xref:audience.adoc[audience]
 | Rule-based audience segmentation: `defaudience` macro, hybrid SQL + predicate evaluation, AND/OR/NOT composition, cached membership.
+
+| xref:webhooks.adoc[webhooks]
+| Outbound webhooks: bus events delivered as signed HTTP requests, one retried job per delivery, per-tenant subscriptions, SSRF refusal, delivery log in the admin.
 
 | xref:push.adoc[push]
 | Mobile push notifications via FCM and APNs: `defpush` macro, device token lifecycle, job-backed reliable delivery, delivery analytics.
