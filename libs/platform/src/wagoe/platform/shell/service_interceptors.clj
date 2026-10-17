@@ -29,6 +29,7 @@
             [wagoe.observability.metrics.core :as metrics]
             [wagoe.observability.errors.core :as error-reporting]
             [wagoe.platform.core.http.problem-details :as problem-details]
+            [wagoe.platform.shell.reported-errors :as reported-errors]
             [wagoe.observability.core.sql-redaction :as redaction])
   (:import [java.time Instant]
            [java.util UUID]))
@@ -149,11 +150,14 @@
             ctx)})
 
 (def service-error-handling
-  "Handles service operation error reporting and recovery."
+  "Reports a failed operation to error tracking, unless it failed with a typed
+   4xx: that is the caller's, not a fault (BOU-714)."
   {:name :service-error-handling
-   :error (fn [{:keys [operation-name params system context] :as ctx}]
+   ;; The throwable is under :exception. This read :error until BOU-714, so
+   ;; nothing was ever reported.
+   :error (fn [{:keys [operation-name params system context] error :exception :as ctx}]
             (when-let [error-reporter (:error-reporter system)]
-              (when-let [error (:error ctx)]
+              (when (and error (>= (first (problem-details/exception-status error {})) 500))
                 ;; Add error breadcrumb
                 (error-reporting/add-breadcrumb
                  error-reporter
@@ -162,14 +166,18 @@
                  :error
                  (pii/redact-for-log (merge context params {:error-message (redaction/loggable-message error)})))
 
-                ;; Report application error
-                (error-reporting/report-application-error
-                 error-reporter
-                 (redaction/redacted-exception error)
-                 (str "Service operation failed: " operation-name)
-                 {:extra (pii/redact-for-log (merge {:operation operation-name} params context))
-                  :tags {:component "service"
-                         :operation operation-name}})))
+                ;; A failing reporter must not replace the operation's own
+                ;; exception, nor skip the logging and metrics after this.
+                ;; Once: the HTTP layer sees the same throwable (BOU-714).
+                (reported-errors/report-once!
+                 error
+                 #(error-reporting/report-and-continue
+                   error-reporter
+                   (redaction/redacted-exception error)
+                   (str "Service operation failed: " operation-name)
+                   {:extra (pii/redact-for-log (merge {:operation operation-name} params context))
+                    :tags {:component "service"
+                           :operation operation-name}}))))
             ctx)})
 
 (def service-audit-logging
