@@ -32,10 +32,38 @@ Response:
 [source,json]
 ----
 {
-  "token": "eyJhbG...",
+  "authenticated": true,
+  "sessionToken": "...",
+  "jwtToken": "eyJhbG...",
   "user": {"id": "...", "email": "user@example.com", "role": "user"}
 }
 ----
+
+`POST /api/v1/sessions` answers the same. A refused login is an error in the
+standard shape (`{"error": {"type", "message", "correlation-id"}}`):
+
+[cols="1,2"]
+|===
+| Status | When
+
+| 200 with `"requiresMfa": true`
+| The password was right; send it again with `mfaCode`.
+
+| 400 `validation-error`
+| The body is malformed or the email is not a valid address.
+
+| 401 `unauthorized`
+| Wrong email or password. The body is the same whether or not the account exists.
+
+| 401 `mfa-verification-failed`
+| Wrong `mfaCode`.
+
+| 403 `mfa-enrolment-required`
+| MFA is required and the user has not enrolled.
+
+| 429 `account-locked`
+| Too many failed attempts. `Retry-After` gives the seconds to wait. Unlike the 401, this tells the caller the account exists.
+|===
 
 == Protected routes
 

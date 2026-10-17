@@ -95,13 +95,6 @@
 ;; Session Command Options
 ;; =============================================================================
 
-(def session-create-options
-  [[nil "--user-id UUID" "User UUID (required)"
-    :parse-fn type-conv/parse-uuid-string
-    :validate [some? "Must be a valid UUID"]]
-   [nil "--user-agent AGENT" "User agent string"]
-   [nil "--ip-address IP" "IP address"]])
-
 (def session-invalidate-options
   [[nil "--token TOKEN" "Session token (required)"]])
 
@@ -442,18 +435,6 @@
         result-context (interceptor/run-pipeline context pipeline)]
     (:response result-context)))
 
-(defn execute-session-create
-  "Execute session create command using interceptor pipeline."
-  [service _error-reporter opts]
-  (let [context (create-cli-interceptor-context
-                 :session-create
-                 service
-                 []
-                 opts)
-        pipeline (user-interceptors/create-session-creation-pipeline :cli)
-        result-context (interceptor/run-pipeline context pipeline)]
-    (:response result-context)))
-
 (defn execute-session-validate-v2
   "Execute session validate command using interceptor pipeline."
   [service _error-reporter opts]
@@ -525,7 +506,6 @@
                             {:type :unknown-command
                              :message (str "Unknown command: user " (name verb))})))
     :session (case verb
-               :create (execute-session-create service nil opts)
                :invalidate (execute-session-invalidate service nil opts)
                :list (execute-session-list service nil opts)
                (throw (ex-info (str "Unknown session command: " (name verb))
@@ -555,7 +535,7 @@ Global Options:
 Examples:
   wagoe user create --email john@example.com --name \"John Doe\" --role user
   wagoe user list --format json
-  wagoe session create --user-id UUID
+  wagoe session list --user-id UUID
 
 For domain-specific help:
   wagoe user --help
@@ -614,14 +594,10 @@ Examples:
 Usage: wagoe session <command> [options]
 
 Commands:
-  create       Create a new session (login)
   invalidate   Invalidate a session (logout)
   list         List sessions for a user
 
-Options for 'create':
-  --user-id UUID       User UUID (required)
-  --user-agent AGENT   User agent string (optional)
-  --ip-address IP      IP address (optional)
+Sessions are created by logging in: POST /api/v1/auth/login.
 
 Options for 'invalidate':
   --token TOKEN        Session token (required)
@@ -630,7 +606,6 @@ Options for 'list':
   --user-id UUID       User UUID (required)
 
 Examples:
-  wagoe session create --user-id UUID
   wagoe session invalidate --token TOKEN
   wagoe session list --user-id UUID")
 

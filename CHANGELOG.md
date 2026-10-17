@@ -108,6 +108,9 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **`POST /api/v1/auth/login` and `/api/v1/sessions` answered 200 to a failed login** (BOU-691). Wrong credentials now
+  answer 401 and a locked account 429, in the standard error shape; check the status, not `authenticated`.
+- **`wagoe session create --user-id` could never create a session, and is removed** (BOU-691). Log in through the API.
 - **Job args came back as strings on the `:db` and `:redis` queues: keywords, UUIDs, instants** (BOU-689). Jobs are stored
   as transit, which older workers cannot read: upgrade them together. Old jobs keep string args, so convert only strings.
 - **Security: the rate limiter keyed on an unchecked `X-Api-Key`, so a caller could dodge its limit or drain another's** (BOU-690).
