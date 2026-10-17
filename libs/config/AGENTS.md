@@ -41,17 +41,23 @@ generates.
 | `user-validation-config` | Password and profile rules for `wagoe-user` |
 | `logging-config` / `metrics-config` / `tracing-config` / `error-reporting-config` | Observability adapters |
 
-## Secrets (BOU-455)
+## Secrets (BOU-455, BOU-699)
 
 `#secret "NAME"` reads the default source (`:env`, or `:default-secret-source`
-in `load-config` opts); `#secret [:file "name"]` names one. `:file` reads
-`WAGOE_SECRETS_DIR`, else `/run/secrets`, trimmed. More sources go in
-`:secret-sources` as `ISecretSource` implementations.
+in `load-config` opts); `#secret [:file "name"]` names one;
+`#secret {:name "NAME" :source :file :default "dev"}` adds a default. `:file`
+reads `WAGOE_SECRETS_DIR`, else `/run/secrets`, trimmed.
 
+- More sources are declared in config.edn, top level:
+  `:secret-sources {:vault my.app/vault-source}`, each symbol an `ISecretSource`
+  or a no-arg fn returning one. `read-config-resource` reads that map in a first
+  pass, so every reader through `wagoe.config` — app, migration and database
+  CLIs — sees them. `:secret-sources` in opts win over declared ones.
 - A missing or blank secret throws `:configuration-error` with `:secret` and
-  `:source`, never the value. Inside `#or` it is nil, so `#or [#secret "X" "dev"]`
-  works: the namespace wraps Aero's `#or` to make that so. A `#secret` as the
-  last value of an `#or` is required again.
+  `:source`, never the value, unless the form has `:default`. `#or` does not
+  catch it: wrapping Aero's `#or` changed it for every Aero user in the JVM.
+- `bb doctor` (`secret-refs`) reports missing `:env`/`:file` names without a
+  default. It parses text, so it cannot ask custom sources.
 - Resolved values are kept in a registry so `redact` can find them by value.
   Anything that prints config must pass it through `redact`; the devtools config
   page and `(config :section)` do.
