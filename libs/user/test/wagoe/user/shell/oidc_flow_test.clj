@@ -9,7 +9,6 @@
             [cheshire.core :as json]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing use-fixtures]]
-            [one-time.core :as otp]
             [ring.adapter.jetty :as jetty]
             [ring.middleware.params :refer [wrap-params]]
             [ring.util.codec :as codec]
@@ -18,6 +17,7 @@
             [wagoe.user.shell.in-memory-repository-test :as mem]
             [wagoe.user.shell.middleware :as middleware]
             [wagoe.user.shell.mfa :as mfa]
+            [wagoe.user.totp-clock :as totp-clock]
             [wagoe.user.shell.oidc :as oidc]
             [wagoe.user.shell.service :as service]
             [wagoe.user.shell.web-handlers :as handlers])
@@ -103,6 +103,8 @@
                                        :challenge    (get params "code_challenge")
                                        :redirect-uri (get params "redirect_uri")})
     {"state" (get params "state") "code" code}))
+
+(use-fixtures :each totp-clock/frozen)
 
 (use-fixtures :once
   (fn [f]
@@ -392,7 +394,7 @@
     (let [wrong (submit "000000")]
       (is (= 401 (:status wrong)))
       (is (= 1 (:failed-login-count (ports/find-user-by-id (:users a) (:id ada))))))
-    (let [ok (submit (str (otp/get-totp-token secret)))]
+    (let [ok (submit (totp-clock/code secret))]
       (is (= "ada@example.com" (authenticated-as a (session-token ok))))
       (is (= "0;url=/web/overzicht" (get-in ok [:headers "Refresh"])) "lands per :login-redirect")
       (is (= 1 (count (ports/find-identities-by-user (:identities a) (:id ada))))))))
@@ -407,7 +409,7 @@
         submit #((:mfa a) (request {:cookies {"oidc-mfa" {:value cookie}} :form-params {"mfa-code" %}}))]
     (is (= [401 401 401] (mapv #(:status (submit %)) ["000000" "WRONG-BACKUP-CODE" "000000"])))
     (is (some? (:lockout-until (ports/find-user-by-id (:users a) (:id ada)))))
-    (let [resp (submit (str (otp/get-totp-token secret)))]
+    (let [resp (submit (totp-clock/code secret))]
       (is (= 403 (:status resp)))
       (is (nil? (session-token resp))))))
 

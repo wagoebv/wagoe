@@ -45,8 +45,8 @@ for what is public API, what is internal, and how deprecations are announced.
   labels without `wagoe.i18n.shell.render`.
 - **Recurring jobs** (BOU-452): `:recurring {:nightly-report {:cron "0 2 * * *"}}` under `:wagoe/jobs`; one replica
   enqueues each tick. `enqueue-once!` and `:wagoe/idempotency-store` make a repeated enqueue a no-op.
-- **`#secret` config reader** (BOU-455): reads env vars or mounted files (`#secret [:file "db-password"]`), takes custom
-  sources such as Vault, and redacts values in devtools. See the config library page.
+- **`#secret` config reader** (BOU-455, BOU-699): env vars or mounted files, custom sources declared under `:secret-sources`
+  in config.edn, defaults as `#secret {:name … :default …}`; `bb doctor` reports missing ones. See the config library page.
 - **CSV reports** (BOU-674): `:type :csv` renders the first `:table` section as RFC 4180 text, formula cells neutralised.
   Pass `:bom? true` for Excel.
 - **App modules can add HTTP middleware and components** (BOU-672): an `ig-config` returns only what it adds to the
@@ -130,6 +130,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **A refused key's field could be read from the value sent, and none was named on non-English PostgreSQL or MySQL 5.7
   with mixed-case tables** (BOU-721). Columns are now read only from the driver's key list, or else the catalog.
+- **Admin dashboard linked to Groups and Audit with the user web UI switched off** (BOU-713). It now shows a card only
+  when its page is mounted.
 - **An app migration sharing an id with a library's silently never ran, or the library's didn't** (BOU-717). Boot and
   `migrate up` now refuse; rename yours and see the migrations guide. Skipped session-token hashing reruns at boot.
 - **Admin: a duplicate on a unique key over several columns marked no field, and a create logged an ERROR** (BOU-712).

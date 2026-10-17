@@ -91,6 +91,30 @@
       (is (= :error (:level (first result))))
       (is (= :warn (:level (second result)))))))
 
+(deftest ^:unit check-secret-refs-reports-missing-names-and-never-values
+  (let [dir    (doto (java.io.File/createTempFile "wagoe-secrets" "") .delete .mkdirs)
+        _      (spit (java.io.File. dir "db-password") "file-s3cret\n")
+        _      (spit (java.io.File. dir "blank") "  \n")
+        env    {"WAGOE_SECRETS_DIR" (str dir) "API_TOKEN" "env-s3cret"}
+        config (str "{:active {:a {:token #secret \"API_TOKEN\"\n"
+                    "              :pw #secret [:file \"db-password\"]\n"
+                    "              :gone #secret \"GONE_TOKEN\"\n"
+                    "              :also #secret [:env GONE_SYM]\n"
+                    "              :blank #secret [:file \"blank\"]\n"
+                    "              :nofile #secret {:name \"no-file\" :source :file}\n"
+                    "              :dev #secret {:name \"DEV_ONLY\" :default \"dev\"}\n"
+                    "              :vault #secret [:vault \"elsewhere\"]\n"
+                    "              :legacy #or [#secret \"LEGACY\" \"dev\"]}}\n"
+                    " :inactive {:b #secret \"INACTIVE_ONE\"}}")
+        [r & more] (doctor/check-secret-refs config env)]
+    (is (nil? more))
+    (is (= :error (:level r)))
+    (is (= "#secret references without defaults are missing: env:GONE_SYM, env:GONE_TOKEN, env:LEGACY, file:blank, file:no-file"
+           (:msg r))
+        "a :default protects, #or does not, :inactive and custom sources are not checked")
+    (is (not (re-find #"s3cret" (str r))))
+    (is (= :pass (:level (first (doctor/check-secret-refs "{:active {:a #secret \"API_TOKEN\"}}" env)))))))
+
 (deftest ^:unit an-unset-optional-setting-is-a-warning
   ;; BOU-591: a Redis without a password is valid, and doctor called an unset
   ;; REDIS_PASSWORD an error.

@@ -2,15 +2,17 @@
   "Enabling MFA stores ten bcrypt-hashed backup codes, which did not fit the
    VARCHAR(255) column they had on PostgreSQL, MySQL and H2 (BOU-715).
    WAGOE_TEST_DB picks the engine."
-  (:require [clojure.test :refer [deftest is testing]]
-            [one-time.core :as otp]
+  (:require [clojure.test :refer [deftest is testing use-fixtures]]
             [support.test-db :as test-db]
             [wagoe.user.ports :as ports]
             [wagoe.user.shell.auth :as auth]
             [wagoe.user.shell.mfa :as mfa]
             [wagoe.user.shell.persistence :as persistence]
-            [wagoe.user.shell.service :as service])
+            [wagoe.user.shell.service :as service]
+            [wagoe.user.totp-clock :as totp-clock])
   (:import [java.util UUID]))
+
+(use-fixtures :each totp-clock/frozen)
 
 (def ^:private password "Correct-Horse-1!")
 
@@ -35,7 +37,7 @@
         (is (= 10 (count backup-codes)))
         (is (= {:success? true}
                (mfa/enable-mfa mfa-svc (:id user) secret backup-codes
-                               (format "%06d" (otp/get-totp-token secret)))))
+                               (totp-clock/code secret))))
         (is (= 10 (count (:mfa-backup-codes (ports/find-user-by-id users (:id user))))) "all ten are stored")
         (with-redefs [auth/get-jwt-secret (constantly "test-secret-minimum-32-characters-long-for-testing")]
           (testing "a backup code signs in, once"

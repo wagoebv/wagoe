@@ -2,7 +2,8 @@
   "Tests for database configuration loading and parsing."
   (:require [clojure.test :refer [deftest is testing]]
             [wagoe.platform.shell.adapters.database.config :as config]
-            [clojure.java.io :as io]))
+            [clojure.java.io :as io]
+            [wagoe.config.secrets :as secrets]))
 
 ;; =============================================================================
 ;; Test Data and Fixtures
@@ -288,6 +289,22 @@
                 (str "Config should have :active section for env: " env))
             (is (seq (:active config))
                 (str "Config should have at least one active adapter for env: " env))))))))
+
+(def vault-source
+  (reify secrets/ISecretSource
+    (fetch-secret [_ n] (get {"db-password" "from-vault"} n))))
+
+(deftest ^:unit the-database-tools-see-the-secret-sources-the-config-declares
+  ;; The migration and database CLIs read config without the app's opts.
+  (let [f (java.io.File/createTempFile "wagoe-config" ".edn")]
+    (.deleteOnExit f)
+    (spit f (str "{:secret-sources {:vault " `vault-source "}"
+                 " :active {:wagoe/postgresql {:password #secret [:vault \"db-password\"]}}}"))
+    (config/clear-config-cache!)
+    (try
+      (with-redefs [io/resource (fn [path] (when (= "conf/with-vault/config.edn" path) (.toURL (.toURI f))))]
+        (is (= "from-vault" (get-in (config/load-config "with-vault") [:active :wagoe/postgresql :password]))))
+      (finally (config/clear-config-cache!)))))
 
 ;; Run all tests
 (defn run-config-tests []
