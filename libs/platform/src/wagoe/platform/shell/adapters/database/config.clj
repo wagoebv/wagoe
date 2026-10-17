@@ -18,7 +18,6 @@
      (db-config/adapter-active? :postgresql)    ; Check if adapter is active"
   (:require [clojure.tools.logging :as log]
             [wagoe.config :as config]
-            [aero.core :as aero]
             [clojure.java.io :as io]
             [wagoe.platform.shell.adapters.database.factory :as factory]))
 
@@ -43,7 +42,8 @@
     (if config-resource
       (do
         (log/info "Loading database configuration" {:env env :path config-path})
-        (aero/read-config config-resource))
+        ;; Through wagoe.config, so the secret sources the file declares resolve.
+        (config/read-config-resource config-resource (keyword env)))
       (throw (ex-info (str "Configuration file not found: " config-path)
                       {:type :configuration-error :env env :path config-path})))))
 
