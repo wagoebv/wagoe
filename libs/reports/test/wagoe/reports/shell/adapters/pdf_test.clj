@@ -3,7 +3,9 @@
    Generates real PDF bytes — verifies %%PDF- magic bytes."
   (:require [wagoe.reports.shell.adapters.pdf :as sut]
             [wagoe.reports.ports :as ports]
-            [clojure.test :refer [deftest is testing]])
+            [clojure.string :as str]
+            [clojure.test :refer [deftest is testing]]
+            [hiccup2.core :as h])
   (:import [com.sun.net.httpserver HttpHandler HttpServer]
            [java.net InetSocketAddress]
            [org.apache.pdfbox.pdmodel PDDocument]
@@ -135,3 +137,53 @@
         (render-template (fn [_] [:html [:body [:img {:src url}]]]) nil)
         (is (zero? @hits)))
       (finally (.stop server 0)))))
+
+;; =============================================================================
+;; Vectors and maps in data (BOU-687)
+;; =============================================================================
+
+;; What a JSON decoder yields for ["a", {"onclick": "..."}].
+(def ^:private json-vector ["a" {"onclick" "app.alert(1)"}])
+
+(defn- report-html [report-def data]
+  (#'sut/report-html report-def data {}))
+
+(defn- report-text [report-def data]
+  (pdf-text (:bytes (ports/generate! (sut/create-pdf-generator) report-def data {}))))
+
+(deftest ^:integration ^:security pdf-data-vector-renders-as-text-test
+  (let [template {:id :t :type :pdf
+                  :template (fn [rows] [:html [:body (for [r rows] [:p (:note r)])]])}
+        sections {:id :s :type :pdf
+                  :sections [{:type :table :columns [{:key :note :label "Note"}]}]}
+        data     [{:note json-vector}]]
+    (doseq [[label report] [["text field" template] ["table cell" sections]]]
+      (testing label
+        (let [html (report-html report data)]
+          (is (not (str/includes? html "<a")))
+          (is (not (re-find #"onclick=" html))))
+        (is (str/includes? (report-text report data) "onclick"))))))
+
+(deftest ^:integration ^:security pdf-data-map-is-not-attributes-test
+  (let [report {:id :t :type :pdf
+                :template (fn [row] [:html [:body [:p (:style row)]]])}
+        html   (report-html report {:style {"onclick" "app.alert(1)"}})]
+    (is (not (re-find #"onclick=" html)))
+    (is (str/includes? html "<p>{"))))
+
+(deftest ^:unit ^:security pdf-template-markup-test
+  (let [html (report-html {:id :t :type :pdf
+                           :template (fn [d]
+                                       [:html [:body
+                                               [:a {:href " JavaScript:app.alert(1)" :onClick "x" :class "c"} "l"]
+                                               [:a {:href "https://wagoe.org"} "ok"]
+                                               [:td {} (:n d)]
+                                               (h/raw "<b>trusted</b>")]])}
+                          {:n "1" :empty {}})]
+    (testing "on* attributes and javascript: hrefs are dropped"
+      (is (not (re-find #"(?i)onclick|javascript" html)))
+      (is (str/includes? html "class=\"c\"")))
+    (testing "the rest of the template renders as written"
+      (is (str/includes? html "href=\"https://wagoe.org\""))
+      (is (str/includes? html "<td>1</td>"))
+      (is (str/includes? html "<b>trusted</b>")))))

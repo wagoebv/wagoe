@@ -274,6 +274,8 @@ Set the matching CSS `@page { size: A4 landscape; }` in your custom CSS string.
 
 1. **Strings are escaped** — the PDF adapter renders with `hiccup2.core/html`, so data is text, never markup.
    Wrap trusted HTML in `hiccup2.core/raw`. Nothing is fetched: images and CSS load only from `data:` URIs (BOU-675).
+   A vector or map taken from the data renders as text, never as an element or attributes; build markup in the
+   template instead. `on*` attributes and `javascript:` hrefs are dropped (BOU-687).
 
 2. **Page-size CSS** — OpenHTMLtoPDF reads `@page { size: A4; }` from the CSS, NOT the `:page-size` key directly.
    The default CSS sets `size: A4`. Pass custom CSS with `:css` to override.

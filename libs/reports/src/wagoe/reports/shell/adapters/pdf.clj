@@ -19,7 +19,8 @@
             [hiccup2.core :as h])
   (:import [com.openhtmltopdf.extend FSUriResolver]
            [com.openhtmltopdf.pdfboxout PdfRendererBuilder]
-           [java.io ByteArrayOutputStream]))
+           [java.io ByteArrayOutputStream]
+           [java.util IdentityHashMap]))
 
 ;; =============================================================================
 ;; CSS helper
@@ -73,6 +74,44 @@
   (-> (str "<!DOCTYPE html>" (h/html hiccup-form))
       (str/replace xml-illegal-chars "")))
 
+;; =============================================================================
+;; Untrusted data (BOU-687)
+;; =============================================================================
+
+(defn- data-colls
+  "Every vector and map in data, by identity. A template that places one in
+   its output is passing data through, not building markup."
+  [data]
+  (let [seen (IdentityHashMap.)]
+    (letfn [(walk [x]
+              (when (and (coll? x) (not (.containsKey seen x)))
+                ;; Empty ones are shared instances, the same [] or {} a template writes.
+                (when (and (or (vector? x) (map? x)) (seq x)) (.put seen x true))
+                (run! walk (if (map? x) (mapcat identity x) x))))]
+      (walk data))
+    seen))
+
+(defn- unsafe-attr? [k v]
+  (let [k (str/lower-case (name k))]
+    (or (str/starts-with? k "on")
+        (and (= "href" k) (string? v)
+             (str/starts-with? (str/lower-case (str/replace v #"[\x00-\x20]" "")) "javascript:")))))
+
+(defn- neutralise
+  "Render data vectors and maps as text, and drop on* attributes and
+   javascript: hrefs. Template-built markup and h/raw pass through."
+  [form ^IdentityHashMap data]
+  (cond
+    (.containsKey data form) (str form)
+    (and (vector? form) (seq form))
+    (let [[tag & more] form
+          [attrs children] (if (and (map? (first more)) (not (.containsKey data (first more))))
+                             [(into {} (remove (fn [[k v]] (unsafe-attr? k v))) (first more)) (rest more)]
+                             [nil more])]
+      (into (cond-> [tag] attrs (conj attrs)) (map #(neutralise % data)) children))
+    (seq? form) (map #(neutralise % data) form)
+    :else form))
+
 (def ^:private data-uris-only
   "Resolves only data: URIs, so a report never fetches a URL or reads a file
    named in its content (BOU-675)."
@@ -85,6 +124,15 @@
 ;; OpenHTMLtoPDF generator record
 ;; =============================================================================
 
+(defn- report-html [report-def data opts]
+  (let [formatting-context {:zone-id (or (:zone-id opts) (java.time.ZoneId/systemDefault))}
+        hiccup-form (if-let [tmpl (:template report-def)]
+                      (tmpl data)
+                      (core/build-sections-hiccup* (:sections report-def) data formatting-context))]
+    (-> (neutralise hiccup-form (data-colls data))
+        (inject-css (:css opts))
+        render-html)))
+
 (defrecord OpenHtmlToPdfGenerator [])
 
 (extend-protocol ports/ReportGeneratorProtocol
@@ -92,13 +140,7 @@
 
   (generate! [_this report-def data opts]
     (log/debug "Generating PDF report" {:id (:id report-def)})
-    (let [css-override (:css opts)
-          formatting-context {:zone-id (or (:zone-id opts) (java.time.ZoneId/systemDefault))}
-          hiccup-form  (if-let [tmpl (:template report-def)]
-                         (tmpl data)
-                         (core/build-sections-hiccup* (:sections report-def) data formatting-context))
-          full-hiccup  (inject-css hiccup-form css-override)
-          html-str     (render-html full-hiccup)
+    (let [html-str     (report-html report-def data opts)
           baos         (ByteArrayOutputStream.)
           builder      (doto (PdfRendererBuilder.)
                          (.useUriResolver data-uris-only)
