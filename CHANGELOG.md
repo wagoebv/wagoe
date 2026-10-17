@@ -108,6 +108,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **A user promoted to admin concurrently could be demoted past the last-admin guard** (BOU-685). Role and active
+  changes now decide under the admin lock, and a partial edit writes only its own fields. No action needed.
+- **`wagoe session list` and `session invalidate` were unreachable, and are removed** (BOU-692). A role change or
+  deactivation already ends a user's sessions.
 - **`POST /api/v1/auth/login` and `/api/v1/sessions` answered 200 to a failed login** (BOU-691). Wrong credentials now
   answer 401 and a locked account 429, in the standard error shape; check the status, not `authenticated`.
 - **`wagoe session create --user-id` could never create a session, and is removed** (BOU-691). Log in through the API.

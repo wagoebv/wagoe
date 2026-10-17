@@ -103,9 +103,9 @@
     (is (= 429 (:status resp)))
     (is (some? (get-in resp [:headers "Retry-After"])))))
 
-(deftest ^:unit the-cli-has-no-session-create
-  ;; It took --user-id, which is not a credential, so it could only fail.
-  (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Unknown session command: create"
-                        (cli/dispatch-command :session :create {:user-id (random-uuid)} nil)))
-  (is (not (re-find #"(?m)^\s+create\s" cli/session-help)))
-  (is (not (str/includes? cli/root-help "session create"))))
+(deftest ^:unit the-cli-has-no-session-commands
+  ;; No entry point reached them, and `session list` printed live tokens
+  ;; (BOU-692).
+  (binding [*err* (java.io.StringWriter.)]
+    (is (= 1 (cli/run-cli! nil ["session" "list" "--user-id" (str (random-uuid))]))))
+  (is (not (str/includes? (with-out-str (cli/run-cli! nil ["--help"])) "session"))))

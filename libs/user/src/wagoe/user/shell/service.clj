@@ -167,16 +167,21 @@
       (user-core/deactivates? before after)))
 
 (defn- change-access!
-  "Run `write!`, the change from `before` to `after`: refused by the admin
-   guard, and ending the user's sessions when it changes their
-   access. Returns what `write!` returned."
-  [user-repository session-repository before after write!]
-  (let [result (if (and before (user-core/removes-admin? before after))
-                 (locked-write! user-repository (constantly [[before] write!]))
-                 (write!))]
-    (when (and result before (ends-sessions? before after))
-      (.invalidate-all-user-sessions session-repository (:id before)))
-    result))
+  "Run `write!`, the change `after` to user `user-id`: refused by the admin
+   guard, and ending the user's sessions when it changes their access. A
+   change to role or active reads the user under the admin lock, so the guard
+   sees a concurrent promotion (BOU-685). Returns what `write!` returned."
+  [user-repository session-repository user-id after write!]
+  (if-not (or (contains? after :role) (contains? after :active))
+    (write!)
+    (let [[before result]
+          (locked-write! user-repository
+                         #(let [before (.find-user-by-id user-repository user-id)]
+                            [(when (and before (user-core/removes-admin? before after)) [before])
+                             (fn [] [before (write!)])]))]
+      (when (and result before (ends-sessions? before after))
+        (.invalidate-all-user-sessions session-repository user-id))
+      result)))
 
 (defn- audit-quietly!
   "Record `entry-fn`'s audit entry for `user-id`; a failed write warns and does
@@ -579,10 +584,13 @@
      {:user-entity user-entity
       :user-id (:id user-entity)}
      (fn [{:keys [params]}]
-       (let [;; Get old user data for audit trail (before update)
-             old-user (.find-user-by-id user-repository (:id (:user-entity params)))
-             ;; A partial update keeps the stored values of the required keys.
-             user-entity (cond->> (:user-entity params)
+       (let [input (:user-entity params)
+             ;; Get old user data for audit trail (before update)
+             old-user (.find-user-by-id user-repository (:id input))
+             ;; A partial update is validated with the stored values of the
+             ;; required keys, but writes only its own: a stale role written
+             ;; back would undo a concurrent promotion unguarded (BOU-685).
+             user-entity (cond->> input
                            old-user (merge (select-keys old-user [:email :name :role :active :created-at])))]
          ;; 1. Validate update using pure core function
          (let [validation-result (user-core/validate-user-update-request user-entity)]
@@ -604,31 +612,30 @@
 
          ;; 2. Stamp updated-at
          (let [current-time (current-timestamp)
-               prepared-user (user-core/prepare-user-for-update user-entity current-time)
+               prepared-user (user-core/prepare-user-for-update input current-time)
                ;; 3. Persist using impure shell persistence layer
-               updated-user (change-access! user-repository session-repository old-user user-entity
+               updated-user (change-access! user-repository session-repository (:id input) input
                                             #(.update-user user-repository prepared-user))]
 
-          ;; 4. Create audit log entry
-           (when (and updated-user old-user)
-             (let [{:keys [actor-id actor-email ip-address user-agent]}
-                   (effective-audit-context {:default-actor-id (:id updated-user)
-                                             :default-actor-email (:email updated-user)})
-                   audit-entry (audit-core/update-user-audit-entry
-                                actor-id
-                                actor-email
-                                (:id updated-user)      ; target-user-id
-                                (:email updated-user)   ; target-user-email
-                                old-user                ; old user data
-                                updated-user            ; new user data
-                                ip-address
-                                user-agent)]
-               (.create-audit-log audit-repository audit-entry)))
-
-           ;; Remove sensitive data before returning. A partial update returns
-           ;; the whole user, as the port promises.
-           (when updated-user
-             (dissoc (merge old-user updated-user) :password-hash)))))
+          ;; 4. Create audit log entry. A partial update returns the whole
+          ;; user, as the port promises.
+           (when-let [after (some->> updated-user (merge old-user))]
+             (when old-user
+               (let [{:keys [actor-id actor-email ip-address user-agent]}
+                     (effective-audit-context {:default-actor-id (:id after)
+                                               :default-actor-email (:email after)})
+                     audit-entry (audit-core/update-user-audit-entry
+                                  actor-id
+                                  actor-email
+                                  (:id after)      ; target-user-id
+                                  (:email after)   ; target-user-email
+                                  old-user         ; old user data
+                                  updated-user     ; new user data
+                                  ip-address
+                                  user-agent)]
+                 (.create-audit-log audit-repository audit-entry)))
+             ;; Remove sensitive data before returning.
+             (dissoc after :password-hash)))))
      {:system {:user-repository user-repository
                :session-repository session-repository
                :auth-service auth-service}}))
@@ -646,7 +653,7 @@
              ;; written, so a concurrent password or MFA change is not undone.
              after  {:id user-id :active false}
              result (when user
-                      (change-access! user-repository session-repository user after
+                      (change-access! user-repository session-repository user-id after
                                       #(.update-user user-repository
                                                      (user-core/prepare-user-for-update after (current-timestamp)))))]
          (when result
