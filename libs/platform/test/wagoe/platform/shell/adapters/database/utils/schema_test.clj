@@ -44,8 +44,8 @@
      :text         ["VARCHAR" "TEXT" "TEXT" "LONGTEXT"]
      :enum         ["VARCHAR(50)" "TEXT" "VARCHAR(50)" "VARCHAR(50)"]
      :map          ["VARCHAR" "TEXT" "JSONB" "JSON"]
-     :map-of       ["VARCHAR" "TEXT" "JSONB" "JSON"]
      ;; Serialised, so longer than a string: never VARCHAR(255) (BOU-715).
+     :map-of       ["VARCHAR" "TEXT" "TEXT" "LONGTEXT"]
      :vector       ["VARCHAR" "TEXT" "TEXT" "LONGTEXT"]
      :sequential   ["VARCHAR" "TEXT" "TEXT" "LONGTEXT"]
      :set          ["VARCHAR" "TEXT" "TEXT" "LONGTEXT"]
@@ -68,6 +68,7 @@
     (doseq [make [h2/new-adapter postgresql/new-adapter mysql/new-adapter]]
       (is (= "VARCHAR(320)" (ddl-type make [:email [:string {:min 3 :max 320}]])))
       (is (= "VARCHAR(255)" (ddl-type make [:name [:string {:min 1}]])))
+      (is (= "VARCHAR(255)" (ddl-type make [:schema-name [:string {:max 63}]])) "never shorter than the default")
       (is (= (ddl-type make [:x :text]) (ddl-type make [:note [:string {:max 5000}]]))
           "past the longest VARCHAR it is TEXT")
       (is (= (ddl-type make [:x :text]) (ddl-type make [:codes {:optional true} [:maybe [:vector :string]]]))))

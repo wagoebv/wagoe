@@ -211,6 +211,8 @@
                      (:postgresql :h2) (str "ALTER TABLE " table " ALTER COLUMN " column " SET DATA TYPE " type)
                      :mysql            (str "ALTER TABLE " table " MODIFY COLUMN " column " " type
                                             (if not-null? " NOT NULL" " NULL"))
-                     :sqlite           nil)]
+                     :sqlite           nil
+                     (throw (ex-info "No column widening for this engine"
+                                     {:type :not-supported :engine (protocols/engine (:adapter ctx))})))]
       (log/info "Widening column" {:table table :column column :type type})
       (execute-ddl! ctx ddl))))

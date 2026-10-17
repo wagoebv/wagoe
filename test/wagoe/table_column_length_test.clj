@@ -25,7 +25,7 @@
 
 (def ^:private json-types
   "Collections the builder always stored as JSON, so never as VARCHAR(255)."
-  #{:map :map-of})
+  #{:map})
 
 (def ^:private column-type #'schema/column-type)
 (def ^:private extract-field-info #'schema/extract-field-info)
@@ -52,6 +52,10 @@
     (when (and max length)
       (is (<= max length) (str where ": its schema allows " max)))))
 
+(def ^:private bou-715-column-types
+  "The fields BOU-715 gave a :column-type."
+  #{:avatar-url :user-agent :error-message})
+
 (def ^:private before-bou-715
   "Each table as a database created before BOU-715 has it: no :column-type,
    and a collection or a string with a :max as a plain string."
@@ -60,7 +64,8 @@
                  (into [(first s) (second s)]
                        (map (fn [field]
                               (let [{:keys [type max properties]} (extract-field-info field)
-                                    props (dissoc properties :column-type)]
+                                    props (cond-> properties
+                                            (bou-715-column-types (first field)) (dissoc :column-type))]
                                 (if (or (and (collection-types type) (not (json-types type)))
                                         (and (= :string type) max))
                                   [(first field) props :string]

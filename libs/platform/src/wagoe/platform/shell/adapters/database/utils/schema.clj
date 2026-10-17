@@ -43,8 +43,8 @@
    255-character string does not hold (BOU-715)."
   {:uuid :uuid :string :string :re :string :int :int :bigint :bigint
    :double :double :boolean :boolean :text :text :enum :enum
-   :map :json :map-of :json
-   :vector :text :sequential :text :set :text :tuple :text :any :text
+   :map :json
+   :map-of :text :vector :text :sequential :text :set :text :tuple :text :any :text
    inst? :instant 'inst? :instant})
 
 ;; =============================================================================
@@ -133,12 +133,15 @@
 
 (defn- logical-type
   "A field's `logical-column-types` entry: its :column-type, else its Malli
-   type's, a string honouring its `{:max n}`."
+   type's, a string as long as a `{:max n}` above the default."
   [{:keys [type properties max]}]
   (let [max-length (when (= :string type) max)]
     (cond
       (:column-type properties) (:column-type properties)
-      (not (pos-int? max-length)) (malli->logical type :string)
+      ;; Only ever longer than the default: a shorter column would refuse
+      ;; what a looser validator elsewhere lets through.
+      (not (and (pos-int? max-length) (> max-length protocols/default-string-length)))
+      (malli->logical type :string)
       (<= max-length longest-varchar) [:string max-length]
       :else :text)))
 
@@ -405,10 +408,10 @@
 ;; Short Columns
 ;; =============================================================================
 
-(def ^:private unbounded-length
-  "What H2 reports for a VARCHAR without a length, its longest. PostgreSQL
-   reports no length for TEXT, MySQL more than this for LONGTEXT."
-  1000000000)
+(def ^:private text-length
+  "How long a :text field's column need hold before it counts as wide enough:
+   MySQL's TEXT. Longer TEXT types and unbounded VARCHARs are left alone."
+  65535)
 
 (defn- wanted-length
   "How long a field's column should hold, or nil when it is no string column
@@ -416,22 +419,31 @@
   [{:keys [properties] :as field-info}]
   (when-not (:db-type properties)
     (let [logical (logical-type field-info)]
-      (cond (= :text logical)   unbounded-length
+      (cond (= :text logical)   text-length
             (= :string logical) protocols/default-string-length
             (vector? logical)   (second logical)))))
 
 (defn- widen-short-columns!
   "Widen the VARCHAR columns of an existing table shorter than its schema now
    asks, so a database created before a field grew holds what a fresh one does
-   (BOU-715). Only ever wider: rows are kept."
+   (BOU-715). Only ever wider: rows are kept. A column the database will not
+   alter, say one a view reads, is logged and left, so boot goes on."
   [ctx table-name malli-schema columns]
-  (let [present (into {} (map (juxt :name identity)) columns)]
+  (let [present (into {} (map (juxt :name identity)) columns)
+        mysql?  (= :mysql (protocols/engine (:adapter ctx)))]
     (doseq [f (keep extract-field-info (rest malli-schema))
             :let [column (col-name (:name f))
                   {:keys [max-length not-null default]} (present (str/lower-case column))
                   wanted (wanted-length f)]
-            :when (and wanted max-length (< max-length wanted) (nil? default))]
-      (db-core/widen-column! ctx table-name column (column-type ctx f) not-null))))
+            :when (and wanted max-length (< max-length wanted))]
+      (if (and mysql? (some? default))
+        (log/warn "Not widening a column with a default: MySQL's MODIFY would drop it; widen it in a migration"
+                  {:table table-name :column column :max-length max-length :wanted wanted})
+        (try
+          (db-core/widen-column! ctx table-name column (column-type ctx f) not-null)
+          (catch Exception e
+            (log/error e "Could not widen a column; widen it in a migration"
+                       {:table table-name :column column :max-length max-length :wanted wanted})))))))
 
 ;; =============================================================================
 ;; Schema Initialization
