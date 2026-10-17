@@ -419,10 +419,11 @@
                           (shell-permissions/assert-can-edit-entity! user entity-name entity-config)
                           (shell-permissions/assert-can-create-entity! user entity-name entity-config))
           form-cfg      (cond-> entity-config (nil? id) introspection/for-create)
-          field         (some #(when (= (name %) (get submitted "__field")) %) (:editable-fields form-cfg))
+          field-name    (get submitted "__field")
+          field         (some #(when (= (name %) field-name) %) (:editable-fields form-cfg))
           _             (when-not field
                           (throw (ex-info "No such field on the form"
-                                          {:type :validation-error :field (get submitted "__field")})))
+                                          {:type :validation-error :field field-name})))
           [zones params] (support/form-zone-options config request
                                                     (dissoc submitted "__field" "__id" "__then"))
           [form-data parse-errors] (support/parse-form-params-checked params form-cfg zones)

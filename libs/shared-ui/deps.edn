@@ -4,6 +4,7 @@
          wagoe/platform   {:local/root "../platform"}
          wagoe/ui-style   {:local/root "../ui-style"}
          metosin/malli {:mvn/version "0.20.1"}
+         cheshire/cheshire {:mvn/version "6.2.0"}
          hiccup/hiccup       {:mvn/version "2.0.0"}}
 
  :aliases

@@ -228,15 +228,11 @@
   [entity-config entity-name record-id]
   (let [url  (str "/web/admin/" (name entity-name) "/validate-field")
         vals (when record-id {"__id" (str record-id)})]
-    (update entity-config :fields
-            (fn [fields]
-              (reduce-kv (fn [acc k cfg]
-                           (assoc acc k (cond-> cfg
-                                          (not (or (:readonly cfg)
-                                                   (#{:hidden :file-input} (:widget cfg))))
-                                          (assoc :validate {:url url :vals vals}))))
-                         {}
-                         (or fields {}))))))
+    (update entity-config :fields update-vals
+            (fn [cfg]
+              (cond-> cfg
+                (not (or (:readonly cfg) (#{:hidden :file-input} (:widget cfg))))
+                (assoc :validate {:url url :vals vals}))))))
 
 ;; =============================================================================
 ;; Field Grouping Helpers
@@ -457,9 +453,8 @@
   [entity-name entity-config record errors _permissions & [cancel-url display prefill nested]]
   (let [primary-key (:primary-key entity-config :id)
         record-id (get record primary-key)
-        entity-config (cond-> entity-config
-                        (nil? record) introspection/for-create
-                        true          (with-live-validation entity-name record-id))
+        entity-config (-> (cond-> entity-config (nil? record) introspection/for-create)
+                          (with-live-validation entity-name record-id))
         editable-fields (:editable-fields entity-config)
         values (or record prefill)
         field-groups (compute-field-groups entity-config)

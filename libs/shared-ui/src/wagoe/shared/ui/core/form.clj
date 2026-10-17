@@ -12,6 +12,7 @@
    Error messages are i18n markers (`[:t :validation/required]`); a page that
    is not rendered through wagoe-i18n resolves them with `plain-errors`."
   (:require [clojure.string :as str]
+            [cheshire.core :as json]
             [malli.core :as m]
             [malli.transform :as mt]
             [wagoe.platform.core.csrf :as csrf]
@@ -29,19 +30,17 @@
 (defn- entry [schema field-key]
   (some #(when (= field-key (first %)) %) (entries schema)))
 
+(defn- wrappers
+  "`schema` and every schema inside its :maybe / :and, outermost first."
+  [schema]
+  (cons schema (when (#{:maybe :and} (m/type schema))
+                 (mapcat wrappers (m/children schema)))))
+
 (defn- leaves
   "The schemas that constrain a value: `schema` with :maybe and :and
    unwrapped."
   [schema]
-  (case (m/type schema)
-    (:maybe :and) (mapcat leaves (m/children schema))
-    [schema]))
-
-(defn- wrappers
-  "`schema` and every :maybe / :and inside it, outermost first."
-  [schema]
-  (cons schema (when (#{:maybe :and} (m/type schema))
-                 (mapcat wrappers (m/children schema)))))
+  (remove #(#{:maybe :and} (m/type %)) (wrappers schema)))
 
 (def ^:private integer-types '#{:int int? integer? pos-int? nat-int? neg-int?})
 (def ^:private decimal-types '#{:double :float double? float? decimal? number?})
@@ -82,7 +81,6 @@
   [field-key schema]
   (let [types (set (map m/type (leaves schema)))]
     (or (some #(some-> (:html/type (m/properties %)) name) (wrappers schema))
-        (some #(some-> (:html/type (m/properties %)) name) (leaves schema))
         (cond
           (some number-type? types)                     "number"
           (some comparators types)                      "number"
@@ -110,8 +108,7 @@
           leaves))
 
 (defn- regex-source [s]
-  (let [[re] (m/children s)]
-    (if (string? re) re (some-> re str))))
+  (some-> (first (m/children s)) str))
 
 (def ^:private text-types
   "Input types that take minlength, maxlength and pattern."
@@ -132,7 +129,7 @@
      (input-attrs [:map [:name [:string {:min 2}]]] :name)
      ;=> {:type \"text\" :required true :minlength 2}"
   [schema field-key]
-  (when-let [[_ props s] (entry schema field-key)]
+  (when-let [[_ props s] (entry (m/schema schema) field-key)]
     (let [ls          (leaves s)
           type        (html-type field-key s)
           {:keys [min max]} (bounds ls)
@@ -154,7 +151,8 @@
 (defn attrs-by-field
   "{field-key attrs} for every field of map `schema` (see `input-attrs`)."
   [schema]
-  (into {} (map (juxt identity #(input-attrs schema %))) (field-keys schema)))
+  (let [schema (m/schema schema)]
+    (into {} (map (juxt identity #(input-attrs schema %))) (field-keys schema))))
 
 ;; =============================================================================
 ;; Validation
@@ -178,12 +176,13 @@
    the string the browser sent. A blank field is nil where the schema takes
    nil, and left out otherwise."
   [schema params]
-  (let [data (into {} (for [[k _ s] (entries schema)
-                            :when (some #{k} (field-keys schema))
-                            :let  [v     (value params k)
-                                   blank (or (nil? v) (and (string? v) (str/blank? v)))]
-                            :when (or (not blank) (nullable? s))]
-                        [k (when-not blank v)]))]
+  (let [schema (m/schema schema)
+        data   (into {} (for [k     (field-keys schema)
+                              :let  [[_ _ s] (entry schema k)
+                                     v       (value params k)
+                                     blank   (or (nil? v) (and (string? v) (str/blank? v)))]
+                              :when (or (not blank) (nullable? s))]
+                          [k (when-not blank v)]))]
     (m/decode schema data form-transformer)))
 
 (defn- message
@@ -229,7 +228,8 @@
   "Form `params` checked against map `schema`: {:data decoded :errors
    {field-key [message]}}, :errors nil when the form is valid."
   [schema params]
-  (let [data (decode schema params)]
+  (let [schema (m/schema schema)
+        data   (decode schema params)]
     {:data data :errors (errors schema data)}))
 
 (def english
@@ -270,9 +270,6 @@
   [field-key]
   (str (name field-key) "-field"))
 
-(defn- json-string [s]
-  (str "\"" (str/escape (str s) {\" "\\\"" \\ "\\\\"}) "\""))
-
 (defn live-attrs
   "htmx attributes that post a field's form to `url` when the field changes,
    naming the field as `__field` (plus `extra` string pairs), and swap the
@@ -285,10 +282,7 @@
     :hx-target   "closest .form-field"
     :hx-swap     "outerHTML"
     :hx-push-url "false"
-    :hx-vals     (str "{"
-                      (str/join "," (for [[k v] (merge {"__field" (name field-key)} extra)]
-                                      (str (json-string k) ":" (json-string v))))
-                      "}")}))
+    :hx-vals     (json/generate-string (merge {"__field" (name field-key)} extra))}))
 
 (defn with-live-validation
   "`input-html` with `live-attrs` on the controls named `field-key`."
@@ -299,7 +293,7 @@
 (defn label-text
   "A field's default label: its key, humanised."
   [field-key]
-  (str/capitalize (str/replace (name field-key) "-" " ")))
+  (str/capitalize (str/replace (name field-key) #"[-_]" " ")))
 
 (defn- display-value [v]
   (cond (nil? v)     ""
@@ -338,7 +332,8 @@
    opts: :label, :value, :errors (messages), :validate-url, :attrs (merged
    over the derived attributes)."
   [schema field-key {:keys [label value errors validate-url attrs]}]
-  (let [error-id  (ui/field-error-id field-key)
+  (let [schema    (m/schema schema)
+        error-id  (ui/field-error-id field-key)
         input     (cond-> (control schema field-key value
                                    (merge (input-attrs schema field-key) attrs))
                     validate-url (with-live-validation field-key validate-url)
