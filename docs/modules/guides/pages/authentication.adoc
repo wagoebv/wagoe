@@ -317,7 +317,7 @@ does the same. It defaults to on.
 | `/api/v1/users/**`
 
 | `/web/admin/groups/**`
-| OpenID Connect sign-in, when providers are configured
+| OpenID Connect sign-in (`/web/auth/oidc/**`), when providers are configured
 |===
 
 Other modules are not affected: `/` still redirects to `/web/login`, and the admin UI
