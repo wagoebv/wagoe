@@ -25,6 +25,7 @@
   (reify protocols/DBAdapter
     (dialect [_] :postgresql)
     (now-ms-sql [_] nil)
+    (key-columns [_ _ _ _] nil)
     (jdbc-driver [_] "org.postgresql.Driver")
     (jdbc-url [_ _] "jdbc:postgresql://localhost:5432/test")
     (pool-defaults [_] {})
@@ -91,6 +92,7 @@
     (let [mock-adapter (reify protocols/DBAdapter
                          (dialect [_] :sqlite)
                          (now-ms-sql [_] nil)
+                         (key-columns [_ _ _ _] nil)
                          (jdbc-driver [_] "org.sqlite.JDBC")
                          (jdbc-url [_ _] "jdbc:sqlite::memory:")
                          (pool-defaults [_] {})
@@ -115,6 +117,7 @@
     (let [mock-adapter (reify protocols/DBAdapter
                          (dialect [_] :mysql)
                          (now-ms-sql [_] nil)
+                         (key-columns [_ _ _ _] nil)
                          (jdbc-driver [_] "com.mysql.cj.jdbc.Driver")
                          (jdbc-url [_ _] "jdbc:mysql://localhost:3306/test")
                          (pool-defaults [_] {})
@@ -310,6 +313,7 @@
     (let [ctx {:adapter (reify protocols/DBAdapter
                           (dialect [_] :sqlite)
                           (now-ms-sql [_] nil)
+                          (key-columns [_ _ _ _] nil)
                           (jdbc-driver [_] "org.sqlite.JDBC")
                           (jdbc-url [_ _] nil)
                           (pool-defaults [_] {})

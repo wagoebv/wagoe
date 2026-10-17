@@ -3,51 +3,53 @@
 
    Migratus keys applied migrations by their numeric id across every directory
    it reads, so two libraries that happen to pick the same timestamp collide.
-   It does not report this: it records the id once, runs whichever it saw first
-   and skips the other, and `bb migrate up` says it succeeded. Push and geo were
-   given the same id in this PR and geo's schema change silently never ran
-   (BOU-431 review).
+   It does not report this: it records the id once, runs one and skips the
+   other. Push and geo were given the same id and geo's schema change silently
+   never ran (BOU-431 review). `migrate up` and boot now refuse such a pair
+   (BOU-717); this catches one between framework libraries before it ships.
 
    A library author cannot see the collision — it needs every library on one
    classpath, which is here."
-  (:require [clojure.java.io :as io]
-            [clojure.string :as str]
+  (:require [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
-            [migratus.migrations :as migratus-migrations]
             [wagoe.platform.shell.database.migrations :as mig]))
 
-(defn- migration-files
-  "Every migration file the runner will read, as {:id :name :dir}."
-  []
-  (for [dir (mig/discover-migration-dirs)
-        :let [resource (io/resource dir)]
-        :when (and resource (= "file" (.getProtocol resource)))
-        file (file-seq (io/file resource))
-        :when (.isFile file)
-        :let [parsed (migratus-migrations/parse-name (.getName file))]
-        :when parsed]
-    {:id   (first parsed)
-     :name (.getName file)
-     :dir  dir}))
+(def ^:private library-ids
+  "Every framework migration id, one per migration."
+  (delay (->> (remove #{mig/project-migration-dir} (mig/discover-migration-dirs))
+              (mapcat #'mig/migrations-in)
+              (map first))))
 
 (deftest ^:unit no-two-migrations-share-an-id
-  (let [by-id (->> (migration-files)
-                   ;; up and down are one migration in two files.
-                   (map #(select-keys % [:id :dir]))
-                   distinct
-                   (group-by :id))
-        clashes (into {}
-                      (for [[id entries] by-id
-                            :when (< 1 (count entries))]
-                        [id (mapv :dir entries)]))]
+  (testing "the runner sees at least the libraries that ship migrations"
+    (is (seq @library-ids)
+        "no migrations discovered at all — this test would pass vacuously"))
 
-    (testing "the runner sees at least the libraries that ship migrations"
-      (is (seq (migration-files))
-          "no migrations discovered at all — this test would pass vacuously"))
-
-    (testing "and none of them collide"
+  (testing "and none of them collide"
+    (let [clashes (mig/duplicate-migration-ids (mig/discover-migration-dirs))]
       (is (empty? clashes)
-          (str "these ids are claimed twice, so one of each pair silently "
-               "never runs: "
-               (str/join "; " (for [[id dirs] clashes]
-                                (str id " in " (str/join " and " dirs)))))))))
+          (str "these ids are claimed twice, so one of each pair silently never runs: "
+               (str/join "; " (for [[id files] clashes]
+                                (str id " in " (str/join " and " files)))))))))
+
+(def ^:private released-round-ids
+  "Framework migration ids from before the odd-seconds convention. Renaming one
+   would re-run it on every database that recorded it."
+  #{"20260311100000" "20260312000000" "20260313000000" "20260324010000"
+    "20260524000000" "20260524000002" "20260911100000" "20260911100100"
+    "20260911100200" "20260926100000" "20260926100100" "20260927200000"
+    "20260928100000" "20261010100000" "20261010110000" "20261010120000"
+    "20261016000000" "20261016120000" "20261016130000" "20261016180000"
+    "20261017120000" "20261017140000" "20261018090000" "20261019091500"
+    "20261019091600"})
+
+(deftest ^:unit framework-migration-ids-end-in-an-odd-second
+  ;; An application picks round timestamps by hand; framework migrations stay
+  ;; off them, so the two do not share an id (BOU-717).
+  (let [even (sort (remove #(or (released-round-ids %) (odd? (parse-long %)))
+                           @library-ids))]
+    (is (empty? (remove (set @library-ids) released-round-ids))
+        "a released id no library ships any more must leave the list, or a new migration could reuse it")
+    (is (empty? even)
+        (str "framework migration ids must end in an odd second (…120017, not …120000): "
+             (str/join ", " even)))))
