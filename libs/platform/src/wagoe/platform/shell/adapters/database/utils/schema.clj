@@ -39,16 +39,13 @@
 
 (def ^:private malli->logical
   "The `protocols/logical-column-types` entry for a Malli type. inst? comes as
-   the fn or, quoted, the symbol."
+   the fn or, quoted, the symbol. A collection is stored serialised, which a
+   255-character string does not hold (BOU-715)."
   {:uuid :uuid :string :string :re :string :int :int :bigint :bigint
-   :double :double :boolean :boolean :text :text :enum :enum :map :json
+   :double :double :boolean :boolean :text :text :enum :enum
+   :map :json
+   :map-of :text :vector :text :sequential :text :set :text :tuple :text :any :text
    inst? :instant 'inst? :instant})
-
-(defn- malli-type->column-type
-  "The engine's DDL type for `malli-type`; a string's when unknown. The adapter
-   owns the table, so the builder and `column-type` cannot disagree (BOU-610)."
-  [ctx malli-type]
-  (protocols/column-type (:adapter ctx) (malli->logical malli-type :string)))
 
 ;; =============================================================================
 ;; Malli Schema Field Processing
@@ -64,7 +61,8 @@
      field-def: Malli field definition - [field-name schema] or [field-name properties schema]
 
    Returns:
-     Map with :name, :type, :optional?, :schema or nil for non-field entries"
+     Map with :name, :type, :optional?, :schema, :max (a `{:max n}` on the
+     type) or nil for non-field entries"
   [field-def]
   (when (and (vector? field-def)
              (>= (count field-def) 2)
@@ -86,7 +84,9 @@
        :type actual-type
        :optional? optional?
        :properties properties
-       :schema unwrapped-type})))
+       :schema unwrapped-type
+       :max (when (and (vector? unwrapped-type) (map? (second unwrapped-type)))
+              (:max (second unwrapped-type)))})))
 
 ;; =============================================================================
 ;; DDL Generation
@@ -126,14 +126,31 @@
   [table-name column-name]
   (str "chk_" table-name "_" column-name))
 
+(def ^:private longest-varchar
+  "The longest `[:string {:max n}]` kept as a VARCHAR. Longer is TEXT: MySQL
+   counts every VARCHAR towards a 65,535-byte row, four bytes a character."
+  1024)
+
+(defn- logical-type
+  "A field's `logical-column-types` entry: its :column-type, else its Malli
+   type's, a string as long as a `{:max n}` above the default."
+  [{:keys [type properties max]}]
+  (let [max-length (when (= :string type) max)]
+    (cond
+      (:column-type properties) (:column-type properties)
+      ;; Only ever longer than the default: a shorter column would refuse
+      ;; what a looser validator elsewhere lets through.
+      (not (and (pos-int? max-length) (> max-length protocols/default-string-length)))
+      (malli->logical type :string)
+      (<= max-length longest-varchar) [:string max-length]
+      :else :text)))
+
 (defn- column-type
-  "The SQL type of a field: its :db-type, the adapter's for its :column-type
-   (a `logical-column-types` keyword, for a value stored other than as its
-   Malli type suggests), or the one its Malli type maps to."
-  [ctx {:keys [type properties]}]
+  "The SQL type of a field: its :db-type, or the adapter's for its
+   `logical-type`, so the builder and `column-type` cannot disagree (BOU-610)."
+  [ctx {:keys [properties] :as field-info}]
   (or (:db-type properties)
-      (some->> (:column-type properties) (protocols/column-type (:adapter ctx)))
-      (malli-type->column-type ctx type)))
+      (protocols/column-type (:adapter ctx) (logical-type field-info))))
 
 (defn- column-default
   "The DEFAULT clause of a field: only a required `active` boolean has one."
@@ -358,8 +375,8 @@
 (defn- add-missing-columns!
   "Add the fields of `malli-schema` an existing table lacks (BOU-622), nullable:
    a NOT NULL column cannot join a table with rows, so a migration backfills it."
-  [ctx table-name malli-schema]
-  (let [present (set (map :name (db-core/get-table-info ctx table-name)))]
+  [ctx table-name malli-schema columns]
+  (let [present (set (map :name columns))]
     (when-let [missing (and (seq present)
                             (seq (remove #(present (str/lower-case (col-name (:name %))))
                                          (keep extract-field-info (rest malli-schema)))))]
@@ -386,6 +403,47 @@
         (doseq [[constraint-name columns] (table-unique-keys table-name)
                 :when (some added columns)]
           (db-core/create-index-if-not-exists! ctx constraint-name table-name columns {:unique? true}))))))
+
+;; =============================================================================
+;; Short Columns
+;; =============================================================================
+
+(def ^:private text-length
+  "How long a :text field's column need hold before it counts as wide enough:
+   MySQL's TEXT. Longer TEXT types and unbounded VARCHARs are left alone."
+  65535)
+
+(defn- wanted-length
+  "How long a field's column should hold, or nil when it is no string column
+   the builder widens: a JSON or :db-type one is left to a migration."
+  [{:keys [properties] :as field-info}]
+  (when-not (:db-type properties)
+    (let [logical (logical-type field-info)]
+      (cond (= :text logical)   text-length
+            (= :string logical) protocols/default-string-length
+            (vector? logical)   (second logical)))))
+
+(defn- widen-short-columns!
+  "Widen the VARCHAR columns of an existing table shorter than its schema now
+   asks, so a database created before a field grew holds what a fresh one does
+   (BOU-715). Only ever wider: rows are kept. A column the database will not
+   alter, say one a view reads, is logged and left, so boot goes on."
+  [ctx table-name malli-schema columns]
+  (let [present (into {} (map (juxt :name identity)) columns)
+        mysql?  (= :mysql (protocols/engine (:adapter ctx)))]
+    (doseq [f (keep extract-field-info (rest malli-schema))
+            :let [column (col-name (:name f))
+                  {:keys [max-length not-null default]} (present (str/lower-case column))
+                  wanted (wanted-length f)]
+            :when (and wanted max-length (< max-length wanted))]
+      (if (and mysql? (some? default))
+        (log/warn "Not widening a column with a default: MySQL's MODIFY would drop it; widen it in a migration"
+                  {:table table-name :column column :max-length max-length :wanted wanted})
+        (try
+          (db-core/widen-column! ctx table-name column (column-type ctx f) not-null)
+          (catch Exception e
+            (log/error e "Could not widen a column; widen it in a migration"
+                       {:table table-name :column column :max-length max-length :wanted wanted})))))))
 
 ;; =============================================================================
 ;; Schema Initialization
@@ -435,7 +493,8 @@
 
   (try
     ; Create tables. For tables that already exist, CREATE TABLE IF NOT EXISTS is
-    ; a no-op, so add the fields the schema gained since, and re-apply named enum
+    ; a no-op, so add the fields the schema gained since, widen those it
+    ; lengthened, and re-apply named enum
     ; CHECK constraints to keep initialization idempotent (and to heal H2's
     ; in-memory reconnect corruption).
     (doseq [[table-name malli-schema] (creation-order schema-definitions)]
@@ -444,7 +503,9 @@
         (log/debug "Creating table" {:table table-name :ddl ddl :existed? existed?})
         (db-core/execute-ddl! ctx ddl)
         (when existed?
-          (add-missing-columns! ctx table-name malli-schema)
+          (let [columns (db-core/get-table-info ctx table-name)]
+            (add-missing-columns! ctx table-name malli-schema columns)
+            (widen-short-columns! ctx table-name malli-schema columns))
           (repair-enum-constraints! ctx table-name malli-schema))))
 
     ; Create indexes

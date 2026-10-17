@@ -126,6 +126,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Enabling MFA failed on PostgreSQL, MySQL and H2: ten backup codes overflowed a VARCHAR(255)** (BOU-715). Boot or
+  `migrate up` widens the column, and the user agents, avatar URLs and audit errors that shared the limit.
 - **`:user-web-ui {:enabled? false}` left the group pages on, and `WAG_WEB_UI_ENABLED=false` did nothing** (BOU-711).
   Copy `#boolean #or [#env WAG_WEB_UI_ENABLED "true"]` from the shipped config if yours reads the env var.
 - **Security: the search API served every index to any signed-in user** (BOU-706). An index is now served only with

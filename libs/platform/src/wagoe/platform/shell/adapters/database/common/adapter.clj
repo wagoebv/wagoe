@@ -167,7 +167,7 @@
 
   (column-type [_ logical]
     (let [types  (:column-types spec)
-          length (cond (= :string logical) 255
+          length (cond (= :string logical) protocols/default-string-length
                        (and (vector? logical) (= :string (first logical))) (second logical))]
       (or (if length
             (when (pos-int? length) (get types :string (str "VARCHAR(" length ")")))

@@ -8,7 +8,8 @@
    `PRAGMA table_info` instead.
 
    Both forms return the same column maps — `:name` (lower case), `:type`,
-   `:not-null`, `:default`, `:primary-key`, `:generated` — which is what the
+   `:not-null`, `:default`, `:primary-key`, `:generated`, `:max-length` (a
+   character column's declared length, nil on SQLite) — which is what the
    port promises and what the four separate copies did not consistently
    deliver."
   (:require [clojure.string :as str]
@@ -86,7 +87,8 @@
   [{:keys [schema honey generated-columns type-column] :or {type-column :data_type} :as spec}
    datasource table-name]
   (let [table-str     (table-key spec table-name)
-        columns-query {:select   (into [:column_name type-column :is_nullable :column_default]
+        columns-query {:select   (into [:column_name type-column :is_nullable :column_default
+                                        :character_maximum_length]
                                        generated-columns)
                        :from     [:information_schema.columns]
                        :where    [:and
@@ -111,7 +113,8 @@
              :not-null    (= "NO" (:is_nullable col))
              :default     (:column_default col)
              :primary-key (contains? pk-columns (:column_name col))
-             :generated   (generated-column? col)})
+             :generated   (generated-column? col)
+             :max-length  (some-> (:character_maximum_length col) long)})
           columns)))
 
 ;; =============================================================================
@@ -149,5 +152,6 @@
              :not-null    (= (:notnull row) 1)
              :default     (:dflt_value row)
              :primary-key (= (:pk row) 1)
-             :generated   (= rowid-alias (:name row))})
+             :generated   (= rowid-alias (:name row))
+             :max-length  nil})
           results)))
