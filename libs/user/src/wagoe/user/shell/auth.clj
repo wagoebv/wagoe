@@ -356,6 +356,9 @@
                         mfa-code
                         (not (:valid? mfa-verification)))
                    (do
+                     ;; The same counter as a wrong password, so codes cannot be
+                     ;; guessed at the rate limit (BOU-698).
+                     (record-failed-login! user-repository auth-config (:id user) current-time)
                      (log/warn "MFA verification failed" {:email email})
                      {:success? false
                       :error {:type    :mfa-verification-failed

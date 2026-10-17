@@ -118,6 +118,10 @@ for what is public API, what is internal, and how deprecations are announced.
   SHA-256 is stored; boot or `migrate up` hashes existing rows in place. Upgrade every replica at once; a rollback signs everyone out.
 - **Security: parallel wrong passwords counted as one, so lockout came late** (BOU-696). The count is incremented in the
   database. Custom repositories add `increment-failed-login-count` and `invalidate-user-session`.
+- **Security: wrong MFA codes at password login did not count towards lockout** (BOU-698). TOTP and backup codes now
+  share the failed-login counter on the form, the API and OIDC. No action needed.
+- **Security: a revoked session was audited as the user's own logout** (BOU-698). It is `:session-revoked`, with the
+  actor and session id; boot or `migrate up` widens the audit check.
 - **A concurrent promotion, demotion or deactivation could be undone past the last-admin guard** (BOU-685). Role and
   active changes decide under the admin lock; edits and logins write only their own fields. No action needed.
 - **`wagoe session list` and `session invalidate` were unreachable, and are removed** (BOU-692). A role change or
