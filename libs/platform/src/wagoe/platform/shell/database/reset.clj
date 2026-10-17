@@ -152,7 +152,7 @@
         env     (some-> (config/named-profile wag-env) name)]
     (cond
       (nil? env)
-      (refuse! :forbidden "No profile is named. Set WAG_ENV to dev, test or acc, or pass --env dev." {})
+      (refuse! :forbidden "No profile is named. Set WAG_ENV to dev, test or acc; `bb db:reset` also takes --env." {})
 
       (not (db-config/resettable-environment? env))
       (refuse! :forbidden (str "Refusing to reset: WAG_ENV=" (pr-str wag-env)
