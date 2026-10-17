@@ -97,10 +97,8 @@
                     :password "Wrong-Pass-1234!"}))
     ;; Correct password should now be rejected because account is locked
     (let [resp (users/login {:email    (-> fx/*seed* :admin :email)
-                             :password (-> fx/*seed* :admin :password)})
-          body (:body resp)]
-      (is (= 200 (:status resp)))
-      (is (false? (:authenticated body))
+                             :password (-> fx/*seed* :admin :password)})]
+      (is (= 429 (:status resp))
           "Login must be rejected when account is locked out")
-      (is (some? (:message body))
-          "Lockout response should include a human-readable message"))))
+      (is (= "account-locked" (:type (users/error-of resp))))
+      (is (some? (get-in resp [:headers "Retry-After"]))))))

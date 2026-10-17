@@ -181,7 +181,7 @@
           context        (create-interceptor-context :session-create user-service request)
 
           ;; Create the interceptor pipeline for session creation
-          pipeline       (user-interceptors/create-session-creation-pipeline :http)
+          pipeline       (user-interceptors/create-session-creation-pipeline)
 
           ;; Execute the pipeline
           result-context (interceptor/run-pipeline context pipeline)]
@@ -197,7 +197,7 @@
           context        (create-interceptor-context :user-login user-service request)
 
           ;; Create the interceptor pipeline for user authentication
-          pipeline       (user-interceptors/create-session-creation-pipeline :http)
+          pipeline       (user-interceptors/create-session-creation-pipeline)
 
           ;; Execute the pipeline
           result-context (interceptor/run-pipeline context pipeline)]
@@ -342,6 +342,14 @@
                                   [:userAgent {:optional true} :string]
                                   [:ipAddress {:optional true} :string]]]])
 
+(def ^:private login-responses
+  "What POST /auth/login and POST /sessions answer (BOU-691)."
+  {200 {:description "Signed in: session, sessionToken, jwtToken. With requiresMfa true instead, the password was right; repeat the request with mfaCode."}
+   400 {:description "Malformed body."}
+   401 {:description "Wrong email or password (type unauthorized, the same body whether or not the account exists), or a wrong mfaCode (type mfa-verification-failed)."}
+   403 {:description "MFA is required but the user has not enrolled (type mfa-enrolment-required)."}
+   429 {:description "Account locked after repeated failures (type account-locked). Retry-After gives the seconds to wait."}})
+
 (defn api-routes
   "The module's API routes, as Reitit data.
 
@@ -430,13 +438,15 @@
        :post {:handler    (login-handler user-service)
               :summary    "Authenticate user with email/password"
               :tags       ["authentication"]
-              :parameters {:body credentials-body}}}]
+              :parameters {:body credentials-body}
+              :responses  login-responses}}]
      ["/sessions"
       {:public true
        :post {:handler    (create-session-handler user-service)
               :summary    "Create session with email/password"
               :tags       ["sessions"]
-              :parameters {:body credentials-body}}}]
+              :parameters {:body credentials-body}
+              :responses  login-responses}}]
      ;; The token in the path is the credential.
      ["/sessions/:token"
       {:public true

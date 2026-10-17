@@ -1,12 +1,10 @@
 (ns wagoe.e2e.api.auth-login-test
   "E2E tests for POST /api/v1/auth/login.
 
-   Verified behaviour (discovered against the live server):
-   - The endpoint always returns HTTP 200.
-   - On success: body has {:authenticated true, :user {...}, :session {...},
+   - On success: 200 with {:authenticated true, :user {...}, :session {...},
      :sessionToken \"...\", :jwtToken \"...\"}.
-   - On failure: body has {:authenticated false, :reason \"...\", :message \"...\"}
-     (message key may be absent for unknown-email).
+   - Wrong credentials: 401 in the standard error shape, the same body for an
+     unknown email (BOU-691).
    - No Set-Cookie header is set (cookie-based auth is web-only)."
   (:require [clojure.test :refer [deftest is testing use-fixtures]]
             [clojure.string :as str]
@@ -33,7 +31,6 @@
     (let [resp (users/login {:email    (-> fx/*seed* :admin :email)
                              :password (-> fx/*seed* :admin :password)})
           body (:body resp)]
-      ;; Status is always 200 for this endpoint
       (is (= 200 (:status resp)))
       ;; Core authentication flag
       (is (true? (:authenticated body)))
@@ -53,25 +50,20 @@
         (is (not (str/includes? s "password_hash")))))))
 
 (deftest ^:integration ^:e2e login-wrong-password-returns-unauthenticated
-  (testing "Wrong password yields authenticated:false with no session data"
+  (testing "Wrong password yields 401 in the error shape, with no session data"
     (let [resp (users/login {:email    (-> fx/*seed* :admin :email)
                              :password "Wrong-Pass-1234!"})
-          body (:body resp)]
-      (is (= 200 (:status resp)))
-      (is (false? (:authenticated body)))
-      (is (= "authentication-failed" (:reason body)))
-      ;; No session token should be in the response
-      (is (nil? (:sessionToken body)))
-      (is (nil? (:session body))))))
+          err  (users/error-of resp)]
+      (is (= 401 (:status resp)))
+      (is (= "unauthorized" (:type err)))
+      (is (string? (:correlation-id err)))
+      (is (not (str/includes? (str (:body resp)) "sessionToken"))))))
 
 (deftest ^:integration ^:e2e login-unknown-email-no-enumeration
-  (testing "Nonexistent email yields a generic failure — no user-enumeration clues"
-    (let [resp (users/login {:email    "nonexistent@acme.test"
-                             :password "Wrong-Pass-1234!"})
-          body (:body resp)]
-      (is (= 200 (:status resp)))
-      (is (false? (:authenticated body)))
-      ;; The message must NOT reveal whether the email exists
-      (let [s (str/lower-case (body-str resp))]
-        (is (not (str/includes? s "not found")))
-        (is (not (str/includes? s "does not exist")))))))
+  (testing "Nonexistent email yields the same 401 as a wrong password"
+    (let [refusal (fn [email]
+                    (let [resp (users/login {:email email :password "Wrong-Pass-1234!"})]
+                      [(:status resp) (dissoc (users/error-of resp) :correlation-id)]))]
+      (is (= [401 {:type "unauthorized" :message "Invalid email or password"}]
+             (refusal "nonexistent@acme.test")
+             (refusal (-> fx/*seed* :admin :email)))))))
