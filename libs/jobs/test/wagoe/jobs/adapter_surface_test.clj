@@ -16,9 +16,10 @@
             [wagoe.jobs.shell.adapters.db :as db]
             [wagoe.jobs.shell.adapters.in-memory :as mem]
             [wagoe.jobs.shell.adapters.redis :as redis]
+            [wagoe.jobs.shell.worker :as worker]
             [next.jdbc :as jdbc]
             [clojure.test :refer [deftest is testing]])
-  (:import [java.time Instant]
+  (:import [java.time Instant ZoneId]
            [redis.clients.jedis Jedis]))
 
 ;; =============================================================================
@@ -132,6 +133,25 @@
          (is (instance? Instant (:created-at got))
              (str label ": :created-at came back as "
                   (some-> (:created-at got) class .getSimpleName))))))))
+
+(deftest ^:integration a-handler-gets-the-args-it-was-given
+  ;; The :db and :redis queues stored JSON, so a handler got strings for
+  ;; keywords, instants and UUIDs that the in-memory queue kept (BOU-689).
+  (let [args {:report-id :sales
+              :at        (Instant/parse "2026-10-17T08:23:28.536003Z")
+              :user-id   (random-uuid)
+              :zone      (ZoneId/of "Europe/Amsterdam")
+              :tags      #{:a :b}
+              :nested    {:status :active :ids [(random-uuid)]}}]
+    (each-backend
+     (fn [q label]
+       (let [got      (promise)
+             registry (worker/create-job-registry)]
+         (ports/register-handler! registry :send-email
+                                  (fn [a] (deliver got a) {:success? true}))
+         (ports/enqueue-job! q :default (assoc (job) :args args))
+         (worker/run-pending! {} q (mem/create-in-memory-job-store) registry)
+         (is (= args (deref got 0 ::not-run)) (str label ": :args")))))))
 
 (deftest ^:integration an-empty-queue-answers-the-same-way
   (each-backend

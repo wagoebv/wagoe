@@ -1,6 +1,7 @@
-(ns wagoe.events.shell.codec
-  "The wire format: transit JSON, shared by the Redis bus and the outbox so an
-   event survives either the same way."
+(ns wagoe.platform.transit
+  "Transit JSON for values that leave the process and come back as Clojure:
+   events on the Redis bus and outbox, jobs on the :db and :redis queues. JSON
+   would turn their keywords, UUIDs and instants into strings (BOU-689)."
   (:require [cognitect.transit :as transit])
   (:import (java.io ByteArrayInputStream ByteArrayOutputStream)))
 
@@ -27,7 +28,9 @@
     java.time.OffsetDateTime (transit/write-handler "offset-date-time" str)
     java.time.ZonedDateTime  (transit/write-handler "zoned-date-time" str)
     java.time.LocalDate      (transit/write-handler "local-date" str)
-    java.time.LocalDateTime  (transit/write-handler "local-date-time" str)}))
+    java.time.LocalDateTime  (transit/write-handler "local-date-time" str)
+    ;; Report opts carry one (BOU-689). Covers ZoneOffset too.
+    java.time.ZoneId         (transit/write-handler "zone-id" str)}))
 
 (def ^:private default-write-handler
   "Anything else goes as its `str`, so an unexpected type (a driver's PGobject
@@ -46,6 +49,7 @@
     "zoned-date-time"  (transit/read-handler #(java.time.ZonedDateTime/parse %))
     "local-date"       (transit/read-handler #(java.time.LocalDate/parse %))
     "local-date-time"  (transit/read-handler #(java.time.LocalDateTime/parse %))
+    "zone-id"          (transit/read-handler #(java.time.ZoneId/of %))
     "str"              (transit/read-handler identity)
 
     ;; transit tags a PersistentList as "list" and its default reader hands back

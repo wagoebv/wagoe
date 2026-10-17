@@ -15,7 +15,7 @@
    redeliveries, unlike the stream entry id."
   (:require [wagoe.events.core.event :as event]
             [wagoe.events.ports :as ports]
-            [wagoe.events.shell.codec :as codec]
+            [wagoe.platform.transit :as codec]
             [clojure.tools.logging :as log])
   (:import (java.util.concurrent Executors ExecutorService TimeUnit)
            (redis.clients.jedis StreamEntryID)

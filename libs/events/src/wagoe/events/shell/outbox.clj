@@ -25,7 +25,7 @@
             [wagoe.events.core.event :as event]
             [wagoe.events.core.outbox :as policy]
             [wagoe.events.ports :as ports]
-            [wagoe.events.shell.codec :as codec]
+            [wagoe.platform.transit :as codec]
             [wagoe.platform.database :as db]
             [wagoe.platform.ports.database :as db-ports])
   (:import (java.util.concurrent RejectedExecutionException ScheduledThreadPoolExecutor TimeUnit)

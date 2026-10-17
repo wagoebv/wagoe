@@ -108,6 +108,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Job args came back as strings on the `:db` and `:redis` queues: keywords, UUIDs, instants** (BOU-689). Jobs are stored
+  as transit now; jobs queued before the upgrade still run. Drop any hand conversion in your handlers.
 - **Reports needed a shell require, and `generate-async` lost its output** (BOU-674). `:wagoe/reports` is now a
   `ReportServiceProtocol` and async output is stored and mailed. Call the port; `service/generate-async` is gone.
 - **Tables from Malli schemas take their column types from the adapter's `column-type`** (BOU-610). On fresh H2

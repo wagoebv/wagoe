@@ -90,7 +90,7 @@ required, survives a Redis outage.
   the best candidate + a conditional `UPDATE … WHERE status='ready'`; the row
   lock serialises concurrent workers (one wins, losers retry). Runs identically
   on H2 and PostgreSQL, so its reliability tests run on the default H2 test DB.
-- The authoritative job is the JSON `payload` column (same wire format as the
+- The authoritative job is the `payload` column (same wire format as the
   Redis adapter); the other columns exist only for ordering/claim/reclaim.
 - `job_store` is the **history and dead-letter** table, separate from
   `job_queue`, which holds only work still to do (`ack-job!` deletes the row).
@@ -143,6 +143,12 @@ A worker on the DB queue picks the job up after commit.
 > implementation. Use the port.
 
 ## Job Handler Signature
+
+A handler gets `:args` back with the types it was enqueued with — keywords,
+UUIDs, `java.time` values — on every queue: `:db` and `:redis` store jobs as
+transit (`wagoe.jobs.shell.adapters.codec`). Until BOU-689 they stored JSON and
+handed keywords back as strings; a job written then still decodes, with its
+`:args` as JSON left them. A type transit has no handler for arrives as its `str`.
 
 ```clojure
 ;; Handlers receive args map, return result map

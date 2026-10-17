@@ -2,7 +2,7 @@
   "The Redis bus's wire format, without a Redis. A value transit cannot write
    fails the publish, so the event is lost; these are the values a database row
    carries (BOU-492)."
-  (:require [wagoe.events.shell.codec :as codec]
+  (:require [wagoe.platform.transit :as codec]
             [wagoe.events.shell.publisher :as publisher]
             [clojure.test :refer [deftest is testing]])
   (:import (java.time LocalDate LocalDateTime OffsetDateTime ZonedDateTime)))
