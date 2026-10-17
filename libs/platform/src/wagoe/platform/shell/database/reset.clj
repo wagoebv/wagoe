@@ -15,7 +15,6 @@
             [migratus.utils :as migratus-utils]
             [wagoe.config :as config]
             [wagoe.config.secrets :as secrets]
-            [aero.core :as aero]
             [clojure.edn :as edn]
             [clojure.java.io :as io]
             [clojure.string :as str]
@@ -202,7 +201,8 @@
    (active-db-config
     ;; Secrets optional: a developer's machine has none of prod's, and without
     ;; them every #secret would push this onto the lenient reader.
-    (try (aero/read-config url {::secrets/optional? true})
+    ;; Through wagoe.config, so a host from a source prod's file declares resolves.
+    (try (config/read-config-resource url :prod {::secrets/optional? true})
          (catch Exception _
            (try (read-leniently url)
                 (catch Exception e
