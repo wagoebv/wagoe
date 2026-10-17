@@ -249,3 +249,27 @@
           ;; Promote both back for the next round.
           (doseq [u [a b]]
             (.update-user (:repo sys) {:id (:id u) :role :admin})))))))
+
+(deftest ^:integration a-concurrent-promotion-does-not-escape-the-guard
+  ;; The guard read the user before taking the lock: a demotion that read them
+  ;; before a concurrent promotion committed took no lock, while a demotion of
+  ;; the other admin counted the promoted one and went through (BOU-685).
+  (let [{:keys [users repo] :as sys} (system)
+        boss   (user! sys "boss@example.com" :user)
+        a      (user! sys "a@example.com" :admin)
+        c      (user! sys "c@example.com" :user)
+        change (fn [start user role]
+                 (future
+                   @start
+                   (try (as boss #(user-ports/update-user-profile users {:id (:id user) :role role}))
+                        (catch clojure.lang.ExceptionInfo e (:reason (ex-data e))))))
+        admins #(count (:users (user-ports/list-users users {:filter-role :admin :filter-active true})))]
+    (with-silent-logging
+      (dotimes [_ 20]
+        (let [start (promise)
+              results [(change start c :admin) (change start c :user) (change start a :user)]]
+          (deliver start true)
+          (run! deref results)
+          (is (pos? (admins)) "an admin remains")
+          (.update-user repo {:id (:id a) :role :admin})
+          (.update-user repo {:id (:id c) :role :user}))))))

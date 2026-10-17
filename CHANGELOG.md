@@ -112,6 +112,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **A concurrent promotion, demotion or deactivation could be undone past the last-admin guard** (BOU-685). Role and
+  active changes decide under the admin lock; edits and logins write only their own fields. No action needed.
+- **`wagoe session list` and `session invalidate` were unreachable, and are removed** (BOU-692). A role change or
+  deactivation already ends a user's sessions.
 - **Migrate, seed and reset picked their profile from `-Denv`, `ENV` or `ENVIRONMENT`; a blank `WAG_ENV` failed the boot** (BOU-686).
   Everything reads `WAG_ENV` now, blank meaning dev. Set it where you relied on the others, `clojure -M:prod:migrate` included.
 - **The storage README documented config keys the module never reads** (BOU-646). It is `{:provider :local :root …}`; see the README.
