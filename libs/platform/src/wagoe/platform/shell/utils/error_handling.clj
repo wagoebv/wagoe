@@ -110,15 +110,16 @@
                                   :request-method (name (or request-method :unknown))
                                   :request-uri uri})]
 
-           ;; Enhanced error logging with full context
-           (log/error "HTTP request failed with enhanced context"
-                      {:correlation-id correlation-id
-                       :uri uri
-                       :method (name (or request-method :unknown))
-                       :exception {:type (.getSimpleName (class ex))
-                                   :message (redaction/loggable-message ex)
-                                   :data (ex-data ex)}
-                       :context enriched-context})
+           ;; A typed 4xx is the client's, not a fault (BOU-704).
+           (log/logp (if (>= (first (problem/exception-status ex error-mappings)) 500) :error :info)
+                     "HTTP request failed with enhanced context"
+                     {:correlation-id correlation-id
+                      :uri uri
+                      :method (name (or request-method :unknown))
+                      :exception {:type (.getSimpleName (class ex))
+                                  :message (redaction/loggable-message ex)
+                                  :data (ex-data ex)}
+                      :context enriched-context})
 
            ;; Return enhanced Problem Details response with correlation-id in headers
            (let [problem-response (problem/exception->problem-response

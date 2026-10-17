@@ -479,9 +479,9 @@
                                          {:system system}))
         details (fn [system]
                   (get-in (json/parse-string
-                             (slurp (:body ((handler system) {:request-method :post :uri "/users"
-                                                              :headers {} :body-params {}})))
-                             true)
+                           (slurp (:body ((handler system) {:request-method :post :uri "/users"
+                                                            :headers {} :body-params {}})))
+                           true)
                           [:error :details]))]
     (is (= {:role ["missing required key"]}
            (details {:error-enricher (constantly {:code "WGE-201"}) :environment "dev"})))
@@ -885,6 +885,20 @@
     (is (nil? (:body resp)))
     (is (= (get-in (static-asset-response) [:headers "ETag"])
            (get-in resp [:headers "ETag"])))))
+
+(deftest ^:contract static-assets-carry-their-content-type
+  ;; resource-request sets none, and nosniff makes a browser refuse an untyped
+  ;; script (BOU-710).
+  (doseq [[uri type] {"/bou389/asset.js"     "text/javascript; charset=utf-8"
+                      "/bou710/a.css"        "text/css; charset=utf-8"
+                      "/bou710/a.svg"        "image/svg+xml"
+                      "/bou710/a.woff2"      "font/woff2"
+                      "/bou710/a.unknownext" "application/octet-stream"}]
+    (testing uri
+      (let [resp (static-asset-response {:uri uri})]
+        (is (= 200 (:status resp)))
+        (is (= type (get-in resp [:headers "Content-Type"])))
+        (is (= "nosniff" (get-in resp [:headers "X-Content-Type-Options"])))))))
 
 (deftest ^:contract dynamic-responses-are-left-alone
   ;; The header belongs to assets. A route response must not inherit it.
