@@ -18,7 +18,6 @@
    [wagoe.shared.ui.core.htmx :as htmx]
    [clojure.string :as str]
    [clojure.tools.logging :as log]
-   [reitit.core :as r]
    [ring.util.codec :as codec]
    [ring.util.response :as ring-response])
   (:import [java.util UUID]))
@@ -31,19 +30,6 @@
   "The :type -> status table admin errors are answered with. Admin throws the
    platform's own types, so the platform's status and this one agree (BOU-586)."
   problem-details/default-error-mappings)
-
-;; =============================================================================
-;; Route table
-;; =============================================================================
-
-(defn mounted?
-  "Whether `path` is a route of its own in the router serving `request`, not
-   just a value for a parameter: /web/admin/groups also matches
-   /web/admin/:entity. True when no router is attached, as nothing can be asked."
-  [request path]
-  (if-let [router (::r/router request)]
-    (= path (:template (r/match-by-path router path)))
-    true))
 
 ;; =============================================================================
 ;; Query Parameter Parsing

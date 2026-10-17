@@ -49,7 +49,9 @@
             [wagoe.platform.core.csrf :as csrf]
             [wagoe.platform.core.http.client-ip :as client-ip]
             [wagoe.platform.core.http.errors :as errors]
+            [wagoe.platform.core.http.pages :as pages]
             [wagoe.platform.core.http.problem-details :as problem-details]
+            [wagoe.platform.shell.http.pages :as shell-pages]
             [wagoe.platform.shell.reported-errors :as reported-errors]
             [buddy.core.nonce :as nonce]
             [buddy.core.codecs :as codecs]
@@ -1131,10 +1133,12 @@
         ;; Create handler interceptor that bridges to Ring handler.
         ;; Bind the CSRF token (issued by http-csrf-protection onto the request)
         ;; for the duration of handler execution — Hiccup is rendered to a string
-        ;; synchronously inside the handler, so layouts/forms can read csrf/*token*.
+        ;; synchronously inside the handler, so layouts/forms can read csrf/*token*,
+        ;; and ask which pages are mounted before linking to one.
         handler-interceptor {:name :ring-handler
                              :enter (fn [ctx]
-                                      (binding [csrf/*token* (get-in ctx [:request :anti-forgery-token])]
+                                      (binding [csrf/*token*     (get-in ctx [:request :anti-forgery-token])
+                                                pages/*mounted?* (partial shell-pages/mounted? (:request ctx))]
                                         (let [response (handler (:request ctx))]
                                           (set-response ctx response))))}
 

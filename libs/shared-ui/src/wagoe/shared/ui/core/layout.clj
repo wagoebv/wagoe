@@ -8,6 +8,8 @@
             [wagoe.shared.ui.core.home :as home]
             [wagoe.shared.ui.core.icons :as icons]
             [wagoe.platform.core.csrf :as csrf]
+            [wagoe.platform.core.http.access :as access]
+            [wagoe.platform.core.http.pages :as pages]
             [wagoe.ui-style :as ui-style]))
 
 (def ^:private default-css
@@ -28,15 +30,13 @@
 (def admin-pilot-js
   (ui-style/js-bundle :admin-pilot))
 
-(defn platform-admin?
-  "Returns true when the user is a platform-level admin without tenant context."
-  [user]
-  (and user
-       (= :admin (:role user))
-       (nil? (:tenant-id user))))
+(def platform-admin?
+  "Whether the user is a platform-level admin without tenant context."
+  access/platform-admin?)
 
 (defn main-navigation
-  "Main site navigation component.
+  "Main site navigation component. Links only to pages that are mounted
+   (`pages/*mounted?*`) and that `user` may open.
    
    Args:
      opts: Optional map with navigation configuration
@@ -44,12 +44,14 @@
    Returns:
      Hiccup navigation structure"
   [& [opts]]
-  (let [{:keys [user brand brand-href]} opts]
+  (let [{:keys [user brand brand-href]} opts
+        profile? (pages/mounted? "/web/profile")
+        logout?  (pages/mounted? "/web/logout")]
     [:nav
      [:a.logo {:href (or brand-href (if user home/*path* "/"))}
       (or brand
           (icons/brand-logo {:size 140}))]
-     (when (platform-admin? user)
+     (when (and (platform-admin? user) (pages/mounted? "/web/audit"))
        [:div.nav-links
         [:a {:href "/web/audit"}
          (icons/icon :file-text {:size 18})
@@ -57,27 +59,31 @@
      (if user
        [:div.user-nav
         (icons/theme-toggle-button)
-        ;; Alpine.js powered dropdown - replaces app.js toggleUserDropdown()
-        [:div.user-dropdown (alpine/dropdown-attrs)
-         [:button.dropdown-toggle (alpine/toggle-button-attrs)
-          (icons/icon :user {:size 18})
-          [:span {:class "ml-2"} (:name user)]
-          (icons/icon :chevron-down {:size 16 :class "ml-1"})]
-         [:div.dropdown-menu (merge {:x-show  "open"
-                                     :x-cloak true}
-                                    (alpine/x-transition {:origin "top right"}))
-          [:a.dropdown-item {:href "/web/profile"}
-           (icons/icon :user {:size 18})
-           [:span "Profile & Security"]]
-          [:div.dropdown-divider]
-          [:form {:method "POST" :action "/web/logout"}
-           (csrf/hidden-field)
-           [:button.dropdown-item {:type "submit"}
-            (icons/icon :log-out {:size 18})
-            [:span "Logout"]]]]]]
+        (if-let [items (seq (cond-> []
+                              profile? (conj [:a.dropdown-item {:href "/web/profile"}
+                                              (icons/icon :user {:size 18})
+                                              [:span "Profile & Security"]])
+                              (and profile? logout?) (conj [:div.dropdown-divider])
+                              logout? (conj [:form {:method "POST" :action "/web/logout"}
+                                             (csrf/hidden-field)
+                                             [:button.dropdown-item {:type "submit"}
+                                              (icons/icon :log-out {:size 18})
+                                              [:span "Logout"]]])))]
+          ;; Alpine.js powered dropdown - replaces app.js toggleUserDropdown()
+          [:div.user-dropdown (alpine/dropdown-attrs)
+           [:button.dropdown-toggle (alpine/toggle-button-attrs)
+            (icons/icon :user {:size 18})
+            [:span {:class "ml-2"} (:name user)]
+            (icons/icon :chevron-down {:size 16 :class "ml-1"})]
+           (into [:div.dropdown-menu (merge {:x-show  "open"
+                                             :x-cloak true}
+                                            (alpine/x-transition {:origin "top right"}))]
+                 items)]
+          [:span (:name user)])]
        [:div.user-nav
         (icons/theme-toggle-button)
-        [:a {:href "/web/login"} "Login"]])]))
+        (when (pages/mounted? "/web/login")
+          [:a {:href "/web/login"} "Login"])])]))
 
 (defn page-layout
   "Main page layout wrapper.

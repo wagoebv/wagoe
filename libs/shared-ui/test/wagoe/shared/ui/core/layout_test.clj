@@ -3,7 +3,8 @@
    
    Tests verify that layout components generate correct page structures,
    navigation elements, and consistent styling for the application."
-  (:require [wagoe.shared.ui.core.home :as home]
+  (:require [wagoe.platform.core.http.pages :as pages]
+            [wagoe.shared.ui.core.home :as home]
             [wagoe.shared.ui.core.layout :as layout]
             [clojure.string :as str]
             [clojure.test :refer [deftest testing is]]))
@@ -44,6 +45,28 @@
       ; Should contain the brand logo (with alt text) and login when no user
       (is (str/includes? nav-html "Wagoe"))
       (is (str/includes? nav-html "Login")))))
+
+(defn- hrefs [opts]
+  (->> (tree-seq coll? seq (layout/main-navigation opts))
+       (keep #(when (map? %) (or (:href %) (:action %))))
+       set))
+
+(def ^:private platform-admin {:name "P" :role :admin})
+(def ^:private tenant-admin {:name "T" :role :admin :tenant-id (random-uuid)})
+
+(deftest ^:unit navigation-links-only-to-mounted-pages
+  (testing "all mounted"
+    (is (= #{"/" "/web/login"} (hrefs {})))
+    (is (= #{"/web/dashboard" "/web/audit" "/web/profile" "/web/logout"} (hrefs {:user platform-admin})))
+    (is (= #{"/web/dashboard" "/web/profile" "/web/logout"} (hrefs {:user tenant-admin}))
+        "the audit trail admits platform admins only")
+    (is (contains? (hrefs {:user (assoc platform-admin :role "admin")}) "/web/audit")
+        "a string role, as an older session holds it"))
+  (testing "the user web UI switched off"
+    (binding [pages/*mounted?* (constantly false)]
+      (is (= #{"/"} (hrefs {})))
+      (is (= #{"/web/dashboard"} (hrefs {:user platform-admin})))
+      (is (str/includes? (str (layout/main-navigation {:user platform-admin})) "P")))))
 
 ;; =============================================================================
 ;; Page Layout Tests
