@@ -82,7 +82,7 @@ New framework migration ids end in an odd second (`…120017`), so a hand-picked
 
 === If your database already applied one of the pair
 
-Until BOU-717 nothing refused the pair: one migration ran and the id was recorded for both.
+Until #749 nothing refused the pair: one migration ran and the id was recorded for both.
 To see which one ran, look up the id the refusal names:
 
 [source,sql]
