@@ -300,3 +300,31 @@
   [metadata]
   (when metadata
     (dissoc metadata :password :password-hash :session-token :reset-token)))
+
+;; =============================================================================
+;; Groups
+;; =============================================================================
+
+(defn- grant-record [{:keys [permission scope]}]
+  {:permission (subs (str permission) 1)
+   :scope      (pr-str scope)})
+
+(defn group-audit-entries
+  "An entry for each of `members` whose rights changed: on :group-join or
+   :group-leave the member who joined or left, gaining or losing the group's
+   `grants`; on :grant-add or :grant-remove every member, gaining or losing
+   the one grant. The log is per user, so a grant changed in an empty group
+   records nothing: nobody's rights changed. A join lists the grants, so each
+   user's entries account for what they hold."
+  [action {:keys [actor-id actor-email ip-address user-agent]} group members grants]
+  (for [{:keys [id email]} members]
+    {:action            action
+     :actor-id          actor-id
+     :actor-email       actor-email
+     :target-user-id    id
+     :target-user-email email
+     :changes           {:grants (mapv grant-record grants)}
+     :metadata          {:group-id (str (:id group)) :group-name (:name group)}
+     :ip-address        ip-address
+     :user-agent        user-agent
+     :result            :success}))

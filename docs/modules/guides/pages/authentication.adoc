@@ -231,6 +231,48 @@ defaults to `/web/dashboard`, or to `/web` with `:dashboard false`, which sends 
 signed-in user on to their landing page. All three keys are checked at boot: a path off
 this site, an unknown role or a symbol that does not resolve stops it.
 
+== Groups and permissions
+
+A group has a name, members and grants. A grant is a permission, a keyword your
+application defines, and a scope, a map of whatever narrows it. A member holds the
+grants of every group they are in. Wagoe stores and checks them; what a scope means is
+up to the application. The `:admin` role needs no group.
+
+Administrators manage groups at `/web/admin/groups`. Joining or leaving a group and a
+changed grant are written to the audit trail of each user whose rights change.
+
+Declare what a grant may name, so a bad one is refused. Each is a Malli schema or a
+symbol naming one:
+
+[source,clojure]
+----
+:wagoe/user
+{:groups {:permissions [:enum :invoice/approve :invoice/view]
+          :scope       [:map {:closed true}
+                        [:domain-id {:optional true} :int]
+                        [:director-general-id {:optional true} :uuid]]}}
+----
+
+Without them any keyword and any map of EDN values is accepted. A scope is stored as
+EDN, so a uuid or keyword in it reads back as one.
+
+Check grants on each request; nothing is cached, so a change applies to the next one:
+
+[source,clojure]
+----
+(require '[wagoe.user.ports :as user-ports]
+         '[wagoe.user.core.group :as group])
+
+;; group-service is :wagoe/user-group-service
+(let [grants (user-ports/user-grants group-service (:user request))]
+  (group/holds? grants :invoice/view)                          ; in any scope
+  (group/grants-for grants :invoice/approve)                   ; => [{:domain-id 4} …]
+  (group/authorized? grants :invoice/approve #(= domain-id (:domain-id %))))
+----
+
+A soft-deleted user holds no grants. Deleting a user or a group removes the
+memberships, and a group's grants go with it.
+
 == Session management
 
 [source,bash]

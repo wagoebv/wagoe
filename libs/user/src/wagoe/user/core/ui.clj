@@ -1178,6 +1178,8 @@
                   :logout :neutral
                   :role-change :warning
                   :bulk-action :info
+                  (:group-join :grant-add) :info
+                  (:group-leave :grant-remove) :warning
                   :neutral)]
     (ui/badge (str/capitalize (str/replace action-name "-" " ")) {:variant variant
                                             :class "audit-action-badge"})))
@@ -1417,7 +1419,11 @@
       [:option {:value "login" :selected (= "login" (:action filters))} [:t :common/audit-login]]
       [:option {:value "logout" :selected (= "logout" (:action filters))} [:t :common/audit-logout]]
       [:option {:value "role-change" :selected (= "role-change" (:action filters))} [:t :common/audit-role-change]]
-      [:option {:value "bulk-action" :selected (= "bulk-action" (:action filters))} [:t :common/audit-bulk-action]]]]
+      [:option {:value "bulk-action" :selected (= "bulk-action" (:action filters))} [:t :common/audit-bulk-action]]
+      [:option {:value "group-join" :selected (= "group-join" (:action filters))} [:t :common/audit-group-join]]
+      [:option {:value "group-leave" :selected (= "group-leave" (:action filters))} [:t :common/audit-group-leave]]
+      [:option {:value "grant-add" :selected (= "grant-add" (:action filters))} [:t :common/audit-grant-add]]
+      [:option {:value "grant-remove" :selected (= "grant-remove" (:action filters))} [:t :common/audit-grant-remove]]]]
 
     [:div.filter-group
      [:label {:for "result"} [:t :user/audit-filter-result-label]]

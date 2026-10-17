@@ -80,7 +80,7 @@
      :ip-address  (client-ip/request-ip request)
      :user-agent  (get-in request [:headers "user-agent"])}))
 
-(defn- effective-audit-context
+(defn effective-audit-context
   "Build final audit context by combining defaults with bound request context."
   [{:keys [default-actor-id default-actor-email]}]
   (let [ctx (or *audit-context* {})]

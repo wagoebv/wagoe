@@ -201,7 +201,12 @@
      [:a {:href "/web/audit" :class "entity-card-link"}
       [:div.entity-card-icon (icons/icon :file-text {:size 20})]
       [:div.entity-card-title [:t :admin/audit-trail-title]]
-      [:div.entity-card-description [:t :admin/audit-trail-description]]]]]])
+      [:div.entity-card-description [:t :admin/audit-trail-description]]]]
+    [:div.entity-card
+     [:a {:href "/web/admin/groups" :class "entity-card-link"}
+      [:div.entity-card-icon (icons/icon :users {:size 20})]
+      [:div.entity-card-title [:t :admin/groups-title]]
+      [:div.entity-card-description [:t :admin/groups-description]]]]]])
 
 ;; =============================================================================
 ;; Confirmation Dialog

@@ -159,6 +159,19 @@
           ddl (schema/generate-table-ddl h2-ctx "configs" malli-schema)]
       (is (.contains ddl "metadata VARCHAR NOT NULL")))))
 
+(deftest ^:unit generate-table-ddl-with-references-and-column-type-test
+  (let [ddl (schema/generate-table-ddl h2-ctx "members"
+                                       [:map
+                                        [:id :uuid]
+                                        [:group-id {:references :groups :on-delete :cascade} :uuid]
+                                        [:owner-id {:references "owners" :on-delete :set-null} [:maybe :uuid]]
+                                        [:tag-id :uuid]
+                                        [:scope {:column-type :text} :map]])]
+    (is (.contains ddl "CONSTRAINT fk_members_group_id FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE CASCADE"))
+    (is (.contains ddl "CONSTRAINT fk_members_owner_id FOREIGN KEY (owner_id) REFERENCES owners(id) ON DELETE SET NULL"))
+    (is (not (.contains ddl "fk_members_tag_id")) "an -id field without :references gets no key")
+    (is (.contains ddl "scope VARCHAR NOT NULL") ":column-type wins over the Malli type")))
+
 (deftest ^:unit generate-table-ddl-with-double-test
   (testing "DDL with double precision field"
     (let [malli-schema [:map

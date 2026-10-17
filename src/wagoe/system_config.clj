@@ -95,7 +95,9 @@
                      ;; prune its table (BOU-429).
                      :wagoe/session-pruner
                      :wagoe/user-identity-repository
-                     :wagoe/user-oidc :wagoe/user-oidc-routes]
+                     :wagoe/user-oidc :wagoe/user-oidc-routes
+                     :wagoe/user-group-repository :wagoe/user-group-service
+                     :wagoe/user-group-routes]
               ;; What this module offers the rest of a split deployment. Only
               ;; served when it is run as a service *and* :wagoe/rpc is
               ;; configured — a `server` boot never starts the listener.

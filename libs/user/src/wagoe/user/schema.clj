@@ -151,12 +151,54 @@
    [:created-at inst?]
    [:last-login-at {:optional true} [:maybe inst?]]])
 
+(def UserGroup
+  "Schema for a group of users. Its grants apply to every member."
+  [:map {:title "User Group"}
+   [:id :uuid]
+   [:name [:string {:min 1 :max 255}]]
+   [:description {:optional true} [:maybe [:string {:max 255}]]]
+   [:created-at inst?]
+   [:updated-at {:optional true} [:maybe inst?]]])
+
+(def UserGroupMember
+  "Schema for a user's membership of a group. Deleting either removes it."
+  [:map {:title "User Group Member"}
+   [:id :uuid]
+   [:group-id {:references :user_groups :on-delete :cascade} :uuid]
+   [:user-id {:references :auth_users :on-delete :cascade} :uuid]
+   [:created-at inst?]])
+
+(def UserGroupGrant
+  "Schema for a permission a group holds, in a scope. Wagoe interprets
+   neither: the application names its permissions and reads the scope. The
+   scope is stored as EDN, so its values keep their types."
+  [:map {:title "User Group Grant"}
+   [:id :uuid]
+   [:group-id {:references :user_groups :on-delete :cascade} :uuid]
+   [:permission :keyword]
+   [:scope {:column-type :text} :map]
+   [:created-at inst?]])
+
+(def GroupRequest
+  "What creating or renaming a group takes."
+  [:map {:title "Group Request" :closed true}
+   [:name [:string {:min 1 :max 255}]]
+   [:description {:optional true} [:maybe [:string {:max 255}]]]])
+
+(def GroupSettings
+  "`:wagoe/user :groups`: the permissions and the scope a grant may name, each
+   a Malli schema or a symbol naming one. Without them any keyword and any map
+   of EDN values is accepted."
+  [:map {:closed true}
+   [:permissions {:optional true} any?]
+   [:scope {:optional true} any?]])
+
 (def audit-actions
   "What an audit entry records. The database checks `action` against these; a
    value added here needs the check widened on existing databases, as
    `:permanent-delete` did (BOU-682)."
   [:create :update :delete :permanent-delete :activate :deactivate :role-change
-   :bulk-action :login :logout])
+   :bulk-action :login :logout :group-join :group-leave :grant-add :grant-remove])
 
 (def UserAuditLog
   "Schema for User Audit Log entity - tracks all user-related actions for compliance and security.

@@ -42,6 +42,7 @@
             [wagoe.user.shell.interceptors :as user-interceptors]
             [wagoe.user.shell.middleware :as user-middleware]
             [wagoe.user.shell.web-handlers :as web-handlers]
+            [wagoe.user.shell.group-handlers :as group-handlers]
             [wagoe.user.shell.mfa :as mfa]
             [cheshire.core :as json]))
 
@@ -725,3 +726,29 @@
     {:api    (api-routes user-service mfa-service)
      :web    (when web-ui-enabled? (web-routes user-service mfa-service config))
      :static []}))
+
+(defn group-routes
+  "Group management, mounted under /web/admin beside the admin UI: admins only."
+  [user-service group-service]
+  (let [guard [(user-middleware/flexible-authentication-middleware user-service)
+               user-middleware/require-admin-middleware]
+        route (fn [path methods] [path (assoc methods :no-doc true :middleware guard)])]
+    {:api        []
+     :static     []
+     :web-prefix "/web/admin"
+     :web        [(route "/groups"
+                         {:get  {:handler (group-handlers/list-page group-service)}
+                          :post {:handler (group-handlers/create group-service)}})
+                  (route "/groups/:id"
+                         {:get  {:handler (group-handlers/show group-service)}
+                          :post {:handler (group-handlers/update-group group-service)}})
+                  (route "/groups/:id/delete"
+                         {:post {:handler (group-handlers/delete-group group-service)}})
+                  (route "/groups/:id/members"
+                         {:post {:handler (group-handlers/add-member user-service group-service)}})
+                  (route "/groups/:id/members/:user-id/remove"
+                         {:post {:handler (group-handlers/remove-member group-service)}})
+                  (route "/groups/:id/grants"
+                         {:post {:handler (group-handlers/add-grant group-service)}})
+                  (route "/groups/:id/grants/:grant-id/remove"
+                         {:post {:handler (group-handlers/remove-grant group-service)}})]}))

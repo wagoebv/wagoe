@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **User groups with scoped permission grants** (BOU-701): manage them at `/web/admin/groups`, check them with
+  `(user-grants svc user)` from `:wagoe/user-group-service`. Declare permissions and scope under `:wagoe/user :groups`.
 - **Recurring jobs** (BOU-452): `:recurring {:nightly-report {:cron "0 2 * * *"}}` under `:wagoe/jobs`; one replica
   enqueues each tick. `enqueue-once!` and `:wagoe/idempotency-store` make a repeated enqueue a no-op.
 - **`#secret` config reader** (BOU-455): reads env vars or mounted files (`#secret [:file "db-password"]`), takes custom

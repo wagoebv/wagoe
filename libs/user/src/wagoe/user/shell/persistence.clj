@@ -162,6 +162,14 @@
    "user_audit_log"  user-schema/UserAuditLog
    "user_identities" user-schema/UserIdentity})
 
+(def group-tables
+  "The group tables, after `tables`: they reference auth_users, and each other
+   in this order."
+  (array-map
+   "user_groups"        user-schema/UserGroup
+   "user_group_members" user-schema/UserGroupMember
+   "user_group_grants"  user-schema/UserGroupGrant))
+
 (defn initialize-user-schema!
   "Initialize database schema for user entities using Malli schema definitions.
 
@@ -171,6 +179,7 @@
    - user_sessions: User authentication sessions
    - user_audit_log: Audit trail for user operations
    - user_identities: OpenID Connect (issuer, subject) links to users
+   - user_groups, user_group_members, user_group_grants: groups and their grants
 
    Includes indexes for:
    - Foreign keys (user_id)
@@ -197,8 +206,11 @@
   (log/info "Initializing user schema from Malli definitions (split-table architecture)")
 
   (db/initialize-tables-from-schemas! ctx tables)
+  (db/initialize-tables-from-schemas! ctx group-tables)
   (db/create-index-if-not-exists! ctx "uk_user_identities_issuer_subject" :user_identities
                                   [:issuer :subject] {:unique? true})
+  (db/create-index-if-not-exists! ctx "uk_user_group_members_group_user" :user_group_members
+                                  [:group_id :user_id] {:unique? true})
   (widen-audit-action-check! ctx)
   (hash-plaintext-session-tokens! ctx)
 
