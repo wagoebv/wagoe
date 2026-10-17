@@ -169,7 +169,7 @@
   "Dashboard cards for pages other modules serve; a card is shown only when its
    page is mounted and the user may open it. The audit trail's guard admits
    platform admins only."
-  [{:href "/web/audit" :icon :file-text :platform-admin? true
+  [{:href "/web/audit" :icon :file-text :visible? layout/platform-admin?
     :title [:t :admin/audit-trail-title] :description [:t :admin/audit-trail-description]}
    {:href "/web/admin/groups" :icon :users
     :title [:t :admin/groups-title] :description [:t :admin/groups-description]}])
@@ -209,9 +209,9 @@
             [:div.entity-card-description description])
           [:div.entity-card-meta
            [:span.entity-card-count [:t :admin/entity-card-count {:count count}]]]]]))
-    (for [{:keys [href icon title description platform-admin?]} page-cards
+    (for [{:keys [href icon title description visible?]} page-cards
           :when (and (pages/mounted? href)
-                     (or (not platform-admin?) (layout/platform-admin? user)))]
+                     (or (nil? visible?) (visible? user)))]
       [:div.entity-card
        [:a {:href href :class "entity-card-link"}
         [:div.entity-card-icon (icons/icon icon {:size 20})]

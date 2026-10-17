@@ -8,6 +8,7 @@
             [wagoe.shared.ui.core.home :as home]
             [wagoe.shared.ui.core.icons :as icons]
             [wagoe.platform.core.csrf :as csrf]
+            [wagoe.platform.core.http.access :as access]
             [wagoe.platform.core.http.pages :as pages]
             [wagoe.ui-style :as ui-style]))
 
@@ -29,14 +30,9 @@
 (def admin-pilot-js
   (ui-style/js-bundle :admin-pilot))
 
-(defn platform-admin?
-  "Returns true when the user is a platform-level admin without tenant context:
-   whom the audit trail's guard admits. The role may be a string in an older
-   session."
-  [user]
-  (and user
-       (some-> (:role user) name (= "admin"))
-       (nil? (:tenant-id user))))
+(def platform-admin?
+  "Whether the user is a platform-level admin without tenant context."
+  access/platform-admin?)
 
 (defn main-navigation
   "Main site navigation component. Links only to pages that are mounted
@@ -63,28 +59,26 @@
      (if user
        [:div.user-nav
         (icons/theme-toggle-button)
-        (if (or profile? logout?)
+        (if-let [items (seq (cond-> []
+                              profile? (conj [:a.dropdown-item {:href "/web/profile"}
+                                              (icons/icon :user {:size 18})
+                                              [:span "Profile & Security"]])
+                              (and profile? logout?) (conj [:div.dropdown-divider])
+                              logout? (conj [:form {:method "POST" :action "/web/logout"}
+                                             (csrf/hidden-field)
+                                             [:button.dropdown-item {:type "submit"}
+                                              (icons/icon :log-out {:size 18})
+                                              [:span "Logout"]]])))]
           ;; Alpine.js powered dropdown - replaces app.js toggleUserDropdown()
           [:div.user-dropdown (alpine/dropdown-attrs)
            [:button.dropdown-toggle (alpine/toggle-button-attrs)
             (icons/icon :user {:size 18})
             [:span {:class "ml-2"} (:name user)]
             (icons/icon :chevron-down {:size 16 :class "ml-1"})]
-           [:div.dropdown-menu (merge {:x-show  "open"
-                                       :x-cloak true}
-                                      (alpine/x-transition {:origin "top right"}))
-            (when profile?
-              [:a.dropdown-item {:href "/web/profile"}
-               (icons/icon :user {:size 18})
-               [:span "Profile & Security"]])
-            (when (and profile? logout?)
-              [:div.dropdown-divider])
-            (when logout?
-              [:form {:method "POST" :action "/web/logout"}
-               (csrf/hidden-field)
-               [:button.dropdown-item {:type "submit"}
-                (icons/icon :log-out {:size 18})
-                [:span "Logout"]]])]]
+           (into [:div.dropdown-menu (merge {:x-show  "open"
+                                             :x-cloak true}
+                                            (alpine/x-transition {:origin "top right"}))]
+                 items)]
           [:span (:name user)])]
        [:div.user-nav
         (icons/theme-toggle-button)
