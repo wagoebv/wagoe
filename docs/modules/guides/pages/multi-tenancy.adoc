@@ -260,7 +260,7 @@ curl -X POST http://localhost:3000/api/v1/tenants/<id>/activate \
 
 === Slug rules
 
-Slugs must be lowercase alphanumeric + hyphens, 2–100 characters:
+Slugs must be lowercase alphanumeric + hyphens, 2–56 characters, so the schema name (`tenant_` + slug) fits PostgreSQL's 63-byte identifier limit:
 
 [source,clojure]
 ----
