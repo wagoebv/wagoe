@@ -91,8 +91,8 @@
   (let [base-cal (-> (Calendar.)
                      (.withProdId product-id)
                      (.withDefaults))
-        with-components (reduce (fn [^Calendar c comp]
-                                  (.withComponent c comp))
+        with-components (reduce (fn [^Calendar c component]
+                                  (.withComponent c component))
                                 base-cal
                                 components)]
     (.getFluentTarget with-components)))
@@ -116,11 +116,16 @@
             (recur (+ i (Character/charCount cp)) (+ used n)))
           (str sb))))))
 
-(defn- check-unique-ids!
+(defn- check-events!
   "UID must be unique within the calendar (RFC 5545 3.8.4.7); clients keep one
-   of two events that share it."
+   of two events that share it. Compared as the UID string, so a UUID and its
+   string form collide. A bad :timezone would otherwise escape as an untyped
+   ZoneRulesException."
   [events]
-  (when-let [dups (seq (for [[id n] (frequencies (map :id events)) :when (> n 1)] id))]
+  (when-let [bad (first (remove #(schema/valid-timezone? (:timezone % "UTC")) events))]
+    (throw (ex-info "Invalid :timezone for iCal export"
+                    {:type :validation-error :field :timezone :value (:timezone bad)})))
+  (when-let [dups (seq (for [[id n] (frequencies (map (comp str :id) events)) :when (> n 1)] id))]
     (throw (ex-info "Events to export share an :id"
                     {:type :validation-error :field :id :value (vec dups)}))))
 
@@ -231,7 +236,7 @@
   ports/CalendarAdapterProtocol
 
   (export-ical [_this events opts]
-    (check-unique-ids! events)
+    (check-events! events)
     (let [product-id (get opts :product-id "-//Wagoe//Calendar//EN")
           zones      (vtimezones events)
           calendar   (build-calendar (concat (vals zones)
