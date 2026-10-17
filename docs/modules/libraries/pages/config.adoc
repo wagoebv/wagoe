@@ -75,9 +75,9 @@ environment:
 
 [source,clojure]
 ----
-{:password #secret "DB_PASSWORD"                 ; the default source, :env
- :api-key  #secret [:file "stripe-key"]          ; /run/secrets/stripe-key, trimmed
- :token    #or [#secret "API_TOKEN" "dev-token"]} ; a default for dev
+{:password #secret "DB_PASSWORD"                             ; the default source, :env
+ :api-key  #secret [:file "stripe-key"]                      ; /run/secrets/stripe-key, trimmed
+ :token    #secret {:name "API_TOKEN" :default "dev-token"}} ; a default for dev
 ----
 
 Two sources are built in. `:env` reads an environment variable. `:file` reads
@@ -87,8 +87,12 @@ is trimmed.
 
 A secret that no source has, or that is blank, fails `load-config` with a
 `:configuration-error` naming the secret and its source. The value never
-appears in an error. Inside `#or` a missing secret is nil instead, so the next
-value is used, unless the secret is the last value.
+appears in an error. The map form takes `:name`, and optionally `:source` and
+`:default`; the default is used when the secret is missing. `#or` does not
+supply one: a missing `#secret` inside it fails like any other.
+
+`bb doctor` reports every `#secret` without a default that the `:env` or
+`:file` source does not have, by name. It cannot ask other sources.
 
 Pass `:default-secret-source` to make bare names read another source:
 
@@ -114,21 +118,42 @@ no Vault, SOPS or cloud adapter; a Vault one is a few lines:
 
 [source,clojure]
 ----
-(require '[wagoe.config :as config]
-         '[wagoe.config.secrets :as secrets])
+(ns my.app.vault
+  (:require [wagoe.config.secrets :as secrets]))
 
 (defrecord VaultSource [client mount]
   secrets/ISecretSource
   (fetch-secret [_ secret-name]
-    ;; my-vault/read-secret stands in for your Vault client
+    ;; my-vault stands in for your Vault client
     (get-in (my-vault/read-secret client (str mount "/" secret-name)) [:data :value])))
 
-(config/load-config {:secret-sources {:vault (->VaultSource client "secret/my-app")}})
+(defn source []
+  (->VaultSource (my-vault/client (System/getenv "VAULT_ADDR")) "secret/my-app"))
 ----
 
-and the config names it with `#secret [:vault "db-password"]`. A source under
-`:env` or `:file` replaces the built-in one. The migration and database CLIs
-read config without your opts, so they see only `:env` and `:file`.
+Declare it at the top level of `config.edn` and name it with
+`#secret [:vault "db-password"]`:
+
+[source,clojure]
+----
+{:secret-sources {:vault my.app.vault/source}
+ :active         {:wagoe/postgresql {:password #secret [:vault "db-password"]}}}
+----
+
+The symbol names an `ISecretSource`, or a function of no arguments that
+returns one. The map is read before the rest of the file, so it must be
+literal: not inside `#profile`, and not in an included file. Because the file
+declares it, every reader of the config sees it, including the migration and
+database CLIs, which run no application code first. A bare `aero/read-config`
+does not: read through `config/load-config` or `config/read-config-resource`.
+A source under `:env` or `:file` replaces the built-in one.
+
+Sources passed to `load-config` under `:secret-sources` win over declared ones:
+
+[source,clojure]
+----
+(config/load-config {:secret-sources {:vault (->VaultSource client "secret/my-app")}})
+----
 
 == Why it is a library
 
