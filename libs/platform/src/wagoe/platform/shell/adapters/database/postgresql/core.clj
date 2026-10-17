@@ -34,7 +34,9 @@
    :table-exists?      (partial introspection/information-schema-table-exists?
                                 introspection-spec)
    :table-info         (partial introspection/information-schema-table-info
-                                introspection-spec)})
+                                introspection-spec)
+   ;; For a Detail in another language than English (BOU-721).
+   :key-columns        introspection/pg-key-columns})
 
 (defn new-adapter
   "Create a PostgreSQL adapter."

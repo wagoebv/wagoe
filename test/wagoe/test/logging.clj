@@ -1,7 +1,8 @@
 (ns wagoe.test.logging
   "Utilities for shrinking log noise in tests."
   (:require [clojure.tools.logging :as log]
-            [clojure.tools.logging.impl :as log-impl]))
+            [clojure.tools.logging.impl :as log-impl]
+            [clojure.tools.logging.test :as log-test]))
 
 (defmacro with-silent-logging
   "Run `body` with logging switched off.
@@ -28,3 +29,10 @@
   [& body]
   `(binding [log/*logger-factory* log-impl/disabled-logger-factory]
      ~@body))
+
+(defn logged-errors
+  "[result errors]: what `f` returns, and the messages it logged at ERROR."
+  [f]
+  (let [the-log (log-test/atomic-log log-test/->LogEntry)
+        res     (binding [log/*logger-factory* (log-test/logger-factory the-log (constantly true))] (f))]
+    [res (into [] (comp (filter #(= :error (:level %))) (map :message)) (log-test/entries the-log))]))

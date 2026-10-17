@@ -16,7 +16,7 @@
             [wagoe.i18n.shell.catalogue :as catalogue]
             [wagoe.platform.database :as db]
             [wagoe.platform.shell.adapters.database.factory :as db-factory]
-            [wagoe.test.logging :refer [with-silent-logging]]))
+            [wagoe.test.logging :refer [logged-errors with-silent-logging]]))
 
 ^{:kaocha.testable/meta {:integration true :admin true}}
 
@@ -44,7 +44,8 @@
       (db/execute-update! ctx {:raw "CREATE TABLE nc_lines (id UUID PRIMARY KEY,
                                                            nc_invoice_id UUID NOT NULL REFERENCES nc_invoices(id),
                                                            description VARCHAR(50) NOT NULL,
-                                                           qty INT DEFAULT 1 NOT NULL)"})
+                                                           qty INT DEFAULT 1 NOT NULL,
+                                                           CONSTRAINT uq_nc_lines UNIQUE (nc_invoice_id, description))"})
       (try (binding [*db* ctx] (f))
            (finally
              (db/execute-update! ctx {:raw "DROP TABLE nc_lines"})
@@ -258,3 +259,19 @@
     (testing "rows for an entity the parent is not created with are not written"
       (is (= 2 (count-rows :nc_invoices)))
       (is (nil? (db/execute-one! *db* {:select [:*] :from [:nc_invoices] :where [:= :number "SMUGGLED"]}))))))
+
+(defn- marked? [body field]
+  (boolean (re-find (re-pattern (str "has-errors\"><label for=\"" (java.util.regex.Pattern/quote field) "\"")) body)))
+
+(deftest ^:integration a-child-row-on-a-taken-key-is-a-409-on-its-row
+  ;; A key over two columns, one of them the parent's id (BOU-721).
+  (let [[response errors] (logged-errors #(post! {"number"              "INV-13"
+                                                  (line 0 :description) "Hours"
+                                                  (line 4 :description) "Hours"}))
+        body              (str (:body response))]
+    (is (= 409 (:status response)))
+    (is (= [] errors))
+    (is (str/includes? body "Taken in this combination"))
+    (is (= [(line 4 :description)] (filter #(marked? body %) [(line 0 :description) (line 4 :description)]))
+        "the row the database refused, and only it")
+    (is (zero? (count-rows :nc_invoices)))))

@@ -12,14 +12,14 @@
             [wagoe.i18n.shell.catalogue :as catalogue]
             [wagoe.platform.shell.adapters.database.factory :as db-factory]
             [wagoe.platform.database :as db]
+            [wagoe.platform.ports.database :as db-ports]
             [wagoe.observability.logging.shell.adapters.no-op :as logging-no-op]
             [wagoe.observability.errors.shell.adapters.no-op :as error-reporting-no-op]
             [support.mysql :as mysql]
             [support.test-db :as test-db]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing use-fixtures]]
-            [clojure.tools.logging :as log]
-            [clojure.tools.logging.test :as log-test])
+            [wagoe.test.logging :refer [logged-errors]])
   (:import [java.io File]))
 
 (def ^:private admin-config
@@ -87,13 +87,6 @@
    :i18n/catalogue i18n-catalogue
    :i18n/default-locale :en})
 
-(defn- logged
-  "[result errors], `errors` the messages logged at ERROR while `f` ran."
-  [f]
-  (let [the-log (log-test/atomic-log log-test/->LogEntry)
-        res     (binding [log/*logger-factory* (log-test/logger-factory the-log (constantly true))] (f))]
-    [res (into [] (comp (filter #(= :error (:level %))) (map :message)) (log-test/entries the-log))]))
-
 (defn- marked? [body field]
   (boolean (re-find (re-pattern (str "has-errors\"><label for=\"" field "\"")) body)))
 
@@ -112,9 +105,9 @@
                  (ex-data ex)))))
 
       (testing "create: 409, both fields marked, nothing at ERROR"
-        (let [[response errors] (logged #((crud/create-entity-handler svc schema admin-config)
-                                          (request :post "/web/admin/templates" {:entity "templates"}
-                                                   {"template-key" k "domain-id" "d1" "slug" (str k "-4")})))
+        (let [[response errors] (logged-errors #((crud/create-entity-handler svc schema admin-config)
+                                                 (request :post "/web/admin/templates" {:entity "templates"}
+                                                          {"template-key" k "domain-id" "d1" "slug" (str k "-4")})))
               body (str (:body response))]
           (is (= 409 (:status response)))
           (is (= [] errors))
@@ -126,10 +119,10 @@
 
       (testing "edit: 409, both fields marked, nothing at ERROR"
         (let [id (str (:id other))
-              [response errors] (logged #((crud/update-entity-handler svc schema admin-config)
-                                          (request :put (str "/web/admin/templates/" id)
-                                                   {:entity "templates" :id id}
-                                                   {"domain-id" "d1"})))
+              [response errors] (logged-errors #((crud/update-entity-handler svc schema admin-config)
+                                                 (request :put (str "/web/admin/templates/" id)
+                                                          {:entity "templates" :id id}
+                                                          {"domain-id" "d1"})))
               body (str (:body response))]
           (is (= 409 (:status response)))
           (is (= [] errors))
@@ -143,11 +136,30 @@
                 slug (str "only-" (name backend))
                 _    (ports/create-entity svc :templates {:template-key slug :domain-id "d1" :slug slug})]]
     (testing (str backend)
-      (let [[response errors] (logged #((crud/create-entity-handler svc schema admin-config)
-                                        (request :post "/web/admin/templates" {:entity "templates"}
-                                                 {"template-key" slug "domain-id" "d9" "slug" slug})))
+      (let [[response errors] (logged-errors #((crud/create-entity-handler svc schema admin-config)
+                                               (request :post "/web/admin/templates" {:entity "templates"}
+                                                        {"template-key" slug "domain-id" "d9" "slug" slug})))
             body (str (:body response))]
         (is (= 422 (:status response)))
         (is (= [] errors))
         (is (marked? body "slug"))
         (is (not (marked? body "template-key")))))))
+
+(deftest ^:integration a-mixed-case-table-names-its-key-columns
+  ;; MySQL 5.7 names the key without its table, so the lookup has the
+  ;; statement's, lower cased; the server need not fold case (BOU-721).
+  (doseq [[backend db-ctx] @backends]
+    (testing (str backend)
+      (db/execute-update! db-ctx {:raw "DROP TABLE IF EXISTS KmLines"})
+      (db/execute-update! db-ctx {:raw "CREATE TABLE KmLines (id INT PRIMARY KEY, invoice_id INT, position INT, CONSTRAINT uq_km UNIQUE (invoice_id, position))"})
+      (try
+        (db/execute-update! db-ctx {:raw "INSERT INTO KmLines VALUES (1, 1, 2)"})
+        (is (= {:type :conflict :constraint :unique :fields [:invoice-id :position]}
+               (ex-data (try (db/execute-update! db-ctx {:raw "INSERT INTO KmLines VALUES (2, 1, 2)"})
+                             nil
+                             (catch clojure.lang.ExceptionInfo e e)))))
+        (when (= :mysql backend)
+          (is (= ["invoice_id" "position"]
+                 (db-ports/key-columns (:adapter db-ctx) (:datasource db-ctx) "kmlines" "uq_km"))))
+        (finally
+          (db/execute-update! db-ctx {:raw "DROP TABLE KmLines"}))))))
