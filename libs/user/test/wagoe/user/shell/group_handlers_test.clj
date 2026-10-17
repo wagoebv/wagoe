@@ -43,6 +43,11 @@
         (is (= 303 (:status created)))
         (is (str/includes? (:body (app (req admin :get "/web/admin/groups"))) "Finance"))
 
+        (testing "a name another group has is refused on the page"
+          (let [r (app (req admin :post "/web/admin/groups" {"name" "Finance"}))]
+            (is (= 422 (:status r)))
+            (is (str/includes? (:body r) "error-name-taken"))))
+
         (testing "a member, by email"
           (is (= 303 (:status (app (req admin :post (str path "/members") {"email" "ada@example.com"}))))))
         (testing "an unknown email is refused on the page"

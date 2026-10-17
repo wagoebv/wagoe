@@ -155,6 +155,22 @@
         :mysql      (db/execute-ddl! ctx (str "ALTER TABLE user_audit_log DROP CHECK " audit-action-check
                                               ", ADD CONSTRAINT " audit-action-check " " audit-action-check-clause))))))
 
+(defn- unique-group-names!
+  "Make user_groups.name unique, which an import matches on (BOU-718). Where
+   names already repeat, say which and go on booting."
+  [ctx]
+  (try
+    (db/create-index-if-not-exists! ctx "uk_user_groups_name" :user_groups [:name] {:unique? true})
+    (catch clojure.lang.ExceptionInfo e
+      (when-not (= :conflict (:type (ex-data e))) (throw e))
+      (log/error (str "Group names repeat, so user_groups.name is not unique and an import may"
+                      " create a group twice. Rename or delete the duplicates at /web/admin/groups,"
+                      " then restart.")
+                 {:names (mapv :name (db/execute-query! ctx {:select   [:name]
+                                                             :from     [:user_groups]
+                                                             :group-by [:name]
+                                                             :having   [:> [:count :*] 1]}))}))))
+
 (def tables
   "The user module's tables, by name, and the Malli schema each is built from."
   {"auth_users"      user-schema/AuthUser
@@ -206,6 +222,10 @@
                                   [:issuer :subject] {:unique? true})
   (db/create-index-if-not-exists! ctx "uk_user_group_members_group_user" :user_group_members
                                   [:group_id :user_id] {:unique? true})
+  (unique-group-names! ctx)
+  ;; For `find-permission-holders`. user_id and group_id are indexed already,
+  ;; as every -id column is.
+  (db/create-index-if-not-exists! ctx "idx_user_group_grants_permission" :user_group_grants [:permission])
   (widen-audit-action-check! ctx)
   (hash-plaintext-session-tokens! ctx)
 

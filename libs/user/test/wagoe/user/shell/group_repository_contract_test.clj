@@ -2,9 +2,12 @@
   "Groups, members and grants on the engine WAGOE_TEST_DB names: the round
    trip, grants through several groups, and what deleting a user or a group
    leaves behind."
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [clojure.set :as set]
+            [clojure.string :as str]
+            [clojure.test :refer [deftest is testing]]
             [next.jdbc :as jdbc]
             [support.test-db :as test-db]
+            [wagoe.platform.database :as db]
             [wagoe.user.ports :as ports]
             [wagoe.user.shell.group-persistence :as sut]
             [wagoe.user.shell.persistence :as persistence]))
@@ -108,3 +111,70 @@
           (jdbc/execute! ds ["DELETE FROM users WHERE id = ?" (str (:id ada))])
           (jdbc/execute! ds ["DELETE FROM auth_users WHERE id = ?" (str (:id ada))])
           (is (zero? (count-rows ctx "user_group_members" "user_id" (:id ada)))))))))
+
+(deftest ^:contract permission-holders-through-every-group
+  (test-db/with-db "user_group_holders"
+    (fn [ctx]
+      (persistence/initialize-user-schema! ctx)
+      (let [users   (persistence/create-user-repository ctx)
+            repo    (sut/create-group-repository ctx)
+            [ada bob cyd dan] (map #(user! users (str % "@example.com")) ["ada" "bob" "cyd" "dan"])
+            finance (ports/insert-group repo {:name "Finance"})
+            audit   (ports/insert-group repo {:name "Audit"})
+            holders #(set (map (juxt :user-id :scope) (ports/find-permission-holders repo %)))]
+        (doseq [[g u] [[finance ada] [finance bob] [audit ada] [audit cyd] [audit dan]]]
+          (ports/insert-member repo (:id g) (:id u)))
+        (ports/insert-grant repo {:group-id (:id finance) :permission :invoice/approve :scope {:domain-id 1}})
+        (ports/insert-grant repo {:group-id (:id audit) :permission :invoice/approve :scope {:domain-id 1}})
+        (ports/insert-grant repo {:group-id (:id audit) :permission :invoice/approve :scope {:domain-id 2}})
+        (ports/insert-grant repo {:group-id (:id audit) :permission :report/view :scope {}})
+        (ports/soft-delete-user users (:id cyd))
+        (jdbc/execute! (:datasource ctx) ["UPDATE auth_users SET active = ? WHERE id = ?" false (str (:id dan))])
+        (is (= #{[(:id ada) {:domain-id 1}] [(:id ada) {:domain-id 2}] [(:id bob) {:domain-id 1}]}
+               (holders :invoice/approve))
+            "soft-deleted cyd and inactive dan hold nothing")
+        (is (= 3 (count (ports/find-permission-holders repo :invoice/approve)))
+            "ada once in {:domain-id 1}, though two groups grant it")
+        (is (= #{:invoice/approve} (set (map :permission (ports/find-permission-holders repo :invoice/approve)))))
+        (is (= #{[(:id ada) {}]} (holders :report/view)))
+        (is (= #{} (holders :nobody/holds)))))))
+
+(deftest ^:contract a-group-name-is-unique
+  (test-db/with-db "user_group_names"
+    (fn [ctx]
+      (persistence/initialize-user-schema! ctx)
+      (let [repo  (sut/create-group-repository ctx)
+            audit (ports/insert-group repo {:name "Audit"})
+            taken #(try (%) nil (catch clojure.lang.ExceptionInfo e (select-keys (ex-data e) [:type :field])))]
+        (ports/insert-group repo {:name "Finance"})
+        (is (= {:type :conflict :field :name} (taken #(ports/insert-group repo {:name "Finance"}))))
+        (is (= {:type :conflict :field :name} (taken #(ports/modify-group repo {:id (:id audit) :name "Finance"}))))
+        (testing "names that already repeat do not stop boot"
+          (db/drop-index-if-exists! ctx "uk_user_groups_name" :user_groups)
+          (ports/insert-group repo {:name "Finance"})
+          (persistence/initialize-user-schema! ctx)
+          (is (= 2 (count (filter #(= "Finance" (:name %)) (ports/find-groups repo))))))))))
+
+(defn- index-names
+  "The lower-case names of `table`'s indexes, from the JDBC catalog."
+  [ctx table]
+  (with-open [conn (jdbc/get-connection (:datasource ctx))]
+    (let [meta (.getMetaData conn)]
+      (into #{}
+            (mapcat (fn [t]
+                      (with-open [result (.getIndexInfo meta (.getCatalog conn) nil t false true)]
+                        (loop [names []]
+                          (if (.next result)
+                            (recur (conj names (some-> (.getString result "INDEX_NAME") str/lower-case)))
+                            names)))))
+            [table (str/upper-case table)]))))
+
+(deftest ^:contract the-per-request-queries-are-indexed
+  (test-db/with-db "user_group_indexes"
+    (fn [ctx]
+      (persistence/initialize-user-schema! ctx)
+      (is (set/subset? #{"idx_user_group_members_user_id" "uk_user_group_members_group_user"}
+                       (index-names ctx "user_group_members")))
+      (is (set/subset? #{"idx_user_group_grants_group_id" "idx_user_group_grants_permission"}
+                       (index-names ctx "user_group_grants")))
+      (is (contains? (index-names ctx "user_groups") "uk_user_groups_name")))))
