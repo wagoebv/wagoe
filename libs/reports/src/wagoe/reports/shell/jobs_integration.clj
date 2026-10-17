@@ -32,14 +32,6 @@
   (when (and notify-email (not email-sender))
     (throw (missing-dependency "email" ":notify-email"))))
 
-(defn- opts->job
-  "The :db and :redis queues store args as JSON, so a ZoneId would not encode."
-  [opts]
-  (cond-> opts (:zone-id opts) (update :zone-id str)))
-
-(defn- job->opts [opts]
-  (cond-> opts (string? (:zone-id opts)) (update :zone-id #(java.time.ZoneId/of %))))
-
 ;; =============================================================================
 ;; Enqueue
 ;; =============================================================================
@@ -58,7 +50,7 @@
         enqueue!   (requiring-resolve 'wagoe.jobs.ports/enqueue-job!)
         job        (create-job {:job-type job-type
                                 :queue    queue-name
-                                :args     {:report-id report-id :opts (opts->job opts)}
+                                :args     {:report-id report-id :opts opts}
                                 :metadata {:report-id report-id :report-type (:type report-def)}}
                                (random-uuid)
                                (java.time.Instant/now))]
@@ -105,10 +97,7 @@
    failure; the worker records it and retries."
   [{:keys [file-storage email-sender from] :as service} {:keys [report-id opts]}]
   (check-companions! service opts)
-  ;; JSON-backed queues return keyword values as strings.
-  (let [report-id (keyword report-id)
-        opts      (job->opts opts)
-        {:keys [storage-key notify-email]} opts
+  (let [{:keys [storage-key notify-email]} opts
         output (ports/generate service (registry/registered-report report-id) opts)
         stored (when storage-key (store! file-storage storage-key output))]
     (when notify-email

@@ -15,7 +15,7 @@
    redeliveries, unlike the stream entry id."
   (:require [wagoe.events.core.event :as event]
             [wagoe.events.ports :as ports]
-            [wagoe.events.shell.codec :as codec]
+            [wagoe.platform.transit :as transit]
             [clojure.tools.logging :as log])
   (:import (java.util.concurrent Executors ExecutorService TimeUnit)
            (redis.clients.jedis StreamEntryID)
@@ -112,7 +112,7 @@
 (defn- handle-entry!
   [pool stream group handler ^StreamEntry entry max-deliveries]
   (let [raw (get (.getFields entry) payload-field)
-        parsed (try (codec/decode raw)
+        parsed (try (transit/decode raw)
                     (catch Exception e
                       (log/warn e "undecodable event on stream" {:stream stream})
                       nil))]
@@ -233,7 +233,7 @@
                          max-len (.maxLen (long max-len))
                          max-len (.approximateTrimming))]
             (str (.xadd jedis (stream-key prefix topic) params
-                        (java.util.HashMap. {payload-field (codec/encode event)})))))
+                        (java.util.HashMap. {payload-field (transit/encode event)})))))
         (catch Exception e
           ;; Returned, not thrown: a failed analytics event should not roll
           ;; back the transaction that produced it. The caller decides.
@@ -319,7 +319,7 @@
     (with-open [jedis (.getResource pool)]
       (let [stream (stream-key prefix topic)
             decode-entry (fn [^StreamEntry e]
-                           (try (codec/decode (get (.getFields e) payload-field))
+                           (try (transit/decode (get (.getFields e) payload-field))
                                 (catch Exception _ nil)))
             ;; `:since` filters on the envelope's :published-at, which is when
             ;; the publisher created the event — the same field, and the same

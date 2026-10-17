@@ -308,7 +308,6 @@ libs/events/src/wagoe/events/
 ├── ports.clj                         # IEventPublisher, IEventSubscriber, IEventHistory, ITransactionalPublisher
 └── shell/
     ├── publisher.clj                 # id + clock, then publish
-    ├── codec.clj                     # transit wire format (Redis, outbox)
     ├── outbox.clj                    # event_outbox table, publish-in-tx!, relay
     ├── module_wiring.clj             # :wagoe/events, :wagoe/events-outbox
     └── adapters/{in_memory,redis_streams}.clj

@@ -6,8 +6,11 @@
             [next.jdbc :as jdbc]
             [wagoe.jobs.ports :as ports]
             [wagoe.jobs.shell.adapters.db :as db]
-            [wagoe.jobs.shell.adapters.in-memory :as mem])
-  (:import [java.time Instant]))
+            [wagoe.jobs.shell.adapters.in-memory :as mem]
+            [wagoe.jobs.shell.adapters.codec-test :refer [legacy-json]]
+            [support.test-db :as test-db])
+  (:import [java.sql Timestamp]
+           [java.time Instant ZoneId]))
 
 (defn- fresh-queue
   "A DbJobQueue over a private in-memory H2 db with the table created."
@@ -202,3 +205,31 @@
       (is (true? (ports/delete-job! q (:id a))))
       (is (false? (ports/delete-job! q (random-uuid))))
       (is (zero? (ports/queue-size q :alpha))))))
+
+(deftest ^:integration args-keep-their-types-on-each-engine
+  ;; WAGOE_TEST_DB=pg or mysql runs this on that engine (BOU-689).
+  (test-db/with-db "jobs_args"
+    (fn [{:keys [datasource]}]
+      (db/create-jobs-table! datasource)
+      (let [q    (db/create-db-job-queue datasource)
+            args {:report-id :sales
+                  :zone-id   (ZoneId/of "Europe/Amsterdam")
+                  :at        (Instant/parse "2026-10-17T08:23:28.536003Z")
+                  :user-id   (random-uuid)}]
+        (ports/enqueue-job! q :default (assoc (mk-job) :args args))
+        (is (= args (:args (ports/dequeue-job! q :default "w"))))))))
+
+(deftest ^:integration a-job-queued-as-json-before-the-upgrade-still-runs
+  (test-db/with-db "jobs_legacy"
+    (fn [{:keys [datasource]}]
+      (db/create-jobs-table! datasource)
+      (let [q (db/create-db-job-queue datasource)]
+        (jdbc/execute! datasource
+                       ["INSERT INTO job_queue (id, queue, priority_rank, status, payload, created_at)
+                         VALUES (?, 'default', 2, 'ready', ?, ?)"
+                        "7f8c1f0e-3b5a-4c1e-9a52-1d2f0c9b8e11" legacy-json
+                        (Timestamp/from (Instant/now))])
+        (let [job (ports/dequeue-job! q :default "w")]
+          (is (= #uuid "7f8c1f0e-3b5a-4c1e-9a52-1d2f0c9b8e11" (:id job)))
+          (is (= :send-email (:job-type job)))
+          (is (= {:to "a@b.c" :kind "receipt"} (:args job))))))))

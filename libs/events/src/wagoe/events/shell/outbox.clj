@@ -25,7 +25,7 @@
             [wagoe.events.core.event :as event]
             [wagoe.events.core.outbox :as policy]
             [wagoe.events.ports :as ports]
-            [wagoe.events.shell.codec :as codec]
+            [wagoe.platform.transit :as transit]
             [wagoe.platform.database :as db]
             [wagoe.platform.ports.database :as db-ports])
   (:import (java.util.concurrent RejectedExecutionException ScheduledThreadPoolExecutor TimeUnit)
@@ -109,7 +109,7 @@
   (jdbc/execute-one! conn ["INSERT INTO event_outbox (id, seq, topic, envelope) VALUES (?,?,?,?)"
                            (str (random-uuid)) (next-seq)
                            (event/topic-name topic)
-                           (codec/encode {:topic topic :event event})]))
+                           (transit/encode {:topic topic :event event})]))
 
 (defn- claim-sql
   "Take or renew the lease, timed by the database clock: a replica's own clock
@@ -158,7 +158,7 @@
   "The bus's answer for `row`, or an error. An undecodable envelope is
    `:fatal?`: retrying cannot fix it."
   [bus {:keys [envelope]}]
-  (let [decoded (try (codec/decode envelope)
+  (let [decoded (try (transit/decode envelope)
                      (catch Exception e
                        {:error {:type :events/undecodable :message (ex-message e) :fatal? true}}))]
     (if (:error decoded)

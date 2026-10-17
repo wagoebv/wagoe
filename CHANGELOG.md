@@ -108,6 +108,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Job args came back as strings on the `:db` and `:redis` queues: keywords, UUIDs, instants** (BOU-689). Jobs are stored
+  as transit, which older workers cannot read: upgrade them together. Old jobs keep string args, so convert only strings.
 - **Security: the rate limiter keyed on an unchecked `X-Api-Key`, so a caller could dodge its limit or drain another's** (BOU-690).
   Buckets are now the signed-in user, else the client IP; the header is ignored.
 - **`POST /api/v1/sessions` accepted a `{userId}` body it could never sign in with** (BOU-690). It now answers 400; send email and password.

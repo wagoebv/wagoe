@@ -18,8 +18,8 @@
    retry the next candidate. This runs identically on H2, PostgreSQL and MySQL, so the
    reliability tests run on the default in-memory H2 test database.
 
-   The authoritative job value is the JSON `payload` column (same wire format as
-   the Redis adapter — keyword fields restored, instants as epoch-millis). The
+   The authoritative job value is the transit `payload` column (same wire format
+   as the Redis adapter, `wagoe.jobs.shell.adapters.codec`). The
    indexed columns (queue, priority_rank, status, execute_at, locked_at) exist
    only for ordering, claiming, and reclaim.
 
@@ -34,10 +34,10 @@
             [wagoe.platform.database :as db]
             [wagoe.platform.ports.database :as db-ports]
             [next.jdbc.result-set :as rs]
-            [cheshire.core :as json]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
             [wagoe.jobs.core.job :as job]
+            [wagoe.jobs.shell.adapters.codec :as codec]
             [wagoe.jobs.ports :as ports])
   (:import [java.sql Timestamp]
            [java.time Instant]))
@@ -56,31 +56,6 @@
     :normal   2
     :low      3
     2))
-
-;; --- serialization (same JSON contract as the Redis adapter) ----------------
-
-(defn- serialize-job [job]
-  (json/generate-string
-   (-> job
-       (update :execute-at   #(when % (.toEpochMilli ^Instant %)))
-       (update :created-at   #(.toEpochMilli ^Instant %))
-       (update :updated-at   #(when % (.toEpochMilli ^Instant %)))
-       (update :started-at   #(when % (.toEpochMilli ^Instant %)))
-       (update :completed-at #(when % (.toEpochMilli ^Instant %))))))
-
-(defn- deserialize-job [json-str]
-  (when json-str
-    (-> (json/parse-string json-str true)
-        (update :id          #(java.util.UUID/fromString %))
-        (update :job-type    #(when % (keyword %)))
-        (update :status      #(when % (keyword %)))
-        (update :queue       #(when % (keyword %)))
-        (update :priority    #(when % (keyword %)))
-        (update :execute-at   #(when % (Instant/ofEpochMilli %)))
-        (update :created-at   #(Instant/ofEpochMilli %))
-        (update :updated-at   #(when % (Instant/ofEpochMilli %)))
-        (update :started-at   #(when % (Instant/ofEpochMilli %)))
-        (update :completed-at #(when % (Instant/ofEpochMilli %))))))
 
 (defn- ts ^Timestamp [^Instant instant] (when instant (Timestamp/from instant)))
 
@@ -154,28 +129,28 @@
    alone). UPDATE-then-INSERT rather than MERGE or ON CONFLICT: those spell
    differently on H2 and PostgreSQL, and this adapter's contract is portable SQL."
   [ds job dead-letter?]
-  (let [now  (ts (Instant/now))
-        flag (boolean dead-letter?)
-        n    (::jdbc/update-count
+  (let [now     (ts (Instant/now))
+        flag    (boolean dead-letter?)
+        payload (codec/encode-job job)
+        n       (::jdbc/update-count
               (execute-one!
                ds
                (if (nil? dead-letter?)
                  ["UPDATE job_store SET job_type = ?, queue = ?, status = ?,
                      updated_at = ?, payload = ? WHERE id = ?"
                   (kw-name (:job-type job)) (kw-name (:queue job))
-                  (kw-name (or (:status job) :pending)) now (serialize-job job) (:id job)]
+                  (kw-name (or (:status job) :pending)) now payload (:id job)]
                  ["UPDATE job_store SET job_type = ?, queue = ?, status = ?,
                      dead_letter = ?, updated_at = ?, payload = ? WHERE id = ?"
                   (kw-name (:job-type job)) (kw-name (:queue job))
-                  (kw-name (or (:status job) :pending)) flag now
-                  (serialize-job job) (:id job)])))]
+                  (kw-name (or (:status job) :pending)) flag now payload (:id job)])))]
     (when (zero? n)
       (execute-one!
        ds
        ["INSERT INTO job_store (id, job_type, queue, status, dead_letter, updated_at, payload)
            VALUES (?,?,?,?,?,?,?)"
         (:id job) (kw-name (:job-type job)) (kw-name (:queue job))
-        (kw-name (or (:status job) :pending)) flag now (serialize-job job)]))
+        (kw-name (or (:status job) :pending)) flag now payload]))
     job))
 
 ;; --- adapter ----------------------------------------------------------------
@@ -229,6 +204,7 @@
   (let [job-id     (:id job)
         scheduled? (some? (:execute-at job))
         status     (if scheduled? "scheduled" "ready")
+        payload    (codec/encode-job job)
         updated    (::jdbc/update-count
                     (execute-one!
                      connectable
@@ -237,7 +213,7 @@
                              payload = ?, locked_by = NULL, locked_at = NULL
                          WHERE id = ?"
                       (name queue-name) (priority-rank (:priority job)) status
-                      (ts (:execute-at job)) (serialize-job job) job-id]))]
+                      (ts (:execute-at job)) payload job-id]))]
     (when (zero? updated)
       (execute-one!
        connectable
@@ -246,7 +222,7 @@
            VALUES (?,?,?,?,?,?,?)"
         job-id (name queue-name) (priority-rank (:priority job)) status
         (ts (:execute-at job))
-        (serialize-job job)
+        payload
         (ts (:created-at job))]))
     ;; And into the store, on the same connectable — so a transactional enqueue
     ;; commits the history row with the business change too. Without this the
@@ -302,7 +278,7 @@
                       WHERE id = ? AND status = 'ready'"
                    worker-id (ts (Instant/now)) (:id cand)]))]
           (if (pos? n)
-            (deserialize-job (:payload cand))
+            (codec/decode-job (:payload cand))
             (recur)))
         nil)))
 
@@ -338,7 +314,7 @@
               (name queue-name)]
              (opts))
             :payload
-            deserialize-job))
+            codec/decode-job))
 
   (delete-job! [_ job-id]
     (pos? (::jdbc/update-count
@@ -405,7 +381,7 @@
     (some-> (execute-one! ds ["SELECT payload FROM job_store WHERE id = ?" job-id]
                           (opts))
             :payload
-            deserialize-job))
+            codec/decode-job))
 
   (update-job-status! [this job-id status result]
     (when-let [job (ports/find-job this job-id)]
@@ -436,7 +412,7 @@
           sql     (str "SELECT payload FROM job_store"
                        (when (seq clauses) (str " WHERE " (str/join " AND " clauses))))]
       (->> (execute! ds (into [sql] params) (opts))
-           (map (comp deserialize-job :payload))
+           (map (comp codec/decode-job :payload))
            vec)))
 
   (failed-jobs [_ limit]
@@ -444,7 +420,7 @@
                           WHERE dead_letter = TRUE ORDER BY updated_at LIMIT ?"
                        limit]
                    (opts))
-         (map (comp deserialize-job :payload))
+         (map (comp codec/decode-job :payload))
          vec))
 
   (retry-job! [this job-id]

@@ -5,9 +5,12 @@
             [wagoe.reports.shell.service :as sut]
             [wagoe.email.ports]
             [wagoe.jobs.ports]
+            [wagoe.jobs.shell.adapters.db :as jobs-db]
+            [support.test-db :as test-db]
             [wagoe.storage.ports]
             [clojure.test :refer [deftest is testing use-fixtures]])
-  (:import [java.nio.charset StandardCharsets]))
+  (:import [java.nio.charset StandardCharsets]
+           [java.time ZoneId]))
 
 (use-fixtures :each (fn [f] (registry/clear-registry!) (f) (registry/clear-registry!)))
 
@@ -116,13 +119,16 @@
                                    (sut/create-report-service {})
                                    {:report-id :sales :opts {}})))))
 
-(deftest ^:unit args-survive-a-json-backed-queue
+(deftest ^:integration args-survive-the-db-queue
+  ;; The :db queue serialises a job; the fake one above does not (BOU-689).
   (registry/register-report! sales)
-  (let [enqueued (atom [])
-        svc      (sut/create-report-service {:job-queue (fake-queue enqueued)})
-        _        (ports/generate-async svc :sales {:zone-id (java.time.ZoneId/of "UTC")})
-        args     (:args (second (first @enqueued)))]
-    (is (= "UTC" (get-in args [:opts :zone-id])) "a ZoneId does not encode as JSON")
-    (testing "the :db and :redis queues hand keyword values back as strings"
-      (is (:success? (jobs-integration/process-report-job
-                      svc {:report-id "sales" :opts (:opts args)}))))))
+  (test-db/with-db "reports_args"
+    (fn [{:keys [datasource]}]
+      (jobs-db/create-jobs-table! datasource)
+      (let [q    (jobs-db/create-db-job-queue datasource)
+            svc  (sut/create-report-service {:job-queue q})
+            zone (ZoneId/of "Europe/Amsterdam")]
+        (ports/generate-async svc :sales {:zone-id zone})
+        (let [{:keys [args]} (wagoe.jobs.ports/dequeue-job! q :default "w1")]
+          (is (= {:report-id :sales :opts {:zone-id zone}} args))
+          (is (:success? (jobs-integration/process-report-job svc args))))))))

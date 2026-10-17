@@ -15,8 +15,8 @@
    - Atomic operations"
   (:require [wagoe.jobs.ports :as ports]
             [wagoe.jobs.core.job :as job]
-            [clojure.tools.logging :as log]
-            [cheshire.core :as json])
+            [wagoe.jobs.shell.adapters.codec :as codec]
+            [clojure.tools.logging :as log])
   (:import [redis.clients.jedis Jedis JedisPool JedisPoolConfig]
            [redis.clients.jedis.params ScanParams]
            [java.time Instant]))
@@ -110,49 +110,6 @@
           (recur next acc'))))))
 
 ;; =============================================================================
-;; Job Serialization
-;; =============================================================================
-
-(defn- serialize-job
-  "Serialize job to JSON string."
-  [job]
-  (json/generate-string
-   (-> job
-       (update :execute-at #(when % (.toEpochMilli %)))
-       (update :created-at #(.toEpochMilli %))
-       (update :updated-at #(.toEpochMilli %))
-       (update :started-at #(when % (.toEpochMilli %)))
-       (update :completed-at #(when % (.toEpochMilli %))))))
-
-(defn- deserialize-job
-  "Deserialize job from JSON string.
-
-   JSON round-trips keyword VALUES as plain strings, so the keyword-typed
-   fields (:job-type :status :queue :priority) must be restored explicitly —
-   without this every keyword comparison downstream (status filters, terminal
-   checks, history lookups) silently misses."
-  [json-str]
-  (when json-str
-    (-> (json/parse-string json-str true)
-        (update :id #(java.util.UUID/fromString %))
-        (update :job-type #(when % (keyword %)))
-        (update :status #(when % (keyword %)))
-        (update :queue #(when % (keyword %)))
-        (update :priority #(when % (keyword %)))
-        (update :execute-at #(when % (Instant/ofEpochMilli %)))
-        (update :created-at #(Instant/ofEpochMilli %))
-        (update :updated-at #(Instant/ofEpochMilli %))
-        (update :started-at #(when % (Instant/ofEpochMilli %)))
-        (update :completed-at #(when % (Instant/ofEpochMilli %)))
-        ;; :error :type is a keyword too (ADR-036 §3), and it round-tripped as a
-        ;; string — so a consumer matching :no-handler matched against the
-        ;; in-memory store and missed against Redis. Jobs stored before the
-        ;; migration carry the old spelling ("NoHandlerError" -> :NoHandlerError);
-        ;; they were strings before this and are keywords of the old name now,
-        ;; which is no worse and is at least one type.
-        (update :error #(when % (cond-> % (:type %) (update :type keyword)))))))
-
-;; =============================================================================
 ;; Redis Operations
 ;; =============================================================================
 
@@ -228,7 +185,7 @@
         (let [job-id (:id job)
               job-key (job-key job-id)
               queue-key (queue-key queue-name)
-              serialized (serialize-job job)]
+              serialized (codec/encode-job job)]
 
           ;; Store job data
           (.set redis job-key serialized)
@@ -268,7 +225,7 @@
             (let [job-key (job-key (java.util.UUID/fromString job-id))
                   job-data (.get redis job-key)]
               (when job-data
-                (deserialize-job job-data))))))))
+                (codec/decode-job job-data))))))))
 
   (ack-job! [_ queue-name worker-id job-id]
     (with-redis pool
@@ -317,7 +274,7 @@
             (let [job-key (job-key (java.util.UUID/fromString job-id))
                   job-data (.get redis job-key)]
               (when job-data
-                (deserialize-job job-data))))))))
+                (codec/decode-job job-data))))))))
 
   (delete-job! [_ job-id]
     (with-redis pool
@@ -394,7 +351,7 @@
                   job-key (job-key job-id)
                   job-data (.get redis job-key)]
               (if job-data
-                (let [job (deserialize-job job-data)
+                (let [job (codec/decode-job job-data)
                       queue-name (:queue job)
                       queue-key (queue-key queue-name)]
                   (.lpush redis (priority-key queue-key (:priority job :normal))
@@ -419,7 +376,7 @@
     (with-redis pool
       (fn [^Jedis redis]
         (let [job-key (job-key (:id job))
-              serialized (serialize-job job)]
+              serialized (codec/encode-job job)]
           (.set redis job-key serialized)
           ;; Set expiration: keep completed jobs for 7 days
           (when (#{:completed :failed :cancelled} (:status job))
@@ -432,7 +389,7 @@
         (let [job-key (job-key job-id)
               job-data (.get redis job-key)]
           (when job-data
-            (deserialize-job job-data))))))
+            (codec/decode-job job-data))))))
 
   (update-job-status! [_ job-id status result]
     (with-redis pool
@@ -440,7 +397,7 @@
         (let [job-key (job-key job-id)
               job-data (.get redis job-key)]
           (when job-data
-            (let [job (deserialize-job job-data)
+            (let [job (codec/decode-job job-data)
                   now (Instant/now)
                   updated-job (case status
                                 :running (job/start-job job now)
@@ -448,7 +405,7 @@
                                 :failed (job/fail-job job result now)
                                 :cancelled (job/cancel-job job now)
                                 job)
-                  serialized (serialize-job updated-job)]
+                  serialized (codec/encode-job updated-job)]
               (.set redis job-key serialized)
 
               ;; If job failed and no more retries, move to dead letter queue
@@ -481,7 +438,7 @@
              (map (fn [key]
                     (let [job-data (.get redis key)]
                       (when job-data
-                        (deserialize-job job-data)))))
+                        (codec/decode-job job-data)))))
              (filter some?)
              (filter (fn [job]
                        (and (or (nil? (:status filters))
@@ -502,7 +459,7 @@
                             job-key (job-key job-id)
                             job-data (.get redis job-key)]
                         (when job-data
-                          (deserialize-job job-data)))))
+                          (codec/decode-job job-data)))))
                (filter some?)
                vec)))))
 
@@ -512,14 +469,14 @@
         (let [job-key (job-key job-id)
               job-data (.get redis job-key)]
           (when job-data
-            (let [job (deserialize-job job-data)
+            (let [job (codec/decode-job job-data)
                   retry-config {:backoff-strategy :exponential
                                 :initial-delay-ms 1000
                                 :max-delay-ms 60000}
                   now (Instant/now)
                   jitter-ms (rand-int 100)
                   retry-job (job/prepare-retry job retry-config now jitter-ms)
-                  serialized (serialize-job retry-job)]
+                  serialized (codec/encode-job retry-job)]
 
               ;; Update job data
               (.set redis job-key serialized)
@@ -586,7 +543,7 @@
              (map (fn [key]
                     (let [job-data (.get redis key)]
                       (when job-data
-                        (deserialize-job job-data)))))
+                        (codec/decode-job job-data)))))
              (filter #(= (:job-type %) job-type))
              (sort-by :created-at #(compare %2 %1))  ; Newest first
              (take limit)
