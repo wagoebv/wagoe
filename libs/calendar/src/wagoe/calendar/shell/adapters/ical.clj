@@ -85,7 +85,7 @@
   "RRULE for `r`, whose occurrence `t` falls on a wall-clock date that may be a
    day off the rule's own (a time given in UTC, or 24:00). Dates that span two
    months are counted from the year's end, as Egypt needs: the Friday after the
-   last Thursday of October."
+   last Thursday of October. Nil for a shape no RRULE can say."
   [^ZoneOffsetTransitionRule r ^ZoneOffsetTransition t]
   (let [wall  (.toLocalDate (.getDateTimeBefore t))
         shift (.between ChronoUnit/DAYS (nominal-date r (.getYear wall)) wall)
@@ -98,24 +98,31 @@
         month (str "FREQ=YEARLY;BYMONTH=" (.getValue (.getMonth wall)))]
     (cond
       (not (or (every? #(<= 1 % len) days) (every? #(<= (- len) % -1) days)))
-      (if-let [yds (and w (year-days r (.getYear wall) shift))]
-        (str "FREQ=YEARLY;BYYEARDAY=" (str/join "," (sort yds)) ";BYDAY=" wd)
-        ;; No rule in the tz database reaches this; the zones test covers them all.
-        (throw (ex-info "Zone rule has no RRULE form" {:type :internal-error :rule (str r)})))
+      (when-let [yds (and w (year-days r (.getYear wall) shift))]
+        (str "FREQ=YEARLY;BYYEARDAY=" (str/join "," (sort yds)) ";BYDAY=" wd))
       (nil? w)                                    (str month ";BYMONTHDAY=" d0)
       (and (pos? d0) (zero? (mod (dec d0) 7)))    (str month ";BYDAY=" (inc (quot d0 7)) wd)
       (or (= -1 d0) (= len (.maxLength (.getMonth wall)) (last days)))
       (str month ";BYDAY=-1" wd)
       :else (str month ";BYDAY=" wd ";BYMONTHDAY=" (str/join "," (sort days))))))
 
-(defn- rule-observance
-  "One RRULE observance for `r`, from its first transition at or after `from`."
-  [^ZoneRules rules ^ZoneOffsetTransitionRule r ^Instant from]
-  (let [t (->> (iterate inc (dec (.getYear (.atZone from ZoneOffset/UTC))))
-               (map #(.createTransition r (int %)))
-               (drop-while #(.isBefore (.getInstant ^ZoneOffsetTransition %) from))
-               first)]
-    (observance rules t (transition-rrule r t))))
+(def ^:private rule-horizon
+  "How far a rule with no RRULE form is written out, transition by transition.
+   No rule in today's tz database needs it; a future one would."
+  (Instant/parse "2100-01-01T00:00:00Z"))
+
+(defn- rule-observances
+  "One RRULE observance for `r`, from its first transition at or after `from`;
+   or, if it has no RRULE form, its transitions up to `hi` or `rule-horizon`."
+  [^ZoneRules rules ^ZoneOffsetTransitionRule r ^Instant from ^Instant hi]
+  (let [ts (->> (iterate inc (dec (.getYear (.atZone from ZoneOffset/UTC))))
+                (map #(.createTransition r (int %)))
+                (drop-while #(.isBefore (.getInstant ^ZoneOffsetTransition %) from)))
+        until (if (.isBefore hi rule-horizon) hi rule-horizon)]
+    (if-let [rrule (transition-rrule r (first ts))]
+      [(observance rules (first ts) rrule)]
+      (map #(observance rules % nil)
+           (take-while #(not (.isAfter (.getInstant ^ZoneOffsetTransition %) until)) ts)))))
 
 (defn- observances
   "Observances covering `lo` onwards: the offset in force at `lo`, the
@@ -135,7 +142,7 @@
                            history)
         rules-from (if (.isAfter from last-hist) from (.plusNanos last-hist 1))
         recurring  (when (.isAfter hi last-hist)
-                     (map #(rule-observance rules % rules-from) (.getTransitionRules rules)))]
+                     (mapcat #(rule-observances rules % rules-from hi) (.getTransitionRules rules)))]
     (concat initial (map #(observance rules % nil) explicit) recurring)))
 
 (defn- vtimezone
@@ -292,9 +299,10 @@
   (when-let [p (find-prop vevent "DTSTART")]
     ;; `str` never returns nil, so this was a `when-let` that always took its
     ;; branch — a guard reading as if a property could stringify to nothing.
+    ;; A TZID holding a colon (`+05:00`) is quoted, as export writes it.
     (let [text (str p)]
-      (when-let [m (re-find #"TZID=([^;:\r\n]+)" text)]
-        (str/trim (second m))))))
+      (when-let [[_ quoted bare] (re-find #"TZID=(?:\"([^\"]*)\"|([^;:\r\n]+))" text)]
+        (str/trim (or quoted bare))))))
 
 (defn- uid-string->uuid
   "Convert a UID string to a UUID.

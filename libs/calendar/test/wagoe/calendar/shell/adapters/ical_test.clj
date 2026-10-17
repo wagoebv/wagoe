@@ -1,9 +1,11 @@
 (ns wagoe.calendar.shell.adapters.ical-test
   "Integration tests for the ical4j adapter — round-trip export/import."
   (:require [wagoe.calendar.shell.service :as service]
+            [wagoe.calendar.shell.adapters.ical :as ical]
             [clojure.test :refer [deftest is testing]]
             [clojure.string :as str])
-  (:import [java.time Duration Instant LocalDateTime ZoneId ZoneOffset]
+  (:import [java.time DayOfWeek Duration Instant LocalDateTime LocalTime Month ZoneId ZoneOffset]
+           [java.time.zone ZoneOffsetTransitionRule ZoneOffsetTransitionRule$TimeDefinition ZoneRules]
            [java.io StringReader]
            [net.fortuna.ical4j.data CalendarBuilder]
            [net.fortuna.ical4j.model.component Observance VTimeZone]
@@ -415,7 +417,11 @@
     (let [ical  (service/export-ical [(assoc appointment :timezone "Asia/Tokyo")])
           [vtz] (vtimezone-blocks ical)]
       (is (= 1 (count (re-seq #"BEGIN:(STANDARD|DAYLIGHT)" vtz))))
-      (is (str/includes? ical "DTSTART;TZID=Asia/Tokyo:20260310T180000")))))
+      (is (str/includes? ical "DTSTART;TZID=Asia/Tokyo:20260310T180000"))))
+  (testing "an offset id is quoted, and import reads it back"
+    (let [ical (service/export-ical [(assoc appointment :timezone "+05:00")])]
+      (is (str/includes? ical "DTSTART;TZID=\"+05:00\":20260310T140000"))
+      (is (= "+05:00" (:timezone (first (service/import-ical ical))))))))
 
 (defn- onsets
   "[instant offset] for each onset of each observance in `vtz` up to `end`,
@@ -460,3 +466,18 @@
       (is (empty? (bad weekly (every (Instant/parse "2025-03-02T08:00:00Z") 1200)))))
     (testing "a single event decades ago: offsets agree a year either side"
       (is (empty? (bad old (every (Instant/parse "1984-06-01T10:00:00Z") 470)))))))
+
+(deftest ^:integration rule-without-rrule-form-test
+  (testing "a rule spanning February and March is written out transition by transition"
+    (let [std   (ZoneOffset/ofHours 1)
+          dst   (ZoneOffset/ofHours 2)
+          rule  (fn [m d before after]
+                  (ZoneOffsetTransitionRule/of m d DayOfWeek/SUNDAY (LocalTime/of 2 0) false
+                                               ZoneOffsetTransitionRule$TimeDefinition/WALL std before after))
+          rules (ZoneRules/of std std [] [] [(rule Month/FEBRUARY 23 std dst) (rule Month/OCTOBER 25 dst std)])
+          obs   (#'ical/observances
+                 rules (Instant/parse "2025-01-01T00:00:00Z") (Instant/parse "2028-01-01T00:00:00Z"))]
+      (is (= 1 (count (filter #(.isPresent (.getProperty % "RRULE")) obs))) "October keeps its RRULE")
+      (is (= ["20250223T020000" "20260301T020000" "20270228T020000"]
+             (for [o obs :when (= "+0200" (.getValue (.getRequiredProperty o "TZOFFSETTO")))]
+               (.getValue (.getRequiredProperty o "DTSTART"))))))))
