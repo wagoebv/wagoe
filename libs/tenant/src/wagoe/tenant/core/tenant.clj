@@ -1,19 +1,24 @@
 (ns wagoe.tenant.core.tenant
   (:require
-   [clojure.string :as str]))
+   [clojure.string :as str]
+   [wagoe.tenant.schema :as schema]))
 
 (defn valid-slug?
-  "Check if slug is a valid tenant identifier (lowercase alphanumeric with hyphens, 2-100 chars)."
+  "Check if slug is a valid tenant identifier: lowercase alphanumeric with
+   hyphens, short enough that its schema name fits PostgreSQL's limit."
   [slug]
   (boolean
    (and
     (string? slug)
-    (re-matches #"^[a-z0-9][a-z0-9-]{0,98}[a-z0-9]$" slug))))
+    (re-matches schema/slug-regex slug))))
 
 (defn slug->schema-name
   "Convert tenant slug to database schema name (hyphens become underscores, prefixed with tenant_)."
   [slug]
-  (str "tenant_" (str/replace slug "-" "_")))
+  (str schema/schema-prefix (str/replace slug "-" "_")))
+
+(def ^:private schema-name-regex
+  (re-pattern (str "^" schema/schema-prefix "[a-z0-9_]+$")))
 
 (defn valid-schema-name?
   "True if schema-name is a safe tenant schema identifier — exactly the shape
@@ -26,8 +31,8 @@
   [schema-name]
   (boolean
    (and (string? schema-name)
-        (<= (count schema-name) 63)
-        (re-matches #"^tenant_[a-z0-9_]+$" schema-name))))
+        (<= (count schema-name) schema/max-schema-name-length)
+        (re-matches schema-name-regex schema-name))))
 
 (defn prepare-tenant
   "Build a complete tenant entity from creation input, id, and timestamp."
@@ -49,7 +54,7 @@
   (cond
     (not (valid-slug? slug))
     {:valid? false
-     :error "Invalid tenant slug (must be lowercase alphanumeric with hyphens, 2-100 chars)"}
+     :error schema/slug-error}
 
     (contains? existing-slugs slug)
     {:valid? false

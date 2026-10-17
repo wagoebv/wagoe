@@ -9,10 +9,25 @@
 ;; Domain Entity Schemas
 ;; =============================================================================
 
+(def schema-prefix "tenant_")
+
+(def max-schema-name-length
+  "PostgreSQL's identifier limit in bytes (NAMEDATALEN - 1). A longer name is
+   truncated, not refused, so two long slugs could share one schema."
+  63)
+
+(def max-slug-length
+  "The longest slug whose schema name fits. Slugs are ASCII, so chars are bytes."
+  (- max-schema-name-length (count schema-prefix)))
+
 (def slug-regex
-  "Regular expression for valid tenant slugs.
-   Must be lowercase alphanumeric with hyphens, 2-100 chars."
-  #"^[a-z0-9][a-z0-9-]{0,98}[a-z0-9]$")
+  "Regular expression for valid tenant slugs: lowercase alphanumeric with
+   hyphens, 2 to max-slug-length chars."
+  (re-pattern (str "^[a-z0-9][a-z0-9-]{0," (- max-slug-length 2) "}[a-z0-9]$")))
+
+(def slug-error
+  (str "Invalid tenant slug (must be lowercase alphanumeric with hyphens, 2-"
+       max-slug-length " chars)"))
 
 (def Tenant
   "Schema for Tenant entity.
@@ -25,10 +40,9 @@
    Note: Timestamps use :inst (java.time.Instant) internally."
   [:map {:title "Tenant"}
    [:id :uuid]
-   [:slug [:re {:error/message "Invalid slug (must be lowercase alphanumeric with hyphens, 2-100 chars)"}
-           slug-regex]]
+   [:slug [:re {:error/message slug-error} slug-regex]]
    [:name [:string {:min 1 :max 255}]]
-   [:schema-name [:string {:min 1 :max 63}]] ; PostgreSQL schema name limit
+   [:schema-name [:string {:min 1 :max max-schema-name-length}]]
    [:status [:enum :active :suspended :deleted]]
    [:settings {:optional true} [:maybe :map]] ; JSON configuration
    [:created-at inst?]
@@ -65,7 +79,7 @@
   "Schema for creating a new tenant (service layer input).
    Used by create-new-tenant in service layer."
   [:map {:title "Tenant Input"}
-   [:slug [:re {:error/message "Invalid slug"} slug-regex]]
+   [:slug [:re {:error/message slug-error} slug-regex]]
    [:name [:string {:min 1 :max 255}]]
    [:status {:optional true} [:enum :active :suspended]]
    [:settings {:optional true} TenantSettings]])
@@ -75,7 +89,7 @@
    Used by update-existing-tenant in service layer."
   [:map {:title "Tenant Update"}
    [:name {:optional true} [:string {:min 1 :max 255}]]
-   [:slug {:optional true} [:re {:error/message "Invalid slug"} slug-regex]]
+   [:slug {:optional true} [:re {:error/message slug-error} slug-regex]]
    [:status {:optional true} [:enum :active :suspended]]
    [:settings {:optional true} TenantSettings]])
 
@@ -86,7 +100,7 @@
 (def CreateTenantRequest
   "Schema for create tenant API requests."
   [:map {:title "Create Tenant Request"}
-   [:slug [:re {:error/message "Invalid slug"} slug-regex]]
+   [:slug [:re {:error/message slug-error} slug-regex]]
    [:name [:string {:min 1 :max 255}]]
    [:settings {:optional true} TenantSettings]])
 

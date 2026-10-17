@@ -56,8 +56,9 @@ Multi-tenancy with schema-per-tenant isolation on PostgreSQL. Provides:
 ## Slug and Schema Naming
 
 ```clojure
-;; Slug rules: lowercase alphanumeric + hyphens, 2-100 chars
-;; Regex: ^[a-z0-9][a-z0-9-]{0,98}[a-z0-9]$
+;; Slug rules: lowercase alphanumeric + hyphens, 2-56 chars, so that
+;; "tenant_" + slug fits PostgreSQL's 63-byte identifier limit
+;; Regex: ^[a-z0-9][a-z0-9-]{0,54}[a-z0-9]$
 (tenant/valid-slug? "acme-corp")     ;=> true
 (tenant/valid-slug? "ACME")          ;=> false (uppercase)
 (tenant/valid-slug? "acme_corp")     ;=> false (underscore)

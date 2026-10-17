@@ -96,11 +96,11 @@
       (is (loc/is-visible? (page/locator pg "form.entity-form"))
           "Entity form should be visible")
       ;; Editable fields should be present
-      (is (pos? (loc/count-elements (page/locator pg "form.entity-form [name='slug']")))
-          "Slug field should be present in the form")
+      (is (zero? (loc/count-elements (page/locator pg "form.entity-form [name='slug']")))
+          "Slug is read-only: it names the tenant's schema")
       (is (pos? (loc/count-elements (page/locator pg "form.entity-form [name='name']")))
           "Name field should be present in the form")
-      ;; Readonly fields (id, schema-name, created-at, updated-at) should NOT be in the form
+      ;; Readonly fields (id, slug, schema-name, created-at, updated-at) should NOT be in the form
       (is (zero? (loc/count-elements (page/locator pg "form.entity-form [name='id']")))
           "Readonly field 'id' should not be in the editable form")
       (is (zero? (loc/count-elements (page/locator pg "form.entity-form [name='created-at']")))
