@@ -18,6 +18,7 @@
    [wagoe.shared.ui.core.htmx :as htmx]
    [clojure.string :as str]
    [clojure.tools.logging :as log]
+   [reitit.core :as r]
    [ring.util.codec :as codec]
    [ring.util.response :as ring-response])
   (:import [java.util UUID]))
@@ -30,6 +31,19 @@
   "The :type -> status table admin errors are answered with. Admin throws the
    platform's own types, so the platform's status and this one agree (BOU-586)."
   problem-details/default-error-mappings)
+
+;; =============================================================================
+;; Route table
+;; =============================================================================
+
+(defn mounted?
+  "Whether `path` is a route of its own in the router serving `request`, not
+   just a value for a parameter: /web/admin/groups also matches
+   /web/admin/:entity. True when no router is attached, as nothing can be asked."
+  [request path]
+  (if-let [router (::r/router request)]
+    (= path (:template (r/match-by-path router path)))
+    true))
 
 ;; =============================================================================
 ;; Query Parameter Parsing
@@ -411,12 +425,22 @@
          (if (or (refusal? e) (rejection e)) [nil e] (throw e)))))
 
 (defn refusal-message
-  "What to tell the user about refusal `e`: its :message-key translated, or
-   its message."
+  "What to tell the user about refusal `e`: its :message-key translated, a
+   unique key's translation, or its message."
   [request e]
-  (if-let [k (:message-key (ex-data e))]
-    ((t-fn request) k)
-    (ex-message e)))
+  (let [{:keys [message-key constraint]} (ex-data e)]
+    (cond
+      message-key            ((t-fn request) message-key)
+      (= :unique constraint) ((t-fn request) :admin/refused-duplicate-values)
+      :else                  (ex-message e))))
+
+(defn conflict-errors
+  "Field errors for a key over several columns the database refused: each of
+   its fields marked, since no one of them is wrong alone (BOU-712)."
+  [e]
+  (let [{:keys [constraint fields]} (ex-data e)]
+    (when (and (= :unique constraint) (seq fields))
+      (zipmap fields (repeat [[:t :admin/error-duplicate-values]])))))
 
 (defn html-response
   "Create HTML response with standard headers, resolving [:t ...] i18n markers.

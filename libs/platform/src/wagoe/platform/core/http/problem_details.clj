@@ -52,7 +52,7 @@
         :else               :info))
 
 (defn exception-log-level
-  "`status-log-level` of the status `ex` answers."
+  "The level `ex` is logged at: its status's (`status-log-level`)."
   [ex error-mappings]
   (status-log-level (first (exception-status ex error-mappings))))
 

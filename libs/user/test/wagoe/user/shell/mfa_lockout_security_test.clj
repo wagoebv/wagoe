@@ -2,8 +2,7 @@
   "Wrong MFA codes on the password form and the JSON login count towards the
    lockout, as a wrong password does; they did not, so a code could be guessed
    at the rate limit (BOU-698)."
-  (:require [clojure.test :refer [deftest is testing]]
-            [one-time.core :as otp]
+  (:require [clojure.test :refer [deftest is testing use-fixtures]]
             [wagoe.user.ports :as ports]
             [wagoe.user.shell.auth :as auth]
             [wagoe.user.shell.http :as user-http]
@@ -11,7 +10,10 @@
             [wagoe.user.shell.mfa :as mfa]
             [wagoe.user.shell.mfa-crypto :as mfa-crypto]
             [wagoe.user.shell.service :as service]
-            [wagoe.user.shell.web-handlers :as handlers]))
+            [wagoe.user.shell.web-handlers :as handlers]
+            [wagoe.user.totp-clock :as totp-clock]))
+
+(use-fixtures :each totp-clock/frozen)
 
 (def ^:private password "Correct-Horse-9")
 (def ^:private backup-code "ABCD-EFGH-JKLM")
@@ -39,7 +41,7 @@
   (ports/find-user-by-id users (:id bob)))
 
 (defn- totp [{:keys [secret]}]
-  (str (otp/get-totp-token secret)))
+  (totp-clock/code secret))
 
 (defn- api-login [handler code]
   (handler {:parameters {:body {:email "bob@x.org" :password password :mfaCode code}}}))
