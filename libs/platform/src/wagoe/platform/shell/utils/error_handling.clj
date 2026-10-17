@@ -110,8 +110,7 @@
                                   :request-method (name (or request-method :unknown))
                                   :request-uri uri})]
 
-           ;; A typed 4xx is the client's, not a fault (BOU-704).
-           (log/logp (if (>= (first (problem/exception-status ex error-mappings)) 500) :error :info)
+           (log/logp (problem/status-log-level (first (problem/exception-status ex error-mappings)))
                      "HTTP request failed with enhanced context"
                      {:correlation-id correlation-id
                       :uri uri

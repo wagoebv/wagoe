@@ -479,9 +479,9 @@
                                          {:system system}))
         details (fn [system]
                   (get-in (json/parse-string
-                           (slurp (:body ((handler system) {:request-method :post :uri "/users"
-                                                            :headers {} :body-params {}})))
-                           true)
+                             (slurp (:body ((handler system) {:request-method :post :uri "/users"
+                                                              :headers {} :body-params {}})))
+                             true)
                           [:error :details]))]
     (is (= {:role ["missing required key"]}
            (details {:error-enricher (constantly {:code "WGE-201"}) :environment "dev"})))

@@ -316,10 +316,9 @@
 (def http-request-logging
   "Logs HTTP requests at entry and completion.
 
-   A thrown error is logged by the status it answers, not as a fault: 5xx at
-   ERROR, 401/403 at WARN (worth seeing in bulk), other 4xx at INFO (BOU-704).
-   The status is the one http-error-handler set, else the problem-details
-   mapping's."
+   A thrown error is logged at the level of the status it answers
+   (`problem-details/status-log-level`): the one http-error-handler set, else
+   the problem-details mapping's."
   {:name :http-request-logging
    :enter (fn [{:keys [request system correlation-id] :as ctx}]
             (when-let [logger (:logger system)]
@@ -340,10 +339,9 @@
             (when-let [logger (:logger system)]
               (let [status (or (:status response)
                                (first (problem-details/exception-status exception {})))
-                    log    (cond (>= status 500)      log-ports/error
-                                 (#{401 403} status)  log-ports/warn
-                                 :else                log-ports/info)]
-                (log logger (if (>= status 500) "HTTP request failed" "HTTP request refused")
+                    level  (problem-details/status-log-level status)
+                    log    ({:error log-ports/error :warn log-ports/warn} level log-ports/info)]
+                (log logger (if (= :error level) "HTTP request failed" "HTTP request refused")
                      {:method (:request-method request)
                       :uri (:uri request)
                       :status status
