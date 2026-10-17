@@ -56,3 +56,24 @@
                                       {:logger logger})
         (catch clojure.lang.ExceptionInfo _))
       (is (= [level] @levels) (str type)))))
+
+(deftest ^:unit only-a-server-error-reaches-the-error-tracker
+  ;; BOU-714: and before it, nothing did — the reporter read the wrong key.
+  (doseq [[ex reported?] [[(ex-info "no" {:type :validation-error}) false]
+                          [(ex-info "no" {:type :forbidden}) false]
+                          [(ex-info "no" {:type :not-found}) false]
+                          [(ex-info "no" {:type :conflict}) false]
+                          [(ex-info "no" {:type :internal-error}) true]
+                          [(RuntimeException. "no") true]]]
+    (let [captured (atom 0)
+          reporter #_{:clj-kondo/ignore [:missing-protocol-method]}
+          (reify
+            error-ports/IErrorReporter
+            (capture-exception [_ _ _] (swap! captured inc))
+            error-ports/IErrorContext
+            (add-breadcrumb! [_ _] nil))]
+      (try
+        (si/execute-service-operation :get-user {} (fn [_] (throw ex))
+                                      {:error-reporter reporter})
+        (catch Exception _))
+      (is (= (if reported? 1 0) @captured) (str ex)))))

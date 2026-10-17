@@ -6,6 +6,7 @@
             [clojure.test :refer [deftest testing is]]
             [reitit.core :as r]
             [reitit.ring.middleware.multipart :as multipart]
+            [wagoe.observability.logging.ports :as log-ports]
             [ring.util.codec :as codec]
             [ring.util.request :as ring-request]))
 
@@ -479,9 +480,9 @@
                                          {:system system}))
         details (fn [system]
                   (get-in (json/parse-string
-                             (slurp (:body ((handler system) {:request-method :post :uri "/users"
-                                                              :headers {} :body-params {}})))
-                             true)
+                           (slurp (:body ((handler system) {:request-method :post :uri "/users"
+                                                            :headers {} :body-params {}})))
+                           true)
                           [:error :details]))]
     (is (= {:role ["missing required key"]}
            (details {:error-enricher (constantly {:code "WGE-201"}) :environment "dev"})))
@@ -806,6 +807,23 @@
         (is (= "cid-1" (get-in resp [:headers "X-Correlation-ID"])))))
     (testing "on the path"
       (is (= 403 (:status (call "/path")))))))
+
+(deftest ^:unit a-typed-error-thrown-from-route-middleware-is-logged-once-at-its-level
+  ;; It was not logged at all (BOU-714).
+  (doseq [[type level] [[:forbidden :warn] [:not-found :info] [:validation-error :info]]]
+    (let [entries (atom [])
+          logger  #_{:clj-kondo/ignore [:missing-protocol-method]}
+          (reify log-ports/ILogger
+            (log* [_ l m c _] (swap! entries conj [l m (:status c)]))
+            (info [_ m c] (swap! entries conj [:info m (:status c)]))
+            (warn [_ m c] (swap! entries conj [:warn m (:status c)]))
+            (error [_ m c] (swap! entries conj [:error m (:status c)])))
+          handler (reitit/compile-routes
+                   [["/x" {:get {:handler    (fn [_] {:status 200 :body {}})
+                                 :middleware [(fn [_] (fn [_] (throw (ex-info "nope" {:type type}))))]}}]]
+                   {:system {:logger logger}})
+          status  (:status (handler {:request-method :get :uri "/x" :headers {}}))]
+      (is (= [[level "HTTP request refused" status]] @entries) (str type)))))
 
 ;; =============================================================================
 ;; Static asset caching (BOU-389)

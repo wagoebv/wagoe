@@ -53,6 +53,14 @@
 
 (def mock-error-reporter
   (reify
+    error-ports/IErrorReporter
+    (capture-exception [_ _] nil)
+    (capture-exception [_ _ _] nil)
+    (capture-exception [_ _ _ _] nil)
+    (capture-message [_ _ _] nil)
+    (capture-message [_ _ _ _] nil)
+    (capture-message [_ _ _ _ _] nil)
+    (capture-event [_ _] nil)
     error-ports/IErrorContext
     (add-breadcrumb! [_ _breadcrumb] nil)
     (with-context [_ _context-map f] (f))

@@ -150,11 +150,16 @@
             ctx)})
 
 (def service-error-handling
-  "Handles service operation error reporting and recovery."
+  "Reports a failed operation to error tracking, unless it failed with a typed
+   4xx: that is the caller's, not a fault (BOU-714)."
   {:name :service-error-handling
-   :error (fn [{:keys [operation-name params system context] :as ctx}]
+   ;; The throwable is under :exception. This read :error until BOU-714, so
+   ;; nothing was ever reported.
+   :error (fn [{:keys [operation-name params system context] error :exception :as ctx}]
             (when-let [error-reporter (:error-reporter system)]
-              (when-let [error (:error ctx)]
+              (when (and error
+                         (= :error (problem-details/status-log-level
+                                    (first (problem-details/exception-status error {})))))
                 ;; Add error breadcrumb
                 (error-reporting/add-breadcrumb
                  error-reporter

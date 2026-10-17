@@ -201,11 +201,13 @@
 
 (defn- typed-error-response
   "The response the interceptor stack gives a typed ex-info, for one thrown
-   where that stack cannot catch it."
+   where that stack cannot catch it, logged at its status's level (BOU-714)."
   [system e request]
   (http-interceptors/run-http-interceptors
    (fn [_] (throw e))
-   [http-interceptors/http-correlation-header http-interceptors/http-error-handler]
+   [http-interceptors/http-correlation-header
+    (select-keys http-interceptors/http-request-logging [:name :error])
+    http-interceptors/http-error-handler]
    request system))
 
 (defn- create-exception-middleware
