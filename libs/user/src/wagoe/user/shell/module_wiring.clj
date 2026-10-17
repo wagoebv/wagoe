@@ -183,6 +183,10 @@
   [_ _mw]
   (log/info "User HTTP middleware halted (no cleanup needed)"))
 
+(defmethod ig/init-key :wagoe/user-home-middleware
+  [_ {:keys [config]}]
+  (landing/wrap-home config))
+
 (defmethod ig/init-key :wagoe/admin-only-middleware
   [_ {:keys [user-service]}]
   ;; The rejecting counterpart of the above: authenticate, then demand the
@@ -291,6 +295,7 @@
                                :config       config}
 
     :wagoe/user-http-middleware {:user-service (ig/ref :wagoe/user-service)}
+    :wagoe/user-home-middleware {:config config}
     :wagoe/admin-only-middleware {:user-service (ig/ref :wagoe/user-service)}}
 
    ;; :user-service stays named: the handler passes it to the test-reset
@@ -301,8 +306,9 @@
    ;; middleware that reads [:user :id]. Contributions merge by key and modules
    ;; iterate sorted, and :wagoe/tenant sorts before :wagoe/user, so ordering
    ;; could not have come from here (BOU-373).
-   :http   {:user-service    (ig/ref :wagoe/user-service)
-            :auth-middleware (ig/ref :wagoe/user-http-middleware)}
+   :http   {:user-service     (ig/ref :wagoe/user-service)
+            :auth-middleware  (ig/ref :wagoe/user-http-middleware)
+            :extra-middleware (ig/ref :wagoe/user-home-middleware)}
    :routes [(ig/ref :wagoe/user-routes)]})
 
 (defn ig-config
@@ -314,8 +320,8 @@
    when the settings name a provider under `[:oidc :providers]`. `:auth` becomes
    the auth service's config.
 
-   `:login-redirect` and `:dashboard` are checked and resolved here, once, so a
-   bad value fails boot whichever components start."
+   `:login-redirect`, `:dashboard` and `:home` are checked and resolved here,
+   once, so a bad value fails boot whichever components start."
   [settings {:keys [config validation-config]}]
   (let [config (landing/prepare config)]
     (cond-> (base-graph config validation-config (:auth settings {}))

@@ -213,7 +213,8 @@ After signing in, an administrator lands on `/web/admin/users` and everyone else
 ----
 :wagoe/user
 {:login-redirect {:user "/web/overzicht" :default "/web/overzicht"}  ; by role
- :dashboard      false}                                               ; or {:handler my.app.web/dashboard}
+ :dashboard      false                                                ; or {:handler my.app.web/dashboard}
+ :home           "/web/overzicht"}                                    ; where the layouts link home
 ----
 
 `:login-redirect` is a map of role to path (`:default` covers roles it does not name,
@@ -223,10 +224,12 @@ to the default. It applies to password login, the MFA step, OpenID Connect sign-
 `/web` for someone already signed in. A `return-to` on this site still wins.
 
 `:dashboard false` leaves `/web/dashboard` to the application; `{:handler sym}` serves
-that Ring handler there instead, behind the same sign-in check. Both keys are checked at
-boot: a path off this site, an unknown role or a symbol that does not resolve stops it.
-The logo and "back" links in the built-in layouts still point at `/web/dashboard`, so
-with `:dashboard false` the application should serve that path.
+that Ring handler there instead, behind the same sign-in check.
+
+`:home` is where the logo, "back" and dashboard links in the built-in layouts point. It
+defaults to `/web/dashboard`, or to `/web` with `:dashboard false`, which sends a
+signed-in user on to their landing page. All three keys are checked at boot: a path off
+this site, an unknown role or a symbol that does not resolve stops it.
 
 == Session management
 

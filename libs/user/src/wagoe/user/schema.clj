@@ -412,7 +412,8 @@
 (def UserLandingSettings
   [:map
    [:login-redirect {:optional true} LoginRedirect]
-   [:dashboard {:optional true} Dashboard]])
+   [:dashboard {:optional true} Dashboard]
+   [:home {:optional true} LocalPath]])
 
 (def ^:private user-validator (m/validator User))
 (def ^:private user-explainer (m/explainer User))

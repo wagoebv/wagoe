@@ -10,7 +10,8 @@
      search-results-fragment — HTMX results area
      indices-page         — list all registered indices (full page)
      index-detail-page    — index config + live search test form (full page)"
-  (:require [wagoe.shared.ui.core.icons :as icons]
+  (:require [wagoe.shared.ui.core.home :as home]
+            [wagoe.shared.ui.core.icons :as icons]
             [wagoe.shared.ui.core.layout :as layout]
             [wagoe.shared.ui.core.components :as ui]
             [clojure.string :as str]))
@@ -68,7 +69,7 @@
        [:h1.page-title
         (icons/icon :search {:size 24})
         [:t :search/page-indices-heading]]
-       [:a.button.secondary {:href "/web/dashboard"}
+       [:a.button.secondary {:href home/*path*}
         [:t :search/button-back-dashboard]]]
       [:p {:style "color: var(--muted-color); margin-top: 0;"}
        [:t :search/page-indices-description]]

@@ -2,7 +2,7 @@
  * Stitch Admin - Keyboard Shortcuts
  *
  * Global shortcuts:
- *   g h  - Go to Dashboard (/web/dashboard)
+ *   g h  - Go home (<meta name="wagoe-home">, else /web/dashboard)
  *   g u  - Go to Users (/web/admin/user)
  *
  * Context shortcuts:
@@ -23,11 +23,14 @@
   const SEARCH_SELECTOR =
     'input[type="search"], input[name="search"], input[name="q"], .search-input, #search';
 
+  // The layout writes the configured home into <meta name="wagoe-home">
+  const HOME = (document.querySelector('meta[name="wagoe-home"]') || {}).content || '/web/dashboard';
+
   // Configuration
   const SHORTCUTS = {
     // Go-to shortcuts (two-key combos: g + key)
     goto: {
-      'h': '/web/dashboard',       // g h -> Dashboard
+      'h': HOME,                   // g h -> Home
       'u': '/web/admin/user'       // g u -> Users (entity name is singular)
     },
 
@@ -371,7 +374,7 @@
    */
   function showHelp() {
     console.log('%c Keyboard Shortcuts ', 'background: #0891b2; color: white; padding: 4px 8px; border-radius: 4px;');
-    console.log('g h  - Go to Dashboard (/web/dashboard)');
+    console.log('g h  - Go home (' + HOME + ')');
     console.log('g u  - Go to Users (/web/admin/user)');
     console.log('n    - New/Create');
     console.log('e    - Edit');
@@ -402,7 +405,7 @@
       config: SHORTCUTS,
       test: function() {
         console.log('Keyboard shortcuts test - navigating to dashboard...');
-        navigateTo('/web/dashboard');
+        navigateTo(HOME);
       }
     };
 
