@@ -62,7 +62,8 @@
         (support/enforce-rate-limit! (:last-request-ms this) (:min-interval-ms this))
         (log/debug "Mapbox geocode request" {:q q})
         (try
-          (let [encoded  (URLEncoder/encode q "UTF-8")
+          ;; URLEncoder writes spaces as "+", which is literal in a path segment.
+          (let [encoded  (str/replace (URLEncoder/encode q "UTF-8") "+" "%20")
                 url      (str (:base-url this)
                               "/geocoding/v5/mapbox.places/"
                               encoded ".json")
@@ -88,12 +89,13 @@
     (log/debug "Mapbox reverse-geocode request" point)
     (try
       ;; Mapbox reverse geocode endpoint: /geocoding/v5/mapbox.places/{lng},{lat}.json
+      ;; No limit: Mapbox rejects one on reverse unless a single `types` is given.
+      ;; Features come most specific first.
       (let [url      (str (:base-url this)
                           "/geocoding/v5/mapbox.places/"
                           (:lng point) "," (:lat point) ".json")
             response (http/get url
-                               {:query-params     {"access_token" (:api-key this)
-                                                   "limit"        "1"}
+                               {:query-params     {"access_token" (:api-key this)}
                                 :as               :json
                                 :coerce           :always
                                 :throw-exceptions false})

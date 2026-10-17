@@ -22,12 +22,16 @@
 ;; Response parsing
 ;; =============================================================================
 
+(defn- parse-coord [x]
+  (cond (number? x) (double x)
+        (string? x) (parse-double x)))
+
 (defn- parse-result
   "Parse a Nominatim result into a GeoResult. clj-http's `:as :json` keywordizes
    keys; Nominatim sends lat/lon as strings."
   [{:keys [lat lon display_name address]}]
-  {:lat               (parse-double lat)
-   :lng               (parse-double lon)
+  {:lat               (parse-coord lat)
+   :lng               (parse-coord lon)
    :formatted-address display_name
    :postcode          (:postcode address)
    :city              (or (:city address) (:town address) (:village address))
@@ -117,8 +121,11 @@
     :or   {base-url         default-base-url
            min-interval-ms  default-min-interval-ms}}]
   ;; The public server's policy: 1 req/s and a User-Agent naming the app. A self-hosted one sets its own.
-  (let [public?  (= "nominatim.openstreetmap.org" (.getHost (URI. base-url)))
+  (let [public?  (= "nominatim.openstreetmap.org" (some-> (URI. base-url) .getHost str/lower-case))
         interval (if public? (max min-interval-ms default-min-interval-ms) min-interval-ms)]
+    (when (not= interval min-interval-ms)
+      (log/warn "Geo: OpenStreetMap allows 1 request per second; ignoring the faster rate limit."
+                {:requested-ms min-interval-ms :using-ms interval}))
     (when (and public? (not user-agent))
       (log/warn "Geo: no :user-agent for OpenStreetMap. Nominatim's usage policy wants one naming your app and a contact; a shared default risks being blocked."))
     (->NominatimAdapter base-url (atom 0) interval (or user-agent default-user-agent))))

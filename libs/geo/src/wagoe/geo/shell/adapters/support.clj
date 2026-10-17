@@ -17,10 +17,15 @@
    A result without numeric :lat/:lng is a malformed response: WARN and nil."
   [provider parse-fn item]
   (when item
-    (let [result (try (parse-fn item) (catch Exception _ nil))]
-      (if (and (number? (:lat result)) (number? (:lng result)))
+    (let [result (try (parse-fn item) (catch Exception e e))
+          data   {:provider provider
+                  :keys     (if (map? item) (keys item) (type item))}]
+      (cond
+        (instance? Throwable result)
+        (log/warn result "Geo provider returned a malformed response" data)
+
+        (and (number? (:lat result)) (number? (:lng result)))
         result
-        (do (log/warn "Geo provider returned a malformed response"
-                      {:provider provider
-                       :keys     (if (map? item) (keys item) (type item))})
-            nil)))))
+
+        :else
+        (log/warn "Geo provider returned a malformed response" data)))))

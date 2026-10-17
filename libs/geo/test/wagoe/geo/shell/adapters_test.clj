@@ -110,9 +110,10 @@
       (with-response (json-response mapbox-body)
         #(is (= (assoc damrak :provider :mapbox :cached? false)
                 (ports/geocode adapter {:address "Damrak 1"})))))
-    (testing "reverse-geocode"
-      (with-response (json-response mapbox-body)
-        #(is (= "Amsterdam" (:city (ports/reverse-geocode adapter {:lat 52.3765 :lng 4.8975}))))))))
+    (testing "reverse-geocode, without the limit Mapbox rejects there"
+      (let [requests (with-response (json-response mapbox-body)
+                       #(is (= "Amsterdam" (:city (ports/reverse-geocode adapter {:lat 52.3765 :lng 4.8975})))))]
+        (is (not (re-find #"limit=" (str (:query-string (first requests))))))))))
 
 (deftest ^:unit rate-limit-test
   (testing "the public Nominatim server is never asked more than once a second"
