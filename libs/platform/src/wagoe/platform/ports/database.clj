@@ -276,6 +276,10 @@
   #{:schemas :transactional-ddl :index-if-not-exists :column-if-not-exists
     :full-text :on-conflict :row-locks :alter-foreign-key})
 
+(def default-string-length
+  "How long `column-type` makes a :string given no length."
+  255)
+
 (def logical-column-types
   "What `column-type` answers for."
   #{:uuid :instant :json :boolean :text :string :int :bigint :double :enum})

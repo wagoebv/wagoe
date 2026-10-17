@@ -208,10 +208,9 @@
   [ctx table column type not-null?]
   (let [table (name table) column (name column)]
     (when-let [ddl (case (protocols/engine (:adapter ctx))
-                     :postgresql (str "ALTER TABLE " table " ALTER COLUMN " column " TYPE " type)
-                     :h2         (str "ALTER TABLE " table " ALTER COLUMN " column " SET DATA TYPE " type)
-                     :mysql      (str "ALTER TABLE " table " MODIFY COLUMN " column " " type
-                                      (if not-null? " NOT NULL" " NULL"))
-                     nil)]
+                     (:postgresql :h2) (str "ALTER TABLE " table " ALTER COLUMN " column " SET DATA TYPE " type)
+                     :mysql            (str "ALTER TABLE " table " MODIFY COLUMN " column " " type
+                                            (if not-null? " NOT NULL" " NULL"))
+                     :sqlite           nil)]
       (log/info "Widening column" {:table table :column column :type type})
       (execute-ddl! ctx ddl))))

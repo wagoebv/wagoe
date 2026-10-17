@@ -23,6 +23,10 @@
 
 (def ^:private collection-types #{:vector :sequential :set :tuple :map-of :map :any})
 
+(def ^:private json-types
+  "Collections the builder always stored as JSON, so never as VARCHAR(255)."
+  #{:map :map-of})
+
 (def ^:private column-type #'schema/column-type)
 (def ^:private extract-field-info #'schema/extract-field-info)
 
@@ -39,10 +43,9 @@
 
 (deftest ^:unit no-field-is-shorter-than-its-schema
   (doseq [make [h2/new-adapter postgresql/new-adapter mysql-adapter/new-adapter sqlite/new-adapter]
-          {:keys [table type schema] field-name :name :as f} (fields)
+          {:keys [table type max] field-name :name :as f} (fields)
           :let [ctx    {:adapter (make)}
                 length (varchar-length (column-type ctx f))
-                max    (when (and (vector? schema) (map? (second schema))) (:max (second schema)))
                 where  (str (name (protocols/engine (:adapter ctx))) " " table "." field-name)]]
     (when (collection-types type)
       (is (nil? length) (str where ": a collection is no VARCHAR")))
@@ -56,10 +59,10 @@
                (fn [s]
                  (into [(first s) (second s)]
                        (map (fn [field]
-                              (let [{:keys [type schema properties]} (extract-field-info field)
+                              (let [{:keys [type max properties]} (extract-field-info field)
                                     props (dissoc properties :column-type)]
-                                (if (or (#{:vector :sequential :set} type)
-                                        (and (= :string type) (vector? schema) (map? (second schema))))
+                                (if (or (and (collection-types type) (not (json-types type)))
+                                        (and (= :string type) max))
                                   [(first field) props :string]
                                   [(first field) props (last field)]))))
                        (drop 2 s)))))
@@ -77,6 +80,12 @@
 
 (def ^:private schema-ns 'wagoe.platform.shell.adapters.database.common.schema)
 
+(defn- boot-widens? [ctx]
+  (log-test/with-log
+    (persistence/initialize-user-schema! ctx)
+    (tenant-tables/ensure-tables! ctx)
+    (log-test/logged? schema-ns :info widening)))
+
 (def ^:private engines
   "Each is [name (fn [f]) calling `f` with a db-context on a fresh database]."
   [["h2" (fn [f]
@@ -93,8 +102,7 @@
     (testing engine
       (with-db
        (fn [ctx]
-        (db/initialize-tables-from-schemas! ctx (select-keys before-bou-715 (keys persistence/tables)))
-        (db/initialize-tables-from-schemas! ctx (select-keys before-bou-715 (keys tenant-tables/tables)))
+        (db/initialize-tables-from-schemas! ctx before-bou-715)
         (is (= 255 (max-length ctx :auth_users "mfa_backup_codes")) "the old column, or this proves nothing")
         (let [users (persistence/create-user-repository ctx)
               user  (ports/create-user users {:email "old@example.com" :name "Old" :role :user :active true
@@ -102,14 +110,8 @@
                                               :mfa-backup-codes ["kept"]})]
           (is (thrown? Exception (ports/update-user users {:id (:id user) :mfa-backup-codes hashed-codes}))
               "ten codes do not fit the old column")
-          (log-test/with-log
-            (persistence/initialize-user-schema! ctx)
-            (tenant-tables/ensure-tables! ctx)
-            (is (log-test/logged? schema-ns :info widening)))
-          (log-test/with-log
-            (persistence/initialize-user-schema! ctx)
-            (tenant-tables/ensure-tables! ctx)
-            (is (not (log-test/logged? schema-ns :info widening)) "a widened column is left alone"))
+          (is (boot-widens? ctx))
+          (is (not (boot-widens? ctx)) "a widened column is left alone")
           (is (= ["kept"] (:mfa-backup-codes (ports/find-user-by-id users (:id user)))) "the row is kept")
           (ports/update-user users {:id (:id user) :mfa-backup-codes hashed-codes})
           (is (= hashed-codes (:mfa-backup-codes (ports/find-user-by-id users (:id user)))))

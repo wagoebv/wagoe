@@ -23,9 +23,6 @@
 
 ;; Access private fns via var for targeted unit tests
 (def ^:private column-type #'schema/column-type)
-
-(defn- malli-type->column-type [ctx malli-type]
-  (column-type ctx {:type malli-type :properties {}}))
 (def ^:private extract-field-info #'schema/extract-field-info)
 
 ;; =============================================================================
@@ -63,7 +60,7 @@
           [engine make expected] (map vector [:h2 :sqlite :postgresql :mysql]
                                       [h2/new-adapter sqlite/new-adapter postgresql/new-adapter mysql/new-adapter]
                                       types)]
-    (is (= expected (malli-type->column-type {:adapter (make)} malli-type))
+    (is (= expected (column-type {:adapter (make)} {:type malli-type :properties {}}))
         (str engine " " malli-type))))
 
 (deftest ^:unit a-string-gets-the-length-its-schema-allows

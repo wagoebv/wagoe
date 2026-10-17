@@ -61,7 +61,8 @@
      field-def: Malli field definition - [field-name schema] or [field-name properties schema]
 
    Returns:
-     Map with :name, :type, :optional?, :schema or nil for non-field entries"
+     Map with :name, :type, :optional?, :schema, :max (a `{:max n}` on the
+     type) or nil for non-field entries"
   [field-def]
   (when (and (vector? field-def)
              (>= (count field-def) 2)
@@ -83,7 +84,9 @@
        :type actual-type
        :optional? optional?
        :properties properties
-       :schema unwrapped-type})))
+       :schema unwrapped-type
+       :max (when (and (vector? unwrapped-type) (map? (second unwrapped-type)))
+              (:max (second unwrapped-type)))})))
 
 ;; =============================================================================
 ;; DDL Generation
@@ -131,9 +134,8 @@
 (defn- logical-type
   "A field's `logical-column-types` entry: its :column-type, else its Malli
    type's, a string honouring its `{:max n}`."
-  [{:keys [type properties schema]}]
-  (let [max-length (when (and (= :string type) (vector? schema) (map? (second schema)))
-                     (:max (second schema)))]
+  [{:keys [type properties max]}]
+  (let [max-length (when (= :string type) max)]
     (cond
       (:column-type properties) (:column-type properties)
       (not (pos-int? max-length)) (malli->logical type :string)
@@ -370,8 +372,8 @@
 (defn- add-missing-columns!
   "Add the fields of `malli-schema` an existing table lacks (BOU-622), nullable:
    a NOT NULL column cannot join a table with rows, so a migration backfills it."
-  [ctx table-name malli-schema]
-  (let [present (set (map :name (db-core/get-table-info ctx table-name)))]
+  [ctx table-name malli-schema columns]
+  (let [present (set (map :name columns))]
     (when-let [missing (and (seq present)
                             (seq (remove #(present (str/lower-case (col-name (:name %))))
                                          (keep extract-field-info (rest malli-schema)))))]
@@ -404,8 +406,8 @@
 ;; =============================================================================
 
 (def ^:private unbounded-length
-  "What H2 reports for a VARCHAR without a length, its longest. TEXT columns on
-   PostgreSQL and MySQL are not character-varying, so they are never widened."
+  "What H2 reports for a VARCHAR without a length, its longest. PostgreSQL
+   reports no length for TEXT, MySQL more than this for LONGTEXT."
   1000000000)
 
 (defn- wanted-length
@@ -415,21 +417,21 @@
   (when-not (:db-type properties)
     (let [logical (logical-type field-info)]
       (cond (= :text logical)   unbounded-length
-            (= :string logical) 255
+            (= :string logical) protocols/default-string-length
             (vector? logical)   (second logical)))))
 
 (defn- widen-short-columns!
   "Widen the VARCHAR columns of an existing table shorter than its schema now
    asks, so a database created before a field grew holds what a fresh one does
    (BOU-715). Only ever wider: rows are kept."
-  [ctx table-name malli-schema]
-  (let [present (into {} (map (juxt :name identity)) (db-core/get-table-info ctx table-name))]
+  [ctx table-name malli-schema columns]
+  (let [present (into {} (map (juxt :name identity)) columns)]
     (doseq [f (keep extract-field-info (rest malli-schema))
-            :let [{:keys [type max-length not-null default]} (present (str/lower-case (col-name (:name f))))
+            :let [column (col-name (:name f))
+                  {:keys [max-length not-null default]} (present (str/lower-case column))
                   wanted (wanted-length f)]
-            :when (and wanted max-length (< max-length wanted)
-                       (re-find #"(?i)char" (str type)) (nil? default))]
-      (db-core/widen-column! ctx table-name (col-name (:name f)) (column-type ctx f) not-null))))
+            :when (and wanted max-length (< max-length wanted) (nil? default))]
+      (db-core/widen-column! ctx table-name column (column-type ctx f) not-null))))
 
 ;; =============================================================================
 ;; Schema Initialization
@@ -489,8 +491,9 @@
         (log/debug "Creating table" {:table table-name :ddl ddl :existed? existed?})
         (db-core/execute-ddl! ctx ddl)
         (when existed?
-          (add-missing-columns! ctx table-name malli-schema)
-          (widen-short-columns! ctx table-name malli-schema)
+          (let [columns (db-core/get-table-info ctx table-name)]
+            (add-missing-columns! ctx table-name malli-schema columns)
+            (widen-short-columns! ctx table-name malli-schema columns))
           (repair-enum-constraints! ctx table-name malli-schema))))
 
     ; Create indexes
