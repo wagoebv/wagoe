@@ -46,8 +46,10 @@
 (deftest ^:unit framework-migration-ids-end-in-an-odd-second
   ;; An application picks round timestamps by hand; framework migrations stay
   ;; off them, so the two do not share an id (BOU-717).
-  (let [even (sort (remove #(or (released-round-ids %) (odd? (parse-long (subs % 12))))
+  (let [even (sort (remove #(or (released-round-ids %) (odd? (parse-long %)))
                            @library-ids))]
+    (is (empty? (remove (set @library-ids) released-round-ids))
+        "a released id no library ships any more must leave the list, or a new migration could reuse it")
     (is (empty? even)
         (str "framework migration ids must end in an odd second (…120017, not …120000): "
              (str/join ", " even)))))

@@ -336,22 +336,22 @@
                      " to a separate classpath resource.")))
     migration-dirs))
 
-(defn- file-names-in
-  "Names of the files under `dir`, found where migratus finds it. Names only:
-   migratus's reader slurps every file and leaves the jar open."
+(defn- files-in
+  "Paths of the files under `dir`, relative to it, found where migratus finds
+   it. Paths only: migratus's reader slurps every file and leaves the jar open."
   [dir]
   (let [found (migratus-utils/find-migration-dir dir)]
     (if (instance? java.util.jar.JarFile found)
       (with-open [jar ^java.util.jar.JarFile found]
         (->> (enumeration-seq (.entries jar))
              (map #(.getName ^java.util.jar.JarEntry %))
-             (filter #(str/starts-with? % dir))
-             (map #(subs % (inc (str/last-index-of % "/"))))
+             (filter #(and (str/starts-with? % dir) (not (str/ends-with? % "/"))))
+             (map #(subs % (count dir)))
              doall))
       (when found
         (->> (file-seq found)
              (filter #(.isFile ^java.io.File %))
-             (map #(.getName ^java.io.File %)))))))
+             (map #(display-name found %)))))))
 
 (defn- migrations-in
   "[id file] for each migration in `dir`. The file is shown without its
@@ -359,10 +359,11 @@
   [dir]
   (let [dir (migratus-utils/ensure-trailing-slash dir)]
     (distinct
-     (for [file-name (file-names-in dir)
-           :let  [[id mig-name] (migratus-migrations/parse-name file-name)]
+     (for [path (files-in dir)
+           :let  [file-name     (subs path (inc (or (str/last-index-of path "/") -1)))
+                  [id mig-name] (migratus-migrations/parse-name file-name)]
            :when id]
-       [id (str dir id "-" mig-name)]))))
+       [id (str dir (subs path 0 (- (count path) (count file-name))) id "-" mig-name)]))))
 
 (defn duplicate-migration-ids
   "{id [file ...]} for every id that more than one migration in `dirs` uses.
@@ -370,10 +371,11 @@
    Every directory shares one schema_migrations table keyed on id alone, and
    migratus keeps the last directory's migration for an id without a word. So
    of two migrations with one id only one ever runs, and the other is recorded
-   as done (BOU-717)."
+   as done (BOU-717). Grouped on the number, as the table stores it: `007` and
+   `7` are one id."
   [dirs]
   (into (sorted-map)
-        (for [[id found] (group-by first (mapcat migrations-in dirs))
+        (for [[id found] (group-by (comp parse-long first) (mapcat migrations-in dirs))
               :when (< 1 (count found))]
           [id (mapv second found)])))
 
@@ -385,7 +387,8 @@
             (str "Two migrations share an id, so only one of them would ever run:\n"
                  (str/join "\n" (for [[id files] dups]
                                   (str "  " id ": " (str/join ", " files))))
-                 "\nGive your migration a new id (rename its .up and .down files); see the migrations guide.")
+                 "\nGive your application's migration a new id (rename its .up and .down files); see the"
+                 " migrations guide. If neither is yours, report it to the libraries' authors.")
             {:type          :duplicate-migration-id
              :duplicate-ids dups}))))
 

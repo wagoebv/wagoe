@@ -960,6 +960,18 @@
       (is (db/table-exists? ctx :app_table))
       (is (db/table-exists? ctx :lib_table)))))
 
+(deftest ^:unit a-nested-duplicate-is-reported-where-it-lives
+  (let [root (io/file "target" (str "bou717-nested-" (System/nanoTime)))]
+    (try
+      (let [app (migration-dir! root 20261017120000 "app_table")
+            lib (str (.getPath (io/file root "lib")) "/")]
+        (spit (doto (io/file lib "tenant" "20261017120000-x.up.sql") io/make-parents) "SELECT 1")
+        (is (= {20261017120000 [(str app "20261017120000-app_table")
+                                (str lib "tenant/20261017120000-x")]}
+               (migrations/duplicate-migration-ids [app lib]))))
+      (finally
+        (doseq [file (reverse (file-seq root))] (.delete ^java.io.File file))))))
+
 (deftest ^:integration a-shared-migration-id-is-found-in-a-jar
   ;; An uberjar is how production boots: the ids come from jar entries there.
   (with-temp-dir
@@ -975,8 +987,8 @@
               prev   (.getContextClassLoader thread)]
           (try
             (.setContextClassLoader thread cl)
-            (is (= {"20261017120000" ["bou717a/migrations/20261017120000-x"
-                                      "bou717b/migrations/20261017120000-x"]}
+            (is (= {20261017120000 ["bou717a/migrations/20261017120000-x"
+                                    "bou717b/migrations/20261017120000-x"]}
                    (migrations/duplicate-migration-ids ["bou717a/migrations" "bou717b/migrations"])))
             (finally
               (.setContextClassLoader thread prev)
