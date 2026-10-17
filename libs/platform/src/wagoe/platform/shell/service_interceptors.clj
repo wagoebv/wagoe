@@ -29,6 +29,7 @@
             [wagoe.observability.metrics.core :as metrics]
             [wagoe.observability.errors.core :as error-reporting]
             [wagoe.platform.core.http.problem-details :as problem-details]
+            [wagoe.platform.shell.reported-errors :as reported-errors]
             [wagoe.observability.core.sql-redaction :as redaction])
   (:import [java.time Instant]
            [java.util UUID]))
@@ -167,13 +168,16 @@
 
                 ;; A failing reporter must not replace the operation's own
                 ;; exception, nor skip the logging and metrics after this.
-                (error-reporting/report-and-continue
-                 error-reporter
-                 (redaction/redacted-exception error)
-                 (str "Service operation failed: " operation-name)
-                 {:extra (pii/redact-for-log (merge {:operation operation-name} params context))
-                  :tags {:component "service"
-                         :operation operation-name}})))
+                ;; Once: the HTTP layer sees the same throwable (BOU-714).
+                (reported-errors/report-once!
+                 error
+                 #(error-reporting/report-and-continue
+                   error-reporter
+                   (redaction/redacted-exception error)
+                   (str "Service operation failed: " operation-name)
+                   {:extra (pii/redact-for-log (merge {:operation operation-name} params context))
+                    :tags {:component "service"
+                           :operation operation-name}}))))
             ctx)})
 
 (def service-audit-logging

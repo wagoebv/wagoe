@@ -3,6 +3,7 @@
             [clojure.test :refer [deftest is]]
             [wagoe.observability.errors.ports :as error-ports]
             [wagoe.observability.logging.ports :as log-ports]
+            [wagoe.platform.shell.http.interceptors :as http-interceptors]
             [wagoe.platform.shell.service-interceptors :as si]))
 
 (defn- recording-system
@@ -77,3 +78,25 @@
                                       {:error-reporter reporter})
         (catch Exception _))
       (is (= (if reported? 1 0) @captured) (str ex)))))
+
+(deftest ^:unit a-service-5xx-in-a-request-is-reported-once
+  ;; The service reports it, then the HTTP layer sees the same throwable (BOU-714).
+  (let [captured (atom [])
+        reporter #_{:clj-kondo/ignore [:missing-protocol-method]}
+        (reify
+          error-ports/IErrorReporter
+          (capture-exception [_ e _] (swap! captured conj (ex-message e)))
+          error-ports/IErrorContext
+          (add-breadcrumb! [_ _] nil))
+        system   {:error-reporter reporter}
+        request! (fn [msg]
+                   (http-interceptors/run-http-interceptors
+                    (fn [_] (si/execute-service-operation
+                             :get-user {} (fn [_] (throw (RuntimeException. ^String msg))) system))
+                    http-interceptors/default-http-interceptors
+                    {:request-method :get :uri "/x" :headers {}}
+                    system))]
+    (is (= 500 (:status (request! "first"))))
+    (is (= 1 (count @captured)) "once, not by the service and again by the HTTP layer")
+    (request! "second")
+    (is (= 2 (count @captured)) "a different exception is reported too")))

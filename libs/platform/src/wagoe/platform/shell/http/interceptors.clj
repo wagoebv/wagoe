@@ -50,6 +50,7 @@
             [wagoe.platform.core.http.client-ip :as client-ip]
             [wagoe.platform.core.http.errors :as errors]
             [wagoe.platform.core.http.problem-details :as problem-details]
+            [wagoe.platform.shell.reported-errors :as reported-errors]
             [buddy.core.nonce :as nonce]
             [buddy.core.codecs :as codecs]
             [wagoe.config :as config]
@@ -489,14 +490,16 @@
             (when-let [error-reporter (and (server-error? (error-status ctx)) (:error-reporter system))]
               ;; Redacted here too, for a reporter or tracer that is not
               ;; observability's own: those redact themselves (BOU-633).
-              (error-reporting/report-application-error
-               error-reporter
-               (redaction/redacted-exception exception)
-               "HTTP request failed"
-               {:context "http-request"
-                :method (name (:request-method request))
-                :uri (:uri request)
-                :correlation-id correlation-id}))
+              (reported-errors/report-once!
+               exception
+               #(error-reporting/report-application-error
+                 error-reporter
+                 (redaction/redacted-exception exception)
+                 "HTTP request failed"
+                 {:context "http-request"
+                  :method (name (:request-method request))
+                  :uri (:uri request)
+                  :correlation-id correlation-id})))
             ctx)})
 
 (defn- add-correlation-id [{:keys [correlation-id] :as ctx}]
