@@ -117,7 +117,8 @@
                   (nil? existing) (ports/insert-group repo data)
                   (and (contains? data :description) (not= (:description data) (:description existing)))
                   (ports/modify-group repo (assoc data :id (:id existing)))
-                  :else existing)
+                  ;; find-groups' counts are from before the import.
+                  :else (dissoc existing :member-count :grant-count))
         held    (ports/find-grants repo (:id group))
         {:keys [join leave stay add remove]}
         (group-core/import-changes {:members (ports/find-members repo (:id group)) :held held}
@@ -212,6 +213,9 @@
       []))
 
   (permission-holders [_ permission]
+    ;; A string would lose its first character to permission-str and match nobody.
+    (when-not (keyword? permission)
+      (throw (ex-info "A permission is a keyword" {:type :validation-error :field :permission})))
     (ports/find-permission-holders group-repository permission))
 
   (import-groups! [_ groups {:keys [replace?]}]

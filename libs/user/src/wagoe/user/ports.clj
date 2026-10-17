@@ -358,11 +358,9 @@
 
   (import-groups! [this groups opts]))
   ;; groups: [{:name :description :members [user-id …] :grants [{:permission :scope}]}].
-  ;; Upserts each group by name in one transaction, after checking every group,
-  ;; user and grant first. Adds members and grants; with opts {:replace? true}
-  ;; also removes those not listed. Creates the group tables where missing and
-  ;; audits as the single changes do. Returns per group {:group :created?
-  ;; :joined :left :grants-added :grants-removed}.
+  ;; Checks all, then upserts by name in one audited transaction; additive
+  ;; unless opts {:replace? true}. Returns per group {:group :created? :joined
+  ;; :left :grants-added :grants-removed}.
 
 ;; =============================================================================
 ;; Sign-in hooks
