@@ -87,6 +87,27 @@ iCal export/import, and admin UI components for scheduling applications.
 ;=> [{:event existing-event :overlap-start ... :overlap-end ...}]
 ----
 
+== UI components
+
+[source,clojure]
+----
+(require '[wagoe.calendar.core.ui :as ui])
+
+(ui/month-view 2026 3 events {:timezone   "Europe/Amsterdam"
+                              :event-href #(str "/appointments/" (:id %))
+                              :t          t-fn})
+(ui/week-view (java.time.LocalDate/of 2026 3 2) events {:t t-fn})
+----
+
+* An event's `:href`, or the `:event-href` option, turns its badge into a link.
+* Weekday and month labels are `[:t ...]` markers. They resolve only through
+  `wagoe.i18n.shell.render`; plain `hiccup2.core/html` prints them as `<t>`
+  tags. Pass `:t` (key -> string) to resolve them when the hiccup is built.
+* Multi-day events show on every day they cover, clipped to the visible range;
+  the week view puts them in an all-day row. Mark all-day events
+  `:all-day? true`: they show no time and keep their dates in the event's own
+  `:timezone`.
+
 == iCal export / import
 
 [source,clojure]
