@@ -56,6 +56,7 @@
                             :config (with-modules {:wagoe/jobs {:provider :memory :workers {:count 2}}})}]
     (let [ran (atom [])]
       (is (empty? (:wagoe/job-workers sys)) "a worker thread would race the test")
+      (is (not (contains? sys :wagoe/job-scheduler)) "nor would a recurring-job ticker")
       (job-ports/register-handler! (:wagoe/job-registry sys) :kit/probe
                                    (fn [args] (swap! ran conj args) {:success? true}))
       (job-ports/enqueue-job! (:wagoe/job-queue sys) :default

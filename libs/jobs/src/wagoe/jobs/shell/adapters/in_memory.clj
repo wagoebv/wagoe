@@ -489,3 +489,52 @@
      Sorted set of {:execute-at :job-id}"
   [state]
   @(:scheduled state))
+
+;; =============================================================================
+;; Idempotency keys and recurring state
+;; =============================================================================
+
+(defn- now-ms [] (System/currentTimeMillis))
+
+(defrecord InMemoryIdempotencyStore [claims]
+  ports/IIdempotencyStore
+  (claim-key! [_ scope key ttl-ms]
+    (let [k   [scope key]
+          now (now-ms)
+          [old new] (swap-vals! claims (fn [m]
+                                         (if (< now (get m k 0))
+                                           m
+                                           (assoc m k (+ now (long ttl-ms))))))]
+      (not= (get old k) (get new k))))
+  (release-key! [_ scope key]
+    (swap! claims dissoc [scope key]))
+  (purge-expired-keys! [_]
+    (let [now (now-ms)
+          [old new] (swap-vals! claims #(into {} (filter (fn [[_ until]] (< now until))) %))]
+      (- (count old) (count new)))))
+
+(defn create-in-memory-idempotency-store
+  "An idempotency store for one process."
+  []
+  (->InMemoryIdempotencyStore (atom {})))
+
+(defrecord InMemoryRecurringState [lease ticks]
+  ports/IRecurringState
+  (acquire-lease! [_ owner lease-ms]
+    (let [now (now-ms)]
+      (= owner (:owner (swap! lease (fn [{:keys [until] :as l}]
+                                      (if (or (nil? l) (= owner (:owner l)) (< until now))
+                                        {:owner owner :until (+ now (long lease-ms))}
+                                        l)))))))
+  (release-lease! [_ owner]
+    (swap! lease #(if (= owner (:owner %)) nil %)))
+  (last-tick [_ schedule-name]
+    (get @ticks schedule-name))
+  (record-tick! [_ schedule-name tick]
+    (swap! ticks assoc schedule-name tick)
+    tick))
+
+(defn create-in-memory-recurring-state
+  "Recurring-job state for one process: tickers sharing it take turns."
+  []
+  (->InMemoryRecurringState (atom nil) (atom {})))

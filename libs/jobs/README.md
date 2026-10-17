@@ -12,6 +12,8 @@ Redis-backed background job processing with:
 - ✅ Distributed job queuing (Redis-backed)
 - ✅ Priority queues (critical, high, normal, low)
 - ✅ Scheduled jobs (run at specific time)
+- ✅ Recurring jobs on cron schedules, one replica enqueueing each tick
+- ✅ Idempotency keys (`enqueue-once!`)
 - ✅ Automatic retries with exponential backoff
 - ✅ Dead letter queue for failed jobs
 - ✅ Job monitoring and statistics
@@ -189,6 +191,27 @@ Max: 60 seconds delay
  :max-delay-ms 60000           ; Max retry delay (default: 60 seconds)
  :jitter true}                 ; Add random jitter (default: true)
 ```
+
+---
+
+## Recurring Jobs
+
+```clojure
+:wagoe/jobs {:recurring {:nightly-report {:cron "0 2 * * *"
+                                          :zone "Europe/Amsterdam"}}}
+```
+
+Each tick enqueues a `:nightly-report` job; register its handler as usual.
+Only the replica holding the ticker lease enqueues, and each tick is claimed
+as an idempotency key, so it is enqueued once. After downtime the latest
+missed tick runs once and earlier ones are skipped. Zones default to UTC.
+
+At runtime: `(recurring/schedule-recurring! scheduler :nightly-report "0 2 * * *" {:zone "UTC"})`
+on the `:wagoe/job-scheduler` component (`wagoe.jobs.shell.recurring`).
+
+`(recurring/enqueue-once! queue idempotency-store :default job key)` enqueues
+unless the job type and `key` were seen before; it returns nil for a duplicate.
+`:wagoe/idempotency-store` is the store, usable by any module.
 
 ---
 

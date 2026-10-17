@@ -14,7 +14,13 @@ automatic retries with exponential backoff, and multi-tenant support.
 | Pure functions: job creation, state transitions, retry logic
 
 | `wagoe.jobs.ports`
-| Protocols: `IJobQueue`, `IJobStore`, `IJobStats`, `IJobWorker`, `IJobRegistry`
+| Protocols: `IJobQueue`, `IJobStore`, `IJobStats`, `IJobWorker`, `IJobRegistry`, `IIdempotencyStore`, `IRecurringState`
+
+| `wagoe.jobs.core.cron`
+| Pure cron parsing and next-run calculation
+
+| `wagoe.jobs.shell.recurring`
+| Recurring-job ticker and `enqueue-once!`
 
 | `wagoe.jobs.schema`
 | Malli schemas: job states, priorities, retry config
@@ -77,6 +83,67 @@ Priority levels: `:critical`, `:high`, `:default`, `:low`, `:bulk`.
 (worker/start-pool! pool)
 (worker/stop-pool! pool)
 ----
+
+== Recurring jobs
+
+Declare cron schedules on `:wagoe/jobs`. Each tick enqueues a job of that
+type; the handler is the one registered for it.
+
+[source,clojure]
+----
+:wagoe/jobs {:provider  :db
+             :recurring {:nightly-report {:cron "0 2 * * *"
+                                          :zone "Europe/Amsterdam"
+                                          :args {:kind :sales}}}
+             :scheduler {:tick-ms 5000 :lease-ms 30000 :zone "UTC"}}
+----
+
+Or at runtime, on the `:wagoe/job-scheduler` component:
+
+[source,clojure]
+----
+(require '[wagoe.jobs.shell.recurring :as recurring])
+
+(recurring/schedule-recurring! scheduler :nightly-report "0 2 * * *"
+                               {:zone "Europe/Amsterdam" :queue :reports})
+----
+
+Expressions have five fields (minute, hour, day of month, month, day of
+week) with `*`, lists, ranges, steps and names (`MON`, `JAN`), plus
+`@hourly`, `@daily`, `@weekly`, `@monthly` and `@yearly`. A malformed
+expression, an unknown zone, or one that never fires fails the boot.
+
+How it behaves:
+
+* *One replica enqueues.* Every replica runs a ticker; the one holding a
+  lease enqueues (a database row timed by the database clock under `:db`,
+  `SET NX PX` under `:redis`). Each tick is also claimed as an idempotency key,
+  job type plus scheduled instant, so two tickers overlapping after a lease
+  handover still enqueue it once.
+* *Zones are wall-clock.* The zone defaults to UTC. A time skipped by a DST
+  jump runs at the shifted instant; a time that occurs twice runs once.
+* *Missed ticks run at most once.* After downtime a schedule runs its latest
+  missed tick once and skips the earlier ones. A new schedule does not run for
+  ticks before it was registered.
+* *A tick is enqueued at most once.* A process that dies between claiming a
+  tick and enqueueing it loses that tick.
+* `:provider :memory` keeps all of this in one process.
+
+== Idempotency keys
+
+`enqueue-once!` enqueues unless the job type and key were claimed before, so a
+retried request does not queue the same work twice. It returns the job id, or
+nil for a duplicate. Claims last a week unless `:ttl-ms` says otherwise.
+
+[source,clojure]
+----
+(recurring/enqueue-once! job-queue idempotency-store :default receipt-job
+                         (str "receipt/" order-id))
+----
+
+The store behind it, `:wagoe/idempotency-store`, implements
+`wagoe.jobs.ports/IIdempotencyStore` (`claim-key!`, `release-key!`) on the
+jobs provider's backend, for any module to use.
 
 == Retry behaviour
 
