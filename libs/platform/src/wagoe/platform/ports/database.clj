@@ -201,6 +201,11 @@
        (get-table-info sqlite-adapter ds :users)
        ;; => [{:name \"id\" :type \"TEXT\" :not-null true :primary-key true} ...]")
 
+  (key-columns [this datasource table-name key-name]
+    "The columns of key `key-name` on `table-name`, in key order, or nil where
+     the driver's refusal names them itself. MySQL's names only the key
+     (BOU-712).")
+
   (engine [this]
     "Which database this is: :postgresql, :mysql, :sqlite or :h2. Never nil.
      Ask this, not `dialect`, not the driver and not the product name (ADR-039).")

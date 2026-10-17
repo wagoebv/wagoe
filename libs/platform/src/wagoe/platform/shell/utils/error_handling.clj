@@ -110,7 +110,7 @@
                                   :request-method (name (or request-method :unknown))
                                   :request-uri uri})]
 
-           (log/logp (problem/status-log-level (first (problem/exception-status ex error-mappings)))
+           (log/logp (problem/exception-log-level ex error-mappings)
                      "HTTP request failed with enhanced context"
                      {:correlation-id correlation-id
                       :uri uri
