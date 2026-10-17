@@ -166,22 +166,28 @@
   (or (and (:role after) (not= (:role before) (:role after)))
       (user-core/deactivates? before after)))
 
+(defn- touches-access?
+  "Whether `after` sets a key the admin guard and session ending judge."
+  [after]
+  (some #(contains? after %) [:role :active]))
+
 (defn- change-access!
   "Run `write!`, the change `after` to user `user-id`: refused by the admin
    guard, and ending the user's sessions when it changes their access. A
    change to role or active reads the user under the admin lock, so the guard
-   sees a concurrent promotion (BOU-685). Returns what `write!` returned."
+   sees a concurrent promotion (BOU-685). Returns {:result <what write!
+   returned>}, with :before, the user read under the lock, when it locked."
   [user-repository session-repository user-id after write!]
-  (if-not (or (contains? after :role) (contains? after :active))
-    (write!)
-    (let [[before result]
+  (if-not (touches-access? after)
+    {:result (write!)}
+    (let [{:keys [before result] :as out}
           (locked-write! user-repository
                          #(let [before (.find-user-by-id user-repository user-id)]
                             [(when (and before (user-core/removes-admin? before after)) [before])
-                             (fn [] [before (write!)])]))]
+                             (fn [] {:before before :result (write!)})]))]
       (when (and result before (ends-sessions? before after))
         (.invalidate-all-user-sessions session-repository user-id))
-      result)))
+      out)))
 
 (defn- audit-quietly!
   "Record `entry-fn`'s audit entry for `user-id`; a failed write warns and does
@@ -590,23 +596,23 @@
              ;; A partial update is validated with the stored values of the
              ;; required keys, but writes only its own: a stale role written
              ;; back would undo a concurrent promotion unguarded (BOU-685).
-             user-entity (cond->> input
-                           old-user (merge (select-keys old-user [:email :name :role :active :created-at])))]
+             merged (cond->> input
+                      old-user (merge (select-keys old-user [:email :name :role :active :created-at])))]
          ;; 1. Validate update using pure core function
-         (let [validation-result (user-core/validate-user-update-request user-entity)]
+         (let [validation-result (user-core/validate-user-update-request merged)]
            (when-not (:valid? validation-result)
              (throw (ex-info "Invalid user data"
                              {:type :validation-error
                               :errors (:errors validation-result)
-                              :original-data user-entity
+                              :original-data merged
                               :interface-type :cli}))))
 
          ;; The database's refusal names no column on MySQL, so the email is
          ;; checked first, in the shape the platform gives a named one; a form
          ;; shows it on its field (BOU-673). The constraint stays the backstop.
-         (when-let [other (when (and old-user (not= (:email user-entity) (:email old-user)))
-                            (.find-user-by-email user-repository (:email user-entity)))]
-           (when (not= (:id other) (:id user-entity))
+         (when-let [other (when (and old-user (not= (:email merged) (:email old-user)))
+                            (.find-user-by-email user-repository (:email merged)))]
+           (when (not= (:id other) (:id input))
              (throw (ex-info "Another record already has this email"
                              {:type :conflict :constraint :unique :field :email}))))
 
@@ -614,28 +620,32 @@
          (let [current-time (current-timestamp)
                prepared-user (user-core/prepare-user-for-update input current-time)
                ;; 3. Persist using impure shell persistence layer
-               updated-user (change-access! user-repository session-repository (:id input) input
-                                            #(.update-user user-repository prepared-user))]
+               {:keys [before result]}
+               (change-access! user-repository session-repository (:id input) input
+                               #(.update-user user-repository prepared-user))
+               ;; The row the guard judged, when it locked.
+               old-user (or before old-user)
+               ;; A partial update returns the whole user, as the port promises.
+               after (some->> result (merge old-user))]
 
-          ;; 4. Create audit log entry. A partial update returns the whole
-          ;; user, as the port promises.
-           (when-let [after (some->> updated-user (merge old-user))]
-             (when old-user
-               (let [{:keys [actor-id actor-email ip-address user-agent]}
-                     (effective-audit-context {:default-actor-id (:id after)
-                                               :default-actor-email (:email after)})
-                     audit-entry (audit-core/update-user-audit-entry
-                                  actor-id
-                                  actor-email
-                                  (:id after)      ; target-user-id
-                                  (:email after)   ; target-user-email
-                                  old-user         ; old user data
-                                  updated-user     ; new user data
-                                  ip-address
-                                  user-agent)]
-                 (.create-audit-log audit-repository audit-entry)))
-             ;; Remove sensitive data before returning.
-             (dissoc after :password-hash)))))
+           ;; 4. Create audit log entry
+           (when (and after old-user)
+             (let [{:keys [actor-id actor-email ip-address user-agent]}
+                   (effective-audit-context {:default-actor-id (:id after)
+                                             :default-actor-email (:email after)})
+                   audit-entry (audit-core/update-user-audit-entry
+                                actor-id
+                                actor-email
+                                (:id after)      ; target-user-id
+                                (:email after)   ; target-user-email
+                                old-user         ; old user data
+                                result           ; new user data
+                                ip-address
+                                user-agent)]
+               (.create-audit-log audit-repository audit-entry)))
+
+           ;; Remove sensitive data before returning.
+           (some-> after (dissoc :password-hash)))))
      {:system {:user-repository user-repository
                :session-repository session-repository
                :auth-service auth-service}}))
@@ -653,9 +663,9 @@
              ;; written, so a concurrent password or MFA change is not undone.
              after  {:id user-id :active false}
              result (when user
-                      (change-access! user-repository session-repository user-id after
-                                      #(.update-user user-repository
-                                                     (user-core/prepare-user-for-update after (current-timestamp)))))]
+                      (:result (change-access! user-repository session-repository user-id after
+                                               #(.update-user user-repository
+                                                              (user-core/prepare-user-for-update after (current-timestamp))))))]
          (when result
            (audit-quietly! audit-repository audit-core/deactivate-user-audit-entry user-id (:email user)))
          (boolean result)))
@@ -789,9 +799,9 @@
                current-time (current-timestamp)
                ;; 5. Update user with new password hash
                updated-user (.update-user user-repository
-                                          (assoc user
-                                                 :password-hash new-password-hash
-                                                 :updated-at current-time))]
+                                          {:id            user-id
+                                           :password-hash new-password-hash
+                                           :updated-at    current-time})]
          ;; 5b. Invalidate every session for this user (BOU-191): a credential
          ;;     change must not leave older sessions authenticated. The caller
          ;;     re-authenticates with the new password.

@@ -993,46 +993,23 @@
   "Formats the session validation response."
   {:name ::format-session-validation-response
    :enter (fn [context]
-            (let [session (:session context)
-                  interface-type (:interface-type context)]
-
-              (case interface-type
-                :http
-                (let [response {:status 200
-                                :body {:valid true
-                                       :userId (type-conv/uuid->string (:user-id session))
-                                       :expiresAt (type-conv/instant->string (:expires-at session))}}]
-                  (-> context
-                      (assoc :response response)
-                      (ctx/add-breadcrumb :operation :session-validate-formatted
-                                          {:user-id (:user-id session)
-                                           :response-format :json})))
-
-                :cli
-                (let [response {:status :success
-                                :data {:valid true
-                                       :user-id (:user-id session)
-                                       :expires-at (:expires-at session)}
-                                :message "Session is valid"}]
-                  (-> context
-                      (assoc :response response)
-                      (ctx/add-breadcrumb :operation :session-validate-formatted
-                                          {:user-id (:user-id session)
-                                           :response-format :cli}))))))})
+            (let [session (:session context)]
+              (-> context
+                  (assoc :response {:status 200
+                                    :body {:valid true
+                                           :userId (type-conv/uuid->string (:user-id session))
+                                           :expiresAt (type-conv/instant->string (:expires-at session))}})
+                  (ctx/add-breadcrumb :operation :session-validate-formatted
+                                      {:user-id (:user-id session)
+                                       :response-format :json}))))})
 
 (defn create-session-validation-pipeline
-  "Creates pipeline for validating a session token."
-  [interface-type]
-  (case interface-type
-    :http (interceptors/create-http-pipeline
-           validate-session-token-input
-           validate-user-session
-           format-session-validation-response)
-
-    :cli (interceptors/create-cli-pipeline
-          validate-session-token-input
-          validate-user-session
-          format-session-validation-response)))
+  "Creates the HTTP pipeline for validating a session token."
+  []
+  (interceptors/create-http-pipeline
+   validate-session-token-input
+   validate-user-session
+   format-session-validation-response))
 
 ;; -----------------------------------------------------------------------------
 ;; INVALIDATE SESSION (LOGOUT) INTERCEPTORS
@@ -1067,38 +1044,16 @@
   "Formats the session invalidation response."
   {:name ::format-session-invalidation-response
    :enter (fn [context]
-            (let [masked-token (:masked-token context)
-                  interface-type (:interface-type context)]
-
-              (case interface-type
-                :http
-                (let [response {:status 204}] ; No content for successful logout
-                  (-> context
-                      (assoc :response response)
-                      (ctx/add-breadcrumb :operation :session-logout-formatted
-                                          {:session-token masked-token
-                                           :response-format :json})))
-
-                :cli
-                (let [response {:status :success
-                                :data {:session-token masked-token}
-                                :message "Session invalidated successfully"}]
-                  (-> context
-                      (assoc :response response)
-                      (ctx/add-breadcrumb :operation :session-logout-formatted
-                                          {:session-token masked-token
-                                           :response-format :cli}))))))})
+            (-> context
+                (assoc :response {:status 204}) ; No content for successful logout
+                (ctx/add-breadcrumb :operation :session-logout-formatted
+                                    {:session-token (:masked-token context)
+                                     :response-format :json})))})
 
 (defn create-session-invalidation-pipeline
-  "Creates pipeline for invalidating a session (logout)."
-  [interface-type]
-  (case interface-type
-    :http (interceptors/create-http-pipeline
-           validate-session-token-input
-           invalidate-user-session
-           format-session-invalidation-response)
-
-    :cli (interceptors/create-cli-pipeline
-          validate-session-token-input
-          invalidate-user-session
-          format-session-invalidation-response)))
+  "Creates the HTTP pipeline for invalidating a session (logout)."
+  []
+  (interceptors/create-http-pipeline
+   validate-session-token-input
+   invalidate-user-session
+   format-session-invalidation-response))

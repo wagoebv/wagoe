@@ -231,7 +231,7 @@
                          :mfa-enabled (:mfa-enabled updated-user)
                          :has-secret (boolean (:mfa-secret updated-user))
                          :backup-codes-count (count (:mfa-backup-codes updated-user))})
-              (.update-user user-repository updated-user)
+              (.update-user user-repository (assoc updates :id (:id user)))
               {:success? true})
             ;; Invalid verification code
             {:success? false
@@ -265,9 +265,8 @@
             can-disable (mfa-core/can-disable-mfa? user)]
         (if (:can-disable? can-disable)
           ;; Disable MFA
-          (let [updates (mfa-core/prepare-mfa-disablement user)
-                updated-user (merge user updates)]
-            (.update-user user-repository updated-user)
+          (let [updates (mfa-core/prepare-mfa-disablement user)]
+            (.update-user user-repository (assoc updates :id (:id user)))
             {:success? true})
           ;; Cannot disable MFA
           {:success? false

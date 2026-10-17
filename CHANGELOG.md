@@ -108,8 +108,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
-- **A user promoted to admin concurrently could be demoted past the last-admin guard** (BOU-685). Role and active
-  changes now decide under the admin lock, and a partial edit writes only its own fields. No action needed.
+- **A concurrent promotion, demotion or deactivation could be undone past the last-admin guard** (BOU-685). Role and
+  active changes decide under the admin lock; edits and logins write only their own fields. No action needed.
 - **`wagoe session list` and `session invalidate` were unreachable, and are removed** (BOU-692). A role change or
   deactivation already ends a user's sessions.
 - **`POST /api/v1/auth/login` and `/api/v1/sessions` answered 200 to a failed login** (BOU-691). Wrong credentials now

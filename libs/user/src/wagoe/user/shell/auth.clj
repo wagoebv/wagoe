@@ -319,10 +319,10 @@
                    ;; Password verification failed
                    (not password-valid?)
                    (let [failure-updates (auth-core/calculate-failed-login-consequences
-                                          user auth-config current-time)
-                         updated-user (merge user failure-updates)]
-                      ;; Update user with failed login consequences (I/O)
-                     (.update-user user-repository updated-user)
+                                          user auth-config current-time)]
+                     ;; Only the changed keys: the role and active read above
+                     ;; may be stale (BOU-685).
+                     (.update-user user-repository (assoc failure-updates :id (:id user)))
                      (log/warn "Authentication failed - invalid password" {:email email})
                      {:success? false
                       :error {:type    :authentication-failed
@@ -361,15 +361,14 @@
                          user-after-mfa (if (:used-backup-code? mfa-verification)
                                           (do
                                             (log/info "Backup code used for MFA" {:email email})
-                                            (let [updated (merge user (:updates mfa-verification))]
-                                              (.update-user user-repository updated)
-                                              updated))
+                                            (let [updates (:updates mfa-verification)]
+                                              (.update-user user-repository (assoc updates :id (:id user)))
+                                              (merge user updates)))
                                           user)
 
                           ;; Update user for successful login (I/O)  
                          login-updates (auth-core/prepare-successful-login-updates user-after-mfa current-time)
-                         updated-user (merge user-after-mfa login-updates)
-                         _ (.update-user user-repository updated-user)
+                         _ (.update-user user-repository (assoc login-updates :id (:id user)))
 
                          {session-policy :policy session :session}
                          (open-session! auth-service user login-risk login-context current-time)]
