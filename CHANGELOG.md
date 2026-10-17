@@ -32,7 +32,7 @@ for what is public API, what is internal, and how deprecations are announced.
 ### Added
 
 - **`permission-holders` and `import-groups!` on the group service** (BOU-718): who holds a permission in one query;
-  move existing grants onto groups idempotently, in one audited transaction (`{:replace? true}` removes the rest).
+  move grants onto groups idempotently, in one audited transaction. Group names are now unique; boot logs any duplicates.
 - **Search indexes live on `:wagoe/search`** (BOU-705): pass definitions under `:indexes` in config, or as a
   module's `:search` part. `wagoe.search.core.index/defsearch` binds one without registering it.
 - **User groups with scoped permission grants** (BOU-701): manage them at `/web/admin/groups`, check them with

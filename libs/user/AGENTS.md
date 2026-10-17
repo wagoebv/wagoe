@@ -406,7 +406,11 @@ grants through their groups on every call; `wagoe.user.core.group` has `holds?`,
   writes and audits in one transaction (the audit repository's queries join it, so
   a failed entry rolls back). Additive unless `:replace?`. `ensure-tables` runs
   `initialize-user-schema!` when the group tables are missing, so an app migration
-  can run it before the user library's. Two existing groups with the name are a `:conflict`.
+  can run it before the user library's. A concurrent import that loses the race
+  gets `:conflict`; run it again.
+- `user_groups.name` is unique (`uk_user_groups_name`): create, rename and import
+  answer `:conflict` with `:field :name`. Where names already repeat, boot logs
+  them at ERROR and goes on without the key.
 
 ## Turning the web UI off
 

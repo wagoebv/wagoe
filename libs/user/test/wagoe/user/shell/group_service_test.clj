@@ -202,12 +202,46 @@
         (is (= :validation-error (:type (refusal #(ports/import-groups! svc [good good] {}))))
             "a group listed twice")
         (is (= :validation-error (:type (refusal #(ports/import-groups! svc [{:name "X" :colour "red"}] {})))))
-        (is (empty? (ports/list-groups svc)) "nothing is written before every group is checked")
-        (testing "a failure while writing rolls the whole import back"
-          (ports/create-group svc {:name "Twice"})
-          (ports/create-group svc {:name "Twice"})
-          (is (= :conflict (:type (refusal #(ports/import-groups! svc [good {:name "Twice"}] {})))))
-          (is (= ["Twice" "Twice"] (map :name (ports/list-groups svc)))))))))
+        (is (empty? (ports/list-groups svc)) "nothing is written before every group is checked")))))
+
+(deftest ^:integration a-failed-audit-entry-rolls-the-import-back
+  (test-db/with-db "user_group_import_rollback"
+    (fn [ctx]
+      (persistence/initialize-user-schema! ctx)
+      (let [users  (persistence/create-user-repository ctx)
+            ada    (ports/create-user users {:email "ada@example.com" :name "Ada" :role :user :active true
+                                             :password-hash "x"})
+            broken (reify ports/IUserAuditRepository
+                     (create-audit-log [_ _] (throw (ex-info "audit down" {:type :internal-error})))
+                     (find-audit-logs [_ _] [])
+                     (find-audit-logs-by-user [_ _ _] []))
+            repo   (group-persistence/create-group-repository ctx)
+            svc    (sut/create-group-service repo users broken (sut/prepare-settings nil))]
+        (is (= "audit down" (ex-message (try (ports/import-groups! svc [{:name "Finance" :members [(:id ada)]}] {})
+                                             nil
+                                             (catch clojure.lang.ExceptionInfo e e)))))
+        (is (empty? (ports/find-groups repo)))))))
+
+(deftest ^:integration concurrent-imports-of-a-new-group
+  ;; One creates it; the other finds it or gets a :conflict, and a rerun works.
+  (with-service nil
+    (fn [{:keys [svc user!]}]
+      (let [ada     (user! "ada@example.com")
+            bob     (user! "bob@example.com")
+            start   (promise)
+            import! (fn [member]
+                      (future @start
+                              (try (ports/import-groups! svc [{:name "Finance" :members [(:id member)]}] {})
+                                   :ok
+                                   (catch clojure.lang.ExceptionInfo e (:type (ex-data e))))))
+            runs    [(import! ada) (import! bob)]]
+        (deliver start true)
+        (let [outcomes (map deref runs)]
+          (is (every? #{:ok :conflict} outcomes) (pr-str outcomes))
+          (is (some #{:ok} outcomes)))
+        (is (= ["Finance"] (map :name (ports/list-groups svc))))
+        (ports/import-groups! svc [{:name "Finance" :members [(:id ada) (:id bob)]}] {})
+        (is (= 2 (:member-count (first (ports/list-groups svc)))))))))
 
 (deftest ^:integration an-import-creates-the-tables-it-needs
   ;; As in an application's migration ordered before the user library's.

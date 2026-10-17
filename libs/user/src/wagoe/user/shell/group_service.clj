@@ -127,7 +127,12 @@
     (doseq [user leave] (ports/remove-member repo (:id group) (:id user)))
     (doseq [grant remove] (ports/remove-grant repo (:id group) (:id grant)))
     (let [added (mapv #(ports/insert-grant repo (assoc % :group-id (:id group))) add)]
-      (doseq [user join] (ports/insert-member repo (:id group) (:id user)))
+      (doseq [user join]
+        ;; False is a concurrent import adding them first. Stop: on PostgreSQL
+        ;; the refused row has aborted the transaction.
+        (when-not (ports/insert-member repo (:id group) (:id user))
+          (throw (ex-info "The group changed during the import; run it again"
+                          {:type :conflict :group (:name group)}))))
       (when (seq leave) (audit! audit-repository :group-leave group leave held true))
       (when (seq remove) (audit! audit-repository :grant-remove group stay remove true))
       (when (seq added) (audit! audit-repository :grant-add group stay added true))

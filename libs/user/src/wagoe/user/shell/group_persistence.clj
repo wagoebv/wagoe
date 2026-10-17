@@ -47,11 +47,20 @@
    :from   [[:user_group_grants :t]]
    :where  [:= :t.group_id :g.id]})
 
-(defn- member? [ctx group-id user-id]
-  (some? (db/execute-one! ctx {:select [:id]
-                               :from   [:user_group_members]
-                               :where  [:and [:= :group_id (id-str group-id)]
-                                        [:= :user_id (id-str user-id)]]})))
+(defn- unique-violation?
+  "Whether `e` is the :conflict the execution layer makes of a unique key."
+  [e]
+  (= [:conflict :unique] ((juxt :type :constraint) (ex-data e))))
+
+(defn- name-taken!
+  "Run `f`, a write to user_groups, turning its unique name refused into a
+   :conflict on :name the admin form shows."
+  [f]
+  (try (f)
+       (catch clojure.lang.ExceptionInfo e
+         (throw (if (unique-violation? e)
+                  (ex-info "Another group has this name" {:type :conflict :field :name} e)
+                  e)))))
 
 (defrecord DatabaseUserGroupRepository [ctx]
   ports/IUserGroupRepository
@@ -71,20 +80,20 @@
   (insert-group [_ group]
     (let [stored (assoc (select-keys group [:name :description])
                         :id (UUID/randomUUID) :created-at (Instant/now) :updated-at nil)]
-      (db/execute-update! ctx {:insert-into :user_groups
-                               :values      [{:id          (tc/uuid->string (:id stored))
-                                              :name        (:name stored)
-                                              :description (:description stored)
-                                              :created_at  (tc/instant->string (:created-at stored))}]})
+      (name-taken! #(db/execute-update! ctx {:insert-into :user_groups
+                                             :values      [{:id          (tc/uuid->string (:id stored))
+                                                            :name        (:name stored)
+                                                            :description (:description stored)
+                                                            :created_at  (tc/instant->string (:created-at stored))}]}))
       stored))
 
   (modify-group [this group]
-    (when (pos? (db/execute-update! ctx {:update :user_groups
-                                         :set    (cond-> {:name       (:name group)
-                                                          :updated_at (tc/instant->string (Instant/now))}
-                                                   (contains? group :description)
-                                                   (assoc :description (:description group)))
-                                         :where  [:= :id (id-str (:id group))]}))
+    (when (pos? (name-taken! #(db/execute-update! ctx {:update :user_groups
+                                                       :set    (cond-> {:name       (:name group)
+                                                                        :updated_at (tc/instant->string (Instant/now))}
+                                                                 (contains? group :description)
+                                                                 (assoc :description (:description group)))
+                                                       :where  [:= :id (id-str (:id group))]})))
       (ports/find-group this (:id group))))
 
   (remove-group [_ group-id]
@@ -113,12 +122,13 @@
                                               :user_id    (id-str user-id)
                                               :created_at (tc/instant->string (Instant/now))}]})
       true
-      ;; A member already: the unique key refuses the row.
-      (catch Exception e
-        (if (member? ctx group-id user-id)
-          false
-          ;; The group or user went meanwhile: a key refused the row.
-          (throw (ex-info "Could not add the member" {:type :conflict} e))))))
+      ;; Read nothing after: in a PostgreSQL transaction the refusal aborts it.
+      (catch clojure.lang.ExceptionInfo e
+        (cond
+          (unique-violation? e) false
+          ;; The group or user went meanwhile: a foreign key refused the row.
+          (= :conflict (:type (ex-data e))) (throw (ex-info "Could not add the member" {:type :conflict} e))
+          :else (throw e)))))
 
   (remove-member [_ group-id user-id]
     (pos? (db/execute-update! ctx {:delete-from :user_group_members

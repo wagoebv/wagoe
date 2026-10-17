@@ -7,6 +7,7 @@
             [clojure.test :refer [deftest is testing]]
             [next.jdbc :as jdbc]
             [support.test-db :as test-db]
+            [wagoe.platform.database :as db]
             [wagoe.user.ports :as ports]
             [wagoe.user.shell.group-persistence :as sut]
             [wagoe.user.shell.persistence :as persistence]))
@@ -138,6 +139,22 @@
         (is (= #{[(:id ada) {}]} (holders :report/view)))
         (is (= #{} (holders :nobody/holds)))))))
 
+(deftest ^:contract a-group-name-is-unique
+  (test-db/with-db "user_group_names"
+    (fn [ctx]
+      (persistence/initialize-user-schema! ctx)
+      (let [repo  (sut/create-group-repository ctx)
+            audit (ports/insert-group repo {:name "Audit"})
+            taken #(try (%) nil (catch clojure.lang.ExceptionInfo e (select-keys (ex-data e) [:type :field])))]
+        (ports/insert-group repo {:name "Finance"})
+        (is (= {:type :conflict :field :name} (taken #(ports/insert-group repo {:name "Finance"}))))
+        (is (= {:type :conflict :field :name} (taken #(ports/modify-group repo {:id (:id audit) :name "Finance"}))))
+        (testing "names that already repeat do not stop boot"
+          (db/drop-index-if-exists! ctx "uk_user_groups_name" :user_groups)
+          (ports/insert-group repo {:name "Finance"})
+          (persistence/initialize-user-schema! ctx)
+          (is (= 2 (count (filter #(= "Finance" (:name %)) (ports/find-groups repo))))))))))
+
 (defn- index-names
   "The lower-case names of `table`'s indexes, from the JDBC catalog."
   [ctx table]
@@ -159,4 +176,5 @@
       (is (set/subset? #{"idx_user_group_members_user_id" "uk_user_group_members_group_user"}
                        (index-names ctx "user_group_members")))
       (is (set/subset? #{"idx_user_group_grants_group_id" "idx_user_group_grants_permission"}
-                       (index-names ctx "user_group_grants"))))))
+                       (index-names ctx "user_group_grants")))
+      (is (contains? (index-names ctx "user_groups") "uk_user_groups_name")))))

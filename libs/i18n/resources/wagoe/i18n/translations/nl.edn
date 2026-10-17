@@ -315,6 +315,7 @@
  :user.groups/scope-hint "Een EDN-map, zoals {:domain-id 42}. Leeg betekent geen bereik."
  :user.groups/button-add-grant "Recht toevoegen"
  :user.groups/error-name "Een groep heeft een naam van hoogstens 255 tekens nodig."
+ :user.groups/error-name-taken "Er is al een groep met deze naam."
  :user.groups/error-permission "Deze applicatie kent dat recht niet."
  :user.groups/error-scope "Het bereik moet een EDN-map zijn die deze applicatie accepteert."
  :user.groups/error-no-user "Geen gebruiker heeft dat e-mailadres."
