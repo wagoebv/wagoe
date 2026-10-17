@@ -130,6 +130,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **A typed 4xx reached the error tracker and marked its trace span errored** (BOU-714). Only 5xx and untyped errors
   do now; service operations report their 5xx, which they never did. Nothing to change.
+- **iCal export wrote zones ical4j lacks (America/Coyhaique) in UTC, and each zone's full history** (BOU-720).
+  VTIMEZONEs now come from the JVM's tz rules, trimmed to the years the feed's events cover.
 - **Admin dashboard linked to Groups and Audit with the user web UI switched off** (BOU-713). It now shows a card only
   when its page is mounted.
 - **An app migration sharing an id with a library's silently never ran, or the library's didn't** (BOU-717). Boot and
