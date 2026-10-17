@@ -12,9 +12,10 @@
    :date-time-format "yyyy-MM-dd HH:mm:ss"
    :currency/iso-code "EUR"
 
-   ;; Feature flags
+   ;; Feature flags. :user-web-ui false drops the user module's HTML pages
+   ;; (API-only); see "Turning the web UI off" in libs/user/AGENTS.md.
    :features
-   {:user-web-ui {:enabled? #or [#env WAG_WEB_UI_ENABLED true]}}
+   {:user-web-ui {:enabled? #boolean #or [#env WAG_WEB_UI_ENABLED "true"]}}
 
    ;; User validation configuration - Production settings
    :user-validation

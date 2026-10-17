@@ -715,6 +715,12 @@
                        :summary "OIDC redirect back from the provider"}}]]
    :static []})
 
+(defn web-ui-enabled?
+  "False when `:wagoe/settings :features :user-web-ui :enabled?` is false:
+   an API-only deployment, where this module contributes no HTML pages."
+  [config]
+  (get-in config [:active :wagoe/settings :features :user-web-ui :enabled?] true))
+
 (defn user-routes
   "This module's contribution to the application's route table.
 
@@ -722,34 +728,35 @@
    :web    mounted under /web, and absent when the web UI is switched off
    :static nothing — user's assets are served at handler level"
   [user-service mfa-service config]
-  (let [web-ui-enabled? (get-in config [:active :wagoe/settings :features :user-web-ui :enabled?] true)]
-    {:api    (api-routes user-service mfa-service)
-     :web    (when web-ui-enabled? (web-routes user-service mfa-service config))
-     :static []}))
+  {:api    (api-routes user-service mfa-service)
+   :web    (when (web-ui-enabled? config) (web-routes user-service mfa-service config))
+   :static []})
 
 (defn group-routes
-  "Group management, mounted under /web/admin beside the admin UI: admins only."
-  [user-service group-service]
+  "Group management, mounted under /web/admin beside the admin UI: admins only.
+   Absent when the web UI is switched off."
+  [user-service group-service config]
   (let [guard [(user-middleware/flexible-authentication-middleware user-service)
                user-middleware/require-admin-middleware]
         route (fn [path methods] [path (assoc methods :no-doc true :middleware guard)])]
     {:api        []
      :static     []
      :web-prefix "/web/admin"
-     :web        [["/groups"
-                   (route ""
-                          {:get  {:handler (group-handlers/list-page group-service)}
-                           :post {:handler (group-handlers/create group-service)}})
-                   (route "/:id"
-                          {:get  {:handler (group-handlers/show group-service)}
-                           :post {:handler (group-handlers/update-group group-service)}})
-                   (route "/:id/delete"
-                          {:post {:handler (group-handlers/delete-group group-service)}})
-                   (route "/:id/members"
-                          {:post {:handler (group-handlers/add-member user-service group-service)}})
-                   (route "/:id/members/:user-id/remove"
-                          {:post {:handler (group-handlers/remove-member group-service)}})
-                   (route "/:id/grants"
-                          {:post {:handler (group-handlers/add-grant group-service)}})
-                   (route "/:id/grants/:grant-id/remove"
-                          {:post {:handler (group-handlers/remove-grant group-service)}})]]}))
+     :web        (when (web-ui-enabled? config)
+                   [["/groups"
+                    (route ""
+                           {:get  {:handler (group-handlers/list-page group-service)}
+                            :post {:handler (group-handlers/create group-service)}})
+                    (route "/:id"
+                           {:get  {:handler (group-handlers/show group-service)}
+                            :post {:handler (group-handlers/update-group group-service)}})
+                    (route "/:id/delete"
+                           {:post {:handler (group-handlers/delete-group group-service)}})
+                    (route "/:id/members"
+                           {:post {:handler (group-handlers/add-member user-service group-service)}})
+                    (route "/:id/members/:user-id/remove"
+                           {:post {:handler (group-handlers/remove-member group-service)}})
+                    (route "/:id/grants"
+                           {:post {:handler (group-handlers/add-grant group-service)}})
+                    (route "/:id/grants/:grant-id/remove"
+                           {:post {:handler (group-handlers/remove-grant group-service)}})]])}))

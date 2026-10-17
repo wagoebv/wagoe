@@ -122,6 +122,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **`:user-web-ui {:enabled? false}` left the group pages on, and `WAG_WEB_UI_ENABLED=false` did nothing** (BOU-711).
+  Copy `#boolean #or [#env WAG_WEB_UI_ENABLED "true"]` from the shipped config if yours reads the env var.
 - **Security: an `unknown` X-Forwarded-For hop resolved to the trusted proxy** (BOU-695). The client IP is now nil;
   code that authorises by address must refuse nil.
 - **Calendar month names were English only, and multi-day events showed on their first day only** (BOU-702). Month

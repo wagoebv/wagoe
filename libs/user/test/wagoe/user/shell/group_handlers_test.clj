@@ -21,7 +21,7 @@
             usvc   (user-service/->UserService users nil audit {} nil)
             gsvc   (group-service/create-group-service (group-persistence/create-group-repository ctx)
                                                        users audit (group-service/prepare-settings settings))
-            routes (http/group-routes usvc gsvc)
+            routes (http/group-routes usvc gsvc nil)
             app    (ring/ring-handler (ring/router [(:web-prefix routes) (:web routes)]))
             admin  (ports/create-user users {:email "admin@example.com" :name "Admin" :role :admin
                                              :active true :password-hash "x"})]
@@ -91,3 +91,14 @@
             (is (= 302 (:status r)) (str method " " uri))
             (is (str/starts-with? (get-in r [:headers "Location"]) "/web/login") (str method " " uri))))
         (is (empty? (ports/list-groups gsvc)))))))
+
+(deftest ^:unit the-web-ui-switch-turns-the-group-pages-off-too
+  (let [usvc (reify ports/IUserService)
+        off  {:active {:wagoe/settings {:features {:user-web-ui {:enabled? false}}}}}]
+    (testing "on unless switched off"
+      (is (seq (:web (http/group-routes usvc nil nil))))
+      (is (seq (:web (http/user-routes usvc nil nil)))))
+    (testing "off: no web routes from either"
+      (is (empty? (:web (http/group-routes usvc nil off))))
+      (is (empty? (:web (http/user-routes usvc nil off))))
+      (is (seq (:api (http/user-routes usvc nil off)))))))

@@ -290,6 +290,40 @@ Check grants on each request; nothing is cached, so a change applies to the next
 A soft-deleted user holds no grants. Deleting a user or a group removes the
 memberships, and a group's grants go with it.
 
+[#web-ui-off]
+== Turning the web UI off
+
+An API-only deployment can drop the user module's HTML pages:
+
+[source,clojure]
+----
+:wagoe/settings {:features {:user-web-ui {:enabled? false}}}
+----
+
+The shipped configs read it from `WAG_WEB_UI_ENABLED`, so `WAG_WEB_UI_ENABLED=false`
+does the same. It defaults to on.
+
+[cols="1,1",options="header"]
+|===
+| Removed | Kept
+
+| `/web` landing page, `/web/login`, `/web/register`, `/web/logout`
+| `/api/v1/auth/login`, `/api/v1/sessions`, `/api/v1/sessions/:token`
+
+| `/web/dashboard`, `/web/profile/**` (incl. MFA setup and disable pages)
+| `/api/v1/auth/mfa/**`
+
+| `/web/users/**` (user management, sessions), `/web/audit`
+| `/api/v1/users/**`
+
+| `/web/admin/groups/**`
+| OpenID Connect sign-in, when providers are configured
+|===
+
+Other modules are not affected: `/` still redirects to `/web/login`, and the admin UI
+stays mounted while `:wagoe/admin` is active. Groups have no API; manage them through
+`:wagoe/user-group-service`.
+
 == Session management
 
 [source,bash]

@@ -277,9 +277,9 @@
   (group-service/create-group-service group-repository user-repository audit-repository settings))
 
 (defmethod ig/init-key :wagoe/user-group-routes
-  [_ {:keys [user-service group-service]}]
+  [_ {:keys [user-service group-service config]}]
   (require 'wagoe.user.shell.http)
-  ((ns-resolve 'wagoe.user.shell.http 'group-routes) user-service group-service))
+  ((ns-resolve 'wagoe.user.shell.http 'group-routes) user-service group-service config))
 
 ;; =============================================================================
 ;; Module graph
@@ -330,7 +330,8 @@
                                :audit-repository (ig/ref :wagoe/audit-repository)
                                :settings         group-settings}
     :wagoe/user-group-routes  {:user-service  (ig/ref :wagoe/user-service)
-                               :group-service (ig/ref :wagoe/user-group-service)}
+                               :group-service (ig/ref :wagoe/user-group-service)
+                               :config        config}
 
     :wagoe/user-http-middleware {:user-service (ig/ref :wagoe/user-service)}
     :wagoe/user-home-middleware {:config config}

@@ -11,6 +11,8 @@
     ;; Auth cookies omit the Secure attribute for local HTTP dev.
     ;; Defaults to true (HTTPS-only) when unset — set true behind TLS in prod.
     :secure-cookies?  false
+    ;; {:user-web-ui {:enabled? false}} drops the user module's HTML pages,
+    ;; for an API-only app.
     :features         {}}
 
    ;; SQLite by default: no server to install, and unlike in-memory H2 the
