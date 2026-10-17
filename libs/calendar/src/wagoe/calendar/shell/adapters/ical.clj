@@ -7,10 +7,11 @@
 
    Shell layer — may perform I/O via ical4j CalendarBuilder."
   (:require [wagoe.calendar.core.event :as event]
+            [wagoe.calendar.core.recurrence :as recurrence]
             [wagoe.calendar.ports :as ports]
             [wagoe.calendar.schema :as schema]
             [clojure.string :as str])
-  (:import [java.time DayOfWeek Duration Instant ZoneId ZoneOffset ZonedDateTime OffsetDateTime LocalDate LocalDateTime LocalTime]
+  (:import [java.time DayOfWeek Duration Instant YearMonth ZoneId ZoneOffset ZonedDateTime OffsetDateTime LocalDate LocalDateTime LocalTime]
            [java.time.temporal ChronoUnit Temporal TemporalAdjusters TemporalAmount]
            [java.time.zone ZoneOffsetTransition ZoneOffsetTransitionRule ZoneRules]
            [java.io StringReader]
@@ -38,13 +39,15 @@
 ;; uses, rather than ical4j's bundled copy: that lacks newer zones and disagrees
 ;; with the JVM, and writes each zone's full history.
 
+(defn- observance-props
+  ^PropertyList [^LocalDateTime start ^ZoneOffset from ^ZoneOffset to rrule]
+  (PropertyList. (cond-> [(DtStart. start) (TzOffsetFrom. from) (TzOffsetTo. to)]
+                   rrule (conj (RRule. ^String rrule)))))
+
 (defn- observance
   "A STANDARD or DAYLIGHT observance starting at transition `t`."
   [^ZoneRules rules ^ZoneOffsetTransition t rrule]
-  (let [props (PropertyList. (cond-> [(DtStart. (.getDateTimeBefore t))
-                                      (TzOffsetFrom. (.getOffsetBefore t))
-                                      (TzOffsetTo. (.getOffsetAfter t))]
-                               rrule (conj (RRule. ^String rrule))))]
+  (let [props (observance-props (.getDateTimeBefore t) (.getOffsetBefore t) (.getOffsetAfter t) rrule)]
     (if (.isDaylightSavings rules (.getInstant t)) (Daylight. props) (Standard. props))))
 
 (defn- base-date
@@ -53,8 +56,7 @@
   (let [d (.getDayOfMonthIndicator r)]
     (if (pos? d)
       (LocalDate/of (int year) (.getMonth r) d)
-      (.plusDays (.with (LocalDate/of (int year) (.getMonth r) 1) (TemporalAdjusters/lastDayOfMonth))
-                 (inc d)))))
+      (.plusDays (.atEndOfMonth (YearMonth/of (int year) (.getMonth r))) (inc d)))))
 
 (defn- nominal-date
   "The date `r` names in `year`, before its time of day is applied."
@@ -90,21 +92,21 @@
         d     (.getDayOfMonthIndicator r)
         w     (.getDayOfWeek r)
         days  (map #(+ shift %) (cond (nil? w) [d] (pos? d) (range d (+ d 7)) :else (range d (- d 7) -1)))
+        d0    (first days)
+        wd    (some-> w (.plus shift) byday)
         len   (.minLength (.getMonth wall))
         month (str "FREQ=YEARLY;BYMONTH=" (.getValue (.getMonth wall)))]
     (cond
       (not (or (every? #(<= 1 % len) days) (every? #(<= (- len) % -1) days)))
       (if-let [yds (and w (year-days r (.getYear wall) shift))]
-        (str "FREQ=YEARLY;BYYEARDAY=" (str/join "," (sort yds)) ";BYDAY=" (byday (.plus w shift)))
+        (str "FREQ=YEARLY;BYYEARDAY=" (str/join "," (sort yds)) ";BYDAY=" wd)
         ;; No rule in the tz database reaches this; the zones test covers them all.
         (throw (ex-info "Zone rule has no RRULE form" {:type :internal-error :rule (str r)})))
-      (nil? w) (str month ";BYMONTHDAY=" (first days))
-      (and (pos? (first days)) (zero? (mod (dec (first days)) 7)))
-      (str month ";BYDAY=" (inc (quot (first days) 7)) (byday (.plus w shift)))
-      (or (= -1 (first days)) (= len (.maxLength (.getMonth wall)) (last days)))
-      (str month ";BYDAY=-1" (byday (.plus w shift)))
-      :else (str month ";BYDAY=" (byday (.plus w shift))
-                 ";BYMONTHDAY=" (str/join "," (sort days))))))
+      (nil? w)                                    (str month ";BYMONTHDAY=" d0)
+      (and (pos? d0) (zero? (mod (dec d0) 7)))    (str month ";BYDAY=" (inc (quot d0 7)) wd)
+      (or (= -1 d0) (= len (.maxLength (.getMonth wall)) (last days)))
+      (str month ";BYDAY=-1" wd)
+      :else (str month ";BYDAY=" wd ";BYMONTHDAY=" (str/join "," (sort days))))))
 
 (defn- rule-observance
   "One RRULE observance for `r`, from its first transition at or after `from`."
@@ -117,21 +119,22 @@
 
 (defn- observances
   "Observances covering `lo` onwards: the offset in force at `lo`, the
-   transitions after it up to `hi` (nil: no limit), and the zone's recurring
-   rules when `hi` reaches them. A fixed offset is one STANDARD."
+   transitions after it up to `hi`, and the zone's recurring rules when `hi`
+   reaches them. A fixed offset is one STANDARD."
   [^ZoneRules rules ^Instant lo ^Instant hi]
-  (let [in-force   (.previousTransition rules (.plusNanos lo 1))
+  (let [history    (.getTransitions rules)
+        in-force   (.previousTransition rules (.plusNanos lo 1))
         from       (if in-force (.getInstant in-force) lo)
-        last-hist  (some-> (last (.getTransitions rules)) .getInstant)
+        last-hist  (if (seq history) (.getInstant ^ZoneOffsetTransition (last history)) Instant/MIN)
         initial    (when-not in-force
                      (let [off (.getOffset rules lo)]
-                       [(Standard. (PropertyList. [(DtStart. (LocalDateTime/ofEpochSecond (.getEpochSecond lo) 0 off))
-                                                   (TzOffsetFrom. off) (TzOffsetTo. off)]))]))
+                       [(Standard. (observance-props (LocalDateTime/ofEpochSecond (.getEpochSecond lo) 0 off)
+                                                     off off nil))]))
         explicit   (filter #(let [i (.getInstant ^ZoneOffsetTransition %)]
-                              (and (not (.isBefore i from)) (or (nil? hi) (not (.isAfter i hi)))))
-                           (.getTransitions rules))
-        rules-from (if (or (nil? last-hist) (.isAfter from last-hist)) from (.plusNanos last-hist 1))
-        recurring  (when (or (nil? hi) (nil? last-hist) (.isAfter hi last-hist))
+                              (not (or (.isBefore i from) (.isAfter i hi))))
+                           history)
+        rules-from (if (.isAfter from last-hist) from (.plusNanos last-hist 1))
+        recurring  (when (.isAfter hi last-hist)
                      (map #(rule-observance rules % rules-from) (.getTransitionRules rules)))]
     (concat initial (map #(observance rules % nil) explicit) recurring)))
 
@@ -140,21 +143,22 @@
    event has no end, so then the zone's current rules are always included."
   [^String tzid events]
   (let [year (Duration/ofDays 366)
-        lo   (.minus ^Instant (reduce #(if (.isBefore ^Instant %2 %1) %2 %1) (map :start events)) year)
-        hi   (when-not (some :recurrence events)
-               (.plus ^Instant (reduce #(if (.isAfter ^Instant %2 %1) %2 %1) (map :end events)) year))]
+        lo   (.minus ^Instant (first (sort (map :start events))) year)
+        hi   (if (some recurrence/recurring? events)
+               Instant/MAX
+               (.plus ^Instant (last (sort (map :end events))) year))]
     (VTimeZone. (PropertyList. [(TzId. tzid)])
                 (ComponentList. (vec (observances (.getRules (ZoneId/of tzid)) lo hi))))))
 
-(defn- utc? [tzid]
-  (= ZoneOffset/UTC (.normalized (ZoneId/of tzid))))
+(defn- utc? [^ZoneId zone]
+  (= ZoneOffset/UTC (.normalized zone)))
 
 (defn- vtimezones
   "VTIMEZONE per zone a timed event is written in. UTC needs none: it is
    written in the Z form."
   [events]
   (for [[tzid evs] (group-by #(:timezone % "UTC") (remove event/all-day? events))
-        :when (not (utc? tzid))]
+        :when (not (utc? (ZoneId/of tzid)))]
     (vtimezone tzid evs)))
 
 (defn- event->vevent
@@ -167,7 +171,7 @@
         zone   (ZoneId/of tzid)
         [s e]  (cond
                  (event/all-day? event) (all-day-dates event zone)
-                 (utc? tzid)            [(:start event) (:end event)]
+                 (utc? zone)            [(:start event) (:end event)]
                  :else                  [(.atZone ^Instant (:start event) zone)
                                          (.atZone ^Instant (:end event) zone)])
         title  ^String (:title event)
