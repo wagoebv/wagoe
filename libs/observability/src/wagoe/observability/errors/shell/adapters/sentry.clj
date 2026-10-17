@@ -125,13 +125,10 @@
 ;; Sentry Error Reporter Implementation
 ;; =============================================================================
 
-(defn- env-name [env]
-  (if (keyword? env) (name env) env))
-
 (defn- reporting-enabled?*
   "Only an explicit `:enabled false` turns reporting off."
-  [settings]
-  (not (false? (:enabled @settings))))
+  [settings-map]
+  (not (false? (:enabled settings-map))))
 
 (defn- report?
   "Ask the filter. A filter rule that throws must not cost the report."
@@ -148,34 +145,35 @@
   "Filter, redact and send one event; the event id, or nil when filtered out,
    disabled or failed. `settings` is the atom IErrorReportingConfig changes,
    so environment, release, sample rate and enabled apply at runtime."
-  [config settings error-filter {:keys [type exception message level context tags extra breadcrumbs]
-                                 :as event}]
+  [settings error-filter {:keys [type exception message level context tags extra breadcrumbs]
+                          :as event}]
   (try
-    (let [fields (case type
-                   :exception {:throwable (redaction/redacted-exception exception)}
-                   :message   {:message message :level (normalize-level level)}
-                   (throw (ex-info "Unknown event type" {:type :validation-error :event-type type})))
-          merged (prepare-context context)]
-      (when (and (reporting-enabled?* settings) (report? error-filter event merged))
-        (let [{:keys [environment release]} @settings
-              event-id (generate-event-id)]
-          (sentry/send-event
-           (merge (-> (extract-sentry-context merged)
-                      (cond-> tags        (update :tags merge tags)
-                              extra       (assoc :extra extra)
-                              breadcrumbs (assoc :breadcrumbs breadcrumbs))
-                      (pii/apply-redaction config))
-                  fields
-                  (cond-> {:event-id event-id :timestamp (current-timestamp)}
-                    environment (assoc :environment (env-name environment))
-                    release     (assoc :release release))))
-          (log/debug "Captured event to Sentry" {:event-id event-id :type type})
-          event-id)))
+    (when-not (#{:exception :message} type)
+      (throw (ex-info "Unknown event type" {:type :validation-error :event-type type})))
+    (when (reporting-enabled?* @settings)
+      (let [merged (prepare-context context)]
+        (when (report? error-filter event merged)
+          (let [{:keys [environment release] :as config} @settings
+                event-id (generate-event-id)]
+            (sentry/send-event
+             (merge (-> (extract-sentry-context merged)
+                        (cond-> tags        (update :tags merge tags)
+                                extra       (assoc :extra extra)
+                                breadcrumbs (assoc :breadcrumbs breadcrumbs))
+                        (pii/apply-redaction config))
+                    (if (= :exception type)
+                      {:throwable (redaction/redacted-exception exception)}
+                      {:message message :level (normalize-level level)})
+                    (cond-> {:event-id event-id :timestamp (current-timestamp)}
+                      environment (assoc :environment (name environment))
+                      release     (assoc :release release))))
+            (log/debug "Captured event to Sentry" {:event-id event-id :type type})
+            event-id))))
     (catch Exception e
       (log/error e "Failed to capture event to Sentry")
       nil)))
 
-(defrecord SentryErrorReporter [config settings error-filter]
+(defrecord SentryErrorReporter [settings error-filter]
   ports/IErrorReporter
   (capture-exception [this exception]
     (ports/capture-exception this exception nil nil))
@@ -184,7 +182,7 @@
     (ports/capture-exception this exception context nil))
 
   (capture-exception [_ exception context tags]
-    (capture! config settings error-filter
+    (capture! settings error-filter
               {:type :exception :exception exception :context context :tags tags}))
 
   (capture-message [this message level]
@@ -194,11 +192,11 @@
     (ports/capture-message this message level context nil))
 
   (capture-message [_ message level context tags]
-    (capture! config settings error-filter
+    (capture! settings error-filter
               {:type :message :message message :level level :context context :tags tags}))
 
   (capture-event [_ event-map]
-    (capture! config settings error-filter event-map)))
+    (capture! settings error-filter event-map)))
 
 ;; =============================================================================
 ;; Sentry Error Context Implementation
@@ -264,12 +262,8 @@
 (defn- sampled? [rate]
   (< (rand) (double rate)))
 
-(defn- verdict->report? [verdict default-rate]
-  (cond
-    (= :ignore verdict) false
-    (= :report verdict) true
-    (vector? verdict)   (sampled? (second verdict))
-    :else               (sampled? default-rate)))
+(defn- report-at? [rule-rate default-rate]
+  (sampled? (or rule-rate default-rate)))
 
 (def ^:private rule-types #{:exception :message :context})
 (def ^:private rule-actions #{:ignore :sample :report})
@@ -285,22 +279,22 @@
 (defrecord SentryErrorFilter [settings rules]
   ports/IErrorFilter
   (should-report? [_this exception context]
-    (verdict->report? (core/filter-decision @rules {:kind :exception :exception exception :context context})
-                      (global-rate settings)))
+    (report-at? (core/filter-decision @rules {:kind :exception :exception exception :context context})
+                (global-rate settings)))
 
   (should-report-message? [_this message level context]
-    (let [verdict (core/filter-decision @rules {:kind :message :message message :level level :context context})]
-      (if (and (nil? verdict)
+    (let [rate (core/filter-decision @rules {:kind :message :message message :level level :context context})]
+      (if (and (nil? rate)
                (core/below-min-severity? level (get-in @settings [:filtering :min-severity])))
         false
-        (verdict->report? verdict (global-rate settings)))))
+        (report-at? rate (global-rate settings)))))
 
   (sample-rate [_this exception-type]
     (core/type-sample-rate @rules exception-type (global-rate settings)))
 
   (add-filter-rule! [_this rule]
     (validate-rule! rule)
-    (let [id (or (:id rule) (str (UUID/randomUUID)))]
+    (let [id (or (:id rule) (generate-event-id))]
       (swap! rules (fn [rs] (conj (filterv #(not= id (:id %)) rs) (assoc rule :id id))))
       id))
 
@@ -340,14 +334,14 @@
 
   (enable-reporting! [_this]
     (let [[before _] (swap-vals! config-atom assoc :enabled true)]
-      (not (false? (:enabled before)))))
+      (reporting-enabled?* before)))
 
   (disable-reporting! [_this]
     (let [[before _] (swap-vals! config-atom assoc :enabled false)]
-      (not (false? (:enabled before)))))
+      (reporting-enabled?* before)))
 
   (reporting-enabled? [_this]
-    (reporting-enabled?* config-atom)))
+    (reporting-enabled?* @config-atom)))
 ;; Factory Functions
 ;; =============================================================================
 
@@ -357,7 +351,7 @@
     (throw (ex-info "Sentry DSN is required" {:type :configuration-error :config config})))
   ;; :sample-rate is applied per event by the filter, so it can change at runtime.
   (sentry/init! dsn (cond-> {}
-                      environment        (assoc :environment (env-name environment))
+                      environment        (assoc :environment (name environment))
                       release            (assoc :release release)
                       traces-sample-rate (assoc :traces-sample-rate traces-sample-rate)
                       debug              (assoc :debug debug)
@@ -366,8 +360,8 @@
                                                  :environment environment
                                                  :release release}))
 
-(defn- new-filter [settings config]
-  (->SentryErrorFilter settings (atom (core/filtering->rules (:filtering config)))))
+(defn- new-filter [settings]
+  (->SentryErrorFilter settings (atom (core/filtering->rules (:filtering @settings)))))
 
 (defn- shared-parts
   "Reporter, filter and config over one settings atom, so a runtime change
@@ -375,8 +369,8 @@
   [config]
   (init-sentry! config)
   (let [settings     (atom config)
-        error-filter (new-filter settings config)]
-    {:error-reporter (->SentryErrorReporter config settings error-filter)
+        error-filter (new-filter settings)]
+    {:error-reporter (->SentryErrorReporter settings error-filter)
      :error-context  (->SentryErrorContext config)
      :error-filter   error-filter
      :error-config   (->SentryErrorReportingConfig settings)}))
@@ -402,7 +396,7 @@
 (defn create-sentry-error-filter
   "Create a Sentry error filter instance."
   [config]
-  (new-filter (atom config) config))
+  (new-filter (atom config)))
 
 (defn create-sentry-error-reporting-config
   "Create a Sentry error reporting configuration manager instance."

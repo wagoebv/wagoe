@@ -57,7 +57,7 @@ atom with the reporter, so `add-filter-rule!`, `set-sample-rate!`,
 event. Rules: `{:type :exception|:message|:context :pattern string|regex|fn
 :action :ignore|:sample|:report :sample-rate r :id optional}`; first match wins;
 `add-filter-rule!` returns the id. Pure matching lives in
-`wagoe.observability.errors.core` (`filter-decision`). A rule that throws is
+`wagoe.observability.errors.core` (`filter-decision`, `type-sample-rate`). A rule that throws is
 logged and the event is reported.
 
 ---

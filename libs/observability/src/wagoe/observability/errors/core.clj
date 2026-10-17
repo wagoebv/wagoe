@@ -495,11 +495,10 @@
   "The :ignore rules a :filtering config implies, one per
    :exclude-exceptions and :exclude-messages entry."
   [{:keys [exclude-exceptions exclude-messages]}]
-  (-> []
-      (into (map (fn [p] {:id (str "exclude-exception:" p) :type :exception :pattern p :action :ignore}))
-            exclude-exceptions)
-      (into (map (fn [p] {:id (str "exclude-message:" p) :type :message :pattern p :action :ignore}))
-            exclude-messages)))
+  (letfn [(ignore [type patterns]
+            (map (fn [p] {:id (str "exclude-" (name type) ":" p) :type type :pattern p :action :ignore})
+                 patterns))]
+    (vec (concat (ignore :exception exclude-exceptions) (ignore :message exclude-messages)))))
 
 (defn- class-names [^Class c]
   #{(.getName c) (.getSimpleName c)})
@@ -529,18 +528,19 @@
       (instance? java.util.regex.Pattern pattern) (boolean (re-find pattern (str message)))
       :else false)))
 
+(defn- rule-rate
+  "The sample rate a rule's action means: :ignore 0, :report 1, :sample its rate."
+  [{:keys [action sample-rate]}]
+  (case action
+    :ignore 0.0
+    :report 1.0
+    :sample (or sample-rate 1.0)
+    nil))
+
 (defn filter-decision
-  "The verdict of the first rule matching `event`: :ignore, :report,
-   [:sample rate], or nil when none matches."
+  "The sample rate the first rule matching `event` sets, or nil when none matches."
   [rules event]
-  (some (fn [{:keys [action sample-rate] :as rule}]
-          (when (rule-matches? rule event)
-            (case action
-              :ignore :ignore
-              :report :report
-              :sample [:sample (or sample-rate 1.0)]
-              nil)))
-        rules))
+  (some #(when (rule-matches? % event) (rule-rate %)) rules))
 
 (defn type-sample-rate
   "Sample rate for `exception-type` (a Class, or a class name as string or
@@ -548,15 +548,12 @@
   [rules exception-type default-rate]
   (let [names (if (class? exception-type)
                 (class-names exception-type)
-                #{(name exception-type)})
-        rule  (first (filter (fn [{:keys [type pattern]}]
-                               (and (= :exception type) (string? pattern) (names pattern)))
-                             rules))]
-    (case (:action rule)
-      :ignore 0.0
-      :report 1.0
-      :sample (or (:sample-rate rule) 1.0)
-      default-rate)))
+                #{(name exception-type)})]
+    (or (some (fn [{:keys [type pattern] :as rule}]
+                (when (and (= :exception type) (string? pattern) (names pattern))
+                  (rule-rate rule)))
+              rules)
+        default-rate)))
 
 ;; =============================================================================
 ;; Configuration Helpers
