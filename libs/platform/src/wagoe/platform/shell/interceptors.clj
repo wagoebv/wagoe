@@ -80,7 +80,7 @@
   "Records operation attempt and starts timing measurement."
   {:name :metrics-start
    :enter (fn [{:keys [op system] :as ctx}]
-            (when-let [metric-collector (:metrics system)]
+            (when-let [metric-collector (:metrics-emitter system)]
               (metrics/increment metric-collector (str (name op) ".attempt") {}))
             (assoc-in ctx [:timing :start] (System/nanoTime)))})
 
@@ -88,7 +88,7 @@
   "Records operation completion metrics including success/failure and latency."
   {:name :metrics-complete
    :leave (fn [{:keys [op system] :as ctx}]
-            (when-let [metric-collector (:metrics system)]
+            (when-let [metric-collector (:metrics-emitter system)]
               (let [start-time (get-in ctx [:timing :start])
                     duration-ms (when start-time
                                   (/ (- (System/nanoTime) start-time) 1e6))
@@ -109,9 +109,18 @@
   "Records operation failure metrics when exceptions occur."
   {:name :metrics-error
    :error (fn [{:keys [op system] :as ctx}]
-            (when-let [metric-collector (:metrics system)]
+            (when-let [metric-collector (:metrics-emitter system)]
               (metrics/increment metric-collector (str (name op) ".failure") {}))
             ctx)})
+
+(def op-metrics
+  "metrics-start, -complete and -error as one interceptor. Ahead of the
+   operation's own interceptors its :leave still runs when one of them halts;
+   at the tail it ran only on full success, so failures went uncounted."
+  {:name  :op-metrics
+   :enter (:enter metrics-start)
+   :leave (:leave metrics-complete)
+   :error (:error metrics-error)})
 
 ;; Error Handling Interceptors
 
@@ -428,12 +437,11 @@
   [& custom-interceptors]
   (vec (concat [context-interceptor
                 logging-start
-                metrics-start
+                op-metrics
                 error-response-converter] ; Move error handling BEFORE custom interceptors
                custom-interceptors
                [effects-dispatch
                 logging-complete
-                metrics-complete
                 response-shape-http])))
 
 (defn create-cli-pipeline
@@ -441,12 +449,11 @@
   [& custom-interceptors]
   (vec (concat [context-interceptor
                 logging-start
-                metrics-start
+                op-metrics
                 error-response-converter] ; Add error handling for CLI like HTTP
                custom-interceptors
                [effects-dispatch
                 logging-complete
-                metrics-complete
                 response-shape-cli])))
 
 (defn add-error-handling

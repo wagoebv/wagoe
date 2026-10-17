@@ -84,7 +84,7 @@
   ([emitter name]
    (increment-counter emitter name {}))
   ([emitter name tags]
-   (ports/inc-counter! emitter name 1 tags)))
+   (ports/increment emitter name tags)))
 
 (defn increment-counter-by
   "Increments a counter metric by a specific amount.
@@ -100,7 +100,7 @@
   ([emitter name amount]
    (increment-counter-by emitter name amount {}))
   ([emitter name amount tags]
-   (ports/inc-counter! emitter name amount tags)))
+   (ports/increment-by emitter name amount tags)))
 
 (defn count-events
   "Convenience function to count application events.
@@ -137,7 +137,7 @@
   ([emitter name value]
    (set-gauge-value emitter name value {}))
   ([emitter name value tags]
-   (ports/set-gauge! emitter name value tags)))
+   (ports/gauge emitter name value tags)))
 
 (defn track-active-count
   "Tracks active count by setting gauge values.
@@ -153,7 +153,7 @@
   ([emitter name value]
    (track-active-count emitter name value {}))
   ([emitter name value tags]
-   (ports/set-gauge! emitter name value tags)))
+   (ports/gauge emitter name value tags)))
 
 (defn track-resource-usage
   "Tracks resource usage metrics.
@@ -191,7 +191,7 @@
   ([emitter name value]
    (observe-histogram emitter name value {}))
   ([emitter name value tags]
-   (ports/observe-histogram! emitter name value tags)))
+   (ports/observe emitter name value tags)))
 
 (defn time-with-histogram
   "Times an operation and records the duration in a histogram.
@@ -250,7 +250,7 @@
   ([emitter name duration]
    (record-timer emitter name duration {}))
   ([emitter name duration tags]
-   (ports/observe-histogram! emitter name duration tags)))
+   (ports/observe emitter name duration tags)))
 
 (defn time-operation
   "Times an operation using histogram timing.
@@ -266,7 +266,7 @@
   ([emitter name f]
    (time-operation emitter name {} f))
   ([emitter name tags f]
-   (ports/time-histogram! emitter name tags f)))
+   (ports/timed emitter name tags f)))
 
 ;; =============================================================================
 ;; Business Metrics Helpers

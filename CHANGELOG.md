@@ -132,6 +132,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Operation metrics never fired, and failed operations were not counted** (BOU-727): the interceptors read
+  `:metrics-emitter` now, and `metrics.core` helpers register on first use. No action needed.
 - **`metrics.ports/increment` and `observe` recorded nothing** (BOU-454): they now register the metric on first use, so
   platform operation and user auth metrics reach the active provider.
 - **Sentry ignored its filter, `:sample-rate`, `:enabled` and runtime config changes** (BOU-454). All now apply per

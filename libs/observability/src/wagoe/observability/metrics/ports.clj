@@ -321,11 +321,22 @@
       (when (nil? (get-metric collector metric-name))
         (register! collector)))))
 
+(defn increment-by
+  "Increment counter `metric-name` by `amount`, registering it on first use."
+  [collector metric-name amount tags]
+  (ensure-registered! collector metric-name #(register-counter! % metric-name "" {}))
+  (inc-counter! collector metric-name amount (or tags {})))
+
 (defn increment
   "Increment counter `metric-name` by 1, registering it on first use."
   [collector metric-name tags]
-  (ensure-registered! collector metric-name #(register-counter! % metric-name "" {}))
-  (inc-counter! collector metric-name 1 (or tags {})))
+  (increment-by collector metric-name 1 tags))
+
+(defn gauge
+  "Set gauge `metric-name` to `value`, registering it on first use."
+  [collector metric-name value tags]
+  (ensure-registered! collector metric-name #(register-gauge! % metric-name "" {}))
+  (set-gauge! collector metric-name value (or tags {})))
 
 (defn observe
   "Record `value` in histogram `metric-name`, registering it on first use with
@@ -333,3 +344,10 @@
   [collector metric-name value tags]
   (ensure-registered! collector metric-name #(register-histogram! % metric-name "" nil {}))
   (observe-histogram! collector metric-name value (or tags {})))
+
+(defn timed
+  "Time `(f)` into histogram `metric-name`, registering it on first use.
+   Returns the result of `(f)`."
+  [collector metric-name tags f]
+  (ensure-registered! collector metric-name #(register-histogram! % metric-name "" nil {}))
+  (time-histogram! collector metric-name (or tags {}) f))

@@ -67,12 +67,11 @@
 ;; =============================================================================
 
 (defn extract-observability-services
-  "Extracts observability services from user-service for interceptor context.
-   
-   Note: Since service layer cleanup removed direct observability dependencies,
-   the interceptor context will obtain these services from the system wiring."
+  "The interceptor :system for a user operation. Wiring puts the metrics
+   emitter on the service; the platform op-metrics interceptors read it."
   [user-service]
-  {:user-service user-service})
+  {:user-service    user-service
+   :metrics-emitter (:metrics-emitter user-service)})
 
 (defn create-interceptor-context
   "Creates interceptor context with real observability services and error mappings."
