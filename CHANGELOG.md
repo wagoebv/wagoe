@@ -140,6 +140,8 @@ for what is public API, what is internal, and how deprecations are announced.
   63 bytes. Such slugs are now a validation error, and the admin no longer edits a slug.
 - **A typed 4xx reached the error tracker and marked its trace span errored** (BOU-714). Only 5xx and untyped errors
   do now; service operations report their 5xx, which they never did. Nothing to change.
+- **iCal times in US zones were an hour off for a week in some years, e.g. 2027-03-07..14** (BOU-723). Import and
+  export now use the JVM's tz rules; Windows TZIDs import as their IANA zone. Re-import affected feeds.
 - **iCal export wrote zones ical4j lacks (America/Coyhaique) in UTC, and each zone's full history** (BOU-720).
   VTIMEZONEs now come from the JVM's tz rules, trimmed to the years the feed's events cover.
 - **Admin dashboard linked to Groups and Audit with the user web UI switched off** (BOU-713). It now shows a card only
