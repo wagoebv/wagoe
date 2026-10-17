@@ -14,6 +14,7 @@
             [migratus.migrations :as migratus-migrations]
             [migratus.utils :as migratus-utils]
             [wagoe.config :as config]
+            [wagoe.config.secrets :as secrets]
             [aero.core :as aero]
             [clojure.edn :as edn]
             [clojure.java.io :as io]
@@ -186,19 +187,22 @@
     (db-config/config->db-config k v)))
 
 (defn- read-leniently
-  "`url` read with each #env unset — a developer's machine has no prod
-   secrets — and #long of nothing nothing, for when Aero cannot."
+  "`url` read with each #env and #secret unset — a developer's machine has no
+   prod secrets — and #long of nothing nothing, for when Aero cannot."
   [url]
-  (edn/read-string {:readers {'env  (constantly nil)
-                              'or   #(first (remove nil? %))
-                              'long #(cond (number? %) (long %) (string? %) (parse-long %) :else nil)}
+  (edn/read-string {:readers {'env    (constantly nil)
+                              'secret (constantly nil)
+                              'or     #(first (remove nil? %))
+                              'long   #(cond (number? %) (long %) (string? %) (parse-long %) :else nil)}
                     :default (fn [_ v] v)}
                    (slurp url)))
 
 (defn- prod-identity [url]
   (identity-of
    (active-db-config
-    (try (aero/read-config url)
+    ;; Secrets optional: a developer's machine has none of prod's, and without
+    ;; them every #secret would push this onto the lenient reader.
+    (try (aero/read-config url {::secrets/optional? true})
          (catch Exception _
            (try (read-leniently url)
                 (catch Exception e

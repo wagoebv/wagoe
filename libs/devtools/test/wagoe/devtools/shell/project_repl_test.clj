@@ -4,7 +4,19 @@
   (:require [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
+            [integrant.repl.state :as state]
+            [wagoe.config.secrets :as secrets]
             [wagoe.devtools.shell.project-repl :as sut]))
+
+(deftest ^:unit a-config-section-prints-secret-values-redacted
+  ;; Under :url, which no key-name pattern treats as sensitive.
+  (let [dsn (secrets/resolve-secret {:secret-sources {:test (reify secrets/ISecretSource
+                                                              (fetch-secret [_ _] "postgres://u:repl-pw@db/app"))}}
+                                    [:test "dsn"])
+        out (with-redefs [state/config {:wagoe/db-context {:url dsn}}]
+              (with-out-str (sut/config :database)))]
+    (is (str/includes? out "<secret test:dsn>") out)
+    (is (not (str/includes? out "repl-pw")))))
 
 (deftest ^:unit the-url-comes-from-the-server-not-the-config-block
   ;; `ig-config` folds the :wagoe/http block into :wagoe/http-server, so the

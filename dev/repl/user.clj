@@ -12,6 +12,7 @@
      (routes)    ; Show all HTTP routes
      (commands)  ; Show all available commands"
   (:require [wagoe.config :as config]
+            [wagoe.config.secrets :as secrets]
             [wagoe.system-config :as sys-config]
             ;; platform Integrant init/halt methods load via the :as wiring
             ;; require below; feature modules load here (app layer, not platform —
@@ -124,7 +125,7 @@
    (config :http)      ; HTTP section"
   ([] state/config)
   ([section]
-   (println (introspection/format-config-tree state/config section))))
+   (println (introspection/format-config-tree (secrets/redact state/config) section))))
 
 ;; =============================================================================
 ;; Development Utilities

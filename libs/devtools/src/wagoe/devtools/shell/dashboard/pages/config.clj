@@ -3,6 +3,7 @@
   (:require [wagoe.devtools.shell.dashboard.layout :as layout]
             [wagoe.devtools.shell.dashboard.components :as c]
             [wagoe.devtools.core.config-editor :as cfg-edit]
+            [wagoe.config.secrets :as secrets]
             [clojure.edn :as edn]
             [clojure.string :as str]
             [hiccup2.core :as h]))
@@ -14,7 +15,7 @@
    contains valid EDN that can round-trip through edn/read-string."
   [section-key section-val editable?]
   (let [key-str (pr-str section-key)
-        val-str (pr-str (cfg-edit/strip-refs section-val))]
+        val-str (pr-str (secrets/redact (cfg-edit/strip-refs section-val)))]
     (c/card {:title key-str}
             [:div
              [:textarea.code-block
@@ -46,7 +47,9 @@
 (defn- config-content
   "Render the config tree, editable when `editable?`.
    Uses real config values in the textareas (not redacted) so that
-   Apply doesn't overwrite secrets with ********. This is a dev-only dashboard."
+   Apply doesn't overwrite secrets with ********. This is a dev-only dashboard.
+   Values read through #secret are the exception: they show as a placeholder
+   that Apply turns back into the value."
   [config editable?]
   [:div
    [:div.stat-row
@@ -82,7 +85,7 @@
    restoring ig/ref placeholders to real refs."
   [new-val-str fallback]
   (try
-    (cfg-edit/restore-refs (edn/read-string new-val-str))
+    (secrets/unredact (cfg-edit/restore-refs (edn/read-string new-val-str)))
     (catch Exception _ fallback)))
 
 (defn render-preview-fragment
@@ -103,7 +106,7 @@
                  [:p [:strong "Affected components: "]
                   (str/join ", " (map pr-str (cfg-edit/affected-components diff)))]
                  [:pre.code-block
-                  (str "Current: " (pr-str old-val) "\n\nProposed: " new-val-str)]])))))))
+                  (str "Current: " (pr-str (secrets/redact old-val)) "\n\nProposed: " new-val-str)]])))))))
 
 (defn render-apply-result
   "Render the result of a config apply operation as an HTML fragment."
