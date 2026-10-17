@@ -39,6 +39,8 @@ for what is public API, what is internal, and how deprecations are announced.
   function of the user. Unset, admins still land on `/web/admin/users`, others on `/web/dashboard`.
 - **Replace or drop the built-in `/web/dashboard`** (BOU-680): `:dashboard {:handler my.app/page}` or
   `:dashboard false` under `:wagoe/user`, so an app can serve the path itself.
+- **Set where layouts link home** (BOU-688): `:home` under `:wagoe/user` sets the logo, back and dashboard links.
+  Unset, they point at `/web/dashboard`, or `/web` with `:dashboard false`.
 - **Per-login MFA decision** (BOU-670): `:wagoe/user {:auth {:mfa-required? my.app/fn}}`, a `(fn [user login-context])`,
   can waive or require MFA for password and OIDC logins. A user required to without MFA set up is refused.
 - **Sign in with OpenID Connect** (BOU-447): authorization code with PKCE, a "Sign in with X" button per provider.

@@ -14,6 +14,7 @@
    All tests are pure function tests - data in, Hiccup out.
    No browser or HTTP simulation required."
   (:require [wagoe.admin.core.ui :as ui]
+            [wagoe.shared.ui.core.home :as home]
             [clojure.test :refer [deftest is testing]]
             [clojure.string :as str])
   (:import [java.time Instant]
@@ -478,6 +479,17 @@
 ;; =============================================================================
 ;; Layout Component Tests
 ;; =============================================================================
+
+(defn- dashboard-href [sidebar]
+  (->> (tree-seq coll? seq sidebar)
+       (some #(when (and (vector? %) (= :a (first %)) (map? (second %))
+                         (= [:t :admin/sidebar-dashboard] (last (last %))))
+                (:href (second %))))))
+
+(deftest ^:unit sidebar-dashboard-link-uses-the-configured-home
+  (is (= "/web/dashboard" (dashboard-href (ui/admin-sidebar [] {} nil))))
+  (binding [home/*path* "/app"]
+    (is (= "/app" (dashboard-href (ui/admin-sidebar [] {} nil))))))
 
 (deftest ^:unit admin-sidebar-test
   (testing "Admin sidebar with entity navigation"

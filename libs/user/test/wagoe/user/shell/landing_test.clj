@@ -3,6 +3,7 @@
   (:require [clojure.test :refer [deftest is testing]]
             [wagoe.platform.shell.http.reitit-router :as reitit-router]
             [wagoe.platform.shell.system.wiring :as wiring]
+            [wagoe.shared.ui.core.home :as home]
             [wagoe.user.ports :as ports]
             [wagoe.user.shell.http :as http]
             [wagoe.user.shell.landing :as landing]
@@ -93,7 +94,8 @@
                     {:dashboard {:handler `not-a-fn}}
                     {:dashboard "off"}
                     {:dashboard {:handler 'no.such.ns/page}}
-                    {:dashboard {:handler `landing-of :extra 1}}]]
+                    {:dashboard {:handler `landing-of :extra 1}}
+                    {:home "https://evil.example"}]]
     (is (= :configuration-error
            (:type (ex-data (try (landing/prepare (config settings)) nil
                                 (catch Exception e e)))))
@@ -140,3 +142,19 @@
 (deftest ^:contract custom-dashboard-handler-is-served
   (let [handler (get-in (dashboard-route {:dashboard {:handler `custom-dashboard}}) [1 :get :handler])]
     (is (= "custom" (:body (handler {}))))))
+
+;; =============================================================================
+;; :home — what the layouts link to
+;; =============================================================================
+
+(defn- home-under [settings]
+  (((landing/wrap-home (landing/prepare (config settings)))
+    (fn [_] (home/path)))
+   {}))
+
+(deftest ^:contract home-path-reaches-the-layouts
+  (is (= "/web/dashboard" (home-under {})))
+  (is (= "/web" (home-under {:dashboard false}))
+      "the app owns /web/dashboard, so home is /web, which sends a user to their landing")
+  (is (= "/app" (home-under {:dashboard false :home "/app"})))
+  (is (= "/app" (home-under {:home "/app"}))))

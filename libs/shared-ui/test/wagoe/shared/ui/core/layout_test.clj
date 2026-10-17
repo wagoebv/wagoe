@@ -3,7 +3,8 @@
    
    Tests verify that layout components generate correct page structures,
    navigation elements, and consistent styling for the application."
-  (:require [wagoe.shared.ui.core.layout :as layout]
+  (:require [wagoe.shared.ui.core.home :as home]
+            [wagoe.shared.ui.core.layout :as layout]
             [clojure.string :as str]
             [clojure.test :refer [deftest testing is]]))
 
@@ -47,6 +48,17 @@
 ;; =============================================================================
 ;; Page Layout Tests
 ;; =============================================================================
+
+(defn- logo-href [opts]
+  (->> (layout/main-navigation opts)
+       (some #(when (and (vector? %) (= :a.logo (first %))) (:href (second %))))))
+
+(deftest ^:unit logo-links-to-the-configured-home
+  (is (= "/web/dashboard" (logo-href {:user {:name "A"}})))
+  (is (= "/" (logo-href {})) "signed out, the logo goes to the site root")
+  (binding [home/*path* "/app"]
+    (is (= "/app" (logo-href {:user {:name "A"}})))
+    (is (= "/elsewhere" (logo-href {:user {:name "A"} :brand-href "/elsewhere"})))))
 
 (deftest ^:unit page-layout-test
   (testing "Basic page layout generation"

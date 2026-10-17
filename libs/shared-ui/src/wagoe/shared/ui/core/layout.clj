@@ -5,6 +5,7 @@
    consistent look and feel across all domain modules."
   (:require [wagoe.shared.ui.core.alpine :as alpine]
             [wagoe.shared.ui.core.components :as components]
+            [wagoe.shared.ui.core.home :as home]
             [wagoe.shared.ui.core.icons :as icons]
             [wagoe.platform.core.csrf :as csrf]
             [wagoe.ui-style :as ui-style]))
@@ -45,7 +46,7 @@
   [& [opts]]
   (let [{:keys [user brand brand-href]} opts]
     [:nav
-     [:a.logo {:href (or brand-href (if user "/web/dashboard" "/"))}
+     [:a.logo {:href (or brand-href (if user (home/path) "/"))}
       (or brand
           (icons/brand-logo {:size 140}))]
      (when (platform-admin? user)
