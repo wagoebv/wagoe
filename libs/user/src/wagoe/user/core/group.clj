@@ -8,6 +8,11 @@
   (:require [malli.core :as m]
             [malli.error :as me]))
 
+(defn permission-str
+  "`permission` as stored and shown: its namespace kept, no colon."
+  [permission]
+  (subs (str permission) 1))
+
 (defn holds?
   "Whether `grants` hold `permission`, in any scope."
   [grants permission]

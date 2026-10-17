@@ -10,7 +10,8 @@
    Key FC/IS principles:
    - Pure functions only - deterministic, no side effects
    - Returns data that shell layer will persist
-   - Business rules for what gets audited and how")
+   - Business rules for what gets audited and how"
+  (:require [wagoe.user.core.group :as group]))
 
 ;; =============================================================================
 ;; Pure Audit Entry Creation Functions
@@ -306,7 +307,7 @@
 ;; =============================================================================
 
 (defn- grant-record [{:keys [permission scope]}]
-  {:permission (subs (str permission) 1)
+  {:permission (group/permission-str permission)
    :scope      (pr-str scope)})
 
 (defn group-audit-entries
@@ -317,14 +318,15 @@
    records nothing: nobody's rights changed. A join lists the grants, so each
    user's entries account for what they hold."
   [action {:keys [actor-id actor-email ip-address user-agent]} group members grants]
-  (for [{:keys [id email]} members]
-    {:action            action
-     :actor-id          actor-id
-     :actor-email       actor-email
-     :target-user-id    id
-     :target-user-email email
-     :changes           {:grants (mapv grant-record grants)}
-     :metadata          {:group-id (str (:id group)) :group-name (:name group)}
-     :ip-address        ip-address
-     :user-agent        user-agent
-     :result            :success}))
+  (let [changes {:grants (mapv grant-record grants)}]
+    (for [{:keys [id email]} members]
+      {:action            action
+       :actor-id          actor-id
+       :actor-email       actor-email
+       :target-user-id    id
+       :target-user-email email
+       :changes           changes
+       :metadata          {:group-id (str (:id group)) :group-name (:name group)}
+       :ip-address        ip-address
+       :user-agent        user-agent
+       :result            :success})))

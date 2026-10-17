@@ -2,7 +2,8 @@
   "Admin pages for groups, their members and their grants. Pure Hiccup; plain
    forms that post and redirect."
   (:require [wagoe.platform.core.csrf :as csrf]
-            [wagoe.shared.ui.core.layout :as layout]))
+            [wagoe.shared.ui.core.layout :as layout]
+            [wagoe.user.core.group :as group]))
 
 (def base-path "/web/admin/groups")
 
@@ -14,6 +15,11 @@
 
 (defn- page [title content opts]
   (layout/admin-pilot-page-layout title [:div.user-groups-page content] opts))
+
+(defn- remove-button [action]
+  [:form {:method "post" :action action}
+   (csrf/hidden-field)
+   [:button.secondary {:type "submit"} [:t :user.groups/button-remove]]])
 
 (defn- group-fields [group]
   (list
@@ -64,7 +70,7 @@
   (if (seq options)
     [:select#grant-permission {:name "permission" :required true}
      (for [p options]
-       [:option {:value (subs (str p) 1)} (subs (str p) 1)])]
+       (let [v (group/permission-str p)] [:option {:value v} v]))]
     [:input#grant-permission {:type "text" :name "permission" :required true
                               :placeholder "invoice/approve"}]))
 
@@ -97,10 +103,7 @@
              [:tr
               [:td (:email m)]
               [:td (:name m)]
-              [:td
-               [:form {:method "post" :action (str path "/members/" (:id m) "/remove")}
-                (csrf/hidden-field)
-                [:button.secondary {:type "submit"} [:t :user.groups/button-remove]]]]])]]
+              [:td (remove-button (str path "/members/" (:id m) "/remove"))]])]]
          [:p.empty-state [:t :user.groups/members-empty]])
        [:form.group-member-form {:method "post" :action (str path "/members")}
         (csrf/hidden-field)
@@ -119,12 +122,9 @@
           [:tbody
            (for [g grants]
              [:tr
-              [:td [:code (subs (str (:permission g)) 1)]]
+              [:td [:code (group/permission-str (:permission g))]]
               [:td [:code (pr-str (:scope g))]]
-              [:td
-               [:form {:method "post" :action (str path "/grants/" (:id g) "/remove")}
-                (csrf/hidden-field)
-                [:button.secondary {:type "submit"} [:t :user.groups/button-remove]]]]])]]
+              [:td (remove-button (str path "/grants/" (:id g) "/remove"))]])]]
          [:p.empty-state [:t :user.groups/grants-empty]])
        [:form.group-grant-form {:method "post" :action (str path "/grants")}
         (csrf/hidden-field)

@@ -5,6 +5,7 @@
             [clojure.tools.logging :as log]
             [malli.core :as m]
             [malli.error :as me]
+            [wagoe.config :as config]
             [wagoe.user.core.audit :as audit-core]
             [wagoe.user.core.group :as group-core]
             [wagoe.user.ports :as ports]
@@ -21,16 +22,7 @@
 (defn- schema-of
   "The Malli schema `x` is, or a symbol names. Throws :configuration-error."
   [k x]
-  (let [v (if (symbol? x)
-            (let [found (try (requiring-resolve x)
-                             (catch Exception e
-                               (throw (config-error (str ":wagoe/user :groups " k " names " x ", whose namespace does not load")
-                                                    {:key k :symbol x :cause (ex-message e)}))))]
-              (when-not found
-                (throw (config-error (str ":wagoe/user :groups " k " names " x ", which does not resolve")
-                                     {:key k :symbol x})))
-              @found)
-            x)]
+  (let [v (if (symbol? x) (config/resolve-symbol x) x)]
     (try (m/schema v)
          (catch Exception e
            (throw (config-error (str ":wagoe/user :groups " k " is not a Malli schema: " (ex-message e))
@@ -52,6 +44,10 @@
 
 (defn- not-found [message data]
   (ex-info message (merge {:type :not-found} data)))
+
+(defn- existing-group [group-repository group-id]
+  (or (ports/find-group group-repository group-id)
+      (throw (not-found "No such group" {:group-id group-id}))))
 
 (defn- group-data
   "`group`'s name and description, trimmed and checked."
@@ -99,16 +95,15 @@
   (delete-group [_ group-id]
     (if-let [group (ports/find-group group-repository group-id)]
       (let [members (ports/find-members group-repository group-id)
-            grants  (ports/find-grants group-repository group-id)
+            grants  (when (seq members) (ports/find-grants group-repository group-id))
             removed (ports/remove-group group-repository group-id)]
-        (when removed
+        (when (and removed (seq members))
           (audit! audit-repository :group-leave group members grants))
         removed)
       false))
 
   (add-group-member [_ group-id user-id]
-    (let [group (or (ports/find-group group-repository group-id)
-                    (throw (not-found "No such group" {:group-id group-id})))
+    (let [group (existing-group group-repository group-id)
           user  (or (ports/find-user-by-id user-repository user-id)
                     (throw (not-found "No such user" {:user-id user-id})))
           added (ports/insert-member group-repository group-id (:id user))]
@@ -117,17 +112,15 @@
       added))
 
   (remove-group-member [_ group-id user-id]
-    (let [group   (ports/find-group group-repository group-id)
-          user    (ports/find-user-by-id user-repository user-id)
-          removed (boolean (and group (ports/remove-member group-repository group-id user-id)))]
+    (let [removed (ports/remove-member group-repository group-id user-id)]
       ;; A soft-deleted user holds nothing, so leaving changes nothing to audit.
-      (when (and removed user)
-        (audit! audit-repository :group-leave group [user] (ports/find-grants group-repository group-id)))
+      (when-let [user (and removed (ports/find-user-by-id user-repository user-id))]
+        (audit! audit-repository :group-leave (ports/find-group group-repository group-id) [user]
+                (ports/find-grants group-repository group-id)))
       removed))
 
   (add-group-grant [_ group-id grant]
-    (let [group (or (ports/find-group group-repository group-id)
-                    (throw (not-found "No such group" {:group-id group-id})))
+    (let [group (existing-group group-repository group-id)
           grant {:permission (:permission grant) :scope (or (:scope grant) {})}]
       (when-let [{:keys [error]} (group-core/grant-refusal grant settings)]
         (throw (ex-info (:message error) error)))

@@ -172,6 +172,15 @@
     (is (not (.contains ddl "fk_members_tag_id")) "an -id field without :references gets no key")
     (is (.contains ddl "scope VARCHAR NOT NULL") ":column-type wins over the Malli type")))
 
+(deftest ^:unit tables-are-created-after-the-ones-they-reference
+  (let [order (map first (#'schema/creation-order
+                          {"grants"  [:map [:id :uuid] [:group-id {:references :groups} :uuid]]
+                           "members" [:map [:id :uuid] [:group-id {:references :groups} :uuid]
+                                      [:user-id {:references :auth_users} :uuid]]
+                           "groups"  [:map [:id :uuid] [:parent-id {:references :groups} [:maybe :uuid]]]}))]
+    (is (= "groups" (first order)) "a reference outside the map, or to itself, does not hold a table back")
+    (is (= #{"grants" "members"} (set (rest order))))))
+
 (deftest ^:unit generate-table-ddl-with-double-test
   (testing "DDL with double precision field"
     (let [malli-schema [:map

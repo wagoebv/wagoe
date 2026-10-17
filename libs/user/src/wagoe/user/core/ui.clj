@@ -1420,10 +1420,9 @@
       [:option {:value "logout" :selected (= "logout" (:action filters))} [:t :common/audit-logout]]
       [:option {:value "role-change" :selected (= "role-change" (:action filters))} [:t :common/audit-role-change]]
       [:option {:value "bulk-action" :selected (= "bulk-action" (:action filters))} [:t :common/audit-bulk-action]]
-      [:option {:value "group-join" :selected (= "group-join" (:action filters))} [:t :common/audit-group-join]]
-      [:option {:value "group-leave" :selected (= "group-leave" (:action filters))} [:t :common/audit-group-leave]]
-      [:option {:value "grant-add" :selected (= "grant-add" (:action filters))} [:t :common/audit-grant-add]]
-      [:option {:value "grant-remove" :selected (= "grant-remove" (:action filters))} [:t :common/audit-grant-remove]]]]
+      (for [[action k] [["group-join" :common/audit-group-join] ["group-leave" :common/audit-group-leave]
+                        ["grant-add" :common/audit-grant-add] ["grant-remove" :common/audit-grant-remove]]]
+        [:option {:value action :selected (= action (:action filters))} [:t k]])]]
 
     [:div.filter-group
      [:label {:for "result"} [:t :user/audit-filter-result-label]]

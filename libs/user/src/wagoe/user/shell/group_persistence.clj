@@ -5,6 +5,7 @@
   (:require [clojure.edn :as edn]
             [wagoe.core.utils.type-conversion :as tc]
             [wagoe.platform.database :as db]
+            [wagoe.user.core.group :as group]
             [wagoe.user.ports :as ports])
   (:import (java.time Instant)
            (java.util UUID)))
@@ -21,8 +22,6 @@
       (contains? row :member-count) (assoc :member-count (long (:member-count row)))
       (contains? row :grant-count)  (assoc :grant-count (long (:grant-count row))))))
 
-(defn- permission->db [kw] (subs (str kw) 1))
-
 (defn- db->grant [row]
   (cond-> {:id         (tc/string->uuid (:id row))
            :group-id   (tc/string->uuid (:group-id row))
@@ -31,18 +30,17 @@
            :created-at (tc/string->instant (:created-at row))}
     (contains? row :group-name) (assoc :group-name (:group-name row))))
 
-(defn- counted
-  "A subquery counting `table`'s rows for the group, live users only for
-   memberships."
-  [table]
-  (if (= table :user_group_members)
-    {:select [[[:count :*]]]
-     :from   [[:user_group_members :m]]
-     :join   [[:auth_users :a] [:= :a.id :m.user_id]]
-     :where  [:and [:= :m.group_id :g.id] [:= :a.deleted_at nil]]}
-    {:select [[[:count :*]]]
-     :from   [[table :t]]
-     :where  [:= :t.group_id :g.id]}))
+(def ^:private member-count
+  "The group's live members, as a subquery of `find-groups`."
+  {:select [[[:count :*]]]
+   :from   [[:user_group_members :m]]
+   :join   [[:auth_users :a] [:= :a.id :m.user_id]]
+   :where  [:and [:= :m.group_id :g.id] [:= :a.deleted_at nil]]})
+
+(def ^:private grant-count
+  {:select [[[:count :*]]]
+   :from   [[:user_group_grants :t]]
+   :where  [:= :t.group_id :g.id]})
 
 (defn- member? [ctx group-id user-id]
   (some? (db/execute-one! ctx {:select [:id]
@@ -60,8 +58,8 @@
 
   (find-groups [_]
     (mapv db->group (db/execute-query! ctx {:select   [:g.id :g.name :g.description :g.created_at :g.updated_at
-                                                       [(counted :user_group_members) :member-count]
-                                                       [(counted :user_group_grants) :grant-count]]
+                                                       [member-count :member-count]
+                                                       [grant-count :grant-count]]
                                             :from     [[:user_groups :g]]
                                             :order-by [[:g.name :asc]]})))
 
@@ -102,18 +100,16 @@
                                   :order-by [[:a.email :asc]]})))
 
   (insert-member [_ group-id user-id]
-    (if (member? ctx group-id user-id)
-      false
-      (try
-        (db/execute-update! ctx {:insert-into :user_group_members
-                                 :values      [{:id         (tc/uuid->string (UUID/randomUUID))
-                                                :group_id   (id-str group-id)
-                                                :user_id    (id-str user-id)
-                                                :created_at (tc/instant->string (Instant/now))}]})
-        true
-        ;; Two requests adding the same member: the unique key refuses one.
-        (catch Exception e
-          (if (member? ctx group-id user-id) false (throw e))))))
+    (try
+      (db/execute-update! ctx {:insert-into :user_group_members
+                               :values      [{:id         (tc/uuid->string (UUID/randomUUID))
+                                              :group_id   (id-str group-id)
+                                              :user_id    (id-str user-id)
+                                              :created_at (tc/instant->string (Instant/now))}]})
+      true
+      ;; A member already: the unique key refuses the row.
+      (catch Exception e
+        (if (member? ctx group-id user-id) false (throw e)))))
 
   (remove-member [_ group-id user-id]
     (pos? (db/execute-update! ctx {:delete-from :user_group_members
@@ -132,7 +128,7 @@
       (db/execute-update! ctx {:insert-into :user_group_grants
                                :values      [{:id         (tc/uuid->string (:id stored))
                                               :group_id   (id-str (:group-id stored))
-                                              :permission (permission->db (:permission stored))
+                                              :permission (group/permission-str (:permission stored))
                                               :scope      (pr-str (:scope stored))
                                               :created_at (tc/instant->string (:created-at stored))}]})
       stored))

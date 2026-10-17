@@ -391,6 +391,26 @@
 ;; Schema Initialization
 ;; =============================================================================
 
+(defn- referenced-tables
+  "The tables `malli-schema`'s fields name under `:references`."
+  [malli-schema]
+  (into #{} (keep #(some-> (get-in % [:properties :references]) name))
+        (keep extract-field-info (rest malli-schema))))
+
+(defn- creation-order
+  "`schema-definitions` as [table schema] pairs, each after the tables in the
+   map it references, so its foreign keys have something to point at."
+  [schema-definitions]
+  (loop [pending (vec schema-definitions) done [] created #{}]
+    (if (empty? pending)
+      done
+      (let [ready? (fn [[t s]] (every? #(or (created %) (= % t) (not (contains? schema-definitions %)))
+                                       (referenced-tables s)))
+            [ready waiting] ((juxt filter remove) ready? pending)]
+        (if (empty? ready)
+          (into done waiting)
+          (recur (vec waiting) (into done ready) (into created (map first ready))))))))
+
 (defn initialize-tables-from-schemas!
   "Initialize database tables and indexes from a map of Malli schema definitions.
    
@@ -418,7 +438,7 @@
     ; a no-op, so add the fields the schema gained since, and re-apply named enum
     ; CHECK constraints to keep initialization idempotent (and to heal H2's
     ; in-memory reconnect corruption).
-    (doseq [[table-name malli-schema] schema-definitions]
+    (doseq [[table-name malli-schema] (creation-order schema-definitions)]
       (let [existed? (db-core/table-exists? ctx table-name)
             ddl (generate-table-ddl ctx table-name malli-schema)]
         (log/debug "Creating table" {:table table-name :ddl ddl :existed? existed?})

@@ -736,19 +736,20 @@
     {:api        []
      :static     []
      :web-prefix "/web/admin"
-     :web        [(route "/groups"
-                         {:get  {:handler (group-handlers/list-page group-service)}
-                          :post {:handler (group-handlers/create group-service)}})
-                  (route "/groups/:id"
-                         {:get  {:handler (group-handlers/show group-service)}
-                          :post {:handler (group-handlers/update-group group-service)}})
-                  (route "/groups/:id/delete"
-                         {:post {:handler (group-handlers/delete-group group-service)}})
-                  (route "/groups/:id/members"
-                         {:post {:handler (group-handlers/add-member user-service group-service)}})
-                  (route "/groups/:id/members/:user-id/remove"
-                         {:post {:handler (group-handlers/remove-member group-service)}})
-                  (route "/groups/:id/grants"
-                         {:post {:handler (group-handlers/add-grant group-service)}})
-                  (route "/groups/:id/grants/:grant-id/remove"
-                         {:post {:handler (group-handlers/remove-grant group-service)}})]}))
+     :web        [["/groups"
+                   (route ""
+                          {:get  {:handler (group-handlers/list-page group-service)}
+                           :post {:handler (group-handlers/create group-service)}})
+                   (route "/:id"
+                          {:get  {:handler (group-handlers/show group-service)}
+                           :post {:handler (group-handlers/update-group group-service)}})
+                   (route "/:id/delete"
+                          {:post {:handler (group-handlers/delete-group group-service)}})
+                   (route "/:id/members"
+                          {:post {:handler (group-handlers/add-member user-service group-service)}})
+                   (route "/:id/members/:user-id/remove"
+                          {:post {:handler (group-handlers/remove-member group-service)}})
+                   (route "/:id/grants"
+                          {:post {:handler (group-handlers/add-grant group-service)}})
+                   (route "/:id/grants/:grant-id/remove"
+                          {:post {:handler (group-handlers/remove-grant group-service)}})]]}))

@@ -7,17 +7,10 @@
             [clojure.tools.logging :as log]
             [malli.core :as m]
             [ring.util.response :as response]
-            [wagoe.i18n.shell.middleware :as i18n-middleware]
-            [wagoe.i18n.shell.render :as i18n]
             [wagoe.user.core.group-ui :as group-ui]
-            [wagoe.user.ports :as ports]))
+            [wagoe.user.ports :as ports]
+            [wagoe.user.shell.web-handlers :refer [html-response]]))
 
-(defn- html [request body status]
-  (let [t (or (i18n-middleware/resolve-t-fn request)
-              (fn ([k] (name k)) ([k _] (name k)) ([k _ _] (name k))))]
-    {:status  status
-     :headers {"Content-Type" "text/html; charset=utf-8"}
-     :body    (i18n/render body t)}))
 
 (defn- page-opts [request]
   {:user  (:user request)
@@ -45,20 +38,19 @@
    explanation when there is one."
   [e]
   (let [{:keys [type field errors]} (ex-data e)]
-    (list [:t (cond
-                (= :permission field) :user.groups/error-permission
-                (= :scope field)      :user.groups/error-scope
-                (= :email field)      :user.groups/error-no-user
-                (= :not-found type)   :user.groups/not-found
-                :else                 :user.groups/error-name)]
+    (list [:t (or ({:permission :user.groups/error-permission
+                    :scope      :user.groups/error-scope
+                    :email      :user.groups/error-no-user} field)
+                  ({:not-found :user.groups/not-found} type)
+                  :user.groups/error-name)]
           (when errors [:code " " (pr-str errors)]))))
 
 (defn- not-found [request]
-  (html request [:p [:t :user.groups/not-found]] 404))
+  (html-response request [:p [:t :user.groups/not-found]] 404))
 
 (defn- group-page [request group-service group-id status opts]
   (if-let [group (ports/get-group group-service group-id)]
-    (html request
+    (html-response request
           (group-ui/group-page group (permission-options group-service) (merge (page-opts request) opts))
           status)
     (not-found request)))
@@ -69,7 +61,7 @@
 
 (defn list-page [group-service]
   (fn [request]
-    (html request (group-ui/groups-page (ports/list-groups group-service) (page-opts request)) 200)))
+    (html-response request (group-ui/groups-page (ports/list-groups group-service) (page-opts request)) 200)))
 
 (defn create [group-service]
   (fn [request]
@@ -79,7 +71,7 @@
           (redirect (group-ui/group-path (:id group)) :user.groups/flash-created))
         (catch clojure.lang.ExceptionInfo e
           (if (refused? e)
-            (html request
+            (html-response request
                   (group-ui/groups-page (ports/list-groups group-service)
                                         (assoc (page-opts request) :error (error-text e) :form data))
                   422)
