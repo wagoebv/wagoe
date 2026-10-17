@@ -168,7 +168,11 @@ docs: `docs/modules/libraries/pages/jobs.adoc`. What to keep true when editing:
   dies in between loses the tick (at most once).
 - DB lease and claim expiry use the database clock (`now-ms-sql`), Redis uses
   `PX`. Tables: `job_idempotency_keys`, `job_recurring`, `job_ticker_lease`,
-  created at boot by `create-recurring-tables!`.
+  created at boot by `create-recurring-tables!`. The DB lease is
+  `wagoe.platform.lease`, shared with the events outbox relay.
+- **A scheduled type with no handler is logged at error** on the first tick,
+  naming the known types. Not a boot failure: handlers may be registered
+  after boot (`register-handler!`), or live only on worker nodes.
 
 ## Job Handler Signature
 

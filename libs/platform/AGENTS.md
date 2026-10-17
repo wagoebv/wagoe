@@ -15,6 +15,7 @@ Infrastructure layer for HTTP routing/interceptors, database integration, CLI/ru
 | `wagoe.platform.shell.http.reitit-router` | Compiles module route contributions into the Ring handler |
 | `wagoe.platform.ports.http` | HTTP router and server protocols |
 | `wagoe.platform.db.*` | Database context, connection pooling, shared persistence utilities |
+| `wagoe.platform.lease` | A lease row replicas take turns holding, timed by the database clock (jobs ticker, outbox relay) |
 
 ---
 

@@ -4,7 +4,8 @@
   (:require [clojure.test :refer [deftest is testing]]
             [wagoe.jobs.ports :as ports]
             [wagoe.jobs.shell.adapters.in-memory :as mem]
-            [wagoe.jobs.shell.recurring :as recurring])
+            [wagoe.jobs.shell.recurring :as recurring]
+            [wagoe.jobs.shell.worker :as worker])
   (:import [java.time Instant]))
 
 (defn- at [s] (Instant/parse s))
@@ -122,3 +123,20 @@
                  (recurring/enqueue-once! broken idempotency :default j "order-42")))
     (is (true? (ports/claim-key! idempotency "send-receipt" "order-42" 1000))
         "the retry can claim it")))
+
+(deftest ^:unit a-job-type-with-no-handler-is-reported-once
+  (let [registry (worker/create-job-registry)
+        reported (atom [])
+        s        (recurring/create-scheduler (assoc (backend) :registry registry))]
+    (ports/register-handler! registry :nightly-report (fn [_] {:success? true}))
+    (recurring/schedule-recurring! s :nightly-report "0 2 * * *")
+    (recurring/schedule-recurring! s :nightly-reprot "0 2 * * *")
+    (is (= [:nightly-reprot] (recurring/unhandled-types s registry)))
+    (with-redefs-fn {#'recurring/report-unhandled! (fn [types _] (swap! reported conj types))}
+      (fn []
+        (recurring/tick! s (at "2026-01-02T01:00:00Z"))
+        (recurring/tick! s (at "2026-01-02T01:00:05Z"))
+        (is (= [[:nightly-reprot]] @reported) "on the first tick, not every tick")
+        (recurring/schedule-recurring! s :weekly-digest "0 3 * * 1")
+        (recurring/tick! s (at "2026-01-02T01:00:10Z"))
+        (is (= [[:nightly-reprot] [:weekly-digest]] @reported) "a schedule added later is checked too")))))
