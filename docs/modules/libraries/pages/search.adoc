@@ -12,7 +12,7 @@ libs/search/src/wagoe/search/
 ├── schema.clj         — Malli schemas: SearchDocument, SearchResult, SearchResponse
 ├── ports.clj          — ISearchStore (persistence), ISearchEngine (orchestration)
 ├── core/
-│   ├── index.clj      — defsearch macro, global registry, build-document*
+│   ├── index.clj      — defsearch, build-document*
 │   ├── query.clj      — SQL builders (PostgreSQL FTS + H2/SQLite LIKE fallback)
 │   └── ui.clj         — Hiccup: search results, admin index page
 └── shell/
@@ -28,8 +28,7 @@ libs/search/src/wagoe/search/
 (require '[wagoe.search.core.index :as search])
 
 (search/defsearch product-search
-  {:id          :product-search
-   :entity-type :product
+  {:entity-type :product
    :language    "english"
    :fields      [{:name :title  :weight :a}
                  {:name :body   :weight :b}
@@ -38,6 +37,39 @@ libs/search/src/wagoe/search/
 ----
 
 Weight levels: `:a` (highest) → `:d` (lowest).
+
+`defsearch` only binds the var. Hand definitions, keyed by index id, to
+`:wagoe/search`: as your module's `:search` part, or as data in config.
+
+[source,clojure]
+----
+(defn ig-config [_settings _ctx]
+  {:search {:product-search search/product-search}})
+----
+
+[source,clojure]
+----
+:wagoe/search
+{:indexes {:product-search {:entity-type :product
+                            :fields      [{:name :title :weight :a}]}}}
+----
+
+Each system holds its own definitions. The older
+`wagoe.search.shell.registry/defsearch` still works, with a deprecation
+warning.
+
+== The search API
+
+`POST /api/v1/search/:index-id` and `/suggest`, and the admin search pages,
+serve an index only when its definition opts in:
+
+* `:api? true` serves it to any signed-in user.
+* `:api {:authorize (fn [request definition] ...)}` serves it when the hook
+  returns truthy.
+
+Any other index answers 404, the same as an unknown one. An index that backs
+your own page, with its own visibility rules, should not opt in. The framework
+ships no indexes.
 
 == Indexing documents
 

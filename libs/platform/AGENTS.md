@@ -246,6 +246,9 @@ Discovery builds a scaffolded module's four keys (`:wagoe/<name>`, `-repository`
 - `:auth {:mfa-required? … :login-redirect …}` hands sign-in hooks, often refs to
   your components, to the user module's `:wagoe/auth-hooks`. One module per hook;
   contributing one without the user module fails the boot. See `libs/user/AGENTS.md`.
+- `:search {index-id definition}` hands search index definitions, or refs to
+  components returning them, to `:wagoe/search`. One module per index id;
+  contributing one without the search module fails the boot. See `libs/search/AGENTS.md`.
 
 ### Authentication is the default
 

@@ -2,7 +2,6 @@
   "Unit tests for SearchService using an in-memory ISearchStore double."
   (:require [clojure.test :refer [deftest testing is use-fixtures]]
             [wagoe.search.ports :as ports]
-            [wagoe.search.shell.registry :as registry]
             [wagoe.search.shell.service :as service]
             [clojure.string :as str])
   (:import [java.util UUID]))
@@ -95,20 +94,18 @@
 (def ^:private ^:dynamic *service* nil)
 
 (defn- service-fixture [f]
-  (registry/clear-registry!)
-  (registry/register-search!
-   {:id          :product-search
-    :entity-type :product
-    :language    :english
-    :fields      [{:name :title       :weight :a}
-                  {:name :description :weight :b}
-                  {:name :tags        :weight :c}]
-    :options     {:highlight? false}})
   (let [store   (create-memory-store)
-        svc     (service/create-search-service store)]
+        svc     (service/create-search-service
+                 store
+                 {:product-search {:id          :product-search
+                                   :entity-type :product
+                                   :language    :english
+                                   :fields      [{:name :title       :weight :a}
+                                                 {:name :description :weight :b}
+                                                 {:name :tags        :weight :c}]
+                                   :options     {:highlight? false}}})]
     (binding [*service* svc]
-      (f)))
-  (registry/clear-registry!))
+      (f))))
 
 (use-fixtures :each service-fixture)
 

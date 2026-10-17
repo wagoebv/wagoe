@@ -15,6 +15,11 @@
    Searching takes a signed-in user; indexing, removing and the admin pages
    take the admin role (BOU-568).
 
+   Search, suggest and the admin pages serve only an index whose definition
+   opts in with `:api? true` or an `:api :authorize` fn; a hook, when set, must
+   accept the request. Any other index answers 404, as an unknown one does, so
+   a caller cannot tell the two apart.
+
    An index whose definition lists `:tenant-id` among its `:filters` is
    tenant-scoped. A search of one reads the request's resolved tenant, and only
    when the caller is an active member of it; a `tenant_id` the caller sends is
@@ -25,7 +30,7 @@
             [wagoe.i18n.shell.render :as i18n]
             [wagoe.search.core.index :as index]
             [wagoe.search.ports :as ports]
-            [wagoe.search.shell.registry :as registry]
+            [wagoe.search.shell.service :as service]
             [wagoe.search.core.ui :as search-ui]
             [clojure.tools.logging :as log]))
 
@@ -66,17 +71,35 @@
       (access/forbidden-response "Admin role required" request
                                  (access/correlation-id request (str (random-uuid)))))))
 
+(defn- served?
+  "Whether `definition` is served to `request`."
+  [request definition]
+  (and (index/api-enabled? definition)
+       ;; fn?, not ifn?: a keyword hook would return its default, the definition.
+       (if-let [authorize (get-in definition [:api :authorize])]
+         (and (fn? authorize) (boolean (authorize request definition)))
+         true)))
+
+(defn- served!
+  "The definition of `index-id` when it is served to `request`, else the
+   engine's unknown-index :not-found."
+  [engine request index-id]
+  (let [definition (ports/index-definition engine index-id)]
+    (if (and definition (served? request definition))
+      definition
+      (throw (service/unknown-index index-id)))))
+
 (defn- tenant-filter? [k]
   (= "tenant_id" (index/filter-key->json-key k)))
 
 (defn- scoped-filters
-  "The filters a search of `index-id` runs with, or ::refused.
+  "The filters a search of `definition` runs with, or ::refused.
 
    See the namespace docstring for the rule."
-  [request index-id caller-filters]
+  [request definition caller-filters]
   (let [own       (into {} (remove (comp tenant-filter? key)) caller-filters)
         tenant-id (get-in request [:tenant :id])
-        scoped?   (some tenant-filter? (:filters (registry/get-search index-id)))]
+        scoped?   (some tenant-filter? (:filters definition))]
     (cond
       (not scoped?)                                own
       (and tenant-id (or (:tenant-membership request)
@@ -137,7 +160,8 @@
         limit      (get body :limit 20)
         offset     (get body :offset 0)
         highlight? (get body :highlight? false)
-        filters    (scoped-filters request index-id (get body :filters))]
+        filters    (scoped-filters request (served! engine request index-id)
+                                   (get body :filters))]
     (log/info "Search request" {:index-id index-id :query query})
     (if (= ::refused filters)
       (refused request)
@@ -165,7 +189,7 @@
         body         (get-in request [:parameters :body] {})
         query        (get body :query "")
         limit        (get body :limit 5)
-        filters      (scoped-filters request index-id nil)]
+        filters      (scoped-filters request (served! engine request index-id) nil)]
     (if (= ::refused filters)
       (refused request)
       (let [suggestions (ports/suggest engine index-id query
@@ -221,7 +245,8 @@
 (defn handle-list-indices-web
   "GET /web/admin/search"
   [engine request]
-  (let [indices   (ports/list-indices engine)
+  (let [indices   (filterv #(served? request (ports/index-definition engine (:id %)))
+                           (ports/list-indices engine))
         page-opts {:user  (:user request)
                    :flash (:flash request)}]
     (html-response request (search-ui/indices-page indices page-opts))))
@@ -230,8 +255,8 @@
   "GET /web/admin/search/:index-id"
   [engine request]
   (let [index-id   (keyword (get-in request [:path-params :index-id]))
-        indices    (ports/list-indices engine)
-        index-info (first (filter #(= index-id (:id %)) indices))
+        index-info (when (some->> (ports/index-definition engine index-id) (served? request))
+                     (first (filter #(= index-id (:id %)) (ports/list-indices engine))))
         page-opts  {:user  (:user request)
                     :flash (:flash request)}]
     (if (nil? index-info)
@@ -249,7 +274,8 @@
   (let [index-id    (keyword (get-in request [:path-params :index-id]))
         form-params (get-in request [:form-params] {})
         query       (get form-params "query" "")
-        results     (ports/search engine index-id query
+        definition  (served! engine request index-id)
+        results     (ports/search engine (:id definition) query
                                   {:limit 20 :highlight? true})]
     {:status  200
      :headers {"Content-Type" "text/html; charset=utf-8"}
