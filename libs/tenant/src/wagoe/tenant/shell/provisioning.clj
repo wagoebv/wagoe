@@ -39,7 +39,8 @@
    identifier before it reaches a statement string."
   [schema-name]
   (when-not (tenant-core/valid-schema-name? schema-name)
-    (throw (ex-info (str "Unsafe tenant schema name (tenant_ and lowercase alphanumerics or _, at most "
+    (throw (ex-info (str "Unsafe tenant schema name (" tenant-schema/schema-prefix
+                         " and lowercase alphanumerics or _, at most "
                          tenant-schema/max-schema-name-length " bytes)")
                     {:type :validation-error
                      :field :schema-name
