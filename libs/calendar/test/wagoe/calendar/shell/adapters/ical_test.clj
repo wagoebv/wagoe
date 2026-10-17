@@ -533,12 +533,19 @@
       (is (= "Europe/Amsterdam" (second before)))))
   (testing "an unknown TZID without a VTIMEZONE reads in the :timezone option"
     (is (= [[(Instant/parse "2027-03-10T09:00:00Z") "Europe/Amsterdam"]]
-           (import-at "Nowhere" [] ["20270310T100000"])))))
+           (import-at "Nowhere" [] ["20270310T100000"]))))
+  (testing "a floating time ignores a VTIMEZONE without a TZID"
+    (let [[ev] (service/import-ical
+                (vcalendar "BEGIN:VTIMEZONE" "BEGIN:STANDARD" "DTSTART:20000101T000000"
+                           "TZOFFSETFROM:+0500" "TZOFFSETTO:+0500" "END:STANDARD" "END:VTIMEZONE"
+                           "BEGIN:VEVENT" "UID:f" "DTSTART:20270310T100000" "END:VEVENT")
+                {:timezone "Europe/Amsterdam"})]
+      (is (= (Instant/parse "2027-03-10T09:00:00Z") (:start ev))))))
 
 (deftest ^:integration import-round-trip-us-test
   (let [tz   "America/New_York"
         mk   (fn [local rrule] (cond-> {:id (random-uuid) :title "Call, then lunch" :timezone tz
-                                         :start (at tz local) :end (.plusSeconds (at tz local) 3600)}
+                                        :start (at tz local) :end (.plusSeconds (at tz local) 3600)}
                                  rrule (assoc :recurrence rrule)))
         evs  [(mk "2027-03-08T09:00" nil) (mk "2027-03-13T23:30" nil) (mk "2027-03-10T10:00" "FREQ=WEEKLY")]
         ical (service/export-ical evs)]
@@ -552,6 +559,13 @@
     (doseq [ical ["not iCal"
                   (vcalendar "BEGIN:VEVENT" "UID:a" "DTSTART:2026-03-10" "END:VEVENT")
                   (vcalendar "BEGIN:VEVENT" "UID:a" "DTSTART:20260310T090000Z" "RRULE:FREQ=NEVER" "END:VEVENT")
-                  (vcalendar "BEGIN:VEVENT" "DTSTART:20260310T090000Z" "END:VEVENT")]]
+                  (vcalendar "BEGIN:VEVENT" "DTSTART:20260310T090000Z" "END:VEVENT")
+                  (vcalendar "BEGIN:VTIMEZONE" "TZID:C" "BEGIN:STANDARD" "TZOFFSETFROM:+0100"
+                             "TZOFFSETTO:+0200" "END:STANDARD" "END:VTIMEZONE"
+                             "BEGIN:VEVENT" "UID:a" "DTSTART;TZID=C:20260310T090000" "END:VEVENT")
+                  (vcalendar "BEGIN:VTIMEZONE" "TZID:C" "BEGIN:STANDARD" "DTSTART:20000101T000000"
+                             "RDATE:20100101T000000Z" "TZOFFSETFROM:+0100" "TZOFFSETTO:+0200"
+                             "END:STANDARD" "END:VTIMEZONE"
+                             "BEGIN:VEVENT" "UID:a" "DTSTART;TZID=C:20260310T090000" "END:VEVENT")]]
       (is (= :validation-error
              (:type (ex-data (try (service/import-ical ical) (catch clojure.lang.ExceptionInfo e e)))))))))

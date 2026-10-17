@@ -374,19 +374,25 @@
       (throw (ex-info "VTIMEZONE RRULE must be YEARLY" {:type :validation-error :field :rrule :value rrule})))
     r))
 
+(defn- observance-time
+  "An observance's DTSTART or RDATE, which RFC 5545 gives in local time."
+  ^LocalDateTime [p]
+  (let [t (some-> p read-date)]
+    (when-not (instance? LocalDateTime t)
+      (throw (ex-info "VTIMEZONE observance times must be local times"
+                      {:type :validation-error :field (keyword (str/lower-case (:name p "DTSTART")))})))
+    t))
+
 (defn- observance-onsets
   "[instant from to] per onset of observance `o` before `until`. RRULEs are
    expanded by ical4j's Recur, which reads BYDAY=2SU as RFC 5545 does."
   [o ^LocalDateTime until]
-  (let [^LocalDateTime start (read-date (prop o "DTSTART"))
-        _     (when-not (instance? LocalDateTime start)
-                (throw (ex-info "VTIMEZONE observance DTSTART must be a local time"
-                                {:type :validation-error :field :dtstart})))
+  (let [start (observance-time (prop o "DTSTART"))
         from  (ZoneOffset/of (str/trim (str (:value (prop o "TZOFFSETFROM")))))
         to    (ZoneOffset/of (str/trim (str (:value (prop o "TZOFFSETTO")))))
         dates (concat [start]
                       (mapcat #(.getDates (yearly-recur (:value %)) start start until) (props o "RRULE"))
-                      (for [p (props o "RDATE") v (str/split (:value p) #",")] (read-date (assoc p :value v))))]
+                      (for [p (props o "RDATE") v (str/split (:value p) #",")] (observance-time (assoc p :value v))))]
     (for [^LocalDateTime d (distinct dates) :when (.isBefore d until)]
       [(.toInstant d from) from to])))
 
@@ -435,8 +441,9 @@
     (instance? LocalDate v)      (.toInstant (.atStartOfDay ^LocalDate v zone))))
 
 (defn- plus-duration
-  "Instant `start` plus a DURATION: days are calendar days, as for a
-   ZonedDateTime. Nil when they do not combine (a time duration on a date)."
+  "Instant `start` plus a DURATION. Whole days and weeks are calendar days;
+   ical4j reads a mixed one (P1DT2H) as exact hours. Nil when they do not
+   combine (a time duration on a date)."
   [start at ^ZoneId zone duration-prop]
   (let [amount (.getDuration (TemporalAmountAdapter/parse (str/trim (:value duration-prop))))]
     (cond
@@ -468,15 +475,15 @@
                       (throw (ex-info "VEVENT without a UID" {:type :validation-error :field :uid})))
         start-p   (prop vevent "DTSTART")
         start     (some-> start-p read-date)
-        resolve   #(resolve (get-in % [:params "TZID"]))
-        {:keys [timezone at]} (resolve start-p)
+        zone-of   #(resolve (get-in % [:params "TZID"]))
+        {:keys [timezone at]} (zone-of start-p)
         timezone  (or timezone default-tz)
         zone      (ZoneId/of timezone)
         all-day?  (instance? LocalDate start)
         end-p     (prop vevent "DTEND")
         dur-p     (prop vevent "DURATION")
         end       (cond
-                    end-p (value->instant (read-date end-p) (:at (resolve end-p)) zone)
+                    end-p (value->instant (read-date end-p) (:at (zone-of end-p)) zone)
                     (and start dur-p) (plus-duration start at zone dur-p)
                     all-day? (value->instant (.plusDays ^LocalDate start 1) at zone))
         rrule     (some-> (prop vevent "RRULE") :value str/trim)]
@@ -496,8 +503,11 @@
   "EventData for each VEVENT in `ical`, local times read by `zone-resolver`."
   [ical default-tz]
   (let [components (parse-components ical)
-        vtimezones (into {} (for [c components :when (= "VTIMEZONE" (:name c))]
-                              [(some-> (prop c "TZID") :value str/trim) (:children c)]))
+        vtimezones (into {} (for [c components
+                                  :when (= "VTIMEZONE" (:name c))
+                                  :let [tzid (some-> (prop c "TZID") :value str/trim not-empty)]
+                                  :when tzid]
+                              [tzid (:children c)]))
         vevents    (filter #(= "VEVENT" (:name %)) components)
         last-year  (transduce (comp (mapcat #(keep (partial prop %) ["DTSTART" "DTEND"]))
                                     (keep #(some->> (:value %) str/trim (re-find #"^\d{4}") parse-long)))
