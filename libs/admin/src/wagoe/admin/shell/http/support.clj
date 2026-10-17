@@ -424,8 +424,9 @@
   "Field errors for a key over several columns the database refused: each of
    its fields marked, since no one of them is wrong alone (BOU-712)."
   [e]
-  (when-let [fields (seq (:fields (ex-data e)))]
-    (zipmap fields (repeat [[:t :admin/error-duplicate-values]]))))
+  (let [{:keys [constraint fields]} (ex-data e)]
+    (when (and (= :unique constraint) (seq fields))
+      (zipmap fields (repeat [[:t :admin/error-duplicate-values]])))))
 
 (defn html-response
   "Create HTML response with standard headers, resolving [:t ...] i18n markers.

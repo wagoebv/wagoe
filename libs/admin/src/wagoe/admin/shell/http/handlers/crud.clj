@@ -130,7 +130,9 @@
   "`nested` with a refusal from the service put where the form shows it: a
    row the database refused, or a has-many given too few rows."
   [nested e]
-  (let [{:keys [child errors too-few too-many]} (ex-data e)]
+  (let [{:keys [child too-few too-many]} (ex-data e)
+        ;; A child's key over several columns: those fields on its row (BOU-712).
+        errors (or (:errors (ex-data e)) (support/conflict-errors e))]
     (update nested :sections
             (fn [sections]
               (mapv (fn [{:keys [rel filled-indexes] :as section}]
@@ -245,7 +247,7 @@
                                                       :else                (support/conflict-errors e))))
                   _ (when-not (or refused? conflict?)
                       (log/error e "Failed to create entity" {:entity entity-name}))
-                  nested (cond-> nested (and nested refused?) (nested-refusal e))
+                  nested (cond-> nested (and nested (or refused? conflict?)) (nested-refusal e))
                   entities (ports/list-available-entities schema-provider)
                   entity-configs (into {} (map (fn [e] [e (ports/get-entity-config schema-provider e)])) entities)
                   permissions (permissions/get-entity-permissions user entity-name entity-config)]

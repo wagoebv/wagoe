@@ -4,6 +4,7 @@
    This is part of the imperative shell - it performs database I/O,
    manages transactions, and handles side effects like logging."
   (:require [wagoe.platform.core.database.constraint :as constraint]
+            [wagoe.platform.core.http.problem-details :as problem]
             [wagoe.platform.core.database.query :as core-query]
             [wagoe.platform.shell.database.validation :as core-validation]
             [wagoe.core.utils.type-conversion :as type-conversion]
@@ -171,18 +172,25 @@
 
 (defn- named-columns
   "`v`, a unique violation, with the columns of key `key-name` read from the
-   database when the driver's message did not name them."
+   database when the driver's message did not name them. Only a key on the
+   statement's table: the message quotes the values sent, so its key name
+   may be one a caller wrote."
   [ctx sql key-name {:keys [kind field fields] :as v}]
-  (if (and (= :unique kind) (not (or field fields)) key-name)
-    (let [[table index] (if-let [i (str/last-index-of key-name ".")]
+  (let [target        (constraint/statement-table sql)
+        [table index] (when key-name
+                        (if-let [i (str/last-index-of key-name ".")]
                           [(subs key-name 0 i) (subs key-name (inc i))]
-                          [(constraint/statement-table sql) key-name])]
+                          [target key-name]))]
+    (if (and (= :unique kind) (not (or field fields)) table
+             (= target (str/lower-case table)))
       (try
         (constraint/with-columns v (protocols/key-columns (:adapter ctx) (current-datasource ctx) table index))
         (catch Exception e
           (log/debug "Could not read the columns of a key" {:key key-name :error (ex-message e)})
-          v)))
-    v))
+          v)
+        ;; A reified adapter that predates key-columns.
+        (catch AbstractMethodError _ v))
+      v)))
 
 (defn- fail!
   "Log `sql-query`'s failure `e` and throw it on: a :conflict for a refused key,
@@ -454,7 +462,8 @@
             result)
 
           (catch Exception e
-            (log/error "Transaction failed, rolling back"
-                       {:adapter (protocols/dialect (:adapter ctx))
-                        :error (redaction/loggable-message e)})
+            ;; A refused key is the caller's to answer, not a fault (BOU-712).
+            (log/logp (problem/exception-log-level e {}) "Transaction failed, rolling back"
+                      {:adapter (protocols/dialect (:adapter ctx))
+                       :error (redaction/loggable-message e)})
             (throw e)))))))
