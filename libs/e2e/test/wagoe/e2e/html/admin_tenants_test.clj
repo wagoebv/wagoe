@@ -121,6 +121,28 @@
         (is (= "Updated Acme" name-value)
             "Name should be updated to 'Updated Acme' after form submission")))))
 
+(deftest ^:integration ^:e2e a-field-is-checked-by-the-server-when-it-changes
+  (testing "Clearing a required field shows the server's error beside it, and fixing it clears it"
+    (spel/with-testing-page [pg]
+      (admin/login-as-admin! pg fx/*seed*)
+      (page/navigate pg (admin/admin-url (str "/tenants/" (-> fx/*seed* :tenant :id))))
+      (page/wait-for-load-state pg)
+      (let [field "input[name='name']"
+            leave (fn [value]
+                    (loc/fill (page/locator pg field) value)
+                    (loc/press (page/locator pg field) "Tab"))]
+        ;; Cleared, the browser's own `required` would block a save; the field's
+        ;; change still goes to the server, which answers with the field again.
+        (leave "")
+        (page/wait-for-selector pg ".form-field:has(input[name='name']) .field-errors" {:timeout 10000.0})
+        (is (= "true" (loc/get-attribute (page/locator pg field) "aria-invalid")))
+        (leave "Acme again")
+        (page/wait-for-function
+         pg "!document.querySelector(\".form-field:has(input[name='name']) .field-errors\")"
+         {:timeout 10000.0 :polling 50.0})
+        (is (nil? (loc/get-attribute (page/locator pg field) "aria-invalid")))
+        (is (= "Acme again" (loc/input-value (page/locator pg field))))))))
+
 (deftest ^:integration ^:e2e soft-delete-removes-from-list
   (testing "Soft-deleting a tenant via the detail page delete button removes it from the list"
     (spel/with-testing-page [pg]

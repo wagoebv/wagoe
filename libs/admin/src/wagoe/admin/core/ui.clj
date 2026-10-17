@@ -77,6 +77,8 @@
 
 ;; --- detail: form widget, entity form, detail/new pages, related tables ---
 (def render-field-widget detail/render-field-widget)
+(def with-field-options detail/with-field-options)
+(def with-live-validation detail/with-live-validation)
 (def entity-form detail/entity-form)
 (def child-row detail/child-row)
 (def parent-context-banner detail/parent-context-banner)

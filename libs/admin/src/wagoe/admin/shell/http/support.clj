@@ -697,6 +697,21 @@
                                 (conj [current current]))
                        (not (get-in entity-config [:fields field :required])) (into [["" "—"]]))])))))
 
+(defn field-options
+  "The choices `field` of `entity-name` is rendered with, as
+   `foreign-key-options` finds them, or nil when it is no foreign key. Reads
+   only the parent of that field."
+  [admin-service schema-provider config entity-name field values]
+  (let [entities       (ports/list-available-entities schema-provider)
+        entity-configs (into {} (map (fn [e] [e (ports/get-entity-config schema-provider e)])) entities)]
+    (when-let [parent (get (parent-entities entity-name entity-configs) field)]
+      ;; Only `field` editable, so a second key to the same parent is not read
+      (get (foreign-key-options admin-service config
+                                (-> (select-keys entity-configs [entity-name parent])
+                                    (assoc-in [entity-name :editable-fields] [field]))
+                                entity-name values)
+           field))))
+
 (defn nested-relationships
   "The has-many entries `entity-config` is created with, as
    `forms/nested-relationships` finds them (BOU-570)."

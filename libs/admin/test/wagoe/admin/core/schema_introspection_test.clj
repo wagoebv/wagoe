@@ -568,6 +568,20 @@
 ;; Malli Schema Enum Extraction Tests
 ;; =============================================================================
 
+(deftest ^:unit constraints-from-input-attrs-test
+  (is (= {:name  {:min 2 :max 40}
+          :qty   {:min 1 :max 9}
+          :code  {:pattern "^[A-Z]+$"}
+          :email {:widget :email-input :max 320}
+          :site  {:widget :url-input}}
+         (introspection/constraints-from-input-attrs
+          {:name   {:type "text" :required true :minlength 2 :maxlength 40}
+           :qty    {:type "number" :min 1 :max 9}
+           :code   {:type "text" :pattern "^[A-Z]+$"}
+           :email  {:type "email" :maxlength 320}
+           :site   {:type "url"}
+           :status {:required true}}))))
+
 (deftest ^:unit extract-enum-fields-from-malli-schema-test
   (testing "Extracts enum fields from a simple :map schema"
     (let [schema [:map {}
