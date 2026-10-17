@@ -106,6 +106,7 @@
 (def vault-source (map-source {"db" "from-declared-vault"}))
 (defn make-vault [] (map-source {"db" "from-constructor"}))
 (def not-a-source 42)
+(defn failing-vault [] (throw (RuntimeException. "vault unreachable")))
 
 (deftest ^:unit sources-declared-in-the-config-resolve-for-every-reader
   (is (= "from-declared-vault"
@@ -125,9 +126,15 @@
                             :pw #secret [:vault \"db\"]}"
                           {:secret-sources {:vault (map-source {"db" "from-opts"})}})))
         "an overridden declaration is not built"))
+  (testing "an optional read leaves out a source it cannot build"
+    (is (= {:pw nil :host "db"}
+           (select-keys (read-edn "{:secret-sources {:vault no.such.ns/source :db wagoe.config.secrets-test/failing-vault}
+                                    :pw #secret [:vault \"db\"] :host \"db\"}"
+                                  {::sut/optional? true})
+                        [:pw :host]))))
   (testing "a bad declaration is a configuration error"
     (doseq [decl ["wagoe.config.secrets-test/not-a-source" "wagoe.config.secrets-test/nope"
-                  "no.such.ns/source" "unqualified"]]
+                  "no.such.ns/source" "unqualified" "wagoe.config.secrets-test/failing-vault"]]
       (is (= :configuration-error
              (:type (ex-data (thrown #(read-edn (str "{:secret-sources {:vault " decl "}}"))))))
           decl))

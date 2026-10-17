@@ -49,7 +49,7 @@
                   (vector? form) (zipmap [:source :name] form)
                   :else          {:source default-source :name form})]
     (if (and (every? #{:name :source :default} (keys ref))
-             (not (and (vector? form) (not= 2 (count form))))
+             (or (not (vector? form)) (= 2 (count form)))
              (keyword? (:source ref))
              (or (string? (:name ref)) (symbol? (:name ref))))
       (update ref :name str)

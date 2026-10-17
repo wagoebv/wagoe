@@ -191,7 +191,9 @@
         present (fn [{source :source n :name}]
                   (case source
                     :env  (not (str/blank? (get env-map n)))
-                    :file (let [f (io/file dir n)] (and (.isFile f) (not (str/blank? (slurp f)))))
+                    ;; An unreadable file is missing to the app too.
+                    :file (let [f (io/file dir n)]
+                            (and (.isFile f) (try (not (str/blank? (slurp f))) (catch Exception _ false))))
                     true))
         missing (->> (secret-refs config-text) (remove :default?) (remove present)
                      (map #(str (name (:source %)) ":" (:name %))) distinct sort)]

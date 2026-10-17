@@ -100,7 +100,13 @@
 
 (defn- secret-source [source-key sym]
   (let [v   (resolve-symbol sym)
-        src (if (and (fn? v) (not (satisfies? secrets/ISecretSource v))) (v) v)]
+        src (if (and (fn? v) (not (satisfies? secrets/ISecretSource v)))
+              (try (v)
+                   (catch Exception e
+                     (throw (ex-info (str ":secret-sources " source-key ": calling " sym " failed: " (ex-message e))
+                                     {:type :configuration-error :source source-key :symbol sym}
+                                     e))))
+              v)]
     (if (satisfies? secrets/ISecretSource src)
       src
       (throw (ex-info (str ":secret-sources " source-key ": " sym
@@ -112,16 +118,24 @@
    `:secret-sources {:vault my.app/vault-source}`, each symbol naming an
    `ISecretSource` or a no-argument function returning one. Read before the
    config itself, so every reader of the file sees them — the migration CLI as
-   much as the app. Keys in `skip` are not built: the caller has its own."
-  ([resource] (declared-secret-sources resource #{}))
-  ([resource skip]
+   much as the app. Keys in `skip` are not built: the caller has its own.
+   When `optional?`, a source that cannot be built is left out, so its
+   secrets read as an unknown source does under `::secrets/optional?`."
+  ([resource] (declared-secret-sources resource #{} false))
+  ([resource skip] (declared-secret-sources resource skip false))
+  ([resource skip optional?]
    (let [declared (:secret-sources (aero/read-config-into-tagged-literal resource))]
      (when-not (or (nil? declared)
                    (and (map? declared) (every? keyword? (keys declared)) (every? qualified-symbol? (vals declared))))
        (throw (ex-info (str ":secret-sources must be a literal map of keyword to qualified symbol, not "
                             (pr-str declared))
                        {:type :configuration-error :config (str resource)})))
-     (into {} (keep (fn [[k sym]] (when-not (contains? skip k) [k (secret-source k sym)]))) declared))))
+     (into {} (keep (fn [[k sym]]
+                      (when-not (contains? skip k)
+                        (if optional?
+                          (try [k (secret-source k sym)] (catch Exception _ nil))
+                          [k (secret-source k sym)]))))
+           declared))))
 
 (defn read-config-resource
   "Read the config at `resource` (a URL) for `profile`. A missing #include
@@ -133,7 +147,8 @@
    `wagoe.config.secrets`."
   ([resource profile] (read-config-resource resource profile {}))
   ([resource profile opts]
-   (let [opts   (update opts :secret-sources #(merge (declared-secret-sources resource (set (keys %))) %))
+   (let [opts   (update opts :secret-sources
+                        #(merge (declared-secret-sources resource (set (keys %)) (::secrets/optional? opts)) %))
          config (aero/read-config resource (assoc opts :profile profile :resolver include-resolver))]
      (when-let [missing (seq (missing-includes config))]
        (throw (ex-info (str "Config include not found: " (str/join ", " missing)
