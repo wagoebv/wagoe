@@ -2,24 +2,25 @@
   "ical4j 4.x adapter implementing CalendarAdapterProtocol.
 
    Converts wagoe EventData maps ↔ RFC 5545 VCALENDAR strings using
-   net.fortuna.ical4j 4.x. VEvents are built with ZonedDateTime so that
-   TZID parameters are correctly emitted and preserved in round-trips.
+   net.fortuna.ical4j 4.x. Zones are read and written with java.time's rules,
+   not ical4j's.
 
-   Shell layer — may perform I/O via ical4j CalendarBuilder."
+   Shell layer — may perform I/O via ical4j."
   (:require [wagoe.calendar.core.event :as event]
             [wagoe.calendar.core.recurrence :as recurrence]
             [wagoe.calendar.ports :as ports]
             [wagoe.calendar.schema :as schema]
             [clojure.string :as str])
-  (:import [java.time DayOfWeek Duration Instant YearMonth ZoneId ZoneOffset ZonedDateTime OffsetDateTime LocalDate LocalDateTime LocalTime]
-           [java.time.temporal ChronoUnit Temporal TemporalAdjusters TemporalAmount]
+  (:import [java.time DateTimeException DayOfWeek Duration Instant YearMonth ZoneId ZoneOffset OffsetDateTime LocalDate LocalDateTime LocalTime Period]
+           [java.time.format DateTimeFormatter]
+           [java.time.temporal ChronoUnit Temporal TemporalAdjusters]
            [java.time.zone ZoneOffsetTransition ZoneOffsetTransitionRule ZoneRules]
            [java.io StringReader]
            [java.nio.charset StandardCharsets]
-           [net.fortuna.ical4j.model Calendar ComponentList PropertyList]
+           [net.fortuna.ical4j.model Calendar ComponentList ParameterList PropertyList Recur TemporalAmountAdapter]
            [net.fortuna.ical4j.model.component Daylight Standard VEvent VTimeZone]
-           [net.fortuna.ical4j.model.property Description DtStart RRule TzId TzOffsetFrom TzOffsetTo Uid]
-           [net.fortuna.ical4j.data CalendarBuilder]))
+           [net.fortuna.ical4j.model.property Description DtEnd DtStart RRule TzId TzOffsetFrom TzOffsetTo Uid]
+           [net.fortuna.ical4j.data CalendarParser CalendarParserFactory ContentHandler ParserException UnfoldingReader]))
 
 ;; =============================================================================
 ;; Internal helpers — export
@@ -171,21 +172,28 @@
 (defn- event->vevent
   "Convert a boundary EventData map to a net.fortuna.ical4j 4.x VEvent.
 
-   ZonedDateTimes make ical4j emit DTSTART;TZID=..., Instants the UTC Z form,
-   LocalDates (all-day events) DTSTART;VALUE=DATE."
+   Instants are written in the UTC Z form, LocalDates (all-day events) as
+   DTSTART;VALUE=DATE, other times as local times with a TZID. Not from a
+   ZonedDateTime: ical4j writes that in its own copy of the zone, whose US
+   rules start DST a week early in some years."
   [event]
   (let [tzid   (:timezone event "UTC")
         zone   (ZoneId/of tzid)
+        zoned? (not (or (event/all-day? event) (utc? zone)))
         [s e]  (cond
                  (event/all-day? event) (all-day-dates event zone)
                  (utc? zone)            [(:start event) (:end event)]
-                 :else                  [(.atZone ^Instant (:start event) zone)
-                                         (.atZone ^Instant (:end event) zone)])
+                 :else                  [(LocalDateTime/ofInstant (:start event) zone)
+                                         (LocalDateTime/ofInstant (:end event) zone)])
         title  ^String (:title event)
         uid    (Uid. (str (:id event)))
-        ;; Base VEvent from 4.x Temporal constructor; add UID via fluent chain
-        vevent (-> (VEvent. ^Temporal s ^Temporal e title)
-                   (.withProperty uid))
+        base   (VEvent. ^Temporal s ^Temporal e title)
+        tz     (ParameterList. [(net.fortuna.ical4j.model.parameter.TzId. tzid)])
+        base   (if zoned?
+                 (-> base (.replace (DtStart. tz ^Temporal s)) (.replace (DtEnd. tz ^Temporal e)))
+                 base)
+        ;; add UID via fluent chain
+        vevent (.withProperty ^VEvent base uid)
         vevent (if-let [rrule (:recurrence event)]
                  (.withProperty vevent (RRule. ^String rrule))
                  vevent)
@@ -246,63 +254,210 @@
 ;; Internal helpers — import
 ;; =============================================================================
 
-(defn- find-prop
-  "Find the first property matching prop-name in the VEvent's property list.
+;; Import reads the text through ical4j's parser only, not CalendarBuilder:
+;; that resolves every TZID through ical4j's own zones, built by its
+;; ZoneRulesBuilder, which reads BYDAY=2SU as the Sunday on or after the 2nd
+;; (US DST a week early in some years), and binds each parsed VTIMEZONE to a
+;; JVM-wide ical4j~<uuid> ZoneId.
 
-   In ical4j 4.x getProperties() returns a plain java.util.List<Property>.
-   We filter by name rather than calling .getProperty on the list."
-  [vevent ^String prop-name]
-  (some (fn [p] (when (= prop-name (.getName p)) p))
-        (.getProperties vevent)))
+(defn- unquote-param [^String v]
+  (if (and (> (count v) 1) (str/starts-with? v "\"") (str/ends-with? v "\""))
+    (subs v 1 (dec (count v)))
+    v))
 
-(defn- get-prop-value
-  "Safely get a property value string from a VEvent by property name."
-  [vevent prop-name]
-  (when-let [p (find-prop vevent prop-name)]
-    (.getValue p)))
+(defn- parse-components
+  "The components of `ical`, as {:name :props :children}, each property
+   {:name :params :value} as written. Names are upper-cased."
+  [^String ical]
+  (let [stack (volatile! [{:children []}])
+        prop  (volatile! nil)
+        h     (reify ContentHandler
+                (startCalendar [_])
+                (endCalendar [_])
+                (startComponent [_ n]
+                  (vswap! stack conj {:name (str/upper-case n) :props [] :children []}))
+                (endComponent [_ _]
+                  (vswap! stack (fn [s] (let [c (peek s) s (pop s)]
+                                          (conj (pop s) (update (peek s) :children conj c))))))
+                (startProperty [_ n] (vreset! prop {:name (str/upper-case n) :params {}}))
+                (parameter [_ n v] (vswap! prop assoc-in [:params (str/upper-case n)] (unquote-param v)))
+                (propertyValue [_ v] (vswap! prop assoc :value v))
+                (endProperty [_ _]
+                  (vswap! stack (fn [s] (conj (pop s) (update (peek s) :props (fnil conj []) @prop))))))]
+    (.parse ^CalendarParser (.get (CalendarParserFactory/getInstance))
+            (UnfoldingReader. (StringReader. ical)) h)
+    (:children (peek @stack))))
 
-(defn- prop-date
-  "The java.time temporal an ical4j 4.x DtStart or DtEnd property holds."
-  [dt-prop]
-  (when dt-prop
-    (try (.getDate dt-prop) (catch Exception _ nil))))
+(defn- props [c ^String prop-name]
+  (filter #(= prop-name (:name %)) (:props c)))
 
-(defn- temporal->instant
-  "Instant of a DTSTART/DTEND value. Floating times and dates (VALUE=DATE)
-   are read in `zone`."
-  [dt ^ZoneId zone]
+(defn- prop [c prop-name]
+  (first (props c prop-name)))
+
+(defn- unescape-text
+  "A TEXT value as written, its escapes (RFC 5545 3.3.11) undone."
+  [s]
+  (some-> s (str/replace #"\\([\\;,nN])" #(if (#{"n" "N"} (second %)) "\n" (second %)))))
+
+(def ^:private date-time-format (DateTimeFormatter/ofPattern "uuuuMMdd'T'HHmmss"))
+
+(defn- read-date
+  "LocalDate for a DATE, OffsetDateTime for a UTC DATE-TIME, else LocalDateTime."
+  [{:keys [^String value params]}]
+  (let [value (str/trim value)]
+    (cond
+      (or (= "DATE" (get params "VALUE")) (= 8 (count value)))
+      (LocalDate/parse value DateTimeFormatter/BASIC_ISO_DATE)
+
+      (str/ends-with? value "Z")
+      (.atOffset (LocalDateTime/parse (subs value 0 (dec (count value))) date-time-format) ZoneOffset/UTC)
+
+      :else (LocalDateTime/parse value date-time-format))))
+
+(defn- read-offset
+  "A UTC offset value: +0100, -0500, +053000."
+  ^ZoneOffset [{:keys [value]}]
+  (let [[_ sign h m s] (or (re-matches #"([+-])(\d{2})(\d{2})(\d{2})?" (str/trim (str value)))
+                           (throw (ex-info "Invalid UTC offset in VTIMEZONE"
+                                           {:type :validation-error :field :tzoffset :value value})))
+        k (if (= "-" sign) -1 1)]
+    (ZoneOffset/ofHoursMinutesSeconds (* k (parse-long h)) (* k (parse-long m)) (* k (if s (parse-long s) 0)))))
+
+(def ^:private windows-zones
+  "Windows zone names, as Outlook and Exchange write TZIDs, to IANA zones
+   (CLDR windowsZones.xml, territory 001). The JDK carries no such table."
+  {"Hawaiian Standard Time"         "Pacific/Honolulu"
+   "Alaskan Standard Time"          "America/Anchorage"
+   "Pacific Standard Time"          "America/Los_Angeles"
+   "US Mountain Standard Time"      "America/Phoenix"
+   "Mountain Standard Time"         "America/Denver"
+   "Central America Standard Time"  "America/Guatemala"
+   "Central Standard Time"          "America/Chicago"
+   "Central Standard Time (Mexico)" "America/Mexico_City"
+   "Canada Central Standard Time"   "America/Regina"
+   "SA Pacific Standard Time"       "America/Bogota"
+   "Eastern Standard Time"          "America/New_York"
+   "US Eastern Standard Time"       "America/Indiana/Indianapolis"
+   "Atlantic Standard Time"         "America/Halifax"
+   "Newfoundland Standard Time"     "America/St_Johns"
+   "E. South America Standard Time" "America/Sao_Paulo"
+   "Argentina Standard Time"        "America/Argentina/Buenos_Aires"
+   "SA Western Standard Time"       "America/La_Paz"
+   "Pacific SA Standard Time"       "America/Santiago"
+   "GMT Standard Time"              "Europe/London"
+   "Greenwich Standard Time"        "Atlantic/Reykjavik"
+   "W. Europe Standard Time"        "Europe/Berlin"
+   "Central Europe Standard Time"   "Europe/Budapest"
+   "Romance Standard Time"          "Europe/Paris"
+   "Central European Standard Time" "Europe/Warsaw"
+   "W. Central Africa Standard Time" "Africa/Lagos"
+   "GTB Standard Time"              "Europe/Bucharest"
+   "E. Europe Standard Time"        "Europe/Chisinau"
+   "FLE Standard Time"              "Europe/Kiev"
+   "Israel Standard Time"           "Asia/Jerusalem"
+   "Egypt Standard Time"            "Africa/Cairo"
+   "South Africa Standard Time"     "Africa/Johannesburg"
+   "Turkey Standard Time"           "Europe/Istanbul"
+   "Russian Standard Time"          "Europe/Moscow"
+   "Arab Standard Time"             "Asia/Riyadh"
+   "Arabian Standard Time"          "Asia/Dubai"
+   "Iran Standard Time"             "Asia/Tehran"
+   "Pakistan Standard Time"         "Asia/Karachi"
+   "India Standard Time"            "Asia/Kolkata"
+   "Nepal Standard Time"            "Asia/Kathmandu"
+   "Bangladesh Standard Time"       "Asia/Dhaka"
+   "SE Asia Standard Time"          "Asia/Bangkok"
+   "China Standard Time"            "Asia/Shanghai"
+   "Singapore Standard Time"        "Asia/Singapore"
+   "Taipei Standard Time"           "Asia/Taipei"
+   "Tokyo Standard Time"            "Asia/Tokyo"
+   "Korea Standard Time"            "Asia/Seoul"
+   "W. Australia Standard Time"     "Australia/Perth"
+   "Cen. Australia Standard Time"   "Australia/Adelaide"
+   "AUS Central Standard Time"      "Australia/Darwin"
+   "E. Australia Standard Time"     "Australia/Brisbane"
+   "AUS Eastern Standard Time"      "Australia/Sydney"
+   "Tasmania Standard Time"         "Australia/Hobart"
+   "New Zealand Standard Time"      "Pacific/Auckland"})
+
+(defn- known-zone
+  "The IANA zone a TZID names, directly or as a Windows zone name."
+  [tzid]
+  (let [id (get windows-zones tzid tzid)]
+    (when (schema/valid-timezone? id) id)))
+
+(defn- observance-onsets
+  "[instant from to] per onset of observance `o` before `until`. RRULEs are
+   expanded by ical4j's Recur, which reads BYDAY=2SU as RFC 5545 does."
+  [o ^LocalDateTime until]
+  (let [start (read-date (prop o "DTSTART"))
+        ^LocalDateTime start (if (instance? LocalDateTime start)
+                               start
+                               (throw (ex-info "VTIMEZONE observance DTSTART must be a local time"
+                                               {:type :validation-error :field :dtstart})))
+        from  (read-offset (prop o "TZOFFSETFROM"))
+        to    (read-offset (prop o "TZOFFSETTO"))
+        dates (concat [start]
+                      (mapcat #(.getDates (Recur. ^String (:value %)) start start until) (props o "RRULE"))
+                      (for [p (props o "RDATE") v (str/split (:value p) #",")] (read-date (assoc p :value v))))]
+    (for [^LocalDateTime d (distinct dates) :when (.isBefore d until)]
+      [(.toInstant d from) from to])))
+
+(defn- vtimezone-rules
+  "ZoneRules for a VTIMEZONE's observances, their onsets up to the end of the
+   year after `year`."
+  ^ZoneRules [observances year]
+  (let [until  (LocalDateTime/of (int (+ year 2)) 1 1 0 0)
+        onsets (sort-by first (mapcat #(observance-onsets % until) observances))
+        base   (or (second (first onsets)) ZoneOffset/UTC)
+        ts     (second (reduce (fn [[cur acc] [^Instant i _ to]]
+                                 (if (= to cur)
+                                   [cur acc]
+                                   [to (conj acc (ZoneOffsetTransition/of (LocalDateTime/ofInstant i cur) cur to))]))
+                               [base []]
+                               onsets))]
+    (ZoneRules/of base base [] ts [])))
+
+(defn- rules-instant
+  "`l` in `rules` as ZonedDateTime/ofLocal reads it: in an overlap the earlier
+   offset, in a gap the offset before it."
+  ^Instant [^ZoneRules rules ^LocalDateTime l]
+  (let [offsets (.getValidOffsets rules l)]
+    (.toInstant l ^ZoneOffset (if (seq offsets) (first offsets) (.getOffsetBefore (.getTransition rules l))))))
+
+(defn- zone-resolver
+  "Reads a TZID: {:timezone iana-id-or-nil, :at (fn [LocalDateTime] Instant)}.
+   An IANA or Windows name uses java.time's rules, whatever the feed's
+   VTIMEZONE says; another name its VTIMEZONE; without one, `default-zone`."
+  [vtimezones ^ZoneId default-zone tzid]
+  (if-let [id (some-> tzid known-zone)]
+    (let [zone (ZoneId/of id)]
+      {:timezone id :at #(.toInstant (.atZone ^LocalDateTime % zone))})
+    (if-let [obs (seq (get vtimezones tzid))]
+      (let [rules (memoize #(vtimezone-rules obs %))]
+        {:at #(rules-instant (rules (.getYear ^LocalDateTime %)) %)})
+      {:at #(.toInstant (.atZone ^LocalDateTime % default-zone))})))
+
+(defn- value->instant
+  "Instant of a read DTSTART/DTEND value: dates start at midnight in `zone`,
+   local times are read by `at`."
+  [v at ^ZoneId zone]
   (cond
-    (instance? ZonedDateTime dt) (.toInstant ^ZonedDateTime dt)
-    ;; UTC times (DTSTART:20261017T100000Z), what Google Calendar exports
-    (instance? OffsetDateTime dt) (.toInstant ^OffsetDateTime dt)
-    (instance? LocalDateTime dt) (.toInstant (.atZone ^LocalDateTime dt zone))
-    (instance? LocalDate dt)     (.toInstant (.atStartOfDay ^LocalDate dt zone))
-    (instance? java.util.Date dt) (.toInstant ^java.util.Date dt)
-    :else nil))
+    (instance? OffsetDateTime v) (.toInstant ^OffsetDateTime v)
+    (instance? LocalDateTime v)  (at v)
+    (instance? LocalDate v)      (.toInstant (.atStartOfDay ^LocalDate v zone))))
 
-(defn- dt-plus-duration
-  "DTSTART value plus a DURATION property, or nil without one, or when the
-   two do not combine (a time duration on a date)."
-  [dt duration-prop]
-  (when (and (instance? Temporal dt) duration-prop)
-    (try (.plus ^Temporal dt ^TemporalAmount (.getDuration duration-prop))
-         (catch Exception _ nil))))
-
-(defn- get-tzid
-  "Extract the TZID from the DTSTART property's string representation.
-
-   ical4j 4.x resolves timezone references to internal synthetic IDs when
-   parsing (e.g. 'ical4j~<uuid>'). Instead we parse the TZID parameter
-   directly from the property text (e.g. 'DTSTART;TZID=Europe/Amsterdam:...')
-   which always carries the original IANA timezone name."
-  [vevent]
-  (when-let [p (find-prop vevent "DTSTART")]
-    ;; `str` never returns nil, so this was a `when-let` that always took its
-    ;; branch — a guard reading as if a property could stringify to nothing.
-    ;; A TZID holding a colon (`+05:00`) is quoted, as export writes it.
-    (let [text (str p)]
-      (when-let [[_ quoted bare] (re-find #"TZID=(?:\"([^\"]*)\"|([^;:\r\n]+))" text)]
-        (str/trim (or quoted bare))))))
+(defn- plus-duration
+  "Instant `start` plus a DURATION: days are calendar days, as for a
+   ZonedDateTime. Nil when they do not combine (a time duration on a date)."
+  [start at ^ZoneId zone duration-prop]
+  (let [amount (.getDuration (TemporalAmountAdapter/parse (str/trim (:value duration-prop))))]
+    (cond
+      (instance? LocalDate start)
+      (when (instance? Period amount) (value->instant (.plus ^LocalDate start amount) at zone))
+      (instance? Duration amount) (.plus ^Instant (value->instant start at zone) ^Duration amount)
+      (instance? LocalDateTime start) (at (.plus ^LocalDateTime start ^Period amount))
+      :else (.toInstant (.plus ^OffsetDateTime start ^Period amount)))))
 
 (defn- uid-string->uuid
   "Convert a UID string to a UUID.
@@ -314,33 +469,49 @@
     (java.util.UUID/fromString uid-str)
     (catch Exception _
       ;; Use Java's built-in nameUUIDFromBytes which generates UUID v3 (MD5-based)
-      (java.util.UUID/nameUUIDFromBytes (.getBytes uid-str StandardCharsets/UTF_8)))))
+      (java.util.UUID/nameUUIDFromBytes (.getBytes ^String uid-str StandardCharsets/UTF_8)))))
 
 (defn- vevent->event
-  "Convert a net.fortuna.ical4j 4.x VEvent to a boundary EventData map.
-   A DTSTART;VALUE=DATE makes it all-day, its dates in `default-tz`; without a
-   DTEND the end is DTSTART plus DURATION, or one day for a date (RFC 5545
-   3.6.1). A TZID java.time does not know (Outlook's \"W. Europe Standard
-   Time\") falls back to `default-tz`; ical4j already resolved the instants."
-  [vevent default-tz]
-  (let [uid-str   (get-prop-value vevent "UID")
-        title     (get-prop-value vevent "SUMMARY")
-        start-dt  (prop-date (find-prop vevent "DTSTART"))
-        all-day?  (instance? LocalDate start-dt)
-        end-dt    (or (prop-date (find-prop vevent "DTEND"))
-                      (dt-plus-duration start-dt (find-prop vevent "DURATION"))
-                      (when all-day? (.plusDays ^LocalDate start-dt 1)))
-        rrule-str (get-prop-value vevent "RRULE")
-        tzid      (get-tzid vevent)
-        timezone  (if (and tzid (schema/valid-timezone? tzid)) tzid default-tz)
-        zone      (ZoneId/of timezone)]
-    (cond-> {:id       (uid-string->uuid uid-str)
-             :title    (or title "")
-             :start    (temporal->instant start-dt zone)
-             :end      (temporal->instant end-dt zone)
+  "EventData for a parsed VEVENT. A DTSTART;VALUE=DATE makes it all-day;
+   without a DTEND the end is DTSTART plus DURATION, or one day for a date
+   (RFC 5545 3.6.1). `:timezone` is DTSTART's zone when java.time knows it,
+   else `default-tz`."
+  [vevent resolve default-tz]
+  (let [uid       (or (some-> (prop vevent "UID") :value str/trim not-empty)
+                      (throw (ex-info "VEVENT without a UID" {:type :validation-error :field :uid})))
+        start-p   (prop vevent "DTSTART")
+        start     (some-> start-p read-date)
+        {:keys [timezone at]} (resolve (get-in start-p [:params "TZID"]))
+        timezone  (or timezone default-tz)
+        zone      (ZoneId/of timezone)
+        all-day?  (instance? LocalDate start)
+        end-p     (prop vevent "DTEND")
+        end       (cond
+                    end-p (value->instant (read-date end-p) (:at (resolve (get-in end-p [:params "TZID"]))) zone)
+                    (and start (prop vevent "DURATION")) (plus-duration start at zone (prop vevent "DURATION"))
+                    all-day? (value->instant (.plusDays ^LocalDate start 1) at zone))
+        rrule     (some-> (prop vevent "RRULE") :value str/trim)]
+    (some-> rrule Recur.)                 ; refuses a malformed RRULE
+    (cond-> {:id       (uid-string->uuid uid)
+             :title    (or (unescape-text (:value (prop vevent "SUMMARY"))) "")
+             :start    (some-> start (value->instant at zone))
+             :end      end
              :timezone timezone}
-      all-day?  (assoc :all-day? true)
-      rrule-str (assoc :recurrence rrule-str))))
+      all-day? (assoc :all-day? true)
+      rrule    (assoc :recurrence rrule))))
+
+(defn- unreadable [^Exception e]
+  (throw (ex-info (str "Unreadable iCal: " (.getMessage e)) {:type :validation-error} e)))
+
+(defn- read-calendar
+  "EventData for each VEVENT in `ical`, local times read by `zone-resolver`."
+  [ical default-tz]
+  (let [components (parse-components ical)
+        vtimezones (into {} (for [c components :when (= "VTIMEZONE" (:name c))]
+                              [(some-> (prop c "TZID") :value str/trim) (:children c)]))
+        resolve    (memoize #(zone-resolver vtimezones (ZoneId/of default-tz) %))]
+    (mapv #(vevent->event % resolve default-tz)
+          (filter #(= "VEVENT" (:name %)) components))))
 
 ;; =============================================================================
 ;; ICalAdapter record
@@ -362,9 +533,11 @@
       (when-not (schema/valid-timezone? tz)
         (throw (ex-info "Invalid :timezone for iCal import"
                         {:type :validation-error :field :timezone :value tz})))
-      (let [calendar (.build (CalendarBuilder.) (StringReader. ical-string))
-            vevents  (filter #(instance? VEvent %) (.getComponents calendar))]
-        (mapv #(vevent->event % tz) vevents)))))
+      (try
+        (read-calendar ical-string tz)
+        (catch ParserException e (unreadable e))
+        (catch DateTimeException e (unreadable e))
+        (catch IllegalArgumentException e (unreadable e))))))
 
 ;; =============================================================================
 ;; Factory

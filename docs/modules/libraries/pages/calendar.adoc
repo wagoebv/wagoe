@@ -136,6 +136,11 @@ An `:all-day? true` event is written as `DTSTART;VALUE=DATE` with an exclusive
 `DTEND`, and a `VALUE=DATE` event is read back `:all-day? true`. `event/all-day?`
 reads that flag and nothing else.
 
+Import reads a TZID that names an IANA zone, or a Windows one such as
+`W. Europe Standard Time`, with the JVM's tz rules, whatever the feed's
+VTIMEZONE says, and returns it as `:timezone`. Any other TZID is read with its
+VTIMEZONE, and `:timezone` is the option's.
+
 Without Integrant, `wagoe.calendar.shell.service` offers the same calls.
 
 == Dependencies

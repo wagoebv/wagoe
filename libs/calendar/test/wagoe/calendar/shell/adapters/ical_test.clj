@@ -273,7 +273,7 @@
                                                "SUMMARY:Call" "END:VEVENT"))]
       (is (= (Instant/parse "2026-10-17T10:00:00Z") (:start ev)))
       (is (= (Instant/parse "2026-10-17T11:00:00Z") (:end ev)))))
-  (testing "a Windows TZID does not fail the import"
+  (testing "a Windows TZID reads as its IANA zone"
     (let [[ev] (service/import-ical
                 (vcalendar "BEGIN:VTIMEZONE" "TZID:W. Europe Standard Time"
                            "BEGIN:STANDARD" "DTSTART:16010101T030000" "TZOFFSETFROM:+0200"
@@ -287,7 +287,7 @@
                            "SUMMARY:Meeting" "END:VEVENT")
                 {:timezone "Europe/Amsterdam"})]
       (is (= (Instant/parse "2026-10-17T08:00:00Z") (:start ev)))
-      (is (= "Europe/Amsterdam" (:timezone ev)))))
+      (is (= "Europe/Berlin" (:timezone ev)))))
   (testing "DURATION instead of DTEND"
     (let [[timed day] (service/import-ical
                        (vcalendar "BEGIN:VEVENT" "UID:d1@example.com"
@@ -481,3 +481,77 @@
       (is (= ["20250223T020000" "20260301T020000" "20270228T020000"]
              (for [o obs :when (= "+0200" (.getValue (.getRequiredProperty o "TZOFFSETTO")))]
                (.getValue (.getRequiredProperty o "DTSTART"))))))))
+
+;; =============================================================================
+;; Import: zones from java.time, VTIMEZONE RRULEs as RFC 5545 reads them (BOU-723)
+;; =============================================================================
+
+(defn- us-eastern
+  "A VTIMEZONE as Outlook writes US Eastern: DST from the second Sunday of March."
+  [tzid]
+  ["BEGIN:VTIMEZONE" (str "TZID:" tzid)
+   "BEGIN:STANDARD" "DTSTART:16010101T020000" "TZOFFSETFROM:-0400" "TZOFFSETTO:-0500"
+   "RRULE:FREQ=YEARLY;BYDAY=1SU;BYMONTH=11" "END:STANDARD"
+   "BEGIN:DAYLIGHT" "DTSTART:16010101T020000" "TZOFFSETFROM:-0500" "TZOFFSETTO:-0400"
+   "RRULE:FREQ=YEARLY;BYDAY=2SU;BYMONTH=3" "END:DAYLIGHT"
+   "END:VTIMEZONE"])
+
+(defn- import-at
+  "Instants and zone of events at `locals` in `tzid`, the feed carrying `vtz`."
+  [tzid vtz locals]
+  (let [ical (apply vcalendar
+                    (concat vtz
+                            (mapcat (fn [l] ["BEGIN:VEVENT" (str "UID:" l)
+                                             (str "DTSTART;TZID=" tzid ":" l) (str "DTEND;TZID=" tzid ":" l)
+                                             "SUMMARY:x" "END:VEVENT"])
+                                    locals)))]
+    (map (juxt :start :timezone) (service/import-ical ical {:timezone "Europe/Amsterdam"}))))
+
+(deftest ^:integration import-us-dst-week-test
+  (testing "2027-03-10 is before DST in New York (it starts on the 14th), whatever the VTIMEZONE"
+    (is (= [[(Instant/parse "2027-03-10T15:00:00Z") "America/New_York"]
+            [(Instant/parse "2027-03-15T14:00:00Z") "America/New_York"]]
+           (import-at "America/New_York" (us-eastern "America/New_York") ["20270310T100000" "20270315T100000"])
+           (import-at "America/New_York" [] ["20270310T100000" "20270315T100000"]))))
+  (testing "an Outlook TZID reads as the IANA zone"
+    (is (= [[(Instant/parse "2027-03-10T15:00:00Z") "America/New_York"]]
+           (import-at "Eastern Standard Time" (us-eastern "Eastern Standard Time") ["20270310T100000"])))))
+
+(deftest ^:integration import-custom-vtimezone-test
+  (let [tzid "Custom Eastern"
+        [before after gap overlap fall-back]
+        (import-at tzid (us-eastern tzid)
+                   ["20270310T100000" "20270315T100000" "20270314T023000" "20271107T013000" "20271108T100000"])]
+    (testing "BYDAY=2SU is the second Sunday"
+      (is (= (Instant/parse "2027-03-10T15:00:00Z") (first before)))
+      (is (= (Instant/parse "2027-03-15T14:00:00Z") (first after))))
+    (testing "a time in the gap or the overlap reads as ZonedDateTime does"
+      (is (= (Instant/parse "2027-03-14T07:30:00Z") (first gap)))
+      (is (= (Instant/parse "2027-11-07T05:30:00Z") (first overlap)))
+      (is (= (Instant/parse "2027-11-08T15:00:00Z") (first fall-back))))
+    (testing "no IANA name, so the :timezone option"
+      (is (= "Europe/Amsterdam" (second before)))))
+  (testing "an unknown TZID without a VTIMEZONE reads in the :timezone option"
+    (is (= [[(Instant/parse "2027-03-10T09:00:00Z") "Europe/Amsterdam"]]
+           (import-at "Nowhere" [] ["20270310T100000"])))))
+
+(deftest ^:integration import-round-trip-us-test
+  (let [tz   "America/New_York"
+        mk   (fn [local rrule] (cond-> {:id (random-uuid) :title "Call, then lunch" :timezone tz
+                                         :start (at tz local) :end (.plusSeconds (at tz local) 3600)}
+                                 rrule (assoc :recurrence rrule)))
+        evs  [(mk "2027-03-08T09:00" nil) (mk "2027-03-13T23:30" nil) (mk "2027-03-10T10:00" "FREQ=WEEKLY")]
+        ical (service/export-ical evs)]
+    (testing "export writes the local time java.time gives"
+      (is (str/includes? ical "DTSTART;TZID=America/New_York:20270308T090000")))
+    (is (= (map #(select-keys % [:id :title :start :end :timezone :recurrence]) evs)
+           (map #(select-keys % [:id :title :start :end :timezone :recurrence]) (service/import-ical ical))))))
+
+(deftest ^:integration import-unreadable-test
+  (testing "malformed input is a validation error"
+    (doseq [ical ["not iCal"
+                  (vcalendar "BEGIN:VEVENT" "UID:a" "DTSTART:2026-03-10" "END:VEVENT")
+                  (vcalendar "BEGIN:VEVENT" "UID:a" "DTSTART:20260310T090000Z" "RRULE:FREQ=NEVER" "END:VEVENT")
+                  (vcalendar "BEGIN:VEVENT" "DTSTART:20260310T090000Z" "END:VEVENT")]]
+      (is (= :validation-error
+             (:type (ex-data (try (service/import-ical ical) (catch clojure.lang.ExceptionInfo e e)))))))))
