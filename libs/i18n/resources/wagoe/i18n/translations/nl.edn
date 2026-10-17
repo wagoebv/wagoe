@@ -481,6 +481,8 @@
  :admin/toast-deleted              "{label} verwijderd"
  :admin/flash-validation-errors    "Corrigeer de fouten hieronder"
  :admin/flash-create-failed        "Aanmaken van {label} mislukt"
+ :admin/refused-duplicate-values   "Een ander record heeft al deze waarden"
+ :admin/error-duplicate-values     "Al in gebruik in deze combinatie"
  :admin/flash-delete-failed        "Verwijderen mislukt"
  :admin/flash-bulk-deleted         "{count} {label} succesvol verwijderd"
  :admin/flash-bulk-deleted-partial "{count} verwijderd, {failed} mislukt"

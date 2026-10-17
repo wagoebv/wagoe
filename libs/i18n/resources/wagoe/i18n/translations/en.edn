@@ -481,6 +481,8 @@
  :admin/toast-deleted              "{label} deleted"
  :admin/flash-validation-errors    "Please fix the errors below"
  :admin/flash-create-failed        "Failed to create {label}"
+ :admin/refused-duplicate-values   "Another record already has these values"
+ :admin/error-duplicate-values     "Taken in this combination"
  :admin/flash-delete-failed        "Failed to delete entity"
  :admin/flash-bulk-deleted         "Successfully deleted {count} {label}"
  :admin/flash-bulk-deleted-partial "Deleted {count}, failed {failed}"

@@ -153,11 +153,12 @@
   "A refused unique or foreign key as a :conflict, which HTTP answers 409
    (BOU-590). Its data reaches the client, so it names at most a field: the
    driver's text holds the SQL and the values sent."
-  [{:keys [kind field referenced?]} sql e]
+  [{:keys [kind field fields referenced?]} sql e]
   ;; The driver says which way a foreign key was refused, except SQLite: there
   ;; a delete is the only case the statement itself tells apart.
   (let [referenced? (or referenced? (deletes? sql))
-        field       (when-not referenced? field)]
+        field       (when-not referenced? field)
+        fields      (when-not referenced? fields)]
     (ex-info (case kind
                :unique      (if field
                               (str "Another record already has this " (name field))
@@ -166,17 +167,49 @@
                               "The record is still referenced by another record"
                               "A referenced record does not exist"))
              (cond-> {:type :conflict :constraint kind}
-               field (assoc :field field))
+               field  (assoc :field field)
+               fields (assoc :fields fields))
              e)))
+
+(defn- mysql-key-columns
+  "The columns of the key MySQL names `key-name` (`table.key`, or `key` before
+   8.0.19), in key order, read from information_schema; nil when that fails.
+   MySQL's message names the key, never its columns (BOU-712)."
+  [ctx sql key-name]
+  (let [[table index] (if-let [i (str/last-index-of key-name ".")]
+                        [(subs key-name 0 i) (subs key-name (inc i))]
+                        [(constraint/statement-table sql) key-name])]
+    (try
+      (not-empty (mapv :column_name
+                       (jdbc/execute! (current-datasource ctx)
+                                      [(str "SELECT column_name AS column_name FROM information_schema.statistics"
+                                            " WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ?"
+                                            " ORDER BY seq_in_index")
+                                       table index]
+                                      {:builder-fn rs/as-unqualified-lower-maps})))
+      (catch Exception e
+        (log/debug "Could not read the columns of a MySQL key" {:key key-name :error (ex-message e)})
+        nil))))
+
+(defn- named-columns
+  "`v`, a unique violation, with its columns read from the database when the
+   driver's message did not name them: MySQL's names only the key."
+  [ctx sql r v]
+  (let [key-name (redaction/constraint-name r)]
+    (if (and (= :unique (:kind v)) (not (or (:field v) (:fields v)))
+             (= :mysql (protocols/dialect (:adapter ctx))) key-name)
+      (constraint/with-columns v (mysql-key-columns ctx sql key-name))
+      v)))
 
 (defn- fail!
   "Log `sql-query`'s failure `e` and throw it on: a :conflict for a refused key,
    a :database-error for anything else. `what` is \"Query\" or \"Update\"."
-  [what adapter-dialect sql-query e]
+  [what ctx adapter-dialect sql-query e]
   (let [r     (reported e)
         sql   (first sql-query)
         cause (redacted-cause e r)]
-    (when-let [v (some-> r (assoc :target (constraint/statement-table sql)) constraint/violation)]
+    (when-let [v (some->> (some-> r (assoc :target (constraint/statement-table sql)) constraint/violation)
+                          (named-columns ctx sql r))]
       (log/info (str what " refused by a constraint")
                 {:adapter adapter-dialect :sql sql :violation v :constraint-name (redaction/constraint-name r)})
       (throw (conflict v sql cause)))
@@ -260,7 +293,7 @@
         result)
 
       (catch Exception e
-        (fail! "Query" adapter-dialect sql-query e)))))
+        (fail! "Query" ctx adapter-dialect sql-query e)))))
 
 (defn execute-one!
   "Execute query expecting single result.
@@ -341,7 +374,7 @@
         affected-rows)
 
       (catch Exception e
-        (fail! "Update" adapter-dialect sql-query e)))))
+        (fail! "Update" ctx adapter-dialect sql-query e)))))
 
 (defn execute-batch!
   "Execute multiple queries in a single transaction.
