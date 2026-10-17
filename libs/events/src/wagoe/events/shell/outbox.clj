@@ -27,6 +27,7 @@
             [wagoe.events.ports :as ports]
             [wagoe.platform.transit :as transit]
             [wagoe.platform.database :as db]
+            [wagoe.platform.lease :as lease]
             [wagoe.platform.ports.database :as db-ports])
   (:import (java.util.concurrent RejectedExecutionException ScheduledThreadPoolExecutor TimeUnit)
            (java.util.concurrent.atomic AtomicLong)))
@@ -42,16 +43,6 @@
    :relay?               true})
 
 ;; --- schema -----------------------------------------------------------------
-
-(defn- seed-relay-lease! [ds]
-  (let [seeded? #(jdbc/execute-one! ds ["SELECT name FROM event_outbox_relay WHERE name = 'relay'"])]
-    (when-not (seeded?)
-      (try
-        (jdbc/execute-one! ds ["INSERT INTO event_outbox_relay (name, owner, until_ms) VALUES ('relay', NULL, 0)"])
-        ;; Another replica seeded it first. Anything else would leave no row,
-        ;; and a relay that can never claim the lease delivers nothing, silently.
-        (catch java.sql.SQLException e
-          (when-not (seeded?) (throw e)))))))
 
 (defn create-outbox-table!
   "Create `event_outbox`, its index and the relay lease row if absent. Called
@@ -74,11 +65,7 @@
     (db/create-index-if-not-exists! ctx "ix_event_outbox_live" :event_outbox
                                     [:delivered_ms :dead_ms :seq])
     (db/drop-index-if-exists! ctx "ix_event_outbox_pending" :event_outbox)
-    (jdbc/execute! ds ["CREATE TABLE IF NOT EXISTS event_outbox_relay (
-                          name     VARCHAR(64) PRIMARY KEY,
-                          owner    VARCHAR(36) NULL,
-                          until_ms BIGINT NOT NULL)"])
-    (seed-relay-lease! ds)))
+    (lease/create-table! ds :event_outbox_relay "relay")))
 
 ;; --- write side -------------------------------------------------------------
 
@@ -111,14 +98,6 @@
                            (event/topic-name topic)
                            (transit/encode {:topic topic :event event})]))
 
-(defn- claim-sql
-  "Take or renew the lease, timed by the database clock: a replica's own clock
-   may be skewed."
-  [adapter]
-  (let [now (db-ports/now-ms-sql adapter)]
-    (str "UPDATE event_outbox_relay SET owner = ?, until_ms = " now " + ?
-          WHERE name = 'relay' AND (until_ms < " now " OR owner = ?)")))
-
 (defrecord EventOutbox [ds bus opts owner]
   ports/ITransactionalPublisher
   (publish-in-tx! [_ tx topic event]
@@ -142,7 +121,7 @@
     (let [adapter (:adapter (db/context-of ds))]
       (assoc (->EventOutbox ds bus opts (str (random-uuid)))
              :purged-at (atom 0)
-             :claim-sql (claim-sql adapter)
+             :lease (lease/create-lease ds :event_outbox_relay "relay")
              :now-sql (str "SELECT " (db-ports/now-ms-sql adapter) " AS now_ms")))))
 
 ;; --- relay ------------------------------------------------------------------
@@ -182,17 +161,6 @@
                            attempts first-failed-ms last-error (when dead? now) (:id row)])
     dead?))
 
-(defn- claim-relay!
-  "Take or renew the relay lease for `owner` with `claim-sql`; true when held.
-   A relay paused past `lease-ms` may overlap the next owner for one batch:
-   duplicates, no loss."
-  [ds claim-sql owner lease-ms]
-  (= 1 (::jdbc/update-count (jdbc/execute-one! ds [claim-sql owner lease-ms owner]))))
-
-(defn- release-relay! [ds owner]
-  (jdbc/execute-one! ds ["UPDATE event_outbox_relay SET until_ms = 0
-                           WHERE name = 'relay' AND owner = ?" owner]))
-
 (defn- mark-delivered! [ds ids]
   (when (seq ids)
     (jdbc/execute-one! ds (into [(str "UPDATE event_outbox SET delivered_ms = ? WHERE id IN ("
@@ -214,9 +182,11 @@
   "One relay pass: `{:delivered n :more? bool :failed? bool}`. `:more?` when
    the batch was full and nothing stopped it, so more may be waiting;
    `:failed?` when a publish failed and the row is to be retried."
-  [{:keys [ds bus opts owner purged-at claim-sql] :as outbox}]
+  [{:keys [ds bus opts owner purged-at lease] :as outbox}]
   (let [{:keys [batch-size retain-ms lease-ms]} opts]
-    (if-not (claim-relay! ds claim-sql owner lease-ms)
+    ;; A relay paused past `lease-ms` may overlap the next owner for one
+    ;; batch: duplicates, no loss.
+    (if-not (lease/claim! lease owner lease-ms)
       {:delivered 0 :more? false :failed? false}
       (let [rows (pending ds batch-size)
             {:keys [ids stopped?]}
@@ -307,7 +277,7 @@
 (defn stop-relay!
   "Stop polling and hand the lease to the next relay. Rows not yet relayed stay
    pending."
-  [{:keys [ds owner] :as outbox}]
+  [{:keys [owner lease] :as outbox}]
   (when-let [^ScheduledThreadPoolExecutor ex (:executor outbox)]
     (.shutdown ex)
     ;; Released only once no pass is running: handing over mid-batch would let
@@ -315,4 +285,4 @@
     (when (or (.awaitTermination ex 5 TimeUnit/SECONDS)
               (do (.shutdownNow ex)
                   (.awaitTermination ex 1 TimeUnit/SECONDS)))
-      (release-relay! ds owner))))
+      (lease/release! lease owner))))

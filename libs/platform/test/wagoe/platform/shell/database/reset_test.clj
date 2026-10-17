@@ -34,6 +34,8 @@
            :let  [src (slurp f)]
            table (concat
                   (map second (re-seq #"\"CREATE TABLE IF NOT EXISTS (\w+)" src))
+                  ;; wagoe.platform.lease names its table.
+                  (map second (re-seq #"lease/create-table! [\w-]+ :(\w+)" src))
                   ;; The map inline, or a var defined in the same file.
                   (for [[_ m sym] (re-seq #"initialize-tables-from-schemas! ctx\s*(?:\{([^}]*)\}|([\w-]+))" src)
                         :let  [m (or m (second (re-find (re-pattern (str "\\(def " (java.util.regex.Pattern/quote sym)

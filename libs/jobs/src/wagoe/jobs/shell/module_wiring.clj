@@ -194,10 +194,11 @@
   (when (seq workers) (worker/stop-worker-pool! workers)))
 
 (defmethod ig/init-key :wagoe/job-scheduler
-  [_ {:keys [runtime recurring scheduler]}]
+  [_ {:keys [runtime registry recurring scheduler]}]
   (let [s (recurring/create-scheduler {:queue       (:queue runtime)
                                        :state       (:recurring-state runtime)
-                                       :idempotency (:idempotency runtime)}
+                                       :idempotency (:idempotency runtime)
+                                       :registry    registry}
                                       scheduler)]
     (doseq [[job-type {:keys [cron] :as opts}] recurring]
       (recurring/schedule-recurring! s job-type cron opts))
@@ -231,6 +232,7 @@
       :wagoe/job-stats    {:runtime (ig/ref :wagoe/jobs-runtime)}
       :wagoe/idempotency-store {:runtime (ig/ref :wagoe/jobs-runtime)}
       :wagoe/job-scheduler {:runtime   (ig/ref :wagoe/jobs-runtime)
+                            :registry  (ig/ref :wagoe/job-registry)
                             :recurring (:recurring settings)
                             :scheduler (:scheduler settings)}
       :wagoe/job-registry {:handler-maps []}

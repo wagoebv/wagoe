@@ -111,7 +111,10 @@ Or at runtime, on the `:wagoe/job-scheduler` component:
 Expressions have five fields (minute, hour, day of month, month, day of
 week) with `*`, lists, ranges, steps and names (`MON`, `JAN`), plus
 `@hourly`, `@daily`, `@weekly`, `@monthly` and `@yearly`. A malformed
-expression, an unknown zone, or one that never fires fails the boot.
+expression, an unknown zone, or one that never fires fails the boot. A job
+type with no handler on the node is logged as a warning by the lease holder,
+on its first tick, with the types that have one: it does not fail the boot, because a handler may be
+registered after boot or run only on worker nodes.
 
 How it behaves:
 

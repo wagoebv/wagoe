@@ -32,6 +32,7 @@
      jobs under ~1 MB."
   (:require [next.jdbc :as jdbc]
             [wagoe.platform.database :as db]
+            [wagoe.platform.lease :as lease]
             [wagoe.platform.core.database.constraint :as constraint]
             [wagoe.platform.ports.database :as db-ports]
             [next.jdbc.result-set :as rs]
@@ -475,11 +476,7 @@
   (execute! ds ["CREATE TABLE IF NOT EXISTS job_recurring (
                    name         VARCHAR(255) PRIMARY KEY,
                    last_tick_ms BIGINT NOT NULL)"])
-  (execute! ds ["CREATE TABLE IF NOT EXISTS job_ticker_lease (
-                   name     VARCHAR(64) PRIMARY KEY,
-                   owner    VARCHAR(64) NULL,
-                   until_ms BIGINT NOT NULL)"])
-  (insert-unless-present! ds ["INSERT INTO job_ticker_lease (name, owner, until_ms) VALUES ('ticker', NULL, 0)"]))
+  (lease/create-table! ds :job_ticker_lease "ticker"))
 
 (defrecord DbIdempotencyStore [ds now-sql]
   ports/IIdempotencyStore
@@ -506,15 +503,12 @@
   [ds]
   (->DbIdempotencyStore ds (now-sql ds)))
 
-(defrecord DbRecurringState [ds now-sql]
+(defrecord DbRecurringState [ds lease]
   ports/IRecurringState
   (acquire-lease! [_ owner lease-ms]
-    (= 1 (::jdbc/update-count
-          (execute-one! ds [(str "UPDATE job_ticker_lease SET owner = ?, until_ms = " now-sql " + ?
-                                  WHERE name = 'ticker' AND (until_ms < " now-sql " OR owner = ?)")
-                            owner lease-ms owner]))))
+    (lease/claim! lease owner lease-ms))
   (release-lease! [_ owner]
-    (execute-one! ds ["UPDATE job_ticker_lease SET until_ms = 0 WHERE name = 'ticker' AND owner = ?" owner]))
+    (lease/release! lease owner))
   (last-tick [_ schedule-name]
     (some-> (execute-one! ds ["SELECT last_tick_ms FROM job_recurring WHERE name = ?" schedule-name]
                           (opts))
@@ -537,4 +531,4 @@
   "Recurring-job state on `ds`, shared by every replica on it. Call
    `create-recurring-tables!` first."
   [ds]
-  (->DbRecurringState ds (now-sql ds)))
+  (->DbRecurringState ds (lease/create-lease ds :job_ticker_lease "ticker")))

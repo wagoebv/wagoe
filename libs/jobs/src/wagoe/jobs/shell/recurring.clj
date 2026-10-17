@@ -8,7 +8,11 @@
 
    Ticks missed while no ticker ran collapse into one: after downtime a
    schedule fires its latest missed tick once and the earlier ones never. A
-   schedule's first tick is the first after it was registered."
+   schedule's first tick is the first after it was registered.
+
+   The lease holder warns once about a scheduled job type with no handler
+   here. Not refused at init: handlers may be registered after boot, or live
+   only on worker nodes."
   (:require [clojure.tools.logging :as log]
             [wagoe.jobs.core.cron :as cron]
             [wagoe.jobs.core.job :as job]
@@ -60,13 +64,17 @@
 
 (defn create-scheduler
   "A scheduler enqueueing on `queue`, coordinating through `state`
-   (`IRecurringState`) and `idempotency` (`IIdempotencyStore`). `opts` as
-   `defaults`; `:zone` is the default for schedules that name none."
-  [{:keys [queue state idempotency]} & [opts]]
+   (`IRecurringState`) and `idempotency` (`IIdempotencyStore`). With
+   `registry` (`IJobRegistry`), a scheduled job type it has no handler for is
+   logged as a warning. `opts` as `defaults`; `:zone` is the default for
+   schedules that name none."
+  [{:keys [queue state idempotency registry]} & [opts]]
   (let [opts (merge defaults opts)]
     {:queue       queue
      :state       state
      :idempotency idempotency
+     :registry    registry
+     :checked     (atom #{})
      :opts        (assoc opts :zone (zone-of (:zone opts)))
      :owner       (str (random-uuid))
      :schedules   (atom {})
@@ -128,6 +136,26 @@
       (reset! purged-at now)
       (ports/purge-expired-keys! idempotency))))
 
+(defn- report-unhandled! [job-types known]
+  (log/warn (str "Recurring job types with no handler on this node: " (pr-str job-types)
+                 ". Fine if their handlers run on worker nodes or are registered later; otherwise check :wagoe/jobs :recurring for a typo.")
+            {:job-types job-types :known-types (vec (sort-by str known))}))
+
+(defn- check-handlers!
+  "Report each newly scheduled job type that has no handler, once."
+  [{:keys [registry schedules checked]}]
+  (when registry
+    (let [unchecked (remove @checked (keys @schedules))]
+      (when (seq unchecked)
+        ;; A diagnostic: a failing registry must not cost this pass its ticks.
+        (try
+          (let [known (set (ports/list-handlers registry))]
+            (when-let [missing (seq (remove known unchecked))]
+              (report-unhandled! (vec (sort-by str missing)) known))
+            (swap! checked into unchecked))
+          (catch Exception e
+            (log/error e "Recurring job handler check failed")))))))
+
 (defn tick!
   "One ticker pass at `now`. Does nothing unless this scheduler holds the
    lease. Returns the job types it enqueued."
@@ -139,6 +167,8 @@
                     ;; Newly the holder: another may have fired ticks meanwhile.
                     (reset! next-due {})
                     (reset! held? true))
+            ;; On the holder only, or every replica says it.
+            _     (check-handlers! scheduler)
             fired (into []
                         (keep (fn [[job-type entry]]
                                 (try
