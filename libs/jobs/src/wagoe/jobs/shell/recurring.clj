@@ -138,7 +138,7 @@
 
 (defn- report-unhandled! [job-types known]
   (log/warn (str "Recurring job types with no handler on this node: " (pr-str job-types)
-                 ". Their ticks enqueue jobs nothing here runs; check :wagoe/jobs :recurring for a typo.")
+                 ". Fine if their handlers run on worker nodes or are registered later; otherwise check :wagoe/jobs :recurring for a typo.")
             {:job-types job-types :known-types (vec (sort-by str known))}))
 
 (defn- check-handlers!
@@ -147,10 +147,14 @@
   (when registry
     (let [unchecked (remove @checked (keys @schedules))]
       (when (seq unchecked)
-        (swap! checked into unchecked)
-        (let [known (set (ports/list-handlers registry))]
-          (when-let [missing (seq (remove known unchecked))]
-            (report-unhandled! (vec (sort-by str missing)) known)))))))
+        ;; A diagnostic: a failing registry must not cost this pass its ticks.
+        (try
+          (let [known (set (ports/list-handlers registry))]
+            (when-let [missing (seq (remove known unchecked))]
+              (report-unhandled! (vec (sort-by str missing)) known))
+            (swap! checked into unchecked))
+          (catch Exception e
+            (log/error e "Recurring job handler check failed")))))))
 
 (defn tick!
   "One ticker pass at `now`. Does nothing unless this scheduler holds the

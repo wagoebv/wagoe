@@ -139,3 +139,27 @@
         (recurring/schedule-recurring! s :weekly-digest "0 3 * * 1")
         (recurring/tick! s (at "2026-01-02T01:00:10Z"))
         (is (= [[:nightly-reprot] [:weekly-digest]] @reported) "a schedule added later is checked too")))))
+
+(deftest ^:unit only-the-lease-holder-reports
+  (let [b        (backend)
+        registry (worker/create-job-registry)
+        reported (atom [])
+        holder   (recurring/create-scheduler (assoc b :registry registry))
+        other    (recurring/create-scheduler (assoc b :registry registry))]
+    (doseq [s [holder other]]
+      (recurring/schedule-recurring! s :nightly-reprot "0 2 * * *"))
+    (with-redefs-fn {#'recurring/report-unhandled! (fn [types _] (swap! reported conj types))}
+      (fn []
+        (recurring/tick! holder (at "2026-01-02T01:00:00Z"))
+        (recurring/tick! other (at "2026-01-02T01:00:01Z"))
+        (is (= [[:nightly-reprot]] @reported))))))
+
+(deftest ^:unit a-failing-registry-does-not-stop-the-tick
+  (let [b        (backend)
+        registry #_{:clj-kondo/ignore [:missing-protocol-method]}
+                 (reify ports/IJobRegistry
+                   (list-handlers [_] (throw (ex-info "down" {:type :internal-error}))))
+        s        (recurring/create-scheduler (assoc b :registry registry))]
+    (recurring/schedule-recurring! s :nightly-report "0 2 * * *")
+    (seed-tick! b :nightly-report "2026-01-01T02:00:00Z")
+    (is (= [:nightly-report] (recurring/tick! s (at "2026-01-02T02:00:01Z"))))))

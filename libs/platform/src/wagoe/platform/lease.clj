@@ -1,11 +1,8 @@
 (ns wagoe.platform.lease
   "A lease row that replicas take turns holding, timed by the database clock
-   so replica clock skew cannot split it. One row per lease, keyed by name, in
-   a table the caller names: the jobs ticker and the outbox relay each keep
-   their own.
-
-   A holder paused past `lease-ms` may overlap the next one until it notices;
-   callers whose work must not run twice guard it separately."
+   so replica clock skew cannot split it. A holder paused past `lease-ms` may
+   overlap the next one until it notices; callers whose work must not run twice
+   guard it separately."
   (:require [next.jdbc :as jdbc]
             [wagoe.platform.database :as db]
             [wagoe.platform.ports.database :as db-ports]))
@@ -47,7 +44,8 @@
      :release-sql (str "UPDATE " t " SET until_ms = 0 WHERE name = ? AND owner = ?")}))
 
 (defn claim!
-  "Take the lease for `owner`, or renew it, for `lease-ms`. True when held."
+  "Take the lease for `owner`, or renew it, for `lease-ms`. True when held.
+   `owner` is at most 36 characters: older tables were made with that width."
   [{:keys [ds lease-name claim-sql]} owner lease-ms]
   (= 1 (::jdbc/update-count (jdbc/execute-one! ds [claim-sql owner lease-ms lease-name owner]))))
 
