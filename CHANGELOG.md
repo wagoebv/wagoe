@@ -126,6 +126,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **`:user-web-ui {:enabled? false}` left the group pages on, and `WAG_WEB_UI_ENABLED=false` did nothing** (BOU-711).
+  Copy `#boolean #or [#env WAG_WEB_UI_ENABLED "true"]` from the shipped config if yours reads the env var.
 - **Security: the search API served every index to any signed-in user** (BOU-706). An index is now served only with
   `:api? true` or an `:api {:authorize …}` hook; apps relying on `/api/v1/search/:index-id` must add `:api? true`.
 - **A typed 4xx thrown by a handler or service was logged at ERROR** (BOU-704). It is now INFO, or WARN for 401/403; 5xx and
