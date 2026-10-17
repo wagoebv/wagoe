@@ -17,7 +17,7 @@
   (:import (java.security SecureRandom)
            (java.net URLEncoder)
            (java.time Instant)
-           (java.util Base64)
+           (java.util Base64 Date)
            (java.io ByteArrayOutputStream)
            (org.apache.commons.codec.binary Base32)
            (com.google.zxing BarcodeFormat)
@@ -42,6 +42,11 @@
     (.nextBytes random bytes)
     (.encodeAsString base32 bytes)))
 
+(def ^:dynamic *now*
+  "The Instant TOTP codes are checked at; nil reads the clock. Tests bind it
+   so a code they generate cannot fall into the next 30 s window."
+  nil)
+
 (defn verify-totp-code
   "Shell function: Verify TOTP code against secret.
    
@@ -57,7 +62,8 @@
   (try
     (if (and code secret)
       (let [code-int (Integer/parseInt (str/trim code))]
-        (boolean (otp/is-valid-totp-token? code-int secret)))
+        (boolean (otp/is-valid-totp-token? code-int secret
+                                           {:date (Date/from (or *now* (Instant/now)))})))
       false) ; Explicit false instead of nil when inputs invalid
     (catch Exception _e
       false)))
