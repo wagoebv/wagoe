@@ -46,7 +46,7 @@
       (support/html-response request
                              (admin-ui/admin-layout
                               (admin-ui/admin-home entities entity-configs stats
-                                                   #(support/mounted? request %))
+                                                   (partial support/mounted? request))
                               {:user user
                                :current-entity nil
                                :entities entities

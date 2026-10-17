@@ -207,7 +207,7 @@
           [:div.entity-card-meta
            [:span.entity-card-count [:t :admin/entity-card-count {:count count}]]]]]))
     (for [{:keys [href icon title description]} page-cards
-          :when ((or mounted? (constantly true)) href)]
+          :when (or (nil? mounted?) (mounted? href))]
       [:div.entity-card
        [:a {:href href :class "entity-card-link"}
         [:div.entity-card-icon (icons/icon icon {:size 20})]

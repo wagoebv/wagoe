@@ -7,11 +7,13 @@
    valid time-based codes in tests. Real verification is tested in integration tests."
   {:kaocha.testable/meta {:integration true :user true}}
   (:require [clojure.string :as str]
-            [clojure.test :refer [deftest testing is]]
+            [clojure.test :refer [deftest testing is use-fixtures]]
             [wagoe.user.shell.mfa :as mfa-shell]
             [wagoe.user.shell.mfa-crypto :as mfa-crypto]
             [wagoe.user.ports :as ports]
             [wagoe.user.totp-clock :as totp-clock]))
+
+(use-fixtures :each totp-clock/frozen)
 
 ;; =============================================================================
 ;; Test Fixtures
@@ -95,9 +97,8 @@
     (let [secret (mfa-shell/generate-totp-secret)]
 
       (testing "rejects invalid TOTP code"
-        (binding [mfa-shell/*now* totp-clock/window-edge]
-          (let [wrong (format "%06d" (mod (inc (parse-long (totp-clock/code secret))) 1000000))]
-            (is (false? (mfa-shell/verify-totp-code wrong secret))))))
+        (let [wrong (format "%06d" (mod (inc (parse-long (totp-clock/code secret))) 1000000))]
+          (is (false? (mfa-shell/verify-totp-code wrong secret)))))
 
       (testing "rejects nil code"
         (is (false? (mfa-shell/verify-totp-code nil secret))))

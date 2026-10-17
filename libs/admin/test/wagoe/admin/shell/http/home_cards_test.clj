@@ -37,12 +37,14 @@
                           ::r/router (router config)})))))
 
 (deftest ^:unit mounted-reads-the-route-table
-  (testing "a page of its own"
-    (is (support/mounted? {::r/router (router nil)} "/web/admin/groups"))
-    (is (support/mounted? {::r/router (router nil)} "/web/audit")))
-  (testing "not mounted, though /web/admin/:entity matches the path"
-    (is (not (support/mounted? {::r/router (router off)} "/web/admin/groups")))
-    (is (not (support/mounted? {::r/router (router off)} "/web/audit")))))
+  (let [on-req  {::r/router (router nil)}
+        off-req {::r/router (router off)}]
+    (testing "a page of its own"
+      (is (support/mounted? on-req "/web/admin/groups"))
+      (is (support/mounted? on-req "/web/audit")))
+    (testing "not mounted, though /web/admin/:entity matches the path"
+      (is (not (support/mounted? off-req "/web/admin/groups")))
+      (is (not (support/mounted? off-req "/web/audit"))))))
 
 (deftest ^:unit dashboard-cards-follow-the-user-web-ui-switch
   (testing "on: both cards"
