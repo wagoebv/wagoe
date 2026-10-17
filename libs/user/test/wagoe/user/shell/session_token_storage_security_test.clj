@@ -91,6 +91,25 @@
               (is (= (:id user) (:target-user-id entry)))
               (is (= "198.51.100.7" (:ip-address entry)) "the actor's address, not the device's"))))))))
 
+(deftest ^:integration ^:security revoking-all-sessions-is-audited-once
+  ;; Without keep-current nothing was audited; with it, one entry per session
+  ;; (BOU-708).
+  (with-service "revoke_all_audit" {}
+    (fn [{:keys [users audit service]}]
+      (let [user    (create-user! users)
+            admin   (create-user! users)
+            [kept & _] (mapv #(:session (login service user %)) (repeat 3 password))
+            revoke! #(service/with-audit-context {:actor-id (:id admin) :actor-email (:email admin)}
+                       (fn [] (ports/logout-user-everywhere service (:id user) %)))
+            entries #(->> (:audit-logs (ports/find-audit-logs audit {:limit 50}))
+                          (filter (comp #{:session-revoked} :action)))]
+        (is (= 2 (revoke! (:id kept))))
+        (is (= 1 (revoke! nil)))
+        (is (= 0 (revoke! nil)) "nothing left, nothing audited")
+        (is (= #{{:all true :count 2 :kept-session-id (str (:id kept))} {:all true :count 1}}
+               (set (map :metadata (entries)))))
+        (is (every? #(= [(:id admin) (:id user)] [(:actor-id %) (:target-user-id %)]) (entries)))))))
+
 (deftest ^:integration ^:security an-upgrade-hashes-a-plaintext-session-in-place
   (with-service "token_upgrade" {}
     (fn [{:keys [ctx users service]}]

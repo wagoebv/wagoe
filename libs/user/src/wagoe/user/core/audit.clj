@@ -283,6 +283,14 @@
    :user-agent user-agent
    :result :success})
 
+(defn sessions-revoked-audit-entry
+  "One audit entry for ending `n` of the user's sessions at once, every one
+   but `kept-session-id` when there is one (BOU-708)."
+  [n kept-session-id actor-id actor-email target-user-id target-user-email ip-address user-agent]
+  (assoc (session-revoked-audit-entry nil actor-id actor-email target-user-id target-user-email ip-address user-agent)
+         :metadata (cond-> {:all true :count n}
+                     kept-session-id (assoc :kept-session-id (str kept-session-id)))))
+
 ;; =============================================================================
 ;; Audit Entry Validation
 ;; =============================================================================
