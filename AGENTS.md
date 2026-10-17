@@ -1103,6 +1103,13 @@ The former `wagoe-examples` repository is archived; these two are the examples.
 
 Clojure's `{:or {limit 20 offset 0}}` destructuring only fires for **absent** keys. If the caller passes `{:limit nil :offset nil}` (e.g. from `some->` on missing query params), the defaults are ignored and `LIMIT nil` causes `SQLITE_MISMATCH`. Always guard with `(or limit 20)` / `(or offset 0)` at the point where the SQL params vector is assembled.
 
+### Framework migration ids end in an odd second
+
+Library migrations and an app's share one `schema_migrations` table keyed on id, so `migrate up` and boot refuse two
+migrations with one id (BOU-717). New framework ids end in an odd second (`20261020120017`), off the round timestamps
+apps pick by hand; `test/wagoe/migration_ids_test.clj` enforces it. Never rename a released id: databases that recorded
+it would run it again. A per-module table or namespaced ids would end the shared space; that is a follow-up.
+
 ---
 
 ## libs/tools — Developer Tooling

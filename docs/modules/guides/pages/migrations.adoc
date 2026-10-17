@@ -72,6 +72,35 @@ Both read `:active` only. A module enabled in code through `:extra-modules` is n
 `rollback` and `reset` go down through every module's migrations, so a rollback past a module that is off still undoes its last migration.
 A last applied migration that no library on the classpath ships stops `rollback` with its id.
 
+== Migration ids are shared with the framework
+
+Your migrations and every library's share one `schema_migrations` table, keyed on the id alone.
+Two migrations with one id cannot both run, so `migrate up` and `:migrate-on-start?` refuse to start and name both files.
+Give your migration a new id: rename its `.up` and `.down` files to a fresh timestamp.
+
+Framework migration ids end in an odd second (`…120017`), so a hand-picked round timestamp such as `…120000` will not collide with a new one.
+Ids released before that rule are round; they are listed in `test/wagoe/migration_ids_test.clj` in the framework repository.
+
+=== If your database already applied one of the pair
+
+Until BOU-717 nothing refused the pair: one migration ran and the id was recorded for both.
+To see which one ran, look up the id the refusal names:
+
+[source,sql]
+----
+SELECT id, description FROM schema_migrations WHERE id = 20261017120000;
+----
+
+`description` is the name of the migration that ran.
+
+* *The library's ran.* Rename yours to a new id and run `migrate up`; it runs then.
+* *Yours ran.* Rename yours, then record the new id so it does not run again: `INSERT INTO schema_migrations (id, applied, description) VALUES (<new id>, CURRENT_TIMESTAMP, '<name>')`.
+  The library's migration is still skipped: delete the old id's row and run `migrate up` to apply it.
+
+The user module's `20261017120000-user-session-token-hash` is the known case. It needs nothing: the user module hashes plaintext session tokens again at every boot.
+
+A per-module migration table, or ids namespaced by module, would remove the shared space altogether; that is a follow-up.
+
 == Resetting a database
 
 `bb db:reset` drops what the application owns and migrates again. It runs only in the `dev`, `test` and `acc` profiles, and there is no override:

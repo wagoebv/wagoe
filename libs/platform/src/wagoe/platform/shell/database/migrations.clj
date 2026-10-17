@@ -336,6 +336,42 @@
                      " to a separate classpath resource.")))
     migration-dirs))
 
+(defn- migrations-in
+  "[id file] for each migration in `dir`, read the way migratus reads it. The
+   file is shown without its .up/.down extension: the pair is one migration."
+  [dir]
+  (let [dir (migratus-utils/ensure-trailing-slash dir)]
+    (for [[id by-name] (migratus-migrations/find-migrations* dir nil nil)
+          mig-name     (keys by-name)]
+      [id (str dir id "-" mig-name)])))
+
+(defn duplicate-migration-ids
+  "{id [file ...]} for every id that more than one migration in `dirs` uses.
+
+   Every directory shares one schema_migrations table keyed on id alone, and
+   migratus keeps the last directory's migration for an id without a word. So
+   of two migrations with one id only one ever runs, and the other is recorded
+   as done (BOU-717)."
+  [dirs]
+  (into (sorted-map)
+        (for [[id found] (group-by first (mapcat migrations-in dirs))
+              :when (< 1 (count found))]
+          [id (mapv second found)])))
+
+(defn refuse-duplicate-migration-ids!
+  "Throw when two migrations in `dirs` share an id, naming both files."
+  [dirs]
+  (when-let [dups (not-empty (duplicate-migration-ids dirs))]
+    (throw (ex-info
+            (str "Two migrations share an id, so only one of them would ever run:\n"
+                 (str/join "\n" (for [[id files] dups]
+                                  (str "  " id ": " (str/join ", " files))))
+                 "\nGive your application's migration a new id (rename the file, up and down)."
+                 " If the database already recorded the id, the description column of"
+                 " schema_migrations says which one ran; see the migrations guide.")
+            {:type          :duplicate-migration-id
+             :duplicate-ids dups}))))
+
 (defn- manifest-library
   "The library a manifest belongs to, from its name: `geo` for `geo.edn`. nil
    for the legacy shared name, which says nothing about its library."
@@ -365,9 +401,13 @@
    `migrate up` created geo, push and audience tables in applications that never
    switched those modules on (BOU-579). Leaving a directory out re-runs nothing:
    migratus applies the ids it has not recorded and ignores recorded ones it no
-   longer reads, so a module's migrations apply the day it is switched on."
+   longer reads, so a module's migrations apply the day it is switched on.
+
+   Duplicate ids are refused across every directory, switched off or not: the
+   collision bites the day the module is switched on."
   [enabled-libs]
   (let [dirs (discover-migration-dirs)]
+    (refuse-duplicate-migration-ids! dirs)
     (if (nil? enabled-libs)
       dirs
       (let [framework (set (vals modules/framework-modules))
@@ -520,6 +560,18 @@
              :ignored-migrations  root
              :resource-migrations resources}))))
 
+(defn- rethrow-config-conflict!
+  "Re-throw a migration-directory conflict or duplicate id unchanged; return nil otherwise.
+
+   Every operation below catches, logs a stack trace, and rewraps its cause as
+   \"Migration failed\" with the real message demoted into ex-data. For a crash
+   that is fine. For this one it is not: the message *is* the fix, and burying
+   it under a trace reproduces the original complaint — a user who cannot tell
+   what happened to their migration."
+  [e]
+  (when (#{:migration-dir-conflict :duplicate-migration-id} (:type (ex-data e)))
+    (throw e)))
+
 (defn get-migration-config
   "Gets migration configuration for the active database.
 
@@ -536,6 +588,7 @@
        (log/info "Loading migration configuration" {:database (:database-type db-config)})
        (create-migratus-config db-config (when-not every-module? (configured-libraries))))
      (catch Exception e
+       (rethrow-config-conflict! e)
        (log/error e "Failed to load database configuration for migrations")
        (throw (ex-info "Migration configuration failed"
                        {:type :configuration-error
@@ -570,18 +623,6 @@
 ;; =============================================================================
 ;; Migration Operations
 ;; =============================================================================
-
-(defn- rethrow-config-conflict!
-  "Re-throw a migration-directory conflict unchanged; return nil otherwise.
-
-   Every operation below catches, logs a stack trace, and rewraps its cause as
-   \"Migration failed\" with the real message demoted into ex-data. For a crash
-   that is fine. For this one it is not: the message *is* the fix, and burying
-   it under a trace reproduces the original complaint — a user who cannot tell
-   what happened to their migration."
-  [e]
-  (when (= :migration-dir-conflict (:type (ex-data e)))
-    (throw e)))
 
 (defn- run-migratus!
   "`(f config)`; true when it ran. migratus returns :ignore, not an exception,

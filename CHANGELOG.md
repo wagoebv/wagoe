@@ -126,6 +126,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **An app migration sharing an id with a library's silently never ran, or the library's didn't** (BOU-717). Boot and
+  `migrate up` now refuse; rename yours and see the migrations guide. Skipped session-token hashing reruns at boot.
 - **Enabling MFA failed on PostgreSQL, MySQL and H2: ten backup codes overflowed a VARCHAR(255)** (BOU-715). Boot or
   `migrate up` widens the column, and the user agents, avatar URLs and audit errors that shared the limit.
 - **`:user-web-ui {:enabled? false}` left the group pages on, and `WAG_WEB_UI_ENABLED=false` did nothing** (BOU-711).
