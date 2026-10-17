@@ -10,6 +10,7 @@
             [wagoe.shared.ui.core.table :as table-ui]
             [wagoe.shared.ui.core.alpine :as alpine]
             [wagoe.platform.core.csrf :as csrf]
+            [wagoe.platform.core.http.pages :as pages]
             [clojure.string :as str]))
 
 ;; =============================================================================
@@ -132,11 +133,12 @@
               [:span [:t :admin/header-welcome {:name who}]]
               (when (and (:display-name user) (:email user))
                 [:span {:class "user-menu-email"} (:email user)])]
-             [:form {:method "POST" :action "/web/logout" :class "logout-form"}
-              (csrf/hidden-field)
-              [:button {:type "submit" :class "logout-button"}
-               (icons/icon :log-out {:size 14})
-               [:span [:t :admin/button-logout]]]]]])]]
+             (when (pages/mounted? "/web/logout")
+               [:form {:method "POST" :action "/web/logout" :class "logout-form"}
+                (csrf/hidden-field)
+                [:button {:type "submit" :class "logout-button"}
+                 (icons/icon :log-out {:size 14})
+                 [:span [:t :admin/button-logout]]]])]])]]
        [:main.admin-content
         content]]]]))
 
@@ -165,8 +167,9 @@
 
 (def page-cards
   "Dashboard cards for pages other modules serve; a card is shown only when its
-   page is mounted."
-  [{:href "/web/audit" :icon :file-text
+   page is mounted and the user may open it. The audit trail's guard admits
+   platform admins only."
+  [{:href "/web/audit" :icon :file-text :platform-admin? true
     :title [:t :admin/audit-trail-title] :description [:t :admin/audit-trail-description]}
    {:href "/web/admin/groups" :icon :users
     :title [:t :admin/groups-title] :description [:t :admin/groups-description]}])
@@ -178,11 +181,11 @@
      entities: Vector of available entity names
      entity-configs: Map of entity configurations
      stats: Optional map of dashboard statistics
-     mounted?: Optional predicate on a `page-cards` href; default shows them all
+     user: Optional signed-in user, for the cards of `page-cards` it may open
 
    Returns:
      Hiccup structure for dashboard"
-  [entities entity-configs & [stats mounted?]]
+  [entities entity-configs & [stats user]]
   [:div.admin-home {:class "space-y-4"}
    [:section.admin-home-hero
     [:div.admin-home-hero-inner
@@ -206,8 +209,9 @@
             [:div.entity-card-description description])
           [:div.entity-card-meta
            [:span.entity-card-count [:t :admin/entity-card-count {:count count}]]]]]))
-    (for [{:keys [href icon title description]} page-cards
-          :when (or (nil? mounted?) (mounted? href))]
+    (for [{:keys [href icon title description platform-admin?]} page-cards
+          :when (and (pages/mounted? href)
+                     (or (not platform-admin?) (layout/platform-admin? user)))]
       [:div.entity-card
        [:a {:href href :class "entity-card-link"}
         [:div.entity-card-icon (icons/icon icon {:size 20})]

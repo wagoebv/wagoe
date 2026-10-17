@@ -16,6 +16,7 @@
            [org.postgresql.util PSQLException ServerErrorMessage]))
 
 (def ^:private ^:dynamic *pg* nil)
+(def ^:private ^:dynamic *server* nil)
 
 (defn- create-tables! [ctx]
   (doseq [sql ["CREATE SCHEMA km_tenant"
@@ -36,7 +37,7 @@
           ctx (epg/db-context pg)]
       (try
         (create-tables! ctx)
-        (binding [*pg* ctx] (f))
+        (binding [*pg* ctx *server* pg] (f))
         (finally
           (db-factory/close-db-context! ctx)
           (epg/stop! pg))))))
@@ -107,6 +108,30 @@
     (is (= {:type :conflict :constraint :unique}
            (ex-data (thrown #(db/execute-update! (german-ctx "km_emails")
                                                  ["INSERT INTO km_emails VALUES (2, 'A@b.c')"])))))))
+
+(defn- millis [f]
+  (let [t (System/nanoTime)]
+    [(try (f) (catch clojure.lang.ExceptionInfo e e)) (quot (- (System/nanoTime) t) 1000000)]))
+
+(deftest ^:integration a-refusal-in-a-transaction-does-not-wait-for-the-pool
+  ;; One connection, held by the transaction: the lookup cannot have another.
+  (let [pool (epg/db-context *server* {:pool {:minimum-idle 1 :maximum-pool-size 1
+                                              :connection-timeout-ms 10000}})
+        ctx  (update pool :datasource refusing "km_lines" in-german)
+        in-tx #(db/with-transaction [tx ctx]
+                 (db/execute-update! tx ["INSERT INTO km_lines VALUES (2, 1, 2)"]))]
+    (try
+      (testing "out of connections: no fields, and well before the pool's timeout"
+        (let [[ex ms] (millis in-tx)]
+          (is (= {:type :conflict :constraint :unique} (ex-data ex)))
+          (is (< ms 5000) (str ms " ms"))))
+      (testing "once looked up, the columns are remembered"
+        (is (= [:invoice-id :position]
+               (:fields (ex-data (thrown #(db/execute-update! ctx ["INSERT INTO km_lines VALUES (2, 1, 2)"]))))))
+        (let [[ex ms] (millis in-tx)]
+          (is (= [:invoice-id :position] (:fields (ex-data ex))))
+          (is (< ms 5000) (str ms " ms"))))
+      (finally (db-factory/close-db-context! pool)))))
 
 (deftest ^:integration the-catalog-lookup-reads-one-table
   (is (= ["invoice_id" "position"] (introspection/pg-key-columns (:datasource *pg*) "km_lines" "uq_km_lines")))

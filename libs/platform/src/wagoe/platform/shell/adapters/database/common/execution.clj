@@ -18,7 +18,8 @@
             [clojure.walk :as walk]
             [next.jdbc :as jdbc]
             [next.jdbc.result-set :as rs])
-  (:import [java.sql SQLException]))
+  (:import [java.sql Connection SQLException]
+           [javax.sql DataSource]))
 
 ;; =============================================================================
 ;; Context Validation (Re-exported from core)
@@ -176,6 +177,29 @@
    transaction a refused write aborted."
   nil)
 
+(def ^:private key-columns-cache
+  "Key columns per [datasource table key], so a refusal looks them up once.
+   Emptied when full."
+  (atom {}))
+
+(def ^:private key-columns-cache-size 512)
+
+(def ^:private borrow-timeout-ms
+  "How long a refusal waits for a connection to read a key's columns from. In
+   a transaction it already holds one, so out of a full pool it would wait the
+   pool's whole timeout (Hikari's 30 s) and still answer without fields."
+  1000)
+
+(defn- borrow
+  "A connection from `ds`, or a throw after `borrow-timeout-ms`. One that
+   arrives later is closed."
+  ^Connection [^DataSource ds]
+  (let [p (future (.getConnection ds))
+        c (deref p borrow-timeout-ms nil)]
+    (or c
+        (do (future (try (.close ^Connection @p) (catch Exception _)))
+            (throw (SQLException. "No connection to read a key's columns from"))))))
+
 (defn- named-columns
   "`v`, a unique violation, with the columns of key `key-name` read from the
    database when the driver's message did not name them. Only a key on the
@@ -197,8 +221,20 @@
       (try
         (let [adapter (:adapter ctx)
               ds      (or (when (= :postgresql (protocols/engine adapter)) *outside-datasource*)
-                          (current-datasource ctx))]
-          (constraint/with-columns v (protocols/key-columns adapter ds (if schema (keyword schema table) table) index)))
+                          (current-datasource ctx))
+              table   (if schema (keyword schema table) table)
+              k       [ds table index]
+              cached  (get @key-columns-cache k ::none)]
+          (constraint/with-columns
+            v
+            (if (not= ::none cached)
+              cached
+              (let [cols (if (instance? DataSource ds)
+                           (with-open [conn (borrow ds)]
+                             (protocols/key-columns adapter conn table index))
+                           (protocols/key-columns adapter ds table index))]
+                (swap! key-columns-cache #(assoc (if (< (count %) key-columns-cache-size) % {}) k cols))
+                cols))))
         (catch Exception e
           (log/debug "Could not read the columns of a key" {:key key-name :error (ex-message e)})
           v)

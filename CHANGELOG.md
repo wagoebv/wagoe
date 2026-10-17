@@ -128,6 +128,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Navigation linked Audit, Profile and Login with the user web UI off, and a tenant admin's dashboard to Audit's
+  403** (BOU-724). Layouts now link only to mounted pages the user may open: `wagoe.platform.core.http.pages/mounted?`.
+- **On non-English PostgreSQL, a refused key in a transaction could wait 30 s for a second connection** (BOU-725). Key
+  columns are now cached and the lookup waits at most 1 s.
 - **A typo'd job type in `:wagoe/jobs :recurring` enqueued jobs nothing ran, silently** (BOU-700). The ticker now
   warns, naming the type and the known handlers.
 - **A refused key's field could be read from the value sent, and none was named on non-English PostgreSQL or MySQL 5.7
