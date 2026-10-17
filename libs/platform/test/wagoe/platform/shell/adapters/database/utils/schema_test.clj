@@ -22,7 +22,10 @@
   {:adapter (h2/new-adapter)})
 
 ;; Access private fns via var for targeted unit tests
-(def ^:private malli-type->column-type #'schema/malli-type->column-type)
+(def ^:private column-type #'schema/column-type)
+
+(defn- malli-type->column-type [ctx malli-type]
+  (column-type ctx {:type malli-type :properties {}}))
 (def ^:private extract-field-info #'schema/extract-field-info)
 
 ;; =============================================================================
@@ -44,6 +47,13 @@
      :text         ["VARCHAR" "TEXT" "TEXT" "LONGTEXT"]
      :enum         ["VARCHAR(50)" "TEXT" "VARCHAR(50)" "VARCHAR(50)"]
      :map          ["VARCHAR" "TEXT" "JSONB" "JSON"]
+     :map-of       ["VARCHAR" "TEXT" "JSONB" "JSON"]
+     ;; Serialised, so longer than a string: never VARCHAR(255) (BOU-715).
+     :vector       ["VARCHAR" "TEXT" "TEXT" "LONGTEXT"]
+     :sequential   ["VARCHAR" "TEXT" "TEXT" "LONGTEXT"]
+     :set          ["VARCHAR" "TEXT" "TEXT" "LONGTEXT"]
+     :tuple        ["VARCHAR" "TEXT" "TEXT" "LONGTEXT"]
+     :any          ["VARCHAR" "TEXT" "TEXT" "LONGTEXT"]
      inst?         [ts "TEXT" ts "DATETIME(6)"]
      'inst?        [ts "TEXT" ts "DATETIME(6)"]}))
 
@@ -55,6 +65,16 @@
                                       types)]
     (is (= expected (malli-type->column-type {:adapter (make)} malli-type))
         (str engine " " malli-type))))
+
+(deftest ^:unit a-string-gets-the-length-its-schema-allows
+  (let [ddl-type (fn [make field] (column-type {:adapter (make)} (extract-field-info field)))]
+    (doseq [make [h2/new-adapter postgresql/new-adapter mysql/new-adapter]]
+      (is (= "VARCHAR(320)" (ddl-type make [:email [:string {:min 3 :max 320}]])))
+      (is (= "VARCHAR(255)" (ddl-type make [:name [:string {:min 1}]])))
+      (is (= (ddl-type make [:x :text]) (ddl-type make [:note [:string {:max 5000}]]))
+          "past the longest VARCHAR it is TEXT")
+      (is (= (ddl-type make [:x :text]) (ddl-type make [:codes {:optional true} [:maybe [:vector :string]]]))))
+    (is (= "TEXT" (ddl-type sqlite/new-adapter [:email [:string {:max 320}]])))))
 
 ;; =============================================================================
 ;; Field Extraction Tests ([:maybe ...] unwrapping)

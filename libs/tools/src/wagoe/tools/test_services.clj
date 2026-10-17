@@ -57,6 +57,7 @@
                 "wagoe.library-migrations-mysql-test"
                 "wagoe.search-mysql-test"
                 "wagoe.seed-mysql-test"
+                "wagoe.table-column-length-test"
                 "wagoe.user-audit-action-check-test"
                 "wagoe.scaffolder.migration-dialects-test"]}])
 

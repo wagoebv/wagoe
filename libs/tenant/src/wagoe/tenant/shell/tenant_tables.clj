@@ -6,6 +6,12 @@
   (:require [wagoe.platform.database :as db]
             [wagoe.tenant.schema :as tenant-schema]))
 
+(def tables
+  "Tenant's tables, by name, and the Malli schema each is built from."
+  {"tenants"               tenant-schema/Tenant
+   "tenant_memberships"    tenant-schema/TenantMembership
+   "tenant_member_invites" tenant-schema/TenantInvite})
+
 (def ^:private indexes
   "[name table columns unique?] the generated DDL does not make. Created
    separately, unless already there, so a table that exists gets them too.
@@ -20,9 +26,7 @@
 (defn ensure-tables!
   "Create the tenant tables and their indexes, unless they are there."
   [ctx]
-  (db/initialize-tables-from-schemas! ctx {"tenants" tenant-schema/Tenant
-                                           "tenant_memberships" tenant-schema/TenantMembership
-                                           "tenant_member_invites" tenant-schema/TenantInvite})
+  (db/initialize-tables-from-schemas! ctx tables)
   (doseq [[index table columns unique?] indexes]
     (db/create-index-if-not-exists! ctx index table columns {:unique? unique?})))
 

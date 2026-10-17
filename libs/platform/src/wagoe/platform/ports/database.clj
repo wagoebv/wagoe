@@ -194,7 +194,9 @@
        - :primary-key - boolean
        - :generated - boolean: the database fills it (identity,
          auto-increment, rowid, or a computed column)
-       
+       - :max-length - a character column's declared length, or nil (always
+         nil on SQLite, which enforces none)
+
      Example:
        (get-table-info sqlite-adapter ds :users)
        ;; => [{:name \"id\" :type \"TEXT\" :not-null true :primary-key true} ...]")

@@ -1,0 +1,6 @@
+;; tenant_member_invites.email widened to the 320 characters its schema allows,
+;; on a database created at VARCHAR(255) (BOU-715). The same idempotent
+;; definition: a column already wide enough is left as it is.
+{:ns      wagoe.tenant.shell.tenant-tables
+ :up-fn   "up"
+ :down-fn "down"}

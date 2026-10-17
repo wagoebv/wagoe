@@ -39,16 +39,13 @@
 
 (def ^:private malli->logical
   "The `protocols/logical-column-types` entry for a Malli type. inst? comes as
-   the fn or, quoted, the symbol."
+   the fn or, quoted, the symbol. A collection is stored serialised, which a
+   255-character string does not hold (BOU-715)."
   {:uuid :uuid :string :string :re :string :int :int :bigint :bigint
-   :double :double :boolean :boolean :text :text :enum :enum :map :json
+   :double :double :boolean :boolean :text :text :enum :enum
+   :map :json :map-of :json
+   :vector :text :sequential :text :set :text :tuple :text :any :text
    inst? :instant 'inst? :instant})
-
-(defn- malli-type->column-type
-  "The engine's DDL type for `malli-type`; a string's when unknown. The adapter
-   owns the table, so the builder and `column-type` cannot disagree (BOU-610)."
-  [ctx malli-type]
-  (protocols/column-type (:adapter ctx) (malli->logical malli-type :string)))
 
 ;; =============================================================================
 ;; Malli Schema Field Processing
@@ -126,14 +123,29 @@
   [table-name column-name]
   (str "chk_" table-name "_" column-name))
 
+(def ^:private longest-varchar
+  "The longest `[:string {:max n}]` kept as a VARCHAR. Longer is TEXT: MySQL
+   counts every VARCHAR towards a 65,535-byte row, four bytes a character."
+  1024)
+
+(defn- logical-type
+  "A field's `logical-column-types` entry: its :column-type, else its Malli
+   type's, a string honouring its `{:max n}`."
+  [{:keys [type properties schema]}]
+  (let [max-length (when (and (= :string type) (vector? schema) (map? (second schema)))
+                     (:max (second schema)))]
+    (cond
+      (:column-type properties) (:column-type properties)
+      (not (pos-int? max-length)) (malli->logical type :string)
+      (<= max-length longest-varchar) [:string max-length]
+      :else :text)))
+
 (defn- column-type
-  "The SQL type of a field: its :db-type, the adapter's for its :column-type
-   (a `logical-column-types` keyword, for a value stored other than as its
-   Malli type suggests), or the one its Malli type maps to."
-  [ctx {:keys [type properties]}]
+  "The SQL type of a field: its :db-type, or the adapter's for its
+   `logical-type`, so the builder and `column-type` cannot disagree (BOU-610)."
+  [ctx {:keys [properties] :as field-info}]
   (or (:db-type properties)
-      (some->> (:column-type properties) (protocols/column-type (:adapter ctx)))
-      (malli-type->column-type ctx type)))
+      (protocols/column-type (:adapter ctx) (logical-type field-info))))
 
 (defn- column-default
   "The DEFAULT clause of a field: only a required `active` boolean has one."
@@ -388,6 +400,38 @@
           (db-core/create-index-if-not-exists! ctx constraint-name table-name columns {:unique? true}))))))
 
 ;; =============================================================================
+;; Short Columns
+;; =============================================================================
+
+(def ^:private unbounded-length
+  "What H2 reports for a VARCHAR without a length, its longest. TEXT columns on
+   PostgreSQL and MySQL are not character-varying, so they are never widened."
+  1000000000)
+
+(defn- wanted-length
+  "How long a field's column should hold, or nil when it is no string column
+   the builder widens: a JSON or :db-type one is left to a migration."
+  [{:keys [properties] :as field-info}]
+  (when-not (:db-type properties)
+    (let [logical (logical-type field-info)]
+      (cond (= :text logical)   unbounded-length
+            (= :string logical) 255
+            (vector? logical)   (second logical)))))
+
+(defn- widen-short-columns!
+  "Widen the VARCHAR columns of an existing table shorter than its schema now
+   asks, so a database created before a field grew holds what a fresh one does
+   (BOU-715). Only ever wider: rows are kept."
+  [ctx table-name malli-schema]
+  (let [present (into {} (map (juxt :name identity)) (db-core/get-table-info ctx table-name))]
+    (doseq [f (keep extract-field-info (rest malli-schema))
+            :let [{:keys [type max-length not-null default]} (present (str/lower-case (col-name (:name f))))
+                  wanted (wanted-length f)]
+            :when (and wanted max-length (< max-length wanted)
+                       (re-find #"(?i)char" (str type)) (nil? default))]
+      (db-core/widen-column! ctx table-name (col-name (:name f)) (column-type ctx f) not-null))))
+
+;; =============================================================================
 ;; Schema Initialization
 ;; =============================================================================
 
@@ -435,7 +479,8 @@
 
   (try
     ; Create tables. For tables that already exist, CREATE TABLE IF NOT EXISTS is
-    ; a no-op, so add the fields the schema gained since, and re-apply named enum
+    ; a no-op, so add the fields the schema gained since, widen those it
+    ; lengthened, and re-apply named enum
     ; CHECK constraints to keep initialization idempotent (and to heal H2's
     ; in-memory reconnect corruption).
     (doseq [[table-name malli-schema] (creation-order schema-definitions)]
@@ -445,6 +490,7 @@
         (db-core/execute-ddl! ctx ddl)
         (when existed?
           (add-missing-columns! ctx table-name malli-schema)
+          (widen-short-columns! ctx table-name malli-schema)
           (repair-enum-constraints! ctx table-name malli-schema))))
 
     ; Create indexes

@@ -199,3 +199,19 @@
   (let [stmt (fn [clause] (str "ALTER TABLE " (name table) " DROP COLUMN " clause (name column)))]
     (if-exists-ddl! ctx (claims? ctx :column-if-not-exists) (stmt "IF EXISTS ") (stmt "")
                     constraint/already-gone?)))
+
+(defn widen-column!
+  "Change `column` of `table` to the longer character `type`, keeping its rows
+   and its NULL or NOT NULL (BOU-715). A no-op on SQLite, which enforces no
+   length. MySQL's MODIFY restates the column, so a default it had is dropped:
+   call this only for columns without one."
+  [ctx table column type not-null?]
+  (let [table (name table) column (name column)]
+    (when-let [ddl (case (protocols/engine (:adapter ctx))
+                     :postgresql (str "ALTER TABLE " table " ALTER COLUMN " column " TYPE " type)
+                     :h2         (str "ALTER TABLE " table " ALTER COLUMN " column " SET DATA TYPE " type)
+                     :mysql      (str "ALTER TABLE " table " MODIFY COLUMN " column " " type
+                                      (if not-null? " NOT NULL" " NULL"))
+                     nil)]
+      (log/info "Widening column" {:table table :column column :type type})
+      (execute-ddl! ctx ddl))))

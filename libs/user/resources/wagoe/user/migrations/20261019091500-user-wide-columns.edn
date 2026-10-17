@@ -1,0 +1,6 @@
+;; MFA backup codes, user agents, avatar URLs and audit error messages, widened
+;; from VARCHAR(255) on a database created before (BOU-715). The same
+;; idempotent definition: a column already wide enough is left as it is.
+{:ns      wagoe.user.shell.user-tables
+ :up-fn   "up"
+ :down-fn "down"}
