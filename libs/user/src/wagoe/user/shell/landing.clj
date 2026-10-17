@@ -1,6 +1,6 @@
 (ns wagoe.user.shell.landing
   "The `:login-redirect`, `:dashboard` and `:home` settings of `:wagoe/user`:
-   checked and resolved at boot, read when a user signs in."
+   checked and resolved at boot, read when a user signs in or a page renders."
   (:require [clojure.tools.logging :as log]
             [malli.error :as me]
             [wagoe.core.utils.redirect :as redirect]
@@ -31,8 +31,8 @@
     x))
 
 (defn prepare
-  "`config` with `:login-redirect` and `:dashboard` checked and their symbols
-   resolved. Throws :configuration-error on a bad value, so boot fails. The
+  "`config` with `:login-redirect`, `:dashboard` and `:home` checked and the
+   symbols resolved. Throws :configuration-error on a bad value, so boot fails. The
    module wiring calls it once; handlers expect its output."
   [config]
   (let [s (settings config)]

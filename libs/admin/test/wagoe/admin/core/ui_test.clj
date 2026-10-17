@@ -1145,6 +1145,11 @@
       ;; Should have link to dashboard (user is logged in, i18n key)
       (is (str/includes? (str page) ":admin/button-go-dashboard")))
 
+    (testing "the dashboard button goes to the configured home"
+      (binding [home/*path* "/app"]
+        (is (some #{[:a.button {:href "/app"} [:t :admin/button-go-dashboard]]}
+                  (tree-seq coll? seq (ui/admin-forbidden-page nil sample-user))))))
+
     (testing "Forbidden page for unauthenticated user"
       (let [page (ui/admin-forbidden-page "Not authenticated" nil)]
         (is (vector? page))

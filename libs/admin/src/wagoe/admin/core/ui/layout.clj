@@ -253,7 +253,7 @@
       [:p.error-message [:t :admin/page-access-denied-message]])
     [:div.error-actions
      (if user
-       [:a.button {:href "/"} [:t :admin/button-go-dashboard]]
+       [:a.button {:href home/*path*} [:t :admin/button-go-dashboard]]
        [:a.button {:href "/web/login"} [:t :admin/button-login]])]]
    {:user user}))
 

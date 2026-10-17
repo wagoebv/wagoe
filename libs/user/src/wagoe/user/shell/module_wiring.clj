@@ -320,8 +320,8 @@
    when the settings name a provider under `[:oidc :providers]`. `:auth` becomes
    the auth service's config.
 
-   `:login-redirect` and `:dashboard` are checked and resolved here, once, so a
-   bad value fails boot whichever components start."
+   `:login-redirect`, `:dashboard` and `:home` are checked and resolved here,
+   once, so a bad value fails boot whichever components start."
   [settings {:keys [config validation-config]}]
   (let [config (landing/prepare config)]
     (cond-> (base-graph config validation-config (:auth settings {}))
