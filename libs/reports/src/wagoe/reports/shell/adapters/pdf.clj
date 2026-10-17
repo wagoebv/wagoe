@@ -95,22 +95,31 @@
 
 (def ^:private safe-href #"(?i)^(https?:|mailto:|#)")
 
-(defn- unsafe-attr? [k v]
+(defn- anchor? [tag]
+  ;; Only <a href> becomes a PDF link; <link href="data:..."> is how a template loads CSS.
+  (boolean (re-matches #"(?i)a(?:[.#].*)?" (name tag))))
+
+(defn- unsafe-attr? [a? k v]
   (let [k (str/lower-case (name k))]
     (or (str/starts-with? k "on")
-        (and (= "href" k)
+        (and a? (= "href" k)
              (not (re-find safe-href (str/replace (str v) #"[\x00-\x20]" "")))))))
 
 (defn- neutralise
-  "Render data vectors and maps as text, and drop on* attributes and hrefs
+  "Render data vectors and maps as text, and drop on* attributes and link hrefs
    other than http(s), mailto and #. Template-built markup and h/raw pass through."
   [form ^IdentityHashMap data]
   (cond
-    (.containsKey data form) (str form)
-    (and (vector? form) (seq form))
-    (let [[tag attrs & children] form]
+    ;; A map entry comes from walking a data map. A vector without a keyword tag
+    ;; (any JSON array, even after keywordize-keys rebuilt it) is never markup.
+    (or (.containsKey data form) (map-entry? form)
+        (and (vector? form) (not (keyword? (first form)))))
+    (str form)
+    (vector? form)
+    (let [[tag attrs & children] form
+          a? (anchor? tag)]
       (if (and (map? attrs) (not (.containsKey data attrs)))
-        (into [tag (reduce-kv (fn [m k v] (cond-> m (unsafe-attr? k v) (dissoc k))) attrs attrs)]
+        (into [tag (reduce-kv (fn [m k v] (cond-> m (unsafe-attr? a? k v) (dissoc k))) attrs attrs)]
               (map #(neutralise % data)) children)
         (into [tag] (map #(neutralise % data)) (rest form))))
     (seq? form) (map #(neutralise % data) form)

@@ -171,6 +171,24 @@
     (is (not (re-find #"onclick=" html)))
     (is (str/includes? html "<p>{"))))
 
+(deftest ^:unit ^:security pdf-data-entries-and-empty-vectors-test
+  (testing "entries of a data map render as text, not as elements"
+    (let [html (report-html {:id :t :type :pdf
+                             :template (fn [d] [:html [:body [:div (seq (:m d))]]])}
+                            {:m {"script" "x"}})]
+      (is (not (str/includes? html "<script")))))
+  (testing "a JSON array rebuilt by the template still renders as text"
+    (let [html (report-html {:id :t :type :pdf
+                             :template (fn [d] [:html [:body [:p (vec (:note d))]]])}
+                            {:note json-vector})]
+      (is (not (str/includes? html "<a")))
+      (is (not (re-find #"onclick=" html)))))
+  (testing "an empty vector in data renders instead of failing"
+    (is (str/includes? (report-html {:id :t :type :pdf
+                                     :template (fn [d] [:html [:body [:p (:tags d)]]])}
+                                    {:tags []})
+                       "<p>[]</p>"))))
+
 (deftest ^:unit ^:security pdf-template-markup-test
   (let [html (report-html {:id :t :type :pdf
                            :template (fn [d]
@@ -178,6 +196,7 @@
                                                [:a {:href " JavaScript:app.alert(1)" :onClick "x" :class "c"} "l"]
                                                [:a {:href "https://wagoe.org"} "ok"]
                                                [:td {} (:n d)]
+                                               [:link {:rel "stylesheet" :href "data:text/css,p{}"}]
                                                (h/raw "<b>trusted</b>")]])}
                           {:n "1" :empty {}})]
     (testing "on* attributes and javascript: hrefs are dropped"
@@ -186,4 +205,5 @@
     (testing "the rest of the template renders as written"
       (is (str/includes? html "href=\"https://wagoe.org\""))
       (is (str/includes? html "<td>1</td>"))
+      (is (str/includes? html "href=\"data:text/css,p{}\""))
       (is (str/includes? html "<b>trusted</b>")))))
