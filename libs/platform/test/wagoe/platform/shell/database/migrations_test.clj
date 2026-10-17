@@ -959,3 +959,25 @@
       (migrations/migrate-datasource! (:datasource ctx))
       (is (db/table-exists? ctx :app_table))
       (is (db/table-exists? ctx :lib_table)))))
+
+(deftest ^:integration a-shared-migration-id-is-found-in-a-jar
+  ;; An uberjar is how production boots: the ids come from jar entries there.
+  (with-temp-dir
+    (fn [root]
+      (let [tree (io/file root "tree")
+            jar  (io/file root "app.jar")]
+        (doseq [d ["bou717a/migrations" "bou717b/migrations"]]
+          (spit (doto (io/file tree d "20261017120000-x.up.sql") io/make-parents) "SELECT 1"))
+        (jar-dir! tree jar)
+        (let [cl     (java.net.URLClassLoader. (into-array java.net.URL [(io/as-url jar)])
+                                               (ClassLoader/getPlatformClassLoader))
+              thread (Thread/currentThread)
+              prev   (.getContextClassLoader thread)]
+          (try
+            (.setContextClassLoader thread cl)
+            (is (= {"20261017120000" ["bou717a/migrations/20261017120000-x"
+                                      "bou717b/migrations/20261017120000-x"]}
+                   (migrations/duplicate-migration-ids ["bou717a/migrations" "bou717b/migrations"])))
+            (finally
+              (.setContextClassLoader thread prev)
+              (.close cl))))))))

@@ -78,8 +78,7 @@ Your migrations and every library's share one `schema_migrations` table, keyed o
 Two migrations with one id cannot both run, so `migrate up` and `:migrate-on-start?` refuse to start and name both files.
 Give your migration a new id: rename its `.up` and `.down` files to a fresh timestamp.
 
-Framework migration ids end in an odd second (`…120017`), so a hand-picked round timestamp such as `…120000` will not collide with a new one.
-Ids released before that rule are round; they are listed in `test/wagoe/migration_ids_test.clj` in the framework repository.
+New framework migration ids end in an odd second (`…120017`), so a hand-picked round timestamp such as `…120000` will not collide with one.
 
 === If your database already applied one of the pair
 

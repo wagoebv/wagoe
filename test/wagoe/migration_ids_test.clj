@@ -12,15 +12,17 @@
    classpath, which is here."
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
-            [migratus.migrations :as migratus-migrations]
             [wagoe.platform.shell.database.migrations :as mig]))
 
-(defn- library-dirs []
-  (remove #{mig/project-migration-dir} (mig/discover-migration-dirs)))
+(def ^:private library-ids
+  "Every framework migration id, one per migration."
+  (delay (->> (remove #{mig/project-migration-dir} (mig/discover-migration-dirs))
+              (mapcat #'mig/migrations-in)
+              (map first))))
 
 (deftest ^:unit no-two-migrations-share-an-id
   (testing "the runner sees at least the libraries that ship migrations"
-    (is (seq (mapcat #(migratus-migrations/find-migrations* % nil nil) (library-dirs)))
+    (is (seq @library-ids)
         "no migrations discovered at all — this test would pass vacuously"))
 
   (testing "and none of them collide"
@@ -44,11 +46,8 @@
 (deftest ^:unit framework-migration-ids-end-in-an-odd-second
   ;; An application picks round timestamps by hand; framework migrations stay
   ;; off them, so the two do not share an id (BOU-717).
-  (let [ids  (for [dir (library-dirs)
-                   id  (keys (migratus-migrations/find-migrations* dir nil nil))]
-               id)
-        even (sort (remove #(or (released-round-ids %) (odd? (parse-long (subs % 12)))) ids))]
-    (is (seq ids))
+  (let [even (sort (remove #(or (released-round-ids %) (odd? (parse-long (subs % 12))))
+                           @library-ids))]
     (is (empty? even)
         (str "framework migration ids must end in an odd second (…120017, not …120000): "
              (str/join ", " even)))))
