@@ -4,7 +4,8 @@
    Pure Hiccup generators for the admin chrome: sidebar navigation, the
    collapsible shell + topbar, the dashboard home, 403/404 error pages, the
    delete-confirmation modal, and the `build-table-url` helper."
-  (:require [wagoe.shared.ui.core.icons :as icons]
+  (:require [wagoe.shared.ui.core.home :as home]
+            [wagoe.shared.ui.core.icons :as icons]
             [wagoe.shared.ui.core.layout :as layout]
             [wagoe.shared.ui.core.table :as table-ui]
             [wagoe.shared.ui.core.alpine :as alpine]
@@ -68,7 +69,7 @@
             (icons/icon icon {:size 20})
             [:span.nav-text label]]]))]]
     [:div.admin-sidebar-footer
-     [:a (merge {:href "/web/dashboard"}
+     [:a (merge {:href home/*path*}
                 (alpine/sidebar-nav-link-attrs))
       (icons/icon :home {:size 20})
       [:span.nav-text [:t :admin/sidebar-dashboard]]]
@@ -252,7 +253,7 @@
       [:p.error-message [:t :admin/page-access-denied-message]])
     [:div.error-actions
      (if user
-       [:a.button {:href "/"} [:t :admin/button-go-dashboard]]
+       [:a.button {:href home/*path*} [:t :admin/button-go-dashboard]]
        [:a.button {:href "/web/login"} [:t :admin/button-login]])]]
    {:user user}))
 

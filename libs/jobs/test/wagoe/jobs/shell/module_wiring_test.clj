@@ -30,3 +30,23 @@
     (let [e (try (ig/init-key :wagoe/jobs-runtime {:provider :postgres})
                  (catch clojure.lang.ExceptionInfo e e))]
       (is (= :wagoe/jobs-unknown-provider (:type (ex-data e)))))))
+
+(deftest ^:unit the-scheduler-takes-its-schedules-from-config
+  (let [runtime   (ig/init-key :wagoe/jobs-runtime {:provider :memory})
+        scheduler (ig/init-key :wagoe/job-scheduler
+                               {:runtime   runtime
+                                :recurring {:nightly-report {:cron "0 2 * * *" :args {:kind :sales}}}
+                                :scheduler {:zone "Europe/Amsterdam"}})]
+    (try
+      (is (= {:args {:kind :sales}}
+             (get-in @(:schedules scheduler) [:nightly-report :job])))
+      (is (= "Europe/Amsterdam" (str (get-in @(:schedules scheduler) [:nightly-report :zone]))))
+      (is (some? (:executor scheduler)) "and it is ticking")
+      (finally (ig/halt-key! :wagoe/job-scheduler scheduler))))
+
+  (testing "a bad expression fails the boot"
+    (let [runtime (ig/init-key :wagoe/jobs-runtime {:provider :memory})]
+      (is (thrown? clojure.lang.ExceptionInfo
+                   (ig/init-key :wagoe/job-scheduler
+                                {:runtime   runtime
+                                 :recurring {:nightly-report {:cron "0 2 * *"}}}))))))

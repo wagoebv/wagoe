@@ -92,11 +92,10 @@
       (let [e (is (thrown? clojure.lang.ExceptionInfo (sut/plan {})))]
         (is (re-find #"bb migrate up" (ex-message e)))))))
 
-(deftest ^:integration every-named-profile-must-be-resettable
-  ;; A name decided, and the name could lie: --env dev beat WAG_ENV=prod, and
-  ;; nothing set at all fell back to dev (BOU-585 review).
-  (doseq [[label sources] [["WAG_ENV=prod with --env dev" {"-Denv" "dev" "WAG_ENV" "prod"}]
-                           ["ENV=staging beside WAG_ENV=dev" {"WAG_ENV" "dev" "ENV" "staging"}]
+(deftest ^:integration a-profile-must-be-named
+  ;; The default is not a choice anybody made (BOU-585 review), and a blank
+  ;; WAG_ENV names nothing (BOU-686).
+  (doseq [[label sources] [["a blank WAG_ENV" {"WAG_ENV" "  "}]
                            ["nothing named, only the default" {}]]]
     (testing label
       (let [ctx (h2)]
@@ -156,7 +155,7 @@
                                 :port     #or [#long #or [#env WAGOE_TEST_UNSET_PORT 5432] 5432]
                                 :dbname   #env WAGOE_TEST_UNSET_DB
                                 :user     #env WAGOE_TEST_UNSET_USER
-                                :password #env WAGOE_TEST_UNSET_PASSWORD}
+                                :password #secret WAGOE_TEST_UNSET_PASSWORD}
              :wagoe/events {:provider :redis :host #env WAGOE_TEST_UNSET_REDIS
                             :port #long #env WAGOE_TEST_UNSET_REDIS_PORT}}}")
 

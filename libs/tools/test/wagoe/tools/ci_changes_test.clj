@@ -24,7 +24,9 @@
    "libs/workflow/test/wagoe/workflow/shell/service_test.clj"
    "reads libs/workflow/README.md, relative to the library"
    "libs/wagoe-cli/test/wagoe/cli/new_test.clj"
-   "checks CLAUDE.md in a generated project"})
+   "checks CLAUDE.md in a generated project"
+   "libs/storage/test/wagoe/storage/schema_test.clj"
+   "reads libs/storage's READMEs, not the root one"})
 
 (def ^:private docs-only-names
   #"dev-docs|(CHANGELOG|README|UPGRADING|CONTRIBUTING|BUILD|CLAUDE)\.md")

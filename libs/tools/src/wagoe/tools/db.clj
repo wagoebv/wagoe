@@ -51,6 +51,7 @@
   "Parse config.edn with a minimal reader that replaces Aero tags with placeholders."
   [config-text]
   (let [readers {'env      (fn [v] (str "ENV:" v))
+                 'secret   (fn [v] (str "SECRET:" v))
                  'or       (fn [v] (if (vector? v) (last v) v))
                  'long     (fn [v] (if (number? v) v 0))
                  'merge    (fn [v] (if (vector? v) (apply merge v) v))
@@ -205,15 +206,19 @@
   (let [s (some-> s str/trim str/lower-case)]
     (get env-aliases s s)))
 
+(defn- wag-env
+  "WAG_ENV from `getenv`, nil when unset or blank. Mirrors
+   wagoe.config/named-profile, which Babashka cannot load."
+  [getenv]
+  (some-> (getenv "WAG_ENV") str/trim not-empty))
+
 (defn reset-profile
-  "{:profile p} for `bb db:reset args`, or {:refused why}. Every place that
-   names a profile must name dev, test or acc — one prod anywhere refuses —
-   and one must: the default is not a choice anybody made."
+  "{:profile p} for `bb db:reset args`, or {:refused why}. --env and WAG_ENV
+   must both name dev, test or acc where set — one prod refuses — and one
+   must: the default is not a choice anybody made."
   [args getenv]
   (let [sources (filter second [["--env" (flag-value args "--env")]
-                                ["WAG_ENV" (getenv "WAG_ENV")]
-                                ["ENV" (getenv "ENV")]
-                                ["ENVIRONMENT" (getenv "ENVIRONMENT")]])
+                                ["WAG_ENV" (wag-env getenv)]])
         bad     (remove #(contains? resettable-envs (normalize-profile (second %))) sources)]
     (cond
       (empty? sources)
@@ -228,9 +233,9 @@
 (defn db-reset
   "Drop the application's tables and migrate, in dev, test or acc only.
 
-   The profile goes to the JVM as -Denv, which outranks every variable, so
-   the platform resolves the same one. It checks again there, shows what it
-   will drop, and asks; this refusal only saves starting a JVM."
+   The profile goes to the JVM as WAG_ENV, so the platform resolves the same
+   one. It checks again there, shows what it will drop, and asks; this refusal
+   only saves starting a JVM."
   [& args]
   (let [{env :profile why :refused} (reset-profile args #(System/getenv %))]
     (if why
@@ -239,9 +244,9 @@
           (println (dim "  migration or a conversion migration for what must change or go. Never a reset."))
           (println (dim "  Reset runs only in: acc, dev, test."))
           (*exit!* 1))
-      (let [cmd (cond-> ["clojure" (str "-J-Denv=" env) "-M:migrate" "reset"]
+      (let [cmd (cond-> ["clojure" "-M:migrate" "reset"]
                   (some #{"--allow-remote"} args) (conj "--allow-remote"))
-            {:keys [exit]} (apply process/shell {:continue true} cmd)]
+            {:keys [exit]} (apply process/shell {:continue true :extra-env {"WAG_ENV" env}} cmd)]
         (when-not (zero? exit)
           (println (red "  Reset refused, cancelled or failed."))
           (*exit!* exit))))))
@@ -276,14 +281,11 @@
   (println)
   (println (bold "Wagoe Database Seed"))
   (println)
-  ;; Advisory only. libs/tools is Babashka in its own process, so it cannot see
-  ;; the -Denv JVM property the :prod/:dev aliases set — meaning it cannot fully
-  ;; reproduce the platform's detect-environment. The authoritative guard lives
-  ;; in wagoe.platform.shell.database.cli-seed, which runs in the same JVM as
-  ;; the database connection and uses detect-environment directly. This check
-  ;; exists to fail fast with a friendly message in the common case.
+  ;; Advisory: the authoritative guard is wagoe.platform.shell.database.cli-seed,
+  ;; in the JVM that opens the connection. This one fails fast with a friendly
+  ;; message.
   (let [force?    (boolean (some #{"--force"} args))
-        env       (or (getenv "WAG_ENV") (getenv "ENV") (getenv "ENVIRONMENT") "dev")
+        env       (or (wag-env getenv) "dev")
         given     (path-arg args)
         path      (if given (resolve-path given) (seed-path))
         rest-args (let [[before after] (split-with #(not= given %) args)]

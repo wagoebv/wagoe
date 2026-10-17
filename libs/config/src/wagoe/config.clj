@@ -17,7 +17,9 @@
   (:require [aero.core :as aero]
             [clojure.java.io :as io]
             [clojure.string :as str]
-            [clojure.tools.logging :as log]))
+            [clojure.tools.logging :as log]
+            ;; Loaded for its #secret reader.
+            [wagoe.config.secrets]))
 
 ;; =============================================================================
 ;; Configuration Loading
@@ -36,10 +38,16 @@
   (let [s (some-> env str .trim .toLowerCase)]
     (get env-aliases s s)))
 
+(defn named-profile
+  "The profile `wag-env` names, or nil when it is unset or blank: a blank
+   WAG_ENV is not a profile named \"\" (BOU-686)."
+  [wag-env]
+  (some-> (not-empty (normalize-env wag-env)) keyword))
+
 (defn active-profile
   "The profile `load-config` picks when none is passed: WAG_ENV, else dev."
   ([] (active-profile (System/getenv "WAG_ENV")))
-  ([wag-env] (keyword (normalize-env (or wag-env "dev")))))
+  ([wag-env] (or (named-profile wag-env) :dev)))
 
 (defn- url-exists? [^java.net.URL url]
   (try (with-open [_ (.openStream url)] true)
@@ -66,20 +74,25 @@
 (defn read-config-resource
   "Read the config at `resource` (a URL) for `profile`. A missing #include
    fails here, naming the file: Aero puts a placeholder in its place and the
-   application would start without whatever it held."
-  [resource profile]
-  (let [config (aero/read-config resource {:profile profile :resolver include-resolver})]
-    (when-let [missing (seq (missing-includes config))]
-      (throw (ex-info (str "Config include not found: " (str/join ", " missing)
-                           " (included from " resource ")")
-                      {:type :configuration-error :missing-includes (vec missing) :config (str resource)})))
-    config))
+   application would start without whatever it held.
+
+   `opts` may carry `:secret-sources` and `:default-secret-source`, see
+   `wagoe.config.secrets`."
+  ([resource profile] (read-config-resource resource profile {}))
+  ([resource profile opts]
+   (let [config (aero/read-config resource (assoc opts :profile profile :resolver include-resolver))]
+     (when-let [missing (seq (missing-includes config))]
+       (throw (ex-info (str "Config include not found: " (str/join ", " missing)
+                            " (included from " resource ")")
+                       {:type :configuration-error :missing-includes (vec missing) :config (str resource)})))
+     config)))
 
 (defn load-config
   "Load configuration from resources/conf/dev/config.edn using Aero.
 
    Args:
-     opts: Optional map with :profile key (defaults to :dev)
+     opts: Optional map with :profile key (defaults to :dev), and
+           :secret-sources / :default-secret-source for #secret
 
    Returns:
      Configuration map with resolved environment variables and profile selection
@@ -88,14 +101,14 @@
      (load-config)
      (load-config {:profile :test})"
   ([] (load-config {}))
-  ([{:keys [profile] :or {profile (active-profile)}}]
+  ([{:keys [profile] :or {profile (active-profile)} :as opts}]
    (let [profile (keyword (normalize-env (name profile)))
          config-path (str "conf/" (name profile) "/config.edn")
          config-resource (io/resource config-path)]
      (if config-resource
        (do
          (log/info "Loading configuration" {:profile profile :path config-path})
-         (assoc (read-config-resource config-resource profile)
+         (assoc (read-config-resource config-resource profile opts)
                 :wagoe/profile profile))
        (throw (ex-info "Configuration file not found"
                        {:profile profile

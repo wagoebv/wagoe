@@ -89,6 +89,7 @@
                      :wagoe/mfa-service :wagoe/auth-service
                      :wagoe/user-service :wagoe/user-routes
                      :wagoe/user-http-middleware :wagoe/admin-only-middleware
+                     :wagoe/user-home-middleware
                      ;; Its timer belongs to whoever owns user_sessions, so a
                      ;; service that does not run the user module does not also
                      ;; prune its table (BOU-429).
@@ -147,7 +148,7 @@
    ;; and storage any service legitimately uses. What is here is the surface a
    ;; module owns — including the two that must not run everywhere,
    ;; `:wagoe/job-workers` and `:wagoe/storage-routes`.
-   :jobs     {:keys [:wagoe/job-workers]}
+   :jobs     {:keys [:wagoe/job-workers :wagoe/job-scheduler]}
 
    :storage  {:keys [:wagoe/storage-routes]}
 
@@ -193,7 +194,7 @@
    `:rpc` means first giving the implementation an Integrant key of its own —
    a change to each module, not to this table (BOU-426)."
   {:admin    "a UI. Nothing in a deployment calls the admin service; people call its pages"
-   :jobs     "this entry claims :wagoe/job-workers, a worker pool. The queue other services enqueue on is platform, in-process everywhere (BOU-424)"
+   :jobs     "this entry claims :wagoe/job-workers, a worker pool, and :wagoe/job-scheduler, the recurring-job ticker. The queue other services enqueue on is platform, in-process everywhere (BOU-424)"
    :events   "this entry claims :wagoe/events-relay, the outbox relay. The bus and the outbox are platform"
    :storage  "this entry claims :wagoe/storage-routes. :wagoe/storage itself is platform, so a service that stores a file already has one"
    :ai       "its provider talks to an external API; a second hop through RPC buys nothing"

@@ -353,3 +353,41 @@
    as a runtime error."
   [q]
   (satisfies? ITransactionalJobQueue q))
+
+;; =============================================================================
+;; Idempotency keys and recurring jobs
+;; =============================================================================
+
+(defprotocol IIdempotencyStore
+  "Remembers which (scope, key) pairs have been seen, so a retried or repeated
+   operation can tell it already ran. Scope and key are strings; jobs uses the
+   job type as scope. Any module may take `:wagoe/idempotency-store`."
+
+  (claim-key! [this scope key ttl-ms]
+    "True when this call is the first to claim (scope, key) within `ttl-ms`;
+     false when it is already claimed.")
+
+  (release-key! [this scope key]
+    "Forget (scope, key), so the next claim succeeds. For an operation that
+     claimed and then failed.")
+
+  (purge-expired-keys! [this]
+    "Delete expired claims. Returns the count, or nil where the backend
+     expires them itself."))
+
+(defprotocol IRecurringState
+  "What recurring-job tickers on several replicas share: a lease, so one
+   enqueues at a time, and the last tick each schedule fired. Schedule names are
+   strings; jobs uses the job type."
+
+  (acquire-lease! [this owner lease-ms]
+    "Take the ticker lease for `owner`, or renew it. True when `owner` holds it.")
+
+  (release-lease! [this owner]
+    "Give up the lease if `owner` holds it.")
+
+  (last-tick [this schedule-name]
+    "The instant `schedule-name` last fired for, or nil.")
+
+  (record-tick! [this schedule-name tick]
+    "Record that `schedule-name` fired for instant `tick`."))

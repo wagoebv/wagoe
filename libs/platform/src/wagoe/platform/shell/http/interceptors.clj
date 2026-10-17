@@ -52,6 +52,7 @@
             [wagoe.platform.core.http.problem-details :as problem-details]
             [buddy.core.nonce :as nonce]
             [buddy.core.codecs :as codecs]
+            [wagoe.config :as config]
             [clojure.string :as str])
   (:import [java.time Instant]
            [java.util UUID]))
@@ -244,24 +245,20 @@
         :else nil))))
 
 (def ^:private dev-like-environments
-  #{"dev" "development" "test" "testing" "local"})
+  #{"dev" "test" "local"})
 
 (defn- detect-environment
-  "Derive the current runtime environment."
+  "The profile the app booted with, else `wagoe.config/active-profile`."
   [system]
-  (some-> (or (:environment system)
-              (get-in system [:config :environment])
-              (System/getenv "WAG_ENV")
-              (System/getProperty "environment")
-              "development")
-          str
-          str/trim
-          str/lower-case))
+  (config/normalize-env
+   (name (or (:environment system)
+             (get-in system [:config :environment])
+             (config/active-profile)))))
 
 (defn- dev-like?
   "True when the runtime environment is one people develop against."
   [system]
-  (boolean (dev-like-environments (or (detect-environment system) "development"))))
+  (boolean (dev-like-environments (detect-environment system))))
 
 (defn dev-error-info
   "WGE code, category and fix for `exception`, or nil.
@@ -300,7 +297,7 @@
     (if (some? parsed-override)
       parsed-override
       ;; Default: enforce in dev-like environments, skip in production
-      (dev-like-environments (or env "development")))))
+      (dev-like-environments env))))
 
 (defn- respond-missing-error-type
   "Emit a diagnostic response for ex-info missing :type."

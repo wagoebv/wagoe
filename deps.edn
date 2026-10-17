@@ -213,12 +213,12 @@
                                      org.postgresql/postgresql {:mvn/version "42.7.13"}
                                      com.h2database/h2 {:mvn/version "2.5.250"}
                                      com.mysql/mysql-connector-j {:mvn/version "26.7.0"}}
-                       :jvm-opts    ["-Denv=dev" "-Duser.timezone=UTC"]}
+                       :jvm-opts    ["-Duser.timezone=UTC"]}
            :prod      {:extra-deps {org.xerial/sqlite-jdbc {:mvn/version "3.53.4.0"}
                                     org.postgresql/postgresql {:mvn/version "42.7.13"}
                                     com.h2database/h2 {:mvn/version "2.5.250"}
                                     com.mysql/mysql-connector-j {:mvn/version "26.7.0"}}
-                       :jvm-opts   ["-Denv=prod" "-Duser.timezone=UTC"]}
+                       :jvm-opts   ["-Duser.timezone=UTC"]}
 
            ;; =============================================================================
            ;; Tool and utility aliases
@@ -261,7 +261,7 @@
                                      org.postgresql/postgresql {:mvn/version "42.7.13"}
                                      com.h2database/h2 {:mvn/version "2.5.250"}
                                      com.mysql/mysql-connector-j {:mvn/version "26.7.0"}}
-                       :jvm-opts    ["-Denv=test" "--enable-native-access=ALL-UNNAMED" "-Duser.timezone=UTC"]}
+                       :jvm-opts    ["--enable-native-access=ALL-UNNAMED" "-Duser.timezone=UTC"]}
 
            ;; Embedded PostgreSQL, for the admin suite's PG integration tests.
            ;; Split out of :test because the two platform binaries are ~90 MB —
@@ -354,7 +354,7 @@
                                     com.h2database/h2 {:mvn/version "2.5.250"}
                                     com.mysql/mysql-connector-j {:mvn/version "26.7.0"}}
                        :main-opts  ["-m" "wagoe.cli"]
-                       :jvm-opts   ["-Denv=dev" "-Duser.timezone=UTC"]}
+                       :jvm-opts   ["-Duser.timezone=UTC"]}
 
            ;; Direct entrypoint into the user module CLI; used by bb create-admin so that
            ;; generated projects (which do not have wagoe.cli on the classpath) can still

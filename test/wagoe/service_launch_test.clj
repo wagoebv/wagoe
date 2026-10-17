@@ -229,7 +229,7 @@
     ;; to their modules — otherwise every service starts a worker pool against
     ;; the same queue, which is what BOU-418 had just made real (BOU-424).
     :wagoe/jobs :wagoe/jobs-runtime :wagoe/job-queue :wagoe/job-store
-    :wagoe/job-stats :wagoe/job-registry
+    :wagoe/job-stats :wagoe/job-registry :wagoe/idempotency-store
     :wagoe/storage
     ;; The event bus is infrastructure: every service that runs needs one,
     ;; whichever module it is running.

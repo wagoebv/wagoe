@@ -341,7 +341,7 @@
     ;; key nothing put here — so a project that sets no WAG_ENV (every generated
     ;; one) read as development wherever it ran. The config knows; pass it
     ;; (BOU-321). Absent rather than nil when there is no profile, so the
-    ;; detector falls through to WAG_ENV as it always did.
+    ;; detector falls through to `wagoe.config/active-profile`.
     (:wagoe/profile config) (assoc :environment (name (:wagoe/profile config)))))
 
 (defn- request-middleware
