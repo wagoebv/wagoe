@@ -10,6 +10,7 @@
    All functions are pure and deterministic - no I/O operations.
    Password hashing and token operations are handled in the shell layer."
   (:require [wagoe.user.core.password-policy :as password-policy]
+            [wagoe.user.core.session :as session]
             [wagoe.user.schema :as schema]
             [clojure.string :as str]
             [malli.core :as m])
@@ -118,9 +119,9 @@
    Pure - risk assessment based on patterns and context."
   [user login-context recent-sessions now]
   (let [risk-factors (cond-> []
-                       ;; New IP address
-                       (not-any? #(= (:ip-address login-context)
-                                     (:ip-address %))
+                       ;; New IP address; an unknown one is never familiar
+                       (not-any? #(session/same-ip? (:ip-address login-context)
+                                                    (:ip-address %))
                                  recent-sessions)
                        (conj {:factor :new-ip-address :weight 30})
 

@@ -33,6 +33,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **App modules can contribute sign-in hooks** (BOU-697): `:auth {:mfa-required? (ig/ref …)}`, or `:login-redirect`,
   from an `ig-config`. `:login-redirect` functions now take `[user login-context]`, which has the client IP and request.
+- **`client-ip/in-network?` and `in-any?`** (BOU-693): match an address against CIDRs exactly as the trust walk does.
+  Use them instead of a second IP parser.
 - **Calendar events can link** (BOU-702): an event's `:href`, or the `:event-href` view option. Pass `:t` to resolve
   labels without `wagoe.i18n.shell.render`.
 - **Recurring jobs** (BOU-452): `:recurring {:nightly-report {:cron "0 2 * * *"}}` under `:wagoe/jobs`; one replica
@@ -118,6 +120,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Security: an `unknown` X-Forwarded-For hop resolved to the trusted proxy** (BOU-695). The client IP is now nil;
+  code that authorises by address must refuse nil.
 - **Calendar month names were English only, and multi-day events showed on their first day only** (BOU-702). Month
   names are `[:t …]` markers now; add `:calendar/month-*` and `:calendar/all-day` to any custom catalogue.
 - **Security: session tokens were stored in plaintext, so a read of `user_sessions` was a login** (BOU-696). Only their

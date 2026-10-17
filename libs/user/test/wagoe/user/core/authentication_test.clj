@@ -140,6 +140,12 @@
           result (auth/analyze-login-risk user login-ctx recent-sessions now)]
       (is (some #(= :new-ip-address (:factor %)) (:risk-factors result)))))
 
+  (testing "an unresolved IP is new even when a past session's was unresolved too"
+    (let [recent-sessions [{:ip-address nil :user-agent "Chrome/120"}]
+          user (assoc active-user :last-login recent :role :user)
+          result (auth/analyze-login-risk user (assoc login-ctx :ip-address nil) recent-sessions now)]
+      (is (some #(= :new-ip-address (:factor %)) (:risk-factors result)))))
+
   (testing "adds risk for new user-agent"
     (let [recent-sessions [{:ip-address "1.2.3.4" :user-agent "Firefox/100"}]
           user (assoc active-user :last-login recent :role :user)
