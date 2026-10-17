@@ -63,8 +63,10 @@
                           (ig/init-key :wagoe/user-oidc {:settings settings})))))
 
 (deftest ^:unit auth-settings-reach-the-auth-service
-  (is (= {:mfa-required? 'my.app/mfa?}
-         (get-in (sut/ig-config {:auth {:mfa-required? 'my.app/mfa?}} {:config {}})
-                 [:components :wagoe/auth-service :auth-config])))
+  (let [{:keys [components]} (sut/ig-config {:auth {:mfa-required? 'my.app/mfa? :max-login-attempts 3}}
+                                            {:config {}})]
+    (is (= {:max-login-attempts 3} (get-in components [:wagoe/auth-service :auth-config])))
+    (is (= 'my.app/mfa? (get-in components [:wagoe/auth-hooks :configured :mfa-required?]))
+        "the hook goes through :wagoe/auth-hooks, where module contributions meet it"))
   (is (= {} (get-in (sut/ig-config nil {:config {}})
                     [:components :wagoe/auth-service :auth-config]))))

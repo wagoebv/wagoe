@@ -241,3 +241,21 @@
   ;; Verifies the current password, checks the new one against policy, rehashes,
   ;; revokes every session (BOU-191) and audits. Returns true.
   ;; Throws :user-not-found, :invalid-current-password, :password-policy-violation.
+
+;; =============================================================================
+;; Sign-in hooks
+;; =============================================================================
+;;
+;; What an application component implements to decide, per sign-in, whether a
+;; second factor is asked and where the user lands. A plain function of the same
+;; arguments works too.
+
+(defprotocol IMfaPolicy
+  (mfa-required? [this user login-context]))
+  ;; login-context: :ip-address, :user-agent, :provider for OIDC.
+  ;; Returns truthy to ask for a code.
+
+(defprotocol ILoginRedirect
+  (login-path [this user login-context]))
+  ;; login-context: :ip-address, :user-agent and the Ring :request.
+  ;; Returns a path on this site, or nil for the default.
