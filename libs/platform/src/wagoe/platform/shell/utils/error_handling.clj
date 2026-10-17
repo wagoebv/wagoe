@@ -3,7 +3,7 @@
    
    This namespace provides middleware and utilities for capturing rich error context
    across HTTP and CLI interfaces, enabling better debugging and observability."
-(:require [wagoe.platform.shell.utils.time :as time]
+  (:require [wagoe.platform.shell.utils.time :as time]
             [wagoe.observability.core.sql-redaction :as redaction]
             [wagoe.platform.core.http.problem-details :as problem]
             [wagoe.config :as config]
@@ -110,7 +110,7 @@
                                   :request-method (name (or request-method :unknown))
                                   :request-uri uri})]
 
-           (log/logp (problem/status-log-level (first (problem/exception-status ex error-mappings)))
+           (log/logp (problem/exception-log-level ex error-mappings)
                      "HTTP request failed with enhanced context"
                      {:correlation-id correlation-id
                       :uri uri
@@ -228,7 +228,7 @@
                              (dissoc ex-data :cli-context :original-data))
             data-text (when (seq display-data)
                         (str "Exception Data:\n"
-(with-out-str (pprint/pprint display-data))))]
+                             (with-out-str (pprint/pprint display-data))))]
         (format "%s\n\nContext:\n%s\n%s"
                 base-message
                 (str/join "\n" all-context-lines)

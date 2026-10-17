@@ -100,8 +100,7 @@
    :error (fn [{:keys [operation-name system context exception] :as ctx}]
             (when-let [logger (:logger system)]
               ;; A typed 4xx is not a fault here either (BOU-704).
-              (let [log (case (problem-details/status-log-level
-                               (first (problem-details/exception-status exception {})))
+              (let [log (case (problem-details/exception-log-level exception {})
                           :error log-ports/error
                           :warn  log-ports/warn
                           log-ports/info)]
@@ -157,9 +156,7 @@
    ;; nothing was ever reported.
    :error (fn [{:keys [operation-name params system context] error :exception :as ctx}]
             (when-let [error-reporter (:error-reporter system)]
-              (when (and error
-                         (= :error (problem-details/status-log-level
-                                    (first (problem-details/exception-status error {})))))
+              (when (and error (= :error (problem-details/exception-log-level error {})))
                 ;; Add error breadcrumb
                 (error-reporting/add-breadcrumb
                  error-reporter

@@ -321,8 +321,8 @@
 
 (defn- server-error?
   "A 5xx or untyped error: the server's fault, not the client's (BOU-714)."
-  [ctx]
-  (= :error (problem-details/status-log-level (error-status ctx))))
+  [status]
+  (= :error (problem-details/status-log-level status)))
 
 (def http-request-logging
   "Logs HTTP requests at entry and completion.
@@ -461,12 +461,12 @@
    :error (fn [{:keys [system exception] :as ctx}]
             (when-let [tracer (:tracer system)]
               (when-let [span (get-in ctx [:tracing :span])]
-                (tracing-ports/set-attributes! tracer span
-                                               {:http.response.status_code (error-status ctx)})
-                ;; Recording marks the span errored, which the OTel HTTP
-                ;; conventions reserve for a server span's 5xx (BOU-714).
-                (when (and exception (server-error? ctx))
-                  (tracing-ports/record-exception! tracer span (redaction/redacted-exception exception)))
+                (let [status (error-status ctx)]
+                  (tracing-ports/set-attributes! tracer span {:http.response.status_code status})
+                  ;; Recording marks the span errored, which the OTel HTTP
+                  ;; conventions reserve for a server span's 5xx (BOU-714).
+                  (when (and exception (server-error? status))
+                    (tracing-ports/record-exception! tracer span (redaction/redacted-exception exception))))
                 (tracing-ports/end-span! tracer span)))
             ctx)})
 
@@ -486,7 +486,7 @@
                 :correlation-id correlation-id}))
             ctx)
    :error (fn [{:keys [request exception system correlation-id] :as ctx}]
-            (when-let [error-reporter (and (server-error? ctx) (:error-reporter system))]
+            (when-let [error-reporter (and (server-error? (error-status ctx)) (:error-reporter system))]
               ;; Redacted here too, for a reporter or tracer that is not
               ;; observability's own: those redact themselves (BOU-633).
               (error-reporting/report-application-error

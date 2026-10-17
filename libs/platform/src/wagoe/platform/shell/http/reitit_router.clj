@@ -199,15 +199,19 @@
   (errors/response 500 :internal-error "Internal Server Error"
                    {:correlation-id correlation-id}))
 
+(def ^:private typed-error-interceptors
+  "Logged at its status's level (BOU-714), without the received/completed lines."
+  [http-interceptors/http-correlation-header
+   (select-keys http-interceptors/http-request-logging [:name :error])
+   http-interceptors/http-error-handler])
+
 (defn- typed-error-response
   "The response the interceptor stack gives a typed ex-info, for one thrown
-   where that stack cannot catch it, logged at its status's level (BOU-714)."
+   where that stack cannot catch it."
   [system e request]
   (http-interceptors/run-http-interceptors
    (fn [_] (throw e))
-   [http-interceptors/http-correlation-header
-    (select-keys http-interceptors/http-request-logging [:name :error])
-    http-interceptors/http-error-handler]
+   typed-error-interceptors
    request system))
 
 (defn- create-exception-middleware
