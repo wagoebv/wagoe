@@ -10,8 +10,7 @@
    change in between. The HTTP client resolves the name once more when it
    connects, so a name that switches address between the two lookups is not
    caught; `:allowed-hosts` is the way to reach a private host on purpose."
-  (:require [clojure.string :as str]
-            [wagoe.webhooks.core.delivery :as delivery])
+  (:require [wagoe.webhooks.core.delivery :as delivery])
   (:import (java.net Inet4Address Inet6Address InetAddress UnknownHostException)))
 
 (defn- in-v4-range? [^bytes b first-octet mask second-octet]
@@ -40,9 +39,9 @@
 
    `:refused` for a private address, `:unresolvable` when DNS has no answer —
    the first will not change by retrying, the second may."
-  [url {:keys [allowed-hosts]}]
+  [url {:keys [allowed-hosts]}]   ; lower case
   (let [host (delivery/url-host url)]
-    (when-not (contains? (into #{} (map str/lower-case) allowed-hosts) host)
+    (when-not (contains? allowed-hosts host)
       (try
         (when-let [bad (first (filter private-address? (InetAddress/getAllByName host)))]
           {:type    :refused

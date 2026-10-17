@@ -17,6 +17,7 @@
        (persistence/create-tables! ctx)
        (let [js (support/job-system)]
          (f {:svc   (support/service ctx js settings)
+             :ctx   ctx
              :js    js
              :store (persistence/create-store ctx)}))))))
 
@@ -91,19 +92,17 @@
   (support/with-receiver (constantly {:status 200})
     (fn [{:keys [url seen]}]
       (with-service
-        (fn [{:keys [svc js store]}]
-          (testing "at create time"
-            (with-service {:allowed-hosts #{}}
-              (fn [{:keys [svc]}]
-                (is (= :validation-error (get-in (subscribe! svc url) [:error :type]))))))
-          (testing "and at delivery, when the allowlist no longer covers it"
-            (let [{:keys [subscription]} (subscribe! svc url)
-                  strict (support/service (:ctx store) js {:allowed-hosts #{}})]
+        (fn [{:keys [svc ctx js store]}]
+          (let [strict (support/service ctx js {:allowed-hosts #{}})]
+            (testing "at create time"
+              (is (= :validation-error (get-in (subscribe! strict url) [:error :type]))))
+            (testing "and at delivery, when the allowlist no longer covers it"
+              (let [{:keys [subscription]} (subscribe! svc url)]
               (ports/dispatch! strict :orders/placed (event nil))
               (support/run-jobs! strict js support/no-backoff)
               (is (empty? @seen) "no request is made")
               (is (= [:refused] (mapv :status (ports/list-attempts store {:subscription-id (:id subscription)}))))
-              (is (empty? (jobs/failed-jobs (:store js) 10)) "and it is not retried"))))))))
+              (is (empty? (jobs/failed-jobs (:store js) 10)) "and it is not retried")))))))))
 
 (deftest ^:integration https-is-required-when-configured
   (with-service {:require-https? true}

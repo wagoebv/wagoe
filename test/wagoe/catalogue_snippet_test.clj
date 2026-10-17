@@ -45,9 +45,12 @@
                    "here \u2014 :wagoe.external/imap and /twilio have no documented "
                    "settings at all (BOU-427)")
    "tenant"   (str "tenancy needs PostgreSQL, and this boots the H2 test profile "
-                   "with the dev snippet, which rightly does not set :allow-h2? (BOU-576)")
-   "webhooks" (str "every delivery is a job, so it refuses to boot without :wagoe/jobs, "
-                   "which the test profile does not enable")})
+                   "with the dev snippet, which rightly does not set :allow-h2? (BOU-576)")})
+
+(def ^:private prerequisites
+  "Modules that refuse to boot without another, and the settings that switch
+   the other on. Webhooks enqueues every delivery as a job."
+  {"webhooks" {:wagoe/jobs {}}})
 
 (defn- dev-snippet
   "What `wagoe add` writes into dev: the dev snippet where the entry has one,
@@ -100,7 +103,7 @@
           (finally (ig/halt! system)))))))
 
 (deftest ^:integration webhooks-boot-beside-jobs-and-events
-  (let [system (boot-with (merge {:wagoe/jobs {}}
+  (let [system (boot-with (merge (get prerequisites "webhooks")
                                  (snippet-settings (dev-snippet (module "webhooks")))
                                  {:wagoe/webhooks {:topics [:orders/placed]}}))]
     (try
@@ -159,7 +162,8 @@
                      ;; test profile; its other key boots on its own.
                      settings (not-empty (apply dissoc (snippet-settings (dev-snippet entry))
                                                 (keys modules/dev-only-modules)))
-                     active   (or settings {k {:enabled? true}})]]
+                     active   (merge (get prerequisites lib)
+                                     (or settings {k {:enabled? true}}))]]
       (testing (str k " from " (if settings "its snippet" "{:enabled? true}"))
         (if-let [why (get needs-more-than-config lib)]
           (is (thrown? Exception (boot-with active))

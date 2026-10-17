@@ -4,13 +4,13 @@
   (:require [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
+            [wagoe.core.utils.type-conversion :as tc]
             [wagoe.platform.core.database.migration-sql :as migration-sql]
             [wagoe.platform.database :as db]
             [wagoe.platform.ports.database :as db-ports]
             [wagoe.webhooks.ports :as ports])
   (:import (java.sql Timestamp)
-           (java.time Instant LocalDateTime OffsetDateTime ZoneOffset)
-           (java.util Date)))
+           (java.time Instant)))
 
 ;; =============================================================================
 ;; Schema
@@ -41,17 +41,6 @@
 
 (defn- ->ts [^Instant i] (when i (Timestamp/from i)))
 
-(defn- ->instant
-  "What each driver returns for a zoned timestamp, as an Instant."
-  [v]
-  (condp instance? v
-    Instant        v
-    OffsetDateTime (.toInstant ^OffsetDateTime v)
-    LocalDateTime  (.toInstant ^LocalDateTime v ZoneOffset/UTC)
-    Date           (.toInstant ^Date v)
-    nil))
-
-(defn- ->bool [v] (if (number? v) (not (zero? v)) (boolean v)))
 
 (defn- subscription->row [s]
   (cond-> {}
@@ -72,10 +61,10 @@
      :event-pattern (:event-pattern row)
      :url           (:url row)
      :secret        (:secret row)
-     :active?       (->bool (:active row))
+     :active?       (tc/int->boolean (:active row))
      :description   (:description row)
-     :created-at    (->instant (:created-at row))
-     :updated-at    (->instant (:updated-at row))}))
+     :created-at    (tc/string->instant (:created-at row))
+     :updated-at    (tc/string->instant (:updated-at row))}))
 
 (defn- attempt->row [a]
   {:id              (str (:id a))
@@ -103,7 +92,7 @@
    :latency-ms      (:latency-ms row)
    :response        (:response row)
    :error           (:error row)
-   :created-at      (->instant (:created-at row))})
+   :created-at      (tc/string->instant (:created-at row))})
 
 (defn- page
   "`query` filtered by the non-nil `conditions`, one page of it."

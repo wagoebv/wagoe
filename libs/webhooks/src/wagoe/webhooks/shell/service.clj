@@ -2,6 +2,7 @@
   "`IWebhooks`: subscriptions in, one job per delivery out, one log row per
    attempt."
   (:require [clojure.tools.logging :as log]
+            [clojure.string :as str]
             [malli.core :as m]
             [malli.error :as me]
             [wagoe.jobs.core.job :as job]
@@ -27,12 +28,18 @@
   {:error {:type :validation-error :message message :details details}})
 
 (defn- target-problem
-  "Why `url` may not be a target under `settings`, as an error map, or nil."
+  "Why `url` may not be a target under `settings`, or nil: `:refused` when it
+   never can be, `:unresolvable` when DNS has no answer now."
   [url settings]
   (if-let [problem (delivery/url-problem url settings)]
-    {:type :validation-error :message problem}
-    (when-let [{:keys [message]} (ssrf/host-problem url settings)]
-      {:type :validation-error :message message})))
+    {:type :refused :message problem}
+    (ssrf/host-problem url settings)))
+
+(defn- invalid-target
+  "`target-problem` as a validation error, for create and change."
+  [url settings]
+  (when-let [{:keys [message]} (target-problem url settings)]
+    {:error {:type :validation-error :message message}}))
 
 (defn- public-view [subscription] (dissoc subscription :secret))
 
@@ -62,9 +69,7 @@
                                                        :attempt         attempt
                                                        :created-at      (Instant/now)}
                                                       fields)))
-        problem (or (some->> (delivery/url-problem (:url subscription) settings)
-                             (hash-map :type :refused :message))
-                    (ssrf/host-problem (:url subscription) settings))]
+        problem (target-problem (:url subscription) settings)]
     (if (= :refused (:type problem))
       ;; Retrying cannot make a refused target acceptable.
       (do (record! {:status :refused :error (:message problem)})
@@ -82,25 +87,23 @@
                                     (crypto/decrypt key (:secret subscription))
                                     (.getEpochSecond (Instant/now))
                                     body))}))
-            status   (delivery/attempt-status response attempt (:max-attempts settings))]
+            status   (delivery/attempt-status response attempt (:max-attempts settings))
+            failure  (when-not (= :delivered status) (delivery/failure-message response))]
         (record! {:status      status
                   :status-code (:status response)
                   :latency-ms  (:latency-ms response)
-                  :response    (delivery/truncate (:body response) (:max-response-bytes settings))
-                  :error       (when-not (= :delivered status) (delivery/failure-message response))})
-        (if (= :delivered status)
-          {:success? true :result {:status :delivered :status-code (:status response)}}
-          {:success? false
-           :error    {:type    :webhooks/delivery-failed
-                      :message (delivery/failure-message response)}})))))
+                  :response    (:body response)
+                  :error       failure})
+        (if failure
+          {:success? false :error {:type :webhooks/delivery-failed :message failure}}
+          {:success? true :result {:status :delivered :status-code (:status response)}})))))
 
 (defrecord WebhookService [store transport job-queue idempotency settings key]
   ports/IWebhooks
   (create-subscription! [_ input]
     (if-not (m/validate schema/SubscriptionInput input)
       (validation-error "Invalid subscription" (me/humanize (m/explain schema/SubscriptionInput input)))
-      (if-let [problem (target-problem (:url input) settings)]
-        {:error problem}
+      (or (invalid-target (:url input) settings)
         (let [secret (or (:secret input) (crypto/generate-secret))
               now    (Instant/now)
               s      {:id            (str (random-uuid))
@@ -120,12 +123,10 @@
       (not (m/validate schema/SubscriptionChanges changes))
       (validation-error "Invalid changes" (me/humanize (m/explain schema/SubscriptionChanges changes)))
 
-      (and (:url changes) (target-problem (:url changes) settings))
-      {:error (target-problem (:url changes) settings)}
-
       :else
-      (some-> (ports/update-subscription! store id (assoc changes :updated-at (Instant/now)))
-              public-view)))
+      (or (some-> (:url changes) (invalid-target settings))
+          (some-> (ports/update-subscription! store id (assoc changes :updated-at (Instant/now)))
+              public-view))))
 
   (remove-subscription! [_ id]
     (ports/delete-subscription! store id))
@@ -134,20 +135,22 @@
     (mapv public-view (ports/list-subscriptions store opts)))
 
   (dispatch! [this topic event]
-    (let [matches (delivery/matching-subscriptions
-                   (ports/candidate-subscriptions store (:tenant-id event)) topic event)
-          body    (delivery/payload-body topic event)]
+    (let [matches  (delivery/matching-subscriptions
+                    (ports/candidate-subscriptions store (:tenant-id event)) topic event)
+          body     (when (seq matches) (delivery/payload-body topic event))
+          event-id (str (:id event))
+          topic    (delivery/topic-name topic)]
       (reduce (fn [n s]
-                (if (first-claim? idempotency (:id s) (:id event))
+                (if (first-claim? idempotency (:id s) event-id)
                   (do (try
                         (enqueue! this {:subscription-id (:id s)
-                                        :event-id        (str (:id event))
-                                        :topic           (delivery/topic-name topic)
+                                        :event-id        event-id
+                                        :topic           topic
                                         :body            body})
                         (catch Exception e
                           ;; Unclaimed, so the bus's redelivery can try again.
                           (some-> idempotency
-                                  (jobs/release-key! "webhooks" (claim-key (:id s) (:id event))))
+                                  (jobs/release-key! "webhooks" (claim-key (:id s) event-id)))
                           (throw e)))
                       (inc n))
                   n))
@@ -174,7 +177,9 @@
    optionally `:idempotency`. `settings`: see `defaults`, plus
    `:require-https?` and `:encryption-key`."
   [{:keys [store transport job-queue idempotency]} settings]
-  (let [settings (merge defaults settings)]
+  (let [settings (-> (merge defaults settings)
+                     ;; Lower case once, not on every check.
+                     (update :allowed-hosts #(into #{} (map str/lower-case) %)))]
     (->WebhookService store transport job-queue idempotency
                       (dissoc settings :encryption-key)
                       (crypto/derive-key (:encryption-key settings)))))

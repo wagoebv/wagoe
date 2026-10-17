@@ -52,5 +52,4 @@
   (is (= :delivered (d/attempt-status {:status 204} 1 3)))
   (is (= :failed (d/attempt-status {:status 500} 1 3)))
   (is (= :failed (d/attempt-status {:status 302} 1 3)) "a redirect is not followed")
-  (is (= :dead (d/attempt-status {:error {:message "x"}} 3 3)))
-  (is (= "abc" (d/truncate "abcdef" 3))))
+  (is (= :dead (d/attempt-status {:error {:message "x"}} 3 3))))

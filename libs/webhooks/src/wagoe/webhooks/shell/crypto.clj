@@ -6,7 +6,8 @@
             [buddy.core.crypto :as crypto]
             [buddy.core.hash :as hash]
             [buddy.core.nonce :as nonce]
-            [clojure.string :as str]))
+            [clojure.string :as str])
+  (:import (java.util Arrays)))
 
 (def ^:private prefix "enc:v1:")
 
@@ -28,9 +29,11 @@
 (defn encrypt
   "`plaintext` as `enc:v1:<base64(iv || ciphertext)>`."
   [key plaintext]
-  (let [iv (nonce/random-bytes iv-bytes)
-        ct (crypto/encrypt (codecs/to-bytes plaintext) key iv {:algorithm :aes256-gcm})]
-    (str prefix (codecs/bytes->b64-str (byte-array (concat iv ct)) true))))
+  (let [^bytes iv  (nonce/random-bytes iv-bytes)
+        ^bytes ct  (crypto/encrypt (codecs/to-bytes plaintext) key iv {:algorithm :aes256-gcm})
+        ^bytes out (Arrays/copyOf iv (+ iv-bytes (alength ct)))]
+    (System/arraycopy ct 0 out iv-bytes (alength ct))
+    (str prefix (codecs/bytes->b64-str out true))))
 
 (defn decrypt
   "The plaintext of a value `encrypt` produced. Throws on anything else, or
@@ -38,7 +41,7 @@
   [key value]
   (when-not (and (string? value) (str/starts-with? value prefix))
     (throw (ex-info "Webhook secret is not encrypted" {:type :internal-error})))
-  (let [raw (codecs/b64->bytes (subs value (count prefix)) true)]
-    (codecs/bytes->str (crypto/decrypt (byte-array (drop iv-bytes raw)) key
-                                       (byte-array (take iv-bytes raw))
+  (let [^bytes raw (codecs/b64->bytes (subs value (count prefix)) true)]
+    (codecs/bytes->str (crypto/decrypt (Arrays/copyOfRange raw iv-bytes (alength raw)) key
+                                       (Arrays/copyOfRange raw 0 iv-bytes)
                                        {:algorithm :aes256-gcm}))))

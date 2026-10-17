@@ -2,21 +2,24 @@
   "Which subscriptions an event goes to, what is sent, and what an attempt's
    outcome means. Pure: the clock, ids and I/O come from the shell."
   (:require [cheshire.core :as json]
-            [clojure.string :as str])
+            [clojure.string :as str]
+            [wagoe.events.core.event :as event])
   (:import (java.net URI URISyntaxException)))
 
 ;; =============================================================================
 ;; Matching
 ;; =============================================================================
 
-(defn topic-name
-  "`topic` as a string, namespace included: `:orders/placed` -> \"orders/placed\"."
-  [topic]
-  (if (keyword? topic) (subs (str topic) 1) (str topic)))
+(def topic-name
+  "`topic` as a string, namespace included, as the bus names it."
+  event/topic-name)
 
-(defn- glob->regex [pattern]
-  (re-pattern (str/join ".*" (map #(java.util.regex.Pattern/quote %)
-                                  (str/split pattern #"\*" -1)))))
+(def ^:private glob->regex
+  ;; Memoized: few patterns, matched against every event.
+  (memoize
+   (fn [pattern]
+     (re-pattern (str/join ".*" (map #(java.util.regex.Pattern/quote %)
+                                     (str/split pattern #"\*" -1)))))))
 
 (defn pattern-matches?
   "Whether topic glob `pattern` matches `topic`. `*` matches any run of
@@ -92,11 +95,6 @@
 ;; =============================================================================
 ;; Outcome
 ;; =============================================================================
-
-(defn truncate
-  "`s` cut to `n` characters."
-  [s n]
-  (when s (if (> (count s) n) (subs s 0 n) s)))
 
 (defn attempt-status
   "`:delivered` for a 2xx, otherwise `:failed`, or `:dead` when this was the

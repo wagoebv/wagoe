@@ -47,8 +47,8 @@
            :latency-ms (elapsed-ms start)})))))
 
 (defn create-transport
-  [{:keys [timeout-ms connect-timeout-ms max-response-bytes]
-    :or   {timeout-ms 10000 connect-timeout-ms 5000 max-response-bytes 2000}}]
+  "Settings as `service/defaults` gives them."
+  [{:keys [timeout-ms connect-timeout-ms max-response-bytes]}]
   (->HttpTransport (-> (HttpClient/newBuilder)
                        (.connectTimeout (Duration/ofMillis connect-timeout-ms))
                        (.followRedirects HttpClient$Redirect/NEVER)

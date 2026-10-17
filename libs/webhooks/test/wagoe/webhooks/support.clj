@@ -56,7 +56,7 @@
    test defaults, which allow 127.0.0.1 over http."
   [ctx js settings]
   (service/create-service {:store       (persistence/create-store ctx)
-                           :transport   (http-transport/create-transport {:timeout-ms 2000})
+                           :transport   (http-transport/create-transport (assoc service/defaults :timeout-ms 2000))
                            :job-queue   (:queue js)
                            :idempotency (:idempotency js)}
                           (merge {:allowed-hosts  #{"127.0.0.1"}
