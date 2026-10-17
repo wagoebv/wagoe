@@ -19,7 +19,8 @@
             [hiccup2.core :as h])
   (:import [com.openhtmltopdf.extend FSUriResolver]
            [com.openhtmltopdf.pdfboxout PdfRendererBuilder]
-           [java.io ByteArrayOutputStream]))
+           [java.io ByteArrayOutputStream]
+           [java.util IdentityHashMap]))
 
 ;; =============================================================================
 ;; CSS helper
@@ -73,6 +74,57 @@
   (-> (str "<!DOCTYPE html>" (h/html hiccup-form))
       (str/replace xml-illegal-chars "")))
 
+;; =============================================================================
+;; Untrusted data (BOU-687)
+;; =============================================================================
+
+(defn- data-colls
+  "Every vector and map in data, by identity. A template that places one in
+   its output is passing data through, not building markup."
+  [data]
+  (let [seen (IdentityHashMap.)]
+    (letfn [(walk [x]
+              (when (and (coll? x) (not (.containsKey seen x)))
+                ;; Empty ones are shared instances, the same [] or {} a template writes.
+                (when (and (or (vector? x) (map? x)) (seq x)) (.put seen x true))
+                (if (map? x)
+                  (run! (fn [[k v]] (walk k) (walk v)) x)
+                  (run! walk x))))]
+      (walk data))
+    seen))
+
+(def ^:private safe-href #"(?i)^(https?:|mailto:|#)")
+
+(defn- anchor? [tag]
+  ;; Only <a href> becomes a PDF link; <link href="data:..."> is how a template loads CSS.
+  (boolean (re-matches #"(?i)a(?:[.#].*)?" (name tag))))
+
+(defn- unsafe-attr? [a? k v]
+  (let [k (str/lower-case (name k))]
+    (or (str/starts-with? k "on")
+        (and a? (= "href" k)
+             (not (re-find safe-href (str/replace (str v) #"[\x00-\x20]" "")))))))
+
+(defn- neutralise
+  "Render data vectors and maps as text, and drop on* attributes and link hrefs
+   other than http(s), mailto and #. Template-built markup and h/raw pass through."
+  [form ^IdentityHashMap data]
+  (cond
+    ;; A map entry comes from walking a data map. A vector without a keyword tag
+    ;; (any JSON array, even after keywordize-keys rebuilt it) is never markup.
+    (or (.containsKey data form) (map-entry? form)
+        (and (vector? form) (not (keyword? (first form)))))
+    (str form)
+    (vector? form)
+    (let [[tag attrs & children] form
+          a? (anchor? tag)]
+      (if (and (map? attrs) (not (.containsKey data attrs)))
+        (into [tag (reduce-kv (fn [m k v] (cond-> m (unsafe-attr? a? k v) (dissoc k))) attrs attrs)]
+              (map #(neutralise % data)) children)
+        (into [tag] (map #(neutralise % data)) (rest form))))
+    (seq? form) (map #(neutralise % data) form)
+    :else form))
+
 (def ^:private data-uris-only
   "Resolves only data: URIs, so a report never fetches a URL or reads a file
    named in its content (BOU-675)."
@@ -85,6 +137,18 @@
 ;; OpenHTMLtoPDF generator record
 ;; =============================================================================
 
+(defn- report-html [report-def data opts]
+  ;; Sections already stringify cells (format-cell*), so only templates need the data walk.
+  (let [tmpl (:template report-def)
+        hiccup-form (if tmpl
+                      (tmpl data)
+                      (core/build-sections-hiccup*
+                       (:sections report-def) data
+                       {:zone-id (or (:zone-id opts) (java.time.ZoneId/systemDefault))}))]
+    (-> (neutralise hiccup-form (if tmpl (data-colls data) (IdentityHashMap.)))
+        (inject-css (:css opts))
+        render-html)))
+
 (defrecord OpenHtmlToPdfGenerator [])
 
 (extend-protocol ports/ReportGeneratorProtocol
@@ -92,13 +156,7 @@
 
   (generate! [_this report-def data opts]
     (log/debug "Generating PDF report" {:id (:id report-def)})
-    (let [css-override (:css opts)
-          formatting-context {:zone-id (or (:zone-id opts) (java.time.ZoneId/systemDefault))}
-          hiccup-form  (if-let [tmpl (:template report-def)]
-                         (tmpl data)
-                         (core/build-sections-hiccup* (:sections report-def) data formatting-context))
-          full-hiccup  (inject-css hiccup-form css-override)
-          html-str     (render-html full-hiccup)
+    (let [html-str     (report-html report-def data opts)
           baos         (ByteArrayOutputStream.)
           builder      (doto (PdfRendererBuilder.)
                          (.useUriResolver data-uris-only)

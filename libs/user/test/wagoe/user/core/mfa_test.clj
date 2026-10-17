@@ -44,7 +44,7 @@
             password-valid? true
             mfa-code nil
             login-risk {:risk-level :low}
-            result (mfa/determine-mfa-requirement user password-valid? mfa-code login-risk)]
+            result (mfa/determine-mfa-requirement user password-valid? mfa-code login-risk (:mfa-enabled user))]
         (is (true? (:requires-mfa? result)))
         (is (= "MFA code required" (:reason result)))))
 
@@ -53,7 +53,7 @@
             password-valid? true
             mfa-code nil
             login-risk {:risk-level :low}
-            result (mfa/determine-mfa-requirement user password-valid? mfa-code login-risk)]
+            result (mfa/determine-mfa-requirement user password-valid? mfa-code login-risk (:mfa-enabled user))]
         (is (false? (:requires-mfa? result)))))
 
     (testing "does not require MFA when password invalid"
@@ -61,7 +61,7 @@
             password-valid? false
             mfa-code nil
             login-risk {:risk-level :low}
-            result (mfa/determine-mfa-requirement user password-valid? mfa-code login-risk)]
+            result (mfa/determine-mfa-requirement user password-valid? mfa-code login-risk (:mfa-enabled user))]
         (is (false? (:requires-mfa? result)))))
 
     (testing "requires verification when code provided"
@@ -69,10 +69,21 @@
             password-valid? true
             mfa-code "123456"
             login-risk {:risk-level :low}
-            result (mfa/determine-mfa-requirement user password-valid? mfa-code login-risk)]
+            result (mfa/determine-mfa-requirement user password-valid? mfa-code login-risk (:mfa-enabled user))]
         (is (true? (:requires-mfa? result)))
         (is (= :pending (:mfa-verified? result)))
-        (is (= "MFA code verification pending" (:reason result)))))))
+        (is (= "MFA code verification pending" (:reason result)))))
+
+    (testing "a decision not to require MFA lets an MFA user in without a code"
+      (let [result (mfa/determine-mfa-requirement {:mfa-enabled true} true nil {} false)]
+        (is (false? (:requires-mfa? result)))
+        (is (true? (:allow-login? result)))))
+
+    (testing "requiring MFA of a user without it asks for enrolment"
+      (let [result (mfa/determine-mfa-requirement {:mfa-enabled false} true nil {} true)]
+        (is (false? (:requires-mfa? result)))
+        (is (true? (:requires-enrolment? result)))
+        (is (false? (:allow-login? result)))))))
 
 ;; =============================================================================
 ;; MFA Enablement Tests

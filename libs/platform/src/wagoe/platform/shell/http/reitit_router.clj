@@ -27,6 +27,7 @@
             [ring.util.codec :as codec]
             [ring.util.io :as ring-io]
             [ring.util.request :as ring-request]
+            [wagoe.config :as wagoe-config]
             [wagoe.platform.core.http.access :as access]
             [wagoe.platform.core.http.errors :as errors]
             [wagoe.platform.shell.http.interceptors :as http-interceptors])
@@ -54,23 +55,7 @@
     ;; naming middleware by symbol failed with "No implementation of method:
     ;; :into-middleware ... for class: clojure.lang.Var". Nobody had hit it
     ;; because the setting never reached the router at all (BOU-357).
-    ;;
-    ;; Two ways a symbol from config fails, and they throw differently:
-    ;; a namespace that does not exist raises FileNotFoundException out of the
-    ;; `require`, with no ex-data; a namespace that loads without the var just
-    ;; returns nil. Both are the same mistake in a config file, so both leave
-    ;; here as :configuration-error (ADR-022 / pitfall #7).
-    (let [v (try
-              (requiring-resolve spec)
-              (catch Exception e
-                (throw (ex-info (str "Could not load the namespace for " spec)
-                                {:type   :configuration-error
-                                 :symbol spec}
-                                e))))]
-      (if v
-        (deref v)
-        (throw (ex-info (str "Could not resolve symbol " spec)
-                        {:type :configuration-error :symbol spec}))))
+    (wagoe-config/resolve-symbol spec)
     spec))
 
 (defn- resolve-middleware-fns

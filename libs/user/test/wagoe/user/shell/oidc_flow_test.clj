@@ -137,18 +137,19 @@
     (boolean (when (get @state [issuer subject]) (swap! state dissoc [issuer subject])))))
 
 (defn- app
-  "`:user-settings` merge into `:wagoe/user`; the other options configure the
-   provider."
-  [& {:keys [user-settings] :as opts}]
+  "`:user-settings` merge into `:wagoe/user`, `:auth-config` is the auth
+   service's; the other options configure the provider."
+  [& {:keys [user-settings auth-config] :as opts}]
   (reset! idp {})
   (let [users      (mem/->MemoryUserRepository (atom {}))
         sessions   (mem/->MemorySessionRepository (atom {}))
         audit      (mem/->MemoryAuditRepository (atom []))
         identities (->MemoryIdentityRepository (atom {}))
-        auth-svc   (auth/create-authentication-service users sessions (mfa/create-mfa-service users {}) {})
+        auth-svc   (auth/create-authentication-service users sessions (mfa/create-mfa-service users {})
+                                                       (or auth-config {}))
         provider   (merge {:issuer *issuer* :client-id "app" :client-secret "app-secret"
                            :link-by-email? true}
-                          (dissoc opts :user-settings))
+                          (dissoc opts :user-settings :auth-config))
         _          (swap! idp assoc :client-secret (:client-secret provider))
         settings   {:base-url  "http://localhost:3000"
                     :providers {:fake provider}}
@@ -395,3 +396,30 @@
       (is (= "ada@example.com" (authenticated-as a (session-token ok))))
       (is (= "0;url=/web/overzicht" (get-in ok [:headers "Refresh"])) "lands per :login-redirect")
       (is (= 1 (count (ports/find-identities-by-user (:identities a) (:id ada))))))))
+
+(deftest ^:integration ^:security the-mfa-hook-decides-for-oidc-too
+  (testing "waived: an MFA user signs straight in, and keeps MFA on"
+    (let [seen (atom nil)
+          a    (app :auth-config {:mfa-required? (fn [_ ctx] (reset! seen ctx) false)})
+          ada  (add-user! a :mfa-enabled true :mfa-secret (mfa/generate-totp-secret))
+          resp (sign-in! a)]
+      (is (= "ada@example.com" (authenticated-as a (session-token resp))))
+      (is (str/blank? (get-in resp [:cookies "oidc-mfa" :value])) "no MFA step")
+      (is (true? (:mfa-enabled (ports/find-user-by-id (:users a) (:id ada)))))
+      (is (= "fake" (:provider @seen)) "the hook is told which provider")))
+  (testing "required: a user without MFA is refused, with no session"
+    (let [a    (app :auth-config {:mfa-required? (constantly true)})
+          ada  (add-user! a)
+          resp (sign-in! a)]
+      (is (= 403 (:status resp)))
+      (is (nil? (session-token resp)))
+      (is (empty? (ports/find-sessions-by-user (:sessions a) (:id ada)))))))
+
+(deftest ^:integration ^:security an-account-refused-for-enrolment-is-still-linked
+  (let [require? (atom true)
+        a        (app :auto-create? true :link-by-email? false
+                      :auth-config {:mfa-required? (fn [_ _] @require?)})]
+    (is (= 403 (:status (sign-in! a))) "created, then refused")
+    (reset! require? false)
+    (is (= "ada@example.com" (authenticated-as a (session-token (sign-in! a))))
+        "the provider's link finds it once MFA is waived")))

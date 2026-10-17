@@ -152,6 +152,7 @@
  :user/oidc-admin-link-refused "Beheerdersaccounts worden niet via e-mail gekoppeld. Log in met uw wachtwoord."
  :user/oidc-account-unavailable "Dit account kan nu niet inloggen."
  :user/oidc-mfa-invalid        "Ongeldige code"
+ :user/mfa-enrolment-required  "Voor deze aanmelding is tweestapsverificatie nodig, maar die is voor uw account niet ingesteld. Vraag een beheerder."
 
  :user/created-label-email     "E-mail:"
  :user/created-label-name      "Naam:"

@@ -18,6 +18,7 @@
             [clojure.tools.logging :as log]
             [wagoe.user.core.audit :as audit-core]
             [wagoe.user.core.authentication :as auth-core]
+            [wagoe.user.core.mfa :as mfa-core]
             [wagoe.user.core.oidc :as oidc]
             [wagoe.user.ports :as ports]
             [wagoe.user.shell.auth :as auth]
@@ -200,20 +201,25 @@
                                                 success? message)
                   provider-id)))
 
+(defn- link-identity!
+  "Link the identity if this sign-in is what links it, else note its use."
+  [client user {:keys [identity link?]} now]
+  (let [repo (:identity-repository client)]
+    ;; Another tab may have linked it while this one waited for the second factor.
+    (if (and link? (nil? (ports/find-identity repo (:issuer identity) (:subject identity))))
+      (ports/link-identity repo (assoc identity :user-id (:id user)))
+      (ports/touch-identity repo (:issuer identity) (:subject identity) now))))
+
 (defn- finish!
   "Record the login, link the identity if this sign-in is what links it, and
    open a session — the same session a password login gets."
-  [client user {:keys [provider-id identity link?] :as sign-in} login-context]
+  [client user {:keys [provider-id link?] :as sign-in} login-context]
   (let [{:keys [user-repository session-repository]} (:auth-service client)
-        repo    (:identity-repository client)
         now     (Instant/now)
         risk    (auth-core/analyze-login-risk user login-context
                                               (ports/find-sessions-by-user session-repository (:id user))
                                               now)]
-    ;; Another tab may have linked it while this one waited for the second factor.
-    (if (and link? (nil? (ports/find-identity repo (:issuer identity) (:subject identity))))
-      (ports/link-identity repo (assoc identity :user-id (:id user)))
-      (ports/touch-identity repo (:issuer identity) (:subject identity) now))
+    (link-identity! client user sign-in now)
     (ports/update-user user-repository (merge user (auth-core/prepare-successful-login-updates user now)))
     (let [{:keys [session]} (auth/open-session! (:auth-service client) user risk login-context now)]
       (audit! client user login-context provider-id true nil)
@@ -275,15 +281,27 @@
   "Apply the account rules a password login applies, then either open the
    session or ask for the second factor."
   [client user sign-in login-context]
-  (let [allowed (auth-core/should-allow-login-attempt? user nil (Instant/now))]
+  (let [allowed   (auth-core/should-allow-login-attempt? user nil (Instant/now))
+        ;; The provider vouches for the person; the second factor is still
+        ;; ours to ask for, by the same rule as a password login.
+        mfa       (when (:allowed? allowed)
+                    (mfa-core/determine-mfa-requirement
+                     user true nil nil
+                     (auth/mfa-required? (:auth-service client) user
+                                         (assoc login-context :provider (:provider-id sign-in)))))]
     (cond
       (not (:allowed? allowed))
       (do (audit! client user login-context (:provider-id sign-in) false (:reason allowed))
           {:error {:type :oidc/account-unavailable :message (:reason allowed)}})
 
-      ;; The provider vouches for the person; an account that turned on a
-      ;; second factor here still asks for it.
-      (:mfa-enabled user)
+      ;; Linked all the same: a just-created account would otherwise be
+      ;; unreachable once the hook waives MFA, with link-by-email? off.
+      (:requires-enrolment? mfa)
+      (do (link-identity! client user sign-in (Instant/now))
+          (audit! client user login-context (:provider-id sign-in) false (:reason mfa))
+          {:error {:type :oidc/mfa-enrolment-required :message (:reason mfa)}})
+
+      (:requires-mfa? mfa)
       {:ok {:outcome :mfa-required
             :user    user
             :cookie  (seal client :mfa (assoc sign-in :user-id (str (:id user))) pending-ttl-seconds)}}

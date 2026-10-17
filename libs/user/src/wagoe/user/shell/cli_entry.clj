@@ -56,7 +56,7 @@
 
                 ;; Validation and auth configuration
                 validation-cfg (config/user-validation-config cfg)
-                auth-cfg {} ; no special auth config for CLI yet
+                auth-cfg (get-in cfg [:active :wagoe/user :auth] {})
 
                 ;; Create MFA service (required by auth service)
                 mfa-svc (user-mfa/create-mfa-service user-repo {})
