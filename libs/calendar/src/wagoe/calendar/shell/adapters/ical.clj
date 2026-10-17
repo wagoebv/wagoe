@@ -19,7 +19,9 @@
            [java.nio.charset StandardCharsets]
            [net.fortuna.ical4j.model Calendar ComponentList ParameterList PropertyList Recur TemporalAmountAdapter]
            [net.fortuna.ical4j.model.component Daylight Standard VEvent VTimeZone]
-           [net.fortuna.ical4j.model.property Description DtEnd DtStart RRule TzId TzOffsetFrom TzOffsetTo Uid]
+           [net.fortuna.ical4j.model.property Description DtEnd DtStamp DtStart RRule Summary TzId TzOffsetFrom TzOffsetTo Uid]
+           [net.fortuna.ical4j.transform.recurrence Frequency]
+           [net.fortuna.ical4j.util Strings]
            [net.fortuna.ical4j.data CalendarParser CalendarParserFactory ContentHandler ParserException UnfoldingReader]))
 
 ;; =============================================================================
@@ -179,21 +181,17 @@
   [event]
   (let [tzid   (:timezone event "UTC")
         zone   (ZoneId/of tzid)
-        zoned? (not (or (event/all-day? event) (utc? zone)))
-        [s e]  (cond
-                 (event/all-day? event) (all-day-dates event zone)
-                 (utc? zone)            [(:start event) (:end event)]
-                 :else                  [(LocalDateTime/ofInstant (:start event) zone)
-                                         (LocalDateTime/ofInstant (:end event) zone)])
         title  ^String (:title event)
-        uid    (Uid. (str (:id event)))
-        base   (VEvent. ^Temporal s ^Temporal e title)
-        tz     (ParameterList. [(net.fortuna.ical4j.model.parameter.TzId. tzid)])
-        base   (if zoned?
-                 (-> base (.replace (DtStart. tz ^Temporal s)) (.replace (DtEnd. tz ^Temporal e)))
-                 base)
-        ;; add UID via fluent chain
-        vevent (.withProperty ^VEvent base uid)
+        base   (cond
+                 (event/all-day? event) (let [[s e] (all-day-dates event zone)] (VEvent. ^Temporal s ^Temporal e title))
+                 (utc? zone)            (VEvent. ^Temporal (:start event) ^Temporal (:end event) title)
+                 :else                  (let [tz (ParameterList. [(net.fortuna.ical4j.model.parameter.TzId. tzid)])
+                                              at #(LocalDateTime/ofInstant % zone)]
+                                          (VEvent. (PropertyList. [(DtStamp. (Instant/now))
+                                                                   (DtStart. tz ^Temporal (at (:start event)))
+                                                                   (DtEnd. tz ^Temporal (at (:end event)))
+                                                                   (Summary. title)]))))
+        vevent (.withProperty ^VEvent base (Uid. (str (:id event))))
         vevent (if-let [rrule (:recurrence event)]
                  (.withProperty vevent (RRule. ^String rrule))
                  vevent)
@@ -260,16 +258,11 @@
 ;; (US DST a week early in some years), and binds each parsed VTIMEZONE to a
 ;; JVM-wide ical4j~<uuid> ZoneId.
 
-(defn- unquote-param [^String v]
-  (if (and (> (count v) 1) (str/starts-with? v "\"") (str/ends-with? v "\""))
-    (subs v 1 (dec (count v)))
-    v))
-
 (defn- parse-components
   "The components of `ical`, as {:name :props :children}, each property
    {:name :params :value} as written. Names are upper-cased."
   [^String ical]
-  (let [stack (volatile! [{:children []}])
+  (let [stack (volatile! [{:props [] :children []}])
         prop  (volatile! nil)
         h     (reify ContentHandler
                 (startCalendar [_])
@@ -280,10 +273,10 @@
                   (vswap! stack (fn [s] (let [c (peek s) s (pop s)]
                                           (conj (pop s) (update (peek s) :children conj c))))))
                 (startProperty [_ n] (vreset! prop {:name (str/upper-case n) :params {}}))
-                (parameter [_ n v] (vswap! prop assoc-in [:params (str/upper-case n)] (unquote-param v)))
+                (parameter [_ n v] (vswap! prop assoc-in [:params (str/upper-case n)] (Strings/unquote v)))
                 (propertyValue [_ v] (vswap! prop assoc :value v))
                 (endProperty [_ _]
-                  (vswap! stack (fn [s] (conj (pop s) (update (peek s) :props (fnil conj []) @prop))))))]
+                  (vswap! stack (fn [s] (conj (pop s) (update (peek s) :props conj @prop))))))]
     (.parse ^CalendarParser (.get (CalendarParserFactory/getInstance))
             (UnfoldingReader. (StringReader. ical)) h)
     (:children (peek @stack))))
@@ -293,11 +286,6 @@
 
 (defn- prop [c prop-name]
   (first (props c prop-name)))
-
-(defn- unescape-text
-  "A TEXT value as written, its escapes (RFC 5545 3.3.11) undone."
-  [s]
-  (some-> s (str/replace #"\\([\\;,nN])" #(if (#{"n" "N"} (second %)) "\n" (second %)))))
 
 (def ^:private date-time-format (DateTimeFormatter/ofPattern "uuuuMMdd'T'HHmmss"))
 
@@ -313,15 +301,6 @@
       (.atOffset (LocalDateTime/parse (subs value 0 (dec (count value))) date-time-format) ZoneOffset/UTC)
 
       :else (LocalDateTime/parse value date-time-format))))
-
-(defn- read-offset
-  "A UTC offset value: +0100, -0500, +053000."
-  ^ZoneOffset [{:keys [value]}]
-  (let [[_ sign h m s] (or (re-matches #"([+-])(\d{2})(\d{2})(\d{2})?" (str/trim (str value)))
-                           (throw (ex-info "Invalid UTC offset in VTIMEZONE"
-                                           {:type :validation-error :field :tzoffset :value value})))
-        k (if (= "-" sign) -1 1)]
-    (ZoneOffset/ofHoursMinutesSeconds (* k (parse-long h)) (* k (parse-long m)) (* k (if s (parse-long s) 0)))))
 
 (def ^:private windows-zones
   "Windows zone names, as Outlook and Exchange write TZIDs, to IANA zones
@@ -386,26 +365,34 @@
   (let [id (get windows-zones tzid tzid)]
     (when (schema/valid-timezone? id) id)))
 
+(defn- yearly-recur
+  "An observance's RRULE. Only YEARLY: anything finer, expanded from 1601,
+   would run for minutes."
+  ^Recur [^String rrule]
+  (let [r (Recur. rrule)]
+    (when-not (= Frequency/YEARLY (.getFrequency r))
+      (throw (ex-info "VTIMEZONE RRULE must be YEARLY" {:type :validation-error :field :rrule :value rrule})))
+    r))
+
 (defn- observance-onsets
   "[instant from to] per onset of observance `o` before `until`. RRULEs are
    expanded by ical4j's Recur, which reads BYDAY=2SU as RFC 5545 does."
   [o ^LocalDateTime until]
-  (let [start (read-date (prop o "DTSTART"))
-        ^LocalDateTime start (if (instance? LocalDateTime start)
-                               start
-                               (throw (ex-info "VTIMEZONE observance DTSTART must be a local time"
-                                               {:type :validation-error :field :dtstart})))
-        from  (read-offset (prop o "TZOFFSETFROM"))
-        to    (read-offset (prop o "TZOFFSETTO"))
+  (let [^LocalDateTime start (read-date (prop o "DTSTART"))
+        _     (when-not (instance? LocalDateTime start)
+                (throw (ex-info "VTIMEZONE observance DTSTART must be a local time"
+                                {:type :validation-error :field :dtstart})))
+        from  (ZoneOffset/of (str/trim (str (:value (prop o "TZOFFSETFROM")))))
+        to    (ZoneOffset/of (str/trim (str (:value (prop o "TZOFFSETTO")))))
         dates (concat [start]
-                      (mapcat #(.getDates (Recur. ^String (:value %)) start start until) (props o "RRULE"))
+                      (mapcat #(.getDates (yearly-recur (:value %)) start start until) (props o "RRULE"))
                       (for [p (props o "RDATE") v (str/split (:value p) #",")] (read-date (assoc p :value v))))]
     (for [^LocalDateTime d (distinct dates) :when (.isBefore d until)]
       [(.toInstant d from) from to])))
 
 (defn- vtimezone-rules
   "ZoneRules for a VTIMEZONE's observances, their onsets up to the end of the
-   year after `year`."
+   year after `year`, the feed's last."
   ^ZoneRules [observances year]
   (let [until  (LocalDateTime/of (int (+ year 2)) 1 1 0 0)
         onsets (sort-by first (mapcat #(observance-onsets % until) observances))
@@ -429,13 +416,13 @@
   "Reads a TZID: {:timezone iana-id-or-nil, :at (fn [LocalDateTime] Instant)}.
    An IANA or Windows name uses java.time's rules, whatever the feed's
    VTIMEZONE says; another name its VTIMEZONE; without one, `default-zone`."
-  [vtimezones ^ZoneId default-zone tzid]
+  [vtimezones last-year ^ZoneId default-zone tzid]
   (if-let [id (some-> tzid known-zone)]
     (let [zone (ZoneId/of id)]
       {:timezone id :at #(.toInstant (.atZone ^LocalDateTime % zone))})
     (if-let [obs (seq (get vtimezones tzid))]
-      (let [rules (memoize #(vtimezone-rules obs %))]
-        {:at #(rules-instant (rules (.getYear ^LocalDateTime %)) %)})
+      (let [rules (vtimezone-rules obs last-year)]
+        {:at #(rules-instant rules %)})
       {:at #(.toInstant (.atZone ^LocalDateTime % default-zone))})))
 
 (defn- value->instant
@@ -481,19 +468,21 @@
                       (throw (ex-info "VEVENT without a UID" {:type :validation-error :field :uid})))
         start-p   (prop vevent "DTSTART")
         start     (some-> start-p read-date)
-        {:keys [timezone at]} (resolve (get-in start-p [:params "TZID"]))
+        resolve   #(resolve (get-in % [:params "TZID"]))
+        {:keys [timezone at]} (resolve start-p)
         timezone  (or timezone default-tz)
         zone      (ZoneId/of timezone)
         all-day?  (instance? LocalDate start)
         end-p     (prop vevent "DTEND")
+        dur-p     (prop vevent "DURATION")
         end       (cond
-                    end-p (value->instant (read-date end-p) (:at (resolve (get-in end-p [:params "TZID"]))) zone)
-                    (and start (prop vevent "DURATION")) (plus-duration start at zone (prop vevent "DURATION"))
+                    end-p (value->instant (read-date end-p) (:at (resolve end-p)) zone)
+                    (and start dur-p) (plus-duration start at zone dur-p)
                     all-day? (value->instant (.plusDays ^LocalDate start 1) at zone))
         rrule     (some-> (prop vevent "RRULE") :value str/trim)]
     (some-> rrule Recur.)                 ; refuses a malformed RRULE
     (cond-> {:id       (uid-string->uuid uid)
-             :title    (or (unescape-text (:value (prop vevent "SUMMARY"))) "")
+             :title    (or (some-> (prop vevent "SUMMARY") :value Strings/unescape) "")
              :start    (some-> start (value->instant at zone))
              :end      end
              :timezone timezone}
@@ -509,9 +498,12 @@
   (let [components (parse-components ical)
         vtimezones (into {} (for [c components :when (= "VTIMEZONE" (:name c))]
                               [(some-> (prop c "TZID") :value str/trim) (:children c)]))
-        resolve    (memoize #(zone-resolver vtimezones (ZoneId/of default-tz) %))]
-    (mapv #(vevent->event % resolve default-tz)
-          (filter #(= "VEVENT" (:name %)) components))))
+        vevents    (filter #(= "VEVENT" (:name %)) components)
+        last-year  (transduce (comp (mapcat #(keep (partial prop %) ["DTSTART" "DTEND"]))
+                                    (keep #(some->> (:value %) str/trim (re-find #"^\d{4}") parse-long)))
+                              max 1970 vevents)
+        resolve    (memoize #(zone-resolver vtimezones last-year (ZoneId/of default-tz) %))]
+    (mapv #(vevent->event % resolve default-tz) vevents)))
 
 ;; =============================================================================
 ;; ICalAdapter record
