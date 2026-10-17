@@ -9,6 +9,7 @@
   (:require [wagoe.platform.shell.interceptors :as interceptors]
             [wagoe.core.interceptor-context :as ctx]
             [wagoe.core.utils.type-conversion :as type-conv]
+            [wagoe.platform.core.http.client-ip :as client-ip]
             [wagoe.user.shell.service :as user-service]
             [wagoe.user.ports :as ports]
             [wagoe.user.schema :as schema]
@@ -900,11 +901,9 @@
                                          (:email body) (assoc :email (:email body))
                                          (:password body) (assoc :password (:password body))
                                          (:mfaCode body) (assoc :mfa-code (:mfaCode body))
+                                         ;; Not deviceInfo.ipAddress: the caller writes that.
                                          true (assoc :user-agent (get-in body [:deviceInfo :userAgent] "Unknown")
-                                                     ;; The connection's, not deviceInfo.ipAddress: a
-                                                     ;; client-supplied address could steer the
-                                                     ;; :mfa-required? hook.
-                                                     :ip-address (get-in context [:request :remote-addr] "Unknown")))
+                                                     :ip-address (or (client-ip/request-ip (:request context)) "Unknown")))
 
                                  :cli (cond-> {}
                                         (:user-id body) (assoc :user-id (:user-id body))

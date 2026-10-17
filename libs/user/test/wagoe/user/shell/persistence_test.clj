@@ -2,7 +2,9 @@
   (:require [wagoe.platform.database :as db-core]
             [wagoe.platform.shell.adapters.database.factory :as factory]
             [wagoe.platform.shell.adapters.database.sqlite.core :as sqlite]
+            [wagoe.platform.shell.adapters.database.utils.schema :as schema-utils]
             [wagoe.user.shell.persistence :as sut]
+            [support.test-db :as test-db]
             [cheshire.core :as json]
             [clojure.test :refer [deftest is testing]])
   (:import [java.time Instant]
@@ -100,7 +102,10 @@
       (is (= "Unexpected JSON field type" (ex-message ex)))
       (is (= java.lang.Long (type (:value (ex-data ex))))))))
 
-(defn- columns [ctx table] (set (map :name (db-core/get-table-info ctx table))))
+(defn- column-types [ctx table]
+  (into {} (map (juxt :name :type)) (db-core/get-table-info ctx table)))
+
+(defn- columns [ctx table] (set (keys (column-types ctx table))))
 
 (deftest ^:integration an-existing-table-gains-the-missing-columns
   ;; A table from before a field was added to the schema: CREATE TABLE IF NOT
@@ -129,3 +134,19 @@
                          (db-core/execute-update! ctx {:insert-into :user_sessions
                                                        :values [{:id (str (UUID/randomUUID)) :session_token "t1"}]}))))
           (finally (factory/close-db-context! ctx)))))))
+
+(deftest ^:integration an-upgraded-database-has-the-column-types-of-a-fresh-one
+  ;; Before BOU-622 the upgrades picked their own types, so an upgraded database
+  ;; differed from a fresh one (BOU-610). WAGOE_TEST_DB picks the engine.
+  (test-db/with-db "user_fresh"
+    (fn [fresh]
+      (sut/initialize-user-schema! fresh)
+      (test-db/with-db "user_upgraded"
+        (fn [upgraded]
+          ;; Each table as an older release left it: its first three fields.
+          (doseq [[table schema] sut/tables]
+            (db-core/execute-ddl! upgraded (schema-utils/generate-table-ddl
+                                            upgraded table (into [:map] (take 3 (filter vector? (rest schema)))))))
+          (sut/initialize-user-schema! upgraded)
+          (doseq [table (keys sut/tables)]
+            (is (= (column-types fresh table) (column-types upgraded table)) table)))))))

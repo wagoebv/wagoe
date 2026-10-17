@@ -55,18 +55,16 @@
                       :service-test-ns "shell.service-test"} k)))
 
 (defn generate-field-schema
-  "Generate Malli schema for a single field.
-   
-   Args:
-     field-ctx - Field context map
-   
-   Returns:
-     String representation of Malli schema
-   
+  "The Malli entry for a field context in a schema of `role`: `:entity`
+   (default), `:create` or `:update`. A required field is optional on update,
+   which is a partial, and on create when its column has a default (BOU-537).
+
    Pure: true"
-  ([field-ctx] (generate-field-schema field-ctx false))
-  ([field-ctx force-optional?]
-   (let [required   (and (:field-required field-ctx) (not force-optional?))
+  ([field-ctx] (generate-field-schema field-ctx :entity))
+  ([field-ctx role]
+   (let [required   (and (:field-required field-ctx)
+                         (not= :update role)
+                         (not (and (= :create role) (:field-default? field-ctx))))
          malli-type (:malli-type field-ctx)
          field-name (keyword (:field-name-kebab field-ctx))]
      (if required
@@ -91,14 +89,14 @@
         field-schemas (str/join "\n" (map generate-field-schema fields))
         ;; A workflow's status is set by its transitions, never by a request.
         requested (remove :workflow-state? fields)
-        request-schemas (str/join "\n" (map generate-field-schema requested))
+        request-schemas (str/join "\n" (map #(generate-field-schema % :create) requested))
         ;; Every field optional, whatever it is on the entity. An update
         ;; request is a partial: one required field in this schema means every
         ;; caller doing a partial update has to send it. The same
         ;; `field-schemas` string used to be interpolated into all three
         ;; schemas, so `--field name:string:required` made `name` mandatory on
         ;; update — against the convention in libs/scaffolder/AGENTS.md.
-        update-field-schemas (str/join "\n" (map #(generate-field-schema % true) requested))]
+        update-field-schemas (str/join "\n" (map #(generate-field-schema % :update) requested))]
     {:entity (str "(def " entity-name "\n"
                   "  \"Schema for " entity-name " entity.\"\n"
                   "  [:map {:title \"" entity-name "\"}\n"
@@ -1908,7 +1906,7 @@ DROP TABLE IF EXISTS %s;
 ;; =============================================================================
 ;;
 ;; Platform discovery builds a scaffolded module from four keys, one service
-;; and one routes contribution, unless the wiring namespace defines `ig-config`.
+;; and one routes contribution, and merges the wiring's `ig-config` over them.
 ;; So the first further entity installs, once: an `ig-config` that adds
 ;; :wagoe/<m>-entities, and a routes init-key that adds those entities' API
 ;; routes to the module's. The routes init-key is the one form replaced rather
@@ -2029,10 +2027,11 @@ DROP TABLE IF EXISTS %s;
          "    (and (some? v) (not (false? (:enabled? v))))))\n"
          "\n"
          "(defn ig-config\n"
-         "  \"This module's Integrant graph: the four keys platform discovery would\n"
-         "   build, plus " (k "-entities") ". With the workflow module on, the services\n"
-         "   get it, and the event bus the admin publishes to when both are on.\"\n"
-         "  [settings {:keys [config]}]\n"
+         "  \"What this module adds to the four keys platform discovery builds:\n"
+         "   " (k "-entities") ", handed to the service and the routes. With the\n"
+         "   workflow module on, the services get it, and the event bus the admin\n"
+         "   publishes to when both are on.\"\n"
+         "  [_settings {:keys [config]}]\n"
          "  (let [workflow (when (switched-on? config :wagoe/workflow)\n"
          "                   {:workflow (ig/ref :wagoe/workflow)\n"
          "                    :events   (when (and (switched-on? config :wagoe/events)\n"
@@ -2040,22 +2039,12 @@ DROP TABLE IF EXISTS %s;
          "                                (ig/ref :wagoe/events))})]\n"
          "    {:components\n"
          "     (cond->\n"
-         "      {" (k "-repository") "\n"
-         "      {:ctx (ig/ref :wagoe/db-context)}\n"
-         "      " (k "-service") "\n"
-         "      (merge {:repository (ig/ref " (k "-repository") ")\n"
-         "              :entities   (ig/ref " (k "-entities") ")}\n"
-         "             workflow)\n"
+         "      {" (k "-service") "\n"
+         "      (merge {:entities (ig/ref " (k "-entities") ")} workflow)\n"
          "      " (k "-entities") "\n"
          "      (merge {:ctx (ig/ref :wagoe/db-context)} workflow)\n"
          "      " (k "-routes") "\n"
-         "      {:service  (ig/ref " (k "-service") ")\n"
-         "       :entities (ig/ref " (k "-entities") ")\n"
-         "       :config   settings}\n"
-         "      " (k "") "\n"
-         "      {:enabled? true\n"
-         "       :service  (ig/ref " (k "-service") ")\n"
-         "       :routes   (ig/ref " (k "-routes") ")}}\n"
+         "      {:entities (ig/ref " (k "-entities") ")}}\n"
          "      workflow\n"
          "      (assoc " (k "-seed") " {:service  (ig/ref " (k "-service") ")\n"
          "                               :entities (ig/ref " (k "-entities") ")})\n"
@@ -2159,7 +2148,7 @@ DROP TABLE IF EXISTS %s;
         svc-wanted  (z/sexpr (form-of service-init-form? base))]
     (cond
       (contains? (defined-symbols source) 'ig-config)
-      {:error "it already defines ig-config, so the module builds its own graph"}
+      {:error "it already defines ig-config, which wiring an entity would replace"}
 
       (or (nil? loc) (not= expected (z/sexpr loc)))
       {:error (str "its :wagoe/" module-name "-routes init-key is not the one bb scaffold"
@@ -2414,24 +2403,22 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s%s%s;%s"
             index)))
 
 (defn schema-field-entry
-  "The Malli entry line for `field`, without indentation.
+  "The Malli entry line for a field definition, without indentation, in a
+   schema of `role` as `generate-field-schema` takes it. See
+   `libs/scaffolder/AGENTS.md`."
+  ([field] (schema-field-entry field :entity))
+  ([field role]
+   (str/trim (generate-field-schema (template/build-field-context field) role))))
 
-   Required fields are plain; optional ones carry `{:optional true}`, matching
-   what module generation emits for the same field definition.
+(defn schema-entry-for
+  "The entry `field` takes in the schema named `schema-name`.
 
-   `force-optional?` produces the optional form regardless. Update request
-   schemas take that one: an update is a partial, so a required entry there
-   means every existing caller doing a partial update has to start sending the
-   new field or fail validation. See `libs/scaffolder/AGENTS.md`, and
-   `generate-field-schema`, which applies the same rule at module generation."
-  ([field] (schema-field-entry field false))
-  ([field force-optional?]
-   (let [field-ctx  (template/build-field-context field)
-         field-name (keyword (:field-name-kebab field-ctx))
-         malli-type (:malli-type field-ctx)]
-     (if (and (:field-required field-ctx) (not force-optional?))
-       (format "[%s %s]" field-name malli-type)
-       (format "[%s {:optional true} %s]" field-name malli-type)))))
+   Pure: true"
+  [field entity schema-name]
+  (schema-field-entry field (condp = schema-name
+                              (str "Create" entity "Request") :create
+                              (str "Update" entity "Request") :update
+                              :entity)))
 
 (defn- schema-map-zloc
   "Zipper at the `[:map …]` vector inside `(def schema-name …)`, or nil.
@@ -2560,7 +2547,7 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s%s%s;%s"
   [child]
   (let [fk     (str (:belongs-to child) "-id")
         fields (remove #(or (:workflow-state? %) (= fk (:field-name-kebab %))) (:fields child))
-        item   (str "[:map " (str/join " " (map #(str/trim (generate-field-schema %)) fields)) "]")]
+        item   (str "[:map " (str/join " " (map #(str/trim (generate-field-schema % :create)) fields)) "]")]
     (if-let [n (:min child)]
       (str "[:" (:entity-plural child) " [:vector {:min " n " :max " max-children "} " item "]]")
       (str "[:" (:entity-plural child) " {:optional true} [:vector {:max " max-children "} " item "]]"))))
@@ -2632,7 +2619,7 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s%s%s;%s"
           k     (entry-key-of entry)]
       (if (existing-entry item k)
         {:status :present :parent parent}
-        (let [created (append-to-item item entry)
+        (let [created (append-to-item item (schema-field-entry field :create))
               shown   (children-item-zloc created parent plural)]
           {:status  :inserted
            :parent  parent
@@ -2786,7 +2773,7 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s%s%s;%s"
         ;; an update is a partial, so a required entry there breaks every
         ;; caller that was sending a subset. Applying one entry to all three
         ;; schemas made `--required` mandatory on update.
-        entry-for     #(schema-field-entry field (= % update-schema))
+        entry-for     #(schema-entry-for field entity %)
         targets       [entity (str "Create" entity "Request") update-schema]
         ;; An entry that is present but not optional, in the update request
         ;; only. Scoped that narrowly on purpose: a project generated before

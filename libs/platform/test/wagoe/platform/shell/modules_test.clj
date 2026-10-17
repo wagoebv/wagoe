@@ -143,7 +143,13 @@
                     (fn [sym] (get graphs (namespace sym)))))
         found    (discover {:wagoe/visits {:enabled? true}}
                            {"acme.visits.shell.module-wiring" (constantly graph)})]
-    (is (= graph found))
+    (is (= (:routes graph) (:routes found)))
+    (is (= (:job-handlers graph) (:job-handlers found)))
+    (is (contains? (:components found) :wagoe/visits-job-handlers))
+
+    (testing "with its :extra-middleware collected rather than taking a slot"
+      (is (= [[:visits]] (:middleware found)))
+      (is (= {} (:http found))))
 
     (testing "and two modules wiring one key fail rather than overwrite"
       (let [e (is (thrown? clojure.lang.ExceptionInfo
@@ -153,10 +159,31 @@
         (is (= :wagoe/module-key-conflict (:type (ex-data e))))))
 
     (testing "and an :http slot a framework module fills is refused, not replaced"
-      ;; tenant's `:extra-middleware` would otherwise be dropped silently
       (let [e (is (thrown? clojure.lang.ExceptionInfo
-                           (sut/merge-http {:extra-middleware :tenant} :discovered (:http found))))]
-        (is (= :extra-middleware (:key (ex-data e))))))))
+                           (sut/merge-http {:tenant-service :tenant} :discovered
+                                           {:tenant-service :mine})))]
+        (is (= :tenant-service (:key (ex-data e))))))))
+
+(deftest ^:unit an-app-ig-config-adds-to-the-scaffold-keys
+  ;; To add one component a module restated the four keys discovery builds,
+  ;; and drifted when they changed.
+  (let [discover (fn [graph]
+                   (sut/discover-module-config
+                    {:wagoe/visits {:enabled? true :x 1}} #{} "acme" (constantly true)
+                    (constantly (constantly graph))))]
+    (testing "one extra component keeps the four"
+      (is (= #{:wagoe/visits :wagoe/visits-repository :wagoe/visits-service
+               :wagoe/visits-routes :wagoe/visits-cache}
+             (set (keys (:components (discover {:components {:wagoe/visits-cache {}}})))))))
+
+    (testing "a scaffold key it names is merged, not replaced"
+      (is (= {:repository (ig/ref :wagoe/visits-repository) :cache (ig/ref :wagoe/visits-cache)}
+             (get-in (discover {:components {:wagoe/visits-service {:cache (ig/ref :wagoe/visits-cache)}}})
+                     [:components :wagoe/visits-service]))))
+
+    (testing "a module that wires its own key owns its whole graph"
+      (is (= {:wagoe/visits {}}
+             (:components (discover {:components {:wagoe/visits {}}})))))))
 
 (deftest ^:unit discovered-routes-reach-the-handler
   ;; Emitting the keys is half the job. :wagoe/http-handler destructures a fixed
@@ -209,6 +236,18 @@
 
     (testing "the http-handler gets the ref, because it takes routes by name"
       (is (= {:search-routes (ig/ref :wagoe/search-routes)} http)))))
+
+(deftest ^:unit middleware-is-collected-in-module-order
+  ;; :extra-middleware was a slot: the second module to set it failed the boot,
+  ;; so tenant and an application could not both add middleware.
+  (let [{:keys [http middleware]}
+        (assemble {:wagoe/tenant {} :wagoe/search {}}
+                  {'wagoe.tenant.shell.module-wiring
+                   {:http {:tenant-service :ts :extra-middleware :tenant-mw}}
+                   'wagoe.search.shell.module-wiring
+                   {:http {:extra-middleware :search-mw}}})]
+    (is (= [:search-mw :tenant-mw] middleware) "sorted by module key, like routes")
+    (is (= {:tenant-service :ts} http) "and every other :http key is still a slot")))
 
 (deftest ^:unit a-module-sees-which-of-its-peers-are-on
   ;; audience takes a cache ref only when there is a cache to ref; without

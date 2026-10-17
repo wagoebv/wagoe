@@ -43,6 +43,7 @@
             [wagoe.observability.errors.shell.adapters.sentry :as error-reporting-sentry]
             [wagoe.platform.shell.http.reitit-router :as reitit-router]
             [wagoe.platform.shell.http.interceptors :as http-interceptors]
+            [wagoe.platform.core.http.client-ip :as client-ip]
             [wagoe.platform.shell.http.versioning :as http-versioning]
             [wagoe.platform.shell.utils.port-manager :as port-manager]
             [wagoe.platform.shell.rpc.server :as rpc-server]
@@ -346,16 +347,17 @@
 (defn- request-middleware
   "The middleware every request passes through, outermost first.
 
-   `extra-middleware` is a seq of `(fn [handler] ...)` supplied by the
-   application — tenant resolution arrives this way. Platform provides the
-   pipeline; feature libraries inject their middleware, which is why platform
-   does not require the tenant library (BOU-200).
+   `module-middleware` holds each module's `:extra-middleware` — a middleware
+   fn or a seq of them — framework modules first, then the application's, each
+   group in module-key order. Tenant resolution arrives this way, which is why
+   platform does not require the tenant library (BOU-200). `extra-middleware`,
+   a seq of `(fn [handler] ...)` an application wires by hand, runs after them.
 
    Authentication is not here: it runs earlier, ahead of body decoding, with
    the default-deny guard — see `:authentication` in the router config. It
    still precedes the tenant middleware, which reads `[:user :id]` (BOU-373,
    BOU-568)."
-  [{:keys [extra-middleware i18n i18n-middleware]}]
+  [{:keys [module-middleware extra-middleware i18n i18n-middleware]}]
   (let [;; `:i18n` is still accepted. An app that upgrades platform without
         ;; regenerating its config still passes the component under that key —
         ;; the documented input until now — and dropping it would take the
@@ -374,6 +376,8 @@
                       (let [wrap (requiring-resolve 'wagoe.i18n.shell.middleware/wrap-i18n)]
                         (fn [handler] (wrap handler i18n)))))]
     (concat
+     ;; `sequential?`, not `fn?`: a var or multimethod is a middleware too.
+     (mapcat #(if (or (nil? %) (sequential? %)) % [%]) module-middleware)
      (or extra-middleware [])
      (when i18n-mw [i18n-mw])
      ;; HTML forms can only GET and POST, so a POST carrying _method=delete is
@@ -389,8 +393,8 @@
             (handler request))))])))
 
 (defn- security-config
-  "CSRF and rate-limit settings, and the two guards that refuse to boot without
-   them.
+  "CSRF, rate-limit and trusted-proxy settings, and the guards that refuse to
+   boot without them.
 
    Both are opt-in: a framework upgrade must not start 403-ing or 429-ing an
    application that was working. What is not optional is failing loudly when the
@@ -451,9 +455,15 @@
                              "falling back to a per-process counter. This is correct on a "
                              "single node only; across replicas each instance counts "
                              "independently, so the effective global limit is limit x N. "
-                             "Configure :wagoe/cache (Redis) for a shared limit."))))]
+                             "Configure :wagoe/cache (Redis) for a shared limit."))))
 
-    {:csrf csrf-config :rate-limit rate-limit-config}))
+        ;; An unparseable entry would trust nothing, or the wrong peer; refuse.
+        {cidrs :cidrs proxies-error :error} (client-ip/parse-trusted-proxies
+                                             (get-in config [:active :wagoe/http :trusted-proxies]))
+        _ (when proxies-error
+            (throw (ex-info (:message proxies-error) proxies-error)))]
+
+    {:csrf csrf-config :rate-limit rate-limit-config :trusted-proxies cidrs}))
 
 (defn- platform-routes
   "The endpoints every Wagoe application serves, whoever it is.
@@ -503,7 +513,7 @@
                                :summary "Prometheus metrics scrape endpoint"})}]]))
 
 (defmethod ig/init-key :wagoe/http-handler
-  [_ {:keys [module-routes logger metrics-emitter tracer error-reporter error-enricher config tenant-service db-context cache i18n i18n-middleware user-service request-capture? auth-middleware extra-middleware router]}]
+  [_ {:keys [module-routes logger metrics-emitter tracer error-reporter error-enricher config tenant-service db-context cache i18n i18n-middleware user-service request-capture? auth-middleware module-middleware extra-middleware router]}]
   (log/info "Initializing top-level HTTP handler")
   (when (empty? auth-middleware)
     (log/warn (str "No authentication middleware is wired (no user module?). "
@@ -550,7 +560,8 @@
                            (or test-reset-routes []))
 
         {csrf-config :csrf
-         rate-limit-config :rate-limit} (security-config {:config config :cache cache})
+         rate-limit-config :rate-limit
+         trusted-proxies :trusted-proxies} (security-config {:config config :cache cache})
 
         system (interceptor-services
                 {:logger            logger
@@ -584,7 +595,8 @@
                               ;; after the framework's pipeline, so it sees a
                               ;; request the framework has already prepared.
                               :middleware (into (vec (request-middleware
-                                                      {:extra-middleware extra-middleware
+                                                      {:module-middleware module-middleware
+                                                       :extra-middleware extra-middleware
                                                        :i18n             i18n
                                                        :i18n-middleware  i18n-middleware}))
                                                 (:middleware settings))
@@ -612,7 +624,9 @@
                           (catch Exception _
                             (log/debug "Request capture middleware not available, skipping")
                             versioned-handler))
-                        versioned-handler)]
+                        versioned-handler)
+        ;; Outermost, so everything downstream reads the same client address.
+        final-handler (http-interceptors/wrap-client-ip final-handler trusted-proxies)]
 
     (log/info "Top-level HTTP handler initialized successfully"
               {;; Counts rather than six named modules: this line named the

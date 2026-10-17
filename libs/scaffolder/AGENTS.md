@@ -114,7 +114,8 @@ bb scaffold entity \
   installs an `ig-config` and an `entity-wiring` multimethod, and replaces the
   one `:wagoe/<module>-routes` init-key so it mounts every entity's routes;
   that replacement is refused if the init-key was hand-edited. Later entities
-  append one `entity-wiring` method. No web page. `--no-http` (or `:http false`
+  append one `entity-wiring` method. That `ig-config` returns only what it adds;
+  discovery builds the four module keys under it. No web page. `--no-http` (or `:http false`
   in `:interfaces`) leaves out the http namespace and its routes;
   `--public-api` (`:public-api true`) serves them without a signed-in user.
 
@@ -301,7 +302,9 @@ identifier. Anything else is refused rather than interpolated.
 numbers and booleans, and refused when the value does not suit the type (or on
 a relation). A required enum without one defaults to its first value. This is
 what keeps a required column creatable when an admin form leaves it out as a
-`:readonly-fields` entry. `bb scaffold field` takes it as `--default VALUE`.
+`:readonly-fields` entry. `bb scaffold field` takes it as `--default VALUE`;
+the wizards ask for one, and `bb scaffold ai` and MCP carry it. A field with
+`default=` is optional in the Create request, since the column fills it.
 
 A datetime default needs an offset, `default=2026-01-01T00:00:00Z`: a bare date
 would resolve in the database session's time zone. An unquoted default keeps

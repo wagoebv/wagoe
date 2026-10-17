@@ -17,6 +17,7 @@
             [wagoe.shared.ui.core.components :as ui]
             [wagoe.shared.ui.core.layout :as layout]
             [wagoe.shared.ui.core.validation :as validation]
+            [wagoe.platform.core.http.client-ip :as client-ip]
             [wagoe.platform.shell.web.table :as web-table]
             [wagoe.user.core.oidc :as oidc-core]
             [wagoe.user.core.password-policy :as password-policy]
@@ -27,6 +28,7 @@
             [wagoe.user.schema :as user-schema]
             [wagoe.email.ports :as email-ports]
             [wagoe.user.shell.auth :as auth]
+            [wagoe.user.shell.landing :as landing]
             [wagoe.user.shell.middleware :as user-middleware]
             [wagoe.user.shell.mfa :as mfa]
             [wagoe.user.shell.oidc :as oidc]
@@ -275,23 +277,24 @@
   "Handler for the web root landing page (GET /web).
 
    Shows logo, welcome message and login link for unauthenticated users.
-   Authenticated users (valid session cookie present) are redirected to the dashboard.
+   Authenticated users (valid session cookie present) are redirected to their
+   landing page.
 
    Args:
      user-service: User service instance for session validation
-     _config: Application configuration map
+     config: Application configuration map
 
    Returns:
      Ring handler function"
-  [user-service _config]
+  [user-service config]
   (fn [request]
     (let [session-token (user-middleware/extract-session-token request)
-          authenticated? (when session-token
-                           (try
-                             (boolean (user-ports/validate-session user-service session-token))
-                             (catch Exception _ false)))]
-      (if authenticated?
-        (response/redirect "/web/dashboard")
+          session (when session-token
+                    (try
+                      (user-ports/validate-session user-service session-token)
+                      (catch Exception _ nil)))]
+      (if session
+        (response/redirect (landing/path-for config (:user session)))
         (html-response request (user-ui/web-root-page {}))))))
 
 (defn dashboard-page-handler
@@ -448,7 +451,7 @@
                          :password (get form-data "password")
                          :remember (boolean (get form-data "remember"))
                          :mfa-code (get form-data "mfa-code")
-                         :ip-address (:remote-addr request)
+                         :ip-address (client-ip/request-ip request)
                          :user-agent (get-in request [:headers "user-agent"])}
           [valid? validation-errors validated-data]
           (validate-request-data user-schema/LoginRequest prepared-data)
@@ -466,11 +469,8 @@
           ;; Use IUserService/authenticate-user with validated data
           (let [auth-result (user-ports/authenticate-user user-service validated-data)
                 user (:user auth-result)
-                ;; Determine default redirect based on user role (if authenticated)
-                default-redirect (if (and user (= :admin (:role user)))
-                                   "/web/admin/users"
-                                   "/web/dashboard")
-                return-to (safe-return-url raw-return-to default-redirect)]
+                return-to (when (:authenticated auth-result)
+                            (safe-return-url raw-return-to (landing/path-for config user)))]
             (log/info "Login attempt" {:email (:email validated-data)
                                        :authenticated (:authenticated auth-result)
                                        :result-keys (keys auth-result)
@@ -521,7 +521,7 @@
                                                        {}
                                                        {:user (get request :user)
                                                         :flash (get request :flash)
-                                                        :return-to return-to
+                                                        :return-to raw-return-to
                                                         :logo-url logo-url})
                                200))
 
@@ -549,14 +549,14 @@
                                                          {:mfa-code [error-message]}
                                                          {:user (get request :user)
                                                           :flash (get request :flash)
-                                                          :return-to return-to
+                                                          :return-to raw-return-to
                                                           :logo-url logo-url})
                    ;; Otherwise show regular login page
                                  (user-ui/login-page prepared-data
                                                      {:password [error-message]}
                                                      {:user (get request :user)
                                                       :flash (get request :flash)
-                                                      :return-to return-to
+                                                      :return-to raw-return-to
                                                       :logo-url logo-url}))
                                401))))
           (catch Exception e
@@ -606,7 +606,7 @@
       (assoc-in [:cookies oidc-mfa-cookie] oidc-cookie-cleared)))
 
 (defn- login-context [request]
-  {:ip-address (:remote-addr request)
+  {:ip-address (client-ip/request-ip request)
    :user-agent (get-in request [:headers "user-agent"])})
 
 (defn- oidc-failure
@@ -630,8 +630,7 @@
 (defn- oidc-signed-in
   "Set the session cookie exactly as password login does, and move on."
   [request config {:keys [user session return-to]}]
-  (let [default  (if (= :admin (:role user)) "/web/admin/users" "/web/dashboard")
-        location (safe-return-url return-to default)]
+  (let [location (safe-return-url return-to (landing/path-for config user))]
     (-> (html-response request (user-ui/oidc-continue-page location) 200
                        {"Refresh" (str "0;url=" location)})
         (assoc-in [:cookies "session-token"] (session-cookie config (:session-token session)))
@@ -766,7 +765,7 @@
                 auth-data {:email (:email user-result)
                            :password (get prepared-data :password)
                            :remember false
-                           :ip-address (:remote-addr request)
+                           :ip-address (client-ip/request-ip request)
                            :user-agent (get-in request [:headers "user-agent"])}
                 auth-result (user-ports/authenticate-user user-service auth-data)]
             (if (:authenticated auth-result)

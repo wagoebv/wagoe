@@ -139,8 +139,8 @@ The `*audit-context*` dynamic var carries per-request audit metadata (actor, IP,
 (user-service/with-audit-context
   {:actor-id    (get-in request [:session :user :id])
    :actor-email (get-in request [:session :user :email])
-   :ip-address  (get-in request [:headers "x-forwarded-for"]
-                        (:remote-addr request))
+   ;; Not the raw X-Forwarded-For header: the client writes it.
+   :ip-address  (wagoe.platform.core.http.client-ip/request-ip request)
    :user-agent  (get-in request [:headers "user-agent"])}
   (fn []
     ;; All service calls within f see the bound context
@@ -269,7 +269,7 @@ curl -X POST http://localhost:3000/api/auth/login \
 
 ### Deciding Per Login
 
-`:wagoe/user {:auth {:mfa-required? my.app/mfa-required?}}` names a `(fn [user login-context] bool)`, resolved at boot. It replaces the default `(:mfa-enabled user)` for password and OIDC logins (OIDC adds `:provider` to the context). False waives the code without touching the user's MFA settings. True for a user without MFA refuses the login with `:mfa-enrolment-required` (`:oidc/mfa-enrolment-required` for OIDC): enrolment needs a signed-in user. The hook never sees password or MFA secrets, and `:ip-address` is the request's `:remote-addr` (the API ignores `deviceInfo.ipAddress`). `:auth` is passed whole as the auth service's config, CLI included.
+`:wagoe/user {:auth {:mfa-required? my.app/mfa-required?}}` names a `(fn [user login-context] bool)`, resolved at boot. It replaces the default `(:mfa-enabled user)` for password and OIDC logins (OIDC adds `:provider` to the context). False waives the code without touching the user's MFA settings. True for a user without MFA refuses the login with `:mfa-enrolment-required` (`:oidc/mfa-enrolment-required` for OIDC): enrolment needs a signed-in user. The hook never sees password or MFA secrets, and `:ip-address` is the client IP (`:wagoe/http :trusted-proxies` decides it behind a proxy). `:auth` is passed whole as the auth service's config, CLI included.
 
 Do not waive MFA by making the repository report `:mfa-enabled false`: login writes the user back, which turns MFA off in the database.
 
@@ -317,6 +317,29 @@ The password is never passed on the command line. The wizard delegates to the Wa
 The wizard accepts `--env dev|test|acc|prod` to pick the Aero config profile and the correct database connection.
 
 ---
+
+## Landing Page and Dashboard
+
+Two `:wagoe/user` keys, both checked at boot; a bad value fails it.
+
+```clojure
+:wagoe/user
+{;; Where a signed-in user lands: paths by role, `:default` for the rest,
+ ;; merged over {:admin "/web/admin/users" :default "/web/dashboard"}.
+ :login-redirect {:user "/web/overzicht" :default "/web/overzicht"}
+ ;; or a function of the user, resolved at boot; nil or an off-site path
+ ;; means the default:   :login-redirect my.app.web/landing
+
+ ;; false: /web/dashboard is not mounted, so the app can route it.
+ ;; {:handler my.app.web/dashboard}: that Ring handler serves it, signed in.
+ :dashboard false}
+```
+
+`:login-redirect` applies to password login, MFA completion, OIDC sign-in and
+`/web` for a signed-in user. A safe `return-to` still wins. With
+`:dashboard false` and no `:login-redirect`, users land on `/web/dashboard`, so
+serve it or point the redirect elsewhere. The shared layouts' logo and "back"
+links still point at `/web/dashboard` either way.
 
 ## Session Pruning
 

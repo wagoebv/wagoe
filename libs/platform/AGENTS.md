@@ -223,6 +223,27 @@ that attaches the security stack, interceptors, coercion and Swagger.
 
 Health checks and `/swagger.json` are mounted for you.
 
+### Adding components and middleware to an app module
+
+Discovery builds a scaffolded module's four keys (`:wagoe/<name>`, `-repository`,
+`-service`, `-routes`). To add to them, define `ig-config` in the module's
+`module_wiring.clj` and return only what you add:
+
+```clojure
+(defn ig-config [_settings _ctx]
+  {:components {:wagoe/orders-ip-filter {:allow ["10.0.0.0/8"]}
+                ;; merged into the scaffold's service, which keeps :repository
+                :wagoe/orders-service   {:filter (ig/ref :wagoe/orders-ip-filter)}}
+   :http       {:extra-middleware (ig/ref :wagoe/orders-ip-filter)}})
+```
+
+- A component the scaffold also builds is merged, your keys winning.
+- Wire `:wagoe/<name>` yourself and the module owns its whole graph: no scaffold keys.
+- `:extra-middleware` is a middleware fn or a seq of them. Every module may set
+  one. They run outermost first: framework modules, then app modules, each group
+  sorted by module key, then the handler's own `:extra-middleware`.
+- Any other `:http` key is a single slot; two modules setting it fail the boot.
+
 ### Authentication is the default
 
 Every route requires a signed-in user (`:user` on the request) unless its
@@ -359,7 +380,16 @@ client is evicted to make room. So even a sustained stream of fresh client ids
 (rotating API keys, many remote addresses) cannot grow the state map past the cap
 on a long-running node.
 
-Client identity is resolved as user id → `x-api-key` header → remote address.
+Client identity is resolved as user id → `x-api-key` header → client IP.
+
+### Client IP
+
+`wrap-client-ip`, outermost in the handler, sets `:client-ip` on every request.
+Read it through `wagoe.platform.core.http.client-ip/request-ip`, never
+`:remote-addr` or `X-Forwarded-For` directly. `X-Forwarded-For` is honoured only
+when the peer is in `:wagoe/http :trusted-proxies` (CIDRs, default empty); the
+client is then the right-most hop that is not a trusted proxy. An invalid CIDR
+fails the boot.
 
 ### Explicit / per-route form
 

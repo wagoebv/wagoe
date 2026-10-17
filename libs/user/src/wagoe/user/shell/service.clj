@@ -22,6 +22,7 @@
             [wagoe.user.shell.auth :as auth-shell]
             [wagoe.user.ports :as ports]
             [wagoe.platform.core.database.constraint :as constraint]
+            [wagoe.platform.core.http.client-ip :as client-ip]
             [wagoe.platform.shell.service-interceptors :as service-interceptors]
             [clojure.string :as str])
   (:import (java.security SecureRandom)
@@ -76,7 +77,7 @@
   (let [actor (or (:user request) (get-in request [:session :user]))]
     {:actor-id    (:id actor)
      :actor-email (:email actor)
-     :ip-address  (:remote-addr request)
+     :ip-address  (client-ip/request-ip request)
      :user-agent  (get-in request [:headers "user-agent"])}))
 
 (defn- effective-audit-context

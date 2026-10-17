@@ -103,10 +103,8 @@ signed-in user, so they must sign in where MFA is not required, or ask an
 administrator. The symbol is resolved at boot, and one that does not resolve stops
 the boot. A function that throws fails the login.
 
-WARNING: `:ip-address` is the request's `:remote-addr`. Behind a reverse proxy that
-is the proxy, so set it from `X-Forwarded-For` in your own middleware, trusting only
-your proxy, before keying a hook on it. `deviceInfo.ipAddress` in an API login body
-is ignored.
+WARNING: Behind a reverse proxy, set `:wagoe/http :trusted-proxies` before keying a
+hook on `:ip-address`; without it every login carries the proxy's address.
 
 === Disable MFA
 
@@ -176,6 +174,31 @@ The cookie key derives from `JWT_SECRET`; set `:state-secret` under `:oidc` to u
 another. The client secret is sent with HTTP Basic; set `:token-endpoint-auth :post` on
 a provider that wants it in the form body. Leave `:client-secret` out for a public
 client.
+
+== Landing page and dashboard
+
+After signing in, an administrator lands on `/web/admin/users` and everyone else on
+`/web/dashboard`, a generic page the user module serves. Both are configurable under
+`:wagoe/user`:
+
+[source,clojure]
+----
+:wagoe/user
+{:login-redirect {:user "/web/overzicht" :default "/web/overzicht"}  ; by role
+ :dashboard      false}                                               ; or {:handler my.app.web/dashboard}
+----
+
+`:login-redirect` is a map of role to path (`:default` covers roles it does not name,
+and unnamed keys keep the defaults above), or a symbol naming a function of the user
+that returns a path. A function that returns nil or a path off this site sends the user
+to the default. It applies to password login, the MFA step, OpenID Connect sign-in and
+`/web` for someone already signed in. A `return-to` on this site still wins.
+
+`:dashboard false` leaves `/web/dashboard` to the application; `{:handler sym}` serves
+that Ring handler there instead, behind the same sign-in check. Both keys are checked at
+boot: a path off this site, an unknown role or a symbol that does not resolve stops it.
+The logo and "back" links in the built-in layouts still point at `/web/dashboard`, so
+with `:dashboard false` the application should serve that path.
 
 == Session management
 

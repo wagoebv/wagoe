@@ -31,6 +31,12 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **App modules can add HTTP middleware and components** (BOU-672): an `ig-config` returns only what it adds to the
+  scaffold's four keys, and its `:http :extra-middleware` runs after the framework modules'. See the platform guide.
+- **Choose where users land after signing in** (BOU-678): `:login-redirect` under `:wagoe/user`, a role map or a
+  function of the user. Unset, admins still land on `/web/admin/users`, others on `/web/dashboard`.
+- **Replace or drop the built-in `/web/dashboard`** (BOU-680): `:dashboard {:handler my.app/page}` or
+  `:dashboard false` under `:wagoe/user`, so an app can serve the path itself.
 - **Per-login MFA decision** (BOU-670): `:wagoe/user {:auth {:mfa-required? my.app/fn}}`, a `(fn [user login-context])`,
   can waive or require MFA for password and OIDC logins. A user required to without MFA set up is refused.
 - **Sign in with OpenID Connect** (BOU-447): authorization code with PKCE, a "Sign in with X" button per provider.
@@ -72,8 +78,6 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Changed
 
-- **API login records the connection's address** (BOU-670), not the body's `deviceInfo.ipAddress`, which is ignored.
-  Behind a proxy, set `:remote-addr` from `X-Forwarded-For` in your own middleware.
 - **Database errors are logged redacted unless their SQLState is known to quote no values** (BOU-629): the summary
   names SQLState, code and constraint. Read the driver's text in a debugger if you need it.
 - **Tables from Malli schemas gain the fields added since they were created** (BOU-622): boot adds them, a required one as
@@ -102,6 +106,16 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Tables from Malli schemas take their column types from the adapter's `column-type`** (BOU-610). On fresh H2
+  databases `:text` and `:map` columns are now `VARCHAR`, not `CLOB`; other engines are unchanged.
+- **Security: behind a proxy every client shared one rate-limit bucket and audit IP; X-Forwarded-For was trusted from anyone** (BOU-671).
+  Set `:wagoe/http :trusted-proxies` to your proxies' CIDRs; read the address as `:client-ip`.
+- **PDF reports wrote data unescaped: `&` failed the render, and markup in data was rendered and its URLs fetched** (BOU-675, security).
+  Strings holding HTML or entities like `&nbsp;` must be wrapped in `hiccup2.core/raw`; images load only from `data:` URIs.
+- **A scaffolded field's `default=` was unreachable from the wizards and `bb scaffold ai`, and stayed required on create**
+  (BOU-537). Both now take a default; a defaulted field is optional in the generated Create request.
+- **`wagoe.ai.core.parsing/module-spec->cli-args` rendered only the first entity** (BOU-541). Removed; nothing called it.
+  `bb scaffold ai` builds one command per entity.
 - **Without a boot profile, the port manager let `-Denv`, `ENV` and `ENVIRONMENT` choose its range** (BOU-530).
   Only `WAG_ENV` affects the HTTP port now, as it does the loaded config.
 - **A session request wrote `last_accessed_at` twice, and a database error during sign-in lookup answered 401** (BOU-666).

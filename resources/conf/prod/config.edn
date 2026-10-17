@@ -128,6 +128,9 @@
    :rate-limit {:enabled?  #boolean #or [#env HTTP_RATE_LIMIT_ENABLED "false"]
                 :limit     #long #or [#env HTTP_RATE_LIMIT 300]
                 :window-ms #long #or [#env HTTP_RATE_LIMIT_WINDOW_MS 60000]}
+   ;; Behind a load balancer, list its CIDRs so rate limiting and the audit
+   ;; log see the client rather than the proxy. Empty trusts no X-Forwarded-For.
+   ;; :trusted-proxies ["10.0.0.0/8"]
    :security {:csrf {:enabled? true
                      :secret   #or [#env CSRF_SECRET #env JWT_SECRET]}}}
 

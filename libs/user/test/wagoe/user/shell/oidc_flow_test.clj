@@ -137,7 +137,9 @@
     (boolean (when (get @state [issuer subject]) (swap! state dissoc [issuer subject])))))
 
 (defn- app
-  [& {:keys [auth-config] :as provider-opts}]
+  "`:user-settings` merge into `:wagoe/user`, `:auth-config` is the auth
+   service's; the other options configure the provider."
+  [& {:keys [user-settings auth-config] :as opts}]
   (reset! idp {})
   (let [users      (mem/->MemoryUserRepository (atom {}))
         sessions   (mem/->MemorySessionRepository (atom {}))
@@ -147,14 +149,14 @@
                                                        (or auth-config {}))
         provider   (merge {:issuer *issuer* :client-id "app" :client-secret "app-secret"
                            :link-by-email? true}
-                          (dissoc provider-opts :auth-config))
+                          (dissoc opts :user-settings :auth-config))
         _          (swap! idp assoc :client-secret (:client-secret provider))
         settings   {:base-url  "http://localhost:3000"
                     :providers {:fake provider}}
         client     (oidc/create-oidc-client {:settings settings :secret (apply str (repeat 40 "s"))
                                              :auth-service auth-svc :audit-repository audit
                                              :identity-repository identities})
-        config     {:active {:wagoe/user {:oidc settings}}}]
+        config     {:active {:wagoe/user (merge {:oidc settings} user-settings)}}]
     {:users users :sessions sessions :audit audit :identities identities :client client
      :user-service (service/create-user-service users sessions audit {} auth-svc)
      :start    (handlers/oidc-start-handler client config)
@@ -247,6 +249,11 @@
             cb   (callback! a (get-in resp [:cookies "oidc-pending" :value])
                             (authorize! (get-in resp [:headers "Location"])))]
         (is (= (str "0;url=" landed) (get-in cb [:headers "Refresh"])))))))
+
+(deftest ^:integration lands-where-the-app-says
+  (let [a (app :user-settings {:login-redirect {:user "/web/overzicht"}})]
+    (add-user! a)
+    (is (= "0;url=/web/overzicht" (get-in (sign-in! a) [:headers "Refresh"])))))
 
 (deftest ^:integration ^:security rejected-id-tokens-open-no-session
   (doseq [[reason override] [[:signature {:sign-with forged-keys}]
@@ -371,7 +378,7 @@
       (is (= [(:id u)] (map :user-id (vals @(:state (:identities a)))))))))
 
 (deftest ^:integration ^:security mfa-is-still-asked
-  (let [a      (app)
+  (let [a      (app :user-settings {:login-redirect {:user "/web/overzicht"}})
         secret (mfa/generate-totp-secret)
         ada    (add-user! a :mfa-enabled true :mfa-secret secret)
         resp   (sign-in! a)
@@ -387,6 +394,7 @@
       (is (= 1 (:failed-login-count (ports/find-user-by-id (:users a) (:id ada))))))
     (let [ok (submit (str (otp/get-totp-token secret)))]
       (is (= "ada@example.com" (authenticated-as a (session-token ok))))
+      (is (= "0;url=/web/overzicht" (get-in ok [:headers "Refresh"])) "lands per :login-redirect")
       (is (= 1 (count (ports/find-identities-by-user (:identities a) (:id ada))))))))
 
 (deftest ^:integration ^:security the-mfa-hook-decides-for-oidc-too

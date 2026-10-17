@@ -9,6 +9,7 @@
             [wagoe.user.shell.service :as user-service]
             [wagoe.user.shell.auth :as user-auth]
             [wagoe.user.shell.identity-persistence :as identity-persistence]
+            [wagoe.user.shell.landing :as landing]
             [wagoe.user.shell.mfa :as user-mfa]
             [wagoe.user.shell.oidc :as oidc]
             [wagoe.user.shell.middleware :as user-middleware]
@@ -309,17 +310,21 @@
 
    Called with the module's `:active` settings — nil when the user module is
    switched on in code rather than in config — and the context the application
-   supplies: `:config` and `:validation-config`. `:auth` becomes the auth
-   service's config. OIDC sign-in is wired only when the settings name a
-   provider under `[:oidc :providers]`."
+   supplies: `:config` and `:validation-config`. OIDC sign-in is wired only
+   when the settings name a provider under `[:oidc :providers]`. `:auth` becomes
+   the auth service's config.
+
+   `:login-redirect` and `:dashboard` are checked and resolved here, once, so a
+   bad value fails boot whichever components start."
   [settings {:keys [config validation-config]}]
-  (cond-> (base-graph config validation-config (:auth settings {}))
-    (seq (get-in settings [:oidc :providers]))
-    (-> (update :components assoc
-                :wagoe/user-oidc        {:settings            (:oidc settings)
-                                         :auth-service        (ig/ref :wagoe/auth-service)
-                                         :audit-repository    (ig/ref :wagoe/audit-repository)
-                                         :identity-repository (ig/ref :wagoe/user-identity-repository)}
-                :wagoe/user-oidc-routes {:oidc   (ig/ref :wagoe/user-oidc)
-                                         :config config})
-        (update :routes conj (ig/ref :wagoe/user-oidc-routes)))))
+  (let [config (landing/prepare config)]
+    (cond-> (base-graph config validation-config (:auth settings {}))
+      (seq (get-in settings [:oidc :providers]))
+      (-> (update :components assoc
+                  :wagoe/user-oidc        {:settings            (:oidc settings)
+                                           :auth-service        (ig/ref :wagoe/auth-service)
+                                           :audit-repository    (ig/ref :wagoe/audit-repository)
+                                           :identity-repository (ig/ref :wagoe/user-identity-repository)}
+                  :wagoe/user-oidc-routes {:oidc   (ig/ref :wagoe/user-oidc)
+                                           :config config})
+          (update :routes conj (ig/ref :wagoe/user-oidc-routes))))))
