@@ -2,7 +2,7 @@
   (:require [clojure.test :refer [deftest is testing use-fixtures]]
             [wagoe.tenant.shell.membership-service :as sut]
             [wagoe.tenant.ports :as ports]
-            [wagoe.observability.errors.ports :as error-ports]
+            [wagoe.observability.errors.shell.adapters.no-op :as no-op-errors]
             [wagoe.observability.metrics.ports :as metrics-ports]
             [wagoe.observability.logging.shell.adapters.no-op :as no-op-logging])
   (:import (java.util UUID)))
@@ -37,18 +37,7 @@
     Object
     (toString [_] "MockMetricsEmitter")))
 
-(def mock-error-reporter
-  (reify
-    error-ports/IErrorContext
-    (add-breadcrumb! [_ _breadcrumb] nil)
-    (with-context [_ _context-map f] (f))
-    (clear-breadcrumbs! [_] nil)
-    (set-user! [_ _user-info] nil)
-    (set-tags! [_ _tags] nil)
-    (set-extra! [_ _extra] nil)
-    (current-context [_] {})
-    Object
-    (toString [_] "MockErrorReporter")))
+(def mock-error-reporter (no-op-errors/create-error-reporting-component {}))
 
 ;; =============================================================================
 ;; Mock Repository

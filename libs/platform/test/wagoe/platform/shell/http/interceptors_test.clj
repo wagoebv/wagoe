@@ -1,7 +1,9 @@
 (ns wagoe.platform.shell.http.interceptors-test
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest testing is]]
+            [wagoe.observability.errors.ports :as error-ports]
             [wagoe.observability.logging.ports :as log-ports]
+            [wagoe.observability.tracing.ports :as tracing-ports]
             [wagoe.platform.shell.http.interceptors :as http-interceptors]
             [wagoe.config :as config]))
 
@@ -427,3 +429,48 @@
         (is (some #(and (= "HTTP request failed" (:event %))
                         (= "cid-704" (get-in % [:data :correlation-id])))
                   entries))))))
+
+;; ==============================================================================
+;; Error tracking and span status (BOU-714)
+;; ==============================================================================
+
+(defn- reported-and-traced
+  "What the default stack sends the error tracker, and records on the span, for
+   a request whose handler throws `ex`."
+  [ex]
+  (let [reported (atom [])
+        spans    (atom [])
+        reporter #_{:clj-kondo/ignore [:missing-protocol-method]}
+        (reify
+          error-ports/IErrorReporter
+          (capture-exception [_ e _] (swap! reported conj e))
+          error-ports/IErrorContext
+          (add-breadcrumb! [_ _] nil))
+        tracer   #_{:clj-kondo/ignore [:missing-protocol-method]}
+        (reify tracing-ports/ITracer
+          (start-span! [_ n _] n)
+          (end-span! [_ _] nil)
+          (set-attributes! [_ _ a] (swap! spans conj [:attrs a]))
+          (record-exception! [_ _ _] (swap! spans conj [:error])))]
+    (http-interceptors/run-http-interceptors
+     (fn [_] (throw ex))
+     http-interceptors/default-http-interceptors
+     {:request-method :get :uri "/x" :headers {}}
+     {:error-reporter reporter :tracer tracer})
+    {:reported @reported :spans @spans}))
+
+(deftest ^:unit a-typed-client-error-is-not-reported-nor-a-span-error
+  (doseq [[type status] [[:validation-error 400] [:forbidden 403]
+                         [:not-found 404] [:conflict 409]]]
+    (testing (str type)
+      (let [{:keys [reported spans]} (reported-and-traced (ex-info "nope" {:type type}))]
+        (is (empty? reported))
+        (is (= [[:attrs {:http.response.status_code status}]] spans))))))
+
+(deftest ^:unit a-server-error-is-reported-and-a-span-error
+  (doseq [ex [(RuntimeException. "boom")
+              (ex-info "boom" {:type :internal-error})]]
+    (testing (str ex)
+      (let [{:keys [reported spans]} (reported-and-traced ex)]
+        (is (= 1 (count reported)))
+        (is (= [[:attrs {:http.response.status_code 500}] [:error]] spans))))))

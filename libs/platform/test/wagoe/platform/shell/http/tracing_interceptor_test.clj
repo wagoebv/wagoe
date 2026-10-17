@@ -51,6 +51,22 @@
         "the exception was recorded on the span")
     (is (some #(= :end (first %)) events) "the span was ended")))
 
+(deftest ^:unit tracing-interceptor-leaves-a-client-error-span-unmarked
+  ;; OTel HTTP conventions: a server span's 4xx is not an error (BOU-714).
+  (let [log (atom [])
+        t   (recording-tracer log)
+        ctx ((:enter interceptor) {:request {:request-method :get :uri "/orders/1"}
+                                   :system {:tracer t}
+                                   :correlation-id "corr-3"})
+        _   ((:error interceptor) (assoc ctx
+                                         :exception (ex-info "gone" {:type :not-found})
+                                         :response {:status 404}))
+        events @log]
+    (is (not-any? #(= :exc (first %)) events))
+    (is (some #(= [:attrs {:span "HTTP GET /orders/1"} {:http.response.status_code 404}] %)
+              events))
+    (is (some #(= :end (first %)) events))))
+
 (deftest ^:unit tracing-interceptor-is-a-no-op-without-a-tracer
   (let [ctx {:request {:request-method :get :uri "/x"} :system {} :correlation-id "c"}
         after-enter ((:enter interceptor) ctx)]
