@@ -735,16 +735,13 @@
      :revoke-user-session
      {:user-id user-id :session-id session-id}
      (fn [{:keys [params]}]
-       ;; Found among the user's own sessions: an id from another account
-       ;; revokes nothing.
-       (if-let [session (->> (.find-sessions-by-user session-repository (:user-id params))
-                             (filter #(= (:session-id params) (:id %)))
-                             first)]
-         (do
-           (.update-session session-repository (assoc session :revoked-at (current-timestamp)))
-           (audit-logout! user-repository audit-repository session)
-           {:invalidated true})
-         {:invalidated false}))
+       (let [{:keys [user-id session-id]} params]
+         (if (.invalidate-user-session session-repository user-id session-id)
+           ;; No IP or agent: those of the device would misattribute who
+           ;; revoked it.
+           (do (audit-logout! user-repository audit-repository {:user-id user-id})
+               {:invalidated true})
+           {:invalidated false})))
      {:system {:user-repository user-repository
                :session-repository session-repository
                :auth-service auth-service}}))

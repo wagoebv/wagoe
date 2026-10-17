@@ -12,6 +12,7 @@
   (find-session-by-token [_ _] session)
   (find-sessions-by-user [_ _] [])
   (invalidate-session [_ _] true)
+  (invalidate-user-session [_ _ _] true)
   (invalidate-all-user-sessions [_ _] 0)
   (update-session [_ _] nil)
   (find-all-sessions [_] [])

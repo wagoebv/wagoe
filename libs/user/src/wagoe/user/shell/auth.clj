@@ -236,9 +236,8 @@
    user read before it, so parallel failures each count (BOU-696)."
   [user-repository auth-config user-id current-time]
   (when-let [n (ports/increment-failed-login-count user-repository user-id)]
-    (let [{:keys [lockout-until]} (auth-core/calculate-failed-login-consequences n auth-config current-time)]
-      (when lockout-until
-        (ports/update-user user-repository {:id user-id :lockout-until lockout-until})))))
+    (when-let [lockout-until (auth-core/failed-login-lockout n auth-config current-time)]
+      (ports/update-user user-repository {:id user-id :lockout-until lockout-until}))))
 
 (defn authenticate-user
   "Coordinate user authentication with all security checks including MFA.

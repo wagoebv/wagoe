@@ -106,6 +106,12 @@
                (swap! state assoc-in [(:id session) :revoked-at] (Instant/now))
                true)))
 
+  (invalidate-user-session [_ user-id session-id]
+    (let [s (get @state session-id)]
+      (boolean (when (and s (= user-id (:user-id s)) (nil? (:revoked-at s)))
+                 (swap! state assoc-in [session-id :revoked-at] (Instant/now))
+                 true))))
+
   (invalidate-all-user-sessions [_ user-id]
     (let [live (filter #(and (= user-id (:user-id %)) (nil? (:revoked-at %)))
                        (vals @state))]

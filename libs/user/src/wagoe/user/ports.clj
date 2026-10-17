@@ -58,8 +58,9 @@
 
   (create-session [this session-entity])
   ;; Generates :id when absent. Returns the entity with its plaintext
-  ;; :session-token, the only time it is handed out: the database adapter
-  ;; stores a hash, and its reads return no :session-token (BOU-696).
+  ;; :session-token, the only time it is handed out. An adapter stores a hash
+  ;; of the token, never the token, and its reads return no :session-token
+  ;; (BOU-696).
 
   (find-session-by-token [this session-token])
   ;; Returns the session entity, or nil when absent, expired or revoked.
@@ -77,6 +78,10 @@
 
   (invalidate-session [this session-token])
   ;; Sets :revoked-at. Idempotent. Returns boolean.
+
+  (invalidate-user-session [this user-id session-id])
+  ;; Sets :revoked-at on the session with that id, when it belongs to the user
+  ;; and is not yet revoked. Returns boolean.
 
   (invalidate-all-user-sessions [this user-id])
   ;; Revokes every active session for the user. Returns the count revoked.
@@ -220,7 +225,7 @@
 
   (revoke-user-session [this user-id session-id])
   ;; Revokes one of the user's sessions, named by id, and audits a logout.
-  ;; Returns {:invalidated boolean}; false when the user holds no such session.
+  ;; Returns {:invalidated boolean}; false when the user holds no such live session.
 
   (list-audit-logs [this options])
   ;; options as IUserAuditRepository/find-audit-logs.

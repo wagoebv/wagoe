@@ -26,14 +26,14 @@
             [wagoe.user.ports :as ports]
             [wagoe.user.schema :as user-schema]
             [wagoe.platform.shell.persistence-interceptors :as persistence-interceptors]
+            [buddy.core.codecs :as codecs]
+            [buddy.core.hash :as hash]
             [cheshire.core]
             [clojure.set :as set]
             [clojure.string :as str]
             [clojure.walk]
             [clojure.tools.logging :as log])
-  (:import [java.nio.charset StandardCharsets]
-           [java.security MessageDigest]
-           [java.util HexFormat UUID]))
+  (:import [java.util UUID]))
 
 ;; =============================================================================
 ;; Session token hashing
@@ -44,10 +44,7 @@
    random bits, so an unsalted fast hash is enough, and a read of the table
    yields nothing a client can present (BOU-696)."
   [token]
-  (when token
-    (.formatHex (HexFormat/of)
-                (.digest (MessageDigest/getInstance "SHA-256")
-                         (.getBytes ^String token StandardCharsets/UTF_8)))))
+  (some-> token hash/sha256 codecs/bytes->hex))
 
 ;; =============================================================================
 ;; Schema Initialization
@@ -76,12 +73,13 @@
    token 43, so a row is only ever hashed once; the guard on the old value keeps
    two booting replicas from hashing the same row twice."
   [ctx]
-  (doseq [{:keys [id session-token]} (db/execute-query! ctx {:select [:id :session_token]
-                                                              :from   [:user_sessions]
-                                                              :where  [:<> [:length :session_token] 64]})]
-    (db/execute-update! ctx {:update :user_sessions
-                             :set    {:session_token (session-token-hash session-token)}
-                             :where  [:and [:= :id id] [:= :session_token session-token]]})))
+  (db/with-transaction [tx ctx]
+    (doseq [{:keys [id session-token]} (db/execute-query! tx {:select [:id :session_token]
+                                                               :from   [:user_sessions]
+                                                               :where  [:<> [:length :session_token] 64]})]
+      (db/execute-update! tx {:update :user_sessions
+                              :set    {:session_token (session-token-hash session-token)}
+                              :where  [:and [:= :id id] [:= :session_token session-token]]}))))
 
 (def ^:private audit-action-check "chk_user_audit_log_action")
 
@@ -969,6 +967,19 @@
                             [:is :revoked_at nil]]}
              affected-rows (db/execute-update! ctx query)]
          (> affected-rows 0)))
+     {:db-ctx ctx}))
+
+  (invalidate-user-session [_ user-id session-id]
+    (persistence-interceptors/execute-persistence-operation
+     :invalidate-user-session
+     {:user-id user-id :session-id session-id}
+     (fn [{:keys [params]}]
+       (pos? (db/execute-update! ctx {:update :user_sessions
+                                      :set    {:revoked_at (type-conversion/instant->string (java.time.Instant/now))}
+                                      :where  [:and
+                                               [:= :id (type-conversion/uuid->string (:session-id params))]
+                                               [:= :user_id (type-conversion/uuid->string (:user-id params))]
+                                               [:is :revoked_at nil]]})))
      {:db-ctx ctx}))
 
   (invalidate-all-user-sessions [_ user-id]

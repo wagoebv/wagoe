@@ -99,26 +99,17 @@
       (is (true? (:allowed? result))))))
 
 ;; =============================================================================
-;; calculate-failed-login-consequences
+;; failed-login-lockout
 ;; =============================================================================
 
-(deftest ^:unit calculate-failed-login-consequences-test
-  (testing "reports the count it is given: the increment already happened"
-    (is (= 1 (:failed-login-count (auth/calculate-failed-login-consequences 1 login-config now)))))
+(deftest ^:unit failed-login-lockout-test
+  (testing "locks at max attempts, from the count the increment returned"
+    (let [until (auth/failed-login-lockout 5 login-config now)]
+      (is (some? until))
+      (is (.isAfter until now))))
 
-  (testing "sets should-alert? when threshold is reached"
-    (is (true? (:should-alert? (auth/calculate-failed-login-consequences 3 login-config now)))))
-
-  (testing "does not set should-alert? below threshold"
-    (is (false? (:should-alert? (auth/calculate-failed-login-consequences 1 login-config now)))))
-
-  (testing "sets lockout-until when max attempts reached"
-    (let [result (auth/calculate-failed-login-consequences 5 login-config now)]
-      (is (some? (:lockout-until result)))
-      (is (.isAfter (:lockout-until result) now))))
-
-  (testing "does not set lockout-until below max attempts"
-    (is (nil? (:lockout-until (auth/calculate-failed-login-consequences 4 login-config now))))))
+  (testing "nothing below max attempts"
+    (is (nil? (auth/failed-login-lockout 4 login-config now)))))
 
 ;; =============================================================================
 ;; prepare-successful-login-updates
