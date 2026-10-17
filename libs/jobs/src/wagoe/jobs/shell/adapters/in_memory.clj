@@ -507,8 +507,7 @@
                                            (assoc m k (+ now (long ttl-ms))))))]
       (not= (get old k) (get new k))))
   (release-key! [_ scope key]
-    (swap! claims dissoc [scope key])
-    true)
+    (swap! claims dissoc [scope key]))
   (purge-expired-keys! [_]
     (let [now (now-ms)
           [old new] (swap-vals! claims #(into {} (filter (fn [[_ until]] (< now until))) %))]
@@ -528,8 +527,7 @@
                                         {:owner owner :until (+ now (long lease-ms))}
                                         l)))))))
   (release-lease! [_ owner]
-    (swap! lease #(if (= owner (:owner %)) nil %))
-    nil)
+    (swap! lease #(if (= owner (:owner %)) nil %)))
   (last-tick [_ schedule-name]
     (get @ticks schedule-name))
   (record-tick! [_ schedule-name tick]

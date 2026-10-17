@@ -633,7 +633,7 @@
 ;; lease or revive a claim early.
 
 (def ^:private ticker-lease-key "jobs:ticker:lease")
-(def ^:private last-tick-key "jobs:recurring:last-tick")
+(def ^:private ^String last-tick-key "jobs:recurring:last-tick")
 
 (defn- idempotency-key [scope key] (str "idempotency:" scope ":" key))
 
@@ -656,8 +656,7 @@
         (= "OK" (.set redis ^String (idempotency-key scope key) "1"
                       (-> (SetParams.) (.nx) (.px (long ttl-ms))))))))
   (release-key! [_ scope key]
-    (with-redis pool (fn [^Jedis redis] (.del redis ^String (idempotency-key scope key))))
-    true)
+    (with-redis pool (fn [^Jedis redis] (.del redis ^String (idempotency-key scope key)))))
   ;; Redis expires claims itself.
   (purge-expired-keys! [_] nil))
 
@@ -678,16 +677,15 @@
     (with-redis pool
       (fn [^Jedis redis]
         (.eval redis ^String release-lease-script
-               ^java.util.List [ticker-lease-key] ^java.util.List [(str owner)])))
-    nil)
+               ^java.util.List [ticker-lease-key] ^java.util.List [(str owner)]))))
   (last-tick [_ schedule-name]
-    (some-> (with-redis pool (fn [^Jedis redis] (.hget redis last-tick-key schedule-name)))
+    (some-> (with-redis pool (fn [^Jedis redis] (.hget redis last-tick-key ^String schedule-name)))
             parse-long
             Instant/ofEpochMilli))
   (record-tick! [_ schedule-name tick]
     (with-redis pool
       (fn [^Jedis redis]
-        (.hset redis last-tick-key schedule-name (str (.toEpochMilli ^Instant tick)))))
+        (.hset redis last-tick-key ^String schedule-name (str (.toEpochMilli ^Instant tick)))))
     tick))
 
 (defn create-redis-recurring-state

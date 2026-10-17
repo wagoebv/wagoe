@@ -34,8 +34,7 @@
 (deftest ^:unit the-scheduler-takes-its-schedules-from-config
   (let [runtime   (ig/init-key :wagoe/jobs-runtime {:provider :memory})
         scheduler (ig/init-key :wagoe/job-scheduler
-                               {:queue     (:queue runtime)
-                                :runtime   runtime
+                               {:runtime   runtime
                                 :recurring {:nightly-report {:cron "0 2 * * *" :args {:kind :sales}}}
                                 :scheduler {:zone "Europe/Amsterdam"}})]
     (try
@@ -49,6 +48,5 @@
     (let [runtime (ig/init-key :wagoe/jobs-runtime {:provider :memory})]
       (is (thrown? clojure.lang.ExceptionInfo
                    (ig/init-key :wagoe/job-scheduler
-                                {:queue     (:queue runtime)
-                                 :runtime   runtime
+                                {:runtime   runtime
                                  :recurring {:nightly-report {:cron "0 2 * *"}}}))))))

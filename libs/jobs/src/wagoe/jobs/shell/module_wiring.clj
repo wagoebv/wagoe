@@ -194,8 +194,8 @@
   (when (seq workers) (worker/stop-worker-pool! workers)))
 
 (defmethod ig/init-key :wagoe/job-scheduler
-  [_ {:keys [queue runtime recurring scheduler]}]
-  (let [s (recurring/create-scheduler {:queue       queue
+  [_ {:keys [runtime recurring scheduler]}]
+  (let [s (recurring/create-scheduler {:queue       (:queue runtime)
                                        :state       (:recurring-state runtime)
                                        :idempotency (:idempotency runtime)}
                                       scheduler)]
@@ -230,8 +230,7 @@
       :wagoe/job-store    {:runtime (ig/ref :wagoe/jobs-runtime)}
       :wagoe/job-stats    {:runtime (ig/ref :wagoe/jobs-runtime)}
       :wagoe/idempotency-store {:runtime (ig/ref :wagoe/jobs-runtime)}
-      :wagoe/job-scheduler {:queue     (ig/ref :wagoe/job-queue)
-                            :runtime   (ig/ref :wagoe/jobs-runtime)
+      :wagoe/job-scheduler {:runtime   (ig/ref :wagoe/jobs-runtime)
                             :recurring (:recurring settings)
                             :scheduler (:scheduler settings)}
       :wagoe/job-registry {:handler-maps []}

@@ -130,26 +130,22 @@
 (defn latest-run
   "The last instant in (`after`, `upto`] that `schedule` fires in `zone`, or nil."
   [schedule zone ^Instant after ^Instant upto]
-  (let [from  (fn [^long window]
-                (let [t (.minusMillis upto window)]
-                  (if (.isAfter t after) t after)))
-        starts (concat (map from lookbacks) [after])
-        walk   (fn [first-run]
-                 (loop [t first-run]
-                   (let [n (next-run schedule zone t)]
-                     (if (and n (not (.isAfter ^Instant n upto))) (recur n) t))))]
+  (let [run-by (fn [t]
+                 (when-let [n (next-run schedule zone t)]
+                   (when-not (.isAfter ^Instant n upto) n)))
+        from   (fn [^long window]
+                 (let [t (.minusMillis upto window)]
+                   (if (.isAfter t after) t after)))]
     (some (fn [start]
-            (let [n (next-run schedule zone start)]
-              (when (and n (not (.isAfter ^Instant n upto)))
-                (walk n))))
-          starts)))
+            (when-let [n (run-by start)]
+              (loop [t n]
+                (if-let [n' (run-by t)] (recur n') t))))
+          (concat (map from lookbacks) [after]))))
 
 (defn due-tick
   "What a ticker should enqueue now for a schedule last fired at `last-tick`:
    `{:tick instant :skipped? bool}`, or nil when nothing is due. Ticks missed
    while nothing ran collapse into the latest one; `:skipped?` says some did."
   [schedule zone ^Instant last-tick ^Instant now]
-  (when-let [first-due (next-run schedule zone last-tick)]
-    (when-not (.isAfter ^Instant first-due now)
-      (let [tick (latest-run schedule zone last-tick now)]
-        {:tick tick :skipped? (not= tick first-due)}))))
+  (when-let [tick (latest-run schedule zone last-tick now)]
+    {:tick tick :skipped? (not= tick (next-run schedule zone last-tick))}))

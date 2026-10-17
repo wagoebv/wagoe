@@ -62,6 +62,10 @@
      :opts        (assoc opts :zone (zone-of (:zone opts)))
      :owner       (str (random-uuid))
      :schedules   (atom {})
+     ;; Only the lease holder writes ticks, so while it holds the lease it can
+     ;; skip a schedule until its next run instead of reading it every pass.
+     :held?       (atom false)
+     :next-due    (atom {})
      :purged-at   (atom 0)}))
 
 (defn schedule-recurring!
@@ -70,7 +74,7 @@
    id like \"Europe/Amsterdam\". Calling it again for a job type replaces its
    schedule. Throws `:validation-error` for an expression that is malformed or
    never fires."
-  [{:keys [schedules opts]} job-type cron-expr & [job-opts]]
+  [{:keys [schedules next-due opts]} job-type cron-expr & [job-opts]]
   (let [schedule (cron/parse cron-expr)
         zone     (zone-of (:zone job-opts (:zone opts)))
         now      (Instant/now)]
@@ -79,8 +83,10 @@
     (when-not (cron/next-run schedule zone now)
       (throw (ex-info (str "Cron expression never fires: " cron-expr)
                       {:type :validation-error :job-type job-type :expression cron-expr})))
+    (swap! next-due dissoc job-type)
     (swap! schedules assoc job-type
-           {:schedule      schedule
+           {:name          (type-name job-type)
+            :schedule      schedule
             :zone          zone
             :job           (select-keys job-opts [:args :queue :priority :max-retries])
             :registered-at now})
@@ -93,15 +99,20 @@
 
 (defn- tick-schedule!
   "Enqueue `job-type`'s due tick, if any; true when it enqueued."
-  [{:keys [state] :as scheduler} job-type {:keys [schedule zone registered-at] :as entry} now]
-  (let [since (or (ports/last-tick state (type-name job-type)) registered-at)]
-    (when-let [{:keys [tick skipped?]} (cron/due-tick schedule zone since now)]
-      (when skipped?
-        (log/warn "Recurring job missed ticks; running the latest once"
-                  {:job-type job-type :since since :tick tick}))
-      (let [fired? (some? (fire! scheduler job-type entry tick now))]
-        (ports/record-tick! state (type-name job-type) tick)
-        fired?))))
+  [{:keys [state next-due] :as scheduler} job-type {:keys [schedule zone registered-at] schedule-name :name :as entry}
+   ^Instant now]
+  (when-not (some-> ^Instant (get @next-due job-type) (.isAfter now))
+    (let [since (or (ports/last-tick state schedule-name) registered-at)
+          {:keys [tick skipped?]} (cron/due-tick schedule zone since now)
+          fired? (when tick
+                   (when skipped?
+                     (log/warn "Recurring job missed ticks; running the latest once"
+                               {:job-type job-type :since since :tick tick}))
+                   (let [fired? (some? (fire! scheduler job-type entry tick now))]
+                     (ports/record-tick! state schedule-name tick)
+                     fired?))]
+      (swap! next-due assoc job-type (cron/next-run schedule zone (or tick since)))
+      fired?)))
 
 (defn- purge-hourly! [{:keys [idempotency purged-at]}]
   (let [now (System/currentTimeMillis)]
@@ -112,11 +123,15 @@
 (defn tick!
   "One ticker pass at `now`. Does nothing unless this scheduler holds the
    lease. Returns the job types it enqueued."
-  [{:keys [state schedules owner opts] :as scheduler} ^Instant now]
+  [{:keys [state schedules owner opts held? next-due] :as scheduler} ^Instant now]
   (let [entries @schedules]
     (if-not (and (seq entries) (ports/acquire-lease! state owner (:lease-ms opts)))
-      []
-      (let [fired (into []
+      (do (reset! held? false) [])
+      (let [_     (when-not @held?
+                    ;; Newly the holder: another may have fired ticks meanwhile.
+                    (reset! next-due {})
+                    (reset! held? true))
+            fired (into []
                         (keep (fn [[job-type entry]]
                                 (try
                                   (when (tick-schedule! scheduler job-type entry now) job-type)
@@ -147,5 +162,7 @@
   (when-let [^ScheduledExecutorService ex (:executor scheduler)]
     (.shutdown ex)
     ;; Released only once no pass is running, or two would overlap.
-    (when (.awaitTermination ex 5 TimeUnit/SECONDS)
+    (when (or (.awaitTermination ex 5 TimeUnit/SECONDS)
+              (do (.shutdownNow ex)
+                  (.awaitTermination ex 1 TimeUnit/SECONDS)))
       (ports/release-lease! state owner))))
