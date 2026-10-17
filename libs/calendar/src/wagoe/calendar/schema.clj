@@ -30,6 +30,8 @@
    [:end        inst?]                              ; java.time.Instant (UTC)
    [:timezone   [:and :string [:fn valid-timezone?]]]  ; IANA timezone with validation
    [:recurrence {:optional true} :string]           ; RFC 5545 RRULE string
+   [:all-day?   {:optional true} :boolean]          ; dates in :timezone, no time shown
+   [:href       {:optional true} :string]           ; link for the UI badge
    [:attendees  {:optional true} [:vector :uuid]]])
 
 ;; =============================================================================

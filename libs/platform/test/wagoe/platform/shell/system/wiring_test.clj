@@ -94,7 +94,7 @@
       (is (false? (get-in @captured-config [:system :rate-limit :enabled?]))))
 
     (testing "the returned handler is the compiled handler after wrapping"
-      (is (= {:status 200 :body {:request-method :get}}
+      (is (= {:status 200 :body {:request-method :get :client-ip nil}}
              (handler {:request-method :get}))))))
 
 (deftest ^:unit http-handler-normalizes-web-routes-and-skips-optional-middleware-when-disabled
@@ -167,7 +167,7 @@
                                    :params {"_method" "PATCH"}}}
                (wrapped-handler {:request-method :post
                                  :params {"_method" "PATCH"}})))
-        (is (= {:status 200 :body {:request-method :get}}
+        (is (= {:status 200 :body {:request-method :get :client-ip nil}}
                (handler {:request-method :get})))))))
 
 (deftest ^:security ^:unit http-handler-fails-loud-when-csrf-enabled-without-secret
@@ -223,7 +223,11 @@
                                              :headers {"x-forwarded-for" "198.51.100.7"}})
                                    [:body :client-ip]))]
     (is (= "198.51.100.7" (seen "10.1.2.3")) "behind a trusted proxy: the forwarded client")
-    (is (= "203.0.113.9" (seen "203.0.113.9")) "from anyone else: the peer, header ignored")))
+    (is (= "203.0.113.9" (seen "203.0.113.9")) "from anyone else: the peer, header ignored")
+    (let [body (:body (handler {:request-method :get :uri "/x" :remote-addr "10.1.2.3"
+                                :headers {"x-forwarded-for" "unknown"}}))]
+      (is (and (contains? body :client-ip) (nil? (:client-ip body)))
+          "an unnamed client is nil, not the proxy (BOU-695)"))))
 
 (deftest ^:unit component-init-falls-back-to-no-op-providers-for-unknown-adapters
   (with-redefs [wagoe.observability.logging.shell.adapters.no-op/create-logging-component

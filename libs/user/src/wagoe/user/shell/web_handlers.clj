@@ -255,6 +255,25 @@
         (response/redirect "/web/dashboard")
         (response/redirect "/web")))))
 
+(defn- login-context [request]
+  {:ip-address (client-ip/request-ip request)
+   :user-agent (get-in request [:headers "user-agent"])})
+
+(def ^:private secret-fields ["password" "mfa-code" :password :mfa-code])
+
+(defn- without-secrets
+  "`request` minus the submitted password and MFA code: the sign-in hook gets
+   the request, and should not be one log line away from a plaintext password."
+  [request]
+  (reduce (fn [r k] (cond-> r (map? (get r k)) (update k #(apply dissoc % secret-fields))))
+          request
+          [:form-params :params :multipart-params]))
+
+(defn- landing-path
+  "Where `user`, signing in with `request`, lands."
+  [config user request]
+  (landing/path-for config user (assoc (login-context request) :request (without-secrets request))))
+
 (defn web-root-page-handler
   "Handler for the web root landing page (GET /web).
 
@@ -276,7 +295,7 @@
                       (user-ports/validate-session user-service session-token)
                       (catch Exception _ nil)))]
       (if session
-        (response/redirect (landing/path-for config (:user session)))
+        (response/redirect (landing-path config (:user session) request))
         (html-response request (user-ui/web-root-page {}))))))
 
 (defn dashboard-page-handler
@@ -432,9 +451,8 @@
           prepared-data {:email (get form-data "email")
                          :password (get form-data "password")
                          :remember (boolean (get form-data "remember"))
-                         :mfa-code (get form-data "mfa-code")
-                         :ip-address (client-ip/request-ip request)
-                         :user-agent (get-in request [:headers "user-agent"])}
+                         :mfa-code (get form-data "mfa-code")}
+          prepared-data (merge prepared-data (login-context request))
           [valid? validation-errors validated-data]
           (validate-request-data user-schema/LoginRequest prepared-data)
           logo-url (get-in config [:wagoe/settings :logo-url])]
@@ -452,7 +470,7 @@
           (let [auth-result (user-ports/authenticate-user user-service validated-data)
                 user (:user auth-result)
                 return-to (when (:authenticated auth-result)
-                            (safe-return-url raw-return-to (landing/path-for config user)))]
+                            (safe-return-url raw-return-to (landing-path config user request)))]
             (log/info "Login attempt" {:email (:email validated-data)
                                        :authenticated (:authenticated auth-result)
                                        :result-keys (keys auth-result)
@@ -587,10 +605,6 @@
       (assoc-in [:cookies oidc-pending-cookie] oidc-cookie-cleared)
       (assoc-in [:cookies oidc-mfa-cookie] oidc-cookie-cleared)))
 
-(defn- login-context [request]
-  {:ip-address (client-ip/request-ip request)
-   :user-agent (get-in request [:headers "user-agent"])})
-
 (defn- oidc-failure
   "The login page again, saying why, for an :oidc/* error."
   [request config {:keys [type] :as error}]
@@ -612,7 +626,7 @@
 (defn- oidc-signed-in
   "Set the session cookie exactly as password login does, and move on."
   [request config {:keys [user session return-to]}]
-  (let [location (safe-return-url return-to (landing/path-for config user))]
+  (let [location (safe-return-url return-to (landing-path config user request))]
     (-> (html-response request (user-ui/oidc-continue-page location) 200
                        {"Refresh" (str "0;url=" location)})
         (assoc-in [:cookies "session-token"] (session-cookie config (:session-token session)))

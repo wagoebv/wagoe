@@ -86,7 +86,7 @@
    forget: the keys change when modules change, and nothing would notice."
   {:user     {:keys [:wagoe/user-db-schema :wagoe/user-repository
                      :wagoe/session-repository :wagoe/audit-repository
-                     :wagoe/mfa-service :wagoe/auth-service
+                     :wagoe/mfa-service :wagoe/auth-hooks :wagoe/auth-service
                      :wagoe/user-service :wagoe/user-routes
                      :wagoe/user-http-middleware :wagoe/admin-only-middleware
                      :wagoe/user-home-middleware

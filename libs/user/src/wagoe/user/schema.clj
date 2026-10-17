@@ -137,7 +137,7 @@
    [:last-accessed-at {:optional true} [:maybe inst?]]
    [:revoked-at {:optional true} [:maybe inst?]]
    [:user-agent {:optional true} :string]
-   [:ip-address {:optional true} :string]])
+   [:ip-address {:optional true} [:maybe :string]]])
 
 (def UserIdentity
   "Schema for a link between a user and an OpenID Connect (issuer, subject)."
@@ -198,7 +198,7 @@
    value added here needs the check widened on existing databases, as
    `:permanent-delete` did (BOU-682)."
   [:create :update :delete :permanent-delete :activate :deactivate :role-change
-   :bulk-action :login :logout :group-join :group-leave :grant-add :grant-remove])
+   :bulk-action :login :logout :session-revoked :group-join :group-leave :grant-add :grant-remove])
 
 (def UserAuditLog
   "Schema for User Audit Log entity - tracks all user-related actions for compliance and security.

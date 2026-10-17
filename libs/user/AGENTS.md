@@ -272,7 +272,9 @@ curl -X POST http://localhost:3000/api/auth/login \
 
 ### Deciding Per Login
 
-`:wagoe/user {:auth {:mfa-required? my.app/mfa-required?}}` names a `(fn [user login-context] bool)`, resolved at boot. It replaces the default `(:mfa-enabled user)` for password and OIDC logins (OIDC adds `:provider` to the context). False waives the code without touching the user's MFA settings. True for a user without MFA refuses the login with `:mfa-enrolment-required` (`:oidc/mfa-enrolment-required` for OIDC): enrolment needs a signed-in user. The hook never sees password or MFA secrets, and `:ip-address` is the client IP (`:wagoe/http :trusted-proxies` decides it behind a proxy). `:auth` is passed whole as the auth service's config, CLI included.
+`:wagoe/user {:auth {:mfa-required? my.app/mfa-required?}}` names a `(fn [user login-context] bool)`, resolved at boot. It replaces the default `(:mfa-enabled user)` for password and OIDC logins (OIDC adds `:provider` to the context). False waives the code without touching the user's MFA settings. True for a user without MFA refuses the login with `:mfa-enrolment-required` (`:oidc/mfa-enrolment-required` for OIDC): enrolment needs a signed-in user. The hook never sees password or MFA secrets, and `:ip-address` is the client IP (`:wagoe/http :trusted-proxies` decides it behind a proxy), or nil when the proxy did not name the client. Match it with `client-ip/in-any?`, which is false for nil, so an office-network waiver still asks for the code. `:auth` is passed whole as the auth service's config, CLI included.
+
+To read state a component holds, such as allowed networks kept in the database, contribute the hook from an app module instead of naming a var: its `ig-config` returns `:auth {:mfa-required? (ig/ref :my.app/mfa-policy)}`, and the component is a `(fn [user login-context])` or implements `ports/IMfaPolicy`. Each system then runs its own component, so two systems in one JVM do not share state. A hook set both in config and by a module, or by two modules, fails the boot.
 
 Do not waive MFA by making the repository report `:mfa-enabled false`: login writes the user back, which turns MFA off in the database.
 
@@ -330,7 +332,7 @@ Three `:wagoe/user` keys, all checked at boot; a bad value fails it.
 {;; Where a signed-in user lands: paths by role, `:default` for the rest,
  ;; merged over {:admin "/web/admin/users" :default "/web/dashboard"}.
  :login-redirect {:user "/web/overzicht" :default "/web/overzicht"}
- ;; or a function of the user, resolved at boot; nil or an off-site path
+ ;; or a (fn [user login-context]), resolved at boot; nil or an off-site path
  ;; means the default:   :login-redirect my.app.web/landing
 
  ;; false: /web/dashboard is not mounted, so the app can route it.
@@ -343,7 +345,10 @@ Three `:wagoe/user` keys, all checked at boot; a bad value fails it.
 ```
 
 `:login-redirect` applies to password login, MFA completion, OIDC sign-in and
-`/web` for a signed-in user. A safe `return-to` still wins. With
+`/web` for a signed-in user. A safe `return-to` still wins. The function's
+login context has `:ip-address` (the client IP), `:user-agent` and the Ring
+`:request`. An app module can contribute it as `:auth {:login-redirect (ig/ref …)}`
+instead, a function or an `ports/ILoginRedirect`, like `:mfa-required?` above. With
 `:dashboard false` and no `:login-redirect`, users land on `/web/dashboard`, so
 serve it or point the redirect elsewhere. `:home` is bound per request
 (`wagoe.shared.ui.core.home/*path*`), so the shared, admin, search and workflow

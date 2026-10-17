@@ -332,3 +332,21 @@
 
   (user-groups [this user]))
   ;; user: a user map or id. The groups the user is in.
+
+;; =============================================================================
+;; Sign-in hooks
+;; =============================================================================
+;;
+;; What an application component implements to decide, per sign-in, whether a
+;; second factor is asked and where the user lands. A plain function of the same
+;; arguments works too.
+
+(defprotocol IMfaPolicy
+  (mfa-required? [this user login-context]))
+  ;; login-context: :ip-address, :user-agent, :provider for OIDC.
+  ;; Returns truthy to ask for a code.
+
+(defprotocol ILoginRedirect
+  (login-path [this user login-context]))
+  ;; login-context: :ip-address, :user-agent and the Ring :request.
+  ;; Returns a path on this site, or nil for the default.

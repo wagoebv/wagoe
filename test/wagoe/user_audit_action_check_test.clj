@@ -1,7 +1,8 @@
 (ns wagoe.user-audit-action-check-test
   "A database created before `:permanent-delete` checks user_audit_log's action
    against the old list, and refused the entry a permanent delete writes; the
-   service only warns about a failed audit write (BOU-682). Boot and `migrate
+   service only warns about a failed audit write (BOU-682). `:session-revoked`
+   is the same (BOU-698). Boot and `migrate
    up` widen the check, on every engine. H2 re-applies its checks at boot.
 
    Needs MySQL: `bb test:services up`."
@@ -17,9 +18,9 @@
             [wagoe.user.shell.persistence :as persistence]))
 
 (def ^:private old-audit-log
-  "UserAuditLog as it was before `:permanent-delete`."
+  "UserAuditLog as it was before `:permanent-delete` and `:session-revoked`."
   (mapv #(if (and (vector? %) (= :action (first %)))
-           [:action (into [:enum] (remove #{:permanent-delete}) user-schema/audit-actions)]
+           [:action (into [:enum] (remove #{:permanent-delete :session-revoked}) user-schema/audit-actions)]
            %)
         user-schema/UserAuditLog))
 
@@ -38,9 +39,11 @@
       (is (not (log-test/logged? 'wagoe.user.shell.persistence :info #"Widening"))
           "a widened check is left alone"))
     (ports/create-audit-log repo (entry audit/permanently-delete-user-audit-entry))
-    (is (= #{:delete :permanent-delete}
+    (ports/create-audit-log repo (audit/session-revoked-audit-entry (random-uuid) (random-uuid) "admin@example.com"
+                                                                    (random-uuid) "u@example.com" nil nil))
+    (is (= #{:delete :permanent-delete :session-revoked}
            (set (map :action (:audit-logs (ports/find-audit-logs repo {:limit 10})))))
-        "the earlier entry is kept, and the new one written")
+        "the earlier entry is kept, and the new ones written")
     (is (thrown? Exception (ports/create-audit-log repo (assoc (entry audit/delete-user-audit-entry)
                                                                :action :no-such-action)))
         "and the check still checks")))
@@ -48,7 +51,7 @@
 (defn- check-widened-and-close [ctx]
   (try (check-widened ctx) (finally (factory/close-db-context! ctx))))
 
-(deftest ^:integration the-audit-action-check-takes-permanent-delete
+(deftest ^:integration the-audit-action-check-takes-new-actions
   (testing "sqlite"
     (let [f   (doto (java.io.File/createTempFile "audit-check-" ".db") .deleteOnExit)
           ctx (factory/db-context (factory/sqlite-config (str f)))

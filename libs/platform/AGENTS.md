@@ -243,6 +243,9 @@ Discovery builds a scaffolded module's four keys (`:wagoe/<name>`, `-repository`
   one. They run outermost first: framework modules, then app modules, each group
   sorted by module key, then the handler's own `:extra-middleware`.
 - Any other `:http` key is a single slot; two modules setting it fail the boot.
+- `:auth {:mfa-required? … :login-redirect …}` hands sign-in hooks, often refs to
+  your components, to the user module's `:wagoe/auth-hooks`. One module per hook;
+  contributing one without the user module fails the boot. See `libs/user/AGENTS.md`.
 
 ### Authentication is the default
 
@@ -381,7 +384,9 @@ client is evicted to make room. So even a sustained stream of fresh client ids
 on a long-running node.
 
 The bucket is `user:<id>` for a signed-in request, else `ip:<client ip>`. No
-header picks it: an unchecked `x-api-key` once did (BOU-690).
+header picks it: an unchecked `x-api-key` once did (BOU-690). A client the proxy
+did not name (see below) goes in `unresolved:<proxy address>`: not exempt, and
+apart from the named clients behind that proxy.
 
 ### Client IP
 
@@ -391,6 +396,18 @@ Read it through `wagoe.platform.core.http.client-ip/request-ip`, never
 when the peer is in `:wagoe/http :trusted-proxies` (CIDRs, default empty); the
 client is then the right-most hop that is not a trusted proxy. An invalid CIDR
 fails the boot.
+
+When the hop the walk stops at is not an address (`unknown`), `request-ip` is
+nil, not the proxy: the proxy's address would put an outside client inside the
+proxy's network (BOU-695). Treat nil as "not allowed" wherever you authorise by
+address.
+
+Match addresses with `(client-ip/in-network? ip cidr)` and
+`(client-ip/in-any? ip cidrs)` rather than a parser of your own. Strings or
+parsed values; ports, brackets and zone ids are ignored, IPv4-mapped IPv6 is
+IPv4, and anything unparseable (nil included) is false. Parse configured ranges
+once with `parse-trusted-proxies` so a typo fails loudly instead of matching
+nothing.
 
 ### Explicit / per-route form
 

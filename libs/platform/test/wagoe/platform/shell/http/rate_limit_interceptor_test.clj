@@ -111,7 +111,15 @@
                             (call "10.0.0.2" "198.51.100.1")])))
     (testing "an untrusted peer cannot dodge its bucket with a forged header"
       (is (= [200 429] [(call "203.0.113.77" "198.51.100.3")
-                        (call "203.0.113.77" "198.51.100.4")])))))
+                        (call "203.0.113.77" "198.51.100.4")])))
+    (testing "unnamed clients share a bucket per proxy, apart from named ones (BOU-695)"
+      (is (= [200 429 200 200] [(call "10.0.0.3" "unknown")
+                                (call "10.0.0.3" "garbage")
+                                (call "10.0.0.4" "unknown")
+                                (call "10.0.0.3" "198.51.100.5")])))))
+
+(deftest ^:unit ^:security an-unresolved-client-without-a-peer-still-has-a-bucket
+  (is (= "unresolved:unknown" (itc/get-client-id {:client-ip nil}))))
 
 ;; BOU-690: the limiter keyed on an unchecked X-Api-Key before the IP.
 (deftest ^:unit ^:security ignores-the-x-api-key-header

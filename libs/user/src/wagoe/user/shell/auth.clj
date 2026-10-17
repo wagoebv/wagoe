@@ -10,10 +10,10 @@
    
    All I/O and side effects happen here. Pure business logic
    is delegated to wagoe.user.core.authentication."
-  (:require [wagoe.config :as wagoe-config]
-            [wagoe.user.core.authentication :as auth-core]
+  (:require [wagoe.user.core.authentication :as auth-core]
             [wagoe.user.core.mfa :as mfa-core]
             [wagoe.user.ports :as ports]
+            [wagoe.user.shell.hooks :as hooks]
             [wagoe.user.shell.mfa :as mfa-shell]
             [buddy.hashers :as hashers]
             [buddy.sign.jwt :as jwt]
@@ -168,15 +168,6 @@
 
 (defrecord AuthenticationService [user-repository session-repository mfa-service auth-config])
 
-(defn- resolve-mfa-hook
-  "Config names the :mfa-required? hook as a symbol; resolve it once, at boot."
-  [hook]
-  (let [f (if (qualified-symbol? hook) (wagoe-config/resolve-symbol hook) hook)]
-    (if (or (fn? f) (instance? clojure.lang.MultiFn f))
-      f
-      (throw (ex-info ":mfa-required? must be a function or a qualified symbol naming one"
-                      {:type :configuration-error :symbol hook})))))
-
 (defn create-authentication-service
   "Factory function: Create authentication service instance.
    
@@ -185,8 +176,8 @@
      session-repository: IUserSessionRepository implementation
      mfa-service: MFAService implementation  
      auth-config: Authentication configuration map. :mfa-required? is an
-                  optional (fn [user login-context] bool), or a symbol naming
-                  one; throws :configuration-error when it does not resolve.
+                  optional (fn [user login-context] bool), a symbol naming
+                  one, or an IMfaPolicy; throws :configuration-error otherwise.
      
    Returns:
      AuthenticationService instance"
@@ -194,7 +185,7 @@
   (->AuthenticationService user-repository session-repository mfa-service
                            (cond-> auth-config
                              (:mfa-required? auth-config)
-                             (update :mfa-required? resolve-mfa-hook))))
+                             (update :mfa-required? #(hooks/as-fn :mfa-required? %)))))
 
 (defn mfa-required?
   "Whether this login needs a second factor: the app's :mfa-required? hook
@@ -238,6 +229,17 @@
   (ports/increment-failed-login-count user-repository user-id
                                       (auth-core/failed-login-lockout auth-config current-time)))
 
+(defn verify-second-factor!
+  "Check the TOTP or backup `code` for `user`. A wrong or blank one counts as a
+   failed login, the same counter as a wrong password, so codes cannot be
+   guessed at the rate limit (BOU-698). Returns `mfa-shell/verify-mfa-code`'s map."
+  [auth-service user code current-time]
+  (let [{:keys [user-repository mfa-service auth-config]} auth-service
+        check (when-not (str/blank? code) (mfa-shell/verify-mfa-code mfa-service user code))]
+    (when-not (:valid? check)
+      (record-failed-login! user-repository auth-config (:id user) current-time))
+    check))
+
 (defn authenticate-user
   "Coordinate user authentication with all security checks including MFA.
    
@@ -261,7 +263,7 @@
      `:requires-mfa?` stays at the top level: it is not part of why the attempt
      failed, it is what the caller does next."
   [auth-service email password login-context]
-  (let [{:keys [user-repository session-repository mfa-service auth-config]} auth-service]
+  (let [{:keys [user-repository session-repository auth-config]} auth-service]
     (log/info "Authentication attempt" {:email email :ip (:ip-address login-context)})
 
     (let [current-time (Instant/now)
@@ -297,7 +299,8 @@
                         current-time))
 
           ;; Step 6: Check MFA requirement and verification
-          mfa-code (:mfa-code login-context)
+          ;; Blank is not a code: answer :mfa-required, without counting.
+          mfa-code (when-not (str/blank? (:mfa-code login-context)) (:mfa-code login-context))
           mfa-requirement (when (and user password-valid?)
                             (mfa-core/determine-mfa-requirement
                              user password-valid? mfa-code login-risk
@@ -305,7 +308,7 @@
 
           ;; Step 7: Verify MFA code if provided
           mfa-verification (when (and (:requires-mfa? mfa-requirement) mfa-code)
-                             (mfa-shell/verify-mfa-code mfa-service user mfa-code))
+                             (verify-second-factor! auth-service user mfa-code current-time))
 
           ;; Step 8: Handle authentication result
           result (cond

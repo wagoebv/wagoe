@@ -833,8 +833,9 @@
                   session-data (cond-> {:email      (:email body)
                                         :password   (:password body)
                                         :user-agent (get-in body [:deviceInfo :userAgent] "Unknown")
-                                        ;; Not deviceInfo.ipAddress: the caller writes that.
-                                        :ip-address (or (client-ip/request-ip (:request context)) "Unknown")}
+                                        ;; Not deviceInfo.ipAddress: the caller writes that. Nil when
+                                        ;; unresolved, so an IP-based MFA hook can refuse it.
+                                        :ip-address (client-ip/request-ip (:request context))}
                                  (:mfaCode body) (assoc :mfa-code (:mfaCode body)))]
               (-> context
                   (assoc :session-data session-data)

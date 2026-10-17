@@ -56,6 +56,7 @@
  :common/audit-deactivate   "Deactiveren"
  :common/audit-login        "Inloggen"
  :common/audit-logout       "Uitloggen"
+ :common/audit-session-revoked "Sessie ingetrokken"
  :common/audit-role-change  "Rolwijziging"
  :common/audit-bulk-action  "Bulkactie"
  :common/audit-group-join "Lid geworden van groep"
@@ -604,6 +605,19 @@
  :calendar/tz-utc           "UTC"
  :calendar/button-prev-month "Vorige maand"
  :calendar/button-next-month "Volgende maand"
+ :calendar/all-day          "Hele dag"
+ :calendar/month-january    "januari"
+ :calendar/month-february   "februari"
+ :calendar/month-march      "maart"
+ :calendar/month-april      "april"
+ :calendar/month-may        "mei"
+ :calendar/month-june       "juni"
+ :calendar/month-july       "juli"
+ :calendar/month-august     "augustus"
+ :calendar/month-september  "september"
+ :calendar/month-october    "oktober"
+ :calendar/month-november   "november"
+ :calendar/month-december   "december"
 
  ;; =============================================================================
  ;; Workflowmodule

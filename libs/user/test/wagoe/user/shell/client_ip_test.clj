@@ -27,6 +27,33 @@
   (testing "a request that did not pass the middleware falls back to the peer"
     (is (= "10.0.0.2" (:ip-address (service/request-audit-context (dissoc behind-proxy :client-ip)))))))
 
+(def ^:private unresolved
+  "Behind a proxy that did not name the client (BOU-695)."
+  (assoc behind-proxy :client-ip nil))
+
+(deftest ^:contract ^:security an-unresolved-client-logs-in-with-no-ip
+  (let [seen (atom ::none)
+        svc  #_{:clj-kondo/ignore [:missing-protocol-method]}
+             (reify ports/IUserService
+               (authenticate-user [_ creds]
+                 (reset! seen creds)
+                 {:authenticated false}))]
+    ((web-handlers/login-submit-handler svc {})
+     (assoc unresolved :form-params {"email" "user@example.com" "password" "password123"}))
+    (is (contains? @seen :ip-address))
+    (is (nil? (:ip-address @seen)) "the proxy's address must not stand in")))
+
+(deftest ^:unit ^:security an-unresolved-client-audits-with-no-ip
+  (is (nil? (:ip-address (service/request-audit-context unresolved)))))
+
+(deftest ^:unit ^:security an-unresolved-api-login-gives-the-mfa-hook-nil
+  (let [ctx {:interface-type   :http
+             :request          unresolved
+             :raw-session-data {:email "user@example.com" :password "password123"
+                                :deviceInfo {:ipAddress "10.0.0.9"}}}]
+    (is (nil? (get-in ((:enter user-interceptors/transform-session-creation-data) ctx)
+                      [:session-data :ip-address])))))
+
 (deftest ^:unit ^:security api-session-ignores-a-caller-supplied-ip
   (let [ctx {:interface-type   :http
              :request          behind-proxy

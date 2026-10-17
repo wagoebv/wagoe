@@ -33,6 +33,12 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **User groups with scoped permission grants** (BOU-701): manage them at `/web/admin/groups`, check them with
   `(user-grants svc user)` from `:wagoe/user-group-service`. Declare permissions and scope under `:wagoe/user :groups`.
+- **App modules can contribute sign-in hooks** (BOU-697): `:auth {:mfa-required? (ig/ref …)}`, or `:login-redirect`,
+  from an `ig-config`. `:login-redirect` functions now take `[user login-context]`, which has the client IP and request.
+- **`client-ip/in-network?` and `in-any?`** (BOU-693): match an address against CIDRs exactly as the trust walk does.
+  Use them instead of a second IP parser.
+- **Calendar events can link** (BOU-702): an event's `:href`, or the `:event-href` view option. Pass `:t` to resolve
+  labels without `wagoe.i18n.shell.render`.
 - **Recurring jobs** (BOU-452): `:recurring {:nightly-report {:cron "0 2 * * *"}}` under `:wagoe/jobs`; one replica
   enqueues each tick. `enqueue-once!` and `:wagoe/idempotency-store` make a repeated enqueue a no-op.
 - **`#secret` config reader** (BOU-455): reads env vars or mounted files (`#secret [:file "db-password"]`), takes custom
@@ -42,7 +48,7 @@ for what is public API, what is internal, and how deprecations are announced.
 - **App modules can add HTTP middleware and components** (BOU-672): an `ig-config` returns only what it adds to the
   scaffold's four keys, and its `:http :extra-middleware` runs after the framework modules'. See the platform guide.
 - **Choose where users land after signing in** (BOU-678): `:login-redirect` under `:wagoe/user`, a role map or a
-  function of the user. Unset, admins still land on `/web/admin/users`, others on `/web/dashboard`.
+  function of the user and login context. Unset, admins still land on `/web/admin/users`, others on `/web/dashboard`.
 - **Replace or drop the built-in `/web/dashboard`** (BOU-680): `:dashboard {:handler my.app/page}` or
   `:dashboard false` under `:wagoe/user`, so an app can serve the path itself.
 - **Set where layouts link home** (BOU-688): `:home` under `:wagoe/user` sets the logo, back and dashboard links.
@@ -116,10 +122,18 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Security: an `unknown` X-Forwarded-For hop resolved to the trusted proxy** (BOU-695). The client IP is now nil;
+  code that authorises by address must refuse nil.
+- **Calendar month names were English only, and multi-day events showed on their first day only** (BOU-702). Month
+  names are `[:t …]` markers now; add `:calendar/month-*` and `:calendar/all-day` to any custom catalogue.
 - **Security: session tokens were stored in plaintext, so a read of `user_sessions` was a login** (BOU-696). Only their
   SHA-256 is stored; boot or `migrate up` hashes existing rows in place. Upgrade every replica at once; a rollback signs everyone out.
 - **Security: parallel wrong passwords counted as one, so lockout came late** (BOU-696). The count is incremented in the
   database. Custom repositories add `increment-failed-login-count` and `invalidate-user-session`.
+- **Security: wrong MFA codes at password login did not count towards lockout** (BOU-698). TOTP and backup codes now
+  share the failed-login counter on the form, the API and OIDC. No action needed.
+- **Security: a revoked session was audited as the user's own logout** (BOU-698). It is `:session-revoked`, with the
+  actor and session id; boot or `migrate up` widens the audit check.
 - **A concurrent promotion, demotion or deactivation could be undone past the last-admin guard** (BOU-685). Role and
   active changes decide under the admin lock; edits and logins write only their own fields. No action needed.
 - **`wagoe session list` and `session invalidate` were unreachable, and are removed** (BOU-692). A role change or
