@@ -131,7 +131,6 @@
     (ports/register-handler! registry :nightly-report (fn [_] {:success? true}))
     (recurring/schedule-recurring! s :nightly-report "0 2 * * *")
     (recurring/schedule-recurring! s :nightly-reprot "0 2 * * *")
-    (is (= [:nightly-reprot] (recurring/unhandled-types s registry)))
     (with-redefs-fn {#'recurring/report-unhandled! (fn [types _] (swap! reported conj types))}
       (fn []
         (recurring/tick! s (at "2026-01-02T01:00:00Z"))

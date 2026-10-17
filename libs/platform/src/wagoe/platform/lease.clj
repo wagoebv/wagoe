@@ -41,18 +41,18 @@
   (let [t   (table-name table)
         now (db-ports/now-ms-sql (:adapter (db/context-of ds)))]
     {:ds          ds
-     :name        lease-name
+     :lease-name  lease-name
      :claim-sql   (str "UPDATE " t " SET owner = ?, until_ms = " now " + ?
                         WHERE name = ? AND (until_ms < " now " OR owner = ?)")
      :release-sql (str "UPDATE " t " SET until_ms = 0 WHERE name = ? AND owner = ?")}))
 
 (defn claim!
   "Take the lease for `owner`, or renew it, for `lease-ms`. True when held."
-  [{:keys [ds name claim-sql]} owner lease-ms]
-  (= 1 (::jdbc/update-count (jdbc/execute-one! ds [claim-sql owner lease-ms name owner]))))
+  [{:keys [ds lease-name claim-sql]} owner lease-ms]
+  (= 1 (::jdbc/update-count (jdbc/execute-one! ds [claim-sql owner lease-ms lease-name owner]))))
 
 (defn release!
   "Hand the lease on, if `owner` holds it."
-  [{:keys [ds name release-sql]} owner]
-  (jdbc/execute-one! ds [release-sql name owner])
+  [{:keys [ds lease-name release-sql]} owner]
+  (jdbc/execute-one! ds [release-sql lease-name owner])
   nil)

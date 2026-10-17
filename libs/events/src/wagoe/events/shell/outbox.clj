@@ -182,11 +182,11 @@
   "One relay pass: `{:delivered n :more? bool :failed? bool}`. `:more?` when
    the batch was full and nothing stopped it, so more may be waiting;
    `:failed?` when a publish failed and the row is to be retried."
-  [{:keys [ds bus opts owner purged-at] :as outbox}]
+  [{:keys [ds bus opts owner purged-at lease] :as outbox}]
   (let [{:keys [batch-size retain-ms lease-ms]} opts]
     ;; A relay paused past `lease-ms` may overlap the next owner for one
     ;; batch: duplicates, no loss.
-    (if-not (lease/claim! (:lease outbox) owner lease-ms)
+    (if-not (lease/claim! lease owner lease-ms)
       {:delivered 0 :more? false :failed? false}
       (let [rows (pending ds batch-size)
             {:keys [ids stopped?]}
@@ -277,7 +277,7 @@
 (defn stop-relay!
   "Stop polling and hand the lease to the next relay. Rows not yet relayed stay
    pending."
-  [{:keys [owner] :as outbox}]
+  [{:keys [owner lease] :as outbox}]
   (when-let [^ScheduledThreadPoolExecutor ex (:executor outbox)]
     (.shutdown ex)
     ;; Released only once no pass is running: handing over mid-batch would let
@@ -285,4 +285,4 @@
     (when (or (.awaitTermination ex 5 TimeUnit/SECONDS)
               (do (.shutdownNow ex)
                   (.awaitTermination ex 1 TimeUnit/SECONDS)))
-      (lease/release! (:lease outbox) owner))))
+      (lease/release! lease owner))))
