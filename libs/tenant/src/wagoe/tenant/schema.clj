@@ -42,7 +42,7 @@
    [:id :uuid]
    [:slug [:re {:error/message slug-error} slug-regex]]
    [:name [:string {:min 1 :max 255}]]
-   [:schema-name [:string {:min 1 :max 63}]] ; PostgreSQL schema name limit
+   [:schema-name [:string {:min 1 :max max-schema-name-length}]]
    [:status [:enum :active :suspended :deleted]]
    [:settings {:optional true} [:maybe :map]] ; JSON configuration
    [:created-at inst?]

@@ -662,9 +662,7 @@
         service (tenant-service/create-tenant-service
                  (tenant-persistence/create-tenant-repository ctx logger errors)
                  {} logger (noop-metrics/create-metrics-emitter {}) errors)
-        schemas #(set (map :schema-name
-                           (db/execute-query! ctx ["SELECT schema_name FROM information_schema.schemata
-                                                    WHERE schema_name LIKE 'tenant_%'"])))
+        schemas #(set (sut/list-tenant-schemas ctx))
         prefix  (apply str (repeat 55 "a"))
         refused (fn [f] (try (f) nil (catch clojure.lang.ExceptionInfo e (:type (ex-data e)))))]
     (try

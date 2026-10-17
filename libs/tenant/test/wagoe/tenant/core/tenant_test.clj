@@ -19,7 +19,7 @@
     (is (false? (sut/valid-slug? "acme_corp")))
     (is (false? (sut/valid-slug? "acme corp")))
     (is (false? (sut/valid-slug? "a")))
-    (is (false? (sut/valid-slug? (apply str (repeat 101 "a")))))))
+    (is (false? (sut/valid-slug? (apply str (repeat 57 "a")))))))
 
 (deftest ^:unit a-valid-slug-names-a-schema-postgresql-keeps-whole
   ;; PostgreSQL truncates identifiers past 63 bytes rather than refusing them.
@@ -27,7 +27,6 @@
     (is (true? (sut/valid-slug? longest)))
     (is (= 63 (count (sut/slug->schema-name longest))))
     (is (true? (sut/valid-schema-name? (sut/slug->schema-name longest))))
-    (is (false? (sut/valid-slug? (str longest "a"))))
     (is (= {:valid? false
             :error  "Invalid tenant slug (must be lowercase alphanumeric with hyphens, 2-56 chars)"}
            (sut/create-tenant-decision (str longest "a") #{})))))

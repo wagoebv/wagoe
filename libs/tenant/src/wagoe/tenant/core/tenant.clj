@@ -17,6 +17,9 @@
   [slug]
   (str schema/schema-prefix (str/replace slug "-" "_")))
 
+(def ^:private schema-name-regex
+  (re-pattern (str "^" schema/schema-prefix "[a-z0-9_]+$")))
+
 (defn valid-schema-name?
   "True if schema-name is a safe tenant schema identifier — exactly the shape
    slug->schema-name produces: a `tenant_` prefix followed by lowercase
@@ -29,7 +32,7 @@
   (boolean
    (and (string? schema-name)
         (<= (count schema-name) schema/max-schema-name-length)
-        (re-matches #"^tenant_[a-z0-9_]+$" schema-name))))
+        (re-matches schema-name-regex schema-name))))
 
 (defn prepare-tenant
   "Build a complete tenant entity from creation input, id, and timestamp."
