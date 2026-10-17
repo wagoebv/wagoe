@@ -165,6 +165,44 @@
           :level :pass
           :msg   "All #env references resolved or have defaults"}])))))
 
+(defn secret-refs
+  "Every #secret in `config-text`'s :active section, as {:source :name} plus
+   :default? when the form gives one. A name that is itself a tag is skipped."
+  [config-text]
+  (let [tree   (try (edn/read-string {:default tagged-literal} config-text)
+                    (catch Exception _ nil))
+        active (if (map? tree) (:active tree tree) tree)]
+    (for [x     (tree-seq (some-fn coll? tagged-literal?) #(if (tagged-literal? %) [(:form %)] (seq %)) active)
+          :when (and (tagged-literal? x) (= 'secret (:tag x)))
+          :let  [form (:form x)
+                 [source n] (cond (map? form)    [(:source form :env) (:name form)]
+                                  (vector? form) form
+                                  :else          [:env form])]
+          :when (or (string? n) (symbol? n))]
+      {:source source :name (str n) :default? (and (map? form) (contains? form :default))})))
+
+(defn check-secret-refs
+  "#secret references without a :default that the :env or :file source does
+   not have. Other sources cannot be asked from here. Names only, never values."
+  [config-text env-map]
+  (let [dir     (or (get env-map "WAGOE_SECRETS_DIR") "/run/secrets")
+        present (fn [{:keys [source name]}]
+                  (case source
+                    :env  (not (str/blank? (get env-map name)))
+                    :file (let [f (io/file dir name)] (and (.isFile f) (not (str/blank? (slurp f)))))
+                    true))
+        missing (->> (secret-refs config-text) (remove :default?) (remove present)
+                     (map #(str (clojure.core/name (:source %)) ":" (:name %))) distinct sort)]
+    (if (seq missing)
+      [{:id    :secret-refs
+        :level :error
+        :msg   (str "#secret references without defaults are missing: " (str/join ", " missing))
+        :fix   (str "Export env: ones, put file: ones in " dir " (WAGOE_SECRETS_DIR), or give a default:\n"
+                    "  #secret {:name \"NAME\" :default \"dev\"} — #or does not supply one.")}]
+      [{:id    :secret-refs
+        :level :pass
+        :msg   "All #secret references resolve or have defaults"}])))
+
 (defn check-providers
   "Check that :provider values in the config are known/valid.
    Accepts parsed EDN config (the :active map).
@@ -536,6 +574,7 @@
         (concat
          (check-config-loadable parsed)
          (check-env-refs active-text env-map (optional-env-refs active))
+         (check-secret-refs config-text env-map)
          (check-providers active)
          (check-jwt-secret active env-map (code-enabled-modules (root-dir)))
          ;; It compares dev with test, so it says nothing about another
@@ -581,6 +620,7 @@
   (println "  config-loadable     config.edn parses and has an :active section")
   (println "  env-refs            #env vars without #or defaults are set")
   (println "                      (an optional one, a Redis :password, only warns)")
+  (println "  secret-refs         #secret names without a :default exist (env and file sources)")
   (println "  providers           Provider values are recognized")
   (println "  jwt-secret          JWT_SECRET set when user module active (config or :extra-modules)")
   (println "  admin-parity        Admin entity files exist in both dev and test")

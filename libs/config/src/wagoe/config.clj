@@ -18,8 +18,8 @@
             [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
-            ;; Loaded for its #secret reader.
-            [wagoe.config.secrets]))
+            ;; Also loaded for its #secret reader.
+            [wagoe.config.secrets :as secrets]))
 
 ;; =============================================================================
 ;; Configuration Loading
@@ -80,16 +80,60 @@
        distinct
        vec))
 
+(defn resolve-symbol
+  "The value of the var a config file names by qualified symbol.
+
+   A missing namespace throws FileNotFoundException without ex-data; a
+   namespace without the var returns nil. Both are the same config mistake, so
+   both throw :configuration-error."
+  [sym]
+  (let [v (try
+            (requiring-resolve sym)
+            (catch Exception e
+              (throw (ex-info (str "Could not load the namespace for " sym)
+                              {:type :configuration-error :symbol sym}
+                              e))))]
+    (if v
+      (deref v)
+      (throw (ex-info (str "Could not resolve symbol " sym)
+                      {:type :configuration-error :symbol sym})))))
+
+(defn- secret-source [source-key sym]
+  (let [v   (resolve-symbol sym)
+        src (if (and (fn? v) (not (satisfies? secrets/ISecretSource v))) (v) v)]
+    (if (satisfies? secrets/ISecretSource src)
+      src
+      (throw (ex-info (str ":secret-sources " source-key ": " sym
+                           " is neither an ISecretSource nor a no-argument function returning one")
+                      {:type :configuration-error :source source-key :symbol sym})))))
+
+(defn declared-secret-sources
+  "The sources the config at `resource` declares under a top-level
+   `:secret-sources {:vault my.app/vault-source}`, each symbol naming an
+   `ISecretSource` or a no-argument function returning one. Read before the
+   config itself, so every reader of the file sees them — the migration CLI as
+   much as the app."
+  [resource]
+  (let [declared (:secret-sources (aero/read-config-into-tagged-literal resource))]
+    (when-not (or (nil? declared)
+                  (and (map? declared) (every? keyword? (keys declared)) (every? qualified-symbol? (vals declared))))
+      (throw (ex-info (str ":secret-sources must be a literal map of keyword to qualified symbol, not "
+                           (pr-str declared))
+                      {:type :configuration-error :config (str resource)})))
+    (into {} (map (fn [[k sym]] [k (secret-source k sym)])) declared)))
+
 (defn read-config-resource
   "Read the config at `resource` (a URL) for `profile`. A missing #include
    fails here, naming the file: Aero puts a placeholder in its place and the
    application would start without whatever it held.
 
-   `opts` may carry `:secret-sources` and `:default-secret-source`, see
+   `opts` may carry `:secret-sources`, over those the file declares (see
+   `declared-secret-sources`), and `:default-secret-source`; see
    `wagoe.config.secrets`."
   ([resource profile] (read-config-resource resource profile {}))
   ([resource profile opts]
-   (let [config (aero/read-config resource (assoc opts :profile profile :resolver include-resolver))]
+   (let [opts   (update opts :secret-sources #(merge (declared-secret-sources resource) %))
+         config (aero/read-config resource (assoc opts :profile profile :resolver include-resolver))]
      (when-let [missing (seq (missing-includes config))]
        (throw (ex-info (str "Config include not found: " (str/join ", " missing)
                             " (included from " resource ")")
@@ -127,24 +171,6 @@
 ;; =============================================================================
 ;; Configuration Helpers
 ;; =============================================================================
-
-(defn resolve-symbol
-  "The value of the var a config file names by qualified symbol.
-
-   A missing namespace throws FileNotFoundException without ex-data; a
-   namespace without the var returns nil. Both are the same config mistake, so
-   both throw :configuration-error."
-  [sym]
-  (let [v (try
-            (requiring-resolve sym)
-            (catch Exception e
-              (throw (ex-info (str "Could not load the namespace for " sym)
-                              {:type :configuration-error :symbol sym}
-                              e))))]
-    (if v
-      (deref v)
-      (throw (ex-info (str "Could not resolve symbol " sym)
-                      {:type :configuration-error :symbol sym})))))
 
 (defn- active-database-adapter
   "Determine which database adapter is active from config.
