@@ -182,7 +182,7 @@
           result-ctx ((:leave interceptors/metrics-complete) ctx)]
       (is (= ctx result-ctx))
       (is (= 1 (counter-total metrics "operation.success")))
-      (is (= 1 (-> (metrics-ports/get-metric-values metrics "operation.latency.ms")
+      (is (= 1 (-> (metrics-ports/get-metric-values metrics "operation.latency.seconds")
                    :series vals first :count)))))
 
   (testing "metrics-complete records errors"

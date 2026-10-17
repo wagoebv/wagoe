@@ -481,24 +481,26 @@
 ;; =============================================================================
 
 (def ^:private level-rank
-  {:debug 0 :info 1 :warning 2 :warn 2 :error 3 :fatal 4 :critical 4})
+  {:trace 0 :debug 0 :info 1 :warning 2 :warn 2 :error 3 :fatal 4 :critical 4})
 
 (defn below-min-severity?
-  "True when `level` ranks below `min-severity`. An unknown level or no
-   minimum is never below."
+  "True when `level` ranks below `min-severity`. An unknown or nil level counts
+   as info, which is what Sentry receives for it; no minimum is never below."
   [level min-severity]
   (let [floor (level-rank min-severity)
-        rank  (level-rank level)]
-    (boolean (and floor rank (< rank floor)))))
+        rank  (level-rank level 1)]
+    (boolean (and floor (< rank floor)))))
 
 (defn filtering->rules
   "The :ignore rules a :filtering config implies, one per
-   :exclude-exceptions and :exclude-messages entry."
-  [{:keys [exclude-exceptions exclude-messages]}]
+   :exclude-exceptions and :exclude-messages entry. None when :enabled is false."
+  [{:keys [enabled exclude-exceptions exclude-messages]}]
   (letfn [(ignore [type patterns]
             (map (fn [p] {:id (str "exclude-" (name type) ":" p) :type type :pattern p :action :ignore})
                  patterns))]
-    (vec (concat (ignore :exception exclude-exceptions) (ignore :message exclude-messages)))))
+    (if (false? enabled)
+      []
+      (vec (concat (ignore :exception exclude-exceptions) (ignore :message exclude-messages))))))
 
 (defn- class-names [^Class c]
   #{(.getName c) (.getSimpleName c)})

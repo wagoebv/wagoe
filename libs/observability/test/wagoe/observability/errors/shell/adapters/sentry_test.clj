@@ -162,7 +162,27 @@
 
     (testing "a malformed rule is refused"
       (is (thrown? clojure.lang.ExceptionInfo
-                   (ports/add-filter-rule! f {:type :exception :action :drop :pattern "x"}))))))
+                   (ports/add-filter-rule! f {:type :exception :action :drop :pattern "x"})))
+      (is (thrown? clojure.lang.ExceptionInfo
+                   (ports/add-filter-rule! f {:type :context :action :ignore :pattern "t-1"})))
+      (is (thrown? clojure.lang.ExceptionInfo
+                   (ports/add-filter-rule! f {:type :exception :action :sample :pattern "x" :sample-rate "0.5"}))))
+
+    (testing "a nil or unknown level counts as info, as Sentry receives it"
+      (is (false? (ports/should-report-message? f "noise" nil {})))
+      (is (false? (ports/should-report-message? f "noise" :trace {}))))))
+
+(deftest ^:unit replacing-a-rule-keeps-its-precedence
+  (let [f (sentry-adapter/create-sentry-error-filter {})]
+    (ports/add-filter-rule! f {:id "a" :type :message :pattern "x" :action :ignore})
+    (ports/add-filter-rule! f {:id "b" :type :message :pattern "x" :action :report})
+    (ports/add-filter-rule! f {:id "a" :type :message :pattern "x" :action :ignore})
+    (is (false? (ports/should-report-message? f "x" :error {})) "a still comes before b")))
+
+(deftest ^:unit filtering-switched-off
+  (let [f (sentry-adapter/create-sentry-error-filter
+           {:filtering {:enabled false :min-severity :error :exclude-messages ["noise"]}})]
+    (is (true? (ports/should-report-message? f "noise" :info {})))))
 
 ;; =============================================================================
 ;; Error Reporting Configuration Tests
@@ -426,7 +446,9 @@
     (is (empty? (with-sent-events test-config
                   (fn [c]
                     (ports/set-sample-rate! c 0.0)
-                    (ports/capture-exception c (Exception. "x")))))))
+                    (ports/capture-exception c (Exception. "x"))))))
+    (is (thrown? clojure.lang.ExceptionInfo
+                 (with-sent-events test-config #(ports/set-sample-rate! % "0.5")))))
 
   (testing "a filtered event is not sent"
     (is (empty? (with-sent-events (assoc test-config :filtering {:exclude-exceptions ["IllegalStateException"]})

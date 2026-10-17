@@ -40,7 +40,6 @@
    (java.time Instant)
    (java.util UUID)))
 
-
 (defn- current-timestamp
   "Get current timestamp as Instant.
 
@@ -268,13 +267,32 @@
 (def ^:private rule-types #{:exception :message :context})
 (def ^:private rule-actions #{:ignore :sample :report})
 
+(defn- valid-rate? [r]
+  (and (number? r) (<= 0.0 r 1.0)))
+
 (defn- validate-rule! [{:keys [type action pattern sample-rate] :as rule}]
   (when-not (and (rule-types type) (rule-actions action) (some? pattern)
-                 (or (nil? sample-rate) (<= 0.0 sample-rate 1.0)))
+                 ;; A :context rule with anything but a function never matches.
+                 (or (not= :context type) (fn? pattern))
+                 (or (nil? sample-rate) (valid-rate? sample-rate)))
     (throw (ex-info "Invalid error filter rule"
                     {:type :validation-error
                      :rule (dissoc rule :pattern)
-                     :message "Needs :type (:exception :message :context), :action (:ignore :sample :report), a :pattern, and a :sample-rate in [0, 1]"}))))
+                     :message "Needs :type (:exception :message :context), :action (:ignore :sample :report), a :pattern (a function for :context), and a :sample-rate in [0, 1]"}))))
+
+(defn- min-severity
+  "The :filtering minimum, unless filtering is switched off."
+  [settings]
+  (let [{:keys [enabled min-severity]} (:filtering @settings)]
+    (when-not (false? enabled) min-severity)))
+
+(defn- put-rule
+  "Replace the rule with `id` where it stands, so its precedence is kept, or
+   append it."
+  [rules {:keys [id] :as rule}]
+  (if (some #(= id (:id %)) rules)
+    (mapv #(if (= id (:id %)) rule %) rules)
+    (conj rules rule)))
 
 (defrecord SentryErrorFilter [settings rules]
   ports/IErrorFilter
@@ -285,7 +303,7 @@
   (should-report-message? [_this message level context]
     (let [rate (core/filter-decision @rules {:kind :message :message message :level level :context context})]
       (if (and (nil? rate)
-               (core/below-min-severity? level (get-in @settings [:filtering :min-severity])))
+               (core/below-min-severity? level (min-severity settings)))
         false
         (report-at? rate (global-rate settings)))))
 
@@ -295,7 +313,7 @@
   (add-filter-rule! [_this rule]
     (validate-rule! rule)
     (let [id (or (:id rule) (generate-event-id))]
-      (swap! rules (fn [rs] (conj (filterv #(not= id (:id %)) rs) (assoc rule :id id))))
+      (swap! rules put-rule (assoc rule :id id))
       id))
 
   (remove-filter-rule! [_this rule-id]
@@ -325,6 +343,11 @@
     (:release @config-atom))
 
   (set-sample-rate! [_this sample-rate]
+    ;; An invalid rate would make every filter call throw, and a filter that
+    ;; throws reports the event: sampling would silently stop.
+    (when-not (valid-rate? sample-rate)
+      (throw (ex-info "Sample rate must be a number in [0, 1]"
+                      {:type :validation-error :sample-rate sample-rate})))
     (let [old-rate (:sample-rate @config-atom)]
       (swap! config-atom assoc :sample-rate sample-rate)
       old-rate))

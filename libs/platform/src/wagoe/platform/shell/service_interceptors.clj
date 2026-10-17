@@ -109,8 +109,9 @@
             ctx)})
 
 (def service-operation-metrics
-  "Counts attempts, successes and failures per operation, and records duration.
-   Labels stay bounded: no user or tenant id."
+  "Counts attempts, successes and failures per operation, and records duration
+   in seconds, the unit of the default histogram buckets. Labels stay bounded:
+   no user or tenant id."
   {:name :service-operation-metrics
    :enter (fn [{:keys [operation-name system] :as ctx}]
             (when-let [metrics-emitter (:metrics-emitter system)]
@@ -120,7 +121,7 @@
             (when-let [metrics-emitter (:metrics-emitter system)]
               (when-let [start-time (:start timing)]
                 (metrics/observe metrics-emitter "service-operation-duration"
-                                 (/ (- (System/nanoTime) start-time) 1e6)
+                                 (/ (- (System/nanoTime) start-time) 1e9)
                                  {:operation-type operation-name}))
               (metrics/increment metrics-emitter (str operation-name "-successful") {}))
             ctx)

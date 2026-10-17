@@ -312,11 +312,14 @@
 
 (defn- ensure-registered!
   "Register `metric-name` on first use. Every adapter drops emissions to an
-   unregistered handle, so without this a convenience call records nothing."
+   unregistered handle, so without this a convenience call records nothing.
+   Locked so two first uses do not both register: datadog resets on re-register."
   [collector metric-name register!]
   (when (and (satisfies? IMetricsRegistry collector)
              (nil? (get-metric collector metric-name)))
-    (register! collector)))
+    (locking collector
+      (when (nil? (get-metric collector metric-name))
+        (register! collector)))))
 
 (defn increment
   "Increment counter `metric-name` by 1, registering it on first use."
