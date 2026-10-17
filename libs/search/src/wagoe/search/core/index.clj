@@ -35,18 +35,17 @@
   [indexes contributed]
   (let [clash      (some (set (keys indexes)) (keys contributed))
         entries    (concat indexes contributed)
-        mismatched (some (fn [[k d]] (when (and (:id d) (not= k (:id d))) k)) entries)]
+        [k d]      (some (fn [[k d :as e]] (when (and (:id d) (not= k (:id d))) e)) entries)]
     (cond
       clash
       {:error {:type    :configuration-error
                :id      clash
                :message (str "Search index " clash " is defined both under :indexes and by a module.")}}
 
-      mismatched
+      k
       {:error {:type    :configuration-error
-               :id      mismatched
-               :message (str "Search index under " mismatched " has :id "
-                             (:id (get (into {} entries) mismatched)) ".")}}
+               :id      k
+               :message (str "Search index under " k " has :id " (:id d) ".")}}
 
       :else
       {:definitions (into {} (map (fn [[k d]] [k (assoc d :id k)])) entries)})))

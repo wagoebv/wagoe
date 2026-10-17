@@ -30,6 +30,7 @@
             [wagoe.i18n.shell.render :as i18n]
             [wagoe.search.core.index :as index]
             [wagoe.search.ports :as ports]
+            [wagoe.search.shell.service :as service]
             [wagoe.search.core.ui :as search-ui]
             [clojure.tools.logging :as log]))
 
@@ -79,16 +80,13 @@
          true)))
 
 (defn- served!
-  "The definition of `index-id` when it is served to `request`. Otherwise the
-   :not-found the engine throws for an unknown index, word for word."
+  "The definition of `index-id` when it is served to `request`, else the
+   engine's unknown-index :not-found."
   [engine request index-id]
   (let [definition (ports/index-definition engine index-id)]
     (if (and definition (served? request definition))
       definition
-      (throw (ex-info "Search index not registered"
-                      {:type     :not-found
-                       :index-id index-id
-                       :message  (str "No search definition found for: " (name index-id))})))))
+      (throw (service/unknown-index index-id)))))
 
 (defn- tenant-filter? [k]
   (= "tenant_id" (index/filter-key->json-key k)))
@@ -256,9 +254,8 @@
   "GET /web/admin/search/:index-id"
   [engine request]
   (let [index-id   (keyword (get-in request [:path-params :index-id]))
-        indices    (ports/list-indices engine)
         index-info (when (some->> (ports/index-definition engine index-id) (served? request))
-                     (first (filter #(= index-id (:id %)) indices)))
+                     (first (filter #(= index-id (:id %)) (ports/list-indices engine))))
         page-opts  {:user  (:user request)
                     :flash (:flash request)}]
     (if (nil? index-info)
@@ -276,8 +273,7 @@
   (let [index-id    (keyword (get-in request [:path-params :index-id]))
         form-params (get-in request [:form-params] {})
         query       (get form-params "query" "")
-        _           (served! engine request index-id)
-        results     (ports/search engine index-id query
+        results     (ports/search engine (:id (served! engine request index-id)) query
                                   {:limit 20 :highlight? true})]
     {:status  200
      :headers {"Content-Type" "text/html; charset=utf-8"}

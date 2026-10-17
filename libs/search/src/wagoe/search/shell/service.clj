@@ -21,17 +21,25 @@
 (defn- current-timestamp []
   (Instant/now))
 
-(defn- lookup [definitions index-id]
+(defn- lookup
+  "Read per call rather than merged at init: a namespace using the deprecated
+   registry may load after the system starts."
+  [definitions index-id]
   (or (get definitions index-id) (registry/fallback index-id)))
 
+(defn unknown-index
+  "The :not-found for an index this engine does not hold. HTTP answers a
+   refused index with it too, so the two cannot be told apart."
+  [index-id]
+  (ex-info "Search index not registered"
+           {:type     :not-found
+            :index-id index-id
+            :message  (str "No search definition found for: " (name index-id))}))
+
 (defn- definition!
-  "The definition of `index-id`, or a :not-found."
   [definitions index-id]
   (or (lookup definitions index-id)
-      (throw (ex-info "Search index not registered"
-                      {:type     :not-found
-                       :index-id index-id
-                       :message  (str "No search definition found for: " (name index-id))}))))
+      (throw (unknown-index index-id))))
 
 (defrecord SearchService [store definitions]
   ports/ISearchEngine

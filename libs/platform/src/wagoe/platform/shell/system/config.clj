@@ -90,25 +90,15 @@
       (log/warn (str "The " lib " module is enabled in code, not in :active, so its migrations"
                      " do not run. Add its key to :active in config.edn.")))))
 
-(defn- with-auth-hooks
-  "`ig-config` with the modules' `:auth` hooks handed to the user module, which
-   runs them. Throws when it is off: the hooks would never be called."
-  [ig-config auth]
-  (if (contains? ig-config :wagoe/auth-hooks)
-    (assoc-in ig-config [:wagoe/auth-hooks :contributed] auth)
-    (throw (ex-info (str "Modules contribute " (vec (keys auth)) " under :auth, but the user"
-                         " module, which runs sign-in hooks, is not enabled.")
-                    {:type :configuration-error :keys (vec (keys auth))}))))
-
-(defn- with-search-indexes
-  "`ig-config` with the modules' `:search` index definitions handed to the
-   search module. Throws when it is off: nothing would serve them."
-  [ig-config search]
-  (if (contains? ig-config :wagoe/search)
-    (assoc-in ig-config [:wagoe/search :contributed] search)
-    (throw (ex-info (str "Modules define search indexes " (vec (keys search)) " under :search,"
-                         " but the search module is not enabled.")
-                    {:type :configuration-error :keys (vec (keys search))}))))
+(defn- with-contributed
+  "`ig-config` with what modules contribute under `part` handed to `target` as
+   `:contributed`. Throws when `target` is off: nothing would use it."
+  [ig-config target part contributed]
+  (if (contains? ig-config target)
+    (assoc-in ig-config [target :contributed] contributed)
+    (throw (ex-info (str "Modules contribute " (vec (keys contributed)) " under " part
+                         ", but " target ", which uses them, is not enabled.")
+                    {:type :configuration-error :keys (vec (keys contributed))}))))
 
 (defn system-config
   "The Integrant configuration for `config`.
@@ -183,7 +173,7 @@
                  (modules/enabled-libraries active))
 
        (seq auth)
-       (with-auth-hooks auth)
+       (with-contributed :wagoe/auth-hooks :auth auth)
 
        (seq search)
-       (with-search-indexes search)))))
+       (with-contributed :wagoe/search :search search)))))
