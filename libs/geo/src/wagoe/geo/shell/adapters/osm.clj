@@ -8,54 +8,36 @@
      (def adapter (create-nominatim-adapter {:user-agent \"MyApp/1.0 (contact@example.com)\"}))
      (geocode adapter {:postcode \"1012 JS\" :city \"Amsterdam\"})"
   (:require [wagoe.geo.ports :as ports]
+            [wagoe.geo.shell.adapters.support :as support]
             [clj-http.client :as http]
             [clojure.string :as str]
-            [clojure.tools.logging :as log]))
+            [clojure.tools.logging :as log])
+  (:import [java.net URI]))
 
 (def ^:private default-base-url "https://nominatim.openstreetmap.org")
 (def ^:private default-min-interval-ms 1000)
-
-;; =============================================================================
-;; Rate limiting helpers
-;; =============================================================================
-
-(defn- enforce-rate-limit!
-  "Sleep if less than `min-interval-ms` have passed since the last request."
-  [last-request-ms min-interval-ms]
-  (let [now     (System/currentTimeMillis)
-        elapsed (- now @last-request-ms)
-        wait    (- min-interval-ms elapsed)]
-    (when (pos? wait)
-      (Thread/sleep wait))
-    (reset! last-request-ms (System/currentTimeMillis))))
+(def ^:private default-user-agent "wagoe-geo/1.0 (https://github.com/wagoebv/wagoe)")
 
 ;; =============================================================================
 ;; Response parsing
 ;; =============================================================================
 
-(defn- parse-address-details
-  "Extract postcode, city, and country from Nominatim addressdetails block."
-  [address]
-  {:postcode (or (get address "postcode") (get address :postcode))
-   :city     (or (get address "city")
-                 (get address "town")
-                 (get address "village")
-                 (get address :city))
-   :country  (or (get address "country") (get address :country))})
+(defn- parse-coord [x]
+  (cond (number? x) (double x)
+        (string? x) (parse-double x)))
 
 (defn- parse-result
-  "Parse a single Nominatim JSON result map into a GeoResult."
-  [item]
-  (when item
-    (let [lat     (Double/parseDouble (str (get item "lat")))
-          lng     (Double/parseDouble (str (get item "lon")))  ; OSM uses "lon"
-          address (get item "address" {})]
-      (merge {:lat      lat
-              :lng      lng
-              :formatted-address (get item "display_name")
-              :provider :openstreetmap
-              :cached?  false}
-             (parse-address-details address)))))
+  "Parse a Nominatim result into a GeoResult. clj-http's `:as :json` keywordizes
+   keys; Nominatim sends lat/lon as strings."
+  [{:keys [lat lon display_name address]}]
+  {:lat               (parse-coord lat)
+   :lng               (parse-coord lon)
+   :formatted-address display_name
+   :postcode          (:postcode address)
+   :city              (or (:city address) (:town address) (:village address))
+   :country           (:country address)
+   :provider          :openstreetmap
+   :cached?           false})
 
 ;; =============================================================================
 ;; Adapter record
@@ -72,7 +54,7 @@
                       (remove nil? [address postcode city
                                     (or country "Netherlands")]))]
       (when (not (str/blank? q))
-        (enforce-rate-limit! (:last-request-ms this) (:min-interval-ms this))
+        (support/enforce-rate-limit! (:last-request-ms this) (:min-interval-ms this))
         (log/debug "OSM geocode request" {:q q})
         (try
           (let [response (http/get (str (:base-url this) "/search")
@@ -87,7 +69,7 @@
                 status   (:status response)
                 results  (:body response)]
             (if (= 200 status)
-              (parse-result (first results))
+              (support/parse-response :openstreetmap parse-result (first results))
               (do
                 (log/warn "OSM geocode non-200 response" {:status status})
                 nil)))
@@ -96,7 +78,7 @@
             nil)))))
 
   (reverse-geocode [this point]
-    (enforce-rate-limit! (:last-request-ms this) (:min-interval-ms this))
+    (support/enforce-rate-limit! (:last-request-ms this) (:min-interval-ms this))
     (log/debug "OSM reverse-geocode request" point)
     (try
       (let [response (http/get (str (:base-url this) "/reverse")
@@ -111,7 +93,9 @@
             status   (:status response)
             body     (:body response)]
         (if (= 200 status)
-          (parse-result body)
+          ;; No address here is a 200 with {"error": "Unable to geocode"}.
+          (when-not (:error body)
+            (support/parse-response :openstreetmap parse-result body))
           (do
             (log/warn "OSM reverse-geocode non-200 response" {:status status})
             nil)))
@@ -127,14 +111,21 @@
   "Create an OpenStreetMap Nominatim adapter.
 
    Config keys:
-     :user-agent       - Descriptive User-Agent string (REQUIRED by OSM policy)
+     :user-agent       - App name and contact (OSM policy; WARN and a shared default when absent)
      :base-url         - Override base URL (default: https://nominatim.openstreetmap.org)
-     :min-interval-ms  - Minimum ms between requests (default: 1000)
+     :min-interval-ms  - Minimum ms between requests (default and floor on the public server: 1000)
 
    Returns:
      NominatimAdapter implementing GeoProviderProtocol"
   [{:keys [user-agent base-url min-interval-ms]
     :or   {base-url         default-base-url
            min-interval-ms  default-min-interval-ms}}]
-  {:pre [(string? user-agent)]}
-  (->NominatimAdapter base-url (atom 0) min-interval-ms user-agent))
+  ;; The public server's policy: 1 req/s and a User-Agent naming the app. A self-hosted one sets its own.
+  (let [public?  (= "nominatim.openstreetmap.org" (some-> (URI. base-url) .getHost str/lower-case))
+        interval (if public? (max min-interval-ms default-min-interval-ms) min-interval-ms)]
+    (when (not= interval min-interval-ms)
+      (log/warn "Geo: OpenStreetMap allows 1 request per second; ignoring the faster rate limit."
+                {:requested-ms min-interval-ms :using-ms interval}))
+    (when (and public? (not user-agent))
+      (log/warn "Geo: no :user-agent for OpenStreetMap. Nominatim's usage policy wants one naming your app and a contact; a shared default risks being blocked."))
+    (->NominatimAdapter base-url (atom 0) interval (or user-agent default-user-agent))))

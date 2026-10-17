@@ -8,6 +8,7 @@
      (def adapter (create-mapbox-adapter {:api-key \"pk.eyJ1...\"}))
      (geocode adapter {:address \"Damrak 1, Amsterdam\"})"
   (:require [wagoe.geo.ports :as ports]
+            [wagoe.geo.shell.adapters.support :as support]
             [clj-http.client :as http]
             [clojure.string :as str]
             [clojure.tools.logging :as log])
@@ -17,19 +18,6 @@
 (def ^:private default-min-interval-ms 100)
 
 ;; =============================================================================
-;; Rate limiting helpers
-;; =============================================================================
-
-(defn- enforce-rate-limit!
-  [last-request-ms min-interval-ms]
-  (let [now     (System/currentTimeMillis)
-        elapsed (- now @last-request-ms)
-        wait    (- min-interval-ms elapsed)]
-    (when (pos? wait)
-      (Thread/sleep wait))
-    (reset! last-request-ms (System/currentTimeMillis))))
-
-;; =============================================================================
 ;; Response parsing
 ;; =============================================================================
 
@@ -37,27 +25,24 @@
   "Extract a value from Mapbox context array by id prefix."
   [context prefix]
   (some (fn [c]
-          (when (str/starts-with? (get c "id" "") prefix)
-            (get c "text")))
+          (when (str/starts-with? (:id c "") prefix)
+            (:text c)))
         context))
 
 (defn- parse-result
   "Parse a single Mapbox feature into a GeoResult.
    Mapbox returns coordinates as [lng, lat] (GeoJSON — longitude first)."
   [feature]
-  (when feature
-    (let [coords   (get-in feature ["geometry" "coordinates"])
-          lng      (first coords)
-          lat      (second coords)
-          context  (get feature "context" [])]
-      {:lat               lat
-       :lng               lng
-       :formatted-address (get feature "place_name")
-       :postcode          (extract-context-field context "postcode")
-       :city              (extract-context-field context "place")
-       :country           (extract-context-field context "country")
-       :provider          :mapbox
-       :cached?           false})))
+  (let [[lng lat] (get-in feature [:geometry :coordinates])
+        context   (:context feature)]
+    {:lat               lat
+     :lng               lng
+     :formatted-address (:place_name feature)
+     :postcode          (extract-context-field context "postcode")
+     :city              (extract-context-field context "place")
+     :country           (extract-context-field context "country")
+     :provider          :mapbox
+     :cached?           false}))
 
 ;; =============================================================================
 ;; Adapter record
@@ -74,10 +59,11 @@
                       (remove nil? [address postcode city
                                     (or country "Netherlands")]))]
       (when (not (str/blank? q))
-        (enforce-rate-limit! (:last-request-ms this) (:min-interval-ms this))
+        (support/enforce-rate-limit! (:last-request-ms this) (:min-interval-ms this))
         (log/debug "Mapbox geocode request" {:q q})
         (try
-          (let [encoded  (URLEncoder/encode q "UTF-8")
+          ;; URLEncoder writes spaces as "+", which is literal in a path segment.
+          (let [encoded  (str/replace (URLEncoder/encode q "UTF-8") "+" "%20")
                 url      (str (:base-url this)
                               "/geocoding/v5/mapbox.places/"
                               encoded ".json")
@@ -90,7 +76,7 @@
                 status   (:status response)
                 body     (:body response)]
             (if (= 200 status)
-              (parse-result (first (get body "features")))
+              (support/parse-response :mapbox parse-result (first (:features body)))
               (do
                 (log/warn "Mapbox geocode non-200 response" {:status status})
                 nil)))
@@ -99,23 +85,24 @@
             nil)))))
 
   (reverse-geocode [this point]
-    (enforce-rate-limit! (:last-request-ms this) (:min-interval-ms this))
+    (support/enforce-rate-limit! (:last-request-ms this) (:min-interval-ms this))
     (log/debug "Mapbox reverse-geocode request" point)
     (try
       ;; Mapbox reverse geocode endpoint: /geocoding/v5/mapbox.places/{lng},{lat}.json
+      ;; No limit: Mapbox rejects one on reverse unless a single `types` is given.
+      ;; Features come most specific first.
       (let [url      (str (:base-url this)
                           "/geocoding/v5/mapbox.places/"
                           (:lng point) "," (:lat point) ".json")
             response (http/get url
-                               {:query-params     {"access_token" (:api-key this)
-                                                   "limit"        "1"}
+                               {:query-params     {"access_token" (:api-key this)}
                                 :as               :json
                                 :coerce           :always
                                 :throw-exceptions false})
             status   (:status response)
             body     (:body response)]
         (if (= 200 status)
-          (parse-result (first (get body "features")))
+          (support/parse-response :mapbox parse-result (first (:features body)))
           (do
             (log/warn "Mapbox reverse-geocode non-200 response" {:status status})
             nil)))

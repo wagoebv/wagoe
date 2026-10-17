@@ -25,6 +25,7 @@
 | `wagoe.geo.shell.adapters.osm` | shell | Nominatim adapter (`NominatimAdapter`) |
 | `wagoe.geo.shell.adapters.google` | shell | Google Maps adapter (`GoogleAdapter`) |
 | `wagoe.geo.shell.adapters.mapbox` | shell | Mapbox adapter (`MapboxAdapter`) |
+| `wagoe.geo.shell.adapters.support` | shell | Shared rate limiter and response check |
 | `wagoe.geo.shell.cache` | shell | `DbGeoCache` — next.jdbc-backed cache |
 | `wagoe.geo.shell.service` | shell | Public API: `geocode!`, `reverse-geocode!`, `distance` |
 | `wagoe.geo.shell.module-wiring` | shell | Integrant `:wagoe/geo-service` |
@@ -145,7 +146,7 @@ CREATE INDEX idx_geo_cache_coords ON geo_cache(lat, lng);
 ## 7. Common Pitfalls
 
 ### 1. OSM lon vs lng
-The Nominatim JSON response uses the field name `"lon"` (not `"lng"`). The adapter handles this, but if you call the OSM API directly, remember `lon` → `lng` mapping.
+The Nominatim JSON response uses the field name `"lon"` (not `"lng"`). The adapter handles this, but if you call the OSM API directly, remember `lon` → `lng` mapping. Responses are read with clj-http `:as :json`, so keys are keywords (`:lon`, `:display_name`); a string-key lookup finds nothing (BOU-709).
 
 ### 2. OSM rate limiting
 OSM usage policy requires **at most 1 request per second**. The adapter enforces this with `Thread/sleep`. Never create multiple `NominatimAdapter` instances for the same application — each has its own `last-request-ms` atom and would bypass the limit.
@@ -163,10 +164,10 @@ The SHA-256 cache key is computed from the **normalised** query (lowercased, tri
 `reverse-geocode!` does not use the cache. Reverse geocoding typically produces different addresses for slightly different coordinates, making coordinate-based hashing impractical. Cache at the application layer if needed.
 
 ### 7. Provider nil → fallback continues
-When a provider throws an exception, the adapter returns `nil` and logs a warning. The service layer treats this as a miss and continues to the next provider. Do not rely on exceptions propagating from `geocode!`.
+When a provider throws an exception, the adapter returns `nil` and logs an error. A response without numeric coordinates logs a WARN naming the provider. The service layer treats this as a miss and continues to the next provider. Do not rely on exceptions propagating from `geocode!`.
 
 ### 8. Thread safety of rate-limit atoms
-Each adapter record holds a mutable `last-request-ms` atom. **Atoms are thread-safe** for reads and updates, so concurrent requests from multiple threads will not cause corruption. However, two threads might both pass the rate limit check before either updates the atom, causing brief rate limit overshoots (e.g., 1.1 req/sec instead of 1.0 req/sec). This is acceptable — worst case is slightly exceeding the rate limit by a few milliseconds, not data corruption.
+`support/enforce-rate-limit!` locks on the adapter's `last-request-ms` atom, so concurrent requests are spaced as well as sequential ones. Against the public Nominatim server the interval never drops below 1000 ms, whatever `:rate-limit` says.
 
 ### 9. Multi-instance deployments
 **Rate limiting is per-JVM instance, not distributed.** In multi-instance deployments (Kubernetes, ECS), each pod independently enforces rate limits. This may exceed provider rate limits.

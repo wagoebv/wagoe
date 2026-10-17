@@ -128,6 +128,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **Security: the search API served every index to any signed-in user** (BOU-706). An index is now served only with
   `:api? true` or an `:api {:authorize …}` hook; apps relying on `/api/v1/search/:index-id` must add `:api? true`.
+- **Geocoding never returned a result** (BOU-709): the OSM, Google and Mapbox adapters read string keys from keywordized
+  JSON. Set `:user-agent` with a contact when using OpenStreetMap.
 - **Security: an `unknown` X-Forwarded-For hop resolved to the trusted proxy** (BOU-695). The client IP is now nil;
   code that authorises by address must refuse nil.
 - **Calendar month names were English only, and multi-day events showed on their first day only** (BOU-702). Month
