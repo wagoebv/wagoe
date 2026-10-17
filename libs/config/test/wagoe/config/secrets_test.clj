@@ -70,6 +70,11 @@
       (is (= :configuration-error (:type (ex-data (thrown #(read-edn (str "{:pw #secret " form "}"))))))
           form)))
 
+  (testing "a value that is not a string is refused"
+    (let [e (thrown #(read-edn "{:pw #secret [:vault \"db\"]}"
+                               {:secret-sources {:vault (map-source {"db" 5432})}}))]
+      (is (= {:type :configuration-error :source :vault :secret "db"} (ex-data e)))))
+
   (testing "an unknown source is named"
     (is (re-find #":nope" (ex-message (thrown #(read-edn "{:pw #secret [:nope \"x\"]}")))))))
 
@@ -77,6 +82,11 @@
   (is (= "dev-pw" (:pw (read-edn (str "{:pw #or [#secret \"" unset "\" \"dev-pw\"]}")))))
   (is (= "real" (:pw (read-edn "{:pw #or [#secret [:vault \"db\"] \"dev-pw\"]}"
                                {:secret-sources {:vault (map-source {"db" "real"})}}))))
+  (testing "a #secret as the last fallback still fails"
+    (let [e (thrown #(read-edn (str "{:pw #or [#secret \"" unset "\" #secret [:file \"" unset "\"]]}")))]
+      (is (= :file (:source (ex-data e))))))
+  (testing "an explicit nil default is honoured"
+    (is (nil? (:pw (read-edn (str "{:pw #or [#secret \"" unset "\" nil]}"))))))
   (testing "only inside the #or: a sibling secret still fails"
     (is (thrown? clojure.lang.ExceptionInfo
                  (read-edn (str "{:a #or [#secret \"" unset "\" \"x\"] :b #secret \"" unset "\"}"))))))
@@ -89,3 +99,14 @@
            (sut/redact ig))
         "by value, so a key no name pattern catches is still covered")
     (is (= ig (sut/unredact (sut/redact ig))) "and an edited copy restores")))
+
+(deftest ^:unit redact-covers-a-secret-joined-into-a-longer-string
+  (let [cfg (read-edn "{:url #join [\"postgres://u:\" #secret [:vault \"pw\"] \"@db\"]}"
+                      {:secret-sources {:vault (map-source {"pw" "j0ined-pw"})}})]
+    (is (= {:url "postgres://u:<secret vault:pw>@db"} (sut/redact cfg)))
+    (is (= cfg (sut/unredact (sut/redact cfg))))))
+
+(deftest ^:unit optional-reads-make-missing-secrets-and-sources-nil
+  (is (= {:a nil :b nil}
+         (read-edn (str "{:a #secret \"" unset "\" :b #secret [:nope \"x\"]}")
+                   {::sut/optional? true}))))

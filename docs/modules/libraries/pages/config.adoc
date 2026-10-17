@@ -88,7 +88,7 @@ is trimmed.
 A secret that no source has, or that is blank, fails `load-config` with a
 `:configuration-error` naming the secret and its source. The value never
 appears in an error. Inside `#or` a missing secret is nil instead, so the next
-value is used.
+value is used, unless the secret is the last value.
 
 Pass `:default-secret-source` to make bare names read another source:
 
@@ -127,7 +127,8 @@ no Vault, SOPS or cloud adapter; a Vault one is a few lines:
 ----
 
 and the config names it with `#secret [:vault "db-password"]`. A source under
-`:env` or `:file` replaces the built-in one.
+`:env` or `:file` replaces the built-in one. The migration and database CLIs
+read config without your opts, so they see only `:env` and `:file`.
 
 == Why it is a library
 

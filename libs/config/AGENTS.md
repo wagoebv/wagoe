@@ -50,7 +50,8 @@ in `load-config` opts); `#secret [:file "name"]` names one. `:file` reads
 
 - A missing or blank secret throws `:configuration-error` with `:secret` and
   `:source`, never the value. Inside `#or` it is nil, so `#or [#secret "X" "dev"]`
-  works: the namespace wraps Aero's `#or` to make that so.
+  works: the namespace wraps Aero's `#or` to make that so. A `#secret` as the
+  last value of an `#or` is required again.
 - Resolved values are kept in a registry so `redact` can find them by value.
   Anything that prints config must pass it through `redact`; the devtools config
   page and `(config :section)` do.

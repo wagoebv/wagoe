@@ -45,13 +45,31 @@
   "True inside #or, where a missing secret is nil so the next value is tried."
   false)
 
-;; Wrapped once: defonce keeps a reload from wrapping the wrapper.
-(defonce ^:private aero-or (get-method aero-alpha/eval-tagged-literal 'or))
+;; The wrapper carries Aero's original, so a reload — including tools.namespace's
+;; remove-ns, which defonce does not survive — never wraps the wrapper.
+(def ^:private aero-or
+  (let [m (get-method aero-alpha/eval-tagged-literal 'or)]
+    (::original (meta m) m)))
 
-(defmethod aero-alpha/eval-tagged-literal 'or
-  [tl opts env ks]
-  (binding [*optional?* true]
-    (aero-or tl opts env ks)))
+(declare resolve-secret)
+
+(defn- last-secret
+  "The form of the #secret ending an #or, when one does: nothing follows it to
+   fall back to, so missing it is an error again."
+  [tl]
+  (let [form (:form tl)
+        end  (when (sequential? form) (last form))]
+    (when (and (tagged-literal? end) (= 'secret (:tag end)))
+      (:form end))))
+
+(.addMethod ^clojure.lang.MultiFn aero-alpha/eval-tagged-literal 'or
+            (with-meta (fn [tl opts env ks]
+                         (let [result (binding [*optional?* true]
+                                        (aero-or tl opts env ks))]
+                           (when-let [form (and (nil? (:aero.core/value result)) (last-secret tl))]
+                             (resolve-secret opts form))
+                           result))
+              {::original aero-or}))
 
 (defn- secret-ref
   "[source-key name] from a #secret form."
@@ -69,21 +87,28 @@
 (defn resolve-secret
   "The value of the secret `form` names. `opts` are Aero's: `:secret-sources`
    adds or replaces sources, `:default-secret-source` picks the one a bare name
-   reads (default `:env`)."
-  [{:keys [secret-sources default-secret-source] :or {default-secret-source :env}} form]
+   reads (default `:env`), and `::optional?` makes a missing secret or source
+   nil, for a reader that only wants the rest of the file."
+  [{:keys [secret-sources default-secret-source] :or {default-secret-source :env} :as opts} form]
   (let [[source-key secret-name] (secret-ref form default-secret-source)
         sources (merge (default-sources) secret-sources)
         source  (or (get sources source-key)
-                    (throw (ex-info (str "#secret: unknown source " source-key " for " secret-name
-                                         ". Known: " (str/join ", " (sort (keys sources))))
-                                    {:type :configuration-error :source source-key :secret secret-name})))
-        value   (fetch-secret source secret-name)]
+                    (when-not (::optional? opts)
+                      (throw (ex-info (str "#secret: unknown source " source-key " for " secret-name
+                                           ". Known: " (str/join ", " (sort (keys sources))))
+                                      {:type :configuration-error :source source-key :secret secret-name}))))
+        value   (some-> source (fetch-secret secret-name))]
     (cond
+      (and (some? value) (not (string? value)))
+      (throw (ex-info (str "#secret: source " source-key " returned a " (.getName (class value))
+                           " for " secret-name ", not a string")
+                      {:type :configuration-error :source source-key :secret secret-name}))
+
       (not (str/blank? value))
       (do (swap! resolved assoc (label source-key secret-name) value)
           value)
 
-      *optional?* nil
+      (or *optional?* (::optional? opts)) nil
 
       :else
       (throw (ex-info (str "Secret not found: " secret-name " (source " source-key
@@ -96,21 +121,26 @@
   (resolve-secret opts form))
 
 (defn- placeholder [l] (str "<secret " l ">"))
-(def ^:private placeholder-re #"<secret (.+)>")
+(def ^:private placeholder-re #"<secret ([^<>]+)>")
 
 (defn redact
-  "`x` with every value a #secret resolved to replaced by `<secret source:name>`."
+  "`x` with every value a #secret resolved to replaced by `<secret source:name>`,
+   inside longer strings too: a DSN built with #join holds the password."
   [x]
-  (let [labels (set/map-invert @resolved)]
-    (if (empty? labels)
+  ;; Longest first, so a secret that contains another is replaced whole.
+  (let [pairs (sort-by (comp - count key) (set/map-invert @resolved))]
+    (if (empty? pairs)
       x
-      (walk/postwalk #(if-let [l (and (string? %) (labels %))] (placeholder l) %) x))))
+      (walk/postwalk #(if (string? %)
+                        (reduce (fn [s [v l]] (str/replace s v (placeholder l))) % pairs)
+                        %)
+                     x))))
 
 (defn unredact
   "The inverse of `redact`, for an edited copy written back."
   [x]
   (let [values @resolved]
-    (walk/postwalk #(or (when (string? %)
-                          (some-> (re-matches placeholder-re %) second values))
-                        %)
+    (walk/postwalk #(if (string? %)
+                      (str/replace % placeholder-re (fn [[m l]] (get values l m)))
+                      %)
                    x)))
