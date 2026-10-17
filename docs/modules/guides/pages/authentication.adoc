@@ -290,6 +290,31 @@ Check grants on each request; nothing is cached, so a change applies to the next
 A soft-deleted user holds no grants. Deleting a user or a group removes the
 memberships, and a group's grants go with it.
 
+To ask who holds a permission, say for a notification, use one query rather than
+walking the groups. Inactive users are left out:
+
+[source,clojure]
+----
+(-> (user-ports/permission-holders group-service :invoice/approve) ; [{:user-id :permission :scope} …]
+    (group/users-with-permission #(= domain-id (:domain-id %))))  ; => [user-id …]
+----
+
+To move existing grants onto groups, import them. Each group is matched by name and
+created when missing; every group, member and grant is checked before anything is
+written, and the import runs in one transaction, audited as the single changes are.
+It adds what is missing and removes nothing unless you pass `{:replace? true}`, so
+running it twice is harmless. It creates the group tables itself, so it can run from
+your own migration:
+
+[source,clojure]
+----
+(user-ports/import-groups! group-service
+                           [{:name    "Finance"
+                             :members [ada-id bob-id]
+                             :grants  [{:permission :invoice/approve :scope {:domain-id 4}}]}]
+                           {})
+----
+
 [#web-ui-off]
 == Turning the web UI off
 

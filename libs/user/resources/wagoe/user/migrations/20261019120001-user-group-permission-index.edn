@@ -1,0 +1,5 @@
+;; An index on user_group_grants(permission), for permission-holders (BOU-718),
+;; on a database created before. The same idempotent definition.
+{:ns      wagoe.user.shell.user-tables
+ :up-fn   "up"
+ :down-fn "down"}

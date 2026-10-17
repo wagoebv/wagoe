@@ -5,8 +5,10 @@
   (:require [clojure.edn :as edn]
             [wagoe.core.utils.type-conversion :as tc]
             [wagoe.platform.database :as db]
+            [wagoe.platform.ports.database :as protocols]
             [wagoe.user.core.group :as group]
-            [wagoe.user.ports :as ports])
+            [wagoe.user.ports :as ports]
+            [wagoe.user.shell.persistence :as persistence])
   (:import (java.time Instant)
            (java.util UUID)))
 
@@ -22,11 +24,14 @@
       (contains? row :member-count) (assoc :member-count (long (:member-count row)))
       (contains? row :grant-count)  (assoc :grant-count (long (:grant-count row))))))
 
+(defn- db->scope [row]
+  (edn/read-string (str (:scope row))))
+
 (defn- db->grant [row]
   (cond-> {:id         (tc/string->uuid (:id row))
            :group-id   (tc/string->uuid (:group-id row))
            :permission (keyword (:permission row))
-           :scope      (edn/read-string (str (:scope row)))
+           :scope      (db->scope row)
            :created-at (tc/string->instant (:created-at row))}
     (contains? row :group-name) (assoc :group-name (:group-name row))))
 
@@ -42,11 +47,20 @@
    :from   [[:user_group_grants :t]]
    :where  [:= :t.group_id :g.id]})
 
-(defn- member? [ctx group-id user-id]
-  (some? (db/execute-one! ctx {:select [:id]
-                               :from   [:user_group_members]
-                               :where  [:and [:= :group_id (id-str group-id)]
-                                        [:= :user_id (id-str user-id)]]})))
+(defn- unique-violation?
+  "Whether `e` is the :conflict the execution layer makes of a unique key."
+  [e]
+  (= [:conflict :unique] ((juxt :type :constraint) (ex-data e))))
+
+(defn- name-taken!
+  "Run `f`, a write to user_groups, turning its unique name refused into a
+   :conflict on :name the admin form shows."
+  [f]
+  (try (f)
+       (catch clojure.lang.ExceptionInfo e
+         (throw (if (unique-violation? e)
+                  (ex-info "Another group has this name" {:type :conflict :field :name} e)
+                  e)))))
 
 (defrecord DatabaseUserGroupRepository [ctx]
   ports/IUserGroupRepository
@@ -66,20 +80,20 @@
   (insert-group [_ group]
     (let [stored (assoc (select-keys group [:name :description])
                         :id (UUID/randomUUID) :created-at (Instant/now) :updated-at nil)]
-      (db/execute-update! ctx {:insert-into :user_groups
-                               :values      [{:id          (tc/uuid->string (:id stored))
-                                              :name        (:name stored)
-                                              :description (:description stored)
-                                              :created_at  (tc/instant->string (:created-at stored))}]})
+      (name-taken! #(db/execute-update! ctx {:insert-into :user_groups
+                                             :values      [{:id          (tc/uuid->string (:id stored))
+                                                            :name        (:name stored)
+                                                            :description (:description stored)
+                                                            :created_at  (tc/instant->string (:created-at stored))}]}))
       stored))
 
   (modify-group [this group]
-    (when (pos? (db/execute-update! ctx {:update :user_groups
-                                         :set    (cond-> {:name       (:name group)
-                                                          :updated_at (tc/instant->string (Instant/now))}
-                                                   (contains? group :description)
-                                                   (assoc :description (:description group)))
-                                         :where  [:= :id (id-str (:id group))]}))
+    (when (pos? (name-taken! #(db/execute-update! ctx {:update :user_groups
+                                                       :set    (cond-> {:name       (:name group)
+                                                                        :updated_at (tc/instant->string (Instant/now))}
+                                                                 (contains? group :description)
+                                                                 (assoc :description (:description group)))
+                                                       :where  [:= :id (id-str (:id group))]})))
       (ports/find-group this (:id group))))
 
   (remove-group [_ group-id]
@@ -108,12 +122,13 @@
                                               :user_id    (id-str user-id)
                                               :created_at (tc/instant->string (Instant/now))}]})
       true
-      ;; A member already: the unique key refuses the row.
-      (catch Exception e
-        (if (member? ctx group-id user-id)
-          false
-          ;; The group or user went meanwhile: a key refused the row.
-          (throw (ex-info "Could not add the member" {:type :conflict} e))))))
+      ;; Read nothing after: in a PostgreSQL transaction the refusal aborts it.
+      (catch clojure.lang.ExceptionInfo e
+        (cond
+          (unique-violation? e) false
+          ;; The group or user went meanwhile: a foreign key refused the row.
+          (= :conflict (:type (ex-data e))) (throw (ex-info "Could not add the member" {:type :conflict} e))
+          :else (throw e)))))
 
   (remove-member [_ group-id user-id]
     (pos? (db/execute-update! ctx {:delete-from :user_group_members
@@ -158,7 +173,34 @@
                                             :join     [[:user_group_members :m] [:= :m.group_id :g.id]
                                                        [:auth_users :a] [:= :a.id :m.user_id]]
                                             :where    [:and [:= :m.user_id (id-str user-id)] [:= :a.deleted_at nil]]
-                                            :order-by [[:g.name :asc]]}))))
+                                            :order-by [[:g.name :asc]]})))
+
+  (find-permission-holders [_ permission]
+    (->> (db/execute-query! ctx {:select   [:m.user_id :gr.scope]
+                                 :from     [[:user_group_grants :gr]]
+                                 :join     [[:user_group_members :m] [:= :m.group_id :gr.group_id]
+                                            [:auth_users :a] [:= :a.id :m.user_id]]
+                                 :where    [:and [:= :gr.permission (group/permission-str permission)]
+                                            [:= :a.deleted_at nil]
+                                            [:= :a.active (protocols/boolean->db (:adapter ctx) true)]]
+                                 :order-by [[:m.user_id :asc]]})
+         ;; Distinct here: a scope is TEXT, which not every engine compares.
+         (into [] (comp (map (fn [row] {:user-id    (tc/string->uuid (:user-id row))
+                                        :permission permission
+                                        :scope      (db->scope row)}))
+                        (distinct)))))
+
+  (ensure-tables [_]
+    ;; What the migration runs, so an import in an application's migration
+    ;; need not be ordered after the user library's. Only when needed: it
+    ;; also scans user_sessions.
+    (when-not (db/table-exists? ctx "user_group_grants")
+      (persistence/initialize-user-schema! ctx))
+    nil)
+
+  (in-transaction [this f]
+    (db/with-transaction [tx ctx]
+      (f (assoc this :ctx tx)))))
 
 (defn create-group-repository [ctx]
   (->DatabaseUserGroupRepository ctx))
