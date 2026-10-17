@@ -181,7 +181,7 @@
           context        (create-interceptor-context :session-create user-service request)
 
           ;; Create the interceptor pipeline for session creation
-          pipeline       (user-interceptors/create-session-creation-pipeline :http)
+          pipeline       (user-interceptors/create-session-creation-pipeline)
 
           ;; Execute the pipeline
           result-context (interceptor/run-pipeline context pipeline)]
@@ -197,7 +197,7 @@
           context        (create-interceptor-context :user-login user-service request)
 
           ;; Create the interceptor pipeline for user authentication
-          pipeline       (user-interceptors/create-session-creation-pipeline :http)
+          pipeline       (user-interceptors/create-session-creation-pipeline)
 
           ;; Execute the pipeline
           result-context (interceptor/run-pipeline context pipeline)]

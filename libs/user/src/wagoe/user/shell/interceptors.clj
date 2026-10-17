@@ -821,6 +821,7 @@
                                                   {:type :validation-error
                                                    :message "Must provide email and password"
                                                    :provided-fields (keys input-data)
+                                                   ;; The converter reports :cli when absent.
                                                    :interface-type :http})))))})
 
 (def transform-session-creation-data
@@ -828,13 +829,12 @@
   {:name ::transform-session-creation-data
    :enter (fn [context]
             (let [body (:raw-session-data context)
-                  session-data (cond-> {}
-                                 (:email body) (assoc :email (:email body))
-                                 (:password body) (assoc :password (:password body))
-                                 (:mfaCode body) (assoc :mfa-code (:mfaCode body))
-                                 ;; Not deviceInfo.ipAddress: the caller writes that.
-                                 true (assoc :user-agent (get-in body [:deviceInfo :userAgent] "Unknown")
-                                             :ip-address (or (client-ip/request-ip (:request context)) "Unknown")))]
+                  session-data (cond-> {:email      (:email body)
+                                        :password   (:password body)
+                                        :user-agent (get-in body [:deviceInfo :userAgent] "Unknown")
+                                        ;; Not deviceInfo.ipAddress: the caller writes that.
+                                        :ip-address (or (client-ip/request-ip (:request context)) "Unknown")}
+                                 (:mfaCode body) (assoc :mfa-code (:mfaCode body)))]
               (-> context
                   (assoc :session-data session-data)
                   (ctx/add-breadcrumb :operation :session-create-transform-complete
@@ -851,9 +851,7 @@
                   updated-context (ctx/add-breadcrumb context :operation :user-authenticate-start
                                                       {:email (:email session-data)})]
               (try
-                (-> updated-context
-                    (assoc :session (ports/authenticate-user service session-data))
-                    (ctx/add-breadcrumb :operation :user-authenticate-complete {}))
+                (assoc updated-context :session (ports/authenticate-user service session-data))
                 (catch Exception ex
                   (-> updated-context
                       (ctx/add-breadcrumb :operation :user-authenticate-error
@@ -918,13 +916,12 @@
 (defn create-session-creation-pipeline
   "Creates pipeline for creating a session (login). HTTP only: the CLI has no
    way to log in (BOU-691)."
-  [interface-type]
-  (case interface-type
-    :http (interceptors/create-http-pipeline
-           validate-session-creation-input
-           transform-session-creation-data
-           authenticate-user-session
-           format-session-creation-response)))
+  []
+  (interceptors/create-http-pipeline
+   validate-session-creation-input
+   transform-session-creation-data
+   authenticate-user-session
+   format-session-creation-response))
 
 ;; -----------------------------------------------------------------------------
 ;; VALIDATE SESSION INTERCEPTORS

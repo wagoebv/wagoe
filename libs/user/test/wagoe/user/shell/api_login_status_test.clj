@@ -48,13 +48,13 @@
 
 (deftest ^:contract ^:security an-unknown-email-gets-the-same-body
   (let [{:keys [svc]} (fixture)
-        error-of     (fn [handler body]
+        refusal      (fn [handler body]
                        (let [resp (post handler body)]
                          [(:status resp) (dissoc (get-in resp [:body :error]) :correlation-id)]))]
     (doseq [[path handler] (login-routes svc)]
       (testing path
-        (is (= (error-of handler {:email "bob@x.org" :password "Wrong-Pass-1"})
-               (error-of handler {:email "nobody@x.org" :password "Wrong-Pass-1"})))))))
+        (is (= (refusal handler {:email "bob@x.org" :password "Wrong-Pass-1"})
+               (refusal handler {:email "nobody@x.org" :password "Wrong-Pass-1"})))))))
 
 (deftest ^:contract ^:security an-inactive-account-gets-the-same-body
   (let [{:keys [svc] :as f} (fixture)]

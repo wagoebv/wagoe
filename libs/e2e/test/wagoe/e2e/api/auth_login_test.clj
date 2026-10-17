@@ -61,9 +61,9 @@
 
 (deftest ^:integration ^:e2e login-unknown-email-no-enumeration
   (testing "Nonexistent email yields the same 401 as a wrong password"
-    (let [error-of (fn [email]
-                     (let [resp (users/login {:email email :password "Wrong-Pass-1234!"})]
-                       [(:status resp) (dissoc (users/error-of resp) :correlation-id)]))]
+    (let [refusal (fn [email]
+                    (let [resp (users/login {:email email :password "Wrong-Pass-1234!"})]
+                      [(:status resp) (dissoc (users/error-of resp) :correlation-id)]))]
       (is (= [401 {:type "unauthorized" :message "Invalid email or password"}]
-             (error-of "nonexistent@acme.test")
-             (error-of (-> fx/*seed* :admin :email)))))))
+             (refusal "nonexistent@acme.test")
+             (refusal (-> fx/*seed* :admin :email)))))))
