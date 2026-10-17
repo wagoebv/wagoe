@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **Search indexes live on `:wagoe/search`** (BOU-705): pass definitions under `:indexes` in config, or as a
+  module's `:search` part. `wagoe.search.core.index/defsearch` binds one without registering it.
 - **User groups with scoped permission grants** (BOU-701): manage them at `/web/admin/groups`, check them with
   `(user-grants svc user)` from `:wagoe/user-group-service`. Declare permissions and scope under `:wagoe/user :groups`.
 - **App modules can contribute sign-in hooks** (BOU-697): `:auth {:mfa-required? (ig/ref …)}`, or `:login-redirect`,
@@ -115,6 +117,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Deprecated
 
+- **`wagoe.search.shell.registry` and its `defsearch`** (BOU-705): one registry for every system in the JVM. Hand
+  definitions to `:wagoe/search`; the registry is still read, warns once, and goes in 2.0.
 - **`DBAdapter/like` with a hand-built pattern** (BOU-684): `%` and `_` from user input match
   anything. Pass a mode and the raw value instead; the 3-arity goes in 2.0.
 - **`jwt-authentication-middleware` and `protect-with-jwt` without a user service** (BOU-682): they trust the token, so a
@@ -122,6 +126,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Security: the search API served every index to any signed-in user** (BOU-706). An index is now served only with
+  `:api? true` or an `:api {:authorize …}` hook; apps relying on `/api/v1/search/:index-id` must add `:api? true`.
 - **Security: an `unknown` X-Forwarded-For hop resolved to the trusted proxy** (BOU-695). The client IP is now nil;
   code that authorises by address must refuse nil.
 - **Calendar month names were English only, and multi-day events showed on their first day only** (BOU-702). Month

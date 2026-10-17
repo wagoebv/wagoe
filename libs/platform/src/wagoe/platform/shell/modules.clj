@@ -228,7 +228,7 @@
        (mapv #(symbol (str % "." module ".shell.module-wiring")))))
 
 (def ^:private no-graph
-  {:components {} :http {} :auth {} :middleware [] :routes [] :job-handlers []})
+  {:components {} :http {} :auth {} :search {} :middleware [] :routes [] :job-handlers []})
 
 (defn- merge-slots
   "`part` over `acc`, refusing a key both set. Each is one slot on `target`,
@@ -251,6 +251,12 @@
   [acc k auth]
   (merge-slots ":wagoe/auth-hooks" acc k (into {} (remove (comp nil? val)) auth)))
 
+(defn merge-search
+  "A module's `:search` index definitions over `acc`, refusing an index id
+   both define."
+  [acc k search]
+  (merge-slots ":wagoe/search" acc k search))
+
 (defn- add-graph
   "Fold module `k`'s graph into `acc`. One step for framework and discovered
    modules alike: a discovered module kept only `:components` and lost its
@@ -258,12 +264,14 @@
 
    `:extra-middleware` is the one `:http` key every module may set: it is
    collected into `:middleware`, in fold order, rather than taking a slot.
-   `:auth` holds sign-in hooks, one module each, for the user module."
-  [acc k {:keys [components http auth routes job-handlers]}]
+   `:auth` holds sign-in hooks, one module each, for the user module, and
+   `:search` index definitions by id, for the search module."
+  [acc k {:keys [components http auth search routes job-handlers]}]
   (-> acc
       (update :components #(merge-slots "the system config" % k components))
       (update :http merge-http k (dissoc http :extra-middleware))
       (update :auth merge-auth k auth)
+      (update :search merge-search k search)
       (cond-> (contains? http :extra-middleware)
         (update :middleware conj (:extra-middleware http)))
       (update :routes into routes)
@@ -552,9 +560,10 @@
 (defn framework-module-config
   "Integrant entries for the framework modules `active` switches on.
 
-   Returns `{:components {…} :http {…} :auth {…} :middleware [..] :routes [..]
-   :job-handlers [..]}`. `:components` merges into the system config,
-   `:http` into `:wagoe/http-handler` and `:auth` into `:wagoe/auth-hooks`. `:middleware` collects each module's
+   Returns `{:components {…} :http {…} :auth {…} :search {…} :middleware [..]
+   :routes [..] :job-handlers [..]}`. `:components` merges into the system config,
+   `:http` into `:wagoe/http-handler`, `:auth` into `:wagoe/auth-hooks` and
+   `:search` into `:wagoe/search`. `:middleware` collects each module's
    `:extra-middleware` — tenant's, for one — in module-key order.
    `:routes` is a vector of refs to modules' route components, which reach the
    handler as one collection rather than as a named slot per module (BOU-330).

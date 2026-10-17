@@ -100,6 +100,16 @@
                          " module, which runs sign-in hooks, is not enabled.")
                     {:type :configuration-error :keys (vec (keys auth))}))))
 
+(defn- with-search-indexes
+  "`ig-config` with the modules' `:search` index definitions handed to the
+   search module. Throws when it is off: nothing would serve them."
+  [ig-config search]
+  (if (contains? ig-config :wagoe/search)
+    (assoc-in ig-config [:wagoe/search :contributed] search)
+    (throw (ex-info (str "Modules define search indexes " (vec (keys search)) " under :search,"
+                         " but the search module is not enabled.")
+                    {:type :configuration-error :keys (vec (keys search))}))))
+
 (defn system-config
   "The Integrant configuration for `config`.
 
@@ -119,7 +129,7 @@
          ;; feature the config asks for and does not get, and it used to say
          ;; nothing at all (BOU-477).
          _          (modules/assert-every-key-claimed! active known)
-         {:keys [components http auth middleware routes job-handlers]}
+         {:keys [components http auth search middleware routes job-handlers]}
          (modules/framework-module-config
           active
           {:config            config
@@ -133,12 +143,14 @@
          {discovered          :components
           discovered-http     :http
           discovered-auth     :auth
+          discovered-search   :search
           discovered-mw       :middleware
           discovered-routes   :routes
           discovered-handlers :job-handlers}
          (modules/discover-module-config
           active known base-ns modules/require-wiring! requiring-resolve)
-         auth (modules/merge-auth auth :discovered discovered-auth)]
+         auth   (modules/merge-auth auth :discovered discovered-auth)
+         search (modules/merge-search search :discovered discovered-search)]
      (warn-code-enabled-migrations! active extra-modules)
      ;; Said once, so nobody looks for it on :9999 in prod (BOU-588).
      (when-let [profile (:wagoe/profile config)]
@@ -171,4 +183,7 @@
                  (modules/enabled-libraries active))
 
        (seq auth)
-       (with-auth-hooks auth)))))
+       (with-auth-hooks auth)
+
+       (seq search)
+       (with-search-indexes search)))))

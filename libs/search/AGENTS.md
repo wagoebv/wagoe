@@ -13,13 +13,13 @@ libs/search/
 │   ├── schema.clj          # Malli schemas: SearchDocument, SearchResult, SearchResponse, SearchDefinition (+ :filters)
 │   ├── ports.clj           # ISearchStore (persistence), ISearchEngine (orchestration)
 │   ├── core/
-│   │   ├── index.clj       # build-document*, filter-key->json-key (pure)
+│   │   ├── index.clj       # defsearch (data only), collect-definitions, api-enabled?, build-document* (pure)
 │   │   ├── query.clj       # SQL builders (PostgreSQL FTS + H2/SQLite LIKE fallback)
 │   │   ├── ranking.clj     # pure relevance scoring: field weights, recency boost, score normalization (z-score/min-max), combine
 │   │   ├── highlighting.clj # pure snippet extraction + match highlighting (highlight-field, extract-snippet-with-highlight)
 │   │   └── ui.clj          # Hiccup: indices-page, index-detail-page, search-results-fragment
 │   └── shell/
-│       ├── registry.clj    # defsearch macro + global definition registry (mutable state)
+│       ├── registry.clj    # deprecated global registry, read as a fallback
 │       ├── trigram.clj      # pg_trgm migration + installed? check
 │       ├── persistence.clj  # SearchStore (next.jdbc, HoneySQL ON CONFLICT upsert)
 │       ├── service.clj      # SearchService (orchestration, pagination, reindex)
@@ -38,27 +38,60 @@ libs/search/
 
 ## Core Concepts
 
-### defsearch Macro
+### Index definitions
 
-Defines a search index and registers it in a global atom registry. The registry
-is mutable process state, so it lives in the shell (`wagoe.search.shell.registry`);
-the core (`wagoe.search.core.index`) stays pure:
+An index is a `SearchDefinition` map, held by the `:wagoe/search` component.
+Hand definitions to it, keyed by index id, in either of two places:
+
+```edn
+;; config.edn — data only
+:wagoe/search
+{:indexes {:product-search {:entity-type :product
+                            :fields      [{:name :title :weight :a}]
+                            :api?        true}}}
+```
 
 ```clojure
-(require '[wagoe.search.shell.registry :as registry])
+;; your module's ig-config — the :search part, like :http and :auth
+(require '[wagoe.search.core.index :refer [defsearch]])
 
-(registry/defsearch product-search
-  {:id          :product-search
-   :entity-type :product
+(defsearch product-search
+  {:entity-type :product
    :language    "english"
    :fields      [{:name :title   :weight :a}
                  {:name :body    :weight :b}
                  {:name :tags    :weight :c}]
    :filters     [:tenant-id :category-id]})  ; optional: filterable dimensions
+
+(defn ig-config [_settings _ctx]
+  {:components {:shop/order-index {}}
+   :search     {:product-search product-search
+                :orders         (ig/ref :shop/order-index)}})  ; a component works too
 ```
 
-The var `product-search` holds the `SearchDefinition` map.
-`registry/get-search :product-search` retrieves it from the registry.
+`defsearch` only binds the var. `:id` defaults to the key; one that disagrees,
+or an id defined twice, fails the boot. Two systems in one JVM keep their own
+indexes, so tests need no fixture.
+
+`wagoe.search.shell.registry/defsearch` still works: the service reads that
+global registry for an id its component lacks, and logs a deprecation warning
+once.
+
+### Which indexes the HTTP API serves
+
+Search, suggest and the admin pages serve an index only when its definition
+opts in:
+
+| Definition                              | Served to                                           |
+|-----------------------------------------|-----------------------------------------------------|
+| neither key                             | nobody: 404                                         |
+| `:api? true`                            | any signed-in user                                  |
+| `:api {:authorize (fn [request def])}`  | requests the hook returns truthy for; 404 otherwise |
+
+A refused index answers the same 404 as an unknown one, so ids cannot be
+enumerated. An index behind your own page, with its own visibility rules,
+should leave both keys off and call `ports/search` from that page. The
+framework ships no indexes.
 
 ### build-document*
 
@@ -155,7 +188,8 @@ Call `ports/index-document!` from your module's service layer or event handler:
 ## HTTP Endpoints
 
 Searching takes a signed-in user; indexing, removing and the web UI take the
-admin role (BOU-568).
+admin role (BOU-568). Search, suggest and the web UI serve only an index that
+opts in (see above).
 
 An index with `:tenant-id` in its `:filters` is tenant-scoped. Search and
 suggest then filter on the request's resolved tenant, and only for an active
@@ -176,7 +210,7 @@ filters); anyone else gets 403.
 
 | Method | Path                            | Action             |
 |--------|----------------------------------|-------------------|
-| GET    | `/search`                        | List all indices   |
+| GET    | `/search`                        | List served indices |
 | GET    | `/search/:index-id`              | Index detail page  |
 | GET    | `/search/:index-id/results`      | HTMX search fragment |
 
@@ -244,24 +278,19 @@ bb lint:imports     # writes .clj-kondo/imports/ — commit it
 Before rc-4, or if you would rather not commit the imports, keep the rule local:
 
 ```clojure
-{:lint-as {wagoe.search.shell.registry/defsearch clojure.core/def}}
+{:lint-as {wagoe.search.core.index/defsearch clojure.core/def}}
 ```
 
 ## Common Pitfalls
 
-### 1. Registry Leakage Between Tests
+### 1. An index is not searchable over HTTP
 
-`defsearch` registers in a global atom that lives in the shell
-(`wagoe.search.shell.registry`). Reset it in test fixtures:
+Search and suggest answer 404 for an index without `:api? true` or an `:api`
+map. That is the default; opt in per index.
 
-```clojure
-(require '[wagoe.search.shell.registry :as registry])
-
-(use-fixtures :each
-  (fn [f]
-    (registry/clear-registry!)
-    (f)))
-```
+Code still on the deprecated `wagoe.search.shell.registry` shares one global
+atom across tests; reset it with `registry/clear-registry!`, or move the
+definitions to `:wagoe/search`.
 
 ### 2. Pass the adapter in tests
 
@@ -301,11 +330,12 @@ Enable in `resources/conf/<env>/config.edn`:
 
 ```edn
 :wagoe/search
-{:enabled? true}
+{:enabled? true
+ :indexes  {}}   ; optional: index id -> definition
 ```
 
-No additional options are required — the search module auto-detects the database
-type from the shared `:wagoe/db-context`.
+The search module auto-detects the database type from the shared
+`:wagoe/db-context`.
 
 ---
 

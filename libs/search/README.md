@@ -17,20 +17,29 @@ and an admin UI — all wired in via a single Integrant key.
 ### 1. Define a Search Index
 
 ```clojure
-(require '[wagoe.search.shell.registry :as registry])
+(require '[wagoe.search.core.index :refer [defsearch]])
 
-(registry/defsearch product-search
-  {:id          :product-search
-   :entity-type :product
+(defsearch product-search
+  {:entity-type :product
    :language    :english
-   :fields      [{:name :title       :weight :A}
-                 {:name :description :weight :B}
-                 {:name :tags        :weight :C}]})
+   :fields      [{:name :title       :weight :a}
+                 {:name :description :weight :b}
+                 {:name :tags        :weight :c}]
+   :api?        true})   ; serve it over the HTTP API
 ```
 
-`defsearch` binds the var and registers the definition in the in-process registry.
-The registry is mutable process state, so it lives in the shell
-(`wagoe.search.shell.registry`); `wagoe.search.core.index` stays pure.
+`defsearch` only binds the var. Hand it to `:wagoe/search` from your module's
+`ig-config`, as its `:search` part:
+
+```clojure
+(defn ig-config [_settings _ctx]
+  {:search {:product-search product-search}})
+```
+
+or put the same map in config, under `:wagoe/search :indexes`. The search API
+and admin pages serve an index only with `:api? true`, or an `:api` map whose
+`:authorize` hook, `(fn [request definition])`, accepts the request; any other
+index answers 404.
 
 ### 2. Index Documents
 
@@ -110,7 +119,8 @@ returns an empty `SearchResponse` with `:total 0` without touching the database.
 {:wagoe/search {:enabled? true}}
 ```
 
-No additional options are needed — the module auto-detects the database type.
+`:indexes` (index id -> definition) is the one option; the module auto-detects
+the database type.
 
 ---
 
@@ -129,7 +139,7 @@ No additional options are needed — the module auto-detects the database type.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/search` | List all registered indices |
+| `GET` | `/search` | List served indices |
 | `GET` | `/search/:index-id` | Index detail + live search form |
 | `POST` | `/search/:index-id/search` | HTMX search results fragment |
 
@@ -175,16 +185,9 @@ clojure -M:test :search --focus-meta :unit
 
 H2 integration tests create their own in-memory database — no external dependencies required.
 
-Test fixture pattern (reset the global registry between tests):
-
-```clojure
-(require '[wagoe.search.shell.registry :as registry])
-
-(use-fixtures :each
-  (fn [f]
-    (registry/clear-registry!)
-    (f)))
-```
+Definitions live on the component, so tests need no registry fixture. Code
+still on the deprecated `wagoe.search.shell.registry` resets it with
+`registry/clear-registry!`.
 
 ---
 
