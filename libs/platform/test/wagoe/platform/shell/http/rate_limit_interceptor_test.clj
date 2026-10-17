@@ -28,12 +28,13 @@
 
 (defn- run
   "Drive a request through only the rate-limit interceptor and return the response."
-  [system client-ip]
-  (itc/run-http-interceptors
-   (fn [_req] {:status 200 :headers {} :body "ok"})
-   [itc/http-rate-limit-protection]
-   {:request-method :get :uri "/api/v1/thing" :remote-addr client-ip}
-   system))
+  ([system client-ip] (run system client-ip {}))
+  ([system client-ip headers]
+   (itc/run-http-interceptors
+    (fn [_req] {:status 200 :headers {} :body "ok"})
+    [itc/http-rate-limit-protection]
+    {:request-method :get :uri "/api/v1/thing" :remote-addr client-ip :headers headers}
+    system)))
 
 (deftest ^:unit ^:security disabled-is-a-noop
   (testing "with :enabled? false the interceptor never limits and adds no headers"
@@ -115,13 +116,7 @@
 ;; BOU-690: the limiter keyed on an unchecked X-Api-Key before the IP.
 (deftest ^:unit ^:security ignores-the-x-api-key-header
   (let [system {:rate-limit {:enabled? true :limit 2 :window-ms 60000}}
-        call   (fn [ip api-key]
-                 (:status (itc/run-http-interceptors
-                           (fn [_] {:status 200 :headers {} :body "ok"})
-                           [itc/http-rate-limit-protection]
-                           {:request-method :get :uri "/api/v1/thing" :remote-addr ip
-                            :headers {"x-api-key" api-key}}
-                           system)))]
+        call   (fn [ip api-key] (:status (run system ip {"x-api-key" api-key})))]
     (testing "a fresh random key per request does not reset the caller's bucket"
       (is (= [200 200 429]
              (vec (repeatedly 3 #(call "198.51.100.10" (str (random-uuid))))))))
