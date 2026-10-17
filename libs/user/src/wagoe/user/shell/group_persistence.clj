@@ -24,11 +24,14 @@
       (contains? row :member-count) (assoc :member-count (long (:member-count row)))
       (contains? row :grant-count)  (assoc :grant-count (long (:grant-count row))))))
 
+(defn- db->scope [row]
+  (edn/read-string (str (:scope row))))
+
 (defn- db->grant [row]
   (cond-> {:id         (tc/string->uuid (:id row))
            :group-id   (tc/string->uuid (:group-id row))
            :permission (keyword (:permission row))
-           :scope      (edn/read-string (str (:scope row)))
+           :scope      (db->scope row)
            :created-at (tc/string->instant (:created-at row))}
     (contains? row :group-name) (assoc :group-name (:group-name row))))
 
@@ -174,13 +177,15 @@
          ;; Distinct here: a scope is TEXT, which not every engine compares.
          (into [] (comp (map (fn [row] {:user-id    (tc/string->uuid (:user-id row))
                                         :permission permission
-                                        :scope      (edn/read-string (str (:scope row)))}))
+                                        :scope      (db->scope row)}))
                         (distinct)))))
 
   (ensure-tables [_]
     ;; What the migration runs, so an import in an application's migration
-    ;; need not be ordered after the user library's.
-    (persistence/initialize-user-schema! ctx)
+    ;; need not be ordered after the user library's. Only when needed: it
+    ;; also scans user_sessions.
+    (when-not (db/table-exists? ctx "user_group_grants")
+      (persistence/initialize-user-schema! ctx))
     nil)
 
   (in-transaction [this f]

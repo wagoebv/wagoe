@@ -77,19 +77,18 @@
     (is (= [] (sut/users-with-permission [] (constantly true))))))
 
 (deftest ^:unit what-an-import-changes
-  (let [[a b c] [(random-uuid) (random-uuid) (random-uuid)]
+  (let [[a b c] (map (fn [_] {:id (random-uuid)}) (range 3))
         kept    {:id 1 :permission :invoice/approve :scope {:domain-id 1}}
         extra   {:id 2 :permission :report/view :scope {}}
-        current {:member-ids [a b] :held [kept extra]}
-        wanted  {:members [b c c] :grants [{:permission :invoice/approve :scope {:domain-id 1}}
-                                           {:permission :invoice/approve :scope {:domain-id 2}}
-                                           {:permission :invoice/approve :scope {:domain-id 2}}]}]
+        new     {:permission :invoice/approve :scope {:domain-id 2}}
+        current {:members [a b] :held [kept extra]}
+        wanted  {:members [b c c] :grants [(dissoc kept :id) new new]}]
     (testing "additive: only what is missing is added"
-      (is (= {:join [c] :leave [] :add [{:permission :invoice/approve :scope {:domain-id 2}}] :remove []}
+      (is (= {:join [c] :leave [] :stay [a b] :add [new] :remove []}
              (sut/import-changes current wanted false))))
     (testing "replace: what is not listed goes too"
-      (is (= {:join [c] :leave [a] :add [{:permission :invoice/approve :scope {:domain-id 2}}] :remove [extra]}
+      (is (= {:join [c] :leave [a] :stay [b] :add [new] :remove [extra]}
              (sut/import-changes current wanted true))))
     (testing "importing what is there changes nothing"
-      (is (= {:join [] :leave [] :add [] :remove []}
+      (is (= {:join [] :leave [] :stay [a b] :add [] :remove []}
              (sut/import-changes current {:members [a b] :grants (map #(dissoc % :id) [kept extra])} true))))))

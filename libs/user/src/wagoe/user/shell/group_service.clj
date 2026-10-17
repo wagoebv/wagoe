@@ -62,13 +62,26 @@
 
 (defn- audit!
   "Record `action` for each of `members`. A failed write warns and does not
-   undo the change, as for the user service's other entries."
-  [audit-repository action group members grants]
-  (doseq [entry (audit-core/group-audit-entries action (user-service/effective-audit-context {})
-                                                group members grants)]
-    (try (ports/create-audit-log audit-repository entry)
-         (catch Exception e
-           (log/warn e "Failed to write a group audit entry" {:action action :group-id (:id group)})))))
+   undo the change, as for the user service's other entries, unless
+   `strict?`: then it throws, rolling back the transaction it is in."
+  ([audit-repository action group members grants]
+   (audit! audit-repository action group members grants false))
+  ([audit-repository action group members grants strict?]
+   (doseq [entry (audit-core/group-audit-entries action (user-service/effective-audit-context {})
+                                                 group members grants)]
+     (try (ports/create-audit-log audit-repository entry)
+          (catch Exception e
+            (when strict? (throw e))
+            (log/warn e "Failed to write a group audit entry" {:action action :group-id (:id group)}))))))
+
+(defn- checked-grant
+  "`grant` as stored, its scope {} when it has none. Throws :validation-error
+   when the declared schemas refuse it, carrying `data`."
+  [settings grant data]
+  (let [grant {:permission (:permission grant) :scope (or (:scope grant) {})}]
+    (when-let [{:keys [error]} (group-core/grant-refusal grant settings)]
+      (throw (ex-info (:message error) (merge error data))))
+    grant))
 
 (defn- user-id-of [user]
   (if (map? user) (:id user) user))
@@ -87,13 +100,9 @@
   (when-let [explanation (m/explain user-schema/GroupImport spec)]
     (throw (import-refusal "Invalid group import" {:group  (:name spec)
                                                    :errors (me/humanize explanation)})))
-  (let [data   (group-data spec)
-        grants (mapv (fn [g] {:permission (:permission g) :scope (or (:scope g) {})}) (:grants spec))]
-    (doseq [grant grants]
-      (when-let [{:keys [error]} (group-core/grant-refusal grant settings)]
-        (throw (ex-info (:message error) (assoc error :group (:name data))))))
+  (let [data (group-data spec)]
     (assoc data
-           :grants  grants
+           :grants  (mapv #(checked-grant settings % {:group (:name data)}) (:grants spec))
            :members (mapv #(or (ports/find-user-by-id user-repository %)
                                (throw (import-refusal "No such user" {:field :members :group (:name data) :user-id %})))
                           (distinct (:members spec))))))
@@ -101,44 +110,33 @@
 (defn- import-group!
   "Upsert `spec` through `repo`, auditing each user whose rights change in
    the order the single changes would: leaving, grants removed, grants added,
-   joining."
-  [repo audit-repository groups-by-name {:keys [name members grants] :as spec} replace?]
-  (let [[existing more] (groups-by-name name)
-        _        (when more
-                   (throw (ex-info "Several groups have this name" {:type :conflict :group name})))
-        group    (cond
-                   (nil? existing) (ports/insert-group repo (select-keys spec [:name :description]))
-                   (and (contains? spec :description) (not= (:description spec) (:description existing)))
-                   (ports/modify-group repo (assoc (select-keys spec [:name :description]) :id (:id existing)))
-                   :else existing)
-        before   (if existing (ports/find-members repo (:id group)) [])
-        held     (if existing (ports/find-grants repo (:id group)) [])
-        changes  (group-core/import-changes {:member-ids (map :id before) :held held}
-                                            {:members (map :id members) :grants grants}
-                                            replace?)
-        joiners  (filter (comp (set (:join changes)) :id) members)
-        leavers  (filter (comp (set (:leave changes)) :id) before)
-        stayers  (remove (set leavers) before)]
-    (doseq [user leavers] (ports/remove-member repo (:id group) (:id user)))
-    (doseq [grant (:remove changes)] (ports/remove-grant repo (:id group) (:id grant)))
-    (let [added (mapv #(ports/insert-grant repo (assoc % :group-id (:id group))) (:add changes))]
-      (doseq [user joiners] (ports/insert-member repo (:id group) (:id user)))
-      ;; Not through audit!, which swallows a failure: inside the transaction
-      ;; (the audit repository's queries join it), a failed entry rolls back.
-      (doseq [[action users grants] [[:group-leave leavers held]
-                                     [:grant-remove stayers (:remove changes)]
-                                     [:grant-add stayers added]
-                                     [:group-join joiners (ports/find-grants repo (:id group))]]
-              :when (or (#{:group-leave :group-join} action) (seq grants))
-              entry (audit-core/group-audit-entries action (user-service/effective-audit-context {})
-                                                    group users grants)]
-        (ports/create-audit-log audit-repository entry))
+   joining. Audit failures throw, so the import rolls back."
+  [repo audit-repository existing {:keys [members grants] :as spec} replace?]
+  (let [data    (select-keys spec [:name :description])
+        group   (cond
+                  (nil? existing) (ports/insert-group repo data)
+                  (and (contains? data :description) (not= (:description data) (:description existing)))
+                  (ports/modify-group repo (assoc data :id (:id existing)))
+                  :else existing)
+        held    (ports/find-grants repo (:id group))
+        {:keys [join leave stay add remove]}
+        (group-core/import-changes {:members (ports/find-members repo (:id group)) :held held}
+                                   {:members members :grants grants}
+                                   replace?)]
+    (doseq [user leave] (ports/remove-member repo (:id group) (:id user)))
+    (doseq [grant remove] (ports/remove-grant repo (:id group) (:id grant)))
+    (let [added (mapv #(ports/insert-grant repo (assoc % :group-id (:id group))) add)]
+      (doseq [user join] (ports/insert-member repo (:id group) (:id user)))
+      (when (seq leave) (audit! audit-repository :group-leave group leave held true))
+      (when (seq remove) (audit! audit-repository :grant-remove group stay remove true))
+      (when (seq added) (audit! audit-repository :grant-add group stay added true))
+      (when (seq join) (audit! audit-repository :group-join group join (ports/find-grants repo (:id group)) true))
       {:group          group
        :created?       (nil? existing)
-       :joined         (mapv :id joiners)
-       :left           (mapv :id leavers)
+       :joined         (mapv :id join)
+       :left           (mapv :id leave)
        :grants-added   added
-       :grants-removed (:remove changes)})))
+       :grants-removed remove})))
 
 (defrecord UserGroupService [group-repository user-repository audit-repository settings]
   ports/IUserGroupService
@@ -188,12 +186,10 @@
 
   (add-group-grant [_ group-id grant]
     (let [group (existing-group group-repository group-id)
-          grant {:permission (:permission grant) :scope (or (:scope grant) {})}]
-      (when-let [{:keys [error]} (group-core/grant-refusal grant settings)]
-        (throw (ex-info (:message error) error)))
-      (let [stored (ports/insert-grant group-repository (assoc grant :group-id group-id))]
-        (audit! audit-repository :grant-add group (ports/find-members group-repository group-id) [stored])
-        stored)))
+          grant  (checked-grant settings grant nil)
+          stored (ports/insert-grant group-repository (assoc grant :group-id group-id))]
+      (audit! audit-repository :grant-add group (ports/find-members group-repository group-id) [stored])
+      stored))
 
   (remove-group-grant [_ group-id grant-id]
     (let [group (ports/find-group group-repository group-id)
@@ -226,7 +222,12 @@
       (ports/in-transaction group-repository
                             (fn [repo]
                               (let [by-name (group-by :name (ports/find-groups repo))]
-                                (mapv #(import-group! repo audit-repository by-name % replace?) specs)))))))
+                                (mapv (fn [{:keys [name] :as spec}]
+                                        (let [[existing more] (by-name name)]
+                                          (when more
+                                            (throw (ex-info "Several groups have this name" {:type :conflict :group name})))
+                                          (import-group! repo audit-repository existing spec replace?)))
+                                      specs)))))))
 
 (defn create-group-service
   "A group service. `settings` is what `prepare-settings` returns."

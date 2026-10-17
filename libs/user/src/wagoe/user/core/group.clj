@@ -92,15 +92,19 @@
   [(:permission grant) (:scope grant)])
 
 (defn import-changes
-  "What importing wanted `members` (ids) and `grants` into a group holding
-   `member-ids` and `held` grants changes: users to :join and :leave, grants
-   to :add and :remove. Nothing leaves unless `replace?`."
-  [{:keys [member-ids held]} {:keys [members grants]} replace?]
-  (let [present     (set member-ids)
-        wanted      (set members)
+  "What importing wanted `members` and `grants` into a group holding
+   `members` and `held` grants changes: users to :join, :leave and :stay,
+   compared by :id, and grants to :add and :remove. Nothing leaves unless
+   `replace?`."
+  [{:keys [held] present :members} {:keys [members grants]} replace?]
+  (let [present-ids (set (map :id present))
+        wanted-ids  (set (map :id members))
+        leave       (if replace? (into [] (remove (comp wanted-ids :id)) present) [])
+        leave-ids   (set (map :id leave))
         held-keys   (set (map grant-key held))
         wanted-keys (set (map grant-key grants))]
-    {:join   (into [] (comp (remove present) (distinct)) members)
-     :leave  (if replace? (into [] (remove wanted) member-ids) [])
+    {:join   (into [] (comp (remove (comp present-ids :id)) (distinct)) members)
+     :leave  leave
+     :stay   (into [] (remove (comp leave-ids :id)) present)
      :add    (into [] (comp (remove (comp held-keys grant-key)) (distinct)) grants)
      :remove (if replace? (into [] (remove (comp wanted-keys grant-key)) held) [])}))

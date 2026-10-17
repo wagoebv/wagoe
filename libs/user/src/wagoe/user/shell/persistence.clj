@@ -75,8 +75,8 @@
   [ctx]
   (db/with-transaction [tx ctx]
     (doseq [{:keys [id session-token]} (db/execute-query! tx {:select [:id :session_token]
-                                                              :from   [:user_sessions]
-                                                              :where  [:<> [:length :session_token] 64]})]
+                                                               :from   [:user_sessions]
+                                                               :where  [:<> [:length :session_token] 64]})]
       (db/execute-update! tx {:update :user_sessions
                               :set    {:session_token (session-token-hash session-token)}
                               :where  [:and [:= :id id] [:= :session_token session-token]]}))))

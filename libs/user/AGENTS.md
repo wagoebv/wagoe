@@ -404,9 +404,9 @@ grants through their groups on every call; `wagoe.user.core.group` has `holds?`,
 - `(import-groups! svc groups {:replace? bool})` upserts groups by name. It checks
   every group (`GroupImport`), grant (`grant-refusal`) and member first, then
   writes and audits in one transaction (the audit repository's queries join it, so
-  a failed entry rolls back). Additive unless `:replace?`. It calls
-  `ensure-tables` (`initialize-user-schema!`), so an app migration can run it before
-  the user library's. Two existing groups with the name are a `:conflict`.
+  a failed entry rolls back). Additive unless `:replace?`. `ensure-tables` runs
+  `initialize-user-schema!` when the group tables are missing, so an app migration
+  can run it before the user library's. Two existing groups with the name are a `:conflict`.
 
 ## Turning the web UI off
 
