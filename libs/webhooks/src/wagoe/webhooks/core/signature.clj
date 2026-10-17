@@ -13,7 +13,9 @@
   300)
 
 (defn- hmac-hex [secret timestamp body]
-  (codecs/bytes->hex (mac/hash (str timestamp "." body) {:key secret :alg :hmac+sha256})))
+  ;; A raw body often arrives as bytes; str of a byte array is its identity.
+  (let [body (if (bytes? body) (codecs/bytes->str body) body)]
+    (codecs/bytes->hex (mac/hash (str timestamp "." body) {:key secret :alg :hmac+sha256}))))
 
 (defn signature-header
   "The header value for `body` signed with `secret` at `timestamp` (seconds)."
@@ -41,6 +43,8 @@
   (if-let [{:keys [t v1]} (parse-header header)]
     (let [expected (codecs/to-bytes (hmac-hex secret t body))]
       (cond
-        (> (abs (- now t)) tolerance-s) :stale
+        ;; Bounds rather than (abs (- now t)): t is the sender's, and an
+        ;; extreme one would overflow the subtraction and throw.
+        (not (<= (- now tolerance-s) t (+ now tolerance-s))) :stale
         (not-any? #(bytes/equals? expected (codecs/to-bytes %)) v1) :mismatch))
     :malformed))

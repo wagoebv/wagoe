@@ -17,9 +17,11 @@
    not read. The request timeout ends when the headers arrive, so a receiver
    that trickles its body would otherwise hold the worker."
   [^InputStream in n wait-ms]
-  (let [f    (future (String. (.readNBytes in (int n)) StandardCharsets/UTF_8))
-        body (deref f (max 1 wait-ms) ::timeout)]
-    (.close in)
+  ;; A body that breaks off is still an answer: the status already arrived.
+  (let [f    (future (try (String. (.readNBytes in (int n)) StandardCharsets/UTF_8)
+                          (catch Exception _ "")))
+        body (try (deref f (max 1 wait-ms) ::timeout)
+                  (finally (.close in)))]
     (if (= ::timeout body)
       (do (future-cancel f) "")
       body)))

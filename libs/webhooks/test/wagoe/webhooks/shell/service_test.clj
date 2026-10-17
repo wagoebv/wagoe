@@ -127,11 +127,12 @@
   (support/with-receiver (constantly {:status 200})
     (fn [{:keys [url]}]
       (with-service
-        (fn [{:keys [svc]}]
+        (fn [{:keys [svc js]}]
           (subscribe! svc url)
           (let [e (event nil)]
             (is (= 1 (ports/dispatch! svc :orders/placed e)))
-            (is (= 0 (ports/dispatch! svc :orders/placed e)))))))))
+            (is (= 0 (ports/dispatch! svc :orders/placed e)))
+            (is (= 1 (jobs/queue-size (:queue js) :default)) "the second job is withdrawn")))))))
 
 (deftest ^:integration an-inactive-subscription-gets-nothing
   (support/with-receiver (constantly {:status 200})

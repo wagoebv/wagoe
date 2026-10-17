@@ -14,12 +14,9 @@
   "`topic` as a string, namespace included, as the bus names it."
   event/topic-name)
 
-(def ^:private glob->regex
-  ;; Memoized: few patterns, matched against every event.
-  (memoize
-   (fn [pattern]
-     (re-pattern (str/join ".*" (map #(java.util.regex.Pattern/quote %)
-                                     (str/split pattern #"\*" -1)))))))
+(defn- glob->regex [pattern]
+  (re-pattern (str/join ".*" (map #(java.util.regex.Pattern/quote %)
+                                  (str/split pattern #"\*" -1)))))
 
 (defn pattern-matches?
   "Whether topic glob `pattern` matches `topic`. `*` matches any run of
@@ -56,9 +53,9 @@
             :topic        (topic-name topic)
             :type         (some-> (:type event) topic-name)
             :source       (some-> (:source event) topic-name)
-            :published-at (some-> (:published-at event) str)
+            :publishedAt  (some-> (:published-at event) str)
             :payload      (:payload event)}
-     (:tenant-id event) (assoc :tenant-id (str (:tenant-id event))))))
+     (:tenant-id event) (assoc :tenantId (str (:tenant-id event))))))
 
 (defn headers
   "Request headers for one attempt."

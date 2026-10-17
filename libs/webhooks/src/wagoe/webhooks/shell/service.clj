@@ -52,11 +52,9 @@
                             (random-uuid) now)]
     (jobs/enqueue-job! job-queue (:queue settings) j)))
 
-(defn- claim-key [subscription-id event-id] (str subscription-id "/" event-id))
-
 (defn- first-claim? [idempotency subscription-id event-id]
   (or (nil? idempotency)
-      (jobs/claim-key! idempotency "webhooks" (claim-key subscription-id event-id) claim-ttl-ms)))
+      (jobs/claim-key! idempotency "webhooks" (str subscription-id "/" event-id) claim-ttl-ms)))
 
 (defn- attempt! [{:keys [store transport settings key]} subscription args attempt]
   (let [{:keys [event-id topic body]} args
@@ -75,8 +73,17 @@
       (do (record! {:status :refused :error (:message problem)})
           (log/warn "Webhook target refused" {:subscription-id (:id subscription) :reason (:message problem)})
           {:success? true :result {:status :refused}})
-      (let [response (if problem
-                       {:error problem :latency-ms 0}
+      (let [secret   (when-not problem
+                       ;; Unreadable under this key (a rotated JWT_SECRET):
+                       ;; logged as an attempt, not thrown past the log.
+                       (try (crypto/decrypt key (:secret subscription))
+                            (catch Exception e
+                              (log/error e "Webhook secret cannot be decrypted" {:subscription-id (:id subscription)})
+                              nil)))
+            response (cond
+                       problem       {:error problem :latency-ms 0}
+                       (nil? secret) {:error {:message "signing secret cannot be decrypted"} :latency-ms 0}
+                       :else
                        (ports/send-request!
                         transport
                         {:url     (:url subscription)
@@ -84,9 +91,7 @@
                          :headers (delivery/headers
                                    args
                                    (signature/signature-header
-                                    (crypto/decrypt key (:secret subscription))
-                                    (.getEpochSecond (Instant/now))
-                                    body))}))
+                                    secret (.getEpochSecond (Instant/now)) body))}))
             status   (delivery/attempt-status response attempt (:max-attempts settings))
             failure  (when-not (= :delivered status) (delivery/failure-message response))]
         (record! {:status      status
@@ -104,19 +109,19 @@
     (if-not (m/validate schema/SubscriptionInput input)
       (validation-error "Invalid subscription" (me/humanize (m/explain schema/SubscriptionInput input)))
       (or (invalid-target (:url input) settings)
-        (let [secret (or (:secret input) (crypto/generate-secret))
-              now    (Instant/now)
-              s      {:id            (str (random-uuid))
-                      :tenant-id     (:tenant-id input)
-                      :event-pattern (:event-pattern input)
-                      :url           (:url input)
-                      :secret        (crypto/encrypt key secret)
-                      :active?       true
-                      :description   (:description input)
-                      :created-at    now
-                      :updated-at    now}]
-          (ports/save-subscription! store s)
-          {:subscription (public-view s) :secret secret}))))
+          (let [secret (or (:secret input) (crypto/generate-secret))
+                now    (Instant/now)
+                s      {:id            (str (random-uuid))
+                        :tenant-id     (:tenant-id input)
+                        :event-pattern (:event-pattern input)
+                        :url           (:url input)
+                        :secret        (crypto/encrypt key secret)
+                        :active?       true
+                        :description   (:description input)
+                        :created-at    now
+                        :updated-at    now}]
+            (ports/save-subscription! store s)
+            {:subscription (public-view s) :secret secret}))))
 
   (change-subscription! [_ id changes]
     (cond
@@ -126,7 +131,7 @@
       :else
       (or (some-> (:url changes) (invalid-target settings))
           (some-> (ports/update-subscription! store id (assoc changes :updated-at (Instant/now)))
-              public-view))))
+                  public-view))))
 
   (remove-subscription! [_ id]
     (ports/delete-subscription! store id))
@@ -140,20 +145,16 @@
           body     (when (seq matches) (delivery/payload-body topic event))
           event-id (str (:id event))
           topic    (delivery/topic-name topic)]
+      ;; Enqueue, then claim: a crash in between duplicates a delivery, which
+      ;; receivers dedupe on Wagoe-Event-Id. Claiming first would lose it.
       (reduce (fn [n s]
-                (if (first-claim? idempotency (:id s) event-id)
-                  (do (try
-                        (enqueue! this {:subscription-id (:id s)
-                                        :event-id        event-id
-                                        :topic           topic
-                                        :body            body})
-                        (catch Exception e
-                          ;; Unclaimed, so the bus's redelivery can try again.
-                          (some-> idempotency
-                                  (jobs/release-key! "webhooks" (claim-key (:id s) event-id)))
-                          (throw e)))
-                      (inc n))
-                  n))
+                (let [job-id (enqueue! this {:subscription-id (:id s)
+                                             :event-id        event-id
+                                             :topic           topic
+                                             :body            body})]
+                  (if (first-claim? idempotency (:id s) event-id)
+                    (inc n)
+                    (do (jobs/delete-job! job-queue job-id) n))))
               0
               matches)))
 

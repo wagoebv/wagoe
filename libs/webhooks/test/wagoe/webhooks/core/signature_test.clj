@@ -22,7 +22,11 @@
       (is (= :stale (webhooks/signature-problem secret body h {:now 1700000301}))
           "a replay after the tolerance")
       (is (= :malformed (webhooks/signature-problem secret body "v1=abc")) "no timestamp")
-      (is (= :malformed (webhooks/signature-problem secret body nil)) "no header"))
+      (is (= :malformed (webhooks/signature-problem secret body nil)) "no header")
+      (is (= :stale (webhooks/signature-problem secret body "t=-9223372036854775808,v1=00"))
+          "a timestamp whose distance from now overflows a long"))
+    (testing "a raw body given as bytes"
+      (is (webhooks/verify-signature secret (.getBytes ^String body "UTF-8") h {:now 1700000010})))
     (testing "a re-signed timestamp with the old signature"
       (let [forged (str "t=1700000300," (subs h (inc (.indexOf ^String h ","))))]
         (is (= :mismatch (webhooks/signature-problem secret body forged {:now 1700000300})))))))

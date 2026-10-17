@@ -36,7 +36,7 @@
                                              :published-at (java.time.Instant/parse "2026-01-01T00:00:00Z")
                                              :tenant-id "t1" :payload {:n 1}})]
     (is (= {"id" "e1" "topic" "orders/placed" "type" "order/placed" "source" "orders"
-            "published-at" "2026-01-01T00:00:00Z" "tenant-id" "t1" "payload" {"n" 1}}
+            "publishedAt" "2026-01-01T00:00:00Z" "tenantId" "t1" "payload" {"n" 1}}
            (json/parse-string body)))))
 
 (deftest ^:unit url-shape

@@ -17,9 +17,26 @@
   (and (= first-octet (bit-and (aget b 0) 0xff))
        (= second-octet (bit-and (aget b 1) mask))))
 
+(defn- embedded-v4
+  "The IPv4 address an IPv6 one carries — IPv4-compatible (::a.b.c.d),
+   NAT64 (64:ff9b::/96) or 6to4 (2002::/16) — or nil."
+  [^bytes b]
+  (let [octet #(bit-and (aget b %) 0xff)
+        v4    #(InetAddress/getByAddress (byte-array (map (fn [i] (aget b i)) %&)))]
+    (cond
+      (every? zero? (map octet (range 12)))
+      (v4 12 13 14 15)
+
+      (= [0 0x64 0xff 0x9b 0 0 0 0 0 0 0 0] (map octet (range 12)))
+      (v4 12 13 14 15)
+
+      (and (= 0x20 (octet 0)) (= 0x02 (octet 1)))
+      (v4 2 3 4 5))))
+
 (defn private-address?
   "Whether `addr` is loopback, link-local, private, unspecified, multicast,
-   carrier-grade NAT or IPv6 unique-local."
+   carrier-grade NAT, benchmarking, reserved, IPv6 unique-local, or an IPv6
+   address that carries one of those."
   [^InetAddress addr]
   (let [b (.getAddress addr)]
     (boolean
@@ -30,9 +47,12 @@
          (.isMulticastAddress addr)
          (and (instance? Inet4Address addr)
               (or (zero? (aget b 0))                     ; 0.0.0.0/8
-                  (in-v4-range? b 100 0xc0 64)))         ; 100.64.0.0/10
+                  (in-v4-range? b 100 0xc0 64)           ; 100.64.0.0/10
+                  (in-v4-range? b 198 0xfe 18)           ; 198.18.0.0/15
+                  (<= 240 (bit-and (aget b 0) 0xff))))   ; 240.0.0.0/4, broadcast
          (and (instance? Inet6Address addr)
-              (= 0xfc (bit-and (aget b 0) 0xfe)))))))    ; fc00::/7
+              (or (= 0xfc (bit-and (aget b 0) 0xfe))     ; fc00::/7
+                  (some-> (embedded-v4 b) private-address?)))))))
 
 (defn host-problem
   "Why the host of `url` may not be called, or nil.
