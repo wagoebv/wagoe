@@ -14,7 +14,7 @@ Calendar and scheduling library for the [Wagoe](https://github.com/wagoebv/wagoe
 - **Conflict detection** — overlap check for any pair of events, including recurring ones, within a time window
 - **iCal export** — RFC 5545 VCALENDAR strings ready for Google Calendar / Outlook / iOS subscription
 - **iCal import** — parse `.ics` files back to wagoe EventData maps
-- **Hiccup UI components** — pure month-view, week-view, mini-calendar for admin interfaces
+- **Hiccup UI components** — pure month-view, week-view, mini-calendar; events can link (`:href` / `:event-href`) and multi-day events show on each day. Labels are `[:t …]` markers: render with `wagoe.i18n.shell.render`, or pass `:t` to resolve them up front
 - **`defevent` macro** — named event type registry (same pattern as `defreport` in wagoe-reports)
 
 ## Installation
