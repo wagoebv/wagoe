@@ -75,8 +75,8 @@
   [ctx]
   (db/with-transaction [tx ctx]
     (doseq [{:keys [id session-token]} (db/execute-query! tx {:select [:id :session_token]
-                                                               :from   [:user_sessions]
-                                                               :where  [:<> [:length :session_token] 64]})]
+                                                              :from   [:user_sessions]
+                                                              :where  [:<> [:length :session_token] 64]})]
       (db/execute-update! tx {:update :user_sessions
                               :set    {:session_token (session-token-hash session-token)}
                               :where  [:and [:= :id id] [:= :session_token session-token]]}))))
@@ -839,6 +839,27 @@
              (:failed-login-count (db/execute-one! tx {:select [:failed_login_count]
                                                        :from   [:auth_users]
                                                        :where  [:= :id id]}))))))
+     {:db-ctx ctx}))
+
+  (consume-backup-code [_ user code-hash]
+    (persistence-interceptors/execute-persistence-operation
+     :consume-backup-code
+     {:user-id (:id user)}
+     (fn [_]
+       ;; Compare-and-set on the JSON both columns hold, written by the same
+       ;; generate-string, so the update matches only if neither has changed.
+       (let [{:keys [mfa-backup-codes mfa-backup-codes-used]} user
+             json cheshire.core/generate-string]
+         (pos? (db/execute-update!
+                ctx {:update :auth_users
+                     :set    {:mfa_backup_codes_used (json (conj (vec mfa-backup-codes-used) code-hash))
+                              :updated_at            (type-conversion/instant->string (java.time.Instant/now))}
+                     :where  [:and
+                              [:= :id (type-conversion/uuid->string (:id user))]
+                              [:= :mfa_backup_codes (json mfa-backup-codes)]
+                              (if (seq mfa-backup-codes-used)
+                                [:= :mfa_backup_codes_used (json mfa-backup-codes-used)]
+                                [:or [:is :mfa_backup_codes_used nil] [:= :mfa_backup_codes_used "[]"]])]}))))
      {:db-ctx ctx}))
 
   (with-admins-locked [_ f]

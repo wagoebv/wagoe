@@ -43,6 +43,12 @@
   ;; login that reset the count (BOU-696). Returns the new count, or nil when
   ;; absent.
 
+  (consume-backup-code [this user code-hash])
+  ;; Adds code-hash, one of `user`'s :mfa-backup-codes, to its
+  ;; :mfa-backup-codes-used, only while both are still as `user` holds them:
+  ;; two logins spending one code cannot both succeed (BOU-708). Returns
+  ;; boolean; false when either changed since `user` was read.
+
   (soft-delete-user [this user-id])
   ;; Sets :deleted-at, hiding the user from every other query. Returns boolean.
 
@@ -269,8 +275,9 @@
   ;; Returns {:invalidated true :session-id …}, or {:invalidated false} when the
   ;; token is unknown.
 
-  (logout-user-everywhere [this user-id])
-  ;; Returns the count of sessions revoked.
+  (logout-user-everywhere [this user-id] [this user-id keep-session-id])
+  ;; Revokes the user's sessions, except keep-session-id when given, and
+  ;; audits one :session-revoked for them all. Returns the count revoked.
 
   (get-user-sessions [this user-id])
   ;; Returns the user's active sessions, newest first.
