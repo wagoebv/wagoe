@@ -7,7 +7,13 @@
    - Contract tests: Verify PostgreSQL-specific behavior"
   (:require [clojure.test :refer [deftest is testing]]
             [support.embedded-pg :as epg]
+            [wagoe.observability.errors.shell.adapters.no-op :as noop-errors]
+            [wagoe.observability.logging.shell.adapters.no-op :as noop-logging]
+            [wagoe.observability.metrics.shell.adapters.no-op :as noop-metrics]
+            [wagoe.tenant.ports :as tenant-ports]
+            [wagoe.tenant.shell.persistence :as tenant-persistence]
             [wagoe.tenant.shell.provisioning :as sut]
+            [wagoe.tenant.shell.service :as tenant-service]
             [wagoe.tenant.shell.tenant-middleware :as tenant-mw]
             [wagoe.platform.shell.adapters.database.factory :as db-factory]
             [wagoe.platform.database :as db]
@@ -642,6 +648,41 @@
           (let [handler (tenant-mw/wrap-tenant-schema (fn [_] {:status 200 :body (path ctx)}) ctx)]
             (is (= "tenant_x, public" (:body (handler {:tenant {:id "t" :schema-name "tenant_x"}}))))
             (is (= before (path ctx))))))
+      (finally
+        (db-factory/close-db-context! ctx)
+        (epg/stop! pg)))))
+
+(deftest ^:integration a-tenant-schema-name-never-passes-postgresqls-63-byte-limit
+  ;; PostgreSQL truncates a longer identifier rather than refusing it, so two
+  ;; long slugs sharing a prefix would land in one schema.
+  (let [pg      (epg/start!)
+        ctx     (epg/db-context pg)
+        logger  (noop-logging/create-logging-component {})
+        errors  (noop-errors/create-error-reporting-component)
+        service (tenant-service/create-tenant-service
+                 (tenant-persistence/create-tenant-repository ctx logger errors)
+                 {} logger (noop-metrics/create-metrics-emitter {}) errors)
+        schemas #(set (map :schema-name
+                           (db/execute-query! ctx ["SELECT schema_name FROM information_schema.schemata
+                                                    WHERE schema_name LIKE 'tenant_%'"])))
+        prefix  (apply str (repeat 55 "a"))
+        refused (fn [f] (try (f) nil (catch clojure.lang.ExceptionInfo e (:type (ex-data e)))))]
+    (try
+      (tenant-persistence/initialize-tenant-schema! ctx)
+      (testing "two 56-char slugs differing only in their last char get two 63-byte schemas"
+        (tenant-ports/create-new-tenant service {:slug (str prefix "b") :name "B"})
+        (tenant-ports/create-new-tenant service {:slug (str prefix "c") :name "C"})
+        (is (= #{(str "tenant_" prefix "b") (str "tenant_" prefix "c")} (schemas))))
+      (testing "a 57-char slug is refused before anything is written"
+        (is (= :validation-error
+               (refused #(tenant-ports/create-new-tenant service {:slug (str prefix "bb") :name "BB"}))))
+        (is (= :not-found (refused #(tenant-ports/get-tenant-by-slug service (str prefix "bb")))))
+        (is (= 2 (count (schemas)))))
+      (testing "provisioning refuses a 64-byte schema name itself"
+        (let [too-long (str "tenant_" prefix "bb")]
+          (is (= 64 (count too-long)))
+          (is (= :validation-error (refused #(sut/provision-tenant! ctx {:schema-name too-long}))))
+          (is (= 2 (count (schemas))))))
       (finally
         (db-factory/close-db-context! ctx)
         (epg/stop! pg)))))

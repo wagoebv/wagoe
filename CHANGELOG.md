@@ -128,6 +128,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **A tenant slug over 56 characters named a schema PostgreSQL truncates, so two could share one** (BOU-716). Such
+  slugs are now refused with a validation error; the admin no longer edits a slug.
 - **iCal export named a TZID without its VTIMEZONE, so Outlook could misread times** (BOU-719). Export now adds one
   per zone, writes UTC as `Z`, folds by octets, and refuses two events with the same `:id`.
 - **Enabling MFA failed on PostgreSQL, MySQL and H2: ten backup codes overflowed a VARCHAR(255)** (BOU-715). Boot or

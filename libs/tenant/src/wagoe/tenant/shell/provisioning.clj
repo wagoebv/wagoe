@@ -24,6 +24,7 @@
             [wagoe.platform.ports.database :as protocols]
             [wagoe.tenant.core.tenant :as tenant-core]
             [wagoe.tenant.ports :as ports]
+            [wagoe.tenant.schema :as tenant-schema]
             [wagoe.tenant.shell.tenant-migrations :as tenant-migrations]
             [clojure.string :as str]
             [clojure.tools.logging :as log]))
@@ -38,7 +39,11 @@
    identifier before it reaches a statement string."
   [schema-name]
   (when-not (tenant-core/valid-schema-name? schema-name)
-    (throw (ex-info "Unsafe tenant schema name"
+    (throw (ex-info (if (and (string? schema-name)
+                             (> (count schema-name) tenant-schema/max-schema-name-length))
+                      (str "Tenant schema name is longer than PostgreSQL's "
+                           tenant-schema/max-schema-name-length "-byte limit")
+                      "Unsafe tenant schema name")
                     {:type :validation-error
                      :field :schema-name
                      :schema-name schema-name}))))

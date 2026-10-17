@@ -53,7 +53,8 @@ NOTE: Requires PostgreSQL. On SQLite or H2 the application refuses to boot with
 
 [source,clojure]
 ----
-;; Slug: lowercase alphanumeric + hyphens, 2–100 chars
+;; Slug: lowercase alphanumeric + hyphens, 2–56 chars, so that
+;; "tenant_" + slug fits PostgreSQL's 63-byte identifier limit
 (tenant/valid-slug? "acme-corp")     ;=> true
 (tenant/valid-slug? "ACME")          ;=> false (uppercase)
 (tenant/valid-slug? "acme_corp")     ;=> false (underscore)
