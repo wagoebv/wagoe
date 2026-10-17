@@ -122,6 +122,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **A typed 4xx thrown by a handler or service was logged at ERROR** (BOU-704). It is now INFO, or WARN for 401/403; 5xx and
+  untyped errors stay ERROR. Re-check alerts that keyed on "HTTP request failed".
+- **Static assets had no Content-Type** (BOU-710). They now carry one from the extension, plus
+  `X-Content-Type-Options: nosniff`.
 - **Security: two parallel logins could spend one MFA backup code** (BOU-708). Spending is a conditional write; the
   loser counts as a wrong code. Custom repositories add `consume-backup-code`.
 - **Security: revoking all of a user's sessions wrote no audit entry** (BOU-708). It writes one `:session-revoked`;

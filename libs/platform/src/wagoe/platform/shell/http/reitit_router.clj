@@ -22,6 +22,7 @@
             [reitit.swagger-ui :as swagger-ui]
             [ring.middleware.cookies :refer [wrap-cookies]]
             [ring.middleware.multipart-params :refer [multipart-params-request]]
+            [ring.middleware.content-type :refer [content-type-response]]
             [ring.middleware.not-modified :refer [not-modified-response]]
             [ring.middleware.resource :refer [resource-request]]
             [ring.util.codec :as codec]
@@ -724,6 +725,18 @@
         (assoc response :body nil))
     response))
 
+(defn- typed
+  "Content-Type from the extension, as `wrap-content-type` sets it, plus
+   nosniff: `resource-request` sets neither, and a script without a type is one
+   a browser may refuse (BOU-710). The security headers interceptor does not
+   reach these, they answer before the router."
+  [response path]
+  (let [response (content-type-response response {:uri path})
+        t        (get-in response [:headers "Content-Type"])]
+    (update response :headers assoc
+            "Content-Type" (cond-> t (str/starts-with? t "text/") (str "; charset=utf-8"))
+            "X-Content-Type-Options" "nosniff")))
+
 (defn- wrap-static-resources
   "Serve classpath resources from resources/public/, with revalidation headers.
 
@@ -748,6 +761,7 @@
                 path   (try (codec/url-decode (ring-request/path-info request))
                             (catch Exception _ nil))]
             (some-> (lookup)
+                    (typed (or path (:uri request)))
                     (cache-headers path lookup)
                     ;; The digest decides, so If-Modified-Since gets no vote.
                     ;; Ring resolves a 304 from whichever validators the request

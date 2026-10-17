@@ -1,6 +1,7 @@
 (ns wagoe.platform.shell.http.interceptors-test
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest testing is]]
+            [wagoe.observability.logging.ports :as log-ports]
             [wagoe.platform.shell.http.interceptors :as http-interceptors]
             [wagoe.config :as config]))
 
@@ -370,3 +371,59 @@
       (is (= 401 (get-in result [:response :status])))
       (is (= "unauthorized" (get-in result [:response :body :error :type])))
       (is (= "Invalid token" (get-in result [:response :body :error :details :reason]))))))
+
+;; ==============================================================================
+;; Error log levels (BOU-704)
+;; ==============================================================================
+
+(defn- recording-logger [entries]
+  (reify log-ports/ILogger
+    (log* [_ l m c _] (swap! entries conj {:level l :event m :data c}))
+    (trace [_ _] nil) (trace [_ _ _] nil)
+    (debug [_ _] nil) (debug [_ _ _] nil)
+    (info [_ _] nil) (info [_ m c] (swap! entries conj {:level :info :event m :data c}))
+    (warn [_ _] nil) (warn [_ m c] (swap! entries conj {:level :warn :event m :data c}))
+    (error [_ _] nil) (error [_ m c] (swap! entries conj {:level :error :event m :data c}))
+    (fatal [_ _] nil) (fatal [_ _ _] nil) (fatal [_ _ _ _] nil)))
+
+(defn- error-log-entries
+  "What the default stack logs, besides the received line, for a request whose
+   handler throws `ex`."
+  [ex]
+  (let [entries (atom [])]
+    (http-interceptors/run-http-interceptors
+     (fn [_] (throw ex))
+     http-interceptors/default-http-interceptors
+     {:request-method :get :uri "/x" :headers {"x-correlation-id" "cid-704"}}
+     {:logger (recording-logger entries)})
+    (remove #(= "HTTP request received" (:event %)) @entries)))
+
+(deftest ^:unit a-typed-client-error-is-logged-once-below-error
+  (doseq [[type status level] [[:validation-error 400 :info]
+                               [:forbidden 403 :warn]
+                               [:not-found 404 :info]
+                               [:conflict 409 :info]]]
+    (testing (str type)
+      (let [[entry :as entries] (error-log-entries (ex-info "nope" {:type type}))]
+        (is (= 1 (count entries)))
+        (is (= level (:level entry)))
+        (is (= {:status status :error-type type :correlation-id "cid-704"}
+               (select-keys (:data entry) [:status :error-type :correlation-id])))))))
+
+(deftest ^:unit a-redirect-is-logged-as-one
+  (let [[entry :as entries] (error-log-entries
+                             (ex-info "go" {:type :redirect :location "/login"}))]
+    (is (= 1 (count entries)))
+    (is (= [:info "HTTP request redirected" 302]
+           [(:level entry) (:event entry) (get-in entry [:data :status])]))))
+
+(deftest ^:unit a-server-error-is-logged-at-error
+  (doseq [ex [(RuntimeException. "boom")
+              (ex-info "boom" {:type :internal-error})]]
+    (testing (str ex)
+      (let [entries (error-log-entries ex)]
+        (is (seq entries))
+        (is (every? #(= :error (:level %)) entries))
+        (is (some #(and (= "HTTP request failed" (:event %))
+                        (= "cid-704" (get-in % [:data :correlation-id])))
+                  entries))))))
