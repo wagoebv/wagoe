@@ -191,7 +191,7 @@
   ;; on a pending second factor, {:authenticated false :requires-mfa? true
   ;;                              :user … :message "…"};
   ;; otherwise {:authenticated false :reason <keyword> :message "…"
-  ;;            :retry-after <seconds-or-nil>}.
+  ;;            :retry-after <Instant-or-nil>}.
   ;; Does not throw on a bad password — it returns the failure shape.
 
   (validate-session [this session-token])

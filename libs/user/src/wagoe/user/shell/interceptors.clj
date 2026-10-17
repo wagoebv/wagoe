@@ -10,10 +10,12 @@
             [wagoe.core.interceptor-context :as ctx]
             [wagoe.core.utils.type-conversion :as type-conv]
             [wagoe.platform.core.http.client-ip :as client-ip]
+            [wagoe.platform.core.http.errors :as errors]
             [wagoe.user.shell.service :as user-service]
             [wagoe.user.ports :as ports]
             [wagoe.user.schema :as schema]
-            [clojure.string :as str]))
+            [clojure.string :as str])
+  (:import [java.time Duration Instant]))
 
 (def validate-user-creation-input
   "Validates required fields for user creation.
@@ -802,174 +804,127 @@
 ;; -----------------------------------------------------------------------------
 
 (def validate-session-creation-input
-  "Validates input for creating a session (login): email + password, on every
-   interface. A user id is not a credential, and `authenticate-user` never
-   read one (BOU-690)."
+  "Validates input for creating a session (login): email + password. A user id
+   is not a credential, and `authenticate-user` never read one (BOU-690)."
   {:name ::validate-session-creation-input
    :enter (fn [context]
-            (let [interface-type (ctx/get-interface-type context)
-                  input-data     (case interface-type
-                                   :http (get-in context [:request :parameters :body])
-                                   :cli (:opts context))
+            (let [input-data (get-in context [:request :parameters :body])
                   {:keys [email password]} input-data]
               (if (and email password)
                 (-> context
                     (assoc :raw-session-data input-data)
                     (ctx/add-breadcrumb :operation :session-create-validation-success
-                                        {:auth-type      :email-password
-                                         :email          email
-                                         :interface-type interface-type}))
+                                        {:auth-type :email-password
+                                         :email     email}))
                 (ctx/fail-with-exception context
                                          (ex-info "Invalid authentication parameters"
                                                   {:type :validation-error
                                                    :message "Must provide email and password"
                                                    :provided-fields (keys input-data)
-                                                   :interface-type interface-type})))))})
+                                                   :interface-type :http})))))})
 
 (def transform-session-creation-data
-  "Transforms and normalizes session creation data.
-
-   HTTP: Email/password, device info and MFA code
-   CLI: Email/password and MFA code"
+  "Normalizes the login body: email/password, device info and MFA code."
   {:name ::transform-session-creation-data
    :enter (fn [context]
-            (let [interface-type (ctx/get-interface-type context)
-                  body (:raw-session-data context)
-
-                  session-data (case interface-type
-                                 :http (cond-> {}
-                                         (:email body) (assoc :email (:email body))
-                                         (:password body) (assoc :password (:password body))
-                                         (:mfaCode body) (assoc :mfa-code (:mfaCode body))
-                                         ;; Not deviceInfo.ipAddress: the caller writes that.
-                                         true (assoc :user-agent (get-in body [:deviceInfo :userAgent] "Unknown")
-                                                     :ip-address (or (client-ip/request-ip (:request context)) "Unknown")))
-
-                                 :cli (cond-> {}
-                                        (:email body) (assoc :email (:email body))
-                                        (:password body) (assoc :password (:password body))
-                                        (:mfa-code body) (assoc :mfa-code (:mfa-code body))
-                                        true (assoc :user-agent "CLI"
-                                                    :ip-address "127.0.0.1")))]
-
+            (let [body (:raw-session-data context)
+                  session-data (cond-> {}
+                                 (:email body) (assoc :email (:email body))
+                                 (:password body) (assoc :password (:password body))
+                                 (:mfaCode body) (assoc :mfa-code (:mfaCode body))
+                                 ;; Not deviceInfo.ipAddress: the caller writes that.
+                                 true (assoc :user-agent (get-in body [:deviceInfo :userAgent] "Unknown")
+                                             :ip-address (or (client-ip/request-ip (:request context)) "Unknown")))]
               (-> context
                   (assoc :session-data session-data)
                   (ctx/add-breadcrumb :operation :session-create-transform-complete
-                                      {:user-id (:user-id session-data)
-                                       :has-email (some? (:email session-data))
-                                       :has-mfa-code (some? (:mfa-code session-data))
-                                       :auth-type (if (:email session-data) :email-password :user-id)
-                                       :user-agent (:user-agent session-data)
-                                       :interface-type interface-type}))))})
+                                      {:has-mfa-code (some? (:mfa-code session-data))
+                                       :user-agent   (:user-agent session-data)}))))})
 
 (def authenticate-user-session
-  "Authenticates user and creates session.
-
-   Returns either:
-   - A session with :token when authentication succeeds
-   - A map with :requires-mfa? true when MFA verification is needed
-   - Throws exception on authentication failure"
+  "Authenticates the user. Puts the `authenticate-user` result on the context
+   as :session; an exception halts the pipeline."
   {:name ::authenticate-user-session
    :enter (fn [context]
             (let [session-data (:session-data context)
                   service (ctx/get-service context)
                   updated-context (ctx/add-breadcrumb context :operation :user-authenticate-start
-                                                      {:user-id (:user-id session-data)})]
-
+                                                      {:email (:email session-data)})]
               (try
-                (let [auth-result (ports/authenticate-user service session-data)
-                      ;; Normal authentication success - session with token
-                      masked-token (str (take 8 (:token auth-result)) "...")]
-                  (-> updated-context
-                      (assoc :session auth-result)
-                      (ctx/add-breadcrumb :operation :user-authenticate-success
-                                          {:user-id (:user-id auth-result)
-                                           :session-token masked-token
-                                           :expires-at (:expires-at auth-result)})))
-
+                (-> updated-context
+                    (assoc :session (ports/authenticate-user service session-data))
+                    (ctx/add-breadcrumb :operation :user-authenticate-complete {}))
                 (catch Exception ex
                   (-> updated-context
                       (ctx/add-breadcrumb :operation :user-authenticate-error
-                                          {:user-id (:user-id session-data)
-                                           :error-type (or (:type (ex-data ex)) "unknown")
+                                          {:error-type (or (:type (ex-data ex)) "unknown")
                                            :error-message (.getMessage ex)})
                       (ctx/fail-with-exception ex))))))})
 
-(def format-session-creation-response
-  "Formats the created session or MFA-required response.
+(defn- seconds-until
+  "Whole seconds from now until `instant`, at least 1."
+  [instant]
+  (max 1 (.getSeconds (Duration/between (Instant/now) instant))))
 
-   Handles three cases:
-   - MFA required: Returns 200 with requiresMfa flag and limited user info
-   - Authentication success: Returns 200 with session token and user details
-   - CLI: Returns appropriate status and data for command-line interface"
+(defn- login-refusal
+  "The error response for a refused login (BOU-691). Unknown email, wrong
+   password and an inactive account get the same 401, so the body never says
+   whether the account exists."
+  [{:keys [reason message retry-after]} correlation-id]
+  (let [opts {:correlation-id correlation-id}]
+    (case reason
+      :account-locked
+      (let [secs (some-> retry-after seconds-until)]
+        (cond-> (errors/response 429 :account-locked "Too many failed attempts, try again later"
+                                 (cond-> opts secs (assoc :details {:retry-after-seconds secs})))
+          secs (assoc-in [:headers "Retry-After"] (str secs))))
+      :validation-error        (errors/response 400 :validation-error message opts)
+      :mfa-verification-failed (errors/response 401 :mfa-verification-failed "Invalid MFA code" opts)
+      :mfa-enrolment-required  (errors/response 403 :mfa-enrolment-required message opts)
+      (errors/response 401 :unauthorized "Invalid email or password" opts))))
+
+(def format-session-creation-response
+  "200 with the session, 200 with requiresMfa when a second factor is still
+   needed, otherwise the error from `login-refusal`."
   {:name ::format-session-creation-response
    :enter (fn [context]
-            (let [auth-result (:session context)
-                  interface-type (:interface-type context)]
+            (let [auth-result (:session context)]
+              (cond
+                (:requires-mfa? auth-result)
+                (let [user (:user auth-result)]
+                  (-> context
+                      (assoc :response {:status 200
+                                        :body {:requiresMfa true
+                                               :message "MFA code required"
+                                               :user {:id (str (:id user))
+                                                      :email (:email user)
+                                                      :name (:name user)}}})
+                      (ctx/add-breadcrumb :operation :mfa-required-response
+                                          {:user-id (:id user)})))
 
-              (case interface-type
-                :http
-                (if (:requires-mfa? auth-result)
-                  ;; MFA required - return 200 with requiresMfa flag
-                  (let [user (:user auth-result)
-                        response {:status 200
-                                  :body {:requiresMfa true
-                                         :message "MFA code required"
-                                         :user {:id (str (:id user))
-                                                :email (:email user)
-                                                :name (:name user)}}}]
-                    (-> context
-                        (assoc :response response)
-                        (ctx/add-breadcrumb :operation :mfa-required-response
-                                            {:user-id (:id user)
-                                             :response-format :json})))
-                  ;; Normal authentication success - return session
-                  (let [response {:status 200
-                                  :body (schema/user-specific-kebab->camel auth-result)}]
-                    (-> context
-                        (assoc :response response)
-                        (ctx/add-breadcrumb :operation :session-create-formatted
-                                            {:user-id (get-in auth-result [:user :id])
-                                             :response-format :json}))))
+                (:authenticated auth-result)
+                (-> context
+                    (assoc :response {:status 200
+                                      :body (schema/user-specific-kebab->camel auth-result)})
+                    (ctx/add-breadcrumb :operation :session-create-formatted
+                                        {:user-id (get-in auth-result [:user :id])}))
 
-                :cli
-                (if (:requires-mfa? auth-result)
-                  ;; MFA required for CLI
-                  (let [user (:user auth-result)
-                        response {:status :mfa-required
-                                  :data {:user-id (:id user)
-                                         :email (:email user)}
-                                  :message "MFA code required. Please provide mfa-code parameter."}]
-                    (-> context
-                        (assoc :response response)
-                        (ctx/add-breadcrumb :operation :mfa-required-response
-                                            {:user-id (:id user)
-                                             :response-format :cli})))
-                  ;; Normal authentication success for CLI
-                  (let [response {:status :success
-                                  :data (select-keys auth-result [:user-id :session-token :expires-at])
-                                  :message "Session created successfully"}]
-                    (-> context
-                        (assoc :response response)
-                        (ctx/add-breadcrumb :operation :session-create-formatted
-                                            {:user-id (get-in auth-result [:user :id])
-                                             :response-format :cli})))))))})
+                :else
+                (-> context
+                    (assoc :response (login-refusal auth-result (:correlation-id context)))
+                    (ctx/add-breadcrumb :operation :session-create-refused
+                                        {:reason (:reason auth-result)})))))})
 
 (defn create-session-creation-pipeline
-  "Creates pipeline for creating a session (login)."
+  "Creates pipeline for creating a session (login). HTTP only: the CLI has no
+   way to log in (BOU-691)."
   [interface-type]
   (case interface-type
     :http (interceptors/create-http-pipeline
            validate-session-creation-input
            transform-session-creation-data
            authenticate-user-session
-           format-session-creation-response)
-
-    :cli (interceptors/create-cli-pipeline
-          validate-session-creation-input
-          transform-session-creation-data
-          authenticate-user-session
-          format-session-creation-response)))
+           format-session-creation-response)))
 
 ;; -----------------------------------------------------------------------------
 ;; VALIDATE SESSION INTERCEPTORS
