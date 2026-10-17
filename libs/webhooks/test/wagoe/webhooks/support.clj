@@ -53,12 +53,13 @@
 
 (defn service
   "A service on db-context `ctx` and job system `js`. `settings` override the
-   test defaults, which allow 127.0.0.1 over http."
-  [ctx js settings]
-  (service/create-service {:store       (persistence/create-store ctx)
-                           :transport   (http-transport/create-transport (assoc service/defaults :timeout-ms 2000))
-                           :job-queue   (:queue js)
-                           :idempotency (:idempotency js)}
+   test defaults, which allow 127.0.0.1 over http; `deps` override its deps."
+  [ctx js settings & [deps]]
+  (service/create-service (merge {:store       (persistence/create-store ctx)
+                                  :transport   (http-transport/create-transport (assoc service/defaults :timeout-ms 2000))
+                                  :job-queue   (:queue js)
+                                  :idempotency (:idempotency js)}
+                                 deps)
                           (merge {:allowed-hosts  #{"127.0.0.1"}
                                   :require-https? false
                                   :encryption-key encryption-key}
