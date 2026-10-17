@@ -10,13 +10,13 @@
             [wagoe.calendar.ports :as ports]
             [wagoe.calendar.schema :as schema]
             [clojure.string :as str])
-  (:import [java.time Instant ZoneId ZonedDateTime OffsetDateTime LocalDate LocalDateTime LocalTime]
+  (:import [java.time Instant ZoneId ZoneOffset ZonedDateTime OffsetDateTime LocalDate LocalDateTime LocalTime]
            [java.time.temporal Temporal TemporalAmount]
            [java.io StringReader StringWriter]
            [java.nio.charset StandardCharsets]
-           [net.fortuna.ical4j.model Calendar]
-           [net.fortuna.ical4j.model.component VEvent]
-           [net.fortuna.ical4j.model.property Uid RRule Description]
+           [net.fortuna.ical4j.model Calendar TimeZoneRegistry TimeZoneRegistryFactory]
+           [net.fortuna.ical4j.model.component VEvent VTimeZone]
+           [net.fortuna.ical4j.model.property Uid RRule Description TzId]
            [net.fortuna.ical4j.data CalendarBuilder CalendarOutputter]))
 
 ;; =============================================================================
@@ -33,17 +33,41 @@
                 (not= LocalTime/MIDNIGHT (.toLocalTime end-z)) (.plusDays 1))]
     [start (if (.isAfter end start) end (.plusDays start 1))]))
 
+(defn- vtimezone
+  "The VTIMEZONE for `tzid` from ical4j's bundled registry, or nil. The registry
+   answers links with their target (Amsterdam with Brussels), so the TZID is set
+   back to the name the events reference and the TZURL to the other zone dropped."
+  [^TimeZoneRegistry registry ^String tzid]
+  (when-let [tz (.getTimeZone registry tzid)]
+    (-> ^VTimeZone (.copy (.getVTimeZone tz))
+        (.removeAll (into-array String ["TZURL" "X-LIC-LOCATION"]))
+        (.replace (TzId. tzid)))))
+
+(defn- vtimezones
+  "tzid -> VTIMEZONE for each zone a timed event is written in. UTC needs none:
+   it is written in the Z form."
+  [events]
+  (let [registry (.createRegistry (TimeZoneRegistryFactory/getInstance))]
+    (into {}
+          (keep (fn [tzid]
+                  (when-not (= ZoneOffset/UTC (.normalized (ZoneId/of tzid)))
+                    (some->> (vtimezone registry tzid) (vector tzid)))))
+          (distinct (map #(:timezone % "UTC") (remove event/all-day? events))))))
+
 (defn- event->vevent
   "Convert a boundary EventData map to a net.fortuna.ical4j 4.x VEvent.
 
-   ZonedDateTimes make ical4j emit DTSTART;TZID=..., LocalDates (all-day
-   events) DTSTART;VALUE=DATE."
-  [event]
-  (let [zone   (ZoneId/of (:timezone event "UTC"))
-        [s e]  (if (event/all-day? event)
-                 (all-day-dates event zone)
-                 [(.atZone ^Instant (:start event) zone)
-                  (.atZone ^Instant (:end event) zone)])
+   ZonedDateTimes make ical4j emit DTSTART;TZID=..., Instants the UTC Z form,
+   LocalDates (all-day events) DTSTART;VALUE=DATE. A zone without a VTIMEZONE
+   in `tzids` is written in UTC, so no TZID goes undefined."
+  [event tzids]
+  (let [tzid   (:timezone event "UTC")
+        zone   (ZoneId/of tzid)
+        [s e]  (cond
+                 (event/all-day? event) (all-day-dates event zone)
+                 (contains? tzids tzid) [(.atZone ^Instant (:start event) zone)
+                                         (.atZone ^Instant (:end event) zone)]
+                 :else                  [(:start event) (:end event)])
         title  ^String (:title event)
         uid    (Uid. (str (:id event)))
         ;; Base VEvent from 4.x Temporal constructor; add UID via fluent chain
@@ -58,19 +82,45 @@
     (.getFluentTarget vevent)))
 
 (defn- build-calendar
-  "Build a net.fortuna.ical4j 4.x Calendar from a seq of VEvents.
+  "Build a net.fortuna.ical4j 4.x Calendar from VTIMEZONEs and VEvents, the
+   zones first.
 
    In ical4j 4.x Calendar.withProdId accepts a plain String (not a ProdId object)
    and Calendar.withDefaults adds VERSION:2.0 and CALSCALE:GREGORIAN."
-  [vevents ^String product-id]
+  [components ^String product-id]
   (let [base-cal (-> (Calendar.)
                      (.withProdId product-id)
                      (.withDefaults))
-        with-events (reduce (fn [^Calendar c ve]
-                              (.withComponent c ve))
-                            base-cal
-                            vevents)]
-    (.getFluentTarget with-events)))
+        with-components (reduce (fn [^Calendar c comp]
+                                  (.withComponent c comp))
+                                base-cal
+                                components)]
+    (.getFluentTarget with-components)))
+
+(defn- utf8-length [cp]
+  (cond (< cp 0x80) 1 (< cp 0x800) 2 (< cp 0x10000) 3 :else 4))
+
+(defn- fold-line
+  "Fold a content line at 75 octets (RFC 5545 3.1), never inside a character.
+   ical4j folds at 75 characters, which overruns on multi-byte text."
+  [^String line]
+  (let [sb (StringBuilder.)]
+    (reduce (fn [used cp]
+              (let [n (utf8-length cp)]
+                (if (> (+ used n) 75)
+                  (do (.append sb "\r\n ") (.appendCodePoint sb (int cp)) (inc n))
+                  (do (.appendCodePoint sb (int cp)) (+ used n)))))
+            0
+            (iterator-seq (.iterator (.codePoints line))))
+    (str sb)))
+
+(defn- check-unique-ids!
+  "UID must be unique within the calendar (RFC 5545 3.8.4.7); clients keep one
+   of two events that share it."
+  [events]
+  (when-let [dups (seq (for [[id n] (frequencies (map :id events)) :when (> n 1)] id))]
+    (throw (ex-info "Events to export share an :id"
+                    {:type :validation-error :field :id :value (vec dups)}))))
 
 ;; =============================================================================
 ;; Internal helpers — import
@@ -179,13 +229,21 @@
   ports/CalendarAdapterProtocol
 
   (export-ical [_this events opts]
+    (check-unique-ids! events)
     (let [product-id (get opts :product-id "-//Wagoe//Calendar//EN")
-          vevents    (mapv event->vevent events)
-          calendar   (build-calendar vevents product-id)
-          writer     (StringWriter.)
-          outputter  (CalendarOutputter.)]
-      (.output outputter calendar writer)
-      (.toString writer)))
+          zones      (vtimezones events)
+          tzids      (set (keys zones))
+          calendar   (build-calendar (concat (vals zones)
+                                             (map #(event->vevent % tzids) events))
+                                     product-id)
+          writer     (StringWriter.)]
+      (.output (CalendarOutputter.) calendar writer)
+      ;; Unfold ical4j's character folding and fold again by octets.
+      (-> (str writer)
+          (str/replace #"\r\n[ \t]" "")
+          (str/split-lines)
+          (->> (map fold-line) (str/join "\r\n"))
+          (str "\r\n"))))
 
   (import-ical [_this ical-string opts]
     (let [tz (or (:timezone opts) "UTC")]
