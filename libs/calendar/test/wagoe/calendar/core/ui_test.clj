@@ -60,8 +60,8 @@
         (is (re-find #"Late Event" html-str)
             "Late-night event at 23:00 UTC should render in Amsterdam timezone (00:00 on next day)")))))
 
-(deftest ^:unit events-on-date-timezone-test
-  (testing "events-on-date respects event timezone"
+(deftest ^:unit on-date-timezone-test
+  (testing "on-date takes dates in the view timezone"
     ;; Direct test of the helper function that was buggy
     (let [;; Event at 23:00 UTC on March 10 = 00:00+01:00 on March 11 in Amsterdam
           late-event (make-event "2026-03-10T23:00:00Z"
@@ -149,6 +149,11 @@
         (is (= ["/events/Standup"] (links (sut/month-view 2026 3 [ev] {:event-href href}))))
         (is (= ["/events/Standup"]
                (links (sut/week-view (LocalDate/of 2026 3 9) [ev] {:event-href href}))))))
+    (testing "a script scheme never becomes a link"
+      (doseq [bad ["javascript:alert(1)" " JavaScript:alert(1)" "java\tscript:alert(1)" "data:text/html,x"]]
+        (is (= :div (first (sut/event-badge (assoc ev :href bad)))) bad))
+      (doseq [ok ["/events/1" "https://x.test/e" "mailto:a@b.test" "events/1?a=b:c"]]
+        (is (= ok (:href (attrs (sut/event-badge (assoc ev :href ok))))) ok)))
     (testing "the event's own :href wins over :event-href"
       (is (= "/own" (:href (attrs (sut/event-badge (assoc ev :href "/own") "UTC"
                                                    {:event-href (constantly "/other")}))))))))
@@ -227,6 +232,14 @@
       (is (= ["Late"] (titles-on (week-row (sut/week-view (LocalDate/of 2026 3 9) [ev]) :div.week-body)
                                  (LocalDate/of 2026 3 10)))
           "a same-day event stays in the hour rows")))
+  (testing "a short overnight event stays in its start hour in the week view"
+    (let [ev   (make-event "2026-03-09T23:00:00Z" "2026-03-10T00:30:00Z" "UTC" "Night")
+          week (sut/week-view (LocalDate/of 2026 3 9) [ev])
+          body (week-row week :div.week-body)]
+      (is (= ["Night"] (titles-on body (LocalDate/of 2026 3 9))))
+      (is (empty? (titles-on (week-row week :div.week-all-day) (LocalDate/of 2026 3 10))))
+      (is (= ["Night"] (titles-on (sut/month-view 2026 3 [ev]) (LocalDate/of 2026 3 10)))
+          "the month view still shows it on both days")))
   (testing "crossing midnight in the view timezone makes it multi-day"
     ;; 22:00–23:30 UTC is 23:00–00:30 in Amsterdam
     (let [ev (make-event "2026-03-10T22:00:00Z" "2026-03-10T23:30:00Z" "Europe/Amsterdam" "Late")]

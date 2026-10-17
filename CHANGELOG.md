@@ -117,7 +117,7 @@ for what is public API, what is internal, and how deprecations are announced.
 ### Fixed
 
 - **Calendar month names were English only, and multi-day events showed on their first day only** (BOU-702). Month
-  names are `[:t …]` markers now; add `:calendar/month-*` keys to any custom catalogue.
+  names are `[:t …]` markers now; add `:calendar/month-*` and `:calendar/all-day` to any custom catalogue.
 - **Security: session tokens were stored in plaintext, so a read of `user_sessions` was a login** (BOU-696). Only their
   SHA-256 is stored; boot or `migrate up` hashes existing rows in place. Upgrade every replica at once; a rollback signs everyone out.
 - **Security: parallel wrong passwords counted as one, so lockout came late** (BOU-696). The count is incremented in the

@@ -104,7 +104,7 @@ iCal export/import, and admin UI components for scheduling applications.
   `wagoe.i18n.shell.render`; plain `hiccup2.core/html` prints them as `<t>`
   tags. Pass `:t` (key -> string) to resolve them when the hiccup is built.
 * Multi-day events show on every day they cover, clipped to the visible range;
-  the week view puts them in an all-day row. Mark all-day events
+  the week view puts those of 24 hours or more in an all-day row. Mark all-day events
   `:all-day? true`: they show no time and keep their dates in the event's own
   `:timezone`.
 

@@ -224,7 +224,8 @@ All components are pure Hiccup functions in `wagoe.calendar.core.ui`.
 
 - **Links.** An event's own `:href` links its badge; otherwise the view option `:event-href` (fn event -> url) does. A linked badge is an `[:a.event-badge]`.
 - **Labels are `[:t …]` markers** (weekdays, month names, "All day"). They resolve only through `wagoe.i18n.shell.render`; plain `hiccup2.core/html` prints them as `<t>` tags. Either render through i18n, or pass `:t` (fn key -> string, e.g. the request's t-fn) to resolve them when the hiccup is built.
-- **Multi-day events** show on every day they cover, clipped to the visible month or week. The end is exclusive, so an event ending at midnight stays on one day. In the week view they sit in an all-day row above the hours; the time shows on the start day only.
+- **Multi-day events** show on every day they cover, clipped to the visible month or week. The end is exclusive, so an event ending at midnight stays on one day. In the week view, events of 24 hours or more sit in an all-day row above the hours; shorter overnight events stay in their start hour. The time shows on the start day only.
+- **Links** with a scheme other than `http(s)` or `mailto` (such as `javascript:`) are dropped and the badge renders unlinked.
 - **All-day events** are marked `:all-day? true`. They show no time, and their dates are taken in the event's own `:timezone`, so they do not shift a day when the view uses another zone.
 
 **CSS classes** emitted (for your stylesheet):

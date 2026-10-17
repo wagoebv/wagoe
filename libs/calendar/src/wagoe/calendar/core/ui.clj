@@ -17,7 +17,7 @@
    i18n or pass a :t fn (key -> string) in opts to resolve them here."
   (:require [wagoe.shared.ui.core.components :as ui]
             [clojure.string :as str])
-  (:import [java.time Instant ZoneId ZonedDateTime LocalDate]
+  (:import [java.time Duration Instant ZoneId ZonedDateTime LocalDate]
            [java.time.format DateTimeFormatter]))
 
 ;; =============================================================================
@@ -80,9 +80,9 @@
 
 (defn- label
   "A [:t key] marker, or its translation when the caller passed a :t fn.
-   A key t does not know renders as its name, as wagoe.i18n.shell.render does."
+   A key t does not know renders as \"ns/name\", as wagoe.i18n.shell.render does."
   [t k]
-  (if t (or (t k) (name k)) [:t k]))
+  (if t (or (t k) (subs (str k) 1)) [:t k]))
 
 (def ^:private month-keys
   [:calendar/month-january :calendar/month-february :calendar/month-march
@@ -108,12 +108,23 @@
 ;; event-badge
 ;; =============================================================================
 
+(defn- safe-href
+  "s unless it carries a scheme other than http(s) or mailto: a `javascript:`
+   value must never become a link. Browsers ignore control characters and
+   spaces in a scheme, so they are dropped before the check."
+  [s]
+  (when (string? s)
+    (let [bare (str/replace s #"[\x00-\x20]" "")]
+      (when (or (not (re-find #"^[A-Za-z][A-Za-z0-9+.-]*:" bare))
+                (re-find #"(?i)^(https?|mailto):" bare))
+        s))))
+
 (defn event-badge
   "Render a single event as a colored pill showing title and start time.
 
    Args:
-     event    - EventData map; an :href key links the badge, :all-day? true
-                hides the time
+     event    - EventData map; an :href key links the badge (a scheme other
+                than http(s)/mailto is dropped), :all-day? true hides the time
      timezone - string timezone for local-time display (default UTC)
      opts     - map with optional keys:
                   :event-href fn event -> url, used when the event has no :href
@@ -127,7 +138,7 @@
    (event-badge event timezone {}))
   ([event timezone {:keys [event-href show-time?]
                     :or   {show-time? (not (:all-day? event))}}]
-   (let [href (or (:href event) (when event-href (event-href event)))]
+   (let [href (safe-href (or (:href event) (when event-href (event-href event))))]
      [(if href :a :div)
       (cond-> {:class "event-badge"
                :title (:title event)}
@@ -249,8 +260,9 @@
 (defn week-view
   "Render a 7-column week grid with hourly time rows (00:00–23:00).
 
-   All-day and multi-day events go in an all-day row above the hours, on each
-   day of the week they cover; other events sit in the hour they start.
+   All-day events and events of 24 hours or more go in an all-day row above
+   the hours, on each day of the week they cover; shorter ones, overnight ones
+   included, sit in the hour they start.
 
    Args:
      start-date - java.time.LocalDate (Monday of the week to display)
@@ -270,10 +282,13 @@
           :or   {timezone "UTC"}} opts
          week-dates (map #(.plusDays start-date %) (range 7))
          hours      (range 24)
-         ;; All-day and multi-day events go in the all-day row; the rest are
-         ;; bucketed by the [date hour] they start in.
+         ;; All-day events and events of a day or longer go in the all-day row;
+         ;; the rest, overnight ones included, sit in the hour they start.
          {spanning true timed false}
-         (group-by (fn [[ev [from to]]] (or (boolean (:all-day? ev)) (not= from to)))
+         (group-by (fn [[ev]]
+                     (or (boolean (:all-day? ev))
+                         (not (neg? (.compareTo (Duration/between ^Instant (:start ev) ^Instant (:end ev))
+                                                (Duration/ofDays 1))))))
                    (with-spans events timezone))
          by-hour    (group-by (fn [[ev]]
                                 (let [zdt (instant->zdt (:start ev) timezone)]
