@@ -1,7 +1,7 @@
 = reports
-:description: PDF, Excel, and Word report generation via the defreport macro.
+:description: PDF, Excel, Word and CSV report generation via the defreport macro.
 
-PDF, Excel (XLSX), and Word (DOCX) report generation with Hiccup-style templates
+PDF, Excel (XLSX), Word (DOCX) and CSV report generation with Hiccup-style templates
 and declarative sections. Saves 5–8 days of boilerplate per project.
 Supports sync generation and optional async via `wagoe-jobs`.
 
@@ -15,7 +15,7 @@ Supports sync generation and optional async via `wagoe-jobs`.
 | Registry, `defreport` macro, pure helpers
 
 | `wagoe.reports.ports`
-| Protocol: `ReportGeneratorProtocol` (`generate!`, `supported-type?`)
+| `ReportServiceProtocol` — what apps call on `(ig/ref :wagoe/reports)`; `ReportGeneratorProtocol` — what adapters implement
 
 | `wagoe.reports.schema`
 | Malli schemas: `ColumnDef`, `SectionDef`, `ReportDefinition`, `ReportOutput`
@@ -29,19 +29,23 @@ Supports sync generation and optional async via `wagoe-jobs`.
 | `wagoe.reports.shell.adapters.word`
 | Apache POI XWPF adapter — sections → DOCX bytes
 
+| `wagoe.reports.shell.adapters.csv`
+| RFC 4180 CSV from the first `:table` section, formula cells neutralised
+
 | `wagoe.reports.shell.service`
-| Public API: `generate`, `generate-async`
+| `ReportService`, the `:wagoe/reports` component
 
 | `wagoe.reports.shell.jobs-integration`
-| Optional `wagoe-jobs` integration for async generation
+| The `:reports/generate` job: generate, then store and mail
 |===
 
 == PDF report
 
 [source,clojure]
 ----
-(require '[wagoe.reports.core.report :as r]
-         '[wagoe.reports.shell.service :as reports])
+;; svc is the :wagoe/reports component: (ig/ref :wagoe/reports)
+(require '[wagoe.reports.shell.registry :as r]
+         '[wagoe.reports.ports :as reports])
 
 (r/defreport invoice-report
   {:id        :invoice-report
@@ -60,7 +64,7 @@ Supports sync generation and optional async via `wagoe-jobs`.
                       [:tr [:td (:description line)]
                            [:td (str "€ " (:amount line))]])]]]])})
 
-(def output (reports/generate invoice-report {:invoice-number 42 :lines [...]}))
+(def output (reports/generate svc invoice-report {:invoice-number 42 :lines [...]}))
 ;=> {:bytes #bytes[...] :type :pdf :filename "invoice.pdf"}
 ----
 
@@ -76,18 +80,19 @@ Supports sync generation and optional async via `wagoe-jobs`.
               {:key :email :label "Email" :width 40}
               {:key :role  :label "Role"  :width 15}]})
 
-(reports/generate users-export {:rows (list-all-users)})
+(reports/generate svc users-export {:rows (list-all-users)})
 ----
 
 == Async generation
 
 [source,clojure]
 ----
-;; Non-blocking (returns future)
-(reports/generate-async invoice-report data)
-
-;; Via jobs (with retry logic)
-(reports/generate-queued invoice-report data {:job-queue job-queue})
+;; Needs :wagoe/jobs. Only the id travels, so the report must be registered.
+(reports/generate-async svc :invoice-report
+  {:invoice-id   42
+   :storage-key  "invoices"              ; needs :wagoe/storage
+   :notify-email "billing@example.com"}) ; needs :wagoe/email
+;=> job id
 ----
 
 == Testing

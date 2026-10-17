@@ -18,11 +18,6 @@
 ;; Internal helpers
 ;; =============================================================================
 
-(defn- first-table-columns
-  "Extract :columns from the first :table section, or nil."
-  [sections]
-  (:columns (first (filter #(= :table (:type %)) sections))))
-
 (defn- sheet-rows
   "Build header + data rows for one sheet spec."
   [{:keys [columns data formatting-context]}]
@@ -52,7 +47,7 @@
           sheet-title (or (:title report-def) (name (:id report-def)))
           sheets      (or (:sheets report-def)
                           [{:name    sheet-title
-                            :columns (first-table-columns (:sections report-def))
+                            :columns (core/first-table-columns (:sections report-def))
                             :data    data
                             :formatting-context formatting-context}])
           ;; Create workbook from the first sheet, then add the rest

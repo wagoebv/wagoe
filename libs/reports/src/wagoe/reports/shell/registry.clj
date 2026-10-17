@@ -34,6 +34,14 @@
   [id]
   (get @registry-atom id))
 
+(defn registered-report
+  "The definition registered under `id`, or throw :not-found."
+  [id]
+  (or (get-report id)
+      (throw (ex-info (str "Report " id " is not registered. Register it with register-report!"
+                           " or defreport, on every node that runs report jobs too.")
+                      {:type :not-found :report-id id}))))
+
 (defn list-reports
   "Return a vector of all registered report ids."
   []

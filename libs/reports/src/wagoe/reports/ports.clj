@@ -1,8 +1,8 @@
 (ns wagoe.reports.ports
   "Protocol definitions (interfaces) for the reports module.
 
-   All adapters (PDF, Excel) implement ReportGeneratorProtocol.
-   This keeps the core layer decoupled from any specific rendering backend.")
+   Applications call ReportServiceProtocol. Adapters (PDF, Excel, Word, CSV)
+   implement ReportGeneratorProtocol.")
 
 ;; =============================================================================
 ;; Report Generator Protocol
@@ -31,3 +31,35 @@
      Args:
        this        - Generator instance
        report-type - :pdf or :excel"))
+
+;; =============================================================================
+;; Report Service Protocol
+;; =============================================================================
+
+(defprotocol ReportServiceProtocol
+  "What an application calls. The component behind `(ig/ref :wagoe/reports)`
+   implements it, so app code needs only this namespace."
+
+  (generate [this report opts]
+    "Generate a report now. `report` is a ReportDefinition map or the id of a
+     registered one. `opts` reaches :data-source and the adapter.
+
+     Returns ReportOutput: {:bytes byte-array :type kw :filename \"...\"}")
+
+  (generate-async [this report opts]
+    "Queue a registered report on wagoe-jobs. Only the id travels: a worker
+     finds the definition in its own registry, so register it on every node
+     that runs workers.
+
+     Extra opts:
+       :storage-key  - storage path to save the output under (needs wagoe-storage)
+       :notify-email - address to mail the link, or the file, to (needs wagoe-email)
+
+     Returns the job id. Throws :missing-dependency when a module the request
+     needs is not enabled.")
+
+  (register-report! [this report-def]
+    "Register a ReportDefinition by its :id, as `defreport` does.")
+
+  (list-reports [this]
+    "Ids of every registered report."))
