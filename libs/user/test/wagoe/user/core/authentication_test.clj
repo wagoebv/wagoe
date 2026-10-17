@@ -103,13 +103,10 @@
 ;; =============================================================================
 
 (deftest ^:unit failed-login-lockout-test
-  (testing "locks at max attempts, from the count the increment returned"
-    (let [until (auth/failed-login-lockout 5 login-config now)]
-      (is (some? until))
-      (is (.isAfter until now))))
-
-  (testing "nothing below max attempts"
-    (is (nil? (auth/failed-login-lockout 4 login-config now)))))
+  (testing "the limit and the instant the repository applies at it"
+    (let [{:keys [max-attempts until]} (auth/failed-login-lockout login-config now)]
+      (is (= 5 max-attempts))
+      (is (.isAfter until now)))))
 
 ;; =============================================================================
 ;; prepare-successful-login-updates

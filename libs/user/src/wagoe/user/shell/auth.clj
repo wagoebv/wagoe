@@ -231,13 +231,12 @@
                   (assoc session :jwt-token (create-jwt-token user hours))))}))
 
 (defn record-failed-login!
-  "Count a failed attempt for `user-id` and lock the account when that count
-   reaches the limit. The count comes from the increment itself, not from the
-   user read before it, so parallel failures each count (BOU-696)."
+  "Count a failed attempt for `user-id`, locking the account in the same write
+   when the count reaches the limit, so parallel failures each count and a
+   lockout cannot follow a login that reset it (BOU-696)."
   [user-repository auth-config user-id current-time]
-  (when-let [n (ports/increment-failed-login-count user-repository user-id)]
-    (when-let [lockout-until (auth-core/failed-login-lockout n auth-config current-time)]
-      (ports/update-user user-repository {:id user-id :lockout-until lockout-until}))))
+  (ports/increment-failed-login-count user-repository user-id
+                                      (auth-core/failed-login-lockout auth-config current-time)))
 
 (defn authenticate-user
   "Coordinate user authentication with all security checks including MFA.

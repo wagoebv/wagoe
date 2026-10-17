@@ -78,12 +78,11 @@
     {:allowed? true}))
 
 (defn failed-login-lockout
-  "When a user whose failed-login count, this attempt included, is
-   `failed-count` is locked out until, or nil below the limit. The count is the
-   one the atomic increment returned (BOU-696)."
-  [failed-count login-config current-time]
-  (when (>= failed-count (get login-config :max-failed-attempts 5))
-    (.plus current-time (Duration/ofMinutes (get login-config :lockout-duration-minutes 15)))))
+  "The lockout a failed login applies: {:max-attempts n :until inst}. The
+   repository sets :until in the same write that reaches n (BOU-696)."
+  [login-config current-time]
+  {:max-attempts (get login-config :max-failed-attempts 5)
+   :until        (.plus current-time (Duration/ofMinutes (get login-config :lockout-duration-minutes 15)))})
 
 (defn prepare-successful-login-updates
   "Pure function: Prepare user updates for successful login.

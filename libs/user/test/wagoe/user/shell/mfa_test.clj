@@ -56,7 +56,7 @@
       (hard-delete-user [_ _user-id]
         true)
 
-      (increment-failed-login-count [_ _] nil)
+      (increment-failed-login-count [_ _ _] nil)
       (with-admins-locked [_ f] (f)))))
 
 ;; =============================================================================

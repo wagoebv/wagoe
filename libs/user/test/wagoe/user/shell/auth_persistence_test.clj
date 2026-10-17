@@ -148,15 +148,6 @@
                      :failed-login-count 0}
           created (.create-auth-user repo auth-user)]
 
-      ;; Increment failed login count
-      (let [result1 (.increment-failed-login repo (:id created))
-            result2 (.increment-failed-login repo (:id created))]
-        (is (= true result1) "First increment should succeed")
-        (is (= true result2) "Second increment should succeed"))
-
-      (let [found (.find-auth-user-by-id repo (:id created))]
-        (is (= 2 (:failed-login-count found)) "Failed login count should be 2"))
-
       ;; Set lockout (just verify operation succeeds)
       (let [lockout-until (.plusSeconds (Instant/now) 900)
             result (.set-lockout repo (:id created) lockout-until)]

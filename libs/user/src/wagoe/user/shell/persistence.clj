@@ -807,21 +807,28 @@
          user-entity))
      {:db-ctx ctx}))
 
-  (increment-failed-login-count [_ user-id]
+  (increment-failed-login-count [_ user-id lockout]
     (persistence-interceptors/execute-persistence-operation
      :increment-failed-login-count
-     {:user-id user-id}
+     {:user-id user-id :lockout lockout}
      (fn [{:keys [params]}]
        ;; The UPDATE locks the row until commit, so a parallel failure waits and
        ;; adds to this one, and the read in the same transaction sees this
-       ;; write. No RETURNING: MySQL has none.
-       (let [id  (type-conversion/uuid->string (:user-id params))
-             now (type-conversion/instant->string (java.time.Instant/now))]
+       ;; write. No RETURNING: MySQL has none. lockout_until is assigned first:
+       ;; MySQL evaluates SET left to right, so later terms see earlier writes.
+       (let [id   (type-conversion/uuid->string (:user-id params))
+             next [:+ [:coalesce :failed_login_count 0] 1]
+             {:keys [max-attempts until]} (:lockout params)]
          (db/with-transaction [tx ctx]
-           (when (pos? (db/execute-update! tx {:update :auth_users
-                                               :set    {:failed_login_count [:+ [:coalesce :failed_login_count 0] 1]
-                                                        :updated_at         now}
-                                               :where  [:= :id id]}))
+           (when (pos? (db/execute-update!
+                        tx {:update :auth_users
+                            :set    (array-map
+                                     :lockout_until      [:case [:>= next max-attempts]
+                                                          (type-conversion/instant->string until)
+                                                          :else :lockout_until]
+                                     :failed_login_count next
+                                     :updated_at         (type-conversion/instant->string (java.time.Instant/now)))
+                            :where  [:= :id id]}))
              (:failed-login-count (db/execute-one! tx {:select [:failed_login_count]
                                                        :from   [:auth_users]
                                                        :where  [:= :id id]}))))))

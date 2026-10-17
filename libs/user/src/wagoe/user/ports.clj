@@ -36,9 +36,12 @@
   ;; entity leaves the rest as stored. Sets :updated-at.
   ;; Returns the stored entity; throws {:type :user-not-found} when absent.
 
-  (increment-failed-login-count [this user-id])
-  ;; Adds one to :failed-login-count in a single write, so parallel failures
-  ;; each count (BOU-696). Returns the new count, or nil when absent.
+  (increment-failed-login-count [this user-id lockout])
+  ;; lockout {:max-attempts n :until inst}. Adds one to :failed-login-count and,
+  ;; when that reaches :max-attempts, sets :lockout-until to :until, in one
+  ;; write: parallel failures each count, and a lockout cannot land after a
+  ;; login that reset the count (BOU-696). Returns the new count, or nil when
+  ;; absent.
 
   (soft-delete-user [this user-id])
   ;; Sets :deleted-at, hiding the user from every other query. Returns boolean.

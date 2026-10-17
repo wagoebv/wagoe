@@ -88,9 +88,7 @@
           (is (= "Invalid credentials" (:reason result)))))))
 
   (testing "failed-login-lockout"
-    (let [current-time (Instant/now)]
-      (is (nil? (auth-core/failed-login-lockout 3 test-login-config current-time)))
-      (is (some? (auth-core/failed-login-lockout 5 test-login-config current-time)) "locks after max attempts")))
+    (is (= 5 (:max-attempts (auth-core/failed-login-lockout test-login-config (Instant/now))))))
 
   (testing "prepare-successful-login-updates"
     (let [current-time (Instant/now)

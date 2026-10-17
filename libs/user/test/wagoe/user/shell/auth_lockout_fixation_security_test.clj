@@ -44,8 +44,11 @@
                          (update-user [_ entity]
                            (swap! state merge entity)
                            @state)
-                         (increment-failed-login-count [_ _]
-                           (:failed-login-count (swap! state update :failed-login-count (fnil inc 0)))))
+                         (increment-failed-login-count [_ _ {:keys [max-attempts until]}]
+                           (:failed-login-count
+                            (swap! state #(let [n (inc (or (:failed-login-count %) 0))]
+                                            (cond-> (assoc % :failed-login-count n)
+                                              (>= n max-attempts) (assoc :lockout-until until)))))))
    :session-repository (reify ports/IUserSessionRepository
                          (find-sessions-by-user [_ _] [])
                          (create-session [_ s] s))
@@ -127,8 +130,8 @@
                                (update-user [_ entity]
                                  (swap! writes conj entity)
                                  (ports/update-user repo entity))
-                               (increment-failed-login-count [_ id]
-                                 (ports/increment-failed-login-count repo id))))))]
+                               (increment-failed-login-count [_ id lockout]
+                                 (ports/increment-failed-login-count repo id lockout))))))]
     (is (false? (:success? (login svc "wrong-password"))))
     (is (true? (:success? (login svc correct-password))))
     (is (= 1 (count @writes)) "a failure below the limit only increments")

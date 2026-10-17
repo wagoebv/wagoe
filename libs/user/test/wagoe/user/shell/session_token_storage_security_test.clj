@@ -98,3 +98,16 @@
             (is (= n (:failed-login-count stored)))
             (is (some? (:lockout-until stored)) "locked at the threshold"))
           (is (= :account-locked (:reason (login service user password)))))))))
+
+(deftest ^:integration ^:security the-lockout-is-set-in-the-increment-that-reaches-the-limit
+  ;; Written separately, a lockout could land after a login that had just
+  ;; reset the count.
+  (with-service "lockout_write" {}
+    (fn [{:keys [users]}]
+      (let [user    (create-user! users)
+            lockout {:max-attempts 2 :until (.plusSeconds (java.time.Instant/now) 900)}]
+        (is (= 1 (ports/increment-failed-login-count users (:id user) lockout)))
+        (is (nil? (:lockout-until (ports/find-user-by-id users (:id user)))) "not before the limit")
+        (is (= 2 (ports/increment-failed-login-count users (:id user) lockout)))
+        (is (some? (:lockout-until (ports/find-user-by-id users (:id user)))))
+        (is (nil? (ports/increment-failed-login-count users (UUID/randomUUID) lockout)) "unknown user")))))

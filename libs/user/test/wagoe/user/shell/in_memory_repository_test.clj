@@ -47,9 +47,12 @@
     (let [user (assoc user-entity :updated-at (Instant/now))]
       (get (swap! state update (:id user) merge user) (:id user))))
 
-  (increment-failed-login-count [_ user-id]
+  (increment-failed-login-count [_ user-id {:keys [max-attempts until]}]
     (when (get @state user-id)
-      (get-in (swap! state update-in [user-id :failed-login-count] (fnil inc 0))
+      (get-in (swap! state update user-id
+                     #(let [n (inc (or (:failed-login-count %) 0))]
+                        (cond-> (assoc % :failed-login-count n)
+                          (>= n max-attempts) (assoc :lockout-until until))))
               [user-id :failed-login-count])))
 
   (soft-delete-user [_ user-id]

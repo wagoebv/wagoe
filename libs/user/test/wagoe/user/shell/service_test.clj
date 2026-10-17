@@ -36,7 +36,7 @@
     user-entity)
   (soft-delete-user [_ _user-id] true)
   (hard-delete-user [_ _user-id] true)
-  (increment-failed-login-count [_ _] nil)
+  (increment-failed-login-count [_ _ _] nil)
   (with-admins-locked [_ f] (f)))
 
 (defrecord AuditRepoStub []
@@ -310,7 +310,7 @@
                    (throw (org.postgresql.util.PSQLException.
                            "update or delete on table \"users\" violates foreign key constraint \"fk_tenant_memberships_user\" on table \"tenant_memberships\""
                            org.postgresql.util.PSQLState/FOREIGN_KEY_VIOLATION)))
-                 (increment-failed-login-count [_ _] nil)
+                 (increment-failed-login-count [_ _ _] nil)
                  (with-admins-locked [_ f] (f)))
           service (sut/->UserService repo nil nil {} nil)]
       (try
@@ -354,7 +354,7 @@
                  (update-user [_ user-entity] user-entity)
                  (soft-delete-user [_ _user-id] true)
                  (hard-delete-user [_ _user-id] true)
-                 (increment-failed-login-count [_ _] nil)
+                 (increment-failed-login-count [_ _ _] nil)
                  (with-admins-locked [_ f] (f)))
           service (sut/->UserService repo nil nil {} nil)]
       (is (= (dissoc user :password-hash)
@@ -382,7 +382,7 @@
                      (update-user [_ user-entity] user-entity)
                      (soft-delete-user [_ _user-id] true)
                      (hard-delete-user [_ _user-id] true)
-                     (increment-failed-login-count [_ _] nil)
+                     (increment-failed-login-count [_ _ _] nil)
                      (with-admins-locked [_ f] (f)))
                    (->SessionRepoStub session)
                    (->AuditRepoCapture audit-entries)
@@ -449,7 +449,7 @@
                      (update-user [_ user-entity] user-entity)
                      (soft-delete-user [_ id] (= id user-id))
                      (hard-delete-user [_ _user-id] true)
-                     (increment-failed-login-count [_ _] nil)
+                     (increment-failed-login-count [_ _ _] nil)
                      (with-admins-locked [_ f] (f)))
                    ;; Deactivation ends the user's sessions (BOU-665).
                    (->SessionRepoStub nil)
