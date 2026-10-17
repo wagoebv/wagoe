@@ -175,24 +175,30 @@
                       first)]
      (str (or (some-> control control-id) (name field-key)) "-error"))))
 
+(defn update-controls
+  "`input-html` with `f` applied to the attribute map of each visible control
+   named `field-key`. A control that carries no attribute map is left alone."
+  [input-html field-key f]
+  (let [field-name (name field-key)]
+    (letfn [(walk [node]
+              (cond
+                (named-control? field-name node) (update node 1 f)
+                (vector? node)                   (mapv walk node)
+                (seq? node)                      (doall (map walk node))
+                :else                            node))]
+      (walk input-html))))
+
 (defn describe-input
   "Mark the visible control(s) named `field-key` in `input-html` invalid and
    add `error-id` to their aria-describedby, so a screen reader reads the error
    with the field. A control that carries no attribute map is left alone."
   [input-html field-key error-id]
-  (let [field-name (name field-key)
-        describe   (fn [attrs]
+  (update-controls input-html field-key
+                   (fn [attrs]
                      (-> attrs
                          (assoc :aria-invalid "true")
                          (assoc :aria-describedby
-                                (str/trim (str (:aria-describedby attrs) " " error-id)))))]
-    (letfn [(walk [node]
-              (cond
-                (named-control? field-name node) (update node 1 describe)
-                (vector? node)                   (mapv walk node)
-                (seq? node)                      (doall (map walk node))
-                :else                            node))]
-      (walk input-html))))
+                                (str/trim (str (:aria-describedby attrs) " " error-id)))))))
 
 (defn field-errors
   "A field's error messages, in the container `describe-input` points at."

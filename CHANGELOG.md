@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **Form fields from malli schemas, checked by the server as you type** (BOU-465): `wagoe.shared.ui.core.form`.
+  Admin forms and new scaffolded modules (a create form) use it; generated projects now declare `wagoe-shared-ui`.
 - **`permission-holders` and `import-groups!` on the group service** (BOU-718): who holds a permission in one query;
   move grants onto groups idempotently, in one audited transaction. Group names are now unique; boot logs any duplicates.
 - **Search indexes live on `:wagoe/search`** (BOU-705): pass definitions under `:indexes` in config, or as a
@@ -128,6 +130,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **An htmx 400 answered with `ui/error-message` was dropped, and a whole page could be swapped into a fragment**
+  (BOU-385, BOU-387). `forms.js` now swaps the first and skips the second. Form-wide `[:p]` errors are styled (BOU-397).
 - **Navigation linked Audit, Profile and Login with the user web UI off, and a tenant admin's dashboard to Audit's
   403** (BOU-724). Layouts now link only to mounted pages the user may open: `wagoe.platform.core.http.pages/mounted?`.
 - **On non-English PostgreSQL, a refused key in a transaction could wait 30 s for a second connection** (BOU-725). Key

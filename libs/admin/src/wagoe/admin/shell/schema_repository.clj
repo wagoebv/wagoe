@@ -23,12 +23,24 @@
    [wagoe.admin.core.display :as display]
    [wagoe.platform.ports.database :as db-protocols]
    [wagoe.core.utils.case-conversion :as case-conv]
+   [wagoe.shared.ui.core.form :as form]
    [clojure.string :as str]
    [clojure.tools.logging :as log]))
 
 ;; =============================================================================
 ;; Entity Config Computation (helper — must be defined before the record)
 ;; =============================================================================
+
+(defn- malli-constraints
+  "Field constraints `malli-schema` implies, for the form's HTML attributes.
+   A schema malli cannot read leaves the form as the database describes it."
+  [entity-name malli-schema]
+  (when (and (vector? malli-schema) (= :map (first malli-schema)))
+    (try
+      (introspection/constraints-from-input-attrs (form/attrs-by-field malli-schema))
+      (catch Exception e
+        (log/warn e "admin: Malli schema ignored for form constraints" {:entity entity-name})
+        nil))))
 
 (defn- compute-entity-config
   "Compute the complete entity configuration for `entity-name`.
@@ -74,19 +86,22 @@
                             (update :detail-fields into new-editable)))
                       auto-config)
 
-        ;; Enrich auto-detected fields with enum type/widget/options from Malli schema
+        ;; Enrich auto-detected fields from the Malli schema: enum options, and
+        ;; the bounds, pattern and widget its form attributes imply
         malli-schema (get malli-schemas entity-name)
-        enum-overrides (introspection/extract-enum-fields-from-malli-schema malli-schema)
-        enriched-auto-config (if (seq enum-overrides)
+        malli-overrides (merge-with merge
+                                    (malli-constraints entity-name malli-schema)
+                                    (introspection/extract-enum-fields-from-malli-schema malli-schema))
+        enriched-auto-config (if (seq malli-overrides)
                                (update auto-config :fields
                                        (fn [fields]
                                          (reduce-kv
-                                          (fn [acc field-name enum-cfg]
+                                          (fn [acc field-name malli-cfg]
                                             (if (contains? acc field-name)
-                                              (update acc field-name merge enum-cfg)
+                                              (update acc field-name merge malli-cfg)
                                               acc))
                                           fields
-                                          enum-overrides)))
+                                          malli-overrides)))
                                auto-config)
         manual-config (get-in config [:entities entity-name])
         merged-config (introspection/build-entity-config enriched-auto-config manual-config)

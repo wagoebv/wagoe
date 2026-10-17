@@ -134,8 +134,10 @@ document.addEventListener('alpine:init', function () {
         };
         window.addEventListener('beforeunload', this.onUnload);
         this.$nextTick(function () { self.focusFirst(); });
-        // Submitting is not leaving with unsaved changes
-        this.$root.addEventListener('htmx:beforeRequest', function () {
+        // Submitting is not leaving with unsaved changes. A field checking
+        // itself on the server is not submitting.
+        this.$root.addEventListener('htmx:beforeRequest', function (event) {
+          if (event.detail.elt !== self.$root) return;
           window.removeEventListener('beforeunload', self.onUnload);
         });
       },
@@ -480,50 +482,6 @@ document.addEventListener('alpine:init', function () {
         }
       }
       markOpenRow();
-    });
-  }
-
-  // =========================================================================
-  // 3-. A form field is checked when it is left
-  // =========================================================================
-
-  // `change` fires when a changed field loses focus (or a select / checkbox
-  // changes): the server validates the form as a save would and answers with
-  // that field's errors, or nothing. The rest of the form is left alone.
-  function initFieldValidation() {
-    document.addEventListener('change', function (event) {
-      var input = event.target;
-      var form = input.closest && input.closest('form.entity-form[data-validate-url]');
-      if (!form || !input.name || input.name.indexOf('__') === 0) return;
-      var field = input.closest('.form-field');
-      if (!field) return;
-      var body = new URLSearchParams(new FormData(form));
-      body.delete('__then');
-      body.set('__field', input.name);
-      if (form.getAttribute('data-record-id')) body.set('__id', form.getAttribute('data-record-id'));
-      var csrf = document.querySelector('meta[name="csrf-token"]');
-      var headers = { 'HX-Request': 'true', 'Content-Type': 'application/x-www-form-urlencoded' };
-      if (csrf && csrf.content) headers['X-CSRF-Token'] = csrf.content;
-      fetch(form.getAttribute('data-validate-url'), {
-        method: 'POST', headers: headers, body: body.toString(), credentials: 'same-origin'
-      }).then(function (r) { return r.ok ? r.text() : null; }).then(function (html) {
-        if (html === null) return;
-        var old = field.querySelector('.field-errors');
-        if (old) old.remove();
-        var controls = field.querySelectorAll('[name="' + input.name + '"]');
-        if (html.trim()) {
-          field.insertAdjacentHTML('beforeend', html);
-          field.classList.add('has-errors');
-          var errorsEl = field.querySelector('.field-errors');
-          controls.forEach(function (c) {
-            c.setAttribute('aria-invalid', 'true');
-            if (errorsEl && errorsEl.id) c.setAttribute('aria-describedby', errorsEl.id);
-          });
-        } else {
-          field.classList.remove('has-errors');
-          controls.forEach(function (c) { c.removeAttribute('aria-invalid'); });
-        }
-      }).catch(function () { /* offline: the save will say it */ });
     });
   }
 
@@ -889,7 +847,6 @@ document.addEventListener('alpine:init', function () {
 
   function init() {
     initListView();
-    initFieldValidation();
     // Progress bar on HTMX requests
     document.addEventListener('htmx:beforeRequest', function () {
       showProgress();
