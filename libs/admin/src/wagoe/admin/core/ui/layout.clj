@@ -163,6 +163,14 @@
       :flash flash
       :skip-header true})))
 
+(def page-cards
+  "Dashboard cards for pages other modules serve; a card is shown only when its
+   page is mounted."
+  [{:href "/web/audit" :icon :file-text
+    :title [:t :admin/audit-trail-title] :description [:t :admin/audit-trail-description]}
+   {:href "/web/admin/groups" :icon :users
+    :title [:t :admin/groups-title] :description [:t :admin/groups-description]}])
+
 (defn admin-home
   "Admin dashboard home page content.
 
@@ -170,10 +178,11 @@
      entities: Vector of available entity names
      entity-configs: Map of entity configurations
      stats: Optional map of dashboard statistics
+     mounted?: Optional predicate on a `page-cards` href; default shows them all
 
    Returns:
      Hiccup structure for dashboard"
-  [entities entity-configs & [stats]]
+  [entities entity-configs & [stats mounted?]]
   [:div.admin-home {:class "space-y-4"}
    [:section.admin-home-hero
     [:div.admin-home-hero-inner
@@ -197,16 +206,13 @@
             [:div.entity-card-description description])
           [:div.entity-card-meta
            [:span.entity-card-count [:t :admin/entity-card-count {:count count}]]]]]))
-    [:div.entity-card
-     [:a {:href "/web/audit" :class "entity-card-link"}
-      [:div.entity-card-icon (icons/icon :file-text {:size 20})]
-      [:div.entity-card-title [:t :admin/audit-trail-title]]
-      [:div.entity-card-description [:t :admin/audit-trail-description]]]]
-    [:div.entity-card
-     [:a {:href "/web/admin/groups" :class "entity-card-link"}
-      [:div.entity-card-icon (icons/icon :users {:size 20})]
-      [:div.entity-card-title [:t :admin/groups-title]]
-      [:div.entity-card-description [:t :admin/groups-description]]]]]])
+    (for [{:keys [href icon title description]} page-cards
+          :when (or (nil? mounted?) (mounted? href))]
+      [:div.entity-card
+       [:a {:href href :class "entity-card-link"}
+        [:div.entity-card-icon (icons/icon icon {:size 20})]
+        [:div.entity-card-title title]
+        [:div.entity-card-description description]]])]])
 
 ;; =============================================================================
 ;; Confirmation Dialog
