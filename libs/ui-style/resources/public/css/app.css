@@ -1013,7 +1013,8 @@ input[type="radio"] {
   padding-left: var(--space-6);
 }
 
-.validation-errors li {
+.validation-errors li,
+.validation-errors p {
   color: var(--status-error);
   margin-bottom: var(--space-1);
   line-height: var(--line-height-relaxed);

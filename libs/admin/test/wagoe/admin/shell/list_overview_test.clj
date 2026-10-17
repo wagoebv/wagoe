@@ -282,16 +282,56 @@
     (is (= "INV-999" (:number (ports/get-entity (:svc @sys) :ov-invoices (:id record))))
         "saved before going back")))
 
-(deftest ^:contract leaving-a-valid-field-reports-nothing
+(defn- validate-field [form-params]
+  ((crud/validate-field-handler (:svc @sys) (:sp @sys) config)
+   {:request-method :post
+    :uri            "/web/admin/ov-invoices/validate-field"
+    :headers        {"hx-request" "true"}
+    :user           admin
+    :session        {:user admin}
+    :path-params    {:entity "ov-invoices"}
+    :form-params    form-params}))
+
+(deftest ^:contract changing-a-valid-field-answers-with-the-field
   (reset-data! 1)
   (let [record (first (page {}))
-        resp   ((crud/validate-field-handler (:svc @sys) (:sp @sys) config)
-                {:request-method :post
-                 :uri            "/web/admin/ov-invoices/validate-field"
-                 :headers        {"hx-request" "true"}
-                 :user           admin
-                 :session        {:user admin}
-                 :path-params    {:entity "ov-invoices"}
-                 :form-params    {"number" "INV-123" "__field" "number" "__id" (str (:id record))}})]
+        resp   (validate-field {"number" "INV-123" "__field" "number" "__id" (str (:id record))})
+        body   (:body resp)]
     (is (= 200 (:status resp 200)))
-    (is (str/blank? (:body resp)))))
+    (testing "the field's wrapper, to replace the one on the page"
+      (is (str/includes? body "<label for=\"number\""))
+      (is (str/includes? body "value=\"INV-123\""))
+      (is (str/includes? body "hx-target=\"closest .form-field\"")))
+    (testing "with nothing wrong"
+      (is (not (str/includes? body "field-errors")))
+      (is (not (str/includes? body "aria-invalid"))))
+    (testing "still an edit: it posts the record's id again"
+      (is (str/includes? body (str "&quot;__id&quot;:&quot;" (:id record) "&quot;"))))))
+
+(deftest ^:contract changing-a-field-to-something-wrong-shows-why
+  (reset-data! 1)
+  (let [body (:body (validate-field {"number" "" "__field" "number"}))]
+    (is (str/includes? body "<label for=\"number\""))
+    (is (str/includes? body "class=\"field-errors\" id=\"number-error\""))
+    (is (str/includes? body "aria-invalid=\"true\""))
+    (is (str/includes? body "aria-describedby=\"number-error\""))))
+
+(deftest ^:contract a-foreign-key-comes-back-as-the-select-it-was
+  (reset-data! 1)
+  (let [body (:body (validate-field {"ov-client-id" "" "__field" "ov-client-id"}))]
+    (is (str/includes? body "<select"))
+    (is (str/includes? body "Veldhuis"))))
+
+(deftest ^:contract a-registered-malli-schema-sets-the-form-constraints
+  (let [sp  (schema-repo/create-schema-repository
+             (:db @sys) config
+             {:ov-invoices [:map [:number [:string {:min 3 :max 20}]] [:amount [:>= 0]]]})
+        cfg (ports/get-entity-config sp :ov-invoices)]
+    (is (= [3 20] ((juxt :min :max) (get-in cfg [:fields :number]))))
+    (is (= 0 (get-in cfg [:fields :amount :min])))))
+
+(deftest ^:contract a-field-the-form-does-not-have-is-refused
+  (is (= :validation-error
+         (try (validate-field {"__field" "no-such-field"})
+              nil
+              (catch clojure.lang.ExceptionInfo e (:type (ex-data e)))))))

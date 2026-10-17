@@ -65,6 +65,19 @@
  :common/audit-grant-remove "Recht ingetrokken"
  :common/audit-all-results  "Alle resultaten"
 
+ ;; Meldingen bij formuliervelden (wagoe.shared.ui.core.form)
+ :validation/required      "Verplicht"
+ :validation/too-short     "Minstens {min} tekens"
+ :validation/too-long      "Hoogstens {max} tekens"
+ :validation/too-small     "Minstens {min}"
+ :validation/too-large     "Hoogstens {max}"
+ :validation/greater-than  "Meer dan {min}"
+ :validation/less-than     "Minder dan {max}"
+ :validation/not-a-number  "Moet een getal zijn"
+ :validation/pattern       "Heeft niet de verwachte vorm"
+ :validation/not-an-option "Geen van de opties"
+ :validation/invalid       "Ongeldige waarde"
+
  ;; =============================================================================
  ;; Gebruikersmodule
  ;; =============================================================================

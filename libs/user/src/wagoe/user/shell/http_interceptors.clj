@@ -25,6 +25,7 @@
                            'user.http-interceptors/log-action]}}]"
   (:require [wagoe.observability.logging.ports :as logging]
             [wagoe.observability.metrics.ports :as metrics]
+            [wagoe.platform.core.http.access :as access]
             [wagoe.platform.core.http.errors :as errors]
             [wagoe.tenant.core.membership :as membership-core]
             [clojure.string :as str]))
@@ -206,9 +207,7 @@
   {:name :require-platform-admin
    :enter (fn [{:keys [request correlation-id system] :as ctx}]
             (let [user (get-user request)]
-              (if (and user
-                       (admin-user? user)
-                       (nil? (:tenant-id user)))
+              (if (access/platform-admin? user)
                 (do
                   (when-let [logger (:logger system)]
                     (logging/debug logger "Platform admin authorization check passed"

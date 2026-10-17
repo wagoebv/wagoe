@@ -943,6 +943,39 @@
         (is (str/includes? (str form) "Required field"))
         (is (str/includes? (str form) "Too short"))))))
 
+(defn- control-attrs
+  "The attribute map of the control named `field-name` in `form`."
+  [form field-name]
+  (->> (tree-seq coll? seq form)
+       (filter #(and (vector? %) (map? (second %))
+                     (= field-name (:name (second %)))
+                     (not= "hidden" (:type (second %)))))
+       first
+       second))
+
+(deftest ^:unit entity-form-fields-validate-themselves
+  (let [config (-> sample-entity-config
+                   (assoc-in [:fields :name :min] 2)
+                   (assoc-in [:fields :name :max] 40))]
+    (testing "a field carries the HTML attributes its config implies"
+      (let [attrs (control-attrs (ui/entity-form :users config nil nil sample-permissions) "name")]
+        (is (true? (:required attrs)))
+        (is (= 2 (:minlength attrs)))
+        (is (= 40 (:maxlength attrs)))))
+    (testing "and posts itself to validate-field when it changes, to be swapped whole"
+      (let [attrs (control-attrs (ui/entity-form :users config sample-record nil sample-permissions) "email")]
+        (is (= "/web/admin/users/validate-field" (:hx-post attrs)))
+        (is (= "change delay:300ms" (:hx-trigger attrs)))
+        (is (= "closest .form-field" (:hx-target attrs)))
+        (is (= "outerHTML" (:hx-swap attrs)))
+        (is (str/includes? (:hx-vals attrs) (str (:id sample-record))) "an edit names its record")))))
+
+(deftest ^:unit a-readonly-field-is-not-validated-live
+  (let [config (assoc-in sample-entity-config [:fields :name :readonly] true)
+        attrs  (control-attrs (ui/entity-form :users config sample-record nil sample-permissions) "name")]
+    (is (some? attrs))
+    (is (nil? (:hx-post attrs)))))
+
 (deftest ^:unit entity-detail-page-test
   (testing "Entity detail/edit page"
     (testing "Edit existing record"

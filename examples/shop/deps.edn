@@ -6,6 +6,10 @@
          ;; Reads resources/conf/<env>/config.edn — src/shop/system_config.clj
          ;; calls it directly.
          com.wagoe/wagoe-config        {:local/root "../../libs/config"}
+         ;; A scaffolded module builds its create form from its schema with
+         ;; this. It arrived through wagoe-user and wagoe-admin, and a project
+         ;; may drop both.
+         com.wagoe/wagoe-shared-ui     {:local/root "../../libs/shared-ui"}
          ;; The modules a fresh project can switch on by editing config.edn
          ;; alone. Drop the ones you know you will not use; each is independent.
          com.wagoe/wagoe-cache         {:local/root "../../libs/cache"}

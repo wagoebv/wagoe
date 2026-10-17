@@ -18,7 +18,6 @@
    [wagoe.shared.ui.core.htmx :as htmx]
    [clojure.string :as str]
    [clojure.tools.logging :as log]
-   [reitit.core :as r]
    [ring.util.codec :as codec]
    [ring.util.response :as ring-response])
   (:import [java.util UUID]))
@@ -31,19 +30,6 @@
   "The :type -> status table admin errors are answered with. Admin throws the
    platform's own types, so the platform's status and this one agree (BOU-586)."
   problem-details/default-error-mappings)
-
-;; =============================================================================
-;; Route table
-;; =============================================================================
-
-(defn mounted?
-  "Whether `path` is a route of its own in the router serving `request`, not
-   just a value for a parameter: /web/admin/groups also matches
-   /web/admin/:entity. True when no router is attached, as nothing can be asked."
-  [request path]
-  (if-let [router (::r/router request)]
-    (= path (:template (r/match-by-path router path)))
-    true))
 
 ;; =============================================================================
 ;; Query Parameter Parsing
@@ -710,6 +696,21 @@
                                 (and current (not-any? #(= current (first %)) options))
                                 (conj [current current]))
                        (not (get-in entity-config [:fields field :required])) (into [["" "—"]]))])))))
+
+(defn field-options
+  "The choices `field` of `entity-name` is rendered with, as
+   `foreign-key-options` finds them, or nil when it is no foreign key. Reads
+   only the parent of that field."
+  [admin-service schema-provider config entity-name field values]
+  (let [entities       (ports/list-available-entities schema-provider)
+        entity-configs (into {} (map (fn [e] [e (ports/get-entity-config schema-provider e)])) entities)]
+    (when-let [parent (get (parent-entities entity-name entity-configs) field)]
+      ;; Only `field` editable, so a second key to the same parent is not read
+      (get (foreign-key-options admin-service config
+                                (-> (select-keys entity-configs [entity-name parent])
+                                    (assoc-in [entity-name :editable-fields] [field]))
+                                entity-name values)
+           field))))
 
 (defn nested-relationships
   "The has-many entries `entity-config` is created with, as

@@ -213,6 +213,11 @@ exclusive `DTEND` (the day after the last), dates taken in the event's
 - `:start` and `:end` are `java.time.Instant` (UTC).
 - `:timezone` is extracted from the `DTSTART;TZID=...` parameter. Without one,
   the `:timezone` option applies (default `"UTC"`), to dates and floating times.
+- A TZID naming an IANA zone, or a Windows one (`windows-zones` in the adapter),
+  is read with java.time's rules, not the feed's VTIMEZONE. Other TZIDs use
+  their VTIMEZONE, RRULEs expanded by ical4j's `Recur`, and the `:timezone`
+  option. Import never uses `CalendarBuilder`: its `ZoneRulesBuilder` reads
+  `BYDAY=2SU` as the Sunday on or after the 2nd.
 - `DTSTART;VALUE=DATE` comes back `:all-day? true`, starting at midnight in that
   zone. Without a `DTEND` it lasts one day.
 - Unknown VEVENT properties are ignored.

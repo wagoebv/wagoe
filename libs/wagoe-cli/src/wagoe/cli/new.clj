@@ -12,6 +12,10 @@
 ;; Keep in sync with libs/wagoe-mcp/build.clj version (release-bumped with wagoe-tools-version)
 (def ^:private wagoe-mcp-version "1.0.1")
 
+;; Not in modules-catalogue.edn: no config key turns it on. Keep in sync with
+;; libs/shared-ui/build.clj version.
+(def ^:private wagoe-shared-ui-version "1.0.1")
+
 (defn validate-name [n]
   (cond
     (str/blank? n)                            "Project name cannot be empty"
@@ -66,6 +70,7 @@
                      :jwt-secret               jwt-secret
                      :wagoe-tools-version   wagoe-tools-version
                      :wagoe-mcp-version     wagoe-mcp-version
+                     :shared-ui-version     wagoe-shared-ui-version
                      :config-version        (:version (cat/find-module "config"))
                      :core-version             (:version (cat/find-module "core"))
                      :observability-version (:version (cat/find-module "observability"))

@@ -523,21 +523,60 @@ DROP TABLE IF EXISTS %s;
                      (str/join " "))
         cells (->> field-names
                    (map #(str "[:td (str (:" % " item))]"))
-                   (str/join "\n        "))]
+                   (str/join "\n        "))
+        title (str "New " (str/replace entity-lower "-" " "))]
     (str "(ns " base-ns "." module-name ".core.ui\n"
-         "  \"Pure UI generation for " module-name " module - Hiccup templates.\")\n"
+         "  \"Pure UI generation for " module-name " module - Hiccup templates.\"\n"
+         "  (:require [" base-ns "." module-name ".schema :as schema]\n"
+         "            [wagoe.shared.ui.core.form :as form]\n"
+         "            [wagoe.shared.ui.core.layout :as layout]))\n"
          "\n"
          "(defn " entity-lower "-list-page\n"
          "  \"Generate " entity-lower " listing page.\"\n"
          "  [" entity-plural " _opts]\n"
          "  [:div.page\n"
          "   [:h1 \"" (str/capitalize entity-plural) "\"]\n"
+         "   [:p [:a {:href \"/web/" entity-plural "/new\"} \"" title "\"]]\n"
          "   [:table.items\n"
          "    [:thead [:tr " headers "]]\n"
          "    [:tbody\n"
          "     (for [item " entity-plural "]\n"
          "       [:tr\n"
-         "        " cells "])]]])\n")))
+         "        " cells "])]]])\n"
+         "\n"
+         ;; The form is the create schema's: its fields, and the HTML
+         ;; validation attributes and errors each one's schema implies, so a
+         ;; field added to the schema is on the form.
+         "(defn " entity-lower "-field\n"
+         "  \"One field of the " entity-lower " form, with its errors. A change to the field\n"
+         "   posts the form to /validate, which answers with this again.\"\n"
+         "  [field values errors]\n"
+         "  (form/field schema/Create" entity-name "Request field\n"
+         "              {:value        (form/value values field)\n"
+         "               ;; English: the page is not rendered through wagoe-i18n. With it,\n"
+         "               ;; pass the messages as they are and render with its renderer.\n"
+         "               :errors       (mapv form/plain (get errors field))\n"
+         "               :validate-url \"/web/" entity-plural "/validate\"}))\n"
+         "\n"
+         "(defn " entity-lower "-new-page\n"
+         "  \"The create form: `values` as submitted, `errors` by field. A plain form\n"
+         "   post, so it works without JavaScript.\"\n"
+         "  [values errors opts]\n"
+         "  (let [fields (form/field-keys schema/Create" entity-name "Request)]\n"
+         "    (layout/page-layout\n"
+         "     \"" title "\"\n"
+         "     [:div.page\n"
+         "      [:h1 \"" title "\"]\n"
+         "      ;; A key the form has no field for, such as a map: its error shows here.\n"
+         "      (when-let [other (not-empty (apply dissoc errors fields))]\n"
+         "        [:div.validation-errors\n"
+         "         (for [[k msgs] other, msg msgs]\n"
+         "           [:p (form/label-text k) \": \" (form/plain msg)])])\n"
+         "      (form/form {:method \"post\" :action \"/web/" entity-plural "\"}\n"
+         "                 (for [field fields]\n"
+         "                   (" entity-lower "-field field values errors))\n"
+         "                 [:button {:type \"submit\"} \"Create\"])]\n"
+         "     opts)))\n")))
 
 ;; =============================================================================
 ;; Service File Generator
@@ -990,24 +1029,55 @@ DROP TABLE IF EXISTS %s;
          "  \"Web UI handlers for " module-name " module.\"\n"
          "  (:require [" base-ns "." module-name ".core.ui :as ui]\n"
          "            [" base-ns "." module-name ".ports :as ports]\n"
-         "            [hiccup2.core :as h]))\n"
+         "            [" base-ns "." module-name ".schema :as schema]\n"
+         "            [wagoe.shared.ui.core.components :as components]\n"
+         "            [wagoe.shared.ui.core.form :as form]))\n"
          "\n"
-         "(defn " entity-lower "-list-handler [service _config]\n"
-         "  (fn [_request]\n"
-         "    (let [items (ports/list-" entity-plural " service {})]\n"
-         "      {:status 200\n"
-         "       :headers {\"Content-Type\" \"text/html; charset=utf-8\"}\n"
          ;; A string, not the Hiccup tree: Ring cannot write a vector, so
          ;; returning the page directly produced a response no adapter could
          ;; serve (BOU-484).
          ;;
-         ;; hiccup2 rather than wagoe.i18n's renderer, which resolves [:t ...]
+         ;; Rendered without wagoe.i18n's renderer, which resolves [:t ...]
          ;; markers as well: i18n is a module a project may drop, and a
          ;; generated module that cannot load without it is a hard dependency
-         ;; bought for a page that has no markers in it. Adding markers means
+         ;; bought for pages with no markers in them. Adding markers means
          ;; adding wagoe-i18n and rendering through
          ;; `wagoe.i18n.shell.render/render` instead.
-         "       :body (str (h/html (ui/" entity-lower "-list-page items {})))})))\n")))
+         "(defn- html [status page]\n"
+         "  {:status  status\n"
+         "   :headers {\"Content-Type\" \"text/html; charset=utf-8\"}\n"
+         "   :body    (components/render-html page)})\n"
+         "\n"
+         "(defn " entity-lower "-list-handler [service _config]\n"
+         "  (fn [_request]\n"
+         "    (let [items (ports/list-" entity-plural " service {})]\n"
+         "      (html 200 (ui/" entity-lower "-list-page items {})))))\n"
+         "\n"
+         "(defn " entity-lower "-new-handler [_service _config]\n"
+         "  (fn [request]\n"
+         "    (html 200 (ui/" entity-lower "-new-page {} {} {:user (:user request)}))))\n"
+         "\n"
+         "(defn " entity-lower "-create-handler\n"
+         "  \"The form, posted. A rejected form comes back with its errors and a 422.\"\n"
+         "  [service _config]\n"
+         "  (fn [request]\n"
+         "    (let [params (:form-params request)\n"
+         "          {:keys [data errors]} (form/validate schema/Create" entity-name "Request params)]\n"
+         "      (if errors\n"
+         "        (html 422 (ui/" entity-lower "-new-page params errors {:user (:user request)}))\n"
+         "        (do (ports/create-" entity-lower " service data)\n"
+         "            {:status 303 :headers {\"Location\" \"/web/" entity-plural "\"}})))))\n"
+         "\n"
+         "(defn " entity-lower "-validate-handler\n"
+         "  \"The field named `__field`, checked as the whole form would be, for htmx\n"
+         "   to swap over the one on the page. Nothing is written.\"\n"
+         "  [_service _config]\n"
+         "  (fn [request]\n"
+         "    (let [params (:form-params request)]\n"
+         "      (if-let [field (form/field-key schema/Create" entity-name "Request (get params \"__field\"))]\n"
+         "        (let [{:keys [errors]} (form/validate schema/Create" entity-name "Request params)]\n"
+         "          (html 200 (ui/" entity-lower "-field field params errors)))\n"
+         "        {:status 400 :headers {\"Content-Type\" \"text/plain\"} :body \"No such field\"}))))\n")))
 
 ;; =============================================================================
 ;; Test File Generators
@@ -1698,9 +1768,18 @@ DROP TABLE IF EXISTS %s;
                 "(defn web-routes\n"
                 "  \"Mounted under /web — do not repeat the prefix here.\"\n"
                 "  [service config]\n"
-                "  [[\"/" entity-plural "\"\n"
-                "    {:get {" (if public? ":public true\n           " ":interceptors signed-in-page\n           ")
-                ":handler (web-handlers/" entity-lower "-list-handler service config)}}]])\n"
+                (let [guard   (if public? ":public true" ":interceptors signed-in-page")
+                      route   (fn [method handler]
+                                (str method " {" guard "\n"
+                                     (apply str (repeat (+ 7 (count method)) " "))
+                                     ":handler (web-handlers/" entity-lower "-" handler "-handler service config)}"))]
+                  (str "  [[\"/" entity-plural "\"\n"
+                       "    {" (route ":get" "list") "\n"
+                       "     " (route ":post" "create") "}]\n"
+                       "   [\"/" entity-plural "/new\"\n"
+                       "    {" (route ":get" "new") "}]\n"
+                       "   [\"/" entity-plural "/validate\"\n"
+                       "    {" (route ":post" "validate") "}]])\n"))
                 "\n"))
          "(defn " module-name "-routes\n"
          "  \"This module's contribution to the application's route table.\n"

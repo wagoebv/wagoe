@@ -136,7 +136,15 @@
   [service config]
   [["/products"
     {:get {:interceptors signed-in-page
-           :handler (web-handlers/product-list-handler service config)}}]])
+           :handler (web-handlers/product-list-handler service config)}
+     :post {:interceptors signed-in-page
+            :handler (web-handlers/product-create-handler service config)}}]
+   ["/products/new"
+    {:get {:interceptors signed-in-page
+           :handler (web-handlers/product-new-handler service config)}}]
+   ["/products/validate"
+    {:post {:interceptors signed-in-page
+            :handler (web-handlers/product-validate-handler service config)}}]])
 
 (defn product-routes
   "This module's contribution to the application's route table.
