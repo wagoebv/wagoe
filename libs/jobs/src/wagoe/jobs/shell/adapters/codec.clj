@@ -37,6 +37,6 @@
    opening with `{` is a JSON job from before BOU-689."
   [^String s]
   (when s
-    (if (.startsWith (.stripLeading s) "{")
+    (if (.startsWith s "{")
       (legacy-json->job s)
       (transit/decode s))))
