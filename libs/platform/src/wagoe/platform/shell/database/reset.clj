@@ -13,6 +13,7 @@
             [migratus.core :as migratus]
             [migratus.migrations :as migratus-migrations]
             [migratus.utils :as migratus-utils]
+            [wagoe.config :as config]
             [aero.core :as aero]
             [clojure.edn :as edn]
             [clojure.java.io :as io]
@@ -147,16 +148,16 @@
   "The profile to reset, or a refusal. WAG_ENV must name dev, test or acc:
    the built-in default is not a choice anybody made."
   []
-  (let [named (some-> (db-config/getenv "WAG_ENV") str/trim not-empty)
-        env   (db-config/detect-environment)]
+  (let [wag-env (db-config/getenv "WAG_ENV")
+        env     (some-> (config/named-profile wag-env) name)]
     (cond
-      (nil? named)
+      (nil? env)
       (refuse! :forbidden "No profile is named. Set WAG_ENV to dev, test or acc, or pass --env dev." {})
 
       (not (db-config/resettable-environment? env))
-      (refuse! :forbidden (str "Refusing to reset: WAG_ENV=" (pr-str named)
+      (refuse! :forbidden (str "Refusing to reset: WAG_ENV=" (pr-str wag-env)
                                " is not dev, test or acc. " db-config/reset-refusal)
-               {:sources {"WAG_ENV" named}})
+               {:sources {"WAG_ENV" wag-env}})
 
       :else env)))
 

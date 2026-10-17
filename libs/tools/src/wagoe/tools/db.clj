@@ -206,7 +206,8 @@
     (get env-aliases s s)))
 
 (defn- wag-env
-  "WAG_ENV from `getenv`, nil when unset or blank."
+  "WAG_ENV from `getenv`, nil when unset or blank. Mirrors
+   wagoe.config/named-profile, which Babashka cannot load."
   [getenv]
   (some-> (getenv "WAG_ENV") str/trim not-empty))
 

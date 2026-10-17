@@ -88,7 +88,8 @@
   (is (= :test (sut/active-profile " TEST ")))
   (testing "a blank WAG_ENV is unset (BOU-686)"
     (is (= :dev (sut/active-profile "")))
-    (is (= :dev (sut/active-profile "  ")))))
+    (is (= :dev (sut/active-profile "  ")))
+    (is (nil? (sut/named-profile "  ")) "and names no profile")))
 
 (deftest ^:unit resolve-symbol-returns-the-value-or-a-configuration-error
   (is (= sut/normalize-env (sut/resolve-symbol 'wagoe.config/normalize-env)))

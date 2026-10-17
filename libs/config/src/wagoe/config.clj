@@ -36,11 +36,16 @@
   (let [s (some-> env str .trim .toLowerCase)]
     (get env-aliases s s)))
 
+(defn named-profile
+  "The profile `wag-env` names, or nil when it is unset or blank: a blank
+   WAG_ENV is not a profile named \"\" (BOU-686)."
+  [wag-env]
+  (some-> (not-empty (normalize-env wag-env)) keyword))
+
 (defn active-profile
-  "The profile `load-config` picks when none is passed: WAG_ENV, else dev.
-   A blank WAG_ENV is unset, not a profile named \"\" (BOU-686)."
+  "The profile `load-config` picks when none is passed: WAG_ENV, else dev."
   ([] (active-profile (System/getenv "WAG_ENV")))
-  ([wag-env] (keyword (or (not-empty (normalize-env wag-env)) "dev"))))
+  ([wag-env] (or (named-profile wag-env) :dev)))
 
 (defn- url-exists? [^java.net.URL url]
   (try (with-open [_ (.openStream url)] true)

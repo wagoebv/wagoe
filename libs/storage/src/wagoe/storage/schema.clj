@@ -60,12 +60,13 @@
 ;; ============================================================================
 
 (def LocalStorageConfig
-  "Schema for local filesystem storage configuration."
+  "Schema for local filesystem storage configuration. `:root` is the
+   catalogue's name for `:base-path`; one of them is required."
   [:map
-   [:base-path string?]
+   [:root {:optional true} string?]
+   [:base-path {:optional true} string?]
    [:url-base {:optional true} string?]
-   [:signing-secret {:optional true} string?]
-   [:create-directories? {:optional true} boolean?]])
+   [:signing-secret {:optional true} string?]])
 
 (def S3StorageConfig
   "Schema for S3 storage configuration."
@@ -75,6 +76,7 @@
    [:access-key {:optional true} string?]
    [:secret-key {:optional true} string?]
    [:endpoint {:optional true} string?]  ; For S3-compatible services
+   [:prefix {:optional true} string?]
    [:public-read? {:optional true} boolean?]])
 
 (def GCSStorageConfig
@@ -83,6 +85,7 @@
    [:bucket string?]
    [:project-id string?]
    [:credentials-path {:optional true} string?]
+   [:prefix {:optional true} string?]
    [:public-read? {:optional true} boolean?]])
 
 (def ^:private module-keys
@@ -90,21 +93,17 @@
   [[:expose-http? {:optional true} [:or boolean? string?]]
    [:http-base-path {:optional true} string?]])
 
+(defn- provider-config [provider schema]
+  (into schema (cons [:provider {:optional true} [:= provider]] module-keys)))
+
 (def StorageConfig
   "The `:wagoe/storage` value `module-wiring` reads, by `:provider` (default
-   `:local`). `:root` is the catalogue's name for `:base-path` (BOU-646)."
+   `:local`) (BOU-646)."
   [:multi {:dispatch #(:provider % :local)}
-   [:local [:and
-            (into [:map
-                   [:provider {:optional true} [:= :local]]
-                   [:root {:optional true} string?]
-                   [:base-path {:optional true} string?]
-                   [:url-base {:optional true} string?]
-                   [:signing-secret {:optional true} string?]]
-                  module-keys)
+   [:local [:and (provider-config :local LocalStorageConfig)
             [:fn {:error/message "needs :root or :base-path"} #(some? (or (:root %) (:base-path %)))]]]
-   [:s3 (into S3StorageConfig (concat [[:provider [:= :s3]] [:prefix {:optional true} string?]] module-keys))]
-   [:gcs (into GCSStorageConfig (concat [[:provider [:= :gcs]] [:prefix {:optional true} string?]] module-keys))]])
+   [:s3 (provider-config :s3 S3StorageConfig)]
+   [:gcs (provider-config :gcs GCSStorageConfig)]])
 
 ;; ============================================================================
 ;; Validation Functions
