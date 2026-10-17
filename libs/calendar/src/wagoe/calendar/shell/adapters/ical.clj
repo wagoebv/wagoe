@@ -7,16 +7,18 @@
 
    Shell layer — may perform I/O via ical4j CalendarBuilder."
   (:require [wagoe.calendar.core.event :as event]
+            [wagoe.calendar.core.recurrence :as recurrence]
             [wagoe.calendar.ports :as ports]
             [wagoe.calendar.schema :as schema]
             [clojure.string :as str])
-  (:import [java.time Instant ZoneId ZoneOffset ZonedDateTime OffsetDateTime LocalDate LocalDateTime LocalTime]
-           [java.time.temporal Temporal TemporalAmount]
+  (:import [java.time DayOfWeek Duration Instant YearMonth ZoneId ZoneOffset ZonedDateTime OffsetDateTime LocalDate LocalDateTime LocalTime]
+           [java.time.temporal ChronoUnit Temporal TemporalAdjusters TemporalAmount]
+           [java.time.zone ZoneOffsetTransition ZoneOffsetTransitionRule ZoneRules]
            [java.io StringReader]
            [java.nio.charset StandardCharsets]
-           [net.fortuna.ical4j.model Calendar TimeZoneRegistry TimeZoneRegistryFactory]
-           [net.fortuna.ical4j.model.component VEvent VTimeZone]
-           [net.fortuna.ical4j.model.property Uid RRule Description TzId]
+           [net.fortuna.ical4j.model Calendar ComponentList PropertyList]
+           [net.fortuna.ical4j.model.component Daylight Standard VEvent VTimeZone]
+           [net.fortuna.ical4j.model.property Description DtStart RRule TzId TzOffsetFrom TzOffsetTo Uid]
            [net.fortuna.ical4j.data CalendarBuilder]))
 
 ;; =============================================================================
@@ -33,41 +35,152 @@
                 (not= LocalTime/MIDNIGHT (.toLocalTime end-z)) (.plusDays 1))]
     [start (if (.isAfter end start) end (.plusDays start 1))]))
 
+;; VTIMEZONEs are built from java.time's tz rules, the data the rest of the app
+;; uses, rather than ical4j's bundled copy: that lacks newer zones and disagrees
+;; with the JVM, and writes each zone's full history.
+
+(defn- observance-props
+  ^PropertyList [^LocalDateTime start ^ZoneOffset from ^ZoneOffset to rrule]
+  (PropertyList. (cond-> [(DtStart. start) (TzOffsetFrom. from) (TzOffsetTo. to)]
+                   rrule (conj (RRule. ^String rrule)))))
+
+(defn- observance
+  "A STANDARD or DAYLIGHT observance starting at transition `t`."
+  [^ZoneRules rules ^ZoneOffsetTransition t rrule]
+  (let [props (observance-props (.getDateTimeBefore t) (.getOffsetBefore t) (.getOffsetAfter t) rrule)]
+    (if (.isDaylightSavings rules (.getInstant t)) (Daylight. props) (Standard. props))))
+
+(defn- base-date
+  "The day of the month `r` counts from in `year`; negative counts from the end."
+  ^LocalDate [^ZoneOffsetTransitionRule r year]
+  (let [d (.getDayOfMonthIndicator r)]
+    (if (pos? d)
+      (LocalDate/of (int year) (.getMonth r) d)
+      (.plusDays (.atEndOfMonth (YearMonth/of (int year) (.getMonth r))) (inc d)))))
+
+(defn- nominal-date
+  "The date `r` names in `year`, before its time of day is applied."
+  ^LocalDate [^ZoneOffsetTransitionRule r year]
+  (let [base (base-date r year)]
+    (if-let [w (.getDayOfWeek r)]
+      (.with base (if (pos? (.getDayOfMonthIndicator r))
+                    (TemporalAdjusters/nextOrSame w)
+                    (TemporalAdjusters/previousOrSame w)))
+      base)))
+
+(defn- byday [^DayOfWeek w]
+  (subs (str w) 0 2))
+
+(defn- year-days
+  "BYYEARDAY values, counted back from the year's end, for the dates `r`'s
+   weekday can fall on in `year` — so leap years do not move them."
+  [^ZoneOffsetTransitionRule r year shift]
+  (let [d     (.getDayOfMonthIndicator r)
+        start (.plusDays (base-date r year) shift)
+        dates (map #(.plusDays start (if (pos? d) % (- %))) (range 7))]
+    (when (every? #(>= (.getMonthValue ^LocalDate %) 3) dates)
+      (map #(- (.getDayOfYear ^LocalDate %) (.lengthOfYear ^LocalDate %) 1) dates))))
+
+(defn- transition-rrule
+  "RRULE for `r`, whose occurrence `t` falls on a wall-clock date that may be a
+   day off the rule's own (a time given in UTC, or 24:00). Dates that span two
+   months are counted from the year's end, as Egypt needs: the Friday after the
+   last Thursday of October. Nil for a shape no RRULE can say."
+  [^ZoneOffsetTransitionRule r ^ZoneOffsetTransition t]
+  (let [wall  (.toLocalDate (.getDateTimeBefore t))
+        shift (.between ChronoUnit/DAYS (nominal-date r (.getYear wall)) wall)
+        d     (.getDayOfMonthIndicator r)
+        w     (.getDayOfWeek r)
+        days  (map #(+ shift %) (cond (nil? w) [d] (pos? d) (range d (+ d 7)) :else (range d (- d 7) -1)))
+        d0    (first days)
+        wd    (some-> w (.plus shift) byday)
+        len   (.minLength (.getMonth wall))
+        month (str "FREQ=YEARLY;BYMONTH=" (.getValue (.getMonth wall)))]
+    (cond
+      (not (or (every? #(<= 1 % len) days) (every? #(<= (- len) % -1) days)))
+      (when-let [yds (and w (year-days r (.getYear wall) shift))]
+        (str "FREQ=YEARLY;BYYEARDAY=" (str/join "," (sort yds)) ";BYDAY=" wd))
+      (nil? w)                                    (str month ";BYMONTHDAY=" d0)
+      (and (pos? d0) (zero? (mod (dec d0) 7)))    (str month ";BYDAY=" (inc (quot d0 7)) wd)
+      (or (= -1 d0) (= len (.maxLength (.getMonth wall)) (last days)))
+      (str month ";BYDAY=-1" wd)
+      :else (str month ";BYDAY=" wd ";BYMONTHDAY=" (str/join "," (sort days))))))
+
+(def ^:private rule-horizon
+  "How far a rule with no RRULE form is written out, transition by transition.
+   No rule in today's tz database needs it; a future one would."
+  (Instant/parse "2100-01-01T00:00:00Z"))
+
+(defn- rule-observances
+  "One RRULE observance for `r`, from its first transition at or after `from`;
+   or, if it has no RRULE form, its transitions up to `hi` or `rule-horizon`."
+  [^ZoneRules rules ^ZoneOffsetTransitionRule r ^Instant from ^Instant hi]
+  (let [ts (->> (iterate inc (dec (.getYear (.atZone from ZoneOffset/UTC))))
+                (map #(.createTransition r (int %)))
+                (drop-while #(.isBefore (.getInstant ^ZoneOffsetTransition %) from)))
+        until (if (.isBefore hi rule-horizon) hi rule-horizon)]
+    (if-let [rrule (transition-rrule r (first ts))]
+      [(observance rules (first ts) rrule)]
+      (map #(observance rules % nil)
+           (take-while #(not (.isAfter (.getInstant ^ZoneOffsetTransition %) until)) ts)))))
+
+(defn- observances
+  "Observances covering `lo` onwards: the offset in force at `lo`, the
+   transitions after it up to `hi`, and the zone's recurring rules when `hi`
+   reaches them. A fixed offset is one STANDARD."
+  [^ZoneRules rules ^Instant lo ^Instant hi]
+  (let [history    (.getTransitions rules)
+        in-force   (.previousTransition rules (.plusNanos lo 1))
+        from       (if in-force (.getInstant in-force) lo)
+        last-hist  (if (seq history) (.getInstant ^ZoneOffsetTransition (last history)) Instant/MIN)
+        initial    (when-not in-force
+                     (let [off (.getOffset rules lo)]
+                       [(Standard. (observance-props (LocalDateTime/ofEpochSecond (.getEpochSecond lo) 0 off)
+                                                     off off nil))]))
+        explicit   (filter #(let [i (.getInstant ^ZoneOffsetTransition %)]
+                              (not (or (.isBefore i from) (.isAfter i hi))))
+                           history)
+        rules-from (if (.isAfter from last-hist) from (.plusNanos last-hist 1))
+        recurring  (when (.isAfter hi last-hist)
+                     (mapcat #(rule-observances rules % rules-from hi) (.getTransitionRules rules)))]
+    (concat initial (map #(observance rules % nil) explicit) recurring)))
+
 (defn- vtimezone
-  "The VTIMEZONE for `tzid` from ical4j's bundled registry, or nil. The registry
-   answers links with their target (Amsterdam with Brussels), so the TZID is set
-   back to the name the events reference and the TZURL to the other zone dropped."
-  [^TimeZoneRegistry registry ^String tzid]
-  (when-let [tz (.getTimeZone registry tzid)]
-    (-> ^VTimeZone (.copy (.getVTimeZone tz))
-        (.removeAll (into-array String ["TZURL" "X-LIC-LOCATION"]))
-        (.replace (TzId. tzid)))))
+  "VTIMEZONE for `tzid`, covering a year either side of `events`. A recurring
+   event has no end, so then the zone's current rules are always included."
+  [^String tzid events]
+  (let [year (Duration/ofDays 366)
+        lo   (.minus ^Instant (first (sort (map :start events))) year)
+        hi   (if (some recurrence/recurring? events)
+               Instant/MAX
+               (.plus ^Instant (last (sort (map :end events))) year))]
+    (VTimeZone. (PropertyList. [(TzId. tzid)])
+                (ComponentList. (vec (observances (.getRules (ZoneId/of tzid)) lo hi))))))
+
+(defn- utc? [^ZoneId zone]
+  (= ZoneOffset/UTC (.normalized zone)))
 
 (defn- vtimezones
-  "tzid -> VTIMEZONE for each zone a timed event is written in. UTC needs none:
-   it is written in the Z form."
+  "VTIMEZONE per zone a timed event is written in. UTC needs none: it is
+   written in the Z form."
   [events]
-  (let [registry (.createRegistry (TimeZoneRegistryFactory/getInstance))]
-    (into {}
-          (keep (fn [tzid]
-                  (when-not (= ZoneOffset/UTC (.normalized (ZoneId/of tzid)))
-                    (when-let [vtz (vtimezone registry tzid)] [tzid vtz]))))
-          (distinct (map #(:timezone % "UTC") (remove event/all-day? events))))))
+  (for [[tzid evs] (group-by #(:timezone % "UTC") (remove event/all-day? events))
+        :when (not (utc? (ZoneId/of tzid)))]
+    (vtimezone tzid evs)))
 
 (defn- event->vevent
   "Convert a boundary EventData map to a net.fortuna.ical4j 4.x VEvent.
 
    ZonedDateTimes make ical4j emit DTSTART;TZID=..., Instants the UTC Z form,
-   LocalDates (all-day events) DTSTART;VALUE=DATE. A zone without a VTIMEZONE
-   in `zones` is written in UTC, so no TZID goes undefined."
-  [event zones]
+   LocalDates (all-day events) DTSTART;VALUE=DATE."
+  [event]
   (let [tzid   (:timezone event "UTC")
         zone   (ZoneId/of tzid)
         [s e]  (cond
                  (event/all-day? event) (all-day-dates event zone)
-                 (contains? zones tzid) [(.atZone ^Instant (:start event) zone)
-                                         (.atZone ^Instant (:end event) zone)]
-                 :else                  [(:start event) (:end event)])
+                 (utc? zone)            [(:start event) (:end event)]
+                 :else                  [(.atZone ^Instant (:start event) zone)
+                                         (.atZone ^Instant (:end event) zone)])
         title  ^String (:title event)
         uid    (Uid. (str (:id event)))
         ;; Base VEvent from 4.x Temporal constructor; add UID via fluent chain
@@ -186,9 +299,10 @@
   (when-let [p (find-prop vevent "DTSTART")]
     ;; `str` never returns nil, so this was a `when-let` that always took its
     ;; branch — a guard reading as if a property could stringify to nothing.
+    ;; A TZID holding a colon (`+05:00`) is quoted, as export writes it.
     (let [text (str p)]
-      (when-let [m (re-find #"TZID=([^;:\r\n]+)" text)]
-        (str/trim (second m))))))
+      (when-let [[_ quoted bare] (re-find #"TZID=(?:\"([^\"]*)\"|([^;:\r\n]+))" text)]
+        (str/trim (or quoted bare))))))
 
 (defn- uid-string->uuid
   "Convert a UID string to a UUID.
@@ -238,9 +352,7 @@
   (export-ical [_this events opts]
     (check-events! events)
     (let [product-id (get opts :product-id "-//Wagoe//Calendar//EN")
-          zones      (vtimezones events)
-          calendar   (build-calendar (concat (vals zones)
-                                             (map #(event->vevent % zones) events))
+          calendar   (build-calendar (concat (vtimezones events) (map event->vevent events))
                                      product-id)]
       ;; Calendar.toString is unfolded; CalendarOutputter folds by characters.
       (str (str/join "\r\n" (map fold-line (str/split-lines (str calendar)))) "\r\n")))

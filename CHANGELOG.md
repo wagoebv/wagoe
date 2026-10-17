@@ -130,6 +130,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **Creating a tenant with a 57–100 character slug failed with a 500** (BOU-716): its schema name passed PostgreSQL's
   63 bytes. Such slugs are now a validation error, and the admin no longer edits a slug.
+- **iCal export wrote zones ical4j lacks (America/Coyhaique) in UTC, and each zone's full history** (BOU-720).
+  VTIMEZONEs now come from the JVM's tz rules, trimmed to the years the feed's events cover.
 - **Admin dashboard linked to Groups and Audit with the user web UI switched off** (BOU-713). It now shows a card only
   when its page is mounted.
 - **An app migration sharing an id with a library's silently never ran, or the library's didn't** (BOU-717). Boot and
