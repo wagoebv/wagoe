@@ -716,11 +716,12 @@
    A client the proxy could not name is bucketed per proxy, apart from named
    clients: not exempt, and draining it blocks only other unnamed ones (BOU-695)."
   [request]
-  (if-let [user-id (get-in request [:user :id])]
-    (str "user:" user-id)
-    (if-let [ip (client-ip/request-ip request)]
-      (str "ip:" ip)
-      (str "unresolved:" (or (:remote-addr request) "unknown")))))
+  (let [user-id (get-in request [:user :id])
+        ip      (client-ip/request-ip request)]
+    (cond
+      user-id (str "user:" user-id)
+      ip      (str "ip:" ip)
+      :else   (str "unresolved:" (or (:remote-addr request) "unknown")))))
 
 (defn- check-rate-limit-redis
   "Check rate limit using Redis fixed-window counter.

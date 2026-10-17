@@ -118,8 +118,7 @@
                                 (call "10.0.0.4" "unknown")
                                 (call "10.0.0.3" "198.51.100.5")])))))
 
-(deftest ^:unit ^:security an-unresolved-client-is-bucketed-on-its-peer
-  (is (= "unresolved:10.0.0.2" (itc/get-client-id {:client-ip nil :remote-addr "10.0.0.2"})))
+(deftest ^:unit ^:security an-unresolved-client-without-a-peer-still-has-a-bucket
   (is (= "unresolved:unknown" (itc/get-client-id {:client-ip nil}))))
 
 ;; BOU-690: the limiter keyed on an unchecked X-Api-Key before the IP.

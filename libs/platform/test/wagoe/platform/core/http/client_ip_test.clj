@@ -110,7 +110,8 @@
     (doseq [[ip cidr] [[nil "10.0.0.0/8"] ["unknown" "10.0.0.0/8"] ["10.0.0.1" "10.0.0.0/33"]
                        ["10.0.0.1" nil] ["10.0.0.1" "proxy.local"] [[10 0 0 256] "10.0.0.0/8"]
                        [[10 0 0] "10.0.0.0/8"] ["10.0.0.1" {:bytes [10 0 0 0] :prefix 40}]
-                       [42 "10.0.0.0/8"] ["10.0.0.1" {:bytes "10.0.0.0" :prefix 8}]]]
+                       [42 "10.0.0.0/8"] ["10.0.0.1" {:bytes "10.0.0.0" :prefix 8}]
+                       ["10.0.0.1" {:bytes (vec (concat (repeat 10 0) [255 255 10 0 0 0])) :prefix 104}]]]
       (is (false? (client-ip/in-network? ip cidr)) (pr-str [ip cidr])))))
 
 (deftest ^:unit ^:security in-any-test

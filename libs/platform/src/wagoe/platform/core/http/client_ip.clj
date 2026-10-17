@@ -127,7 +127,8 @@
 (defn- ->cidr [cidr]
   (cond
     (string? cidr) (parse-cidr cidr)
-    (and (map? cidr) (->ip (:bytes cidr)) (int? (:prefix cidr))
+    ;; As parse-cidr returns it: an IPv4-mapped range already folded.
+    (and (map? cidr) (some? (:bytes cidr)) (= (:bytes cidr) (->ip (:bytes cidr))) (int? (:prefix cidr))
          (<= 0 (:prefix cidr) (* 8 (count (:bytes cidr)))))
     cidr))
 
@@ -144,8 +145,7 @@
 (defn in-any?
   "True when `ip` lies in one of `cidrs`; see `in-network?`."
   [ip cidrs]
-  (let [bs (->ip ip)]
-    (boolean (and bs (some #(in-network? bs %) cidrs)))))
+  (boolean (some->> (->ip ip) (trusted? (keep ->cidr cidrs)))))
 
 (defn client-ip
   "The client's address: `:remote-addr`, unless that is a trusted proxy, in
