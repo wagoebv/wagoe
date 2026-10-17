@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **Outbound webhooks: `com.wagoe/wagoe-webhooks`** (BOU-472): bus events go to subscriber URLs, signed, retried as jobs,
+  per tenant, logged in the admin. Enable `:wagoe/webhooks` beside `:wagoe/jobs`; receivers use `verify-signature`.
 - **`permission-holders` and `import-groups!` on the group service** (BOU-718): who holds a permission in one query;
   move grants onto groups idempotently, in one audited transaction. Group names are now unique; boot logs any duplicates.
 - **Search indexes live on `:wagoe/search`** (BOU-705): pass definitions under `:indexes` in config, or as a

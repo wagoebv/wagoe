@@ -26,6 +26,7 @@
 ** xref:libraries:geo.adoc[geo]
 ** xref:libraries:audience.adoc[audience]
 ** xref:libraries:push.adoc[push]
+** xref:libraries:webhooks.adoc[webhooks]
 ** xref:libraries:ai.adoc[ai]
 ** xref:libraries:devtools.adoc[devtools]
 ** xref:libraries:test.adoc[test]

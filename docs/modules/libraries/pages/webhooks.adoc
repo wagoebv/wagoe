@@ -1,0 +1,109 @@
+= webhooks
+:description: Outbound webhooks — bus events delivered as signed, retried HTTP requests, per tenant.
+
+Delivers events from the event bus to URLs that subscribers register. Each
+delivery is a job on the jobs queue, so it is retried with backoff and
+dead-lettered when it keeps failing. Each request is signed, and each attempt
+is logged where the admin can show it.
+
+Incubating: see xref:ROOT:stability.adoc[Stability].
+
+== Configuration
+
+[source,clojure]
+----
+;; config.edn — under :active. Needs :wagoe/jobs, and :wagoe/events for :topics.
+:wagoe/webhooks
+{:topics             [:orders/placed :orders/shipped] ; bus topics to deliver
+ :max-attempts       8          ; then the job is dead-lettered
+ :queue              :default   ; the jobs queue deliveries run on
+ :timeout-ms         10000      ; per request; redirects are never followed
+ :connect-timeout-ms 5000
+ :allowed-hosts      #{}        ; private hosts you mean to reach
+ :encryption-key     #env WEBHOOK_ENCRYPTION_KEY} ; default: JWT_SECRET
+----
+
+HTTPS is required outside the `dev` and `test` profiles; `:require-https?`
+overrides that. Retry delays come from the jobs worker's `:retry-config`.
+
+The tables are created by `migrate up`, and at boot when it has not run.
+
+== Subscriptions
+
+[source,clojure]
+----
+(require '[wagoe.webhooks.ports :as webhooks])
+
+(def svc (:wagoe/webhooks system))
+
+(webhooks/create-subscription! svc {:url           "https://example.com/hooks"
+                                    :event-pattern "orders/*"
+                                    :tenant-id     "acme"})   ; optional
+;; => {:subscription {...} :secret "whsec_..."}
+----
+
+The secret is returned once and stored encrypted. `:event-pattern` is a glob
+over the topic name: `*` matches any run of characters.
+
+A subscription with a `:tenant-id` receives only that tenant's events. One
+without receives every event: it belongs to the operator.
+
+`change-subscription!` updates `:url`, `:event-pattern`, `:active?` and
+`:description`; `remove-subscription!` deletes one.
+
+== What a receiver gets
+
+A `POST` with the event as JSON and these headers:
+
+[cols="1,3",options="header"]
+|===
+| Header | Value
+
+| `Wagoe-Signature`
+| `t=<unix seconds>,v1=<hex>`: HMAC-SHA256 of `<t>.<body>` under the secret
+
+| `Wagoe-Event-Id`
+| The event id. The same on every retry, so a receiver can drop duplicates.
+
+| `Wagoe-Topic`
+| The bus topic
+|===
+
+Verify against the raw body, before parsing it:
+
+[source,clojure]
+----
+(require '[wagoe.webhooks :as webhooks])
+
+(webhooks/verify-signature secret raw-body (get-in request [:headers "wagoe-signature"]))
+----
+
+A signature older than five minutes is refused, which stops a captured request
+being replayed. Any 2xx counts as delivered.
+
+== Delivery after commit
+
+Webhooks listen on the bus. An event published through the events outbox
+reaches the bus only after its transaction commits, so a rolled-back change
+sends nothing.
+
+== Security
+
+* Targets that resolve to loopback, private, link-local, carrier-grade NAT or
+  unique-local addresses are refused, when the subscription is created and
+  before every attempt. List a host in `:allowed-hosts` to reach it. The HTTP
+  client resolves the name again when it connects, so a name that changes
+  address between the two lookups is not caught.
+* Redirects are not followed: a 3xx is a failed attempt.
+* At most `:max-response-bytes` (2000) of a response is read and logged.
+
+== Admin
+
+`wagoe/webhooks/admin.edn` on the classpath defines two admin entities: the
+subscriptions, without their secrets, and the delivery log, read-only.
+
+[source,clojure]
+----
+:entities #merge [#include "admin/users.edn"
+                  #include "wagoe/webhooks/admin.edn"]
+----

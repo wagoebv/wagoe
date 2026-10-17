@@ -282,6 +282,19 @@
    :add-command         "wagoe add events"
    :docs-url            "https://github.com/wagoebv/wagoe/blob/main/libs/events/AGENTS.md"}
 
+  {:name                "webhooks"
+   :description         "Outbound webhooks: signed, retried, per-tenant delivery of bus events"
+   :clojars             com.wagoe/wagoe-webhooks
+   :version             "1.0.1"
+   :category            :optional
+   :tier                :incubating
+   :config-snippet      "  :wagoe/webhooks\n  {:topics []}\n"
+   :test-config-snippet "  :wagoe/webhooks\n  {:topics []}\n"
+   :add-command         "wagoe add webhooks"
+   :post-install        ["Needs the jobs module (wagoe add jobs): each delivery is a job."
+                         "List the event-bus topics to deliver under :topics (needs wagoe add events)."]
+   :docs-url            "https://github.com/wagoebv/wagoe/blob/main/libs/webhooks/AGENTS.md"}
+
   {:name                "audience"
    :description         "Rule-based audience segmentation with SQL + predicate pipeline"
    :clojars             com.wagoe/wagoe-audience

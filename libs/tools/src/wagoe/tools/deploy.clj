@@ -48,6 +48,7 @@
    "cache"
    "events"
    "jobs"
+   "webhooks"
    "push"
    "realtime"
    "email"

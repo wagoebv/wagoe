@@ -16,6 +16,7 @@
             [clojure.test :refer [deftest is testing]]
             [integrant.core :as ig]
             [wagoe.config :as config]
+            [wagoe.jobs.ports]
             [wagoe.main :as main]
             [wagoe.platform.shell.modules :as modules]
             [wagoe.system-config :as sys-config]))
@@ -44,7 +45,9 @@
                    "here \u2014 :wagoe.external/imap and /twilio have no documented "
                    "settings at all (BOU-427)")
    "tenant"   (str "tenancy needs PostgreSQL, and this boots the H2 test profile "
-                   "with the dev snippet, which rightly does not set :allow-h2? (BOU-576)")})
+                   "with the dev snippet, which rightly does not set :allow-h2? (BOU-576)")
+   "webhooks" (str "every delivery is a job, so it refuses to boot without :wagoe/jobs, "
+                   "which the test profile does not enable")})
 
 (defn- dev-snippet
   "What `wagoe add` writes into dev: the dev snippet where the entry has one,
@@ -95,6 +98,18 @@
           (is (some? (:wagoe/audience system)))
           (is (some? (:wagoe/audience-user-source system)))
           (finally (ig/halt! system)))))))
+
+(deftest ^:integration webhooks-boot-beside-jobs-and-events
+  (let [system (boot-with (merge {:wagoe/jobs {}}
+                                 (snippet-settings (dev-snippet (module "webhooks")))
+                                 {:wagoe/webhooks {:topics [:orders/placed]}}))]
+    (try
+      (is (some? (:wagoe/webhooks system)))
+      (is (some? (:wagoe.webhooks/subscriber system)))
+      (is (some #{:webhooks/deliver}
+                (wagoe.jobs.ports/list-handlers (:wagoe/job-registry system)))
+          "its job handler reaches the registry")
+      (finally (ig/halt! system)))))
 
 (def ^:private activated-another-way
   "Framework modules whose catalogue entry carries no snippet, and why.
