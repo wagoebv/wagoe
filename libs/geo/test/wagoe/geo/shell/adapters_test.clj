@@ -116,7 +116,14 @@
 
 (deftest ^:unit rate-limit-test
   (testing "the public Nominatim server is never asked more than once a second"
-    (is (= 1000 (:min-interval-ms (osm/create-nominatim-adapter {:user-agent "x" :min-interval-ms 10})))))
+    (is (= 1000 (:min-interval-ms (osm/create-nominatim-adapter {:user-agent "x" :min-interval-ms 10}))))
+    (is (= 1000 (:min-interval-ms (osm/create-nominatim-adapter
+                                   {:user-agent "x" :min-interval-ms 10
+                                    :base-url "https://nominatim.openstreetmap.org/"})))))
+  (testing "no :user-agent for the public server warns"
+    (log-test/with-log
+      (osm/create-nominatim-adapter {})
+      (is (log-test/logged? 'wagoe.geo.shell.adapters.osm :warn #"no :user-agent"))))
   (testing "concurrent callers are spaced, not just sequential ones"
     (let [last-ms (atom 0)
           starts  (->> (range 3)

@@ -11,10 +11,12 @@
             [wagoe.geo.shell.adapters.support :as support]
             [clj-http.client :as http]
             [clojure.string :as str]
-            [clojure.tools.logging :as log]))
+            [clojure.tools.logging :as log])
+  (:import [java.net URI]))
 
 (def ^:private default-base-url "https://nominatim.openstreetmap.org")
 (def ^:private default-min-interval-ms 1000)
+(def ^:private default-user-agent "wagoe-geo/1.0 (https://github.com/wagoebv/wagoe)")
 
 ;; =============================================================================
 ;; Response parsing
@@ -105,7 +107,7 @@
   "Create an OpenStreetMap Nominatim adapter.
 
    Config keys:
-     :user-agent       - Descriptive User-Agent string (REQUIRED by OSM policy)
+     :user-agent       - App name and contact (OSM policy; WARN and a shared default when absent)
      :base-url         - Override base URL (default: https://nominatim.openstreetmap.org)
      :min-interval-ms  - Minimum ms between requests (default and floor on the public server: 1000)
 
@@ -114,9 +116,9 @@
   [{:keys [user-agent base-url min-interval-ms]
     :or   {base-url         default-base-url
            min-interval-ms  default-min-interval-ms}}]
-  {:pre [(string? user-agent)]}
-  ;; The public server's policy caps clients at 1 req/s; a self-hosted one may go faster.
-  (let [interval (if (= base-url default-base-url)
-                   (max min-interval-ms default-min-interval-ms)
-                   min-interval-ms)]
-    (->NominatimAdapter base-url (atom 0) interval user-agent)))
+  ;; The public server's policy: 1 req/s and a User-Agent naming the app. A self-hosted one sets its own.
+  (let [public?  (= "nominatim.openstreetmap.org" (.getHost (URI. base-url)))
+        interval (if public? (max min-interval-ms default-min-interval-ms) min-interval-ms)]
+    (when (and public? (not user-agent))
+      (log/warn "Geo: no :user-agent for OpenStreetMap. Nominatim's usage policy wants one naming your app and a contact; a shared default risks being blocked."))
+    (->NominatimAdapter base-url (atom 0) interval (or user-agent default-user-agent))))

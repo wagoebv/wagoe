@@ -38,12 +38,9 @@
   (let [min-ms (when rate-limit (long (/ 1000 rate-limit)))]
     (case provider-kw
       :openstreetmap
-      (do
-        (when-not user-agent
-          (log/warn "Geo: no :user-agent for OpenStreetMap. Nominatim's usage policy wants one naming your app and a contact; a shared default risks being blocked."))
-        (osm/create-nominatim-adapter
-         (cond-> {:user-agent (or user-agent "wagoe-geo/1.0 (https://github.com/wagoebv/wagoe)")}
-           min-ms (assoc :min-interval-ms min-ms))))
+      (osm/create-nominatim-adapter
+       (cond-> {:user-agent user-agent}
+         min-ms (assoc :min-interval-ms min-ms)))
 
       :google
       (google/create-google-adapter
