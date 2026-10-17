@@ -142,7 +142,12 @@ When the peer is in one of these ranges, the client is the right-most
 `X-Forwarded-For` hop that is not. Otherwise the header is ignored, since any
 client can send it. The default is empty: trust nothing. Entries are IPv4 or
 IPv6 CIDRs, or bare addresses; an invalid one stops the boot. Handlers read the
-result as `:client-ip` on the request.
+result through `wagoe.platform.core.http.client-ip/request-ip`.
+
+If the hop where the walk stops is not an address, as when a proxy writes
+`unknown`, the client is nil rather than the proxy. Code that grants access by
+address must refuse nil; `client-ip/in-any?` returns false for it. Rate limiting
+puts these requests in one bucket per proxy, separate from named clients.
 
 == Cloud Platforms
 

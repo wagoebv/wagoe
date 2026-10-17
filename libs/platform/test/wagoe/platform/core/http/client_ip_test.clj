@@ -64,18 +64,63 @@
              (client-ip/client-ip (req "2001:db8::5" "[2001:db9::1]:4711") trusted)))
       (is (= "198.51.100.7"
              (client-ip/client-ip (req "::ffff:10.0.0.5" "198.51.100.7:8080") trusted))))
-    (testing "malformed hops stop the walk at the nearest trusted address"
-      (is (= "10.0.0.9" (client-ip/client-ip (req "10.0.0.5" "198.51.100.7, garbage, 10.0.0.9") trusted)))
-      (is (= "10.0.0.5" (client-ip/client-ip (req "10.0.0.5" "unknown") trusted)))
-      (is (= "10.0.0.5" (client-ip/client-ip (req "10.0.0.5" "1.2.3.4%:a") trusted)))
-      (is (= "10.0.0.5" (client-ip/client-ip (req "10.0.0.5" "") trusted)))
-      (is (= "10.0.0.5" (client-ip/client-ip (req "10.0.0.5" " , ,") trusted))))
+    (testing "a malformed hop where the walk stops leaves the client unknown, not the proxy (BOU-695)"
+      (doseq [xff ["unknown" "198.51.100.7, garbage, 10.0.0.9" "1.2.3.4%:a" "" " , ,"]]
+        (is (nil? (client-ip/client-ip (req "10.0.0.5" xff) trusted)) xff)))
+    (testing "a malformed hop left of the client does not matter"
+      (is (= "198.51.100.7" (client-ip/client-ip (req "10.0.0.5" "unknown, 198.51.100.7") trusted))))
     (testing "a trusted peer with no header, or every hop trusted"
       (is (= "10.0.0.5" (client-ip/client-ip (req "10.0.0.5" nil) trusted)))
       (is (= "10.0.0.1" (client-ip/client-ip (req "10.0.0.5" "10.0.0.1, 10.0.0.2") trusted))))
     (testing "no peer at all"
       (is (nil? (client-ip/client-ip {} trusted))))))
 
-(deftest ^:unit request-ip-test
+(deftest ^:unit ^:security request-ip-test
   (is (= "198.51.100.7" (client-ip/request-ip {:client-ip "198.51.100.7" :remote-addr "10.0.0.5"})))
-  (is (= "10.0.0.5" (client-ip/request-ip {:remote-addr "10.0.0.5"}))))
+  (testing "the peer only when the middleware did not run"
+    (is (= "10.0.0.5" (client-ip/request-ip {:remote-addr "10.0.0.5"}))))
+  (testing "an unresolved client stays nil rather than becoming the proxy"
+    (is (nil? (client-ip/request-ip {:client-ip nil :remote-addr "10.0.0.5"})))))
+
+(deftest ^:unit ^:security in-network-test
+  (testing "IPv4 and IPv6 ranges, prefix boundaries"
+    (is (true? (client-ip/in-network? "10.1.2.3" "10.0.0.0/8")))
+    (is (false? (client-ip/in-network? "11.0.0.0" "10.0.0.0/8")))
+    (is (true? (client-ip/in-network? "192.168.1.127" "192.168.1.0/25")))
+    (is (false? (client-ip/in-network? "192.168.1.128" "192.168.1.0/25")))
+    (is (true? (client-ip/in-network? "1.2.3.4" "0.0.0.0/0")))
+    (is (true? (client-ip/in-network? "2001:db8::1" "2001:db8::/32")))
+    (is (false? (client-ip/in-network? "2001:db9::1" "2001:db8::/32"))))
+  (testing "a bare address is a single host"
+    (is (true? (client-ip/in-network? "10.0.0.1" "10.0.0.1")))
+    (is (false? (client-ip/in-network? "10.0.0.2" "10.0.0.1"))))
+  (testing "ports, brackets and zone ids are read as the trust walk reads them"
+    (is (true? (client-ip/in-network? "10.0.0.1:8080" "10.0.0.0/8")))
+    (is (true? (client-ip/in-network? "[2001:db8::1]:443" "2001:db8::/32")))
+    (is (true? (client-ip/in-network? "fe80::1%eth0" "fe80::/10"))))
+  (testing "IPv4-mapped IPv6 folds to IPv4, on either side"
+    (is (true? (client-ip/in-network? "::ffff:10.1.2.3" "10.0.0.0/8")))
+    (is (true? (client-ip/in-network? "10.1.2.3" "::ffff:10.0.0.0/104")))
+    (is (true? (client-ip/in-network? (vec (concat (repeat 10 0) [255 255 10 1 2 3])) "10.0.0.0/8")))
+    (is (false? (client-ip/in-network? "10.1.2.3" "::/0"))))
+  (testing "parsed values work like strings"
+    (is (true? (client-ip/in-network? (client-ip/parse-ip "10.1.2.3")
+                                      (client-ip/parse-cidr "10.0.0.0/8")))))
+  (testing "anything that does not parse is false"
+    (doseq [[ip cidr] [[nil "10.0.0.0/8"] ["unknown" "10.0.0.0/8"] ["10.0.0.1" "10.0.0.0/33"]
+                       ["10.0.0.1" nil] ["10.0.0.1" "proxy.local"] [[10 0 0 256] "10.0.0.0/8"]
+                       [[10 0 0] "10.0.0.0/8"] ["10.0.0.1" {:bytes [10 0 0 0] :prefix 40}]
+                       [42 "10.0.0.0/8"] ["10.0.0.1" {:bytes "10.0.0.0" :prefix 8}]]]
+      (is (false? (client-ip/in-network? ip cidr)) (pr-str [ip cidr])))))
+
+(deftest ^:unit ^:security in-any-test
+  (is (true? (client-ip/in-any? "10.1.2.3" ["192.168.0.0/16" "10.0.0.0/8"])))
+  (is (true? (client-ip/in-any? "10.1.2.3" (:cidrs (client-ip/parse-trusted-proxies ["10.0.0.0/8"])))))
+  (is (false? (client-ip/in-any? "172.16.0.1" ["192.168.0.0/16" "10.0.0.0/8"])))
+  (testing "an invalid entry is skipped, not matched"
+    (is (true? (client-ip/in-any? "10.1.2.3" ["garbage" "10.0.0.0/8"])))
+    (is (false? (client-ip/in-any? "10.1.2.3" ["garbage"]))))
+  (testing "nil or no ranges is false"
+    (is (false? (client-ip/in-any? nil ["0.0.0.0/0"])))
+    (is (false? (client-ip/in-any? "10.1.2.3" [])))
+    (is (false? (client-ip/in-any? "10.1.2.3" nil)))))

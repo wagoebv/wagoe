@@ -697,13 +697,12 @@
 
 (defn wrap-client-ip
   "Sets `:client-ip` on the request: the peer, or the client behind it when the
-   peer is in `trusted-cidrs` (from `client-ip/parse-trusted-proxies`). Keeps
-   the handler's metadata (`:reitit/router`)."
+   peer is in `trusted-cidrs` (from `client-ip/parse-trusted-proxies`), or nil
+   when that client is unknown. Keeps the handler's metadata (`:reitit/router`)."
   [handler trusted-cidrs]
   (with-meta
     (fn [request]
-      (let [ip (client-ip/client-ip request trusted-cidrs)]
-        (handler (cond-> request ip (assoc :client-ip ip)))))
+      (handler (assoc request :client-ip (client-ip/client-ip request trusted-cidrs))))
     (meta handler)))
 
 ;; ==============================================================================
@@ -713,11 +712,15 @@
 (defn get-client-id
   "The rate-limit bucket: the signed-in user (authentication runs first), else
    the client IP, prefixed so one cannot land in the other's bucket. Never a
-   request header: an unchecked `X-Api-Key` let a caller pick or drain a bucket (BOU-690)."
+   request header: an unchecked `X-Api-Key` let a caller pick or drain a bucket (BOU-690).
+   A client the proxy could not name is bucketed per proxy, apart from named
+   clients: not exempt, and draining it blocks only other unnamed ones (BOU-695)."
   [request]
   (if-let [user-id (get-in request [:user :id])]
     (str "user:" user-id)
-    (str "ip:" (or (client-ip/request-ip request) "unknown"))))
+    (if-let [ip (client-ip/request-ip request)]
+      (str "ip:" ip)
+      (str "unresolved:" (or (:remote-addr request) "unknown")))))
 
 (defn- check-rate-limit-redis
   "Check rate limit using Redis fixed-window counter.

@@ -118,10 +118,11 @@
    Pure - risk assessment based on patterns and context."
   [user login-context recent-sessions now]
   (let [risk-factors (cond-> []
-                       ;; New IP address
-                       (not-any? #(= (:ip-address login-context)
-                                     (:ip-address %))
-                                 recent-sessions)
+                       ;; New IP address; an unknown one is never familiar
+                       (or (nil? (:ip-address login-context))
+                           (not-any? #(= (:ip-address login-context)
+                                         (:ip-address %))
+                                     recent-sessions))
                        (conj {:factor :new-ip-address :weight 30})
 
                        ;; New user agent
