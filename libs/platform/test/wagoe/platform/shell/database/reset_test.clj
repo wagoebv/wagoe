@@ -155,7 +155,7 @@
                                 :port     #or [#long #or [#env WAGOE_TEST_UNSET_PORT 5432] 5432]
                                 :dbname   #env WAGOE_TEST_UNSET_DB
                                 :user     #env WAGOE_TEST_UNSET_USER
-                                :password #env WAGOE_TEST_UNSET_PASSWORD}
+                                :password #secret WAGOE_TEST_UNSET_PASSWORD}
              :wagoe/events {:provider :redis :host #env WAGOE_TEST_UNSET_REDIS
                             :port #long #env WAGOE_TEST_UNSET_REDIS_PORT}}}")
 

@@ -22,7 +22,8 @@
             [wagoe.devtools.core.project-repl :as core]
             [wagoe.devtools.shell.auto-fix :as auto-fix-shell]
             [wagoe.devtools.shell.repl :as repl]
-            [wagoe.devtools.shell.repl-error-handler :as repl-errors]))
+            [wagoe.devtools.shell.repl-error-handler :as repl-errors]
+            [wagoe.config.secrets :as secrets]))
 
 ;; =============================================================================
 ;; What is running
@@ -73,7 +74,7 @@
   "The running config. With a section keyword, print that section as a tree
    with secrets redacted."
   ([] state/config)
-  ([section] (println (introspection/format-config-tree state/config section))))
+  ([section] (println (introspection/format-config-tree (secrets/redact state/config) section))))
 
 (defn routes
   "Print the HTTP routes of the running system, optionally filtered by module

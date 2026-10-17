@@ -29,6 +29,7 @@ generates.
 | Namespace | Purpose |
 |-----------|---------|
 | `wagoe.config` | `load-config` and the typed accessors |
+| `wagoe.config.secrets` | `#secret` reader, `ISecretSource`, `redact` / `unredact` |
 
 ## Accessors
 
@@ -39,6 +40,21 @@ generates.
 | `app-config` / `default-tenant-id` | Application identity, development tenant |
 | `user-validation-config` | Password and profile rules for `wagoe-user` |
 | `logging-config` / `metrics-config` / `tracing-config` / `error-reporting-config` | Observability adapters |
+
+## Secrets (BOU-455)
+
+`#secret "NAME"` reads the default source (`:env`, or `:default-secret-source`
+in `load-config` opts); `#secret [:file "name"]` names one. `:file` reads
+`WAGOE_SECRETS_DIR`, else `/run/secrets`, trimmed. More sources go in
+`:secret-sources` as `ISecretSource` implementations.
+
+- A missing or blank secret throws `:configuration-error` with `:secret` and
+  `:source`, never the value. Inside `#or` it is nil, so `#or [#secret "X" "dev"]`
+  works: the namespace wraps Aero's `#or` to make that so. A `#secret` as the
+  last value of an `#or` is required again.
+- Resolved values are kept in a registry so `redact` can find them by value.
+  Anything that prints config must pass it through `redact`; the devtools config
+  page and `(config :section)` do.
 
 ## Why this is a library (BOU-306)
 
