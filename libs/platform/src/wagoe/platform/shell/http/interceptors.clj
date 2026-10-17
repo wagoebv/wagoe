@@ -244,7 +244,7 @@
         (falsy-config-values token) false
         :else nil))))
 
-(defn- dev-like?
+(defn- system-dev-like?
   "True when the profile the app booted with, else the active one, is one
    people develop against."
   [system]
@@ -271,7 +271,7 @@
    that one and asks here for the same enrichment."
   [system exception]
   (when-let [enrich (:error-enricher system)]
-    (when (dev-like? system)
+    (when (system-dev-like? system)
       (try
         (let [info (enrich exception)]
           (when (map? info)
@@ -287,7 +287,7 @@
     (if (some? parsed-override)
       parsed-override
       ;; Default: enforce in dev-like environments, skip in production
-      (dev-like? system))))
+      (system-dev-like? system))))
 
 (defn- respond-missing-error-type
   "Emit a diagnostic response for ex-info missing :type."

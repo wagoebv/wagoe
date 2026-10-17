@@ -3,8 +3,7 @@
 
    Proves the BOU-159 acceptance: provision two tenant schemas, run a tenant
    migration, and confirm each schema gets the change with its own ledger."
-  (:require [wagoe.platform.shell.adapters.database.factory :as db-factory]
-            [wagoe.tenant.shell.provisioning :as provisioning]
+  (:require [wagoe.tenant.shell.provisioning :as provisioning]
             [wagoe.tenant.shell.tenant-migrations :as tmig]
             [clojure.test :refer [deftest is testing use-fixtures]]
             [next.jdbc :as jdbc]
@@ -12,24 +11,11 @@
 
 (def ^:private test-migration-dir "migrations-tenant-test")
 
-(def ^:private pg-instance (atom nil))
 (def ^:private db-ctx (atom nil))
 
-(defn- with-pg [f]
-  (let [pg  (epg/start!)
-        ctx (epg/db-context pg)]
-    (reset! pg-instance pg)
-    (reset! db-ctx ctx)
-    (try (f)
-         (finally
-           (db-factory/close-db-context! ctx)
-           (epg/stop! pg)
-           (reset! db-ctx nil)
-           (reset! pg-instance nil)))))
+(use-fixtures :once (epg/with-embedded-pg #(reset! db-ctx %)))
 
-(use-fixtures :once with-pg)
-
-(defn- ds [] (epg/datasource @pg-instance))
+(defn- ds [] (:datasource @db-ctx))
 
 (defn- create-schema! [schema]
   (jdbc/execute! (ds) [(str "CREATE SCHEMA IF NOT EXISTS " schema)]))

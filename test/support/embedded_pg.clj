@@ -34,9 +34,9 @@
   (.getPostgresDatabase pg))
 
 (defn db-config
-  "Database config map (as produced by db-config/get-active-db-config) for the
-   embedded instance — :host/:port/:name/:username/:password. Suitable for the
-   tenant migration runner and other code that builds its own connections."
+  "Database config map (as `wagoe.config/db-spec` produces) for the
+   embedded instance — :host/:port/:name/:username/:password. Suitable for
+   code that builds its own connections."
   [^EmbeddedPostgres pg]
   {:adapter  :postgresql
    :host     "localhost"

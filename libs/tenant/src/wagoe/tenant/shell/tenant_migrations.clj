@@ -24,31 +24,19 @@
    separate from the public `migrations/` set, which runs once against public."
   "migrations-tenant")
 
-(defn- with-tenant-connection
-  "Call (f conn) on a connection of its own to the database `ctx` uses, with
-   search_path the tenant schema ONLY and no statement timeout, since
-   migrations run long (BOU-658).
-
-   Tenant-only, no `,public` fallback: with one, migratus's
-   `CREATE TABLE IF NOT EXISTS schema_migrations` resolves to the existing
-   `public.schema_migrations`, every tenant shares the public ledger, and the
-   second tenant skips migrations it never ran. So migrations run here may only
-   reference tables in the tenant schema.
-
-   Outside the pool, so the session settings close with the connection instead
-   of reaching the application's next query."
-  [ctx schema-name f]
-  (with-open [conn (db/unpooled-connection ctx)]
-    (with-open [st (.createStatement conn)]
-      (.execute st (str "SET search_path TO " schema-name))
-      (.execute st "SET statement_timeout = 0"))
-    (f conn)))
-
 (defn migrate-tenant!
   "Run all pending tenant-scoped migrations inside one tenant schema of the
    database `ctx` (the boot `:wagoe/db-context`) is connected to.
    `migration-dir` is a classpath-relative tenant migration directory. Throws on
-   a malformed schema name."
+   a malformed schema name.
+
+   Runs on a connection outside the pool, so its session settings close with it
+   instead of reaching the application's next query. No statement timeout:
+   migrations run long (BOU-658). search_path is the tenant schema only: with a
+   `,public` fallback migratus's `CREATE TABLE IF NOT EXISTS schema_migrations`
+   resolves to `public.schema_migrations`, every tenant shares that ledger, and
+   the second skips migrations it never ran. So migrations run here may only
+   reference tables in the tenant schema."
   ([ctx schema-name]
    (migrate-tenant! ctx schema-name default-tenant-migration-dir))
   ([ctx schema-name migration-dir]
@@ -56,14 +44,16 @@
      (throw (ex-info "Unsafe tenant schema name"
                      {:type :validation-error :schema-name schema-name})))
    (log/info "Migrating tenant schema" {:schema schema-name :migration-dir migration-dir})
-   (with-tenant-connection ctx schema-name
-     (fn [conn]
-       (migratus/migrate {:store                :database
-                          :migration-dir        migration-dir
-                          :init-in-transaction? false
-                          :migration-table-name "schema_migrations"
-                          :db                   {:connection          conn
-                                                 :managed-connection? true}})))
+   (with-open [conn (db/unpooled-connection ctx)]
+     (with-open [st (.createStatement conn)]
+       (.execute st (str "SET search_path TO " schema-name))
+       (.execute st "SET statement_timeout = 0"))
+     (migratus/migrate {:store                :database
+                        :migration-dir        migration-dir
+                        :init-in-transaction? false
+                        :migration-table-name "schema_migrations"
+                        :db                   {:connection          conn
+                                               :managed-connection? true}}))
    schema-name))
 
 (defn migrate-all-tenants!
