@@ -365,11 +365,7 @@
       :else
       (let [check (auth/verify-second-factor! (:auth-service client) user code (Instant/now))]
         (if (:valid? check)
-          (let [user (if (:used-backup-code? check)
-                       (do (ports/update-user user-repository (assoc (:updates check) :id (:id user)))
-                           (merge user (:updates check)))
-                       user)]
-            (finish! client user sign-in login-context))
+          (finish! client user sign-in login-context)
           (do (audit! client user login-context (:provider-id sign-in) false "Invalid MFA code")
               {:error {:type :oidc/mfa-failed :message "Invalid MFA code"}}))))))
 
