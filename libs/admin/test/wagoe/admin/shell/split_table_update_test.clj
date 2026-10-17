@@ -253,20 +253,19 @@
 (def ^:private i18n-catalogue
   (catalogue/create-map-catalogue (catalogue/load-catalogue "wagoe/i18n/translations")))
 
-
 (deftest ^:integration an-edit-on-a-taken-key-in-the-secondary-table-is-refused-on-its-field
   ;; The unique key is on the secondary table's email (BOU-721).
   (let [id    (insert-split-user! "mine@example.com" "Mine")
         _     (insert-split-user! "taken@example.com" "Other")
         sp    (schema-repo/create-schema-repository *db-ctx* admin-config)
         [response errors] (logged-errors #((crud/update-entity-handler *admin-service* sp admin-config)
-                                    {:request-method      :put
-                                     :uri                 (str "/web/admin/test-profiles/" id)
-                                     :user                {:id (UUID/randomUUID) :role :admin :active true}
-                                     :path-params         {:entity "test-profiles" :id (str id)}
-                                     :form-params         {"email" "taken@example.com" "name" "Renamed"}
-                                     :i18n/catalogue      i18n-catalogue
-                                     :i18n/default-locale :en}))
+                                           {:request-method      :put
+                                            :uri                 (str "/web/admin/test-profiles/" id)
+                                            :user                {:id (UUID/randomUUID) :role :admin :active true}
+                                            :path-params         {:entity "test-profiles" :id (str id)}
+                                            :form-params         {"email" "taken@example.com" "name" "Renamed"}
+                                            :i18n/catalogue      i18n-catalogue
+                                            :i18n/default-locale :en}))
         body  (str (:body response))]
     (is (= 422 (:status response)))
     (is (= [] errors))

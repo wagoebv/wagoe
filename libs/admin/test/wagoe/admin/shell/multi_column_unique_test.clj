@@ -87,7 +87,6 @@
    :i18n/catalogue i18n-catalogue
    :i18n/default-locale :en})
 
-
 (defn- marked? [body field]
   (boolean (re-find (re-pattern (str "has-errors\"><label for=\"" field "\"")) body)))
 
@@ -107,8 +106,8 @@
 
       (testing "create: 409, both fields marked, nothing at ERROR"
         (let [[response errors] (logged-errors #((crud/create-entity-handler svc schema admin-config)
-                                          (request :post "/web/admin/templates" {:entity "templates"}
-                                                   {"template-key" k "domain-id" "d1" "slug" (str k "-4")})))
+                                                 (request :post "/web/admin/templates" {:entity "templates"}
+                                                          {"template-key" k "domain-id" "d1" "slug" (str k "-4")})))
               body (str (:body response))]
           (is (= 409 (:status response)))
           (is (= [] errors))
@@ -121,9 +120,9 @@
       (testing "edit: 409, both fields marked, nothing at ERROR"
         (let [id (str (:id other))
               [response errors] (logged-errors #((crud/update-entity-handler svc schema admin-config)
-                                          (request :put (str "/web/admin/templates/" id)
-                                                   {:entity "templates" :id id}
-                                                   {"domain-id" "d1"})))
+                                                 (request :put (str "/web/admin/templates/" id)
+                                                          {:entity "templates" :id id}
+                                                          {"domain-id" "d1"})))
               body (str (:body response))]
           (is (= 409 (:status response)))
           (is (= [] errors))
@@ -138,8 +137,8 @@
                 _    (ports/create-entity svc :templates {:template-key slug :domain-id "d1" :slug slug})]]
     (testing (str backend)
       (let [[response errors] (logged-errors #((crud/create-entity-handler svc schema admin-config)
-                                        (request :post "/web/admin/templates" {:entity "templates"}
-                                                 {"template-key" slug "domain-id" "d9" "slug" slug})))
+                                               (request :post "/web/admin/templates" {:entity "templates"}
+                                                        {"template-key" slug "domain-id" "d9" "slug" slug})))
             body (str (:body response))]
         (is (= 422 (:status response)))
         (is (= [] errors))
@@ -153,11 +152,14 @@
     (testing (str backend)
       (db/execute-update! db-ctx {:raw "DROP TABLE IF EXISTS KmLines"})
       (db/execute-update! db-ctx {:raw "CREATE TABLE KmLines (id INT PRIMARY KEY, invoice_id INT, position INT, CONSTRAINT uq_km UNIQUE (invoice_id, position))"})
-      (db/execute-update! db-ctx {:raw "INSERT INTO KmLines VALUES (1, 1, 2)"})
-      (is (= {:type :conflict :constraint :unique :fields [:invoice-id :position]}
-             (ex-data (try (db/execute-update! db-ctx {:raw "INSERT INTO KmLines VALUES (2, 1, 2)"})
-                           nil
-                           (catch clojure.lang.ExceptionInfo e e)))))
-      (when (= :mysql backend)
-        (is (= ["invoice_id" "position"]
-               (db-ports/key-columns (:adapter db-ctx) (:datasource db-ctx) "kmlines" "uq_km")))))))
+      (try
+        (db/execute-update! db-ctx {:raw "INSERT INTO KmLines VALUES (1, 1, 2)"})
+        (is (= {:type :conflict :constraint :unique :fields [:invoice-id :position]}
+               (ex-data (try (db/execute-update! db-ctx {:raw "INSERT INTO KmLines VALUES (2, 1, 2)"})
+                             nil
+                             (catch clojure.lang.ExceptionInfo e e)))))
+        (when (= :mysql backend)
+          (is (= ["invoice_id" "position"]
+                 (db-ports/key-columns (:adapter db-ctx) (:datasource db-ctx) "kmlines" "uq_km"))))
+        (finally
+          (db/execute-update! db-ctx {:raw "DROP TABLE KmLines"}))))))

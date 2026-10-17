@@ -47,10 +47,10 @@
               ;; ... (UNIQUE constraint failed: t.a, t.b), at the end.
               :sqlite     (second (re-find #"\(UNIQUE constraint failed: ([^()]+)\)\s*$" message))
               :postgresql (pg-key reported)
-              ;; The first quoted part, "[KEY INDEX ]IDX ON T(A, B) VALUES ..."
+              ;; The first quoted part, "KEY[ INDEX IDX| PRIMARY KEY] ON T(A, B) ..."
               ;; or "FK: T FOREIGN KEY(A) REFERENCES ...", in any language.
               :h2         (some #(second (re-find % message))
-                                [#"^[^\"]*\"\S+(?: INDEX \S+)? ON [^\s(]+\(([^)]+)\)"
+                                [#"^[^\"]*\"\S+(?: INDEX \S+| PRIMARY KEY)? ON [^\s(]+\(([^)]+)\)"
                                  #"^[^\"]*\"\S+: \S+ FOREIGN KEY\(([^)]+)\)"])
               :mysql      (second (re-find #"^[^(]*\([^,]+, CONSTRAINT `[^`]+` FOREIGN KEY \(([^)]+)\)" message)))
             (str/split #","))))

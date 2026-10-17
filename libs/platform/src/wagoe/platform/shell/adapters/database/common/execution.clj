@@ -191,7 +191,9 @@
                           [(subs key-name 0 i) (subs key-name (inc i))]
                           [target key-name]))]
     (if (and (= :unique kind) (not (or field fields)) table
-             (= target (str/lower-case table)))
+             (= target (str/lower-case table))
+             ;; An English Detail that named no field is a key on an expression.
+             (not (str/starts-with? (str (:detail reported)) "Key (")))
       (try
         (let [adapter (:adapter ctx)
               ds      (or (when (= :postgresql (protocols/engine adapter)) *outside-datasource*)

@@ -37,6 +37,10 @@
     (is (= {:kind :unique :fields [:nc-invoice-id :description]}
            (constraint/violation {:sql-state "23505" :error-code 23505
                                   :message "Unique index or primary key violation: \"public.uq_nc_lines INDEX public.uq_nc_lines_INDEX_C ON public.nc_lines(nc_invoice_id NULLS LAST, description NULLS LAST) VALUES ( /* key:3 */ UUID '79a7511a', 'a')\"; SQL statement:\nINSERT INTO nc_lines VALUES (?, ?, 'a', 1) [23505-250]"}))))
+  (testing "H2 on a primary key"
+    (is (= {:kind :unique :field :id}
+           (constraint/violation {:sql-state "23505" :error-code 23505
+                                  :message "Unique index or primary key violation: \"PUBLIC.CONSTRAINT_5 PRIMARY KEY ON PUBLIC.T(ID) ( /* key:1 */ 1, 1, 'x')\"; SQL statement:\nINSERT INTO t VALUES (1, 2, 'y') [23505-250]"}))))
   (testing "a key on an expression names no field"
     (is (= {:kind :unique}
            (constraint/violation {:sql-state "23505" :message "Detail: Key (lower(email), tenant_id)=(a, 1) already exists."})))))
