@@ -17,7 +17,12 @@
 (defn- resolve-fn
   "The function `x` names, or `x` itself when it is one already."
   [k x]
-  (let [v (if (symbol? x) (wagoe-config/resolve-symbol x) x)]
+  (let [v (if (symbol? x)
+            (try (wagoe-config/resolve-symbol x)
+                 (catch clojure.lang.ExceptionInfo e
+                   (throw (ex-info (str ":wagoe/user " k ": " (ex-message e))
+                                   (assoc (ex-data e) :key k) e))))
+            x)]
     (when-not (fn? v)
       (throw (ex-info (str ":wagoe/user " k " names " x ", which is not a function")
                       {:type :configuration-error :key k :symbol x})))

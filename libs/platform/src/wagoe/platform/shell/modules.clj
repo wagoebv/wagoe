@@ -246,9 +246,10 @@
   (merge-slots ":wagoe/http-handler" acc k http))
 
 (defn merge-auth
-  "A module's `:auth` hooks over `acc`, refusing a hook both set."
+  "A module's `:auth` hooks over `acc`, refusing a hook both set. A nil hook is
+   unset, as the user module reads it, so it claims no slot."
   [acc k auth]
-  (merge-slots ":wagoe/auth-hooks" acc k auth))
+  (merge-slots ":wagoe/auth-hooks" acc k (into {} (remove (comp nil? val)) auth)))
 
 (defn- add-graph
   "Fold module `k`'s graph into `acc`. One step for framework and discovered

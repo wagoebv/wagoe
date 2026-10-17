@@ -90,6 +90,12 @@
         (is (= "/web/kantoor" (lands-at (:wagoe/auth-hooks b) "192.168.1.2"))))
       (finally (ig/halt! a) (ig/halt! b)))))
 
+(deftest ^:unit the-landing-hook-never-sees-the-password
+  (let [seen (atom nil)
+        hook (fn [_ ctx] (reset! seen (:request ctx)) "/web/x")]
+    (lands-at {:login-redirect hook} "10.0.0.5")
+    (is (= {"email" "user@example.com"} (:form-params @seen)))))
+
 ;; =============================================================================
 ;; Contributed through the module graph
 ;; =============================================================================

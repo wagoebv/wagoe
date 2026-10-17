@@ -259,10 +259,20 @@
   {:ip-address (client-ip/request-ip request)
    :user-agent (get-in request [:headers "user-agent"])})
 
+(def ^:private secret-fields ["password" "mfa-code" :password :mfa-code])
+
+(defn- without-secrets
+  "`request` minus the submitted password and MFA code: the sign-in hook gets
+   the request, and should not be one log line away from a plaintext password."
+  [request]
+  (reduce (fn [r k] (cond-> r (map? (get r k)) (update k #(apply dissoc % secret-fields))))
+          request
+          [:form-params :params :multipart-params]))
+
 (defn- landing-path
   "Where `user`, signing in with `request`, lands."
   [config user request]
-  (landing/path-for config user (assoc (login-context request) :request request)))
+  (landing/path-for config user (assoc (login-context request) :request (without-secrets request))))
 
 (defn web-root-page-handler
   "Handler for the web root landing page (GET /web).

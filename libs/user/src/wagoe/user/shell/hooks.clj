@@ -34,7 +34,7 @@
   (when-let [unknown (seq (remove hook-keys (keys contributed)))]
     (throw (ex-info (str "Unknown :auth hook(s) " (vec unknown) "; expected " (vec (sort hook-keys)))
                     {:type :configuration-error :keys (vec unknown)})))
-  (when-let [both (seq (filter #(and (some? (get configured %)) (some? (get contributed %)))
+  (when-let [both (seq (filter #(and (get configured %) (some? (get contributed %)))
                                (sort hook-keys)))]
     (throw (ex-info (str (vec both) " set both under :wagoe/user and by a module's :auth."
                          " One hook each; drop one.")
