@@ -12,7 +12,8 @@
      instances-table      — paginated instance list table
      instances-page       — full page: instance list
      instance-detail-page — full page: instance detail with state viz + audit trail"
-  (:require [wagoe.shared.ui.core.layout :as layout]
+  (:require [wagoe.shared.ui.core.home :as home]
+            [wagoe.shared.ui.core.layout :as layout]
             [wagoe.shared.ui.core.icons :as icons]
             [wagoe.shared.ui.core.components :as ui]
             [clojure.string :as str]))
@@ -256,7 +257,7 @@
        [:h1.page-title
         (icons/icon :layout-list {:size 24})
         [:t :workflow/page-instances-heading]]
-       [:a.button.secondary {:href "/web/dashboard"}
+       [:a.button.secondary {:href home/*path*}
         [:t :workflow/button-dashboard]]]
       (instances-filter-form params)
       (instances-table instances)]

@@ -27,6 +27,13 @@
                       :as               :json}
                cookie (assoc-in [:headers "Cookie"] (str "session-token=" cookie))))))
 
+(defn error-of
+  "The `error` map of a response. clj-http decodes JSON only on a 2xx, so a
+   refusal's body arrives as a string."
+  [resp]
+  (let [b (:body resp)]
+    (:error (if (string? b) (json/parse-string b true) b))))
+
 (defn login
   "POST /api/v1/auth/login — returns the full ring response including headers."
   [{:keys [email password]}]

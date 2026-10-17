@@ -4,8 +4,8 @@
    (BOU-586)."
   (:require [clojure.test :refer [deftest is testing]]
             [clj-http.client :as http]
-            [cheshire.core :as json]
-            [wagoe.e2e.helpers.reset :as reset]))
+            [wagoe.e2e.helpers.reset :as reset]
+            [wagoe.e2e.helpers.users :refer [error-of]]))
 
 (defn- call [method path & [body]]
   (http/request (cond-> {:method           method
@@ -13,9 +13,6 @@
                          :accept           :json
                          :throw-exceptions false}
                   body (assoc :body body :content-type :json))))
-
-(defn- error-of [resp]
-  (:error (json/parse-string (:body resp) true)))
 
 (deftest ^:integration ^:e2e every-refusal-has-the-one-error-shape
   (doseq [[label status method path body]

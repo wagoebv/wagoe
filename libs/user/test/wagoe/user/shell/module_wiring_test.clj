@@ -19,17 +19,17 @@
 (deftest ^:unit user-contributes-its-authentication-middleware-to-the-handler
   ;; :auth-middleware, not :extra-middleware. Platform puts the former
   ;; outermost, ahead of the tenant middleware that reads [:user :id]; module
-  ;; contributions merge by key and iterate sorted, and :wagoe/tenant sorts
-  ;; before :wagoe/user, so the order could not come from module iteration
-  ;; (BOU-373).
+  ;; :extra-middleware is collected in module-key order, and :wagoe/tenant
+  ;; sorts before :wagoe/user, so the order could not come from module
+  ;; iteration (BOU-373).
   (let [{:keys [components http]} (sut/ig-config nil {:config {} :enabled #{}})]
     (is (contains? components :wagoe/user-http-middleware))
     (is (= (ig/ref :wagoe/user-service)
            (:user-service (:wagoe/user-http-middleware components)))
         "it needs the service to validate sessions with")
     (is (= (ig/ref :wagoe/user-http-middleware) (:auth-middleware http)))
-    (is (not (contains? http :extra-middleware))
-        "tenant owns that key; a second contributor would silently replace it")))
+    (is (= (ig/ref :wagoe/user-home-middleware) (:extra-middleware http))
+        "only the home binding, whose position does not matter")))
 
 (deftest ^:unit the-deprecated-repository-says-so-when-it-is-wired
   ;; A `### Deprecated` entry the running system says nothing about is an

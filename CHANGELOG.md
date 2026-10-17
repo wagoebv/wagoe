@@ -39,6 +39,8 @@ for what is public API, what is internal, and how deprecations are announced.
   function of the user. Unset, admins still land on `/web/admin/users`, others on `/web/dashboard`.
 - **Replace or drop the built-in `/web/dashboard`** (BOU-680): `:dashboard {:handler my.app/page}` or
   `:dashboard false` under `:wagoe/user`, so an app can serve the path itself.
+- **Set where layouts link home** (BOU-688): `:home` under `:wagoe/user` sets the logo, back and dashboard links.
+  Unset, they point at `/web/dashboard`, or `/web` with `:dashboard false`.
 - **Per-login MFA decision** (BOU-670): `:wagoe/user {:auth {:mfa-required? my.app/fn}}`, a `(fn [user login-context])`,
   can waive or require MFA for password and OIDC logins. A user required to without MFA set up is refused.
 - **Sign in with OpenID Connect** (BOU-447): authorization code with PKCE, a "Sign in with X" button per provider.
@@ -114,6 +116,9 @@ for what is public API, what is internal, and how deprecations are announced.
 - **Tenant migrations re-read the database config from `WAG_ENV` and leaked a connection pool per run** (BOU-694). They use the
   boot `:wagoe/db-context`: pass it as the first argument to `migrate-tenant!` and `migrate-all-tenants!`. `wagoe.platform.database/get-active-db-config` is gone.
 - **The dev profile reported to Datadog as `production`; the storage Quick Start called functions that do not exist** (BOU-694). No action needed.
+- **`POST /api/v1/auth/login` and `/api/v1/sessions` answered 200 to a failed login** (BOU-691). Wrong credentials now
+  answer 401 and a locked account 429, in the standard error shape; check the status, not `authenticated`.
+- **`wagoe session create --user-id` could never create a session, and is removed** (BOU-691). Log in through the API.
 - **Job args came back as strings on the `:db` and `:redis` queues: keywords, UUIDs, instants** (BOU-689). Jobs are stored
   as transit, which older workers cannot read: upgrade them together. Old jobs keep string args, so convert only strings.
 - **Security: the rate limiter keyed on an unchecked `X-Api-Key`, so a caller could dodge its limit or drain another's** (BOU-690).
