@@ -65,6 +65,17 @@
  :common/audit-grant-remove "Grant removed"
  :common/audit-all-results  "All Results"
 
+ ;; Form field messages (wagoe.shared.ui.core.form)
+ :validation/required      "Required"
+ :validation/too-short     "At least {min} characters"
+ :validation/too-long      "At most {max} characters"
+ :validation/too-small     "At least {min}"
+ :validation/too-large     "At most {max}"
+ :validation/not-a-number  "Must be a number"
+ :validation/pattern       "Not in the expected format"
+ :validation/not-an-option "Not one of the options"
+ :validation/invalid       "Invalid value"
+
  ;; =============================================================================
  ;; User module
  ;; =============================================================================
