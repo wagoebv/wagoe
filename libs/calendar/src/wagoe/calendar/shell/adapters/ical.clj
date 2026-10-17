@@ -5,19 +5,19 @@
    net.fortuna.ical4j 4.x. VEvents are built with ZonedDateTime so that
    TZID parameters are correctly emitted and preserved in round-trips.
 
-   Shell layer — may perform I/O via ical4j CalendarBuilder/CalendarOutputter."
+   Shell layer — may perform I/O via ical4j CalendarBuilder."
   (:require [wagoe.calendar.core.event :as event]
             [wagoe.calendar.ports :as ports]
             [wagoe.calendar.schema :as schema]
             [clojure.string :as str])
   (:import [java.time Instant ZoneId ZoneOffset ZonedDateTime OffsetDateTime LocalDate LocalDateTime LocalTime]
            [java.time.temporal Temporal TemporalAmount]
-           [java.io StringReader StringWriter]
+           [java.io StringReader]
            [java.nio.charset StandardCharsets]
            [net.fortuna.ical4j.model Calendar TimeZoneRegistry TimeZoneRegistryFactory]
            [net.fortuna.ical4j.model.component VEvent VTimeZone]
            [net.fortuna.ical4j.model.property Uid RRule Description TzId]
-           [net.fortuna.ical4j.data CalendarBuilder CalendarOutputter]))
+           [net.fortuna.ical4j.data CalendarBuilder]))
 
 ;; =============================================================================
 ;; Internal helpers — export
@@ -51,7 +51,7 @@
     (into {}
           (keep (fn [tzid]
                   (when-not (= ZoneOffset/UTC (.normalized (ZoneId/of tzid)))
-                    (some->> (vtimezone registry tzid) (vector tzid)))))
+                    (when-let [vtz (vtimezone registry tzid)] [tzid vtz]))))
           (distinct (map #(:timezone % "UTC") (remove event/all-day? events))))))
 
 (defn- event->vevent
@@ -59,13 +59,13 @@
 
    ZonedDateTimes make ical4j emit DTSTART;TZID=..., Instants the UTC Z form,
    LocalDates (all-day events) DTSTART;VALUE=DATE. A zone without a VTIMEZONE
-   in `tzids` is written in UTC, so no TZID goes undefined."
-  [event tzids]
+   in `zones` is written in UTC, so no TZID goes undefined."
+  [event zones]
   (let [tzid   (:timezone event "UTC")
         zone   (ZoneId/of tzid)
         [s e]  (cond
                  (event/all-day? event) (all-day-dates event zone)
-                 (contains? tzids tzid) [(.atZone ^Instant (:start event) zone)
+                 (contains? zones tzid) [(.atZone ^Instant (:start event) zone)
                                          (.atZone ^Instant (:end event) zone)]
                  :else                  [(:start event) (:end event)])
         title  ^String (:title event)
@@ -104,15 +104,17 @@
   "Fold a content line at 75 octets (RFC 5545 3.1), never inside a character.
    ical4j folds at 75 characters, which overruns on multi-byte text."
   [^String line]
-  (let [sb (StringBuilder.)]
-    (reduce (fn [used cp]
-              (let [n (utf8-length cp)]
-                (if (> (+ used n) 75)
-                  (do (.append sb "\r\n ") (.appendCodePoint sb (int cp)) (inc n))
-                  (do (.appendCodePoint sb (int cp)) (+ used n)))))
-            0
-            (iterator-seq (.iterator (.codePoints line))))
-    (str sb)))
+  (if (<= (alength (.getBytes line StandardCharsets/UTF_8)) 75)
+    line
+    (let [sb (StringBuilder. (+ (.length line) 16))]
+      (loop [i 0 used 0]
+        (if (< i (.length line))
+          (let [cp (.codePointAt line i)
+                n  (long (utf8-length cp))
+                used (if (> (+ used n) 75) (do (.append sb "\r\n ") 1) used)]
+            (.appendCodePoint sb cp)
+            (recur (+ i (Character/charCount cp)) (+ used n)))
+          (str sb))))))
 
 (defn- check-unique-ids!
   "UID must be unique within the calendar (RFC 5545 3.8.4.7); clients keep one
@@ -232,18 +234,11 @@
     (check-unique-ids! events)
     (let [product-id (get opts :product-id "-//Wagoe//Calendar//EN")
           zones      (vtimezones events)
-          tzids      (set (keys zones))
           calendar   (build-calendar (concat (vals zones)
-                                             (map #(event->vevent % tzids) events))
-                                     product-id)
-          writer     (StringWriter.)]
-      (.output (CalendarOutputter.) calendar writer)
-      ;; Unfold ical4j's character folding and fold again by octets.
-      (-> (str writer)
-          (str/replace #"\r\n[ \t]" "")
-          (str/split-lines)
-          (->> (map fold-line) (str/join "\r\n"))
-          (str "\r\n"))))
+                                             (map #(event->vevent % zones) events))
+                                     product-id)]
+      ;; Calendar.toString is unfolded; CalendarOutputter folds by characters.
+      (str (str/join "\r\n" (map fold-line (str/split-lines (str calendar)))) "\r\n")))
 
   (import-ical [_this ical-string opts]
     (let [tz (or (:timezone opts) "UTC")]
