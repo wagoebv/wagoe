@@ -108,6 +108,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Security: the rate limiter keyed on an unchecked `X-Api-Key`, so a caller could dodge its limit or drain another's** (BOU-690).
+  Buckets are now the signed-in user, else the client IP; the header is ignored.
+- **`POST /api/v1/sessions` accepted a `{userId}` body it could never sign in with** (BOU-690). It now answers 400; send email and password.
+- **`POST /api/v1/auth/login` and `/api/v1/sessions` dropped `mfaCode`, so an MFA user could not sign in over the API** (BOU-690). No action needed.
 - **Reports needed a shell require, and `generate-async` lost its output** (BOU-674). `:wagoe/reports` is now a
   `ReportServiceProtocol` and async output is stored and mailed. Call the port; `service/generate-async` is gone.
 - **Tables from Malli schemas take their column types from the adapter's `column-type`** (BOU-610). On fresh H2

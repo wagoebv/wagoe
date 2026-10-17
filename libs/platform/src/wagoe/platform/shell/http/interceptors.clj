@@ -723,25 +723,14 @@
 ;; Rate Limiting
 ;; ==============================================================================
 
-;; In-memory rate limit tracking. Maps client-id to request timestamps.
 (defn get-client-id
-  "Extracts client identifier from request for rate limiting.
-
-   Priority order:
-   1. Authenticated user ID (from :user in request)
-   2. API key (from headers)
-   3. Client IP address (see `wrap-client-ip`)
-
-   Args:
-     request: Ring request map
-
-   Returns:
-     String client identifier"
+  "The rate-limit bucket: the signed-in user (authentication runs first), else
+   the client IP, prefixed so one cannot land in the other's bucket. Never a
+   request header: an unchecked `X-Api-Key` let a caller pick or drain a bucket (BOU-690)."
   [request]
-  (or (get-in request [:user :id])
-      (get-in request [:headers "x-api-key"])
-      (client-ip/request-ip request)
-      "unknown"))
+  (if-let [user-id (get-in request [:user :id])]
+    (str "user:" user-id)
+    (str "ip:" (or (client-ip/request-ip request) "unknown"))))
 
 (defn- check-rate-limit-redis
   "Check rate limit using Redis fixed-window counter.
@@ -780,7 +769,7 @@
    The map can never exceed this: before a *new* client is recorded at the cap,
    stale clients (no requests in the window) are swept, and if the map is still
    full the least-recently-active client is evicted. This bounds heap under
-   high-cardinality client identifiers (rotating API keys, many remote addresses)
+   high-cardinality client identifiers (many remote addresses)
    even when every tracked client is within the window — a sustained stream of
    fresh ids can't grow the map past the cap."
   10000)

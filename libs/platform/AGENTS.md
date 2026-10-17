@@ -377,10 +377,11 @@ can never exceed `max-tracked-clients` (10000). Before a *new* client is recorde
 at the cap, stale clients (no requests in the window) are swept; if the map is
 still full — i.e. every tracked client is in-window — the least-recently-active
 client is evicted to make room. So even a sustained stream of fresh client ids
-(rotating API keys, many remote addresses) cannot grow the state map past the cap
+(many remote addresses) cannot grow the state map past the cap
 on a long-running node.
 
-Client identity is resolved as user id → `x-api-key` header → client IP.
+The bucket is `user:<id>` for a signed-in request, else `ip:<client ip>`. No
+header picks it: an unchecked `x-api-key` once did (BOU-690).
 
 ### Client IP
 
