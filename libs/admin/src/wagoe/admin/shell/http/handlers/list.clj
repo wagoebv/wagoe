@@ -45,7 +45,8 @@
           stats (into {} (map (fn [e] [e {:count (ports/count-entities admin-service e {})}])) entities)]
       (support/html-response request
                              (admin-ui/admin-layout
-                              (admin-ui/admin-home entities entity-configs stats)
+                              (admin-ui/admin-home entities entity-configs stats
+                                                   #(support/mounted? request %))
                               {:user user
                                :current-entity nil
                                :entities entities

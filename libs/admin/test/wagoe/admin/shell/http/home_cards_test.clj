@@ -1,0 +1,52 @@
+(ns wagoe.admin.shell.http.home-cards-test
+  "The dashboard links only to pages that are mounted: with the user module's
+   web UI switched off, the Groups and Audit cards went to a 404 (BOU-713)."
+  (:require [clojure.string :as str]
+            [clojure.test :refer [deftest is testing]]
+            [reitit.core :as r]
+            [wagoe.admin.ports :as admin-ports]
+            [wagoe.admin.shell.http.handlers.list :as list-handlers]
+            [wagoe.admin.shell.http.support :as support]
+            [wagoe.user.ports :as user-ports]
+            [wagoe.user.shell.http :as user-http]))
+
+(def ^:private off {:active {:wagoe/settings {:features {:user-web-ui {:enabled? false}}}}})
+
+(defn- router
+  "The user module's contributions as the platform mounts them, beside the
+   admin's catch-all entity route."
+  [config]
+  (let [usvc   (reify user-ports/IUserService)
+        user   (user-http/user-routes usvc nil config)
+        groups (user-http/group-routes usvc nil config)]
+    (r/router [["/web" (vec (:web user))]
+               [(:web-prefix groups) (vec (:web groups))]
+               ["/web/admin/:entity" {:get identity}]]
+              {:conflicts nil})))
+
+(defn- home [config]
+  (let [schema  (reify admin-ports/ISchemaProvider
+                  (list-available-entities [_] [])
+                  (get-entity-config [_ _] nil))
+        handler (list-handlers/admin-home-handler (reify admin-ports/IAdminService) schema {})]
+    (str (:body (handler {:request-method :get :uri "/web/admin/"
+                          :user {:id (random-uuid) :role :admin :active true}
+                          ::r/router (router config)})))))
+
+(deftest ^:unit mounted-reads-the-route-table
+  (testing "a page of its own"
+    (is (support/mounted? {::r/router (router nil)} "/web/admin/groups"))
+    (is (support/mounted? {::r/router (router nil)} "/web/audit")))
+  (testing "not mounted, though /web/admin/:entity matches the path"
+    (is (not (support/mounted? {::r/router (router off)} "/web/admin/groups")))
+    (is (not (support/mounted? {::r/router (router off)} "/web/audit")))))
+
+(deftest ^:unit dashboard-cards-follow-the-user-web-ui-switch
+  (testing "on: both cards"
+    (let [body (home nil)]
+      (is (str/includes? body "href=\"/web/admin/groups\""))
+      (is (str/includes? body "href=\"/web/audit\""))))
+  (testing "off: neither"
+    (let [body (home off)]
+      (is (not (str/includes? body "/web/admin/groups")))
+      (is (not (str/includes? body "/web/audit"))))))
