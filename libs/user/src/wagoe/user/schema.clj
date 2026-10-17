@@ -185,6 +185,15 @@
    [:name [:string {:min 1 :max 255}]]
    [:description {:optional true} [:maybe [:string {:max 255}]]]])
 
+(def GroupImport
+  "One group for `import-groups!`. Its grants are checked against the
+   declared `:groups` schemas afterwards."
+  [:map {:title "Group Import" :closed true}
+   [:name [:string {:min 1 :max 255}]]
+   [:description {:optional true} [:maybe [:string {:max 255}]]]
+   [:members {:optional true} [:sequential any?]]
+   [:grants {:optional true} [:sequential [:map [:permission any?] [:scope {:optional true} any?]]]]])
+
 (def GroupSettings
   "`:wagoe/user :groups`: the permissions and the scope a grant may name, each
    a Malli schema or a symbol naming one. Without them any keyword and any map

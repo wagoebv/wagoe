@@ -5,8 +5,10 @@
   (:require [clojure.edn :as edn]
             [wagoe.core.utils.type-conversion :as tc]
             [wagoe.platform.database :as db]
+            [wagoe.platform.ports.database :as protocols]
             [wagoe.user.core.group :as group]
-            [wagoe.user.ports :as ports])
+            [wagoe.user.ports :as ports]
+            [wagoe.user.shell.persistence :as persistence])
   (:import (java.time Instant)
            (java.util UUID)))
 
@@ -158,7 +160,32 @@
                                             :join     [[:user_group_members :m] [:= :m.group_id :g.id]
                                                        [:auth_users :a] [:= :a.id :m.user_id]]
                                             :where    [:and [:= :m.user_id (id-str user-id)] [:= :a.deleted_at nil]]
-                                            :order-by [[:g.name :asc]]}))))
+                                            :order-by [[:g.name :asc]]})))
+
+  (find-permission-holders [_ permission]
+    (->> (db/execute-query! ctx {:select   [:m.user_id :gr.scope]
+                                 :from     [[:user_group_grants :gr]]
+                                 :join     [[:user_group_members :m] [:= :m.group_id :gr.group_id]
+                                            [:auth_users :a] [:= :a.id :m.user_id]]
+                                 :where    [:and [:= :gr.permission (group/permission-str permission)]
+                                            [:= :a.deleted_at nil]
+                                            [:= :a.active (protocols/boolean->db (:adapter ctx) true)]]
+                                 :order-by [[:m.user_id :asc]]})
+         ;; Distinct here: a scope is TEXT, which not every engine compares.
+         (into [] (comp (map (fn [row] {:user-id    (tc/string->uuid (:user-id row))
+                                        :permission permission
+                                        :scope      (edn/read-string (str (:scope row)))}))
+                        (distinct)))))
+
+  (ensure-tables [_]
+    ;; What the migration runs, so an import in an application's migration
+    ;; need not be ordered after the user library's.
+    (persistence/initialize-user-schema! ctx)
+    nil)
+
+  (in-transaction [this f]
+    (db/with-transaction [tx ctx]
+      (f (assoc this :ctx tx)))))
 
 (defn create-group-repository [ctx]
   (->DatabaseUserGroupRepository ctx))

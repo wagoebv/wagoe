@@ -81,3 +81,26 @@
 
       (not (edn-value? scope))
       (refusal :scope "A scope holds EDN data only" nil))))
+
+(defn users-with-permission
+  "The distinct user ids among `holders`, as `permission-holders` returns
+   them, whose scope `scope-pred` accepts."
+  [holders scope-pred]
+  (into [] (comp (filter (comp scope-pred :scope)) (map :user-id) (distinct)) holders))
+
+(defn- grant-key [grant]
+  [(:permission grant) (:scope grant)])
+
+(defn import-changes
+  "What importing wanted `members` (ids) and `grants` into a group holding
+   `member-ids` and `held` grants changes: users to :join and :leave, grants
+   to :add and :remove. Nothing leaves unless `replace?`."
+  [{:keys [member-ids held]} {:keys [members grants]} replace?]
+  (let [present     (set member-ids)
+        wanted      (set members)
+        held-keys   (set (map grant-key held))
+        wanted-keys (set (map grant-key grants))]
+    {:join   (into [] (comp (remove present) (distinct)) members)
+     :leave  (if replace? (into [] (remove wanted) member-ids) [])
+     :add    (into [] (comp (remove (comp held-keys grant-key)) (distinct)) grants)
+     :remove (if replace? (into [] (remove (comp wanted-keys grant-key)) held) [])}))

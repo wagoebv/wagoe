@@ -2,7 +2,7 @@
   "The group service on a real database: declared schemas refuse bad grants,
    every change to a user's rights is audited, and a change applies to the
    next request."
-  (:require [clojure.test :refer [deftest is]]
+  (:require [clojure.test :refer [deftest is testing]]
             [support.test-db :as test-db]
             [wagoe.user.core.group :as group]
             [wagoe.user.ports :as ports]
@@ -130,3 +130,91 @@
                                     (catch clojure.lang.ExceptionInfo e e))))))
         (is (false? (ports/delete-group svc (random-uuid))))
         (is (false? (ports/remove-group-grant svc (:id g) (random-uuid))))))))
+
+(deftest ^:integration permission-holders-in-one-call
+  (with-service nil
+    (fn [{:keys [svc user!]}]
+      (let [ada (user! "ada@example.com")
+            bob (user! "bob@example.com")]
+        (ports/import-groups! svc [{:name "Finance" :members [(:id ada) (:id bob)]
+                                    :grants [{:permission :invoice/approve :scope {:domain-id 1}}]}
+                                   {:name "Audit" :members [(:id bob)]
+                                    :grants [{:permission :invoice/approve :scope {:domain-id 2}}]}]
+                              {})
+        (let [holders (ports/permission-holders svc :invoice/approve)]
+          (is (= #{(:id ada) (:id bob)} (set (group/users-with-permission holders (constantly true)))))
+          (is (= [(:id bob)] (group/users-with-permission holders #(= 2 (:domain-id %))))))))))
+
+(defn- refusal [f]
+  (try (f) nil (catch clojure.lang.ExceptionInfo e (ex-data e))))
+
+(deftest ^:integration importing-groups-is-idempotent-and-audited
+  (with-service {:permissions `permissions}
+    (fn [{:keys [svc audit user!]}]
+      (let [ada    (user! "ada@example.com")
+            bob    (user! "bob@example.com")
+            admin  (random-uuid)
+            finance {:name "Finance" :description "Pays" :members [(:id ada)]
+                     :grants [{:permission :invoice/approve :scope {:domain-id 1}}]}
+            import! #(user-service/with-audit-context {:actor-id admin}
+                       (fn [] (ports/import-groups! svc %1 %2)))
+            group  #(ports/get-group svc (:id (first (filter (comp #{"Finance"} :name) (ports/list-groups svc)))))
+            shape  (fn [g] {:members (set (map :email (:members g)))
+                            :grants  (set (map (juxt :permission :scope) (:grants g)))})]
+        (let [[result] (import! [finance] {})]
+          (is (true? (:created? result)))
+          (is (= [(:id ada)] (:joined result))))
+        (is (= [false] (map :created? (import! [finance] {}))) "the second import finds the group by name")
+        (is (= {:members #{"ada@example.com"} :grants #{[:invoice/approve {:domain-id 1}]}} (shape (group))))
+        (is (= [:group-join] (actions audit ada)) "an import that changes nothing audits nothing")
+
+        (testing "additive: what is not listed stays"
+          (import! [{:name "Finance" :members [(:id bob)] :grants [{:permission :report/view}]}] {})
+          (is (= {:members #{"ada@example.com" "bob@example.com"}
+                  :grants  #{[:invoice/approve {:domain-id 1}] [:report/view {}]}}
+                 (shape (group))))
+          (is (= "Pays" (:description (group))) "a description not given is kept"))
+
+        (testing "replace: what is not listed goes"
+          (let [[result] (import! [(assoc finance :members [(:id bob)])] {:replace? true})]
+            (is (= [(:id ada)] (:left result)))
+            (is (= [:report/view] (map :permission (:grants-removed result)))))
+          (is (= {:members #{"bob@example.com"} :grants #{[:invoice/approve {:domain-id 1}]}} (shape (group)))))
+
+        (is (= [:grant-add :group-join :group-leave] (actions audit ada)))
+        (is (= [:grant-remove :group-join] (actions audit bob))
+            "bob joined holding both grants, then lost one")
+        (is (every? #(= admin (:actor-id %))
+                    (ports/find-audit-logs-by-user audit (:id bob) {:limit 50})))))))
+
+(deftest ^:integration a-refused-import-changes-nothing
+  (with-service {:permissions `permissions}
+    (fn [{:keys [svc user!]}]
+      (let [ada  (user! "ada@example.com")
+            good {:name "Finance" :members [(:id ada)] :grants [{:permission :invoice/approve}]}]
+        (doseq [[groups field] [[[good {:name "Audit" :grants [{:permission :invoice/delete}]}] :permission]
+                                [[good {:name "Audit" :grants [{:permission :report/view :scope [1]}]}] :scope]
+                                [[good {:name "Audit" :members [(random-uuid)]}] :members]]]
+          (let [data (refusal #(ports/import-groups! svc groups {}))]
+            (is (= :validation-error (:type data)))
+            (is (= field (:field data)))
+            (is (= "Audit" (:group data)))))
+        (is (= :validation-error (:type (refusal #(ports/import-groups! svc [good good] {}))))
+            "a group listed twice")
+        (is (= :validation-error (:type (refusal #(ports/import-groups! svc [{:name "X" :colour "red"}] {})))))
+        (is (empty? (ports/list-groups svc)) "nothing is written before every group is checked")
+        (testing "a failure while writing rolls the whole import back"
+          (ports/create-group svc {:name "Twice"})
+          (ports/create-group svc {:name "Twice"})
+          (is (= :conflict (:type (refusal #(ports/import-groups! svc [good {:name "Twice"}] {})))))
+          (is (= ["Twice" "Twice"] (map :name (ports/list-groups svc)))))))))
+
+(deftest ^:integration an-import-creates-the-tables-it-needs
+  ;; As in an application's migration ordered before the user library's.
+  (test-db/with-db "user_group_import_tables"
+    (fn [ctx]
+      (let [svc (sut/create-group-service (group-persistence/create-group-repository ctx)
+                                          (persistence/create-user-repository ctx)
+                                          (persistence/create-audit-repository ctx {:default-limit 50 :max-limit 100})
+                                          (sut/prepare-settings nil))]
+        (is (= ["Finance"] (map (comp :name :group) (ports/import-groups! svc [{:name "Finance"}] {}))))))))

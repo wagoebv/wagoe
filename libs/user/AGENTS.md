@@ -18,7 +18,7 @@ Authentication and authorization domain: user lifecycle, credentials, sessions/t
 | `wagoe.user.shell.http` | Auth/user HTTP handlers |
 | `wagoe.user.shell.http-interceptors` | Auth, authorization, and audit interceptors |
 | `wagoe.user.ports` | `IUserRepository`, `IUserSessionRepository`, `IUserAuditRepository`, `IUserService`, `IUserGroupRepository`, `IUserGroupService` protocols |
-| `wagoe.user.core.group` | Pure grant checks: `holds?`, `grants-for`, `authorized?`, `grant-refusal` |
+| `wagoe.user.core.group` | Pure grant checks: `holds?`, `grants-for`, `authorized?`, `grant-refusal`, `users-with-permission`, `import-changes` |
 | `wagoe.user.schema` | Malli schemas for User, Session, and request/response types |
 
 ---
@@ -397,6 +397,16 @@ grants through their groups on every call; `wagoe.user.core.group` has `holds?`,
   read back, an `Instant` for one.
 - A soft-deleted user drops out of `find-user-grants` and member lists, and keeps
   their memberships for a restore.
+- `(permission-holders svc permission)` is one join: `{:user-id :permission :scope}`
+  per active, not soft-deleted holder, distinct. Filter the scope with
+  `core.group/users-with-permission`. `user_group_grants(permission)` is indexed for
+  it; `user_id` and `group_id` are, as every `-id` column is.
+- `(import-groups! svc groups {:replace? bool})` upserts groups by name. It checks
+  every group (`GroupImport`), grant (`grant-refusal`) and member first, then
+  writes and audits in one transaction (the audit repository's queries join it, so
+  a failed entry rolls back). Additive unless `:replace?`. It calls
+  `ensure-tables` (`initialize-user-schema!`), so an app migration can run it before
+  the user library's. Two existing groups with the name are a `:conflict`.
 
 ## Turning the web UI off
 

@@ -67,3 +67,29 @@
     (is (= {:grants [{:permission "invoice/approve" :scope "{:domain-id 1}"}]} (:changes (first entries))))
     (is (= {:group-id (str (:id group)) :group-name "Finance"} (:metadata (first entries))))
     (is (empty? (audit/group-audit-entries :grant-add ctx group [] [{:permission :a :scope {}}])))))
+
+(deftest ^:unit users-with-a-permission-in-a-scope
+  (let [[a b] [(random-uuid) (random-uuid)]
+        holders [{:user-id a :scope {:domain-id 1}} {:user-id a :scope {:domain-id 2}}
+                 {:user-id b :scope {:domain-id 2}}]]
+    (is (= [a b] (sut/users-with-permission holders (constantly true))) "each user once")
+    (is (= [a] (sut/users-with-permission holders #(= 1 (:domain-id %)))))
+    (is (= [] (sut/users-with-permission [] (constantly true))))))
+
+(deftest ^:unit what-an-import-changes
+  (let [[a b c] [(random-uuid) (random-uuid) (random-uuid)]
+        kept    {:id 1 :permission :invoice/approve :scope {:domain-id 1}}
+        extra   {:id 2 :permission :report/view :scope {}}
+        current {:member-ids [a b] :held [kept extra]}
+        wanted  {:members [b c c] :grants [{:permission :invoice/approve :scope {:domain-id 1}}
+                                           {:permission :invoice/approve :scope {:domain-id 2}}
+                                           {:permission :invoice/approve :scope {:domain-id 2}}]}]
+    (testing "additive: only what is missing is added"
+      (is (= {:join [c] :leave [] :add [{:permission :invoice/approve :scope {:domain-id 2}}] :remove []}
+             (sut/import-changes current wanted false))))
+    (testing "replace: what is not listed goes too"
+      (is (= {:join [c] :leave [a] :add [{:permission :invoice/approve :scope {:domain-id 2}}] :remove [extra]}
+             (sut/import-changes current wanted true))))
+    (testing "importing what is there changes nothing"
+      (is (= {:join [] :leave [] :add [] :remove []}
+             (sut/import-changes current {:members [a b] :grants (map #(dissoc % :id) [kept extra])} true))))))

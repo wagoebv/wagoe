@@ -184,8 +184,20 @@
   ;; The grants of every group the user is in, each with :group-name. None for
   ;; a soft-deleted user.
 
-  (find-user-groups [this user-id]))
+  (find-user-groups [this user-id])
   ;; The groups the user is in, by name. None for a soft-deleted user.
+
+  (find-permission-holders [this permission])
+  ;; {:user-id :permission :scope} for each active, not soft-deleted user
+  ;; holding `permission` through a group, distinct, by user id.
+
+  (ensure-tables [this])
+  ;; Creates the group tables, and the audit actions they record, where
+  ;; missing. Returns nil.
+
+  (in-transaction [this f]))
+  ;; Calls (f repo), every read and write on repo in one transaction: committed
+  ;; when f returns, rolled back when it throws. Returns what f returns.
 
 ;; =============================================================================
 ;; Service
@@ -303,7 +315,7 @@
    changed grant are audited for each user whose rights change. Nothing is
    cached: `user-grants` reads the database, so a change applies to the next
    request. The :admin role is separate and needs no group. Throws ex-infos
-   carrying :type: :validation-error, :not-found."
+   carrying :type: :validation-error, :not-found, :conflict."
 
   (list-groups [this])
   ;; Every group by name, with :member-count and :grant-count.
@@ -337,8 +349,20 @@
   ;; user: a user map or id. The grants the user holds through their groups,
   ;; for wagoe.user.core.group/holds?, grants-for and authorized?.
 
-  (user-groups [this user]))
+  (user-groups [this user])
   ;; user: a user map or id. The groups the user is in.
+
+  (permission-holders [this permission])
+  ;; {:user-id :permission :scope} for each active user holding `permission`,
+  ;; in one query. Judge the scope with wagoe.user.core.group/users-with-permission.
+
+  (import-groups! [this groups opts]))
+  ;; groups: [{:name :description :members [user-id …] :grants [{:permission :scope}]}].
+  ;; Upserts each group by name in one transaction, after checking every group,
+  ;; user and grant first. Adds members and grants; with opts {:replace? true}
+  ;; also removes those not listed. Creates the group tables where missing and
+  ;; audits as the single changes do. Returns per group {:group :created?
+  ;; :joined :left :grants-added :grants-removed}.
 
 ;; =============================================================================
 ;; Sign-in hooks

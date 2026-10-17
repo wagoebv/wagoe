@@ -75,8 +75,8 @@
   [ctx]
   (db/with-transaction [tx ctx]
     (doseq [{:keys [id session-token]} (db/execute-query! tx {:select [:id :session_token]
-                                                               :from   [:user_sessions]
-                                                               :where  [:<> [:length :session_token] 64]})]
+                                                              :from   [:user_sessions]
+                                                              :where  [:<> [:length :session_token] 64]})]
       (db/execute-update! tx {:update :user_sessions
                               :set    {:session_token (session-token-hash session-token)}
                               :where  [:and [:= :id id] [:= :session_token session-token]]}))))
@@ -206,6 +206,9 @@
                                   [:issuer :subject] {:unique? true})
   (db/create-index-if-not-exists! ctx "uk_user_group_members_group_user" :user_group_members
                                   [:group_id :user_id] {:unique? true})
+  ;; For `find-permission-holders`. user_id and group_id are indexed already,
+  ;; as every -id column is.
+  (db/create-index-if-not-exists! ctx "idx_user_group_grants_permission" :user_group_grants [:permission])
   (widen-audit-action-check! ctx)
   (hash-plaintext-session-tokens! ctx)
 
