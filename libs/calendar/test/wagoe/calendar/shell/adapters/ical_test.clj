@@ -3,7 +3,10 @@
   (:require [wagoe.calendar.shell.service :as service]
             [clojure.test :refer [deftest is testing]]
             [clojure.string :as str])
-  (:import [java.time Instant]))
+  (:import [java.time Instant]
+           [java.io StringReader]
+           [net.fortuna.ical4j.data CalendarBuilder]
+           [net.fortuna.ical4j.util CompatibilityHints]))
 
 ;; =============================================================================
 ;; Test data
@@ -299,3 +302,68 @@
       (is (= :validation-error
              (:type (ex-data (try (service/import-ical ical {:timezone "Mars/Olympus"})
                                   (catch clojure.lang.ExceptionInfo e e)))))))))
+
+;; =============================================================================
+;; Export: VTIMEZONE, UTC, folding, unique UIDs (BOU-719)
+;; =============================================================================
+
+(defn- export-error [events]
+  (ex-data (try (service/export-ical events) (catch clojure.lang.ExceptionInfo e e))))
+
+(deftest ^:integration export-timezones-test
+  (testing "each zone a timed event uses gets one VTIMEZONE, under the name the event uses"
+    (let [ical (service/export-ical [appointment (assoc appointment :id (random-uuid))])]
+      (is (= 1 (count (re-seq #"BEGIN:VTIMEZONE" ical))))
+      (is (str/includes? ical "TZID:Europe/Amsterdam\r\n"))
+      (is (not (str/includes? ical "TZURL")))
+      (is (< (str/index-of ical "END:VTIMEZONE") (str/index-of ical "BEGIN:VEVENT")))))
+  (testing "UTC is written in the Z form, without a VTIMEZONE"
+    (let [ical (service/export-ical [(assoc appointment :timezone "UTC")])]
+      (is (str/includes? ical "DTSTART:20260310T090000Z"))
+      (is (not (str/includes? ical "VTIMEZONE")))))
+  (testing "all-day events need no VTIMEZONE"
+    (is (not (str/includes? (service/export-ical [dst-day]) "VTIMEZONE")))))
+
+(defn- strict-validation-entries
+  "Parse with relaxed parsing off; ical4j's validation entries."
+  [ical]
+  (CompatibilityHints/setHintEnabled CompatibilityHints/KEY_RELAXED_PARSING false)
+  (-> (CalendarBuilder.) (.build (StringReader. ical)) .validate .getEntries))
+
+(deftest ^:integration export-two-zones-test
+  (let [nyc  {:id       (random-uuid)
+              :title    "Call"
+              :start    (Instant/parse "2026-10-17T14:00:00Z")
+              :end      (Instant/parse "2026-10-17T15:00:00Z")
+              :timezone "America/New_York"}
+        evs  [appointment recurring-meeting nyc (assoc appointment :id (random-uuid) :timezone "UTC")]
+        ical (service/export-ical evs)]
+    (testing "one VTIMEZONE per zone, TZIDs matching the ones referenced"
+      (is (= ["Europe/Amsterdam" "America/New_York"]
+             (map second (re-seq #"\r\nTZID:([^\r]+)" ical))))
+      (is (= #{"Europe/Amsterdam" "America/New_York"}
+             (set (map second (re-seq #";TZID=([^:;]+)" ical))))))
+    (testing "strict ical4j parsing and validation pass"
+      (is (empty? (strict-validation-entries ical))))
+    (testing "round trip"
+      (is (= (map #(select-keys % [:id :start :end :timezone]) evs)
+             (map #(select-keys % [:id :start :end :timezone]) (service/import-ical ical)))))
+    (testing "CRLF throughout; DTSTAMP is UTC"
+      (is (str/ends-with? ical "END:VCALENDAR\r\n"))
+      (is (not (re-find #"[^\r]\n" ical)))
+      (is (re-find #"\r\nDTSTAMP:\d{8}T\d{6}Z\r\n" ical)))))
+
+(deftest ^:integration export-folding-test
+  (let [title (apply str (repeat 60 "é"))
+        ical  (service/export-ical [(assoc appointment :title title)])]
+    (is (every? #(<= (alength (.getBytes ^String % "UTF-8")) 75) (str/split ical #"\r\n"))
+        "75 octets at most")
+    (is (= title (:title (first (service/import-ical ical)))) "unfolds to the original")))
+
+(deftest ^:integration export-validation-test
+  (testing "two events with one :id are refused, also when one id is a string"
+    (is (= :validation-error (:type (export-error [appointment appointment]))))
+    (is (= :validation-error (:type (export-error [appointment (update appointment :id str)])))))
+  (testing "an unknown :timezone is a validation error, not a ZoneRulesException"
+    (is (= {:type :validation-error :field :timezone :value "Mars/Olympus"}
+           (export-error [(assoc appointment :timezone "Mars/Olympus")])))))

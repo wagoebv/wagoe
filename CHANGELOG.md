@@ -128,6 +128,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **An app migration sharing an id with a library's silently never ran, or the library's didn't** (BOU-717). Boot and
   `migrate up` now refuse; rename yours and see the migrations guide. Skipped session-token hashing reruns at boot.
+- **iCal export named a TZID without its VTIMEZONE, so Outlook could misread times** (BOU-719). Export now adds one
+  per zone, writes UTC as `Z`, folds by octets, and refuses two events with the same `:id`.
 - **Enabling MFA failed on PostgreSQL, MySQL and H2: ten backup codes overflowed a VARCHAR(255)** (BOU-715). Boot or
   `migrate up` widens the column, and the user agents, avatar URLs and audit errors that shared the limit.
 - **`:user-web-ui {:enabled? false}` left the group pages on, and `WAG_WEB_UI_ENABLED=false` did nothing** (BOU-711).
