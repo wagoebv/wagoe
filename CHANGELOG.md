@@ -109,7 +109,7 @@ for what is public API, what is internal, and how deprecations are announced.
 ### Fixed
 
 - **Security: session tokens were stored in plaintext, so a read of `user_sessions` was a login** (BOU-696). Only their
-  SHA-256 is stored now; boot or `migrate up` hashes existing rows in place, so nobody is signed out.
+  SHA-256 is stored; boot or `migrate up` hashes existing rows in place. Upgrade every replica at once; a rollback signs everyone out.
 - **Security: parallel wrong passwords counted as one, so lockout came late** (BOU-696). The count is incremented in the
   database. Custom repositories add `increment-failed-login-count` and `invalidate-user-session`.
 - **A concurrent promotion, demotion or deactivation could be undone past the last-admin guard** (BOU-685). Role and

@@ -1176,12 +1176,15 @@
   [user-service _config]
   (fn [request]
     (try
-      (let [user-id (get-in request [:path-params :id])]
-        (user-ports/revoke-user-session user-service
-                                        (UUID/fromString user-id)
-                                        (UUID/fromString (get-in request [:path-params :session-id])))
+      (let [user-id (get-in request [:path-params :id])
+            {:keys [invalidated]} (user-ports/revoke-user-session
+                                   user-service
+                                   (UUID/fromString user-id)
+                                   (UUID/fromString (get-in request [:path-params :session-id])))]
         (-> (response/redirect (str "/web/users/" user-id "/sessions"))
-            (assoc :flash {:success "Session revoked successfully"})))
+            (assoc :flash (if invalidated
+                            {:success "Session revoked successfully"}
+                            {:error "Session not found or already ended"}))))
       (catch IllegalArgumentException _
         (html-response request (ui/error-message "Invalid session") 400))
       (catch Exception e
