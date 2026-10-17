@@ -246,13 +246,13 @@
              (not (str/starts-with? (str (:detail reported)) "Key (")))
       (try
         (let [adapter (:adapter ctx)
-              ds      (or (when (= :postgresql (protocols/engine adapter)) *outside-datasource*)
-                          (current-datasource ctx))
+              db      (or *outside-datasource* (current-datasource ctx))
+              ds      (if (= :postgresql (protocols/engine adapter)) db (current-datasource ctx))
               table   (if schema (keyword schema table) table)]
           (constraint/with-columns
             v
             (cached-key-columns
-             (or *outside-datasource* (current-datasource ctx)) [table index]
+             db [table index]
              #(if (and *transaction-datasource* (instance? DataSource ds))
                 (with-open [conn (borrow ds)]
                   (protocols/key-columns adapter conn table index))
