@@ -238,6 +238,17 @@
   (ports/increment-failed-login-count user-repository user-id
                                       (auth-core/failed-login-lockout auth-config current-time)))
 
+(defn verify-second-factor!
+  "Check the TOTP or backup `code` for `user`. A wrong or blank one counts as a
+   failed login, the same counter as a wrong password, so codes cannot be
+   guessed at the rate limit (BOU-698). Returns `mfa-shell/verify-mfa-code`'s map."
+  [auth-service user code current-time]
+  (let [{:keys [user-repository mfa-service auth-config]} auth-service
+        check (when-not (str/blank? code) (mfa-shell/verify-mfa-code mfa-service user code))]
+    (when-not (:valid? check)
+      (record-failed-login! user-repository auth-config (:id user) current-time))
+    check))
+
 (defn authenticate-user
   "Coordinate user authentication with all security checks including MFA.
    
@@ -261,7 +272,7 @@
      `:requires-mfa?` stays at the top level: it is not part of why the attempt
      failed, it is what the caller does next."
   [auth-service email password login-context]
-  (let [{:keys [user-repository session-repository mfa-service auth-config]} auth-service]
+  (let [{:keys [user-repository session-repository auth-config]} auth-service]
     (log/info "Authentication attempt" {:email email :ip (:ip-address login-context)})
 
     (let [current-time (Instant/now)
@@ -305,7 +316,7 @@
 
           ;; Step 7: Verify MFA code if provided
           mfa-verification (when (and (:requires-mfa? mfa-requirement) mfa-code)
-                             (mfa-shell/verify-mfa-code mfa-service user mfa-code))
+                             (verify-second-factor! auth-service user mfa-code current-time))
 
           ;; Step 8: Handle authentication result
           result (cond
@@ -356,9 +367,6 @@
                         mfa-code
                         (not (:valid? mfa-verification)))
                    (do
-                     ;; The same counter as a wrong password, so codes cannot be
-                     ;; guessed at the rate limit (BOU-698).
-                     (record-failed-login! user-repository auth-config (:id user) current-time)
                      (log/warn "MFA verification failed" {:email email})
                      {:success? false
                       :error {:type    :mfa-verification-failed
