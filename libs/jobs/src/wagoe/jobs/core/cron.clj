@@ -147,5 +147,10 @@
    `{:tick instant :skipped? bool}`, or nil when nothing is due. Ticks missed
    while nothing ran collapse into the latest one; `:skipped?` says some did."
   [schedule zone ^Instant last-tick ^Instant now]
-  (when-let [tick (latest-run schedule zone last-tick now)]
-    {:tick tick :skipped? (not= tick (next-run schedule zone last-tick))}))
+  ;; Gated on the next run from `last-tick`: a lookback window starting inside
+  ;; a repeated hour would otherwise find the second occurrence of a local time
+  ;; that already fired.
+  (when-let [first-run (next-run schedule zone last-tick)]
+    (when-not (.isAfter ^Instant first-run now)
+      (let [tick (latest-run schedule zone last-tick now)]
+        {:tick tick :skipped? (not= tick first-run)}))))

@@ -463,15 +463,15 @@
          (if (duplicate-key? e) false (throw e)))))
 
 (defn create-recurring-tables!
-  "Create `idempotency_keys`, `job_recurring` and the ticker lease row if
+  "Create `job_idempotency_keys`, `job_recurring` and the ticker lease row if
    absent. Called at boot under `:provider :db`."
   [ds]
-  (execute! ds ["CREATE TABLE IF NOT EXISTS idempotency_keys (
+  (execute! ds ["CREATE TABLE IF NOT EXISTS job_idempotency_keys (
                    scope      VARCHAR(255) NOT NULL,
                    idem_key   VARCHAR(255) NOT NULL,
                    expires_ms BIGINT NOT NULL,
                    PRIMARY KEY (scope, idem_key))"])
-  (db/create-index-if-not-exists! (db/context-of ds) "ix_idempotency_keys_expires" :idempotency_keys [:expires_ms])
+  (db/create-index-if-not-exists! (db/context-of ds) "ix_job_idempotency_keys_expires" :job_idempotency_keys [:expires_ms])
   (execute! ds ["CREATE TABLE IF NOT EXISTS job_recurring (
                    name         VARCHAR(255) PRIMARY KEY,
                    last_tick_ms BIGINT NOT NULL)"])
@@ -485,19 +485,19 @@
   ports/IIdempotencyStore
   (claim-key! [_ scope key ttl-ms]
     (or (insert-unless-present!
-         ds [(str "INSERT INTO idempotency_keys (scope, idem_key, expires_ms) VALUES (?, ?, "
+         ds [(str "INSERT INTO job_idempotency_keys (scope, idem_key, expires_ms) VALUES (?, ?, "
                   now-sql " + ?)")
              scope key ttl-ms])
         ;; Present: take it over only once it has expired.
         (= 1 (::jdbc/update-count
-              (execute-one! ds [(str "UPDATE idempotency_keys SET expires_ms = " now-sql " + ?
+              (execute-one! ds [(str "UPDATE job_idempotency_keys SET expires_ms = " now-sql " + ?
                                       WHERE scope = ? AND idem_key = ? AND expires_ms <= " now-sql)
                                 ttl-ms scope key])))))
   (release-key! [_ scope key]
-    (execute-one! ds ["DELETE FROM idempotency_keys WHERE scope = ? AND idem_key = ?" scope key]))
+    (execute-one! ds ["DELETE FROM job_idempotency_keys WHERE scope = ? AND idem_key = ?" scope key]))
   (purge-expired-keys! [_]
     (::jdbc/update-count
-     (execute-one! ds [(str "DELETE FROM idempotency_keys WHERE expires_ms <= " now-sql)]))))
+     (execute-one! ds [(str "DELETE FROM job_idempotency_keys WHERE expires_ms <= " now-sql)]))))
 
 (defn- now-sql [ds] (db-ports/now-ms-sql (:adapter (db/context-of ds))))
 
@@ -522,10 +522,15 @@
             long
             Instant/ofEpochMilli))
   (record-tick! [_ schedule-name tick]
-    (let [ms (.toEpochMilli ^Instant tick)]
-      (or (insert-unless-present! ds ["INSERT INTO job_recurring (name, last_tick_ms) VALUES (?, ?)"
-                                      schedule-name ms])
-          (execute-one! ds ["UPDATE job_recurring SET last_tick_ms = ? WHERE name = ?" ms schedule-name]))
+    ;; UPDATE first: after the first tick the row exists, and a duplicate-key
+    ;; exception on every tick is wasted work.
+    (let [ms      (.toEpochMilli ^Instant tick)
+          update! #(::jdbc/update-count
+                    (execute-one! ds ["UPDATE job_recurring SET last_tick_ms = ? WHERE name = ?" ms schedule-name]))]
+      (when (zero? (update!))
+        (when-not (insert-unless-present! ds ["INSERT INTO job_recurring (name, last_tick_ms) VALUES (?, ?)"
+                                              schedule-name ms])
+          (update!)))
       tick)))
 
 (defn create-db-recurring-state

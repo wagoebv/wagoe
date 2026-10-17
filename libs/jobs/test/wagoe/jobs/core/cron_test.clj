@@ -110,4 +110,8 @@
              (cron/due-tick daily utc (at "2026-01-01T02:00:00Z") (at "2026-01-02T02:00:04Z")))))
     (testing "three days down: the latest tick, once"
       (is (= {:tick (at "2026-01-04T02:00:00Z") :skipped? true}
-             (cron/due-tick daily utc (at "2026-01-01T02:00:00Z") (at "2026-01-04T09:00:00Z")))))))
+             (cron/due-tick daily utc (at "2026-01-01T02:00:00Z") (at "2026-01-04T09:00:00Z"))))))
+  (testing "a local time repeated by DST is not due a second time"
+    ;; Fired at 02:40 CEST; 02:40 CET is the same wall-clock time again.
+    (is (nil? (cron/due-tick (cron/parse "40 * * * *") amsterdam
+                             (at "2026-10-25T00:40:00Z") (at "2026-10-25T01:40:30Z"))))))

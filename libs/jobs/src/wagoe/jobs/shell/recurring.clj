@@ -25,13 +25,19 @@
   "How long a claimed idempotency key holds by default: a week."
   (* 7 24 60 60 1000))
 
+(def ^:private tick-key-ttl-ms
+  "Tick claims only cover overlapping leaders; the stored last tick stops
+   re-firing after that, so a day is plenty."
+  (* 24 60 60 1000))
+
 (defn- type-name [job-type]
   (if (keyword? job-type) (subs (str job-type) 1) (str job-type)))
 
 (defn enqueue-once!
   "Enqueue `job` on `queue-name` unless (its job type, `key`) was claimed in
    `idempotency` within `:ttl-ms`. Returns the job id, or nil for a duplicate.
-   A failed enqueue releases the claim, so a retry can succeed."
+   A failed enqueue releases the claim, so a retry can succeed; a process that
+   dies between claim and enqueue loses the job (at most once)."
   [queue idempotency queue-name job key & [{:keys [ttl-ms] :or {ttl-ms default-key-ttl-ms}}]]
   (let [scope (type-name (:job-type job))
         key   (str key)]
@@ -39,7 +45,9 @@
       (try
         (ports/enqueue-job! queue queue-name job)
         (catch Throwable t
-          (ports/release-key! idempotency scope key)
+          ;; A failing release must not hide why the enqueue failed.
+          (try (ports/release-key! idempotency scope key)
+               (catch Throwable t2 (.addSuppressed t t2)))
           (throw t))))))
 
 (defn- zone-of ^ZoneId [zone]
@@ -95,7 +103,7 @@
 (defn- fire! [{:keys [queue idempotency]} job-type {:keys [job]} ^Instant tick now]
   (let [j (job/create-job (assoc job :job-type job-type :metadata {:recurring-tick tick})
                           (random-uuid) now)]
-    (enqueue-once! queue idempotency (:queue j) j (str "tick/" tick))))
+    (enqueue-once! queue idempotency (:queue j) j (str "tick/" tick) {:ttl-ms tick-key-ttl-ms})))
 
 (defn- tick-schedule!
   "Enqueue `job-type`'s due tick, if any; true when it enqueued."

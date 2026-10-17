@@ -167,7 +167,7 @@ docs: `docs/modules/libraries/pages/jobs.adoc`. What to keep true when editing:
 - **Claim before enqueue.** A failed enqueue releases the claim; a process that
   dies in between loses the tick (at most once).
 - DB lease and claim expiry use the database clock (`now-ms-sql`), Redis uses
-  `PX`. Tables: `idempotency_keys`, `job_recurring`, `job_ticker_lease`,
+  `PX`. Tables: `job_idempotency_keys`, `job_recurring`, `job_ticker_lease`,
   created at boot by `create-recurring-tables!`.
 
 ## Job Handler Signature
