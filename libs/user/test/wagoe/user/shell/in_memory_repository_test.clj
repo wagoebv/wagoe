@@ -57,11 +57,10 @@
 
   (consume-backup-code [_ user code-hash]
     (let [seen #(select-keys % [:mfa-backup-codes :mfa-backup-codes-used])
-          [old _] (swap-vals! state (fn [s]
-                                      (cond-> s
-                                        (= (seen user) (seen (get s (:id user))))
-                                        (update-in [(:id user) :mfa-backup-codes-used] (fnil conj []) code-hash))))]
-      (= (seen user) (seen (get old (:id user))))))
+          ok?  #(= (seen user) (seen (get % (:id user))))
+          [old _] (swap-vals! state #(cond-> %
+                                       (ok? %) (update-in [(:id user) :mfa-backup-codes-used] (fnil conj []) code-hash)))]
+      (ok? old)))
 
   (soft-delete-user [_ user-id]
     (boolean (when (get @state user-id)

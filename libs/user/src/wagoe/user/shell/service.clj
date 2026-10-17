@@ -721,11 +721,10 @@
                       count)
                  (.invalidate-all-user-sessions session-repository user-id))]
          ;; One entry for them all, with the actor (BOU-708).
-         (when (pos? n)
-           (when-let [user (.find-user-by-id user-repository user-id)]
-             (audit-quietly! audit-repository
-                             (partial audit-core/sessions-revoked-audit-entry n keep-session-id)
-                             user-id (:email user))))
+         (when-let [user (and (pos? n) (.find-user-by-id user-repository user-id))]
+           (audit-quietly! audit-repository
+                           (partial audit-core/sessions-revoked-audit-entry n keep-session-id)
+                           user-id (:email user)))
          n))
      {:system {:user-repository user-repository
                :session-repository session-repository

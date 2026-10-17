@@ -231,18 +231,20 @@
 
 (defn- check-code!
   "Verify `code`, spending it when it is a backup code. The write is
-   conditional on the codes being as read, so when a parallel login changed
-   them it is checked once more against a fresh read: a code spent there is
-   then wrong here (BOU-708)."
+   conditional on the codes being as read; when a parallel login changed them,
+   the hash is spent once more against a fresh read, unless that login spent
+   it, which makes the code wrong here (BOU-708)."
   [{:keys [user-repository mfa-service]} user code]
-  (loop [user user, retry? true]
-    (let [check (mfa-shell/verify-mfa-code mfa-service user code)]
-      (cond
-        (not (:used-backup-code? check))                                  check
-        (ports/consume-backup-code user-repository user (:code-hash check)) check
-        :else (if-let [fresh (when retry? (ports/find-user-by-id user-repository (:id user)))]
-                (recur fresh false)
-                {:valid? false :used-backup-code? false})))))
+  (let [check  (mfa-shell/verify-mfa-code mfa-service user code)
+        h      (:code-hash check)
+        spend! #(ports/consume-backup-code user-repository % h)
+        retry! #(when-let [fresh (ports/find-user-by-id user-repository (:id user))]
+                  (and (= (:mfa-backup-codes fresh) (:mfa-backup-codes user))
+                       (not (some #{h} (:mfa-backup-codes-used fresh)))
+                       (spend! fresh)))]
+    (if (or (not (:used-backup-code? check)) (spend! user) (retry!))
+      check
+      {:valid? false :used-backup-code? false})))
 
 (defn verify-second-factor!
   "Check the TOTP or backup `code` for `user`, spending a backup code. A wrong
@@ -382,16 +384,15 @@
 
                    ;; Successful authentication (with or without MFA)
                    :else
-                   (let [_ (when (:used-backup-code? mfa-verification)
-                             (log/info "Backup code used for MFA" {:email email}))
-
-                          ;; Update user for successful login (I/O)
+                   (let [;; Update user for successful login (I/O)
                          login-updates (auth-core/prepare-successful-login-updates user current-time)
                          _ (.update-user user-repository (assoc login-updates :id (:id user)))
 
                          {session-policy :policy session :session}
                          (open-session! auth-service user login-risk login-context current-time)]
 
+                     (when (:used-backup-code? mfa-verification)
+                       (log/info "Backup code used for MFA" {:email email}))
                      (log/info "Authentication successful"
                                {:email email
                                 :risk-score (:risk-score login-risk)
