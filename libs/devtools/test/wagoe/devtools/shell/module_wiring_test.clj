@@ -53,6 +53,7 @@
 
     (is (some? dashboard) "the key in :active produced a component")
     (is (= 9123 (:port dashboard)) "and kept what the config said")
+    (is (= :dev (:profile dashboard)) "and knows the profile it booted with")
 
     (testing "wired to the components it reads the running system through"
       (is (= (ig/ref :wagoe/http-handler) (:http-handler dashboard)))

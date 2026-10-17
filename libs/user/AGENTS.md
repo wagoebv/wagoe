@@ -321,7 +321,7 @@ The wizard accepts `--env dev|test|acc|prod` to pick the Aero config profile and
 
 ## Landing Page and Dashboard
 
-Two `:wagoe/user` keys, both checked at boot; a bad value fails it.
+Three `:wagoe/user` keys, all checked at boot; a bad value fails it.
 
 ```clojure
 :wagoe/user
@@ -333,14 +333,20 @@ Two `:wagoe/user` keys, both checked at boot; a bad value fails it.
 
  ;; false: /web/dashboard is not mounted, so the app can route it.
  ;; {:handler my.app.web/dashboard}: that Ring handler serves it, signed in.
- :dashboard false}
+ :dashboard false
+
+ ;; Where the layouts' logo, "back" and dashboard links point. Defaults to
+ ;; /web/dashboard, or /web with :dashboard false.
+ :home "/web/overzicht"}
 ```
 
 `:login-redirect` applies to password login, MFA completion, OIDC sign-in and
 `/web` for a signed-in user. A safe `return-to` still wins. With
 `:dashboard false` and no `:login-redirect`, users land on `/web/dashboard`, so
-serve it or point the redirect elsewhere. The shared layouts' logo and "back"
-links still point at `/web/dashboard` either way.
+serve it or point the redirect elsewhere. `:home` is bound per request
+(`wagoe.shared.ui.core.home/*path*`), so the shared, admin, search and workflow
+layouts read it without a config argument; `/web`, its fallback, sends a
+signed-in user on to their landing path.
 
 ## Session Pruning
 

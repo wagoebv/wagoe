@@ -65,14 +65,15 @@
    means knowing which components the application runs, which a library cannot
    — an application that wants the dashboard's config editor merges it in. The
    dashboard says so when it is missing rather than failing."
-  [settings]
+  [settings profile]
   ;; Required here, not at the top: it starts a Jetty of its own, and a project
   ;; that wants only the error enricher should not pay for loading it.
   (require 'wagoe.devtools.shell.dashboard.server)
   {:components
    {:wagoe/dashboard (merge {:port 9999}
                             settings
-                            {:http-handler (ig/ref :wagoe/http-handler)
+                            {:profile      profile
+                             :http-handler (ig/ref :wagoe/http-handler)
                              :http-server  (ig/ref :wagoe/http-server)
                              :db-context   (ig/ref :wagoe/db-context)
                              :router       (ig/ref :wagoe/router)
@@ -91,8 +92,8 @@
    boot. That the library is absent in production is not a guard, though, so
    the profile check is platform's — see `modules/dev-only-modules`, which can
    refuse the key whether or not this namespace ever loads."
-  [settings {:keys [module-key]}]
+  [settings {:keys [module-key config]}]
   (if (= :wagoe/dashboard module-key)
-    (dashboard-config settings)
+    (dashboard-config settings (:wagoe/profile config))
     {:components {:wagoe/dev-error-enricher settings}
      :http       {:error-enricher (ig/ref :wagoe/dev-error-enricher)}}))

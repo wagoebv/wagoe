@@ -525,8 +525,8 @@
     (is (= "dev"  (build {:wagoe/profile :dev  :active {}})))
 
     (testing "an app with no profile leaves the key absent, as before"
-      ;; Absent, not nil: the detector then falls through to WAG_ENV exactly as
-      ;; it did before this existed.
+      ;; Absent, not nil: the detector then falls through to
+      ;; `wagoe.config/active-profile`.
       (is (nil? (build {:active {}}))))))
 
 (deftest ^:unit an-application-can-switch-conflict-detection-off-from-config

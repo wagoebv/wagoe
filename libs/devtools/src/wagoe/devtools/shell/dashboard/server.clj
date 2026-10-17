@@ -79,6 +79,7 @@
      :component-count (when sys (count sys))
      :error-count     (:total (errors-page/error-stats))
      :http-port       app-port
+     :profile         (:profile config)
      :http-handler    http-handler
      :db-context      db-context
      :job-queue       job-queue

@@ -118,7 +118,7 @@
                 (get-in ig-config [:wagoe/http-handler :module-routes])))
       ;; Tenant/membership middleware is no longer built inside http-handler; the
       ;; tenant lib's component arrives with every module's middleware.
-      (is (= [(ig/ref :wagoe/tenant-http-middleware)]
+      (is (= [(ig/ref :wagoe/tenant-http-middleware) (ig/ref :wagoe/user-home-middleware)]
              (get-in ig-config [:wagoe/http-handler :module-middleware])))
       (is (not (contains? (:wagoe/http-handler ig-config) :membership-service))))
 

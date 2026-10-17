@@ -6,16 +6,15 @@
 (:require [wagoe.platform.shell.utils.time :as time]
             [wagoe.observability.core.sql-redaction :as redaction]
             [wagoe.platform.core.http.problem-details :as problem]
+            [wagoe.config :as config]
             [clojure.pprint :as pprint]
             [clojure.string :as str]
             [clojure.tools.logging :as log])
   (:import (java.util UUID)))
 
 (defn- current-environment []
-  (or (System/getProperty "environment") "test"))
-
-(defn- current-cli-environment []
-  (or (System/getProperty "environment") "development"))
+  ;; It read -Denvironment, defaulting to "test" (BOU-686).
+  (name (config/active-profile)))
 
 (defn- current-process-id []
   (str (.pid (java.lang.ProcessHandle/current))))
@@ -163,7 +162,7 @@
             existing-cli-context (:cli-context original-data)
             ;; Build CLI error context
             base-cli-context (problem/cli-context*
-                              {:environment (current-cli-environment)
+                              {:environment (current-environment)
                                :timestamp (time/now)
                                :process-id (current-process-id)}
                               {:user-id (:user-id context)

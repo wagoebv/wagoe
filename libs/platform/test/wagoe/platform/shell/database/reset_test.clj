@@ -92,11 +92,10 @@
       (let [e (is (thrown? clojure.lang.ExceptionInfo (sut/plan {})))]
         (is (re-find #"bb migrate up" (ex-message e)))))))
 
-(deftest ^:integration every-named-profile-must-be-resettable
-  ;; A name decided, and the name could lie: --env dev beat WAG_ENV=prod, and
-  ;; nothing set at all fell back to dev (BOU-585 review).
-  (doseq [[label sources] [["WAG_ENV=prod with --env dev" {"-Denv" "dev" "WAG_ENV" "prod"}]
-                           ["ENV=staging beside WAG_ENV=dev" {"WAG_ENV" "dev" "ENV" "staging"}]
+(deftest ^:integration a-profile-must-be-named
+  ;; The default is not a choice anybody made (BOU-585 review), and a blank
+  ;; WAG_ENV names nothing (BOU-686).
+  (doseq [[label sources] [["a blank WAG_ENV" {"WAG_ENV" "  "}]
                            ["nothing named, only the default" {}]]]
     (testing label
       (let [ctx (h2)]

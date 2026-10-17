@@ -26,16 +26,11 @@
    with rows. Calls (f run-reset app-dir), where run-reset returns nil or the
    ex-data of what stopped it.
 
-   `env` is WAG_ENV, or a map of the profile's sources — {\"-Denv\" \"dev\"
-   \"WAG_ENV\" \"prod\"} — with :load-config to stand in for the profiles'
-   config files."
+   `env` is WAG_ENV, or a map of environment variables with :load-config to
+   stand in for the profiles' config files."
   [ctx env f]
   (let [root    (io/file "target" (str "bou585-" (System/nanoTime)))
-        {:keys [load-config] :as sources} (if (map? env) env {"WAG_ENV" env})
-        ;; The :test alias sets -Denv=test, which outranks every variable.
-        prop    (System/getProperty "env")]
-    (System/clearProperty "env")
-    (when-let [d (get sources "-Denv")] (System/setProperty "env" d))
+        {:keys [load-config] :as sources} (if (map? env) env {"WAG_ENV" env})]
     (try
       (let [app (migration-dir! root 20260101000000 "app_table")]
         (migratus/migrate (migrations/migratus-config (:datasource ctx) [app]))
@@ -56,6 +51,4 @@
                     (catch clojure.lang.ExceptionInfo e (assoc (ex-data e) :message (ex-message e)))))
              app)))
       (finally
-        (System/clearProperty "env")
-        (when prop (System/setProperty "env" prop))
         (doseq [file (reverse (file-seq root))] (.delete ^java.io.File file))))))

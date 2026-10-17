@@ -2,6 +2,7 @@
 
  :deps  {org.clojure/clojure     {:mvn/version "1.12.6"}
          wagoe/platform       {:local/root "../platform"}
+         wagoe/config         {:local/root "../config"}
          wagoe/core           {:local/root "../core"}
          wagoe/ui-style       {:local/root "../ui-style"}
          wagoe/scaffolder     {:local/root "../scaffolder"}

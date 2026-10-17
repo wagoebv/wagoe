@@ -144,31 +144,22 @@
 (defn- refuse! [type message data]
   (throw (ex-info message (assoc data :type type))))
 
-(defn- profile-sources
-  "[source value] for each place a profile can be named that is set."
-  []
-  (filter second [["-Denv" (System/getProperty "env")]
-                  ["WAG_ENV" (db-config/getenv "WAG_ENV")]
-                  ["ENV" (db-config/getenv "ENV")]
-                  ["ENVIRONMENT" (db-config/getenv "ENVIRONMENT")]]))
-
 (defn- check-profile!
-  "The profile to reset, or a refusal. Every source that names one must name
-   dev, test or acc — one prod anywhere refuses — and one must be named: the
-   built-in default is not a choice anybody made."
+  "The profile to reset, or a refusal. WAG_ENV must name dev, test or acc:
+   the built-in default is not a choice anybody made."
   []
-  (let [sources (profile-sources)
-        bad     (remove #(db-config/resettable-environment? (config/normalize-env (second %))) sources)]
+  (let [wag-env (db-config/getenv "WAG_ENV")
+        env     (some-> (config/named-profile wag-env) name)]
     (cond
-      (empty? sources)
-      (refuse! :forbidden "No profile is named. Set WAG_ENV to dev, test or acc, or pass --env dev." {})
+      (nil? env)
+      (refuse! :forbidden "No profile is named. Set WAG_ENV to dev, test or acc; `bb db:reset` also takes --env." {})
 
-      (seq bad)
-      (refuse! :forbidden (str "Refusing to reset: " (str/join ", " (map (fn [[k v]] (str k "=" (pr-str v))) bad))
+      (not (db-config/resettable-environment? env))
+      (refuse! :forbidden (str "Refusing to reset: WAG_ENV=" (pr-str wag-env)
                                " is not dev, test or acc. " db-config/reset-refusal)
-               {:sources (into {} bad)})
+               {:sources {"WAG_ENV" wag-env}})
 
-      :else (db-config/detect-environment))))
+      :else env)))
 
 (defn prod-config-resource []
   (io/resource "conf/prod/config.edn"))
