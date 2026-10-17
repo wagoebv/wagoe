@@ -112,7 +112,7 @@ for what is public API, what is internal, and how deprecations are announced.
   Everything reads `WAG_ENV` now, blank meaning dev. Set it where you relied on the others, `clojure -M:prod:migrate` included.
 - **The storage README documented config keys the module never reads** (BOU-646). It is `{:provider :local :root …}`; see the README.
 - **Tenant migrations re-read the database config from `WAG_ENV` and leaked a connection pool per run** (BOU-694). They use the
-  boot `:wagoe/db-context`: pass it to `migrate-tenant!` and `migrate-all-tenants!` where you passed a config map. `wagoe.platform.database/get-active-db-config` is gone.
+  boot `:wagoe/db-context`: pass it as the first argument to `migrate-tenant!` and `migrate-all-tenants!`. `wagoe.platform.database/get-active-db-config` is gone.
 - **The dev profile reported to Datadog as `production`; the storage Quick Start called functions that do not exist** (BOU-694). No action needed.
 - **Job args came back as strings on the `:db` and `:redis` queues: keywords, UUIDs, instants** (BOU-689). Jobs are stored
   as transit, which older workers cannot read: upgrade them together. Old jobs keep string args, so convert only strings.

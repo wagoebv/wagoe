@@ -95,7 +95,11 @@
   (doseq [p [:dev :test :local "development" "testing"]]
     (is (sut/dev-like? p) (str p)))
   (doseq [p [:prod :acc "production"]]
-    (is (not (sut/dev-like? p)) (str p))))
+    (is (not (sut/dev-like? p)) (str p)))
+  (with-redefs [sut/active-profile (constantly :prod)]
+    (is (not (sut/dev-like? "  ")) "blank asks the active profile"))
+  (with-redefs [sut/active-profile (constantly :dev)]
+    (is (sut/dev-like? "  "))))
 
 (deftest ^:unit resolve-symbol-returns-the-value-or-a-configuration-error
   (is (= sut/normalize-env (sut/resolve-symbol 'wagoe.config/normalize-env)))

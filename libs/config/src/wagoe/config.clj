@@ -49,10 +49,12 @@
 
 (defn dev-like?
   "Whether `profile` (keyword or string) is one people develop against: dev,
-   test or local. Nil asks about `active-profile`."
+   test or local. Nil or blank asks about `active-profile`, as a blank WAG_ENV
+   means dev (BOU-686)."
   ([] (dev-like? nil))
   ([profile]
-   (contains? #{"dev" "test" "local"} (normalize-env (name (or profile (active-profile)))))))
+   (contains? #{:dev :test :local}
+              (or (some-> profile name named-profile) (active-profile)))))
 
 (defn- url-exists? [^java.net.URL url]
   (try (with-open [_ (.openStream url)] true)
