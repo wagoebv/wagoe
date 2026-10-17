@@ -57,6 +57,8 @@
         true)
 
       (increment-failed-login-count [_ _ _] nil)
+
+      (consume-backup-code [_ _ _] false)
       (with-admins-locked [_ f] (f)))))
 
 ;; =============================================================================
@@ -281,8 +283,7 @@
           (is (true? (:valid? result)))
           (is (true? (:used-backup-code? result)))
           ;; the recorded 'used' value is the matched hash, not the plaintext code
-          (let [used (get-in result [:updates :mfa-backup-codes-used])]
-            (is (mfa-crypto/backup-code-matches? (first backup-codes) (last used))))))
+          (is (mfa-crypto/backup-code-matches? (first backup-codes) (:code-hash result)))))
 
       (testing "rejects an already-used backup code"
         (let [user-with-used-code (update user-with-mfa :mfa-backup-codes-used conj (first hashed-codes))

@@ -300,7 +300,9 @@
    Returns:
      {:valid? boolean
       :used-backup-code? boolean
-      :updates map (if backup code used)}"
+      :code-hash string (the matched backup code's stored hash)}
+
+   Spending the backup code is the caller's: `ports/consume-backup-code`."
   [_mfa-service user code]
   (cond
       ;; Try TOTP verification first
@@ -315,7 +317,7 @@
     (if-let [used-hash (find-unused-backup-code-hash user code)]
       {:valid? true
        :used-backup-code? true
-       :updates {:mfa-backup-codes-used (conj (vec (:mfa-backup-codes-used user)) used-hash)}}
+       :code-hash used-hash}
       {:valid? false
        :used-backup-code? false})))
 

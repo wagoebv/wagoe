@@ -538,6 +538,7 @@
                   (soft-delete-user [_ _] nil)
                   (hard-delete-user [_ _] nil)
                   (increment-failed-login-count [_ _ _] nil)
+                  (consume-backup-code [_ _ _] false)
                   (with-admins-locked [_ f] (f)))
         svc     (mfa/create-mfa-service repo {})
         request {:user {:id (UUID/randomUUID)}

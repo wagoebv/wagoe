@@ -122,6 +122,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Security: two parallel logins could spend one MFA backup code** (BOU-708). Spending is a conditional write; the
+  loser counts as a wrong code. Custom repositories add `consume-backup-code`.
+- **Security: revoking all of a user's sessions wrote no audit entry** (BOU-708). It writes one `:session-revoked`;
+  custom `IUserService` implementations add the 3-arity `logout-user-everywhere`.
 - **Geocoding never returned a result** (BOU-709): the OSM, Google and Mapbox adapters read string keys from keywordized
   JSON. Set `:user-agent` with a contact when using OpenStreetMap.
 - **Security: an `unknown` X-Forwarded-For hop resolved to the trusted proxy** (BOU-695). The client IP is now nil;
