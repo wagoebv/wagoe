@@ -137,7 +137,7 @@
    [:last-accessed-at {:optional true} [:maybe inst?]]
    [:revoked-at {:optional true} [:maybe inst?]]
    [:user-agent {:optional true} :string]
-   [:ip-address {:optional true} :string]])
+   [:ip-address {:optional true} [:maybe :string]]])
 
 (def UserIdentity
   "Schema for a link between a user and an OpenID Connect (issuer, subject)."

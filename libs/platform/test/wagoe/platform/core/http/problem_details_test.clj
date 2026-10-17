@@ -67,7 +67,9 @@
                    :headers     {"x-forwarded-for" "10.0.0.1"}}]
       (is (= "203.0.113.9" (:ip-address (pd/request->context* spoofed))))
       (is (= "198.51.100.7"
-             (:ip-address (pd/request->context* (assoc spoofed :client-ip "198.51.100.7"))))))))
+             (:ip-address (pd/request->context* (assoc spoofed :client-ip "198.51.100.7")))))
+      (testing "and absent, not the peer, when unresolved"
+        (is (not (contains? (pd/request->context* (assoc spoofed :client-ip nil)) :ip-address)))))))
 
 (deftest ^:unit test-cli-context
   (testing "creates CLI context with environment info"
