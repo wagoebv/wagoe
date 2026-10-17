@@ -7,25 +7,13 @@
      (def adapter (create-google-adapter {:api-key \"AIza...\"}))
      (geocode adapter {:address \"Damrak 1, Amsterdam\"})"
   (:require [wagoe.geo.ports :as ports]
+            [wagoe.geo.shell.adapters.support :as support]
             [clj-http.client :as http]
             [clojure.string :as str]
             [clojure.tools.logging :as log]))
 
 (def ^:private default-base-url "https://maps.googleapis.com")
 (def ^:private default-min-interval-ms 100)
-
-;; =============================================================================
-;; Rate limiting helpers
-;; =============================================================================
-
-(defn- enforce-rate-limit!
-  [last-request-ms min-interval-ms]
-  (let [now     (System/currentTimeMillis)
-        elapsed (- now @last-request-ms)
-        wait    (- min-interval-ms elapsed)]
-    (when (pos? wait)
-      (Thread/sleep wait))
-    (reset! last-request-ms (System/currentTimeMillis))))
 
 ;; =============================================================================
 ;; Response parsing
@@ -35,27 +23,31 @@
   "Extract an address component by type from Google's address_components."
   [components type-name]
   (some (fn [c]
-          (when (some #(= type-name %) (get c "types" []))
-            (get c "long_name")))
+          (when (some #(= type-name %) (:types c))
+            (:long_name c)))
         components))
 
 (defn- parse-result
   "Parse a single Google geocoding result into a GeoResult."
   [item]
-  (when item
-    (let [loc        (get-in item ["geometry" "location"])
-          lat        (get loc "lat")
-          lng        (get loc "lng")
-          components (get item "address_components" [])]
-      {:lat               lat
-       :lng               lng
-       :formatted-address (get item "formatted_address")
-       :postcode          (extract-component components "postal_code")
-       :city              (or (extract-component components "locality")
-                              (extract-component components "administrative_area_level_2"))
-       :country           (extract-component components "country")
-       :provider          :google
-       :cached?           false})))
+  (let [{:keys [lat lng]} (get-in item [:geometry :location])
+        components        (:address_components item)]
+    {:lat               lat
+     :lng               lng
+     :formatted-address (:formatted_address item)
+     :postcode          (extract-component components "postal_code")
+     :city              (or (extract-component components "locality")
+                            (extract-component components "administrative_area_level_2"))
+     :country           (extract-component components "country")
+     :provider          :google
+     :cached?           false}))
+
+;; Google answers 200 even for a rejected key; the reason is in the body.
+(defn- first-result [body]
+  (when-not (#{"OK" "ZERO_RESULTS"} (:status body))
+    (log/warn "Google geocode request rejected"
+              {:status (:status body) :error (:error_message body)}))
+  (first (:results body)))
 
 ;; =============================================================================
 ;; Adapter record
@@ -72,7 +64,7 @@
                       (remove nil? [address postcode city
                                     (or country "Netherlands")]))]
       (when (not (str/blank? q))
-        (enforce-rate-limit! (:last-request-ms this) (:min-interval-ms this))
+        (support/enforce-rate-limit! (:last-request-ms this) (:min-interval-ms this))
         (log/debug "Google geocode request" {:q q})
         (try
           (let [response (http/get (str (:base-url this) "/maps/api/geocode/json")
@@ -84,7 +76,7 @@
                 status   (:status response)
                 body     (:body response)]
             (if (= 200 status)
-              (parse-result (first (get body "results")))
+              (support/parse-response :google parse-result (first-result body))
               (do
                 (log/warn "Google geocode non-200 response" {:status status})
                 nil)))
@@ -93,7 +85,7 @@
             nil)))))
 
   (reverse-geocode [this point]
-    (enforce-rate-limit! (:last-request-ms this) (:min-interval-ms this))
+    (support/enforce-rate-limit! (:last-request-ms this) (:min-interval-ms this))
     (log/debug "Google reverse-geocode request" point)
     (try
       (let [latlng   (str (:lat point) "," (:lng point))
@@ -106,7 +98,7 @@
             status   (:status response)
             body     (:body response)]
         (if (= 200 status)
-          (parse-result (first (get body "results")))
+          (support/parse-response :google parse-result (first-result body))
           (do
             (log/warn "Google reverse-geocode non-200 response" {:status status})
             nil)))
