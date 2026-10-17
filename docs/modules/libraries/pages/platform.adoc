@@ -122,8 +122,10 @@ SQLite, PostgreSQL and MySQL alike: `wagoe.platform.database` throws it, so ever
 generated repository gets it. `details` names the constraint and the key's
 columns: `field` for one, `fields` for several. Nothing else of the driver's
 text is sent. Where the driver does not name the columns (MySQL, or PostgreSQL
-with `lc_messages` other than English) they are read from the catalog; a key on
-an expression names none.
+with `lc_messages` other than English) they are read from the catalog, once per
+key; a key on an expression names none. On PostgreSQL a refusal in a transaction
+reads them on a separate connection, outside the pool; if none opens within a
+second, it names no columns.
 
 [source,json]
 ----

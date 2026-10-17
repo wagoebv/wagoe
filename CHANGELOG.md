@@ -132,6 +132,10 @@ for what is public API, what is internal, and how deprecations are announced.
   platform operation and user auth metrics reach the active provider.
 - **Sentry ignored its filter, `:sample-rate`, `:enabled` and runtime config changes** (BOU-454). All now apply per
   event; `:filtering` and `add-filter-rule!` drop or sample events. See the observability guide.
+- **Navigation linked Audit, Profile and Login with the user web UI off, and a tenant admin's dashboard to Audit's
+  403** (BOU-724). Layouts now link only to mounted pages the user may open: `wagoe.platform.core.http.pages/mounted?`.
+- **On non-English PostgreSQL, a refused key in a transaction could wait 30 s for a second connection** (BOU-725). Key
+  columns are now cached and the lookup waits at most 1 s.
 - **A typo'd job type in `:wagoe/jobs :recurring` enqueued jobs nothing ran, silently** (BOU-700). The ticker now
   warns, naming the type and the known handlers.
 - **A refused key's field could be read from the value sent, and none was named on non-English PostgreSQL or MySQL 5.7
@@ -140,6 +144,8 @@ for what is public API, what is internal, and how deprecations are announced.
   63 bytes. Such slugs are now a validation error, and the admin no longer edits a slug.
 - **A typed 4xx reached the error tracker and marked its trace span errored** (BOU-714). Only 5xx and untyped errors
   do now; service operations report their 5xx, which they never did. Nothing to change.
+- **iCal times in US zones were an hour off for a week in some years, e.g. 2027-03-07..14** (BOU-723). Import and
+  export now use the JVM's tz rules; Windows TZIDs import as their IANA zone. Re-import affected feeds.
 - **iCal export wrote zones ical4j lacks (America/Coyhaique) in UTC, and each zone's full history** (BOU-720).
   VTIMEZONEs now come from the JVM's tz rules, trimmed to the years the feed's events cover.
 - **Admin dashboard linked to Groups and Audit with the user web UI switched off** (BOU-713). It now shows a card only
