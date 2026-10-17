@@ -1,15 +1,15 @@
 (ns wagoe.config.secrets
   "The `#secret` Aero reader and the sources it resolves through.
 
-     #secret \"DB_PASSWORD\"            ; the default source, :env unless configured
-     #secret [:file \"db-password\"]    ; a named source
-     #or [#secret \"DB_PASSWORD\" \"dev\"] ; a default, for dev
+     #secret \"DB_PASSWORD\"                         ; the default source, :env unless configured
+     #secret [:file \"db-password\"]                 ; a named source
+     #secret {:name \"DB_PASSWORD\" :default \"dev\"} ; a default, for dev
 
    A source is anything implementing `ISecretSource`. `:env` and `:file` are
-   built in; pass more to `wagoe.config/load-config` under `:secret-sources`.
-   A secret no source has fails the read, naming the secret and never a value."
-  (:require [aero.alpha.core :as aero-alpha]
-            [aero.core :as aero]
+   built in; declare more under `:secret-sources` in the config file, or pass
+   them to `wagoe.config/load-config`. A secret no source has fails the read,
+   naming the secret and never a value."
+  (:require [aero.core :as aero]
             [clojure.java.io :as io]
             [clojure.set :as set]
             [clojure.string :as str]
@@ -41,44 +41,20 @@
 ;; secret under a key no name pattern catches is still a secret.
 (defonce ^:private resolved (atom {}))
 
-(def ^:private ^:dynamic *optional?*
-  "True inside #or, where a missing secret is nil so the next value is tried."
-  false)
-
-;; The wrapper carries Aero's original, so a reload — including tools.namespace's
-;; remove-ns, which defonce does not survive — never wraps the wrapper.
-(def ^:private aero-or
-  (let [m (get-method aero-alpha/eval-tagged-literal 'or)]
-    (::original (meta m) m)))
-
-(declare resolve-secret)
-
-(defn- last-secret
-  "The form of the #secret ending an #or, when one does: nothing follows it to
-   fall back to, so missing it is an error again."
-  [tl]
-  (let [form (:form tl)
-        end  (when (sequential? form) (last form))]
-    (when (and (tagged-literal? end) (= 'secret (:tag end)))
-      (:form end))))
-
-(.addMethod ^clojure.lang.MultiFn aero-alpha/eval-tagged-literal 'or
-            (with-meta (fn [tl opts env ks]
-                         (let [result (binding [*optional?* true]
-                                        (aero-or tl opts env ks))]
-                           (when-let [form (and (nil? (:aero.core/value result)) (last-secret tl))]
-                             (resolve-secret opts form))
-                           result))
-              {::original aero-or}))
-
 (defn- secret-ref
-  "[source-key name] from a #secret form."
+  "{:source :name}, and :default when the form gives one, from a #secret form.
+   wagoe.tools.doctor/secret-refs mirrors this; change both."
   [form default-source]
-  (let [[source-key secret-name] (if (vector? form) form [default-source form])]
-    (if (and (keyword? source-key) (or (string? secret-name) (symbol? secret-name))
-             (or (not (vector? form)) (= 2 (count form))))
-      [source-key (str secret-name)]
-      (throw (ex-info (str "#secret takes a name or [:source \"name\"], not " (pr-str form))
+  (let [ref (cond (map? form)    (update form :source #(or % default-source))
+                  (vector? form) (zipmap [:source :name] form)
+                  :else          {:source default-source :name form})]
+    (if (and (every? #{:name :source :default} (keys ref))
+             (or (not (vector? form)) (= 2 (count form)))
+             (keyword? (:source ref))
+             (or (string? (:name ref)) (symbol? (:name ref))))
+      (update ref :name str)
+      (throw (ex-info (str "#secret takes a name, [:source \"name\"] or {:name \"name\" :default ...}, not "
+                           (pr-str form))
                       {:type :configuration-error :form form})))))
 
 (defn- label [source-key secret-name]
@@ -88,9 +64,10 @@
   "The value of the secret `form` names. `opts` are Aero's: `:secret-sources`
    adds or replaces sources, `:default-secret-source` picks the one a bare name
    reads (default `:env`), and `::optional?` makes a missing secret or source
-   nil, for a reader that only wants the rest of the file."
+   nil, for a reader that only wants the rest of the file. A form's `:default`
+   is returned when the secret is missing or blank."
   [{:keys [secret-sources default-secret-source] :or {default-secret-source :env} :as opts} form]
-  (let [[source-key secret-name] (secret-ref form default-secret-source)
+  (let [{source-key :source secret-name :name :as ref} (secret-ref form default-secret-source)
         sources (merge (default-sources) secret-sources)
         source  (or (get sources source-key)
                     (when-not (::optional? opts)
@@ -108,12 +85,15 @@
       (do (swap! resolved assoc (label source-key secret-name) value)
           value)
 
-      (or *optional?* (::optional? opts)) nil
+      (contains? ref :default) (:default ref)
+
+      (::optional? opts) nil
 
       :else
       (throw (ex-info (str "Secret not found: " secret-name " (source " source-key
                            (when-let [dir (:dir source)] (str ", in " dir))
-                           "). Provide it, or give it a default with #or.")
+                           "). Provide it, or give it a default: #secret {:name \"" secret-name
+                           "\" :default ...}; #or does not supply one.")
                       {:type :configuration-error :source source-key :secret secret-name})))))
 
 (defmethod aero/reader 'secret
