@@ -106,9 +106,7 @@
               (is (empty? (jobs/failed-jobs (:store js) 10)) "and it is not retried")))))))))
 
 (deftest ^:integration delivery-connects-to-the-address-its-check-approved
-  ;; A rebinding resolver: a new answer on every lookup.
-  (let [calls    (atom 0)
-        resolve  (fn [_] [(InetAddress/getByName (str "203.0.113." (swap! calls inc)))])
+  (let [[resolve calls] (support/rebinding-resolver)
         requests (atom [])
         recorder (reify ports/IWebhookTransport
                    (send-request! [_ req]

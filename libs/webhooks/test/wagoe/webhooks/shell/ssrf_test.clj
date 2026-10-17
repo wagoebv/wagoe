@@ -1,7 +1,8 @@
 (ns wagoe.webhooks.shell.ssrf-test
   (:require [clojure.test :refer [deftest is testing]]
             [wagoe.webhooks.shell.crypto :as crypto]
-            [wagoe.webhooks.shell.ssrf :as ssrf])
+            [wagoe.webhooks.shell.ssrf :as ssrf]
+            [wagoe.webhooks.support :as support])
   (:import (java.net InetAddress)))
 
 (defn- problem [url settings]
@@ -28,8 +29,7 @@
     (is (= :refused (:type (problem "http://10.0.0.1/x" {:allowed-hosts #{"127.0.0.1"}}))))))
 
 (deftest ^:unit the-checked-addresses-are-returned-from-one-lookup
-  (let [calls   (atom 0)
-        resolve (fn [_] [(InetAddress/getByName (str "203.0.113." (swap! calls inc)))])]
+  (let [[resolve calls] (support/rebinding-resolver)]
     (is (= ["203.0.113.1"]
            (map #(.getHostAddress ^InetAddress %)
                 (:addresses (ssrf/check-host "https://rebind.test/x" {} resolve)))))

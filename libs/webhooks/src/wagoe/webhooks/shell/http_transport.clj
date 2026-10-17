@@ -9,11 +9,12 @@
   (:require [wagoe.webhooks.ports :as ports])
   (:import (java.net InetAddress)
            (java.nio.charset StandardCharsets)
+           (java.util.concurrent Executors ScheduledExecutorService ScheduledFuture ThreadFactory TimeUnit)
            (javax.net.ssl SSLContext)
            (org.apache.http HttpResponse)
            (org.apache.http.client.config RequestConfig)
            (org.apache.http.client.methods HttpPost)
-           (org.apache.http.config RegistryBuilder)
+           (org.apache.http.config Lookup RegistryBuilder)
            (org.apache.http.conn DnsResolver)
            (org.apache.http.conn.socket PlainConnectionSocketFactory)
            (org.apache.http.conn.ssl SSLConnectionSocketFactory)
@@ -34,23 +35,20 @@
 (defn- client
   "A client for one request: its connection manager holds the pinned resolver,
    so no connection outlives the addresses it was made for."
-  ^CloseableHttpClient [^SSLContext ssl-context connect-timeout-ms addresses]
-  (let [sockets (-> (RegistryBuilder/create)
-                    (.register "http" (PlainConnectionSocketFactory/getSocketFactory))
-                    (.register "https" (if ssl-context
-                                         (SSLConnectionSocketFactory. ssl-context)
-                                         (SSLConnectionSocketFactory/getSocketFactory)))
-                    (.build))]
-    (-> (HttpClients/custom)
-        (.setConnectionManager (BasicHttpClientConnectionManager. sockets nil nil (pinned-resolver addresses)))
-        (.setDefaultRequestConfig (-> (RequestConfig/custom)
-                                      (.setConnectTimeout (int connect-timeout-ms))
-                                      (.build)))
-        (.disableRedirectHandling)
-        (.disableAutomaticRetries)
-        (.disableCookieManagement)
-        (.disableContentCompression)
-        (.build))))
+  ^CloseableHttpClient [^Lookup sockets ^RequestConfig request-config addresses]
+  (-> (HttpClients/custom)
+      (.setConnectionManager (BasicHttpClientConnectionManager. sockets nil nil (pinned-resolver addresses)))
+      (.setDefaultRequestConfig request-config)
+      (.disableRedirectHandling)
+      (.disableAutomaticRetries)
+      (.disableCookieManagement)
+      (.disableContentCompression)
+      (.build)))
+
+(defonce ^:private deadlines
+  (Executors/newSingleThreadScheduledExecutor
+   (reify ThreadFactory
+     (newThread [_ r] (doto (Thread. ^Runnable r "webhooks-deadline") (.setDaemon true))))))
 
 (defn- read-prefix
   "Up to `n` bytes of the response body as a string. The stream is left open:
@@ -63,18 +61,19 @@
          (catch Exception _ ""))
     ""))
 
-(defrecord HttpTransport [ssl-context timeout-ms connect-timeout-ms max-response-bytes]
+(defrecord HttpTransport [sockets request-config timeout-ms max-response-bytes]
   ports/IWebhookTransport
   (send-request! [_ {:keys [url headers body addresses]}]
     (let [start (System/nanoTime)
           post  (HttpPost. ^String url)
           ;; One deadline for headers and body: a receiver that trickles
           ;; either would otherwise hold the worker.
-          abort (future (Thread/sleep (long timeout-ms)) (.abort post))]
+          abort (.schedule ^ScheduledExecutorService deadlines ^Runnable #(.abort post)
+                           (long timeout-ms) TimeUnit/MILLISECONDS)]
       (doseq [[k v] headers] (.setHeader post ^String k ^String v))
       (.setEntity post (ByteArrayEntity. (.getBytes ^String body StandardCharsets/UTF_8)))
       (try
-        (with-open [c (client ssl-context connect-timeout-ms addresses)]
+        (with-open [c (client sockets request-config addresses)]
           (let [resp (.execute c post)]
             {:status     (.getStatusCode (.getStatusLine resp))
              :body       (read-prefix resp max-response-bytes)
@@ -87,10 +86,19 @@
                         :message (str (.getSimpleName (class e)) ": " (.getMessage e))}
            :latency-ms (elapsed-ms start)})
         (finally
-          (future-cancel abort))))))
+          (.cancel ^ScheduledFuture abort false))))))
 
 (defn create-transport
   "Settings as `service/defaults` gives them, plus an optional `:ssl-context`
    for the trust store (the JVM default otherwise)."
-  [{:keys [ssl-context timeout-ms connect-timeout-ms max-response-bytes]}]
-  (->HttpTransport ssl-context timeout-ms connect-timeout-ms max-response-bytes))
+  [{:keys [^SSLContext ssl-context timeout-ms connect-timeout-ms max-response-bytes]}]
+  ;; Built once: the default SSL factory loads the trust store each time.
+  (->HttpTransport (-> (RegistryBuilder/create)
+                       (.register "http" (PlainConnectionSocketFactory/getSocketFactory))
+                       (.register "https" (if ssl-context
+                                            (SSLConnectionSocketFactory. ssl-context)
+                                            (SSLConnectionSocketFactory/getSocketFactory)))
+                       (.build))
+                   (-> (RequestConfig/custom) (.setConnectTimeout (int connect-timeout-ms)) (.build))
+                   timeout-ms
+                   max-response-bytes))

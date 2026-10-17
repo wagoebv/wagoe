@@ -8,17 +8,18 @@
             [wagoe.webhooks.shell.persistence :as persistence]
             [wagoe.webhooks.shell.service :as service])
   (:import (com.sun.net.httpserver HttpExchange HttpHandler HttpServer)
-           (java.net InetSocketAddress)
+           (java.net InetAddress InetSocketAddress)
            (java.nio.charset StandardCharsets)))
 
 (def encryption-key "test-encryption-key-at-least-32-characters")
 
 (defn start-receiver!
   "An HTTP server on 127.0.0.1 answering with `(respond request)` —
-   `{:status n :body s :headers {}}` — and recording each request."
-  [respond]
+   `{:status n :body s :headers {}}` — and recording each request. `server`,
+   unstarted, replaces the plain HTTP one (an HttpsServer)."
+  [respond & [server]]
   (let [seen   (atom [])
-        server (HttpServer/create (InetSocketAddress. "127.0.0.1" 0) 0)]
+        ^HttpServer server (or server (HttpServer/create (InetSocketAddress. "127.0.0.1" 0) 0))]
     (.createContext server "/"
                     (reify HttpHandler
                       (handle [_ ex]
@@ -41,9 +42,23 @@
 
 (defn stop-receiver! [{:keys [^HttpServer server]}] (.stop server 0))
 
-(defn with-receiver [respond f]
-  (let [r (start-receiver! respond)]
-    (try (f r) (finally (stop-receiver! r)))))
+(defn with-receiver
+  ([respond f] (with-receiver respond nil f))
+  ([respond server f]
+   (let [r (start-receiver! respond server)]
+     (try (f r) (finally (stop-receiver! r))))))
+
+(defn transport
+  "The HTTP transport with a 2 s timeout; `settings` override."
+  [& [settings]]
+  (http-transport/create-transport (merge service/defaults {:timeout-ms 2000} settings)))
+
+(defn rebinding-resolver
+  "`[resolve calls]`: a resolver giving a new public address on every lookup,
+   and the atom counting them."
+  []
+  (let [calls (atom 0)]
+    [(fn [_] [(InetAddress/getByName (str "203.0.113." (swap! calls inc)))]) calls]))
 
 (defn job-system
   "In-memory queue, store and idempotency store."
@@ -56,7 +71,7 @@
    test defaults, which allow 127.0.0.1 over http; `deps` override its deps."
   [ctx js settings & [deps]]
   (service/create-service (merge {:store       (persistence/create-store ctx)
-                                  :transport   (http-transport/create-transport (assoc service/defaults :timeout-ms 2000))
+                                  :transport   (transport)
                                   :job-queue   (:queue js)
                                   :idempotency (:idempotency js)}
                                  deps)

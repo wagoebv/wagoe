@@ -2,10 +2,8 @@
   (:require [clojure.java.io :as io]
             [clojure.test :refer [deftest is testing]]
             [wagoe.webhooks.ports :as ports]
-            [wagoe.webhooks.shell.http-transport :as http-transport]
-            [wagoe.webhooks.shell.service :as service]
             [wagoe.webhooks.support :as support])
-  (:import (com.sun.net.httpserver HttpExchange HttpHandler HttpsConfigurator HttpsParameters HttpsServer)
+  (:import (com.sun.net.httpserver HttpServer HttpsConfigurator HttpsParameters HttpsServer)
            (java.io File)
            (java.net InetAddress InetSocketAddress)
            (java.nio.file Files)
@@ -16,9 +14,6 @@
 
 (def ^:private loopback (InetAddress/getByName "127.0.0.1"))
 
-(defn- transport [& [settings]]
-  (http-transport/create-transport (merge service/defaults {:timeout-ms 2000} settings)))
-
 (defn- post! [t url]
   (ports/send-request! t {:url url :headers {"Content-Type" "application/json"} :body "{}"
                           :addresses [loopback]}))
@@ -27,8 +22,8 @@
   (support/with-receiver (constantly {:status 200 :body "ok"})
     (fn [{:keys [server seen]}]
       ;; rebind.test does not resolve: only the pinned address can reach it.
-      (let [port (.getPort (.getAddress ^com.sun.net.httpserver.HttpServer server))
-            resp (post! (transport) (str "http://rebind.test:" port "/hook"))]
+      (let [port (.getPort (.getAddress ^HttpServer server))
+            resp (post! (support/transport) (str "http://rebind.test:" port "/hook"))]
         (is (= 200 (:status resp)))
         (is (= (str "rebind.test:" port) (get-in (first @seen) [:headers "host"]))
             "the Host header names the URL's host, not the address")))))
@@ -36,7 +31,7 @@
 (deftest ^:integration a-slow-receiver-is-cut-off-at-the-timeout
   (support/with-receiver (fn [_] (Thread/sleep 1500) {:status 200})
     (fn [{:keys [url]}]
-      (let [resp (ports/send-request! (transport {:timeout-ms 200}) {:url url :headers {} :body "{}"})]
+      (let [resp (ports/send-request! (support/transport {:timeout-ms 200}) {:url url :headers {} :body "{}"})]
         (is (= :webhooks/no-response (get-in resp [:error :type])))
         (is (< (:latency-ms resp) 1000))))))
 
@@ -72,41 +67,31 @@
                 (.init trust))]
     (doto (SSLContext/getInstance "TLS") (.init nil (.getTrustManagers tmf) nil))))
 
-(defn- start-https!
-  "An HTTPS server on 127.0.0.1 that records the SNI names it is sent."
+(defn- https-server
+  "An unstarted HTTPS server on 127.0.0.1 that records the SNI names it is sent."
   [ks sni]
-  (let [server (HttpsServer/create (InetSocketAddress. "127.0.0.1" 0) 0)
-        ctx    (server-context ks)]
-    (.setHttpsConfigurator
-     server
-     (proxy [HttpsConfigurator] [ctx]
-       (configure [^HttpsParameters params]
-         (let [p (.getDefaultSSLParameters ctx)]
-           (.setSNIMatchers p [(proxy [SNIMatcher] [0]
-                                 (matches [name]
-                                   (swap! sni conj (.getAsciiName ^SNIHostName name))
-                                   true))])
-           (.setSSLParameters params p)))))
-    (.createContext server "/" (reify HttpHandler
-                                 (handle [_ ex]
-                                   (let [^HttpExchange ex ex]
-                                     (.readAllBytes (.getRequestBody ex))
-                                     (.sendResponseHeaders ex 204 -1)
-                                     (.close ex)))))
-    (.start server)
-    server))
+  (let [ctx (server-context ks)]
+    (doto (HttpsServer/create (InetSocketAddress. "127.0.0.1" 0) 0)
+      (.setHttpsConfigurator
+       (proxy [HttpsConfigurator] [ctx]
+         (configure [^HttpsParameters params]
+           (let [p (.getDefaultSSLParameters ctx)]
+             (.setSNIMatchers p [(proxy [SNIMatcher] [0]
+                                   (matches [name]
+                                     (swap! sni conj (.getAsciiName ^SNIHostName name))
+                                     true))])
+             (.setSSLParameters params p))))))))
 
 (deftest ^:integration tls-checks-the-urls-host-on-a-pinned-request
-  (let [ks     (key-store)
-        sni    (atom [])
-        server (start-https! ks sni)
-        port   (.getPort (.getAddress server))
-        t      (transport {:ssl-context (client-context ks)})]
-    (try
-      (testing "SNI and the certificate check use the name, not 127.0.0.1"
-        (is (= 204 (:status (post! t (str "https://rebind.test:" port "/hook")))))
-        (is (= ["rebind.test"] @sni)))
-      (testing "a certificate for another name is refused"
-        (is (re-find #"SSLPeerUnverifiedException|SSLHandshakeException"
-                     (str (get-in (post! t (str "https://other.test:" port "/hook")) [:error :message])))))
-      (finally (.stop server 0)))))
+  (let [ks  (key-store)
+        sni (atom [])
+        t   (support/transport {:ssl-context (client-context ks)})]
+    (support/with-receiver (constantly {:status 204}) (https-server ks sni)
+      (fn [{:keys [^HttpsServer server]}]
+        (let [port (.getPort (.getAddress server))]
+          (testing "SNI and the certificate check use the name, not 127.0.0.1"
+            (is (= 204 (:status (post! t (str "https://rebind.test:" port "/hook")))))
+            (is (= ["rebind.test"] @sni)))
+          (testing "a certificate for another name is refused"
+            (is (re-find #"SSLPeerUnverifiedException|SSLHandshakeException"
+                         (str (get-in (post! t (str "https://other.test:" port "/hook")) [:error :message]))))))))))
