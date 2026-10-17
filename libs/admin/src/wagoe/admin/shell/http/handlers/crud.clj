@@ -130,7 +130,9 @@
   "`nested` with a refusal from the service put where the form shows it: a
    row the database refused, or a has-many given too few rows."
   [nested e]
-  (let [{:keys [child errors too-few too-many]} (ex-data e)]
+  (let [{:keys [child too-few too-many]} (ex-data e)
+        ;; A child's key over several columns: those fields on its row (BOU-712).
+        errors (or (:errors (ex-data e)) (support/conflict-errors e))]
     (update nested :sections
             (fn [sections]
               (mapv (fn [{:keys [rel filled-indexes] :as section}]
@@ -234,13 +236,18 @@
             (let [;; A constraint the database enforced, reported on its field
                   ;; by the service (BOU-494).
                   refused? (= :validation-error (:type (ex-data e)))
+                  ;; A write refused by a rule or a key over several columns:
+                  ;; 409, as on update (BOU-712).
+                  conflict? (support/refusal? e)
                   ;; A refused child row carries its errors on the row.
-                  field-errors (when refused?
+                  field-errors (when (or refused? conflict?)
                                  (log-rejected! entity-name entity-config
-                                                (if (:child (ex-data e)) {} (:errors (ex-data e)))))
-                  _ (when-not refused?
+                                                (cond (:child (ex-data e)) {}
+                                                      refused?             (:errors (ex-data e))
+                                                      :else                (support/conflict-errors e))))
+                  _ (when-not (or refused? conflict?)
                       (log/error e "Failed to create entity" {:entity entity-name}))
-                  nested (cond-> nested (and nested refused?) (nested-refusal e))
+                  nested (cond-> nested (and nested (or refused? conflict?)) (nested-refusal e))
                   entities (ports/list-available-entities schema-provider)
                   entity-configs (into {} (map (fn [e] [e (ports/get-entity-config schema-provider e)])) entities)
                   permissions (permissions/get-entity-permissions user entity-name entity-config)]
@@ -258,10 +265,13 @@
                                                ;; client-safe messages; anything else is
                                                ;; internal — logged above, generic flash
                                                ;; (BOU-182: never echo raw exception text).
-                                                :message (or (client-safe-error-message e)
-                                                             [:t :admin/flash-create-failed
-                                                              {:label (introspection/singular-label entity-config entity-name)}])}}))
-                refused? (assoc :status 422)))))
+                                                :message (if conflict?
+                                                           (support/refusal-message request e)
+                                                           (or (client-safe-error-message e)
+                                                               [:t :admin/flash-create-failed
+                                                                {:label (introspection/singular-label entity-config entity-name)}]))}}))
+                refused?  (assoc :status 422)
+                conflict? (assoc :status 409)))))
 
         ; Validation errors - re-render form
         :else
@@ -373,7 +383,8 @@
         ; Validation errors - re-render form with flash inside page content
         (let [permissions (permissions/get-entity-permissions user entity-name entity-config)
               errors      (log-rejected! entity-name entity-config
-                                         (merge (:errors validation-result) parse-errors rejected))
+                                         (merge (:errors validation-result) parse-errors rejected
+                                                (some-> conflict support/conflict-errors)))
               ctx         (support/build-entity-detail-opts admin-service schema-provider config entity-name entity-config merged request)]
 
           (-> (support/html-response request
