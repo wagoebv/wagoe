@@ -259,6 +259,7 @@
                       (update-user [_ user] user)
                       (soft-delete-user [_ _] true)
                       (hard-delete-user [_ _] true)
+                      (increment-failed-login-count [_ _ _] nil)
                       (with-admins-locked [_ f] (f)))
           ctx {:system {:user-repository user-repo}
                :result {:effects [{:type :persist-user
@@ -277,6 +278,7 @@
                          (update-user [_ user] user)
                          (soft-delete-user [_ _] true)
                          (hard-delete-user [_ _] true)
+                         (increment-failed-login-count [_ _ _] nil)
                          (with-admins-locked [_ f] (f)))
           ctx {:system {:user-repository failing-repo}
                :result {:effects [{:type :persist-user

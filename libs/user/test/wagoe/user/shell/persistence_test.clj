@@ -66,7 +66,8 @@
                    :ip-address "127.0.0.1"})]
       (is (= (str session-id) (:id result)))
       (is (= (str user-id) (:user_id result)))
-      (is (= "token-123" (:session_token result)))
+      (is (= (sut/session-token-hash "token-123") (:session_token result))
+          "the hash is stored, never the token (BOU-696)")
       (is (= expires-at (:expires_at result)))
       (is (not (contains? result :remember-me)))
       (is (not (contains? result :device-info)))))

@@ -76,15 +76,6 @@
      Returns:
        true if updated, false if user not found")
 
-  (increment-failed-login [this user-id]
-    "Increment failed login count for user.
-     
-     Args:
-       user-id: UUID of the user
-     
-     Returns:
-       true if updated")
-
   (reset-failed-login [this user-id]
     "Reset failed login count to 0.
      
@@ -300,21 +291,6 @@
                     :where [:and
                             [:= :id (type-conversion/uuid->string user-id)]
                             [:is :deleted_at nil]]}
-             affected-rows (db/execute-update! ctx query)]
-         (> affected-rows 0)))
-     {:db-ctx ctx}))
-
-  (increment-failed-login [_ user-id]
-    (persistence-interceptors/execute-persistence-operation
-     :increment-failed-login
-     {:user-id user-id}
-     (fn [{:keys [params]}]
-       (let [user-id (:user-id params)
-             now (java.time.Instant/now)
-             query {:update :auth_users
-                    :set {:failed_login_count [:+ :failed_login_count 1]
-                          :updated_at (type-conversion/instant->string now)}
-                    :where [:= :id (type-conversion/uuid->string user-id)]}
              affected-rows (db/execute-update! ctx query)]
          (> affected-rows 0)))
      {:db-ctx ctx}))

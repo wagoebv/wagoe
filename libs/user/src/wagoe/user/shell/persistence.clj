@@ -26,12 +26,25 @@
             [wagoe.user.ports :as ports]
             [wagoe.user.schema :as user-schema]
             [wagoe.platform.shell.persistence-interceptors :as persistence-interceptors]
+            [buddy.core.codecs :as codecs]
+            [buddy.core.hash :as hash]
             [cheshire.core]
             [clojure.set :as set]
             [clojure.string :as str]
             [clojure.walk]
             [clojure.tools.logging :as log])
   (:import [java.util UUID]))
+
+;; =============================================================================
+;; Session token hashing
+;; =============================================================================
+
+(defn session-token-hash
+  "What user_sessions stores for `token`: its SHA-256, in hex. The token is 256
+   random bits, so an unsalted fast hash is enough, and a read of the table
+   yields nothing a client can present (BOU-696)."
+  [token]
+  (some-> token hash/sha256 codecs/bytes->hex))
 
 ;; =============================================================================
 ;; Schema Initialization
@@ -53,6 +66,20 @@
                           "    mfa_backup_codes = NULL, mfa_backup_codes_used = NULL, "
                           "    mfa_enabled_at = NULL "
                           "WHERE mfa_secret IS NOT NULL AND mfa_secret NOT LIKE 'enc:v1:%'"))))
+
+(defn- hash-plaintext-session-tokens!
+  "Replace each session token stored in plaintext with its hash, so a session
+   opened before BOU-696 still validates. A hash is 64 characters and an issued
+   token 43, so a row is only ever hashed once; the guard on the old value keeps
+   two booting replicas from hashing the same row twice."
+  [ctx]
+  (db/with-transaction [tx ctx]
+    (doseq [{:keys [id session-token]} (db/execute-query! tx {:select [:id :session_token]
+                                                               :from   [:user_sessions]
+                                                               :where  [:<> [:length :session_token] 64]})]
+      (db/execute-update! tx {:update :user_sessions
+                              :set    {:session_token (session-token-hash session-token)}
+                              :where  [:and [:= :id id] [:= :session_token session-token]]}))))
 
 (def ^:private audit-action-check "chk_user_audit_log_action")
 
@@ -173,6 +200,7 @@
   (db/create-index-if-not-exists! ctx "uk_user_identities_issuer_subject" :user_identities
                                   [:issuer :subject] {:unique? true})
   (widen-audit-action-check! ctx)
+  (hash-plaintext-session-tokens! ctx)
 
   ;; Retire any MFA rows still holding a pre-encryption plaintext secret. After
   ;; the tables, which add the mfa columns an older auth_users lacks.
@@ -223,12 +251,19 @@
           (update :mfa-backup-codes #(when % (vec (cheshire.core/parse-string % true))))
           (update :mfa-backup-codes-used #(when % (vec (cheshire.core/parse-string % true))))))))
 
+(defn- update-present
+  "`update` only when `m` has `k`: a key a partial update leaves out must not
+   reach the SET clause as NULL (BOU-665)."
+  [m k f]
+  (if (contains? m k) (update m k f) m))
+
 (defn- session-entity->db
   "Transform session domain entity to database format."
   [session-entity]
   (-> session-entity
       (dissoc :device-info) ;; Remove nested device-info before DB conversion
       (dissoc :remember-me) ;; Remove remember-me flag (used for expiry calculation only)
+      (update-present :session-token session-token-hash)
       (update :id type-conversion/uuid->string)
       (update :user-id type-conversion/uuid->string)
       ;; Convert kebab-case to snake_case
@@ -260,7 +295,10 @@
         (update :expires-at type-conversion/string->instant)
         (update :created-at type-conversion/string->instant)
         (update :last-accessed-at type-conversion/string->instant)
-        (update :revoked-at type-conversion/string->instant))))
+        (update :revoked-at type-conversion/string->instant)
+        ;; The stored hash is no use to a caller, and update-session must not
+        ;; write it back hashed again.
+        (dissoc :session-token))))
 
 (defn- audit-log-entity->db
   "Transform audit log domain entity to database format."
@@ -332,12 +370,6 @@
           ;; Parse JSON fields - handles both TEXT and JSONB/JSON types
           (update :changes parse-json-field)
           (update :metadata parse-json-field)))))
-
-(defn- update-present
-  "`update` only when `m` has `k`: a key a partial update leaves out must not
-   reach the SET clause as NULL (BOU-665)."
-  [m k f]
-  (if (contains? m k) (update m k f) m))
 
 ;; =============================================================================
 ;; User Repository Implementation
@@ -775,6 +807,33 @@
          user-entity))
      {:db-ctx ctx}))
 
+  (increment-failed-login-count [_ user-id lockout]
+    (persistence-interceptors/execute-persistence-operation
+     :increment-failed-login-count
+     {:user-id user-id :lockout lockout}
+     (fn [{:keys [params]}]
+       ;; The UPDATE locks the row until commit, so a parallel failure waits and
+       ;; adds to this one, and the read in the same transaction sees this
+       ;; write. No RETURNING: MySQL has none. lockout_until is assigned first:
+       ;; MySQL evaluates SET left to right, so later terms see earlier writes.
+       (let [id   (type-conversion/uuid->string (:user-id params))
+             next [:+ [:coalesce :failed_login_count 0] 1]
+             {:keys [max-attempts until]} (:lockout params)]
+         (db/with-transaction [tx ctx]
+           (when (pos? (db/execute-update!
+                        tx {:update :auth_users
+                            :set    (array-map
+                                     :lockout_until      [:case [:>= next max-attempts]
+                                                          (type-conversion/instant->string until)
+                                                          :else :lockout_until]
+                                     :failed_login_count next
+                                     :updated_at         (type-conversion/instant->string (java.time.Instant/now)))
+                            :where  [:= :id id]}))
+             (:failed-login-count (db/execute-one! tx {:select [:failed_login_count]
+                                                       :from   [:auth_users]
+                                                       :where  [:= :id id]}))))))
+     {:db-ctx ctx}))
+
   (with-admins-locked [_ f]
     ;; A no-op write rather than SELECT … FOR UPDATE: it locks the rows on
     ;; PostgreSQL, MySQL and H2 alike, and takes SQLite's write lock. A second
@@ -874,7 +933,7 @@
              query {:select [:*]
                     :from [:user_sessions]
                     :where [:and
-                            [:= :session_token session-token]
+                            [:= :session_token (session-token-hash session-token)]
                             [:> :expires_at (type-conversion/instant->string now)]
                             [:is :revoked_at nil]]}
              result (db/execute-one! ctx query)]
@@ -911,10 +970,23 @@
              query {:update :user_sessions
                     :set {:revoked_at (type-conversion/instant->string now)}
                     :where [:and
-                            [:= :session_token session-token]
+                            [:= :session_token (session-token-hash session-token)]
                             [:is :revoked_at nil]]}
              affected-rows (db/execute-update! ctx query)]
          (> affected-rows 0)))
+     {:db-ctx ctx}))
+
+  (invalidate-user-session [_ user-id session-id]
+    (persistence-interceptors/execute-persistence-operation
+     :invalidate-user-session
+     {:user-id user-id :session-id session-id}
+     (fn [{:keys [params]}]
+       (pos? (db/execute-update! ctx {:update :user_sessions
+                                      :set    {:revoked_at (type-conversion/instant->string (java.time.Instant/now))}
+                                      :where  [:and
+                                               [:= :id (type-conversion/uuid->string (:session-id params))]
+                                               [:= :user_id (type-conversion/uuid->string (:user-id params))]
+                                               [:is :revoked_at nil]]})))
      {:db-ctx ctx}))
 
   (invalidate-all-user-sessions [_ user-id]

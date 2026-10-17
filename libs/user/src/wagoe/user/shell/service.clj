@@ -242,6 +242,18 @@
 ;; Database-Agnostic User Service (I/O Shell Layer)
 ;; =============================================================================
 
+(defn- audit-logout!
+  "Audit the end of `session`, under the IP and user agent it was opened from."
+  [user-repository audit-repository session]
+  (let [user-id (or (:user-id session) (:user_id session))]
+    (when-let [user (when user-id (.find-user-by-id user-repository user-id))]
+      (.create-audit-log audit-repository
+                         (audit-core/logout-audit-entry
+                          (:id user)
+                          (:email user)
+                          (or (:ip-address session) (:ip_address session))
+                          (or (:user-agent session) (:user_agent session)))))))
+
 (defrecord UserService [user-repository session-repository audit-repository validation-config auth-service]
 
   ports/IUserService
@@ -515,24 +527,9 @@
        (let [session-token (:session-token params)]
          ;; 1. Find and invalidate session using impure shell persistence layer
          (if-let [session (.find-session-by-token session-repository session-token)]
-           (let [_invalidated-session (.invalidate-session session-repository session-token)
-                 session-user-id (or (:user-id session) (:user_id session))
-                 session-ip-address (or (:ip-address session) (:ip_address session))
-                 session-user-agent (or (:user-agent session) (:user_agent session))
-                  ;; Get user info for audit log
-                 user (when session-user-id
-                        (.find-user-by-id user-repository session-user-id))]
-
-             ;; 2. Create audit log entry
-             (when user
-               (let [audit-entry (audit-core/logout-audit-entry
-                                  (:id user)
-                                  (:email user)
-                                  session-ip-address  ; Use IP from session
-                                  session-user-agent)] ; Use user-agent from session
-                 (.create-audit-log audit-repository audit-entry)))
-
-             ;; Return result
+           (do
+             (.invalidate-session session-repository session-token)
+             (audit-logout! user-repository audit-repository session)
              {:invalidated true :session-id (:id session)})
 
            ;; Session not found
@@ -729,6 +726,22 @@
              sessions (.find-sessions-by-user session-repository user-id)]
          ;; Return sessions (no sensitive data to filter)
          sessions))
+     {:system {:user-repository user-repository
+               :session-repository session-repository
+               :auth-service auth-service}}))
+
+  (revoke-user-session [_ user-id session-id]
+    (service-interceptors/execute-service-operation
+     :revoke-user-session
+     {:user-id user-id :session-id session-id}
+     (fn [{:keys [params]}]
+       (let [{:keys [user-id session-id]} params]
+         (if (.invalidate-user-session session-repository user-id session-id)
+           ;; No IP or agent: those of the device would misattribute who
+           ;; revoked it.
+           (do (audit-logout! user-repository audit-repository {:user-id user-id})
+               {:invalidated true})
+           {:invalidated false})))
      {:system {:user-repository user-repository
                :session-repository session-repository
                :auth-service auth-service}}))

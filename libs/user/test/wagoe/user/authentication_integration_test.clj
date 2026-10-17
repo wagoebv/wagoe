@@ -87,21 +87,8 @@
           (is (not (:allowed? result)))
           (is (= "Invalid credentials" (:reason result)))))))
 
-  (testing "calculate-failed-login-consequences"
-    (let [current-time (Instant/now)]
-
-      (testing "increments failed login count"
-        (let [user-with-failures (assoc test-user :failed-login-count 2)
-              result (auth-core/calculate-failed-login-consequences user-with-failures test-login-config current-time)]
-          (is (= 3 (:failed-login-count result)))
-          (is (:should-alert? result))))
-
-      (testing "locks account after max attempts"
-        (let [user-with-max-failures (assoc test-user :failed-login-count 4)
-              result (auth-core/calculate-failed-login-consequences user-with-max-failures test-login-config current-time)]
-          (is (= 5 (:failed-login-count result)))
-          (is (:lockout-until result))
-          (is (:should-alert? result))))))
+  (testing "failed-login-lockout"
+    (is (= 5 (:max-attempts (auth-core/failed-login-lockout test-login-config (Instant/now))))))
 
   (testing "prepare-successful-login-updates"
     (let [current-time (Instant/now)

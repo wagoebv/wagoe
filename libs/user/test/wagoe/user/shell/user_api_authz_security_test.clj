@@ -90,7 +90,10 @@
     (is (denied? (web-guard "/users/:id/sessions" :get :require-self-or-admin) cross-user-ctx)))
   (testing "POST /users/:id/sessions/revoke-all is self-or-admin (cannot force-logout another user)"
     (is (web-mounted? "/users/:id/sessions/revoke-all" :post :require-self-or-admin))
-    (is (denied? (web-guard "/users/:id/sessions/revoke-all" :post :require-self-or-admin) cross-user-ctx))))
+    (is (denied? (web-guard "/users/:id/sessions/revoke-all" :post :require-self-or-admin) cross-user-ctx)))
+  (testing "POST /users/:id/sessions/:session-id/revoke is self-or-admin"
+    (is (web-mounted? "/users/:id/sessions/:session-id/revoke" :post :require-self-or-admin))
+    (is (denied? (web-guard "/users/:id/sessions/:session-id/revoke" :post :require-self-or-admin) cross-user-ctx))))
 
 ;; =============================================================================
 ;; Web user-management routes (re-mounted in BOU-197) — same guard model

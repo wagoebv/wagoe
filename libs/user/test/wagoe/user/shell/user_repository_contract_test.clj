@@ -188,7 +188,7 @@
           fetched (ports/find-session-by-token @session-repo token)]
       (is (some? fetched) "active session found by token")
       (is (= uid (:user-id fetched)) "user-id survives round-trip")
-      (is (= token (:session-token fetched)))
+      (is (nil? (:session-token fetched)) "reads hand back no token (BOU-696)")
       (is (= "203.0.113.7" (:ip-address fetched)))
       (is (nil? (:last-accessed-at fetched))
           "find only reads; validate-session writes the access time (BOU-666)"))))
@@ -237,4 +237,4 @@
                              :expires-at (.plusSeconds (Instant/now) 3600)})
       (let [sessions (ports/find-sessions-by-user @session-repo uid)]
         (is (= 1 (count sessions)))
-        (is (= token (:session-token (first sessions))))))))
+        (is (nil? (:session-token (first sessions))) "no token in a listing (BOU-696)")))))

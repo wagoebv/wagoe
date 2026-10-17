@@ -47,6 +47,14 @@
     (let [user (assoc user-entity :updated-at (Instant/now))]
       (get (swap! state update (:id user) merge user) (:id user))))
 
+  (increment-failed-login-count [_ user-id {:keys [max-attempts until]}]
+    (when (get @state user-id)
+      (get-in (swap! state update user-id
+                     #(let [n (inc (or (:failed-login-count %) 0))]
+                        (cond-> (assoc % :failed-login-count n)
+                          (>= n max-attempts) (assoc :lockout-until until))))
+              [user-id :failed-login-count])))
+
   (soft-delete-user [_ user-id]
     (boolean (when (get @state user-id)
                (swap! state assoc-in [user-id :deleted-at] (Instant/now))
@@ -100,6 +108,12 @@
     (boolean (when-let [session (first (filter #(= token (:session-token %)) (vals @state)))]
                (swap! state assoc-in [(:id session) :revoked-at] (Instant/now))
                true)))
+
+  (invalidate-user-session [_ user-id session-id]
+    (let [s (get @state session-id)]
+      (boolean (when (and s (= user-id (:user-id s)) (nil? (:revoked-at s)))
+                 (swap! state assoc-in [session-id :revoked-at] (Instant/now))
+                 true))))
 
   (invalidate-all-user-sessions [_ user-id]
     (let [live (filter #(and (= user-id (:user-id %)) (nil? (:revoked-at %)))

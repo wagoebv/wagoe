@@ -1096,3 +1096,29 @@
      {:user {:id uid} :form-params {"date-format" "iso" "time-format" "24h" "language" "en"}})
     (is (= [#{:id :name} #{:id :date-format :time-format :language}]
            (map (comp set keys) @calls)))))
+
+(deftest ^:unit sessions-are-revoked-by-id
+  ;; The page posted each session's token, so it showed them; it names them by
+  ;; id now, and keep-current compared a key no session had (BOU-696).
+  (let [uid     (UUID/randomUUID)
+        current (UUID/randomUUID)
+        others  [(UUID/randomUUID) (UUID/randomUUID)]
+        revoked (atom [])
+        svc     (reify ports/IUserService
+                  (get-user-sessions [_ _] (mapv #(hash-map :id %) (cons current others)))
+                  (revoke-user-session [_ user-id session-id]
+                    (swap! revoked conj [user-id session-id])
+                    {:invalidated true}))]
+    (testing "revoke-all keeping the current session"
+      ((web-handlers/revoke-all-sessions-handler svc {})
+       {:path-params {:id (str uid)} :form-params {"keep-current" "true"} :session {:id current}})
+      (is (= (set (map #(vector uid %) others)) (set @revoked))))
+    (testing "one session, named in the path"
+      (reset! revoked [])
+      (let [resp ((web-handlers/revoke-session-handler svc {})
+                  {:path-params {:id (str uid) :session-id (str (first others))}})]
+        (is (= 302 (:status resp)))
+        (is (= [[uid (first others)]] @revoked))))
+    (testing "a malformed id is a 400"
+      (is (= 400 (:status ((web-handlers/revoke-session-handler svc {})
+                           {:path-params {:id (str uid) :session-id "nope"}})))))))

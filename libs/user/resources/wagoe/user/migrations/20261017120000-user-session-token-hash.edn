@@ -1,0 +1,5 @@
+;; Session tokens stored as their SHA-256 on a database that holds them in
+;; plaintext (BOU-696). The same idempotent definition: a row is hashed once.
+{:ns      wagoe.user.shell.user-tables
+ :up-fn   "up"
+ :down-fn "down"}

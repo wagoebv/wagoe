@@ -1146,13 +1146,13 @@
             user (user-ports/get-user-by-id user-service uuid)
             sessions (user-ports/get-user-sessions user-service uuid)
             _ (log/info "Sessions retrieved:" {:count (count sessions)})
-            current-token (get-in request [:cookies "session-token" :value])
+            current-session-id (get-in request [:session :id])
             opts {:user (:user request)
                   :current-time (current-time)
                   :zone-id (current-zone-id)
                   :flash (:flash request)}]
         (if user
-          (html-response request (user-ui/user-sessions-page user sessions current-token opts))
+          (html-response request (user-ui/user-sessions-page user sessions current-session-id opts))
           (html-response request
                          (layout/error-layout 404 "User Not Found" "The requested user could not be found.")
                          404)))
@@ -1163,36 +1163,30 @@
         (server-error request e "Error loading user sessions page")))))
 
 (defn revoke-session-handler
-  "Handler for revoking a single session.
+  "Handler for POST /web/users/:id/sessions/:session-id/revoke: ends one of the
+   user's sessions, forcing that device to sign in again. Sessions are named by
+   id; the page never sees a token (BOU-696).
 
-   Supports:
-   - POST /web/sessions/revoke (preferred; token in form param)
-   - POST /web/sessions/:token/revoke (legacy; token in path)
-   
-   Invalidates the specified session token, forcing that device to sign in again.
-   
    Args:
      user-service: User service instance
      config: Application configuration map
-     
+
    Returns:
      Ring handler function"
   [user-service _config]
   (fn [request]
     (try
-      (let [session-token (or (get-in request [:form-params "session-token"])
-                              (get-in request [:params :session-token])
-                              (get-in request [:path-params :token]))
-            user-id (get-in request [:form-params "user-id"])]
-        (when (str/blank? (str session-token))
-          (throw (ex-info "Missing session token" {:type :validation-error})))
-        (user-ports/logout-user user-service session-token)
+      (let [user-id (get-in request [:path-params :id])
+            {:keys [invalidated]} (user-ports/revoke-user-session
+                                   user-service
+                                   (UUID/fromString user-id)
+                                   (UUID/fromString (get-in request [:path-params :session-id])))]
         (-> (response/redirect (str "/web/users/" user-id "/sessions"))
-            (assoc :flash {:success "Session revoked successfully"})))
-      (catch clojure.lang.ExceptionInfo e
-        (if (= :validation-error (:type (ex-data e)))
-          (html-response request (ui/error-message "Invalid session token") 400)
-          (server-error request e "Error revoking session")))
+            (assoc :flash (if invalidated
+                            {:success "Session revoked successfully"}
+                            {:error "Session not found or already ended"}))))
+      (catch IllegalArgumentException _
+        (html-response request (ui/error-message "Invalid session") 400))
       (catch Exception e
         (server-error request e "Error revoking session")))))
 
@@ -1213,14 +1207,12 @@
       (let [user-id (get-in request [:path-params :id])
             uuid (UUID/fromString user-id)
             keep-current? (= "true" (get-in request [:form-params "keep-current"]))
-            current-token (when keep-current?
-                            (get-in request [:cookies "session-token" :value]))]
+            current-session-id (get-in request [:session :id])]
         (if keep-current?
           ;; Revoke all except current
-          (let [sessions (user-ports/get-user-sessions user-service uuid)]
-            (doseq [session sessions]
-              (when (not= (:token session) current-token)
-                (user-ports/logout-user user-service (:token session)))))
+          (doseq [{:keys [id]} (user-ports/get-user-sessions user-service uuid)
+                  :when (not= id current-session-id)]
+            (user-ports/revoke-user-session user-service uuid id))
           ;; Revoke all including current
           (user-ports/logout-user-everywhere user-service uuid))
         (-> (response/redirect (str "/web/users/" user-id "/sessions"))

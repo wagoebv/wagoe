@@ -77,34 +77,12 @@
     :else
     {:allowed? true}))
 
-(defn calculate-failed-login-consequences
-  "Pure function: Calculate consequences of a failed login attempt.
-   
-   Args:
-     user: User entity with current failed login count
-     login-config: Configuration with lockout policies
-     current-time: Current timestamp
-     
-   Returns:
-     {:lockout-until optional-instant
-      :failed-login-count new-count
-      :should-alert? boolean}
-      
-   Pure - business rule calculations for security policies."
-  [user login-config current-time]
-  (let [current-failures (or (:failed-login-count user) 0)
-        new-failures (inc current-failures)
-        max-attempts (get login-config :max-failed-attempts 5)
-        lockout-duration-minutes (get login-config :lockout-duration-minutes 15)
-        alert-threshold (get login-config :alert-threshold 3)]
-
-    (cond-> {:failed-login-count new-failures
-             :should-alert? (>= new-failures alert-threshold)}
-
-      ;; Lock account if max attempts exceeded
-      (>= new-failures max-attempts)
-      (assoc :lockout-until (.plus current-time
-                                   (Duration/ofMinutes lockout-duration-minutes))))))
+(defn failed-login-lockout
+  "The lockout a failed login applies: {:max-attempts n :until inst}. The
+   repository sets :until in the same write that reaches n (BOU-696)."
+  [login-config current-time]
+  {:max-attempts (get login-config :max-failed-attempts 5)
+   :until        (.plus current-time (Duration/ofMinutes (get login-config :lockout-duration-minutes 15)))})
 
 (defn prepare-successful-login-updates
   "Pure function: Prepare user updates for successful login.
