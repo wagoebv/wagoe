@@ -2,6 +2,7 @@
   (:require
    [malli.core :as m]
    [malli.transform :as mt]
+   [malli.util :as mu]
    [wagoe.core.utils.redirect :as redirect]
    [wagoe.core.utils.type-conversion :as type-conversion]
    [wagoe.core.utils.case-conversion :as case-conversion]))
@@ -184,6 +185,14 @@
   [:map {:title "Group Request" :closed true}
    [:name [:string {:min 1 :max 255}]]
    [:description {:optional true} [:maybe [:string {:max 255}]]]])
+
+(def GroupImport
+  "One group for `import-groups!`. Its grants are checked against the
+   declared `:groups` schemas afterwards."
+  (mu/merge GroupRequest
+            [:map {:title "Group Import"}
+             [:members {:optional true} [:sequential any?]]
+             [:grants {:optional true} [:sequential [:map [:permission any?] [:scope {:optional true} any?]]]]]))
 
 (def GroupSettings
   "`:wagoe/user :groups`: the permissions and the scope a grant may name, each

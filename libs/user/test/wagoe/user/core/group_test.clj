@@ -67,3 +67,28 @@
     (is (= {:grants [{:permission "invoice/approve" :scope "{:domain-id 1}"}]} (:changes (first entries))))
     (is (= {:group-id (str (:id group)) :group-name "Finance"} (:metadata (first entries))))
     (is (empty? (audit/group-audit-entries :grant-add ctx group [] [{:permission :a :scope {}}])))))
+
+(deftest ^:unit users-with-a-permission-in-a-scope
+  (let [[a b] [(random-uuid) (random-uuid)]
+        holders [{:user-id a :scope {:domain-id 1}} {:user-id a :scope {:domain-id 2}}
+                 {:user-id b :scope {:domain-id 2}}]]
+    (is (= [a b] (sut/users-with-permission holders (constantly true))) "each user once")
+    (is (= [a] (sut/users-with-permission holders #(= 1 (:domain-id %)))))
+    (is (= [] (sut/users-with-permission [] (constantly true))))))
+
+(deftest ^:unit what-an-import-changes
+  (let [[a b c] (map (fn [_] {:id (random-uuid)}) (range 3))
+        kept    {:id 1 :permission :invoice/approve :scope {:domain-id 1}}
+        extra   {:id 2 :permission :report/view :scope {}}
+        new     {:permission :invoice/approve :scope {:domain-id 2}}
+        current {:members [a b] :held [kept extra]}
+        wanted  {:members [b c c] :grants [(dissoc kept :id) new new]}]
+    (testing "additive: only what is missing is added"
+      (is (= {:join [c] :leave [] :stay [a b] :add [new] :remove []}
+             (sut/import-changes current wanted false))))
+    (testing "replace: what is not listed goes too"
+      (is (= {:join [c] :leave [a] :stay [b] :add [new] :remove [extra]}
+             (sut/import-changes current wanted true))))
+    (testing "importing what is there changes nothing"
+      (is (= {:join [] :leave [] :stay [a b] :add [] :remove []}
+             (sut/import-changes current {:members [a b] :grants (map #(dissoc % :id) [kept extra])} true))))))

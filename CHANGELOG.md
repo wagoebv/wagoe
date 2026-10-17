@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **`permission-holders` and `import-groups!` on the group service** (BOU-718): who holds a permission in one query;
+  move grants onto groups idempotently, in one audited transaction. Group names are now unique; boot logs any duplicates.
 - **Search indexes live on `:wagoe/search`** (BOU-705): pass definitions under `:indexes` in config, or as a
   module's `:search` part. `wagoe.search.core.index/defsearch` binds one without registering it.
 - **User groups with scoped permission grants** (BOU-701): manage them at `/web/admin/groups`, check them with
@@ -128,6 +130,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **Admin: a duplicate on a unique key over several columns marked no field, and a create logged an ERROR** (BOU-712).
   Both fields are marked with a 409 now; a `:conflict` carries the key's columns as `:fields`.
+- **iCal export named a TZID without its VTIMEZONE, so Outlook could misread times** (BOU-719). Export now adds one
+  per zone, writes UTC as `Z`, folds by octets, and refuses two events with the same `:id`.
 - **Enabling MFA failed on PostgreSQL, MySQL and H2: ten backup codes overflowed a VARCHAR(255)** (BOU-715). Boot or
   `migrate up` widens the column, and the user agents, avatar URLs and audit errors that shared the limit.
 - **`:user-web-ui {:enabled? false}` left the group pages on, and `WAG_WEB_UI_ENABLED=false` did nothing** (BOU-711).

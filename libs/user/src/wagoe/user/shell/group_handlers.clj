@@ -42,6 +42,7 @@
                     :scope      :user.groups/error-scope
                     :email      :user.groups/error-no-user} field)
                   ({:not-found :user.groups/not-found} type)
+                  (when (= [:conflict :name] [type field]) :user.groups/error-name-taken)
                   :user.groups/error-name)]
           (when errors [:code " " (pr-str errors)]))))
 
@@ -57,7 +58,9 @@
 
 (defn- refused?
   [e]
-  (#{:validation-error :not-found} (:type (ex-data e))))
+  (let [{:keys [type field]} (ex-data e)]
+    (or (#{:validation-error :not-found} type)
+        (= [:conflict :name] [type field]))))
 
 (defn list-page [group-service]
   (fn [request]
