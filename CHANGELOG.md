@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **App modules can contribute sign-in hooks** (BOU-697): `:auth {:mfa-required? (ig/ref …)}`, or `:login-redirect`,
+  from an `ig-config`. `:login-redirect` functions now take `[user login-context]`, which has the client IP and request.
 - **Recurring jobs** (BOU-452): `:recurring {:nightly-report {:cron "0 2 * * *"}}` under `:wagoe/jobs`; one replica
   enqueues each tick. `enqueue-once!` and `:wagoe/idempotency-store` make a repeated enqueue a no-op.
 - **`#secret` config reader** (BOU-455): reads env vars or mounted files (`#secret [:file "db-password"]`), takes custom
@@ -40,7 +42,7 @@ for what is public API, what is internal, and how deprecations are announced.
 - **App modules can add HTTP middleware and components** (BOU-672): an `ig-config` returns only what it adds to the
   scaffold's four keys, and its `:http :extra-middleware` runs after the framework modules'. See the platform guide.
 - **Choose where users land after signing in** (BOU-678): `:login-redirect` under `:wagoe/user`, a role map or a
-  function of the user. Unset, admins still land on `/web/admin/users`, others on `/web/dashboard`.
+  function of the user and login context. Unset, admins still land on `/web/admin/users`, others on `/web/dashboard`.
 - **Replace or drop the built-in `/web/dashboard`** (BOU-680): `:dashboard {:handler my.app/page}` or
   `:dashboard false` under `:wagoe/user`, so an app can serve the path itself.
 - **Set where layouts link home** (BOU-688): `:home` under `:wagoe/user` sets the logo, back and dashboard links.

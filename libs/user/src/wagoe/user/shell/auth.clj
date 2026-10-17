@@ -10,10 +10,10 @@
    
    All I/O and side effects happen here. Pure business logic
    is delegated to wagoe.user.core.authentication."
-  (:require [wagoe.config :as wagoe-config]
-            [wagoe.user.core.authentication :as auth-core]
+  (:require [wagoe.user.core.authentication :as auth-core]
             [wagoe.user.core.mfa :as mfa-core]
             [wagoe.user.ports :as ports]
+            [wagoe.user.shell.hooks :as hooks]
             [wagoe.user.shell.mfa :as mfa-shell]
             [buddy.hashers :as hashers]
             [buddy.sign.jwt :as jwt]
@@ -168,15 +168,6 @@
 
 (defrecord AuthenticationService [user-repository session-repository mfa-service auth-config])
 
-(defn- resolve-mfa-hook
-  "Config names the :mfa-required? hook as a symbol; resolve it once, at boot."
-  [hook]
-  (let [f (if (qualified-symbol? hook) (wagoe-config/resolve-symbol hook) hook)]
-    (if (or (fn? f) (instance? clojure.lang.MultiFn f))
-      f
-      (throw (ex-info ":mfa-required? must be a function or a qualified symbol naming one"
-                      {:type :configuration-error :symbol hook})))))
-
 (defn create-authentication-service
   "Factory function: Create authentication service instance.
    
@@ -185,8 +176,8 @@
      session-repository: IUserSessionRepository implementation
      mfa-service: MFAService implementation  
      auth-config: Authentication configuration map. :mfa-required? is an
-                  optional (fn [user login-context] bool), or a symbol naming
-                  one; throws :configuration-error when it does not resolve.
+                  optional (fn [user login-context] bool), a symbol naming
+                  one, or an IMfaPolicy; throws :configuration-error otherwise.
      
    Returns:
      AuthenticationService instance"
@@ -194,7 +185,7 @@
   (->AuthenticationService user-repository session-repository mfa-service
                            (cond-> auth-config
                              (:mfa-required? auth-config)
-                             (update :mfa-required? resolve-mfa-hook))))
+                             (update :mfa-required? #(hooks/as-fn :mfa-required? %)))))
 
 (defn mfa-required?
   "Whether this login needs a second factor: the app's :mfa-required? hook

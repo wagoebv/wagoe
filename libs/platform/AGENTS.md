@@ -243,6 +243,9 @@ Discovery builds a scaffolded module's four keys (`:wagoe/<name>`, `-repository`
   one. They run outermost first: framework modules, then app modules, each group
   sorted by module key, then the handler's own `:extra-middleware`.
 - Any other `:http` key is a single slot; two modules setting it fail the boot.
+- `:auth {:mfa-required? … :login-redirect …}` hands sign-in hooks, often refs to
+  your components, to the user module's `:wagoe/auth-hooks`. One module per hook;
+  contributing one without the user module fails the boot. See `libs/user/AGENTS.md`.
 
 ### Authentication is the default
 

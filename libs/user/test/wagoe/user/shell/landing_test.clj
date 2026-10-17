@@ -30,7 +30,7 @@
 
 (defn landing-of
   "A :login-redirect function, named by symbol in the tests below."
-  [user]
+  [user _login-context]
   (case (:role user)
     :admin  "/web/beheer"
     :viewer "https://evil.example"
@@ -61,7 +61,7 @@
     (is (= "/web/x" (login-location (config {:login-redirect (constantly "/web/x")}) :user))))
   (testing "a function that throws means the default"
     (is (= "/web/dashboard"
-           (login-location (config {:login-redirect (fn [_] (throw (ex-info "boom" {})))}) :user)))))
+           (login-location (config {:login-redirect (fn [_ _] (throw (ex-info "boom" {})))}) :user)))))
 
 (deftest ^:contract password-mfa-lands-per-config
   (let [svc (reify ports/IUserService

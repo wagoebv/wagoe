@@ -7,6 +7,7 @@
             [wagoe.core.validation :as cv]
             [wagoe.shared.ui.core.home :as home]
             [wagoe.user.core.landing :as landing]
+            [wagoe.user.shell.hooks :as hooks]
             [wagoe.user.schema :as user-schema]))
 
 (defn- settings [config]
@@ -42,19 +43,27 @@
                         {:type :configuration-error :errors errors}))))
     (cond-> config
       (:login-redirect s)
-      (update-in [:active :wagoe/user :login-redirect] #(resolve-fn :login-redirect %))
+      (update-in [:active :wagoe/user :login-redirect] #(if (map? %) % (hooks/as-fn :login-redirect %)))
 
       (map? (:dashboard s))
       (update-in [:active :wagoe/user :dashboard :handler] #(resolve-fn :dashboard %)))))
 
+(defn with-hooks
+  "`config` with the `:login-redirect` the auth hooks settled on, which may be
+   a module's rather than the one config set."
+  [config hooks]
+  (cond-> config
+    (:login-redirect hooks) (assoc-in [:active :wagoe/user :login-redirect] (:login-redirect hooks))))
+
 (defn path-for
-  "Where `user` lands after signing in. A function's answer that is not a path
-   on this site — nil included — falls back to the defaults, as does one that
-   throws: by then the session exists, and a 500 would strand it."
-  [config user]
+  "Where `user` lands after signing in. A function gets the user and
+   `login-context` (`:ip-address`, `:user-agent`, `:request`). Its answer that
+   is not a path on this site — nil included — falls back to the defaults, as
+   does one that throws: by then the session exists, and a 500 would strand it."
+  [config user login-context]
   (let [r (:login-redirect (settings config))]
-    (if (fn? r)
-      (let [path (try (r user)
+    (if (and r (not (map? r)))
+      (let [path (try (r user login-context)
                       (catch Exception e
                         (log/warn e ":login-redirect threw; using the default")
                         nil))]

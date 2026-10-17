@@ -228,17 +228,27 @@
        (mapv #(symbol (str % "." module ".shell.module-wiring")))))
 
 (def ^:private no-graph
-  {:components {} :http {} :middleware [] :routes [] :job-handlers []})
+  {:components {} :http {} :auth {} :middleware [] :routes [] :job-handlers []})
 
-(defn merge-http
-  "`http` over `acc`, refusing a key both set. Each is one slot on the handler,
+(defn- merge-slots
+  "`part` over `acc`, refusing a key both set. Each is one slot on `target`,
    and the later module would silently replace the earlier."
-  [acc k http]
-  (when-let [clash (some (set (keys acc)) (keys http))]
-    (throw (ex-info (str "Two modules both contribute " clash " to :wagoe/http-handler."
+  [target acc k part]
+  (when-let [clash (some (set (keys acc)) (keys part))]
+    (throw (ex-info (str "Two modules both contribute " clash " to " target "."
                          " The later one would silently replace the earlier.")
                     {:type :wagoe/module-key-conflict :key clash :module k})))
-  (merge acc http))
+  (merge acc part))
+
+(defn merge-http
+  "`http` over `acc`, refusing a key both set."
+  [acc k http]
+  (merge-slots ":wagoe/http-handler" acc k http))
+
+(defn merge-auth
+  "A module's `:auth` hooks over `acc`, refusing a hook both set."
+  [acc k auth]
+  (merge-slots ":wagoe/auth-hooks" acc k auth))
 
 (defn- add-graph
   "Fold module `k`'s graph into `acc`. One step for framework and discovered
@@ -246,8 +256,9 @@
    `:job-handlers` (BOU-636).
 
    `:extra-middleware` is the one `:http` key every module may set: it is
-   collected into `:middleware`, in fold order, rather than taking a slot."
-  [acc k {:keys [components http routes job-handlers]}]
+   collected into `:middleware`, in fold order, rather than taking a slot.
+   `:auth` holds sign-in hooks, one module each, for the user module."
+  [acc k {:keys [components http auth routes job-handlers]}]
   (when-let [clash (some (set (keys (:components acc))) (keys components))]
     (throw (ex-info (str "Two modules both wire " clash
                          ". The later one would silently replace the earlier.")
@@ -255,6 +266,7 @@
   (-> acc
       (update :components merge components)
       (update :http merge-http k (dissoc http :extra-middleware))
+      (update :auth merge-auth k auth)
       (cond-> (contains? http :extra-middleware)
         (update :middleware conj (:extra-middleware http)))
       (update :routes into routes)
@@ -543,9 +555,9 @@
 (defn framework-module-config
   "Integrant entries for the framework modules `active` switches on.
 
-   Returns `{:components {…} :http {…} :middleware [..] :routes [..]
-   :job-handlers [..]}`. `:components` merges into the system config and
-   `:http` into `:wagoe/http-handler`. `:middleware` collects each module's
+   Returns `{:components {…} :http {…} :auth {…} :middleware [..] :routes [..]
+   :job-handlers [..]}`. `:components` merges into the system config,
+   `:http` into `:wagoe/http-handler` and `:auth` into `:wagoe/auth-hooks`. `:middleware` collects each module's
    `:extra-middleware` — tenant's, for one — in module-key order.
    `:routes` is a vector of refs to modules' route components, which reach the
    handler as one collection rather than as a named slot per module (BOU-330).
