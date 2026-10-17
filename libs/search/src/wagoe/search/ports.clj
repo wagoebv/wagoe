@@ -1,11 +1,8 @@
 (ns wagoe.search.ports
   "Port definitions for the wagoe-search library.
 
-   Three protocols cover the full lifecycle:
-
    ISearchStore    — low-level persistence (upsert, delete, search rows)
-   ISearchEngine   — high-level orchestration (index-document!, search, suggest)
-   ISearchRegistry — in-process registry of defsearch definitions")
+   ISearchEngine   — high-level orchestration (index-document!, search, suggest)")
 
 ;; =============================================================================
 ;; ISearchStore  — persistence
@@ -88,7 +85,7 @@
     "Index a document for full-text search.
 
      Args:
-       index-id     - keyword (from defsearch :id)
+       index-id     - keyword, a definition's :id
        entity-id    - UUID
        field-values - map of field-name -> string or seq value
        opts         - optional map with :metadata
@@ -127,6 +124,9 @@
 
      Returns:
        Vector of SearchResult maps")
+
+  (index-definition [this index-id]
+    "The SearchDefinition this engine holds for `index-id`, or nil.")
 
   (list-indices [this]
     "List all registered search indices with document counts.

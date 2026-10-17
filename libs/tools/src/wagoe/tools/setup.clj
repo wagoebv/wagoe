@@ -131,6 +131,7 @@
               "   :secure-cookies?   true\n")
          (str "   ;; Auth cookies omit Secure for local HTTP; set true behind TLS.\n"
               "   :secure-cookies?   false\n"))
+       "   ;; {:user-web-ui {:enabled? false}} drops the user module's HTML pages (API-only).\n"
        "   :features          {:user-web-ui {:enabled? true}}}\n"))
 
 (defn- postgresql-template [env]

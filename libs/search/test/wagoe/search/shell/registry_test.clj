@@ -1,7 +1,9 @@
 (ns wagoe.search.shell.registry-test
   "Unit tests for the search index definition registry (shell state)."
   (:require [clojure.test :refer [deftest testing is use-fixtures]]
-            [wagoe.search.shell.registry :as registry]))
+            [wagoe.search.ports :as ports]
+            [wagoe.search.shell.registry :as registry]
+            [wagoe.search.shell.service :as service]))
 
 ;; =============================================================================
 ;; Test fixture
@@ -58,3 +60,17 @@
        :fields      [{:name :status :weight :a}]})
     (is (= :order-search (:id order-search)))
     (is (some? (registry/get-search :order-search)))))
+
+;; =============================================================================
+;; Deprecated fallback
+;; =============================================================================
+
+(deftest ^:unit the-service-still-reads-the-registry
+  (registry/register-search! sample-def)
+  (let [svc (service/create-search-service nil {:own (assoc sample-def :id :own)})]
+    (testing "for an id its own definitions lack"
+      (is (= :product (:entity-type (ports/index-definition svc :product-search))))
+      (is (= #{:own :product-search} (set (map :id (ports/list-indices svc))))))
+    (testing "and its own definitions win"
+      (let [svc (service/create-search-service nil {:product-search (assoc sample-def :entity-type :item)})]
+        (is (= :item (:entity-type (ports/index-definition svc :product-search))))))))

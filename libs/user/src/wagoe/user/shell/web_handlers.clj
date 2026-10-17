@@ -1220,15 +1220,9 @@
     (try
       (let [user-id (get-in request [:path-params :id])
             uuid (UUID/fromString user-id)
-            keep-current? (= "true" (get-in request [:form-params "keep-current"]))
-            current-session-id (get-in request [:session :id])]
-        (if keep-current?
-          ;; Revoke all except current
-          (doseq [{:keys [id]} (user-ports/get-user-sessions user-service uuid)
-                  :when (not= id current-session-id)]
-            (user-ports/revoke-user-session user-service uuid id))
-          ;; Revoke all including current
-          (user-ports/logout-user-everywhere user-service uuid))
+            keep-current? (= "true" (get-in request [:form-params "keep-current"]))]
+        (user-ports/logout-user-everywhere user-service uuid
+                                           (when keep-current? (get-in request [:session :id])))
         (-> (response/redirect (str "/web/users/" user-id "/sessions"))
             (assoc :flash {:success "Sessions revoked successfully"})))
       (catch IllegalArgumentException _

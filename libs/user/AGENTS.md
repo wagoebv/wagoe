@@ -398,6 +398,27 @@ grants through their groups on every call; `wagoe.user.core.group` has `holds?`,
 - A soft-deleted user drops out of `find-user-grants` and member lists, and keeps
   their memberships for a restore.
 
+## Turning the web UI off
+
+For an API-only deployment: `:wagoe/settings {:features {:user-web-ui {:enabled? false}}}`,
+or `WAG_WEB_UI_ENABLED=false` with the shipped configs. `web-ui-enabled?` in
+`wagoe.user.shell.http` is the one check; `user-routes` and `group-routes` use it.
+
+Removed:
+- `/web` landing page, `/web/login`, `/web/register`, `/web/logout`
+- `/web/dashboard`, `/web/profile/**` (incl. MFA setup/disable pages)
+- `/web/users/**` (user management, sessions), `/web/audit`
+- `/web/admin/groups/**`
+
+Kept:
+- `/api/v1/auth/login`, `/api/v1/sessions`, `/api/v1/sessions/:token`
+- `/api/v1/users/**`, `/api/v1/auth/mfa/**`
+- OIDC sign-in under `/web/auth/oidc/**`, when providers are configured. It lands
+  on `/web/dashboard` by default; point `:login-redirect` elsewhere.
+- Not this module: the platform's `/` redirect still points at `/web/login`, and
+  the admin UI (`:wagoe/admin`) stays mounted; leave it out of `:active` too.
+- Groups have no API; manage them through `IUserGroupService`.
+
 ## The library's own tables
 
 `auth_users`, `users`, `user_sessions` and `user_audit_log` ship as a library

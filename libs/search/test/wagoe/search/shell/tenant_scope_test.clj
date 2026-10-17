@@ -6,7 +6,6 @@
             [wagoe.search.ports :as ports]
             [wagoe.search.shell.http :as sut]
             [wagoe.search.shell.persistence :as persistence]
-            [wagoe.search.shell.registry :as registry]
             [wagoe.search.shell.service :as service]
             [wagoe.search.test.support :refer [create-search-documents-table!]])
   (:import [java.util UUID]))
@@ -23,12 +22,13 @@
   (test-db/with-db "search_scope"
     (fn [{:keys [datasource adapter]}]
       (create-search-documents-table! datasource)
-      (registry/register-search! {:id :scoped-items :entity-type :item
-                                  :fields [{:name :title :weight :a}]
-                                  :filters [:tenant-id]})
-      (registry/register-search! {:id :open-items :entity-type :item
-                                  :fields [{:name :title :weight :a}]})
-      (let [engine (service/create-search-service (persistence/create-search-store datasource adapter))]
+      (let [engine (service/create-search-service
+                    (persistence/create-search-store datasource adapter)
+                    {:scoped-items {:id :scoped-items :entity-type :item :api? true
+                                    :fields [{:name :title :weight :a}]
+                                    :filters [:tenant-id]}
+                     :open-items   {:id :open-items :entity-type :item :api? true
+                                    :fields [{:name :title :weight :a}]}})]
         (ports/index-document! engine :scoped-items doc-a {:title "widget alpha"}
                                {:filter-values {:tenant-id tenant-a}})
         (ports/index-document! engine :scoped-items doc-b {:title "widget beta"}

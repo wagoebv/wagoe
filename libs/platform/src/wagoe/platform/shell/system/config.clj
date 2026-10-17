@@ -90,15 +90,15 @@
       (log/warn (str "The " lib " module is enabled in code, not in :active, so its migrations"
                      " do not run. Add its key to :active in config.edn.")))))
 
-(defn- with-auth-hooks
-  "`ig-config` with the modules' `:auth` hooks handed to the user module, which
-   runs them. Throws when it is off: the hooks would never be called."
-  [ig-config auth]
-  (if (contains? ig-config :wagoe/auth-hooks)
-    (assoc-in ig-config [:wagoe/auth-hooks :contributed] auth)
-    (throw (ex-info (str "Modules contribute " (vec (keys auth)) " under :auth, but the user"
-                         " module, which runs sign-in hooks, is not enabled.")
-                    {:type :configuration-error :keys (vec (keys auth))}))))
+(defn- with-contributed
+  "`ig-config` with what modules contribute under `part` handed to `target` as
+   `:contributed`. Throws when `target` is off: nothing would use it."
+  [ig-config target part contributed]
+  (if (contains? ig-config target)
+    (assoc-in ig-config [target :contributed] contributed)
+    (throw (ex-info (str "Modules contribute " (vec (keys contributed)) " under " part
+                         ", but " target ", which uses them, is not enabled.")
+                    {:type :configuration-error :keys (vec (keys contributed))}))))
 
 (defn system-config
   "The Integrant configuration for `config`.
@@ -119,7 +119,7 @@
          ;; feature the config asks for and does not get, and it used to say
          ;; nothing at all (BOU-477).
          _          (modules/assert-every-key-claimed! active known)
-         {:keys [components http auth middleware routes job-handlers]}
+         {:keys [components http auth search middleware routes job-handlers]}
          (modules/framework-module-config
           active
           {:config            config
@@ -133,12 +133,14 @@
          {discovered          :components
           discovered-http     :http
           discovered-auth     :auth
+          discovered-search   :search
           discovered-mw       :middleware
           discovered-routes   :routes
           discovered-handlers :job-handlers}
          (modules/discover-module-config
           active known base-ns modules/require-wiring! requiring-resolve)
-         auth (modules/merge-auth auth :discovered discovered-auth)]
+         auth   (modules/merge-auth auth :discovered discovered-auth)
+         search (modules/merge-search search :discovered discovered-search)]
      (warn-code-enabled-migrations! active extra-modules)
      ;; Said once, so nobody looks for it on :9999 in prod (BOU-588).
      (when-let [profile (:wagoe/profile config)]
@@ -171,4 +173,7 @@
                  (modules/enabled-libraries active))
 
        (seq auth)
-       (with-auth-hooks auth)))))
+       (with-contributed :wagoe/auth-hooks :auth auth)
+
+       (seq search)
+       (with-contributed :wagoe/search :search search)))))

@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **Search indexes live on `:wagoe/search`** (BOU-705): pass definitions under `:indexes` in config, or as a
+  module's `:search` part. `wagoe.search.core.index/defsearch` binds one without registering it.
 - **User groups with scoped permission grants** (BOU-701): manage them at `/web/admin/groups`, check them with
   `(user-grants svc user)` from `:wagoe/user-group-service`. Declare permissions and scope under `:wagoe/user :groups`.
 - **App modules can contribute sign-in hooks** (BOU-697): `:auth {:mfa-required? (ig/ref …)}`, or `:login-redirect`,
@@ -115,6 +117,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Deprecated
 
+- **`wagoe.search.shell.registry` and its `defsearch`** (BOU-705): one registry for every system in the JVM. Hand
+  definitions to `:wagoe/search`; the registry is still read, warns once, and goes in 2.0.
 - **`DBAdapter/like` with a hand-built pattern** (BOU-684): `%` and `_` from user input match
   anything. Pass a mode and the raw value instead; the 3-arity goes in 2.0.
 - **`jwt-authentication-middleware` and `protect-with-jwt` without a user service** (BOU-682): they trust the token, so a
@@ -124,6 +128,20 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **Enabling MFA failed on PostgreSQL, MySQL and H2: ten backup codes overflowed a VARCHAR(255)** (BOU-715). Boot or
   `migrate up` widens the column, and the user agents, avatar URLs and audit errors that shared the limit.
+- **`:user-web-ui {:enabled? false}` left the group pages on, and `WAG_WEB_UI_ENABLED=false` did nothing** (BOU-711).
+  Copy `#boolean #or [#env WAG_WEB_UI_ENABLED "true"]` from the shipped config if yours reads the env var.
+- **Security: the search API served every index to any signed-in user** (BOU-706). An index is now served only with
+  `:api? true` or an `:api {:authorize …}` hook; apps relying on `/api/v1/search/:index-id` must add `:api? true`.
+- **A typed 4xx thrown by a handler or service was logged at ERROR** (BOU-704). It is now INFO, or WARN for 401/403; 5xx and
+  untyped errors stay ERROR. Re-check alerts that keyed on "HTTP request failed".
+- **Static assets had no Content-Type** (BOU-710). They now carry one from the extension, plus
+  `X-Content-Type-Options: nosniff`.
+- **Security: two parallel logins could spend one MFA backup code** (BOU-708). Spending is a conditional write; the
+  loser counts as a wrong code. Custom repositories add `consume-backup-code`.
+- **Security: revoking all of a user's sessions wrote no audit entry** (BOU-708). It writes one `:session-revoked`;
+  custom `IUserService` implementations add the 3-arity `logout-user-everywhere`.
+- **Geocoding never returned a result** (BOU-709): the OSM, Google and Mapbox adapters read string keys from keywordized
+  JSON. Set `:user-agent` with a contact when using OpenStreetMap.
 - **Security: an `unknown` X-Forwarded-For hop resolved to the trusted proxy** (BOU-695). The client IP is now nil;
   code that authorises by address must refuse nil.
 - **Calendar month names were English only, and multi-day events showed on their first day only** (BOU-702). Month

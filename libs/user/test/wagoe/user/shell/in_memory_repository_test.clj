@@ -55,6 +55,13 @@
                           (>= n max-attempts) (assoc :lockout-until until))))
               [user-id :failed-login-count])))
 
+  (consume-backup-code [_ user code-hash]
+    (let [seen #(select-keys % [:mfa-backup-codes :mfa-backup-codes-used])
+          ok?  #(= (seen user) (seen (get % (:id user))))
+          [old _] (swap-vals! state #(cond-> %
+                                       (ok? %) (update-in [(:id user) :mfa-backup-codes-used] (fnil conj []) code-hash)))]
+      (ok? old)))
+
   (soft-delete-user [_ user-id]
     (boolean (when (get @state user-id)
                (swap! state assoc-in [user-id :deleted-at] (Instant/now))

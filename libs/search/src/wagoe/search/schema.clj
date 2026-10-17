@@ -27,7 +27,7 @@
    [:max-results {:optional true} pos-int?]])
 
 (def SearchDefinition
-  "A search index definition created by defsearch."
+  "A search index definition, handed to :wagoe/search."
   [:map {:closed false}
    [:id          keyword?]
    [:entity-type keyword?]
@@ -37,7 +37,11 @@
    ;; Declares which fields are filterable; actual filter values are passed at
    ;; index time via :filter-values in opts and at query time via :filters in opts.
    [:filters     {:optional true} [:vector keyword?]]
-   [:options     {:optional true} SearchOptions]])
+   [:options     {:optional true} SearchOptions]
+   ;; The generic search API and admin pages serve an index only when it opts
+   ;; in. `:authorize` is (fn [request definition]) -> truthy to serve.
+   [:api?        {:optional true} boolean?]
+   [:api         {:optional true} [:map [:authorize {:optional true} fn?]]]])
 
 (def SearchDocument
   "An indexed document stored in the search_documents table."
