@@ -117,7 +117,7 @@ for what is public API, what is internal, and how deprecations are announced.
 - **PDF reports wrote data unescaped: `&` failed the render, and markup in data was rendered and its URLs fetched** (BOU-675, security).
   Strings holding HTML or entities like `&nbsp;` must be wrapped in `hiccup2.core/raw`; images load only from `data:` URIs.
 - **PDF reports rendered a vector or map in data as an element or its attributes** (BOU-687, security). They render as text now,
-  and `on*` attributes and `javascript:` hrefs are dropped; markup in data must be wrapped in `hiccup2.core/raw`.
+  and `on*` attributes and non-http(s)/mailto hrefs are dropped; markup in data must be wrapped in `hiccup2.core/raw`.
 - **A scaffolded field's `default=` was unreachable from the wizards and `bb scaffold ai`, and stayed required on create**
   (BOU-537). Both now take a default; a defaulted field is optional in the generated Create request.
 - **`wagoe.ai.core.parsing/module-spec->cli-args` rendered only the first entity** (BOU-541). Removed; nothing called it.

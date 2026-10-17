@@ -87,28 +87,32 @@
               (when (and (coll? x) (not (.containsKey seen x)))
                 ;; Empty ones are shared instances, the same [] or {} a template writes.
                 (when (and (or (vector? x) (map? x)) (seq x)) (.put seen x true))
-                (run! walk (if (map? x) (mapcat identity x) x))))]
+                (if (map? x)
+                  (run! (fn [[k v]] (walk k) (walk v)) x)
+                  (run! walk x))))]
       (walk data))
     seen))
+
+(def ^:private safe-href #"(?i)^(https?:|mailto:|#)")
 
 (defn- unsafe-attr? [k v]
   (let [k (str/lower-case (name k))]
     (or (str/starts-with? k "on")
-        (and (= "href" k) (string? v)
-             (str/starts-with? (str/lower-case (str/replace v #"[\x00-\x20]" "")) "javascript:")))))
+        (and (= "href" k)
+             (not (re-find safe-href (str/replace (str v) #"[\x00-\x20]" "")))))))
 
 (defn- neutralise
-  "Render data vectors and maps as text, and drop on* attributes and
-   javascript: hrefs. Template-built markup and h/raw pass through."
+  "Render data vectors and maps as text, and drop on* attributes and hrefs
+   other than http(s), mailto and #. Template-built markup and h/raw pass through."
   [form ^IdentityHashMap data]
   (cond
     (.containsKey data form) (str form)
     (and (vector? form) (seq form))
-    (let [[tag & more] form
-          [attrs children] (if (and (map? (first more)) (not (.containsKey data (first more))))
-                             [(into {} (remove (fn [[k v]] (unsafe-attr? k v))) (first more)) (rest more)]
-                             [nil more])]
-      (into (cond-> [tag] attrs (conj attrs)) (map #(neutralise % data)) children))
+    (let [[tag attrs & children] form]
+      (if (and (map? attrs) (not (.containsKey data attrs)))
+        (into [tag (reduce-kv (fn [m k v] (cond-> m (unsafe-attr? k v) (dissoc k))) attrs attrs)]
+              (map #(neutralise % data)) children)
+        (into [tag] (map #(neutralise % data)) (rest form))))
     (seq? form) (map #(neutralise % data) form)
     :else form))
 
@@ -125,11 +129,14 @@
 ;; =============================================================================
 
 (defn- report-html [report-def data opts]
-  (let [formatting-context {:zone-id (or (:zone-id opts) (java.time.ZoneId/systemDefault))}
-        hiccup-form (if-let [tmpl (:template report-def)]
+  ;; Sections already stringify cells (format-cell*), so only templates need the data walk.
+  (let [tmpl (:template report-def)
+        hiccup-form (if tmpl
                       (tmpl data)
-                      (core/build-sections-hiccup* (:sections report-def) data formatting-context))]
-    (-> (neutralise hiccup-form (data-colls data))
+                      (core/build-sections-hiccup*
+                       (:sections report-def) data
+                       {:zone-id (or (:zone-id opts) (java.time.ZoneId/systemDefault))}))]
+    (-> (neutralise hiccup-form (if tmpl (data-colls data) (IdentityHashMap.)))
         (inject-css (:css opts))
         render-html)))
 
