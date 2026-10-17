@@ -346,6 +346,10 @@
                                                          :password (:password user-data)
                                                          :remember false}
                                                         login-context))]
+             (when (= :mfa-enrolment-required (:reason auth-result))
+               (throw (ex-info (:message auth-result)
+                               {:type :forbidden :reason :mfa-enrolment-required
+                                :email (:email user-data)})))
              (when-not (:authenticated auth-result)
                (throw (ex-info "Authentication failed after creating account"
                                {:type :internal-error

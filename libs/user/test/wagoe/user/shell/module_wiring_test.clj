@@ -61,3 +61,10 @@
                      :providers {:google {:issuer "https://accounts.google.com"}}}]]
     (is (thrown-with-msg? clojure.lang.ExceptionInfo #"OIDC"
                           (ig/init-key :wagoe/user-oidc {:settings settings})))))
+
+(deftest ^:unit auth-settings-reach-the-auth-service
+  (is (= {:mfa-required? 'my.app/mfa?}
+         (get-in (sut/ig-config {:auth {:mfa-required? 'my.app/mfa?}} {:config {}})
+                 [:components :wagoe/auth-service :auth-config])))
+  (is (= {} (get-in (sut/ig-config nil {:config {}})
+                    [:components :wagoe/auth-service :auth-config]))))

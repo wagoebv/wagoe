@@ -152,6 +152,7 @@
  :user/oidc-admin-link-refused "Administrator accounts cannot be linked by email. Sign in with your password."
  :user/oidc-account-unavailable "This account cannot sign in right now."
  :user/oidc-mfa-invalid        "Invalid code"
+ :user/mfa-enrolment-required  "This sign-in needs two-factor authentication, and your account has none set up. Ask an administrator."
 
  :user/created-label-email     "Email:"
  :user/created-label-name      "Name:"
