@@ -18,7 +18,7 @@
             [wagoe.jobs.shell.adapters.codec :as codec]
             [clojure.tools.logging :as log])
   (:import [redis.clients.jedis Jedis JedisPool JedisPoolConfig]
-           [redis.clients.jedis.params ScanParams]
+           [redis.clients.jedis.params ScanParams SetParams]
            [java.time Instant]))
 
 ;; =============================================================================
@@ -624,3 +624,73 @@
      pool - JedisPool instance"
   [^JedisPool pool]
   (.close pool))
+
+;; =============================================================================
+;; Idempotency keys and recurring state
+;; =============================================================================
+;;
+;; Expiry is Redis's own clock (PX), so replica clock skew cannot split the
+;; lease or revive a claim early.
+
+(def ^:private ticker-lease-key "jobs:ticker:lease")
+(def ^:private last-tick-key "jobs:recurring:last-tick")
+
+(defn- idempotency-key [scope key] (str "idempotency:" scope ":" key))
+
+(def ^:private acquire-lease-script
+  "Take the lease if free, or renew it for its owner."
+  "if redis.call('SET', KEYS[1], ARGV[1], 'NX', 'PX', ARGV[2]) then return 1 end
+   if redis.call('GET', KEYS[1]) == ARGV[1] then
+     redis.call('PEXPIRE', KEYS[1], ARGV[2]) return 1 end
+   return 0")
+
+(def ^:private release-lease-script
+  "if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) end
+   return 0")
+
+(defrecord RedisIdempotencyStore [^JedisPool pool]
+  ports/IIdempotencyStore
+  (claim-key! [_ scope key ttl-ms]
+    (with-redis pool
+      (fn [^Jedis redis]
+        (= "OK" (.set redis ^String (idempotency-key scope key) "1"
+                      (-> (SetParams.) (.nx) (.px (long ttl-ms))))))))
+  (release-key! [_ scope key]
+    (with-redis pool (fn [^Jedis redis] (.del redis ^String (idempotency-key scope key))))
+    true)
+  ;; Redis expires claims itself.
+  (purge-expired-keys! [_] nil))
+
+(defn create-redis-idempotency-store
+  "An idempotency store on `pool`."
+  [pool]
+  (->RedisIdempotencyStore pool))
+
+(defrecord RedisRecurringState [^JedisPool pool]
+  ports/IRecurringState
+  (acquire-lease! [_ owner lease-ms]
+    (with-redis pool
+      (fn [^Jedis redis]
+        (= 1 (.eval redis ^String acquire-lease-script
+                    ^java.util.List [ticker-lease-key]
+                    ^java.util.List [(str owner) (str lease-ms)])))))
+  (release-lease! [_ owner]
+    (with-redis pool
+      (fn [^Jedis redis]
+        (.eval redis ^String release-lease-script
+               ^java.util.List [ticker-lease-key] ^java.util.List [(str owner)])))
+    nil)
+  (last-tick [_ schedule-name]
+    (some-> (with-redis pool (fn [^Jedis redis] (.hget redis last-tick-key schedule-name)))
+            parse-long
+            Instant/ofEpochMilli))
+  (record-tick! [_ schedule-name tick]
+    (with-redis pool
+      (fn [^Jedis redis]
+        (.hset redis last-tick-key schedule-name (str (.toEpochMilli ^Instant tick)))))
+    tick))
+
+(defn create-redis-recurring-state
+  "Recurring-job state on `pool`, shared by every replica on it."
+  [pool]
+  (->RedisRecurringState pool))

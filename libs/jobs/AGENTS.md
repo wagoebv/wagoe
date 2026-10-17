@@ -11,11 +11,13 @@ Background job processing with priority queues, scheduled execution, automatic r
 | Namespace | Purpose |
 |-----------|---------|
 | `wagoe.jobs.core.job` | Pure functions: job creation, state transitions, retry logic |
+| `wagoe.jobs.core.cron` | Pure cron parsing, `next-run`, `latest-run`, `due-tick` |
 | `wagoe.jobs.ports` | Protocols: IJobQueue, IJobStore, IJobStats, IJobWorker, IJobRegistry |
 | `wagoe.jobs.schema` | Malli schemas: job states, priorities, retry config |
 | `wagoe.jobs.shell.adapters.in-memory` | In-memory adapter (atoms, for dev/test) |
 | `wagoe.jobs.shell.adapters.redis` | Redis adapter (sorted sets, lists, hashes) |
 | `wagoe.jobs.shell.adapters.db` | DB adapter (next.jdbc, H2/PostgreSQL) — durable jobs on your existing SQL database |
+| `wagoe.jobs.shell.recurring` | Recurring-job ticker (`schedule-recurring!`, `tick!`) and `enqueue-once!` |
 | `wagoe.jobs.shell.worker` | Worker implementation: polling, processing, pool management |
 | `wagoe.jobs.shell.tenant-context` | Multi-tenant job execution with schema switching |
 | `wagoe.jobs.shell.module-wiring` | Integrant lifecycle: runtime, queue, store, registry, workers |
@@ -29,7 +31,9 @@ Enabling `:wagoe/jobs` builds the runtime. Nothing else to assemble.
              :lease-ms 60000          ; :db only — in-flight lease
              :redis    {:host "localhost" :port 6379}
              :workers  {:count  1
-                        :queues [:default]}}   ; one pool per queue
+                        :queues [:default]}    ; one pool per queue
+             :recurring {:nightly-report {:cron "0 2 * * *" :zone "Europe/Amsterdam"}}
+             :scheduler {:tick-ms 5000 :lease-ms 30000 :zone "UTC"}}
 ```
 
 | Key | What it is |
@@ -39,6 +43,8 @@ Enabling `:wagoe/jobs` builds the runtime. Nothing else to assemble.
 | `:wagoe/job-stats` | `IJobStats` — what the devtools dashboard reads. nil under `:provider :db` |
 | `:wagoe/job-registry` | The handlers every enabled module contributed |
 | `:wagoe/job-workers` | One pool of `:count` workers per queue in `:queues` |
+| `:wagoe/job-scheduler` | The recurring-job ticker; `recurring/schedule-recurring!` takes it |
+| `:wagoe/idempotency-store` | `IIdempotencyStore` on the provider's backend, for any module |
 
 Set `:workers {:count 0}` on a web node in the web/worker split — it enqueues
 and processes nothing. The default of 1 is a single process that does both,
@@ -141,6 +147,28 @@ A worker on the DB queue picks the job up after commit.
 > `wagoe.jobs.shell.adapters.db/enqueue-in-tx!` still exists but is deprecated —
 > calling into the adapter namespace couples application code to one
 > implementation. Use the port.
+
+## Recurring jobs and idempotency keys
+
+`:recurring` on `:wagoe/jobs`, or `recurring/schedule-recurring!` on
+`:wagoe/job-scheduler`, enqueues a job of that type on each cron tick. User
+docs: `docs/modules/libraries/pages/jobs.adoc`. What to keep true when editing:
+
+- **Cron maths is pure** (`core/cron.clj`): the ticker passes `now`, so DST and
+  missed-tick cases are tested without a clock.
+- **Two guards, both needed.** The lease (`IRecurringState/acquire-lease!`)
+  picks one ticker; the idempotency claim on (job type, `"tick/" instant`)
+  covers two leaders overlapping after a pause. `recurring_surface_test.clj`
+  sweeps both over memory, db (`WAGOE_TEST_DB`) and Redis (database 13).
+- **The cursor is the last tick fired**, per job type, in `IRecurringState`.
+  `cron/due-tick` collapses missed ticks into the latest one: after downtime a
+  schedule runs once, not once per missed tick. With no cursor yet it counts
+  from registration, so a new schedule never fires for the past.
+- **Claim before enqueue.** A failed enqueue releases the claim; a process that
+  dies in between loses the tick (at most once).
+- DB lease and claim expiry use the database clock (`now-ms-sql`), Redis uses
+  `PX`. Tables: `idempotency_keys`, `job_recurring`, `job_ticker_lease`,
+  created at boot by `create-recurring-tables!`.
 
 ## Job Handler Signature
 
@@ -265,7 +293,8 @@ Jobs dequeued by priority: critical > high > normal > low.
 3. **Tenant jobs fail explicitly** if tenant not found (safety-first, not silent fallback)
 4. **Scheduled jobs** are stored separately and periodically moved to execution queues (default every 5s)
 5. **In-memory adapter** is single-process only - NOT for production
-6. **Redis key patterns**: `job:{id}`, `queue:{name}:{priority}`, `jobs:scheduled`, `jobs:failed`
+6. **Redis key patterns**: `job:{id}`, `queue:{name}:{priority}`, `jobs:scheduled`, `jobs:failed`,
+   `jobs:ticker:lease`, `jobs:recurring:last-tick`, `idempotency:{scope}:{key}`
 
 ## Testing
 

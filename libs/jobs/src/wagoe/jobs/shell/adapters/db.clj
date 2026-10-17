@@ -441,3 +441,96 @@
    Call `create-job-store-table!` once before use (or run the migration)."
   [ds]
   (->DbJobStore ds))
+
+;; =============================================================================
+;; Idempotency keys and recurring state
+;; =============================================================================
+;;
+;; Times are epoch-millis BIGINTs read from the database clock, so replicas
+;; with skewed clocks agree on who holds the lease and which claim expired.
+
+(defn- duplicate-key? [^java.sql.SQLException e]
+  ;; SQLState class 23 is an integrity violation on H2, PostgreSQL and MySQL.
+  (str/starts-with? (str (.getSQLState e)) "23"))
+
+(defn- insert-unless-present!
+  "INSERT `sqlv`; false instead of an exception when the row already exists."
+  [ds sqlv]
+  (try (execute-one! ds sqlv) true
+       (catch java.sql.SQLException e
+         (if (duplicate-key? e) false (throw e)))))
+
+(defn create-recurring-tables!
+  "Create `idempotency_keys`, `job_recurring` and the ticker lease row if
+   absent. Called at boot under `:provider :db`."
+  [ds]
+  (execute! ds ["CREATE TABLE IF NOT EXISTS idempotency_keys (
+                   scope      VARCHAR(255) NOT NULL,
+                   idem_key   VARCHAR(255) NOT NULL,
+                   expires_ms BIGINT NOT NULL,
+                   PRIMARY KEY (scope, idem_key))"])
+  (execute! ds ["CREATE TABLE IF NOT EXISTS job_recurring (
+                   name         VARCHAR(255) PRIMARY KEY,
+                   last_tick_ms BIGINT NOT NULL)"])
+  (execute! ds ["CREATE TABLE IF NOT EXISTS job_ticker_lease (
+                   name     VARCHAR(64) PRIMARY KEY,
+                   owner    VARCHAR(64) NULL,
+                   until_ms BIGINT NOT NULL)"])
+  (insert-unless-present! ds ["INSERT INTO job_ticker_lease (name, owner, until_ms) VALUES ('ticker', NULL, 0)"]))
+
+(defrecord DbIdempotencyStore [ds now-sql]
+  ports/IIdempotencyStore
+  (claim-key! [_ scope key ttl-ms]
+    (or (insert-unless-present!
+         ds [(str "INSERT INTO idempotency_keys (scope, idem_key, expires_ms) VALUES (?, ?, "
+                  now-sql " + ?)")
+             scope key ttl-ms])
+        ;; Present: take it over only once it has expired.
+        (= 1 (::jdbc/update-count
+              (execute-one! ds [(str "UPDATE idempotency_keys SET expires_ms = " now-sql " + ?
+                                      WHERE scope = ? AND idem_key = ? AND expires_ms <= " now-sql)
+                                ttl-ms scope key])))))
+  (release-key! [_ scope key]
+    (execute-one! ds ["DELETE FROM idempotency_keys WHERE scope = ? AND idem_key = ?" scope key])
+    true)
+  (purge-expired-keys! [_]
+    (::jdbc/update-count
+     (execute-one! ds [(str "DELETE FROM idempotency_keys WHERE expires_ms <= " now-sql)]))))
+
+(defn- now-sql [ds] (db-ports/now-ms-sql (:adapter (db/context-of ds))))
+
+(defn create-db-idempotency-store
+  "An idempotency store on `ds`. Call `create-recurring-tables!` first."
+  [ds]
+  (->DbIdempotencyStore ds (now-sql ds)))
+
+(defrecord DbRecurringState [ds now-sql]
+  ports/IRecurringState
+  (acquire-lease! [_ owner lease-ms]
+    (= 1 (::jdbc/update-count
+          (execute-one! ds [(str "UPDATE job_ticker_lease SET owner = ?, until_ms = " now-sql " + ?
+                                  WHERE name = 'ticker' AND (until_ms < " now-sql " OR owner = ?)")
+                            owner lease-ms owner]))))
+  (release-lease! [_ owner]
+    (execute-one! ds ["UPDATE job_ticker_lease SET until_ms = 0 WHERE name = 'ticker' AND owner = ?" owner])
+    nil)
+  (last-tick [_ schedule-name]
+    (some-> (execute-one! ds ["SELECT last_tick_ms FROM job_recurring WHERE name = ?" schedule-name]
+                          (opts))
+            :last_tick_ms
+            long
+            Instant/ofEpochMilli))
+  (record-tick! [_ schedule-name tick]
+    (let [ms     (.toEpochMilli ^Instant tick)
+          write! #(execute-one! ds ["UPDATE job_recurring SET last_tick_ms = ? WHERE name = ?" ms schedule-name])]
+      (when (zero? (::jdbc/update-count (write!)))
+        (when-not (insert-unless-present! ds ["INSERT INTO job_recurring (name, last_tick_ms) VALUES (?, ?)"
+                                              schedule-name ms])
+          (write!)))
+      tick)))
+
+(defn create-db-recurring-state
+  "Recurring-job state on `ds`, shared by every replica on it. Call
+   `create-recurring-tables!` first."
+  [ds]
+  (->DbRecurringState ds (now-sql ds)))

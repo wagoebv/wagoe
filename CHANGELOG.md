@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **Recurring jobs** (BOU-452): `:recurring {:nightly-report {:cron "0 2 * * *"}}` under `:wagoe/jobs`; one replica
+  enqueues each tick. `enqueue-once!` and `:wagoe/idempotency-store` make a repeated enqueue a no-op.
 - **CSV reports** (BOU-674): `:type :csv` renders the first `:table` section as RFC 4180 text, formula cells neutralised.
   Pass `:bom? true` for Excel.
 - **App modules can add HTTP middleware and components** (BOU-672): an `ig-config` returns only what it adds to the

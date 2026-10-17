@@ -8,7 +8,9 @@
        {:provider :memory | :db | :redis     ; default :memory
         :lease-ms 60000                      ; :db only, in-flight lease
         :redis    {:host \"localhost\" :port 6379}
-        :workers  {:count 1 :queue-name :default}}
+        :workers  {:count 1 :queue-name :default}
+        :recurring {:nightly-report {:cron \"0 2 * * *\" :zone \"Europe/Amsterdam\"}}
+        :scheduler {:tick-ms 5000 :lease-ms 30000 :zone \"UTC\"}}
 
    :wagoe/jobs-runtime
      Queue, store and stats from one adapter, so the three share a backend.
@@ -19,6 +21,14 @@
      than components of their own, because the in-memory adapter's queue and
      store must share state. `:wagoe/job-stats` is nil under `:provider :db`,
      which ships no IJobStats.
+
+   :wagoe/idempotency-store
+     `IIdempotencyStore` on the runtime's backend, for any module.
+
+   :wagoe/job-scheduler
+     The recurring-job ticker: `:recurring {job-type {:cron \"0 2 * * *\" …}}`
+     from the settings block, plus whatever `recurring/schedule-recurring!`
+     adds. `:scheduler {:tick-ms :lease-ms :zone}` tunes it.
 
    :wagoe/job-registry
      The handler map every module contributed. Modules contribute handlers the
@@ -38,6 +48,7 @@
             [wagoe.jobs.shell.adapters.db :as db]
             [wagoe.jobs.shell.adapters.in-memory :as mem]
             [wagoe.jobs.shell.adapters.redis :as redis]
+            [wagoe.jobs.shell.recurring :as recurring]
             [wagoe.jobs.shell.worker :as worker]))
 
 (defmethod ig/init-key :wagoe/jobs [_ config] config)
@@ -60,8 +71,11 @@
     ;; an existing one is untouched.
     ;; job_store too: create-jobs-table! makes both.
     (db/create-jobs-table! ds)
+    (db/create-recurring-tables! ds)
     {:queue  (db/create-db-job-queue ds :lease-ms lease-ms)
      :store  (db/create-db-job-store ds)
+     :idempotency     (db/create-db-idempotency-store ds)
+     :recurring-state (db/create-db-recurring-state ds)
      ;; No IJobStats for the DB backend; the two that have one expose it, and a
      ;; nil here is honest where a silently-empty implementation would not be.
      :stats  nil
@@ -73,6 +87,8 @@
     {:queue  (redis/create-redis-job-queue pool)
      :store  (redis/create-redis-job-store pool)
      :stats  (redis/create-redis-job-stats pool)
+     :idempotency     (redis/create-redis-idempotency-store pool)
+     :recurring-state (redis/create-redis-recurring-state pool)
      :close! (fn [] (redis/close-redis-pool! pool))}))
 
 (defn- memory-runtime
@@ -81,7 +97,12 @@
   ;; the outcome on the store, and with two states the store would never find
   ;; the job it is asked about.
   (let [{:keys [queue store stats]} (mem/create-in-memory-jobs-system)]
-    {:queue queue :store store :stats stats :close! (fn [] nil)}))
+    {:queue           queue
+     :store           store
+     :stats           stats
+     :idempotency     (mem/create-in-memory-idempotency-store)
+     :recurring-state (mem/create-in-memory-recurring-state)
+     :close!          (fn [] nil)}))
 
 (defn normalize-provider
   "The provider keyword in the vocabulary cache, realtime, events and jobs
@@ -130,6 +151,9 @@
 (defmethod ig/init-key :wagoe/job-stats [_ {:keys [runtime]}] (:stats runtime))
 (defmethod ig/halt-key! :wagoe/job-stats [_ _] nil)
 
+(defmethod ig/init-key :wagoe/idempotency-store [_ {:keys [runtime]}] (:idempotency runtime))
+(defmethod ig/halt-key! :wagoe/idempotency-store [_ _] nil)
+
 ;; =============================================================================
 ;; Registry and workers
 ;; =============================================================================
@@ -169,6 +193,20 @@
   [_ workers]
   (when (seq workers) (worker/stop-worker-pool! workers)))
 
+(defmethod ig/init-key :wagoe/job-scheduler
+  [_ {:keys [queue runtime recurring scheduler]}]
+  (let [s (recurring/create-scheduler {:queue       queue
+                                       :state       (:recurring-state runtime)
+                                       :idempotency (:idempotency runtime)}
+                                      scheduler)]
+    (doseq [[job-type {:keys [cron] :as opts}] recurring]
+      (recurring/schedule-recurring! s job-type cron opts))
+    (when (seq recurring)
+      (log/info "Jobs: recurring schedules" {:job-types (vec (sort (keys recurring)))}))
+    (recurring/start! s)))
+
+(defmethod ig/halt-key! :wagoe/job-scheduler [_ scheduler] (recurring/stop! scheduler))
+
 ;; =============================================================================
 ;; Module graph
 ;; =============================================================================
@@ -191,6 +229,11 @@
       :wagoe/job-queue    {:runtime (ig/ref :wagoe/jobs-runtime)}
       :wagoe/job-store    {:runtime (ig/ref :wagoe/jobs-runtime)}
       :wagoe/job-stats    {:runtime (ig/ref :wagoe/jobs-runtime)}
+      :wagoe/idempotency-store {:runtime (ig/ref :wagoe/jobs-runtime)}
+      :wagoe/job-scheduler {:queue     (ig/ref :wagoe/job-queue)
+                            :runtime   (ig/ref :wagoe/jobs-runtime)
+                            :recurring (:recurring settings)
+                            :scheduler (:scheduler settings)}
       :wagoe/job-registry {:handler-maps []}
       :wagoe/job-workers  {:queue    (ig/ref :wagoe/job-queue)
                            :store    (ig/ref :wagoe/job-store)
