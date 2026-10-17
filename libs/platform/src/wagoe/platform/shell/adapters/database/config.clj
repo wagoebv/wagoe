@@ -68,8 +68,6 @@
 ;; Environment Detection
 ;; =============================================================================
 
-(def ^:dynamic *default-environment* "dev")
-
 (defn getenv
   "Environment variable lookup. Exists as a var (rather than inline interop)
    so tests can redef it — env vars cannot be modified inside a JVM."
@@ -77,15 +75,11 @@
   (System/getenv k))
 
 (defn detect-environment
-  "Detect current environment from various sources, with the aliases the
-   config loader accepts resolved: `development` is `dev` (BOU-585)."
+  "The profile the database tools use: `wagoe.config/active-profile`, the
+   one the app boots with. They used to read -Denv, ENV and ENVIRONMENT too,
+   so `migrate` could pick a profile the server never would (BOU-686)."
   []
-  (config/normalize-env
-   (or (System/getProperty "env")
-       (getenv "WAG_ENV")
-       (getenv "ENV")
-       (getenv "ENVIRONMENT")
-       *default-environment*)))
+  (name (config/active-profile (getenv "WAG_ENV"))))
 
 (def resettable-envs
   "The profiles `db:reset` may drop every table in, and `db:seed` may fill:
@@ -102,10 +96,9 @@
 (defn disposable-environment?
   "True when `env` names a database that is safe to seed.
 
-   Callers must pass the environment resolved by `detect-environment`, not a
-   direct read of WAG_ENV — the connection uses the full precedence chain
-   (-Denv > WAG_ENV > ENV > ENVIRONMENT), and a guard that asks a narrower
-   question than the connection is not a guard."
+   Callers must pass the environment resolved by `detect-environment`, the
+   one the connection uses: a guard that asks a narrower question than the
+   connection is not a guard."
   [env]
   (contains? disposable-envs (config/normalize-env env)))
 
@@ -119,12 +112,6 @@
   (str "Production changes go through migrations: `bb migrate up`, with a down"
        " migration or a conversion migration for what must change or go."
        " Never a reset."))
-
-(defn with-environment
-  "Execute function with specific environment context"
-  [env f]
-  (binding [*default-environment* env]
-    (f)))
 
 ;; =============================================================================
 ;; Database Adapter Configuration Analysis

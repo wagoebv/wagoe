@@ -37,9 +37,10 @@
     (get env-aliases s s)))
 
 (defn active-profile
-  "The profile `load-config` picks when none is passed: WAG_ENV, else dev."
+  "The profile `load-config` picks when none is passed: WAG_ENV, else dev.
+   A blank WAG_ENV is unset, not a profile named \"\" (BOU-686)."
   ([] (active-profile (System/getenv "WAG_ENV")))
-  ([wag-env] (keyword (normalize-env (or wag-env "dev")))))
+  ([wag-env] (keyword (or (not-empty (normalize-env wag-env)) "dev"))))
 
 (defn- url-exists? [^java.net.URL url]
   (try (with-open [_ (.openStream url)] true)

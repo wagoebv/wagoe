@@ -200,36 +200,16 @@
 ;; =============================================================================
 
 (deftest ^:unit test-detect-environment
-  (testing "Environment detection from system properties"
-    (testing "Environment set via system property"
-      (System/setProperty "env" "test")
-      (is (= "test" (config/detect-environment))
-          "Should detect environment from system property")
-      (System/clearProperty "env"))
-
-    ;; Env vars can't be modified inside a JVM (and the documented test
-    ;; invocation exports WAG_ENV=test), so exercise the env-var branches
-    ;; through the config/getenv seam instead of the real environment.
-    (testing "System property takes precedence over env vars"
-      (System/setProperty "env" "prop-env")
-      (with-redefs [config/getenv (constantly "env-env")]
-        (is (= "prop-env" (config/detect-environment))))
-      (System/clearProperty "env"))
-
-    (testing "WAG_ENV wins over ENV and ENVIRONMENT"
-      (System/clearProperty "env")
-      (with-redefs [config/getenv {"WAG_ENV" "from-bnd" "ENV" "from-env"}]
-        (is (= "from-bnd" (config/detect-environment))))
-      (with-redefs [config/getenv {"ENV" "from-env" "ENVIRONMENT" "from-environment"}]
-        (is (= "from-env" (config/detect-environment))))
-      (with-redefs [config/getenv {"ENVIRONMENT" "from-environment"}]
-        (is (= "from-environment" (config/detect-environment)))))
-
-    (testing "Defaults to 'dev' when nothing is set"
-      (System/clearProperty "env")
-      (with-redefs [config/getenv (constantly nil)]
-        (is (= "dev" (config/detect-environment))
-            "Should default to 'dev' when env not set")))))
+  ;; The profile the app boots with, and nothing else (BOU-686).
+  (let [detect (fn [env] (with-redefs [config/getenv env] (config/detect-environment)))
+        prev   (System/getProperty "env")]
+    (try
+      (System/setProperty "env" "prod")
+      (is (= "test" (detect {"WAG_ENV" "testing"})) "WAG_ENV decides, aliases resolved")
+      (is (= "dev" (detect {"ENV" "prod" "ENVIRONMENT" "prod"})) "-Denv, ENV and ENVIRONMENT do not")
+      (is (= "dev" (detect {"WAG_ENV" "  "})) "a blank WAG_ENV is unset")
+      (finally
+        (if prev (System/setProperty "env" prev) (System/clearProperty "env"))))))
 
 ;; =============================================================================
 ;; Configuration Merging and Override Tests

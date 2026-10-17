@@ -80,14 +80,16 @@ Includes file validation, image processing, and signed URL generation.
 
 == Configuration
 
+`:wagoe/storage` in `:active`, chosen by `:provider` (default `:local`).
+
 [source,clojure]
 ----
-;; Local (development)
-:wagoe/storage {:backend :local :base-path "/var/uploads" :base-url "http://localhost:3000/uploads"}
+;; Local (development) — :root or :base-path
+:wagoe/storage {:provider :local :root "/var/uploads"}
 
 ;; S3 (production)
-:wagoe/storage {:backend :s3 :bucket #env AWS_S3_BUCKET :region #env AWS_REGION
-                   :access-key #env AWS_ACCESS_KEY_ID :secret-key #env AWS_SECRET_ACCESS_KEY}
+:wagoe/storage {:provider :s3 :bucket #env AWS_S3_BUCKET :region #env AWS_REGION
+                :access-key #env AWS_ACCESS_KEY_ID :secret-key #env AWS_SECRET_ACCESS_KEY}
 ----
 
 == Testing

@@ -85,15 +85,26 @@
    [:credentials-path {:optional true} string?]
    [:public-read? {:optional true} boolean?]])
 
+(def ^:private module-keys
+  "What `module-wiring` reads beside the adapter's own options."
+  [[:expose-http? {:optional true} [:or boolean? string?]]
+   [:http-base-path {:optional true} string?]])
+
 (def StorageConfig
-  "Schema for storage configuration."
-  [:map
-   [:adapter [:enum :local :s3 :gcs]]
-   [:local {:optional true} LocalStorageConfig]
-   [:s3 {:optional true} S3StorageConfig]
-   [:gcs {:optional true} GCSStorageConfig]
-   [:default-visibility {:optional true} [:enum :public :private]]
-   [:max-file-size {:optional true} pos-int?]])
+  "The `:wagoe/storage` value `module-wiring` reads, by `:provider` (default
+   `:local`). `:root` is the catalogue's name for `:base-path` (BOU-646)."
+  [:multi {:dispatch #(:provider % :local)}
+   [:local [:and
+            (into [:map
+                   [:provider {:optional true} [:= :local]]
+                   [:root {:optional true} string?]
+                   [:base-path {:optional true} string?]
+                   [:url-base {:optional true} string?]
+                   [:signing-secret {:optional true} string?]]
+                  module-keys)
+            [:fn {:error/message "needs :root or :base-path"} #(some? (or (:root %) (:base-path %)))]]]
+   [:s3 (into S3StorageConfig (concat [[:provider [:= :s3]] [:prefix {:optional true} string?]] module-keys))]
+   [:gcs (into GCSStorageConfig (concat [[:provider [:= :gcs]] [:prefix {:optional true} string?]] module-keys))]])
 
 ;; ============================================================================
 ;; Validation Functions

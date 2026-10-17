@@ -1,7 +1,8 @@
 (ns wagoe.platform.shell.http.interceptors-test
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest testing is]]
-            [wagoe.platform.shell.http.interceptors :as http-interceptors]))
+            [wagoe.platform.shell.http.interceptors :as http-interceptors]
+            [wagoe.config :as config]))
 
 ;; ==============================================================================
 ;; Mock System (simplified)
@@ -298,6 +299,13 @@
         (let [body (get-in (respond {:error-enricher stub-enricher :environment env} validation)
                            [:response :body :error])]
           (is (nil? (:dev body)) (str "leaked WGE info in " env)))))
+
+    (testing "without a boot profile, active-profile decides (BOU-686)"
+      (with-redefs [config/active-profile (constantly :prod)]
+        (is (nil? (get-in (respond {:error-enricher stub-enricher} validation) [:response :body :error :dev]))))
+      (with-redefs [config/active-profile (constantly :dev)]
+        (is (= "WGE-201" (get-in (respond {:error-enricher stub-enricher} validation)
+                                 [:response :body :error :dev :code])))))
 
     (testing "no enricher wired, no :dev key"
       (is (nil? (get-in (respond {:environment "development"} validation) [:response :body :error :dev]))))

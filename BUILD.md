@@ -103,11 +103,7 @@ java -jar target/wagoe-*-standalone.jar help
 
 - `HTTP_PORT` - HTTP server port (default: 3000)
 - `HTTP_HOST` - HTTP server host (default: 0.0.0.0)
-- `WAG_ENV` - Environment profile (dev, prod, test)
-
-  Resolved by `detect-environment` in this order, first match wins:
-  the `env` JVM system property, then `WAG_ENV`, `ENV`, `ENVIRONMENT`.
-  `ENV` and `ENVIRONMENT` are legacy fallbacks — prefer `WAG_ENV`.
+- `WAG_ENV` - Environment profile (dev, prod, test). Unset or blank means dev.
 
 ### Running in Production
 

@@ -77,7 +77,8 @@
                                 read-line (fn [] (swap! calls conj :read-line) env)]
                     (with-out-str (is (= 1 (sut/cmd-reset {})))))]
         (is (= [] @calls) "neither connected, asked nor reset")
-        (is (re-find #"bb migrate up" out) out)))))
+        ;; A blank WAG_ENV names no profile (BOU-686).
+        (is (re-find (if (= "" env) #"No profile is named" #"bb migrate up") out) out)))))
 
 (deftest ^:unit reset-asks-for-the-database-name-on-a-terminal-only
   ;; `yes | bb db:reset` answered the old prompt; no terminal now refuses,
