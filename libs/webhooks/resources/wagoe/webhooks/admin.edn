@@ -1,0 +1,40 @@
+;; Admin entities for the webhook tables. Merge into :wagoe/admin :entities:
+;;   :entities #merge [#include "admin/users.edn"
+;;                     #include "wagoe/webhooks/admin.edn"]
+{:webhook-subscriptions
+ {:label         "Webhook subscriptions"
+  :description   "Where events are delivered"
+  :icon          :external-link
+  :table-name    :webhook_subscriptions
+  :list-fields   [:event-pattern :url :tenant-id :active :created-at]
+  :search-fields [:url :event-pattern :description]
+  ;; The secret is ciphertext, and only the service can encrypt a new one or
+  ;; check that a URL is not a private address.
+  :hide-fields     #{:secret}
+  :readonly-fields #{:id :secret :url :tenant-id :created-at :updated-at}
+  :permissions   {:create false :create-hint "webhooks/create-subscription!"}
+  :fields        {:active     {:type :boolean :filterable true}
+                  :tenant-id  {:filterable true}
+                  :created-at {:type :instant}}
+  :default-sort  :created-at
+  :default-sort-dir :desc}
+
+ :webhook-deliveries
+ {:label         "Webhook deliveries"
+  :description   "One row per delivery attempt"
+  :icon          :file-text
+  :table-name    :webhook_deliveries
+  :list-fields   [:created-at :topic :status :status-code :attempt :latency-ms :subscription-id]
+  :search-fields [:event-id :topic :subscription-id]
+  ;; A log: written by deliveries, never by hand.
+  :readonly-fields #{:id :subscription-id :tenant-id :event-id :topic :attempt :status
+                     :status-code :latency-ms :response :error :created-at}
+  :permissions   {:create false :create-hint "written by each delivery attempt"}
+  :fields        {:status     {:type :enum
+                               :filterable true
+                               :options [[:delivered "Delivered"] [:failed "Failed"]
+                                         [:dead "Dead"] [:refused "Refused"]]}
+                  :tenant-id  {:filterable true}
+                  :created-at {:type :instant :filterable true}}
+  :default-sort  :created-at
+  :default-sort-dir :desc}}

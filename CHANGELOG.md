@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **Outbound webhooks: `com.wagoe/wagoe-webhooks`** (BOU-472): bus events go to subscriber URLs, signed, retried as jobs,
+  per tenant, logged in the admin. Enable `:wagoe/webhooks` beside `:wagoe/jobs`; receivers use `verify-signature`.
 - **Form fields from malli schemas, checked by the server as you type** (BOU-465): `wagoe.shared.ui.core.form`.
   Admin forms and new scaffolded modules (a create form) use it; generated projects now declare `wagoe-shared-ui`.
 - **`permission-holders` and `import-groups!` on the group service** (BOU-718): who holds a permission in one query;

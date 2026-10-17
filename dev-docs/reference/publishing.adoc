@@ -41,7 +41,7 @@ Add these to your shell profile (`~/.zshrc` or `~/.bashrc`) for convenience.
 
 == Library overview
 
-All 32 libraries are published to the `com.wagoe` group on Clojars. The order
+All 33 libraries are published to the `com.wagoe` group on Clojars. The order
 below is `bb deploy`'s publish order — a topological sort of `all-libs` by each
 library's `deps.edn` Wagoe dependencies, so every library appears after
 everything it depends on.
@@ -95,7 +95,7 @@ in-repo end-to-end test harness, not a library.
 == Version management
 
 Each publishable artifact has a `(def version "…")` in its own `build.clj`.
-This includes all 32 libraries under `libs/*` — `libs/tools` among them. It is
+This includes all 33 libraries under `libs/*` — `libs/tools` among them. It is
 dev-only in the sense that applications do not depend on it at runtime, but it
 is published like everything else, as `com.wagoe/wagoe-tools`.
 
@@ -136,14 +136,14 @@ Always bump the version before deploying — you cannot re-deploy the same versi
 
 == Deploying locally
 
-=== All 32 artifacts in one command
+=== All 33 artifacts in one command
 
 [source,bash]
 ----
 bb deploy --all
 ----
 
-This deploys all 32 publishable artifacts in dependency
+This deploys all 33 publishable artifacts in dependency
 order with a 30-second pause between artifacts to allow Clojars indexing.
 
 === Only libraries not yet on Clojars
@@ -339,11 +339,11 @@ no-API trade the rest of that gate makes.
 - Setup Clojure + Babashka       # DeLaGuardo/setup-clojure with bb: latest
 - Cache ~/.m2 and ~/.gitlibs     # Speeds up subsequent runs
 - npm ci + npm run build:css:admin  # Builds Tailwind CSS for ui-style jar
-- bb deploy --all                # Deploys all 32 artifacts in order, 30s between each
+- bb deploy --all                # Deploys all 33 artifacts in order, 30s between each
 - Create GitHub Release          # Only on tag pushes; pre-release for alpha/beta
 ----
 
-The indexing pauses alone account for roughly 15 minutes (32 artifacts × 30s), so
+The indexing pauses alone account for roughly 15 minutes (33 artifacts × 30s), so
 budget approximately 20–25 minutes in total once the build is included.
 
 ---

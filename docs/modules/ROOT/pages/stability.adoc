@@ -21,7 +21,7 @@ at `1.0.0`, and the surface below is the one it promises.
   Everything deprecated is deferred to `2.0` — see <<_deferred_to_2_0,Deferred to 2.0>>.
 
 | Artifacts
-| 32 libraries on Clojars, all in the `com.wagoe` group. Artifact ids are
+| 33 libraries on Clojars, all in the `com.wagoe` group. Artifact ids are
   `wagoe-` followed by the library name — `wagoe-core`, `wagoe-platform` — except
   where the library name already begins with `wagoe-`, which is not doubled:
   `libs/wagoe-cli` publishes as `com.wagoe/wagoe-cli`, not `wagoe-wagoe-cli`, and
@@ -288,7 +288,10 @@ version bump for a fix we could see coming.
 | Three exporters, same gap
 
 | `audience`
-| The newest library here, and the least exercised
+| Rule-based segmentation, the least exercised library after webhooks
+
+| `webhooks`
+| The newest library here; subscriptions have no HTTP API yet
 
 | `workflow`
 | Its guard and transition API is still moving

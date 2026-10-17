@@ -35,6 +35,7 @@
          com.wagoe/wagoe-jobs     {:local/root "../../libs/jobs"}
          com.wagoe/wagoe-realtime {:local/root "../../libs/realtime"}
          com.wagoe/wagoe-push     {:local/root "../../libs/push"}
+         com.wagoe/wagoe-webhooks {:local/root "../../libs/webhooks"}
          com.wagoe/wagoe-audience {:local/root "../../libs/audience"}
          com.wagoe/wagoe-geo      {:local/root "../../libs/geo"}
          com.wagoe/wagoe-reports  {:local/root "../../libs/reports"}

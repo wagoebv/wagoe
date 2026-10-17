@@ -27,7 +27,8 @@
                         "libs/devtools/src"
                         "libs/push/src"
                         "libs/audience/src"
-                        "libs/test/src"]
+                        "libs/test/src"
+                        "libs/webhooks/src"]
 
   :tests [{:id :unit
            :test-paths ["test"
@@ -58,7 +59,8 @@
                         "libs/devtools/test"
                         "libs/push/test"
                         "libs/audience/test"
-                        "libs/test/test"]
+                        "libs/test/test"
+                        "libs/webhooks/test"]
            :ns-patterns ["wagoe.*-test"]
            :randomize? true}
 
@@ -111,6 +113,10 @@
           {:id :jobs
            :test-paths ["libs/jobs/test"]
            :ns-patterns ["wagoe.jobs.*-test"]}
+
+          {:id :webhooks
+           :test-paths ["libs/webhooks/test"]
+           :ns-patterns ["wagoe.webhooks.*-test"]}
 
           {:id :email
            :test-paths ["libs/email/test"]

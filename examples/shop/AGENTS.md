@@ -501,6 +501,7 @@ In deps.edn but not switched on. `wagoe add <module>` writes its config key.
 | geo | Multi-provider geocoding (OSM/Google/Mapbox), Haversine distance | `wagoe add geo` |
 | push | Multi-platform push notifications — FCM (Firebase) + APNs (Apple) | `wagoe add push` |
 | events | Event bus for cross-process, asynchronous module communication — in-memory and Redis Streams | `wagoe add events` |
+| webhooks | Outbound webhooks: signed, retried, per-tenant delivery of bus events | `wagoe add webhooks` |
 | audience | Rule-based audience segmentation with SQL + predicate pipeline | `wagoe add audience` |
 | admin | Admin UI with entity config, HTMX forms | `wagoe add admin` |
 | devtools | Dev-only: error pipeline with WGE codes, REPL helpers, dashboard component | `wagoe add devtools` |

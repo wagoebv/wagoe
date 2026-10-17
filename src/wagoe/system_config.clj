@@ -168,6 +168,10 @@
                      :wagoe.push/service :wagoe.push/routes
                      :wagoe.push/job-handlers]}
 
+   ;; Deliveries run wherever the job workers run; the service enqueues them.
+   :webhooks {:keys [:wagoe/webhooks :wagoe.webhooks/db-schema
+                     :wagoe.webhooks/job-handlers :wagoe.webhooks/subscriber]}
+
    :calendar {:keys [:wagoe/calendar]}
 
    :geo      {:keys [:wagoe/geo-service]}
@@ -203,6 +207,7 @@
    :workflow "component is a map of {:store :registry :engine}; IWorkflowEngine has no key of its own"
    :search   "component is a map; ISearchEngine has no key of its own"
    :audience "component is a map of {:store :resolver :cache}; IAudienceResolver has no key of its own"
+   :webhooks "it is called in-process by whoever subscribes; delivery itself is a job"
    :calendar "pure iCal conversion, so a hop through RPC buys nothing; a service that refs :wagoe/calendar runs calendar alongside (`service user calendar`)"
    :geo      "component is a map; GeoProviderProtocol has no key of its own"
    :realtime "component is a map; IRealtimeService has no key of its own"

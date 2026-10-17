@@ -1062,6 +1062,7 @@ Automated safeguards run in CI (and `check:fcis` + `check:ports` in pre-commit) 
 | [ui-style](https://github.com/wagoebv/wagoe/blob/main/libs/ui-style/AGENTS.md)           | Shared CSS/JS style bundles — :base, :pilot, :admin-pilot                                           |
 | [user](https://github.com/wagoebv/wagoe/blob/main/libs/user/AGENTS.md)                   | Authentication, JWT, MFA, user management                                                           |
 | [wagoe-mcp](https://github.com/wagoebv/wagoe/blob/main/libs/wagoe-mcp/AGENTS.md)         | MCP server (stdio): tool/resource registry + JSON-RPC transport for editor agents                   |
+| [webhooks](https://github.com/wagoebv/wagoe/blob/main/libs/webhooks/AGENTS.md)           | Outbound webhooks: signed, retried, per-tenant delivery of bus events                               |
 | [workflow](https://github.com/wagoebv/wagoe/blob/main/libs/workflow/AGENTS.md)           | Workflow orchestration with state machines                                                          |
 <!-- /gen:modules -->
 
@@ -1134,7 +1135,7 @@ rename a released id: databases that recorded it would run it again. Per-module 
 | `wagoe.tools.integrate` | `bb scaffold integrate` — guide module integration (Integrant config + wiring) |
 | `wagoe.tools.i18n` | `bb i18n:find/scan/missing/unused` |
 | `wagoe.tools.admin` | `bb create-admin` |
-| `wagoe.tools.deploy` | `bb deploy` (handles all 32 libs) |
+| `wagoe.tools.deploy` | `bb deploy` (handles all 33 libs) |
 | `wagoe.tools.dev` | `bb migrate`, `bb check-links`, `bb smoke-check`, `bb install-hooks` |
 | `wagoe.tools.check-fcis` | `bb check:fcis` — FC/IS boundary enforcement (ADR-021) |
 | `wagoe.tools.check-tests` | `bb check:placeholder-tests` — placeholder assertion detection |
