@@ -73,7 +73,8 @@
 (deftest ^:contract ^:security the-right-code-resets-the-count
   (let [{:keys [svc] :as f} (fixture)
         handler (user-http/login-handler svc)]
+    (is (true? (get-in (api-login handler "") [:body :requiresMfa])) "a blank code asks for one")
     (is (= 401 (:status (api-login handler "000000"))))
-    (is (= 1 (:failed-login-count (stored f))))
+    (is (= 1 (:failed-login-count (stored f))) "and does not count")
     (is (= 200 (:status (api-login handler backup-code))) "a backup code signs in")
     (is (zero? (:failed-login-count (stored f))))))

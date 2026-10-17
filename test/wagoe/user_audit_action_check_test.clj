@@ -39,8 +39,8 @@
       (is (not (log-test/logged? 'wagoe.user.shell.persistence :info #"Widening"))
           "a widened check is left alone"))
     (ports/create-audit-log repo (entry audit/permanently-delete-user-audit-entry))
-    (ports/create-audit-log repo (audit/session-revoked-audit-entry (random-uuid) "admin@example.com" (random-uuid)
-                                                                    "u@example.com" nil nil (random-uuid)))
+    (ports/create-audit-log repo (audit/session-revoked-audit-entry (random-uuid) (random-uuid) "admin@example.com"
+                                                                    (random-uuid) "u@example.com" nil nil))
     (is (= #{:delete :permanent-delete :session-revoked}
            (set (map :action (:audit-logs (ports/find-audit-logs repo {:limit 10})))))
         "the earlier entry is kept, and the new ones written")

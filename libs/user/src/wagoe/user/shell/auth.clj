@@ -308,7 +308,8 @@
                         current-time))
 
           ;; Step 6: Check MFA requirement and verification
-          mfa-code (:mfa-code login-context)
+          ;; Blank is not a code: answer :mfa-required, without counting.
+          mfa-code (when-not (str/blank? (:mfa-code login-context)) (:mfa-code login-context))
           mfa-requirement (when (and user password-valid?)
                             (mfa-core/determine-mfa-requirement
                              user password-valid? mfa-code login-risk

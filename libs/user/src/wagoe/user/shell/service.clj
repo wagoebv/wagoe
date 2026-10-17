@@ -740,7 +740,7 @@
            ;; The actor and their IP, not the revoked device's (BOU-698).
            (do (when-let [user (.find-user-by-id user-repository user-id)]
                  (audit-quietly! audit-repository
-                                 #(audit-core/session-revoked-audit-entry %1 %2 %3 %4 %5 %6 session-id)
+                                 (partial audit-core/session-revoked-audit-entry session-id)
                                  user-id (:email user)))
                {:invalidated true})
            {:invalidated false})))

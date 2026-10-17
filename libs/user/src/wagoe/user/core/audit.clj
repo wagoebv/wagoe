@@ -271,7 +271,7 @@
 (defn session-revoked-audit-entry
   "Audit log entry for ending one of `target-user-id`'s sessions, by an admin
    or by the user themselves (BOU-698)."
-  [actor-id actor-email target-user-id target-user-email ip-address user-agent session-id]
+  [session-id actor-id actor-email target-user-id target-user-email ip-address user-agent]
   {:action :session-revoked
    :actor-id actor-id
    :actor-email actor-email
