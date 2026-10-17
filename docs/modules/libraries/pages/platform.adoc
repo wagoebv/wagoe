@@ -118,9 +118,10 @@ The types the framework answers with:
 |===
 
 A write that a unique or foreign key refuses is a 409 `conflict`, on H2,
-SQLite and PostgreSQL alike: `wagoe.platform.database` throws it, so every
-generated repository gets it. `details` names the constraint and, when the
-driver names one column, the field; nothing else of the driver's text is sent.
+SQLite, PostgreSQL and MySQL alike: `wagoe.platform.database` throws it, so every
+generated repository gets it. `details` names the constraint and the key's
+columns: `field` for one, `fields` for several. Nothing else of the driver's
+text is sent.
 
 [source,json]
 ----

@@ -159,6 +159,9 @@
   (get-table-info [_ datasource table-name]
     ((:table-info spec) datasource table-name))
 
+  (key-columns [_ datasource table-name key-name]
+    (when-let [f (:key-columns spec)] (f datasource table-name key-name)))
+
   (engine [_] (:engine spec))
 
   (now-ms-sql [_] (:now-ms-sql spec))
