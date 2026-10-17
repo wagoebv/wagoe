@@ -19,12 +19,10 @@
             [wagoe.platform.database :as db]
             [wagoe.observability.logging.shell.adapters.no-op :as logging-no-op]
             [wagoe.observability.errors.shell.adapters.no-op :as error-reporting-no-op]
-            [wagoe.test.logging :refer [with-silent-logging]]
+            [wagoe.test.logging :refer [logged-errors with-silent-logging]]
             [wagoe.admin.shell.http.handlers.crud :as crud]
             [wagoe.i18n.shell.catalogue :as catalogue]
-            [clojure.test :refer [deftest is testing use-fixtures]]
-            [clojure.tools.logging :as log]
-            [clojure.tools.logging.test :as log-test])
+            [clojure.test :refer [deftest is testing use-fixtures]])
   (:import [java.util UUID]
            [java.time Instant]))
 
@@ -255,19 +253,13 @@
 (def ^:private i18n-catalogue
   (catalogue/create-map-catalogue (catalogue/load-catalogue "wagoe/i18n/translations")))
 
-(defn- logged
-  "[result errors], `errors` the messages logged at ERROR while `f` ran."
-  [f]
-  (let [the-log (log-test/atomic-log log-test/->LogEntry)
-        res     (binding [log/*logger-factory* (log-test/logger-factory the-log (constantly true))] (f))]
-    [res (into [] (comp (filter #(= :error (:level %))) (map :message)) (log-test/entries the-log))]))
 
 (deftest ^:integration an-edit-on-a-taken-key-in-the-secondary-table-is-refused-on-its-field
   ;; The unique key is on the secondary table's email (BOU-721).
   (let [id    (insert-split-user! "mine@example.com" "Mine")
         _     (insert-split-user! "taken@example.com" "Other")
         sp    (schema-repo/create-schema-repository *db-ctx* admin-config)
-        [response errors] (logged #((crud/update-entity-handler *admin-service* sp admin-config)
+        [response errors] (logged-errors #((crud/update-entity-handler *admin-service* sp admin-config)
                                     {:request-method      :put
                                      :uri                 (str "/web/admin/test-profiles/" id)
                                      :user                {:id (UUID/randomUUID) :role :admin :active true}

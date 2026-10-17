@@ -19,8 +19,7 @@
             [support.test-db :as test-db]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing use-fixtures]]
-            [clojure.tools.logging :as log]
-            [clojure.tools.logging.test :as log-test])
+            [wagoe.test.logging :refer [logged-errors]])
   (:import [java.io File]))
 
 (def ^:private admin-config
@@ -88,12 +87,6 @@
    :i18n/catalogue i18n-catalogue
    :i18n/default-locale :en})
 
-(defn- logged
-  "[result errors], `errors` the messages logged at ERROR while `f` ran."
-  [f]
-  (let [the-log (log-test/atomic-log log-test/->LogEntry)
-        res     (binding [log/*logger-factory* (log-test/logger-factory the-log (constantly true))] (f))]
-    [res (into [] (comp (filter #(= :error (:level %))) (map :message)) (log-test/entries the-log))]))
 
 (defn- marked? [body field]
   (boolean (re-find (re-pattern (str "has-errors\"><label for=\"" field "\"")) body)))
@@ -113,7 +106,7 @@
                  (ex-data ex)))))
 
       (testing "create: 409, both fields marked, nothing at ERROR"
-        (let [[response errors] (logged #((crud/create-entity-handler svc schema admin-config)
+        (let [[response errors] (logged-errors #((crud/create-entity-handler svc schema admin-config)
                                           (request :post "/web/admin/templates" {:entity "templates"}
                                                    {"template-key" k "domain-id" "d1" "slug" (str k "-4")})))
               body (str (:body response))]
@@ -127,7 +120,7 @@
 
       (testing "edit: 409, both fields marked, nothing at ERROR"
         (let [id (str (:id other))
-              [response errors] (logged #((crud/update-entity-handler svc schema admin-config)
+              [response errors] (logged-errors #((crud/update-entity-handler svc schema admin-config)
                                           (request :put (str "/web/admin/templates/" id)
                                                    {:entity "templates" :id id}
                                                    {"domain-id" "d1"})))
@@ -144,7 +137,7 @@
                 slug (str "only-" (name backend))
                 _    (ports/create-entity svc :templates {:template-key slug :domain-id "d1" :slug slug})]]
     (testing (str backend)
-      (let [[response errors] (logged #((crud/create-entity-handler svc schema admin-config)
+      (let [[response errors] (logged-errors #((crud/create-entity-handler svc schema admin-config)
                                         (request :post "/web/admin/templates" {:entity "templates"}
                                                  {"template-key" slug "domain-id" "d9" "slug" slug})))
             body (str (:body response))]

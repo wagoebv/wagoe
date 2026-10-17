@@ -213,7 +213,7 @@
         sql      (first sql-query)
         cause    (redacted-cause e r)
         key-name (some-> r redaction/constraint-name)]
-    (when-let [v (some->> (some-> r (assoc :target (constraint/statement-table sql)) constraint/violation)
+    (when-let [v (some->> (some-> r (assoc :target (constraint/statement-table sql) :engine (protocols/engine (:adapter ctx))) constraint/violation)
                           (named-columns ctx sql key-name r))]
       (log/info (str what " refused by a constraint")
                 {:adapter adapter-dialect :sql sql :violation v :constraint-name key-name})

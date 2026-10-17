@@ -4,8 +4,6 @@
    refused. A parent without one keeps the create-then-add flow."
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest is testing use-fixtures]]
-            [clojure.tools.logging :as log]
-            [clojure.tools.logging.test :as log-test]
             [integrant.core :as ig]
             [wagoe.admin.core.forms :as forms]
             [wagoe.admin.ports :as ports]
@@ -18,7 +16,7 @@
             [wagoe.i18n.shell.catalogue :as catalogue]
             [wagoe.platform.database :as db]
             [wagoe.platform.shell.adapters.database.factory :as db-factory]
-            [wagoe.test.logging :refer [with-silent-logging]]))
+            [wagoe.test.logging :refer [logged-errors with-silent-logging]]))
 
 ^{:kaocha.testable/meta {:integration true :admin true}}
 
@@ -262,21 +260,14 @@
       (is (= 2 (count-rows :nc_invoices)))
       (is (nil? (db/execute-one! *db* {:select [:*] :from [:nc_invoices] :where [:= :number "SMUGGLED"]}))))))
 
-(defn- logged
-  "[result errors], `errors` the messages logged at ERROR while `f` ran."
-  [f]
-  (let [the-log (log-test/atomic-log log-test/->LogEntry)
-        res     (binding [log/*logger-factory* (log-test/logger-factory the-log (constantly true))] (f))]
-    [res (into [] (comp (filter #(= :error (:level %))) (map :message)) (log-test/entries the-log))]))
-
 (defn- marked? [body field]
   (boolean (re-find (re-pattern (str "has-errors\"><label for=\"" (java.util.regex.Pattern/quote field) "\"")) body)))
 
 (deftest ^:integration a-child-row-on-a-taken-key-is-a-409-on-its-row
   ;; A key over two columns, one of them the parent's id (BOU-721).
-  (let [[response errors] (logged #(post! {"number"              "INV-13"
-                                           (line 0 :description) "Hours"
-                                           (line 4 :description) "Hours"}))
+  (let [[response errors] (logged-errors #(post! {"number"              "INV-13"
+                                                  (line 0 :description) "Hours"
+                                                  (line 4 :description) "Hours"}))
         body              (str (:body response))]
     (is (= 409 (:status response)))
     (is (= [] errors))

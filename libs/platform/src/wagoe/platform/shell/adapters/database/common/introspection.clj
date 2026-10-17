@@ -94,19 +94,19 @@
    the table the search path resolves. Nil for a key on an expression."
   [datasource table-name key-name]
   (let [schema (when (keyword? table-name) (namespace table-name))
-        table  (if schema
-                 ["to_regclass(format('%I.%I', ?::text, ?::text))" schema (name table-name)]
-                 ["to_regclass(quote_ident(?))" (name table-name)])
+        [regclass & params] (if schema
+                              ["to_regclass(format('%I.%I', ?::text, ?::text))" schema (name table-name)]
+                              ["to_regclass(quote_ident(?))" (name table-name)])
         found  (jdbc/execute! datasource
                               (into [(str "SELECT a.attname FROM pg_index i"
                                           " JOIN pg_class ic ON ic.oid = i.indexrelid"
                                           " CROSS JOIN LATERAL unnest(i.indkey::int2[]) WITH ORDINALITY AS k(attnum, ord)"
                                           " LEFT JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = k.attnum"
                                           " WHERE ic.relname = ? AND k.ord <= i.indnkeyatts"
-                                          " AND i.indrelid = " (first table)
+                                          " AND i.indrelid = " regclass
                                           " ORDER BY k.ord")
                                      key-name]
-                                    (rest table))
+                                    params)
                               {:builder-fn rs/as-unqualified-lower-maps})]
     (when (every? :attname found)
       (mapv :attname found))))

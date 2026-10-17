@@ -18,10 +18,12 @@
       :foreign-key)))
 
 (defn- engine
-  "Which driver reported this, from its codes: each pattern below reads only
-   its own engine's messages, where the column list has a fixed place."
-  [{:keys [error-code message]}]
+  "Which driver reported this: its adapter's `:engine`, or else read from its
+   codes. Each pattern below reads only its own engine's messages, where the
+   column list has a fixed place."
+  [{:keys [engine error-code message]}]
   (cond
+    engine                                      engine
     (str/starts-with? (str message) "[SQLITE_") :sqlite
     (#{1062 1451 1452} error-code)              :mysql
     (#{23503 23505 23506} error-code)           :h2
