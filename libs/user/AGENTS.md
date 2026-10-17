@@ -413,7 +413,8 @@ Removed:
 Kept:
 - `/api/v1/auth/login`, `/api/v1/sessions`, `/api/v1/sessions/:token`
 - `/api/v1/users/**`, `/api/v1/auth/mfa/**`
-- OIDC sign-in under `/web/auth/oidc/**`, when providers are configured
+- OIDC sign-in under `/web/auth/oidc/**`, when providers are configured. It lands
+  on `/web/dashboard` by default; point `:login-redirect` elsewhere.
 - Not this module: the platform's `/` redirect still points at `/web/login`, and
   the admin UI (`:wagoe/admin`) stays mounted; leave it out of `:active` too.
 - Groups have no API; manage them through `IUserGroupService`.

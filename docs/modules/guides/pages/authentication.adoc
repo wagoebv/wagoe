@@ -324,6 +324,9 @@ Other modules are not affected: `/` still redirects to `/web/login`, and the adm
 stays mounted while `:wagoe/admin` is active. Groups have no API; manage them through
 `:wagoe/user-group-service`.
 
+OpenID Connect sign-in lands on `/web/dashboard` by default; point `:login-redirect`
+at a page that exists.
+
 == Session management
 
 [source,bash]
