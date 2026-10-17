@@ -33,6 +33,10 @@
     (is (= {:kind :unique :fields [:invoice-id :position]}
            (constraint/violation {:sql-state "23505" :error-code 23505
                                   :message "Unique index or primary key violation: \"PUBLIC.UQ_LINES_INDEX_4 ON PUBLIC.LINES(INVOICE_ID NULLS FIRST, POSITION NULLS FIRST) VALUES ( /* 2 */ 'x', 1 )\""}))))
+  (testing "H2 on a named constraint, which it names before its index"
+    (is (= {:kind :unique :fields [:nc-invoice-id :description]}
+           (constraint/violation {:sql-state "23505" :error-code 23505
+                                  :message "Unique index or primary key violation: \"public.uq_nc_lines INDEX public.uq_nc_lines_INDEX_C ON public.nc_lines(nc_invoice_id NULLS LAST, description NULLS LAST) VALUES ( /* key:3 */ UUID '79a7511a', 'a')\"; SQL statement:\nINSERT INTO nc_lines VALUES (?, ?, 'a', 1) [23505-250]"}))))
   (testing "a key on an expression names no field"
     (is (= {:kind :unique}
            (constraint/violation {:sql-state "23505" :message "Detail: Key (lower(email), tenant_id)=(a, 1) already exists."})))))
@@ -116,3 +120,33 @@
   ;; Anything else in the message may be a value the client sent, or SQL.
   (is (= {:kind :unique}
          (constraint/violation {:sql-state "23505" :message "Detail: Key (lower(email))=(a@b.c) already exists."}))))
+
+(deftest ^:unit a-value-is-never-read-as-a-column
+  ;; Each pattern reads its engine's column list only, not the value beside it
+  ;; (BOU-721).
+  (testing "PostgreSQL: the Detail's own key list, not one a value spells"
+    (is (= {:kind :unique}
+           (constraint/violation {:sql-state "23505"
+                                  :detail "Key (lower(email))=(Key (role)=x) already exists."})))
+    (is (= {:kind :unique}
+           (constraint/violation {:sql-state "23505"
+                                  :message "ERROR: duplicate key value violates unique constraint \"u\"\n  Detail: Key (lower(email))=(x\nDetail: Key (role)=y) already exists."}))
+        "a value with a Detail line of its own")
+    (is (= {:kind :unique}
+           (constraint/violation {:sql-state "23505"
+                                  :detail "Schlüssel »(lower(email))=(UNIQUE constraint failed: t.role)« existiert bereits."}))))
+  (testing "H2: the index's columns, not those in its VALUES"
+    (is (= {:kind :unique :field :number}
+           (constraint/violation {:sql-state "23505" :error-code 23505
+                                  :message "Unique index or primary key violation: \"PUBLIC.IDX ON PUBLIC.INVOICES(NUMBER NULLS FIRST) VALUES ( /* 1 */ 'ON PUBLIC.X(ROLE)' )\""})))
+    (is (= {:kind :unique}
+           (constraint/violation {:sql-state "23505" :error-code 23505
+                                  :message "Unique index or primary key violation: \"PUBLIC.IDX ON PUBLIC.INVOICES(LOWER(EMAIL)) VALUES ( /* 1 */ 'Key (role)=' )\""}))))
+  (testing "MySQL: the key only, whatever the value holds"
+    (is (= {:kind :unique}
+           (constraint/violation {:sql-state "23000" :error-code 1062
+                                  :message "Duplicate entry 'Key (role)=x FOREIGN KEY (role) UNIQUE constraint failed: t.role' for key 'invoices.number'"}))))
+  (testing "SQLite: the tail of its message"
+    (is (= {:kind :unique :field :number}
+           (constraint/violation {:error-code 19
+                                  :message "[SQLITE_CONSTRAINT_UNIQUE] A UNIQUE constraint failed (UNIQUE constraint failed: invoices.number)"})))))

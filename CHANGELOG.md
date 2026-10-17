@@ -128,6 +128,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **A refused key's field could be read from the value sent, and none was named on non-English PostgreSQL or MySQL 5.7
+  with mixed-case tables** (BOU-721). Columns are now read only from the driver's key list, or else the catalog.
 - **An app migration sharing an id with a library's silently never ran, or the library's didn't** (BOU-717). Boot and
   `migrate up` now refuse; rename yours and see the migrations guide. Skipped session-token hashing reruns at boot.
 - **Admin: a duplicate on a unique key over several columns marked no field, and a create logged an ERROR** (BOU-712).

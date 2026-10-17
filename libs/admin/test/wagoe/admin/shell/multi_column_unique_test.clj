@@ -12,6 +12,7 @@
             [wagoe.i18n.shell.catalogue :as catalogue]
             [wagoe.platform.shell.adapters.database.factory :as db-factory]
             [wagoe.platform.database :as db]
+            [wagoe.platform.ports.database :as db-ports]
             [wagoe.observability.logging.shell.adapters.no-op :as logging-no-op]
             [wagoe.observability.errors.shell.adapters.no-op :as error-reporting-no-op]
             [support.mysql :as mysql]
@@ -151,3 +152,19 @@
         (is (= [] errors))
         (is (marked? body "slug"))
         (is (not (marked? body "template-key")))))))
+
+(deftest ^:integration a-mixed-case-table-names-its-key-columns
+  ;; MySQL 5.7 names the key without its table, so the lookup has the
+  ;; statement's, lower cased; the server need not fold case (BOU-721).
+  (doseq [[backend db-ctx] @backends]
+    (testing (str backend)
+      (db/execute-update! db-ctx {:raw "DROP TABLE IF EXISTS KmLines"})
+      (db/execute-update! db-ctx {:raw "CREATE TABLE KmLines (id INT PRIMARY KEY, invoice_id INT, position INT, CONSTRAINT uq_km UNIQUE (invoice_id, position))"})
+      (db/execute-update! db-ctx {:raw "INSERT INTO KmLines VALUES (1, 1, 2)"})
+      (is (= {:type :conflict :constraint :unique :fields [:invoice-id :position]}
+             (ex-data (try (db/execute-update! db-ctx {:raw "INSERT INTO KmLines VALUES (2, 1, 2)"})
+                           nil
+                           (catch clojure.lang.ExceptionInfo e e)))))
+      (when (= :mysql backend)
+        (is (= ["invoice_id" "position"]
+               (db-ports/key-columns (:adapter db-ctx) (:datasource db-ctx) "kmlines" "uq_km")))))))

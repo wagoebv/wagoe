@@ -70,18 +70,46 @@
 
 (defn information-schema-key-columns
   "The columns of index `key-name` on `table-name`, in key order, per
-   `information_schema.statistics` (MySQL's)."
+   `information_schema.statistics` (MySQL's). The table is matched ignoring
+   case: MySQL 5.7's refusal names no table, so it is the statement's, lower
+   cased, and the server may or may not fold case (lower_case_table_names).
+   Nil when two tables match."
   [{:keys [schema honey] :as spec} datasource table-name key-name]
-  (mapv :column_name
-        (rows datasource
-              {:select   [[:column_name :column_name]]
-               :from     [:information_schema.statistics]
-               :where    [:and
-                          (in-schema schema :table_schema (table-key spec table-name))
-                          [:= :table_name (table-key spec table-name)]
-                          [:= :index_name key-name]]
-               :order-by [:seq_in_index]}
-              honey)))
+  (let [found (rows datasource
+                    {:select   [[:table_name :table_name] [:column_name :column_name]]
+                     :from     [:information_schema.statistics]
+                     :where    [:and
+                                (in-schema schema :table_schema (table-key spec table-name))
+                                [:= [:lower :table_name] (str/lower-case (name table-name))]
+                                [:= :index_name key-name]]
+                     :order-by [:seq_in_index]}
+                    honey)]
+    (when (>= 1 (count (distinct (map :table_name found))))
+      (mapv :column_name found))))
+
+(defn pg-key-columns
+  "The columns of index or constraint `key-name` on `table-name`, in key
+   order, from PostgreSQL's catalog: its refusal names them only in a Detail
+   that follows lc_messages. `table-name` namespaced with its schema, or else
+   the table the search path resolves. Nil for a key on an expression."
+  [datasource table-name key-name]
+  (let [schema (when (keyword? table-name) (namespace table-name))
+        table  (if schema
+                 ["to_regclass(format('%I.%I', ?::text, ?::text))" schema (name table-name)]
+                 ["to_regclass(quote_ident(?))" (name table-name)])
+        found  (jdbc/execute! datasource
+                              (into [(str "SELECT a.attname FROM pg_index i"
+                                          " JOIN pg_class ic ON ic.oid = i.indexrelid"
+                                          " CROSS JOIN LATERAL unnest(i.indkey::int2[]) WITH ORDINALITY AS k(attnum, ord)"
+                                          " LEFT JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = k.attnum"
+                                          " WHERE ic.relname = ? AND k.ord <= i.indnkeyatts"
+                                          " AND i.indrelid = " (first table)
+                                          " ORDER BY k.ord")
+                                     key-name]
+                                    (rest table))
+                              {:builder-fn rs/as-unqualified-lower-maps})]
+    (when (every? :attname found)
+      (mapv :attname found))))
 
 (defn- generated-column?
   "Whether the database fills this column itself. Their column_default is

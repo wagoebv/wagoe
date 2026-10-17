@@ -4,6 +4,8 @@
    refused. A parent without one keeps the create-then-add flow."
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest is testing use-fixtures]]
+            [clojure.tools.logging :as log]
+            [clojure.tools.logging.test :as log-test]
             [integrant.core :as ig]
             [wagoe.admin.core.forms :as forms]
             [wagoe.admin.ports :as ports]
@@ -44,7 +46,8 @@
       (db/execute-update! ctx {:raw "CREATE TABLE nc_lines (id UUID PRIMARY KEY,
                                                            nc_invoice_id UUID NOT NULL REFERENCES nc_invoices(id),
                                                            description VARCHAR(50) NOT NULL,
-                                                           qty INT DEFAULT 1 NOT NULL)"})
+                                                           qty INT DEFAULT 1 NOT NULL,
+                                                           CONSTRAINT uq_nc_lines UNIQUE (nc_invoice_id, description))"})
       (try (binding [*db* ctx] (f))
            (finally
              (db/execute-update! ctx {:raw "DROP TABLE nc_lines"})
@@ -258,3 +261,26 @@
     (testing "rows for an entity the parent is not created with are not written"
       (is (= 2 (count-rows :nc_invoices)))
       (is (nil? (db/execute-one! *db* {:select [:*] :from [:nc_invoices] :where [:= :number "SMUGGLED"]}))))))
+
+(defn- logged
+  "[result errors], `errors` the messages logged at ERROR while `f` ran."
+  [f]
+  (let [the-log (log-test/atomic-log log-test/->LogEntry)
+        res     (binding [log/*logger-factory* (log-test/logger-factory the-log (constantly true))] (f))]
+    [res (into [] (comp (filter #(= :error (:level %))) (map :message)) (log-test/entries the-log))]))
+
+(defn- marked? [body field]
+  (boolean (re-find (re-pattern (str "has-errors\"><label for=\"" (java.util.regex.Pattern/quote field) "\"")) body)))
+
+(deftest ^:integration a-child-row-on-a-taken-key-is-a-409-on-its-row
+  ;; A key over two columns, one of them the parent's id (BOU-721).
+  (let [[response errors] (logged #(post! {"number"              "INV-13"
+                                           (line 0 :description) "Hours"
+                                           (line 4 :description) "Hours"}))
+        body              (str (:body response))]
+    (is (= 409 (:status response)))
+    (is (= [] errors))
+    (is (str/includes? body "Taken in this combination"))
+    (is (= [(line 4 :description)] (filter #(marked? body %) [(line 0 :description) (line 4 :description)]))
+        "the row the database refused, and only it")
+    (is (zero? (count-rows :nc_invoices)))))

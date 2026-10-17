@@ -17,11 +17,41 @@
           (re-find #"SQLITE_CONSTRAINT_FOREIGNKEY" message))
       :foreign-key)))
 
-(def ^:private column-patterns
-  [#"UNIQUE constraint failed: ([^()]+)"          ; SQLite, table.column[, ...]
-   #"Key \(([^)]+)\)="                            ; PostgreSQL Detail
-   #"FOREIGN KEY ?\(([^)]+)\)"                    ; H2, MySQL
-   #"ON [^\s(]+\(([^)]+)\)"])                     ; H2 unique index
+(defn- engine
+  "Which driver reported this, from its codes: each pattern below reads only
+   its own engine's messages, where the column list has a fixed place."
+  [{:keys [error-code message]}]
+  (cond
+    (str/starts-with? (str message) "[SQLITE_") :sqlite
+    (#{1062 1451 1452} error-code)              :mysql
+    (#{23503 23505 23506} error-code)           :h2
+    :else                                       :postgresql))
+
+(defn- pg-key
+  "The column list of PostgreSQL's Detail, `Key (cols)=(vals)`: its `:detail`,
+   or the Detail line of a message that carries it."
+  [{:keys [message detail]}]
+  (some->> (or detail (second (re-find #"(?m)^\s*Detail: (.*)" (str message))))
+           (re-find #"^Key \(([^)]+)\)=")
+           second))
+
+(defn- named-columns
+  "The column names the driver's message gives, read only from where its
+   engine puts them, so a value it quotes is never taken for one (BOU-721).
+   MySQL's unique refusal names the key only."
+  [reported]
+  (let [message (str (:message reported))]
+    (some-> (case (engine reported)
+              ;; ... (UNIQUE constraint failed: t.a, t.b), at the end.
+              :sqlite     (second (re-find #"\(UNIQUE constraint failed: ([^()]+)\)\s*$" message))
+              :postgresql (pg-key reported)
+              ;; The first quoted part, "[KEY INDEX ]IDX ON T(A, B) VALUES ..."
+              ;; or "FK: T FOREIGN KEY(A) REFERENCES ...", in any language.
+              :h2         (some #(second (re-find % message))
+                                [#"^[^\"]*\"\S+(?: INDEX \S+)? ON [^\s(]+\(([^)]+)\)"
+                                 #"^[^\"]*\"\S+: \S+ FOREIGN KEY\(([^)]+)\)"])
+              :mysql      (second (re-find #"^[^(]*\([^,]+, CONSTRAINT `[^`]+` FOREIGN KEY \(([^)]+)\)" message)))
+            (str/split #","))))
 
 (def ^:private statement-table-pattern
   (let [id "(?:\"[^\"]+\"|`[^`]+`|[\\p{L}_][\\p{L}\\p{N}_$]*)"]
@@ -67,14 +97,11 @@
    violation, `:field` when the driver names one column, `:fields` when it
    names several, and `:referenced? true` when the refused row is one another
    still references; nil for any other failure."
-  [{:keys [message detail authored?] :as reported}]
+  [{:keys [authored?] :as reported}]
   ;; A RAISE claiming a key's state is not one: its author wrote it (BOU-635).
   (when-let [k (when-not authored? (kind reported))]
-    ;; PostgreSQL names the column in its Detail, which `reported` keeps apart.
-    (let [text    (str message "\n" detail)
-          columns (some #(some-> (re-find % text) second (str/split #",")) column-patterns)]
-      (cond-> (with-columns {:kind k} columns)
-        (and (= :foreign-key k) (still-referenced? reported)) (assoc :referenced? true)))))
+    (cond-> (with-columns {:kind k} (named-columns reported))
+      (and (= :foreign-key k) (still-referenced? reported)) (assoc :referenced? true))))
 
 (defn already-exists?
   "Whether the driver reports that the index, column or constraint a statement
