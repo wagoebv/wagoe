@@ -4,6 +4,7 @@
    This is part of the imperative shell - it performs database I/O,
    manages transactions, and handles side effects like logging."
   (:require [wagoe.platform.core.database.constraint :as constraint]
+            [wagoe.platform.core.http.problem-details :as problem]
             [wagoe.platform.core.database.query :as core-query]
             [wagoe.platform.shell.database.validation :as core-validation]
             [wagoe.core.utils.type-conversion :as type-conversion]
@@ -151,9 +152,9 @@
 
 (defn- conflict
   "A refused unique or foreign key as a :conflict, which HTTP answers 409
-   (BOU-590). Its data reaches the client, so it names at most a field: the
+   (BOU-590). Its data reaches the client, so it names at most its fields: the
    driver's text holds the SQL and the values sent."
-  [{:keys [kind field referenced?]} sql e]
+  [{:keys [kind field referenced?] :as v} sql e]
   ;; The driver says which way a foreign key was refused, except SQLite: there
   ;; a delete is the only case the statement itself tells apart.
   (let [referenced? (or referenced? (deletes? sql))
@@ -166,19 +167,44 @@
                               "The record is still referenced by another record"
                               "A referenced record does not exist"))
              (cond-> {:type :conflict :constraint kind}
-               field (assoc :field field))
+               (not referenced?) (merge (select-keys v [:field :fields])))
              e)))
+
+(defn- named-columns
+  "`v`, a unique violation, with the columns of key `key-name` read from the
+   database when the driver's message did not name them. Only a key on the
+   statement's table: the message quotes the values sent, so its key name
+   may be one a caller wrote."
+  [ctx sql key-name {:keys [kind field fields] :as v}]
+  (let [target        (constraint/statement-table sql)
+        [table index] (when key-name
+                        (if-let [i (str/last-index-of key-name ".")]
+                          [(subs key-name 0 i) (subs key-name (inc i))]
+                          [target key-name]))]
+    (if (and (= :unique kind) (not (or field fields)) table
+             (= target (str/lower-case table)))
+      (try
+        (constraint/with-columns v (protocols/key-columns (:adapter ctx) (current-datasource ctx) table index))
+        (catch Exception e
+          (log/debug "Could not read the columns of a key" {:key key-name :error (ex-message e)})
+          v)
+        ;; A reified adapter that predates key-columns.
+        (catch AbstractMethodError _ v))
+      v)))
 
 (defn- fail!
   "Log `sql-query`'s failure `e` and throw it on: a :conflict for a refused key,
    a :database-error for anything else. `what` is \"Query\" or \"Update\"."
-  [what adapter-dialect sql-query e]
-  (let [r     (reported e)
-        sql   (first sql-query)
-        cause (redacted-cause e r)]
-    (when-let [v (some-> r (assoc :target (constraint/statement-table sql)) constraint/violation)]
+  [what ctx sql-query e]
+  (let [adapter-dialect (protocols/dialect (:adapter ctx))
+        r        (reported e)
+        sql      (first sql-query)
+        cause    (redacted-cause e r)
+        key-name (some-> r redaction/constraint-name)]
+    (when-let [v (some->> (some-> r (assoc :target (constraint/statement-table sql)) constraint/violation)
+                          (named-columns ctx sql key-name))]
       (log/info (str what " refused by a constraint")
-                {:adapter adapter-dialect :sql sql :violation v :constraint-name (redaction/constraint-name r)})
+                {:adapter adapter-dialect :sql sql :violation v :constraint-name key-name})
       (throw (conflict v sql cause)))
     (let [msg      (ex-message cause)
           required (some-> r redaction/not-null-field)]
@@ -260,7 +286,7 @@
         result)
 
       (catch Exception e
-        (fail! "Query" adapter-dialect sql-query e)))))
+        (fail! "Query" ctx sql-query e)))))
 
 (defn execute-one!
   "Execute query expecting single result.
@@ -341,7 +367,7 @@
         affected-rows)
 
       (catch Exception e
-        (fail! "Update" adapter-dialect sql-query e)))))
+        (fail! "Update" ctx sql-query e)))))
 
 (defn execute-batch!
   "Execute multiple queries in a single transaction.
@@ -436,7 +462,8 @@
             result)
 
           (catch Exception e
-            (log/error "Transaction failed, rolling back"
-                       {:adapter (protocols/dialect (:adapter ctx))
-                        :error (redaction/loggable-message e)})
+            ;; A refused key is the caller's to answer, not a fault (BOU-712).
+            (log/logp (problem/exception-log-level e {}) "Transaction failed, rolling back"
+                      {:adapter (protocols/dialect (:adapter ctx))
+                       :error (redaction/loggable-message e)})
             (throw e)))))))

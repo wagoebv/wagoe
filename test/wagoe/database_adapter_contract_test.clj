@@ -74,8 +74,7 @@
 ;; =============================================================================
 
 (def ^:private known-divergences
-  {[:mysql :conflicts/unique-key]
-   {:ticket "BOU-574" :reason "the constraint reader finds no field in MySQL's message"}})
+  {})
 
 ;; =============================================================================
 ;; Cases. Each is (fn [ctx]) -> nil when the engine conforms, or what it did.
