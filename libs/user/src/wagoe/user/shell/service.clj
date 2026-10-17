@@ -713,17 +713,17 @@
      {:user-id user-id :keep-session-id keep-session-id}
      (fn [{:keys [params]}]
        (let [{:keys [user-id keep-session-id]} params
-             n (if keep-session-id
-                 (->> (.find-sessions-by-user session-repository user-id)
-                      (map :id)
-                      (remove #{keep-session-id})
-                      (filter #(.invalidate-user-session session-repository user-id %))
-                      count)
-                 (.invalidate-all-user-sessions session-repository user-id))]
+             ;; An admin's own session is not the target's to keep.
+             ids  (when keep-session-id (map :id (.find-sessions-by-user session-repository user-id)))
+             kept (some #{keep-session-id} ids)
+             n    (if kept
+                    (count (filterv #(.invalidate-user-session session-repository user-id %)
+                                    (remove #{kept} ids)))
+                    (.invalidate-all-user-sessions session-repository user-id))]
          ;; One entry for them all, with the actor (BOU-708).
          (when-let [user (and (pos? n) (.find-user-by-id user-repository user-id))]
            (audit-quietly! audit-repository
-                           (partial audit-core/sessions-revoked-audit-entry n keep-session-id)
+                           (partial audit-core/sessions-revoked-audit-entry n kept)
                            user-id (:email user)))
          n))
      {:system {:user-repository user-repository
