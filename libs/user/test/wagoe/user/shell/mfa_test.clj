@@ -2,9 +2,7 @@
   "Integration tests for MFA shell layer services.
    
    Tests I/O operations like TOTP generation/verification and service orchestration.
-   
-   Note: TOTP code verification tests are limited because we cannot easily generate
-   valid time-based codes in tests. Real verification is tested in integration tests."
+   Verification runs on the clock `totp-clock/frozen` binds."
   {:kaocha.testable/meta {:integration true :user true}}
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest testing is use-fixtures]]

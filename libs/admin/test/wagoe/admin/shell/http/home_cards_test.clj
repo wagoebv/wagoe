@@ -7,6 +7,7 @@
             [wagoe.admin.ports :as admin-ports]
             [wagoe.admin.shell.http.handlers.list :as list-handlers]
             [wagoe.admin.shell.http.support :as support]
+            [wagoe.platform.shell.system.wiring :as wiring]
             [wagoe.user.ports :as user-ports]
             [wagoe.user.shell.http :as user-http]))
 
@@ -16,12 +17,12 @@
   "The user module's contributions as the platform mounts them, beside the
    admin's catch-all entity route."
   [config]
-  (let [usvc   (reify user-ports/IUserService)
-        user   (user-http/user-routes usvc nil config)
-        groups (user-http/group-routes usvc nil config)]
-    (r/router [["/web" (vec (:web user))]
-               [(:web-prefix groups) (vec (:web groups))]
-               ["/web/admin/:entity" {:get identity}]]
+  (let [usvc  (reify user-ports/IUserService)
+        admin {:web-prefix "/web/admin" :web [["/:entity" {:get identity}]]}]
+    (r/router (:web (wiring/module-route-contributions
+                     [admin
+                      (user-http/user-routes usvc nil config)
+                      (user-http/group-routes usvc nil config)]))
               {:conflicts nil})))
 
 (defn- home [config]
