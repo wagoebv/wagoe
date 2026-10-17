@@ -224,12 +224,12 @@
    :version             "1.0.1"
    :category            :optional
    :tier                :stable
-   :config-snippet      "  :wagoe/calendar\n  {:enabled? true}\n"
+   :config-snippet      "  ;; A CalendarAdapterProtocol: (ig/ref :wagoe/calendar).\n  :wagoe/calendar\n  {:enabled? true}\n"
    :test-config-snippet "  :wagoe/calendar\n  {:enabled? true}\n"
    :add-command         "wagoe add calendar"
    :docs-url            "https://github.com/wagoebv/wagoe/blob/main/libs/calendar/AGENTS.md"
-   :post-install        ["No Integrant key. Use the service directly:"
-                         "  (require '[wagoe.calendar.shell.service :as cal])"]}
+   :post-install        ["Take (ig/ref :wagoe/calendar) and call it through wagoe.calendar.ports:"
+                         "  (cal/export-ical calendar events {})"]}
 
   {:name                "geo"
    :description         "Multi-provider geocoding (OSM/Google/Mapbox), Haversine distance"

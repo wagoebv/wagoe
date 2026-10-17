@@ -34,22 +34,14 @@
 ;; =============================================================================
 
 (deftest ^:unit all-day-test
-  (testing "24-hour event starting at midnight UTC is all-day"
+  (testing "the flag decides"
+    (is (true? (sut/all-day? (assoc base-event :all-day? true))))
+    (is (false? (sut/all-day? (assoc base-event :all-day? false))))
+    (is (false? (sut/all-day? base-event))))
+  (testing "a timed event from midnight to midnight UTC is not all-day"
     (let [event (assoc base-event
                        :start (Instant/parse "2026-03-10T00:00:00Z")
                        :end   (Instant/parse "2026-03-11T00:00:00Z"))]
-      (is (true? (sut/all-day? event)))))
-  (testing "48-hour event starting at midnight UTC is all-day"
-    (let [event (assoc base-event
-                       :start (Instant/parse "2026-03-10T00:00:00Z")
-                       :end   (Instant/parse "2026-03-12T00:00:00Z"))]
-      (is (true? (sut/all-day? event)))))
-  (testing "1-hour event is not all-day"
-    (is (false? (sut/all-day? base-event))))
-  (testing "24-hour event NOT starting at midnight is not all-day"
-    (let [event (assoc base-event
-                       :start (Instant/parse "2026-03-10T01:00:00Z")
-                       :end   (Instant/parse "2026-03-11T01:00:00Z"))]
       (is (false? (sut/all-day? event))))))
 
 ;; =============================================================================

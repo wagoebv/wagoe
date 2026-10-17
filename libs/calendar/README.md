@@ -54,6 +54,12 @@ com.wagoe/wagoe-calendar {:mvn/version "1.0.1"}
 ;; => {:status 200 :headers {"Content-Type" "text/calendar; charset=utf-8" ...} :body "..."}
 ```
 
+In an Integrant system, `:wagoe/calendar` is a `CalendarAdapterProtocol`: take
+`(ig/ref :wagoe/calendar)`, call `wagoe.calendar.ports/export-ical` on it, and
+serve the string with `wagoe.calendar.core.feed/ical-response`.
+
+Mark all-day events `:all-day? true`; iCal writes and reads them as `VALUE=DATE`.
+
 ## Architecture
 
 Follows the [Functional Core / Imperative Shell](https://github.com/wagoebv/wagoe) pattern:

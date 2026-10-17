@@ -207,3 +207,50 @@
       (is (= 1 (count events)))
       (is (str/includes? (:recurrence (first events)) "UNTIL=")
           "UNTIL with timezone is valid"))))
+
+;; =============================================================================
+;; All-day events
+;; =============================================================================
+
+(def ^:private dst-day
+  "All day on 29 March 2026 in Amsterdam, the 23-hour spring-forward day."
+  {:id       (java.util.UUID/fromString "550e8400-e29b-41d4-a716-446655440002")
+   :title    "Holiday"
+   :start    (Instant/parse "2026-03-28T23:00:00Z")
+   :end      (Instant/parse "2026-03-29T22:00:00Z")
+   :timezone "Europe/Amsterdam"
+   :all-day? true})
+
+(deftest ^:integration all-day-export-test
+  (testing "dates, not times, with an exclusive end"
+    (let [ical (service/export-ical [dst-day])]
+      (is (str/includes? ical "DTSTART;VALUE=DATE:20260329"))
+      (is (str/includes? ical "DTEND;VALUE=DATE:20260330"))))
+  (testing "an end that is not midnight still covers its day"
+    (let [ical (service/export-ical [(assoc dst-day :end (Instant/parse "2026-03-30T10:00:00Z"))])]
+      (is (str/includes? ical "DTEND;VALUE=DATE:20260331"))))
+  (testing "a timed event at midnight stays timed"
+    (let [ical (service/export-ical [(dissoc dst-day :all-day?)])]
+      (is (not (str/includes? ical "VALUE=DATE")))
+      (is (str/includes? ical "DTSTART;TZID=Europe/Amsterdam:20260329T000000")))))
+
+(deftest ^:integration all-day-round-trip-test
+  (testing "with the zone given, the event comes back as it went out"
+    (let [[ev] (service/import-ical (service/export-ical [dst-day]) {:timezone "Europe/Amsterdam"})]
+      (is (= dst-day ev))))
+  (testing "without one, the dates hold in UTC"
+    (let [[ev] (service/import-ical (service/export-ical [dst-day]))]
+      (is (true? (:all-day? ev)))
+      (is (= "UTC" (:timezone ev)))
+      (is (= (Instant/parse "2026-03-29T00:00:00Z") (:start ev)))
+      (is (= (Instant/parse "2026-03-30T00:00:00Z") (:end ev)))))
+  (testing "timed events do not come back all-day"
+    (is (not (contains? (first (service/import-ical (service/export-ical [appointment])))
+                        :all-day?)))))
+
+(deftest ^:integration all-day-import-without-dtend-test
+  (let [ical "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//Test//Test//EN\nBEGIN:VEVENT\nUID:day@example.com\nDTSTART;VALUE=DATE:20260310\nSUMMARY:Day off\nEND:VEVENT\nEND:VCALENDAR"
+        [ev] (service/import-ical ical {:timezone "Europe/Amsterdam"})]
+    (is (true? (:all-day? ev)))
+    (is (= (Instant/parse "2026-03-09T23:00:00Z") (:start ev)))
+    (is (= (Instant/parse "2026-03-10T23:00:00Z") (:end ev)) "one day long")))

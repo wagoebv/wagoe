@@ -16,7 +16,7 @@ iCal export/import, and admin UI components for scheduling applications.
 
 | `wagoe.calendar.ports`
 | shared
-| `CalendarAdapterProtocol` interface
+| `CalendarAdapterProtocol`, implemented by the `:wagoe/calendar` component
 
 | `wagoe.calendar.core.event`
 | core
@@ -33,6 +33,10 @@ iCal export/import, and admin UI components for scheduling applications.
 | `wagoe.calendar.core.ui`
 | core
 | Pure Hiccup: `month-view`, `week-view`, `mini-calendar`, `event-badge`
+
+| `wagoe.calendar.core.feed`
+| core
+| `ical-response`: Ring response for an iCal feed
 
 | `wagoe.calendar.shell.adapters.ical`
 | shell
@@ -110,19 +114,29 @@ iCal export/import, and admin UI components for scheduling applications.
 
 == iCal export / import
 
+The `:wagoe/calendar` component implements `CalendarAdapterProtocol`. Take
+`(ig/ref :wagoe/calendar)` and call it through the ports:
+
 [source,clojure]
 ----
-(require '[wagoe.calendar.shell.service :as cal])
+(require '[wagoe.calendar.ports :as cal]
+         '[wagoe.calendar.core.feed :as feed])
 
 ;; Export to iCal string
-(cal/export-ical events)
+(cal/export-ical calendar events {})
 
-;; Import from iCal string
-(cal/import-ical ical-string)
+;; Import from iCal string; :timezone places events without a TZID
+(cal/import-ical calendar ical-string {:timezone "Europe/Amsterdam"})
 
-;; HTTP response for iCal feed (subscription URL)
-(cal/ical-feed-response events {:filename "appointments.ics"})
+;; Ring response for a feed (subscription URL): content type, filename, caching
+(feed/ical-response (cal/export-ical calendar events {}) {:filename "appointments.ics"})
 ----
+
+An `:all-day? true` event is written as `DTSTART;VALUE=DATE` with an exclusive
+`DTEND`, and a `VALUE=DATE` event is read back `:all-day? true`. `event/all-day?`
+reads that flag and nothing else.
+
+Without Integrant, `wagoe.calendar.shell.service` offers the same calls.
 
 == Dependencies
 

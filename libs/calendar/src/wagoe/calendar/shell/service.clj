@@ -5,7 +5,8 @@
    All functions create an adapter internally unless one is injected via opts.
 
    Shell layer — may perform I/O via the ical4j adapter."
-  (:require [wagoe.calendar.shell.adapters.ical :as ical-adapter]
+  (:require [wagoe.calendar.core.feed :as feed]
+            [wagoe.calendar.shell.adapters.ical :as ical-adapter]
             [wagoe.calendar.ports :as ports]))
 
 ;; =============================================================================
@@ -52,24 +53,12 @@
 ;; =============================================================================
 
 (defn ical-feed-response
-  "Build a Ring response map for serving an iCal feed over HTTP.
+  "Export `events` and wrap them in a Ring response.
 
-   Args:
-     events - seq of EventData maps
-     opts   - same opts as export-ical; also accepts:
-                :filename string — Content-Disposition filename (default \"calendar.ics\")
-
-   Returns:
-     {:status  200
-      :headers {\"Content-Type\"        \"text/calendar; charset=utf-8\"
-                \"Content-Disposition\" \"attachment; filename=\\\"calendar.ics\\\"\"}
-      :body    \"BEGIN:VCALENDAR...\"}"
+   opts: those of export-ical, plus :filename and :max-age as in
+   `wagoe.calendar.core.feed/ical-response`."
   ([events]
    (ical-feed-response events {}))
   ([events opts]
-   (let [filename (get opts :filename "calendar.ics")
-         body     (export-ical events (dissoc opts :filename))]
-     {:status  200
-      :headers {"Content-Type"        "text/calendar; charset=utf-8"
-                "Content-Disposition" (str "attachment; filename=\"" filename "\"")}
-      :body    body})))
+   (feed/ical-response (export-ical events (dissoc opts :filename :max-age))
+                       (select-keys opts [:filename :max-age]))))
