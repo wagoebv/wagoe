@@ -88,6 +88,10 @@ The production config uses environment variables for all secrets:
 {:secret #env JWT_SECRET}
 ----
 
+To read secrets that Docker or Kubernetes mount as files, use `#secret`:
+`#secret [:file "db-password"]` reads `/run/secrets/db-password`. See
+xref:libraries:config.adoc#_secrets[config] for the sources and how to add one.
+
 == Database recommendations
 
 Wagoe 1.0 supports PostgreSQL and SQLite, and H2 for tests. MySQL is not
