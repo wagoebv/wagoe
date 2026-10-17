@@ -229,13 +229,36 @@
   (ports/increment-failed-login-count user-repository user-id
                                       (auth-core/failed-login-lockout auth-config current-time)))
 
+(defn- spend-backup-code!
+  "Spend hash `h`. The write is conditional on the codes being as read; when a
+   parallel login changed them, it is tried again against a fresh read, unless
+   that login spent `h`, which makes the code wrong here (BOU-708). Each lost
+   write means another code was spent, so it ends within one try per code."
+  [user-repository user h]
+  (loop [user user, tries (count (:mfa-backup-codes user))]
+    (or (ports/consume-backup-code user-repository user h)
+        (when-let [fresh (and (pos? tries) (ports/find-user-by-id user-repository (:id user)))]
+          (and (= (:mfa-backup-codes fresh) (:mfa-backup-codes user))
+               (not (some #{h} (:mfa-backup-codes-used fresh)))
+               (recur fresh (dec tries)))))))
+
+(defn- check-code!
+  "Verify `code`, spending it when it is a backup code."
+  [{:keys [user-repository mfa-service]} user code]
+  (let [check (mfa-shell/verify-mfa-code mfa-service user code)]
+    (if (or (not (:used-backup-code? check))
+            (spend-backup-code! user-repository user (:code-hash check)))
+      check
+      {:valid? false :used-backup-code? false})))
+
 (defn verify-second-factor!
-  "Check the TOTP or backup `code` for `user`. A wrong or blank one counts as a
-   failed login, the same counter as a wrong password, so codes cannot be
-   guessed at the rate limit (BOU-698). Returns `mfa-shell/verify-mfa-code`'s map."
+  "Check the TOTP or backup `code` for `user`, spending a backup code. A wrong
+   or blank one counts as a failed login, the same counter as a wrong password,
+   so codes cannot be guessed at the rate limit (BOU-698). Returns
+   `mfa-shell/verify-mfa-code`'s map."
   [auth-service user code current-time]
-  (let [{:keys [user-repository mfa-service auth-config]} auth-service
-        check (when-not (str/blank? code) (mfa-shell/verify-mfa-code mfa-service user code))]
+  (let [{:keys [user-repository auth-config]} auth-service
+        check (when-not (str/blank? code) (check-code! auth-service user code))]
     (when-not (:valid? check)
       (record-failed-login! user-repository auth-config (:id user) current-time))
     check))
@@ -366,22 +389,15 @@
 
                    ;; Successful authentication (with or without MFA)
                    :else
-                   (let [;; If backup code was used, update user
-                         user-after-mfa (if (:used-backup-code? mfa-verification)
-                                          (do
-                                            (log/info "Backup code used for MFA" {:email email})
-                                            (let [updates (:updates mfa-verification)]
-                                              (.update-user user-repository (assoc updates :id (:id user)))
-                                              (merge user updates)))
-                                          user)
-
-                          ;; Update user for successful login (I/O)  
-                         login-updates (auth-core/prepare-successful-login-updates user-after-mfa current-time)
+                   (let [;; Update user for successful login (I/O)
+                         login-updates (auth-core/prepare-successful-login-updates user current-time)
                          _ (.update-user user-repository (assoc login-updates :id (:id user)))
 
                          {session-policy :policy session :session}
                          (open-session! auth-service user login-risk login-context current-time)]
 
+                     (when (:used-backup-code? mfa-verification)
+                       (log/info "Backup code used for MFA" {:email email}))
                      (log/info "Authentication successful"
                                {:email email
                                 :risk-score (:risk-score login-risk)

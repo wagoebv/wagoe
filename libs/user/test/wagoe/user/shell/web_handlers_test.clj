@@ -1105,14 +1105,21 @@
         others  [(UUID/randomUUID) (UUID/randomUUID)]
         revoked (atom [])
         svc     (reify ports/IUserService
-                  (get-user-sessions [_ _] (mapv #(hash-map :id %) (cons current others)))
+                  (logout-user-everywhere [_ user-id keep-session-id]
+                    (swap! revoked conj [user-id keep-session-id])
+                    2)
                   (revoke-user-session [_ user-id session-id]
                     (swap! revoked conj [user-id session-id])
                     {:invalidated true}))]
     (testing "revoke-all keeping the current session"
       ((web-handlers/revoke-all-sessions-handler svc {})
        {:path-params {:id (str uid)} :form-params {"keep-current" "true"} :session {:id current}})
-      (is (= (set (map #(vector uid %) others)) (set @revoked))))
+      (is (= [[uid current]] @revoked)))
+    (testing "revoke-all"
+      (reset! revoked [])
+      ((web-handlers/revoke-all-sessions-handler svc {})
+       {:path-params {:id (str uid)} :session {:id current}})
+      (is (= [[uid nil]] @revoked)))
     (testing "one session, named in the path"
       (reset! revoked [])
       (let [resp ((web-handlers/revoke-session-handler svc {})
