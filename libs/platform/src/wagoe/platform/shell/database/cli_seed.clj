@@ -102,14 +102,8 @@
 (defn -main
   [& args]
   (let [{:keys [force? path system]} (parse-args args)
-        ;; The SAME detection the database config uses, not a second reading of
-        ;; WAG_ENV. detect-environment resolves, in order:
-        ;;   -Denv  >  WAG_ENV  >  ENV  >  ENVIRONMENT  >  "dev"
-        ;; Reading only WAG_ENV left a complete bypass: `clojure -M:prod:seed`
-        ;; sets -Denv=prod (deps.edn :prod alias), so the seeder connected to the
-        ;; production database while the guard saw no WAG_ENV, defaulted to
-        ;; "dev", and allowed the write. A guard that asks a different question
-        ;; than the connection is not a guard.
+        ;; The detection the connection uses, so the guard and the database
+        ;; cannot disagree about which profile this is.
         env     (db-config/detect-environment)]
     ;; Guard here rather than only in `bb db:seed`: this entry point is reachable
     ;; directly via `clojure -M:seed`, which bypasses the bb task entirely.

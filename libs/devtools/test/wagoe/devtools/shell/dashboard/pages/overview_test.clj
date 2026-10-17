@@ -1,6 +1,7 @@
 (ns wagoe.devtools.shell.dashboard.pages.overview-test
   (:require [clojure.test :refer [deftest is testing]]
-            [wagoe.devtools.shell.dashboard.pages.overview :as overview]))
+            [wagoe.devtools.shell.dashboard.pages.overview :as overview]
+            [wagoe.config :as config]))
 
 (defrecord PostgreSQLAdapter [])
 (defrecord SqliteAdapter [])
@@ -21,3 +22,11 @@
 
   (testing "no adapter, no label"
     (is (nil? (overview/adapter-label nil)))))
+
+(deftest ^:unit the-profile-is-the-boot-profile
+  ;; It read WAG_ENV raw, so `development` showed as itself and a blank one as
+  ;; nothing (BOU-686).
+  (let [profile #(:profile (#'overview/system-data %))]
+    (is (= "dev" (profile {:profile :dev})))
+    (with-redefs [config/active-profile (constantly :test)]
+      (is (= "test" (profile {})) "without one, active-profile decides"))))

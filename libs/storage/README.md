@@ -87,20 +87,17 @@ File storage abstraction with local filesystem and S3 backends, including upload
 
 ### Configuration
 
+`:wagoe/storage` in `:active`, chosen by `:provider` (default `:local`). The
+full set of keys is in [src/wagoe/storage/README.md](src/wagoe/storage/README.md#configuration).
+
 ```clojure
-;; config.edn
-{:wagoe/storage
- #profile
- {:development
-  {:adapter :local
-   :base-path "uploads"
-   :url-prefix "/uploads"}
-  
-  :production
-  {:adapter :s3
-   :bucket #env STORAGE_BUCKET
-   :region #env AWS_REGION
-   :url-prefix #env STORAGE_URL_PREFIX}}}
+;; resources/conf/dev/config.edn
+:wagoe/storage {:provider :local :root "uploads"}   ; :root or :base-path
+
+;; resources/conf/prod/config.edn
+:wagoe/storage {:provider :s3
+                :bucket #env STORAGE_BUCKET
+                :region #env AWS_REGION}
 ```
 
 ### Upload Validation
@@ -244,22 +241,15 @@ For S3 storage, configure AWS credentials via:
 
 2. **Configuration file** (development):
    ```clojure
-   {:wagoe/storage
-    {:adapter :s3
-     :bucket "my-bucket"
-     :region "us-east-1"
-     :access-key "AKIA..."
-     :secret-key "..."}}
+   :wagoe/storage {:provider :s3
+                   :bucket "my-bucket"
+                   :region "us-east-1"
+                   :access-key "AKIA..."
+                   :secret-key "..."}
    ```
 
-3. **IAM Role** (EC2, ECS, Lambda):
-   ```clojure
-   {:wagoe/storage
-    {:adapter :s3
-     :bucket "my-bucket"
-     :region "us-east-1"
-     :use-instance-credentials? true}}
-   ```
+3. **IAM Role** (EC2, ECS, Lambda): leave out `:access-key` and `:secret-key`;
+   the AWS default credentials chain is used.
 
 ## Relationship to Other Libraries
 

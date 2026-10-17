@@ -139,8 +139,10 @@ into the module's `:api` contribution. The config matches the `wagoe new` catalo
 ```clojure
 :wagoe/storage {:provider :local :root "uploads"}
 ;; or :s3 / :gcs — see the adapter configs above
-:wagoe/storage-routes {:storage (ig/ref :wagoe/storage)}
 ```
+
+`ig-config` adds `:wagoe/storage-routes`; it is mounted only with
+`:expose-http? true`. `wagoe.storage.schema/StorageConfig` is the shape.
 
 To wire the factories by hand instead (no Integrant), use
 `create-storage-service`:

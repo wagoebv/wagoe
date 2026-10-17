@@ -5,6 +5,7 @@
             [wagoe.devtools.shell.repl :as devtools-repl]
             [wagoe.devtools.core.project-repl :as project-repl]
             [wagoe.platform.system :as platform-system]
+            [wagoe.config :as config]
             [clojure.string :as str]
             [integrant.repl.state :as state]))
 
@@ -81,7 +82,7 @@
      :module-count    (count (or modules []))
      :module-names    modules
      :components      components
-     :profile         (or (System/getenv "WAG_ENV") "dev")
+     :profile         (name (or (:profile ctx) (config/active-profile)))
      :db-info         (when adapter (str adapter " @ " (or host "localhost")))
      :http-port       (or (:http-port ctx) 3000)
      :nrepl-port      7888

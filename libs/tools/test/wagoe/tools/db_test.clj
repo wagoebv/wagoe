@@ -86,7 +86,9 @@
   (let [exit (atom nil)
         cmds (atom [])
         f    db/reset-profile
-        out  (with-redefs [babashka.process/shell (fn [_opts & cmd] (swap! cmds conj (vec cmd)) {:exit 0})
+        out  (with-redefs [babashka.process/shell (fn [opts & cmd]
+                                                    (swap! cmds conj [(get-in opts [:extra-env "WAG_ENV"]) (vec cmd)])
+                                                    {:exit 0})
                            db/reset-profile       (fn [a _] (f a #(get env %)))]
                (binding [db/*exit!* #(reset! exit %)]
                  (with-out-str (with-in-str "yes\nyes\n" (apply db/db-reset args)))))]
@@ -97,7 +99,7 @@
   ;; migrations, and piping yes does not change that (BOU-585).
   (doseq [[args env] [[["--env" "prod"] {}]
                       [[] {"WAG_ENV" "prod"}]
-                      [[] {"ENV" "staging"}]
+                      [[] {"WAG_ENV" " "}]
                       [[] {"WAG_ENV" "local"}]
                       [[] {"WAG_ENV" "production"}]
                       [["--env" ""] {}]
@@ -118,10 +120,12 @@
     (testing profile
       (let [{:keys [exit cmds]} (run-reset args env)]
         (is (nil? exit))
-        (is (= [["clojure" (str "-J-Denv=" profile) "-M:migrate" "reset"]] cmds)
+        (is (= [[profile ["clojure" "-M:migrate" "reset"]]] cmds)
             "the platform resolves the same profile"))))
+  (testing "ENV and ENVIRONMENT name nothing (BOU-686)"
+    (is (= 1 (:exit (run-reset [] {"ENV" "dev" "ENVIRONMENT" "dev"})))))
   (testing "--allow-remote reaches the platform"
-    (is (= [["clojure" "-J-Denv=dev" "-M:migrate" "reset" "--allow-remote"]]
+    (is (= [["dev" ["clojure" "-M:migrate" "reset" "--allow-remote"]]]
            (:cmds (run-reset ["--allow-remote"] {"WAG_ENV" "dev"}))))))
 
 (deftest ^:unit env-aliases-match-the-config-loader
@@ -189,12 +193,12 @@
   ;; One allowlist with db:reset, aliases resolved (BOU-588).
   (let [root (temp-project {"resources/seeds/dev.edn" "[]"})]
     (doseq [env [{"WAG_ENV" "dev"} {"WAG_ENV" "development"} {"WAG_ENV" "acc"}
-                 {"WAG_ENV" "acceptance"} {"ENV" "test"} {}]]
+                 {"WAG_ENV" "acceptance"} {"WAG_ENV" " "} {"ENV" "prod"} {}]]
       (testing (pr-str env)
         (let [{:keys [exit cmds out]} (run-seed root [] env)]
           (is (nil? exit) out)
           (is (= 1 (count cmds))))))
-    (doseq [env [{"WAG_ENV" "prod"} {"WAG_ENV" "production"} {"WAG_ENV" "local"} {"ENV" "staging"}]]
+    (doseq [env [{"WAG_ENV" "prod"} {"WAG_ENV" "production"} {"WAG_ENV" "local"}]]
       (testing (pr-str env)
         (let [{:keys [exit cmds]} (run-seed root [] env)]
           (is (= 1 exit))

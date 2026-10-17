@@ -123,40 +123,58 @@ File upload and storage functionality for the Wagoe framework. Supports local fi
 
 ## Configuration
 
+`:wagoe/storage` in `:active` of `resources/conf/<env>/config.edn`, chosen by
+`:provider` (default `:local`). Other keys are ignored.
+
 ### Local Storage Configuration
 
 ```clojure
-{:adapter :local
- :local {:base-path "/var/app/uploads"
-         :url-base "https://myapp.com/files"
-         :create-directories? true}
- :default-visibility :private}
+:wagoe/storage {:provider :local
+                :root "/var/app/uploads"             ; or :base-path
+                :url-base "https://myapp.com/api/v1/storage"
+                :signing-secret #env STORAGE_SIGNING_SECRET}
 ```
 
 ### S3 Storage Configuration
 
 ```clojure
-{:adapter :s3
- :s3 {:bucket "my-bucket"
-      :region "us-east-1"
-      :access-key "AWS_ACCESS_KEY"
-      :secret-key "AWS_SECRET_KEY"
-      :prefix "uploads/"
-      :public-read? false}
- :default-visibility :private}
+:wagoe/storage {:provider :s3
+                :bucket "my-bucket"
+                :region "us-east-1"
+                :access-key #env AWS_ACCESS_KEY_ID   ; omit both to use the
+                :secret-key #env AWS_SECRET_ACCESS_KEY ; default AWS credentials
+                :prefix "uploads/"
+                :public-read? false}
 ```
 
 ### S3-Compatible Services (MinIO, DigitalOcean Spaces)
 
 ```clojure
-{:adapter :s3
- :s3 {:bucket "my-bucket"
-      :region "us-east-1"
-      :endpoint "https://nyc3.digitaloceanspaces.com"  ; Custom endpoint
-      :access-key "DO_SPACES_KEY"
-      :secret-key "DO_SPACES_SECRET"
-      :public-read? true}}
+:wagoe/storage {:provider :s3
+                :bucket "my-bucket"
+                :region "us-east-1"
+                :endpoint "https://nyc3.digitaloceanspaces.com"
+                :access-key #env DO_SPACES_KEY
+                :secret-key #env DO_SPACES_SECRET
+                :public-read? true}
 ```
+
+### Google Cloud Storage Configuration
+
+```clojure
+:wagoe/storage {:provider :gcs
+                :bucket "my-bucket"
+                :project-id "my-project"
+                :credentials-path "/secrets/gcs.json"} ; else Application Default Credentials
+```
+
+### HTTP routes
+
+The routes are mounted only with `:expose-http? true`. They require a
+signed-in user but check no ownership: any user can act on any key.
+`:http-base-path` places them (default `/storage`, under `/api/v1`). With
+`:signing-secret` set, `:url-base` must be the public URL of that download
+route.
 
 ## API Endpoints
 
@@ -339,10 +357,11 @@ Response: 200 OK
 ### 1. Use Environment Variables for Credentials
 
 ```clojure
-{:s3 {:bucket "my-bucket"
-      :region "us-east-1"
-      :access-key (System/getenv "AWS_ACCESS_KEY")
-      :secret-key (System/getenv "AWS_SECRET_KEY")}}
+:wagoe/storage {:provider :s3
+                :bucket "my-bucket"
+                :region "us-east-1"
+                :access-key #env AWS_ACCESS_KEY_ID
+                :secret-key #env AWS_SECRET_ACCESS_KEY}
 ```
 
 ### 2. Validate File Types
