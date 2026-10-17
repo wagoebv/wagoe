@@ -17,4 +17,8 @@
   (testing "a filename cannot break out of its header"
     (is (= "attachment; filename=\"a.icsX-Evil: 1\""
            (get-in (sut/ical-response "" {:filename "a.ics\"\r\nX-Evil: 1"})
-                   [:headers "Content-Disposition"])))))
+                   [:headers "Content-Disposition"]))))
+  (testing "nil options take the defaults"
+    (let [{:keys [headers]} (sut/ical-response "" {:filename nil :max-age nil})]
+      (is (= "attachment; filename=\"calendar.ics\"" (get headers "Content-Disposition")))
+      (is (= "private, max-age=300" (get headers "Cache-Control"))))))

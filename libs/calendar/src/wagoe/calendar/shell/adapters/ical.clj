@@ -8,9 +8,10 @@
    Shell layer — may perform I/O via ical4j CalendarBuilder/CalendarOutputter."
   (:require [wagoe.calendar.core.event :as event]
             [wagoe.calendar.ports :as ports]
+            [wagoe.calendar.schema :as schema]
             [clojure.string :as str])
-  (:import [java.time Instant ZoneId ZonedDateTime LocalDate LocalDateTime LocalTime]
-           [java.time.temporal Temporal]
+  (:import [java.time Instant ZoneId ZonedDateTime OffsetDateTime LocalDate LocalDateTime LocalTime]
+           [java.time.temporal Temporal TemporalAmount]
            [java.io StringReader StringWriter]
            [java.nio.charset StandardCharsets]
            [net.fortuna.ical4j.model Calendar]
@@ -102,10 +103,20 @@
   [dt ^ZoneId zone]
   (cond
     (instance? ZonedDateTime dt) (.toInstant ^ZonedDateTime dt)
+    ;; UTC times (DTSTART:20261017T100000Z), what Google Calendar exports
+    (instance? OffsetDateTime dt) (.toInstant ^OffsetDateTime dt)
     (instance? LocalDateTime dt) (.toInstant (.atZone ^LocalDateTime dt zone))
     (instance? LocalDate dt)     (.toInstant (.atStartOfDay ^LocalDate dt zone))
     (instance? java.util.Date dt) (.toInstant ^java.util.Date dt)
     :else nil))
+
+(defn- dt-plus-duration
+  "DTSTART value plus a DURATION property, or nil without one, or when the
+   two do not combine (a time duration on a date)."
+  [dt duration-prop]
+  (when (and (instance? Temporal dt) duration-prop)
+    (try (.plus ^Temporal dt ^TemporalAmount (.getDuration duration-prop))
+         (catch Exception _ nil))))
 
 (defn- get-tzid
   "Extract the TZID from the DTSTART property's string representation.
@@ -137,16 +148,20 @@
 (defn- vevent->event
   "Convert a net.fortuna.ical4j 4.x VEvent to a boundary EventData map.
    A DTSTART;VALUE=DATE makes it all-day, its dates in `default-tz`; without a
-   DTEND it lasts one day (RFC 5545 3.6.1)."
+   DTEND the end is DTSTART plus DURATION, or one day for a date (RFC 5545
+   3.6.1). A TZID java.time does not know (Outlook's \"W. Europe Standard
+   Time\") falls back to `default-tz`; ical4j already resolved the instants."
   [vevent default-tz]
   (let [uid-str   (get-prop-value vevent "UID")
         title     (get-prop-value vevent "SUMMARY")
         start-dt  (prop-date (find-prop vevent "DTSTART"))
         all-day?  (instance? LocalDate start-dt)
         end-dt    (or (prop-date (find-prop vevent "DTEND"))
+                      (dt-plus-duration start-dt (find-prop vevent "DURATION"))
                       (when all-day? (.plusDays ^LocalDate start-dt 1)))
         rrule-str (get-prop-value vevent "RRULE")
-        timezone  (or (get-tzid vevent) default-tz)
+        tzid      (get-tzid vevent)
+        timezone  (if (and tzid (schema/valid-timezone? tzid)) tzid default-tz)
         zone      (ZoneId/of timezone)]
     (cond-> {:id       (uid-string->uuid uid-str)
              :title    (or title "")
@@ -173,13 +188,13 @@
       (.toString writer)))
 
   (import-ical [_this ical-string opts]
-    (let [reader   (StringReader. ical-string)
-          builder  (CalendarBuilder.)
-          calendar (.build builder reader)
-          vevents  (filter #(instance? VEvent %)
-                           (.getComponents calendar))
-          tz       (get opts :timezone "UTC")]
-      (mapv #(vevent->event % tz) vevents))))
+    (let [tz (or (:timezone opts) "UTC")]
+      (when-not (schema/valid-timezone? tz)
+        (throw (ex-info "Invalid :timezone for iCal import"
+                        {:type :validation-error :field :timezone :value tz})))
+      (let [calendar (.build (CalendarBuilder.) (StringReader. ical-string))
+            vevents  (filter #(instance? VEvent %) (.getComponents calendar))]
+        (mapv #(vevent->event % tz) vevents)))))
 
 ;; =============================================================================
 ;; Factory

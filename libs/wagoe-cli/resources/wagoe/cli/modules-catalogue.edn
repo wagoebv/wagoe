@@ -229,6 +229,7 @@
    :add-command         "wagoe add calendar"
    :docs-url            "https://github.com/wagoebv/wagoe/blob/main/libs/calendar/AGENTS.md"
    :post-install        ["Take (ig/ref :wagoe/calendar) and call it through wagoe.calendar.ports:"
+                         "  (require '[wagoe.calendar.ports :as cal])"
                          "  (cal/export-ical calendar events {})"]}
 
   {:name                "geo"

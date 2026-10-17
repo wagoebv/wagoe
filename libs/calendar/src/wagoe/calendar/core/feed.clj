@@ -16,9 +16,11 @@
      :max-age  - seconds a client may cache the feed (default 300). Cached
                  privately, because a feed URL is usually per user."
   ([ical] (ical-response ical {}))
-  ([ical {:keys [filename max-age] :or {filename "calendar.ics" max-age 300}}]
+  ([ical {:keys [filename max-age]}]
+   ;; `or`, not `:or`: a caller passing {:filename nil} gets the default too.
    {:status  200
     :headers {"Content-Type"        "text/calendar; charset=utf-8"
-              "Content-Disposition" (str "attachment; filename=\"" (safe-filename filename) "\"")
-              "Cache-Control"       (str "private, max-age=" max-age)}
+              "Content-Disposition" (str "attachment; filename=\""
+                                         (safe-filename (or filename "calendar.ics")) "\"")
+              "Cache-Control"       (str "private, max-age=" (or max-age 300))}
     :body    ical}))

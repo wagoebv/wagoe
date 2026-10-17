@@ -39,7 +39,8 @@
    Args:
      ical-string - RFC 5545 VCALENDAR string
      opts        - options map; supported keys:
-                     :adapter CalendarAdapterProtocol implementation (default ICalAdapter)
+                     :adapter  CalendarAdapterProtocol implementation (default ICalAdapter)
+                     :timezone IANA zone for events without a TZID (default \"UTC\")
 
    Returns a vector of EventData maps (kebab-case, :start/:end as Instants)."
   ([ical-string]

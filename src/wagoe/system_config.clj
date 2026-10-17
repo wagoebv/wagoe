@@ -203,7 +203,7 @@
    :workflow "component is a map of {:store :registry :engine}; IWorkflowEngine has no key of its own"
    :search   "component is a map; ISearchEngine has no key of its own"
    :audience "component is a map of {:store :resolver :cache}; IAudienceResolver has no key of its own"
-   :calendar "pure iCal conversion; every service can run it in-process, so a hop through RPC buys nothing"
+   :calendar "pure iCal conversion, so a hop through RPC buys nothing; a service that refs :wagoe/calendar runs calendar alongside (`service user calendar`)"
    :geo      "component is a map; GeoProviderProtocol has no key of its own"
    :realtime "component is a map; IRealtimeService has no key of its own"
    :reports  "report definitions carry functions (:template, :data-source), which do not cross the wire"})

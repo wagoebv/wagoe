@@ -254,3 +254,48 @@
     (is (true? (:all-day? ev)))
     (is (= (Instant/parse "2026-03-09T23:00:00Z") (:start ev)))
     (is (= (Instant/parse "2026-03-10T23:00:00Z") (:end ev)) "one day long")))
+
+(defn- vcalendar [& lines]
+  (str/join "\r\n" (concat ["BEGIN:VCALENDAR" "VERSION:2.0" "PRODID:-//Test//Test//EN"]
+                           lines
+                           ["END:VCALENDAR" ""])))
+
+(deftest ^:integration import-edge-cases-test
+  (testing "UTC times, as Google Calendar exports them"
+    (let [[ev] (service/import-ical (vcalendar "BEGIN:VEVENT" "UID:z@example.com"
+                                               "DTSTART:20261017T100000Z" "DTEND:20261017T110000Z"
+                                               "SUMMARY:Call" "END:VEVENT"))]
+      (is (= (Instant/parse "2026-10-17T10:00:00Z") (:start ev)))
+      (is (= (Instant/parse "2026-10-17T11:00:00Z") (:end ev)))))
+  (testing "a Windows TZID does not fail the import"
+    (let [[ev] (service/import-ical
+                (vcalendar "BEGIN:VTIMEZONE" "TZID:W. Europe Standard Time"
+                           "BEGIN:STANDARD" "DTSTART:16010101T030000" "TZOFFSETFROM:+0200"
+                           "TZOFFSETTO:+0100" "RRULE:FREQ=YEARLY;BYDAY=-1SU;BYMONTH=10" "END:STANDARD"
+                           "BEGIN:DAYLIGHT" "DTSTART:16010101T020000" "TZOFFSETFROM:+0100"
+                           "TZOFFSETTO:+0200" "RRULE:FREQ=YEARLY;BYDAY=-1SU;BYMONTH=3" "END:DAYLIGHT"
+                           "END:VTIMEZONE"
+                           "BEGIN:VEVENT" "UID:w@example.com"
+                           "DTSTART;TZID=W. Europe Standard Time:20261017T100000"
+                           "DTEND;TZID=W. Europe Standard Time:20261017T110000"
+                           "SUMMARY:Meeting" "END:VEVENT")
+                {:timezone "Europe/Amsterdam"})]
+      (is (= (Instant/parse "2026-10-17T08:00:00Z") (:start ev)))
+      (is (= "Europe/Amsterdam" (:timezone ev)))))
+  (testing "DURATION instead of DTEND"
+    (let [[timed day] (service/import-ical
+                       (vcalendar "BEGIN:VEVENT" "UID:d1@example.com"
+                                  "DTSTART;TZID=Europe/Amsterdam:20261017T100000" "DURATION:PT1H"
+                                  "SUMMARY:Hour" "END:VEVENT"
+                                  "BEGIN:VEVENT" "UID:d2@example.com"
+                                  "DTSTART;VALUE=DATE:20261017" "DURATION:P3D"
+                                  "SUMMARY:Trip" "END:VEVENT"))]
+      (is (= (Instant/parse "2026-10-17T09:00:00Z") (:end timed)))
+      (is (= (Instant/parse "2026-10-20T00:00:00Z") (:end day)))))
+  (testing "a nil :timezone means UTC; an unknown one is a validation error"
+    (let [ical (vcalendar "BEGIN:VEVENT" "UID:n@example.com" "DTSTART;VALUE=DATE:20261017"
+                          "SUMMARY:Day" "END:VEVENT")]
+      (is (= "UTC" (:timezone (first (service/import-ical ical {:timezone nil})))))
+      (is (= :validation-error
+             (:type (ex-data (try (service/import-ical ical {:timezone "Mars/Olympus"})
+                                  (catch clojure.lang.ExceptionInfo e e)))))))))
