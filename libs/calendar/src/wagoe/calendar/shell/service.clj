@@ -60,5 +60,4 @@
   ([events]
    (ical-feed-response events {}))
   ([events opts]
-   (feed/ical-response (export-ical events (dissoc opts :filename :max-age))
-                       (select-keys opts [:filename :max-age]))))
+   (feed/ical-response (export-ical events opts) opts)))

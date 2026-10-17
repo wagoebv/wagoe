@@ -142,16 +142,16 @@
   (let [uid-str   (get-prop-value vevent "UID")
         title     (get-prop-value vevent "SUMMARY")
         start-dt  (prop-date (find-prop vevent "DTSTART"))
-        end-dt    (prop-date (find-prop vevent "DTEND"))
         all-day?  (instance? LocalDate start-dt)
+        end-dt    (or (prop-date (find-prop vevent "DTEND"))
+                      (when all-day? (.plusDays ^LocalDate start-dt 1)))
         rrule-str (get-prop-value vevent "RRULE")
         timezone  (or (get-tzid vevent) default-tz)
         zone      (ZoneId/of timezone)]
     (cond-> {:id       (uid-string->uuid uid-str)
              :title    (or title "")
              :start    (temporal->instant start-dt zone)
-             :end      (temporal->instant (or end-dt (when all-day? (.plusDays ^LocalDate start-dt 1)))
-                                          zone)
+             :end      (temporal->instant end-dt zone)
              :timezone timezone}
       all-day?  (assoc :all-day? true)
       rrule-str (assoc :recurrence rrule-str))))
@@ -186,7 +186,6 @@
 ;; =============================================================================
 
 (defn create-ical-adapter
-  "Create an ICalAdapter. `settings`, the `:wagoe/calendar` config, stay
-   readable on it as keys."
-  ([] (->ICalAdapter))
-  ([settings] (map->ICalAdapter (or settings {}))))
+  "Create and return a new ICalAdapter instance."
+  []
+  (->ICalAdapter))
