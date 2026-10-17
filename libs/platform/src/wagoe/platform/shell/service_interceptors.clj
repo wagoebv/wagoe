@@ -28,6 +28,7 @@
             [wagoe.observability.logging.ports :as log-ports]
             [wagoe.observability.metrics.core :as metrics]
             [wagoe.observability.errors.core :as error-reporting]
+            [wagoe.platform.core.http.problem-details :as problem-details]
             [wagoe.observability.core.sql-redaction :as redaction])
   (:import [java.time Instant]
            [java.util UUID]))
@@ -96,9 +97,15 @@
               (log-ports/info logger (str "Service operation completed: " operation-name)
                               (merge context {:result-type (if result :success :null)})))
             ctx)
-   :error (fn [{:keys [operation-name system context] :as ctx}]
+   :error (fn [{:keys [operation-name system context exception] :as ctx}]
             (when-let [logger (:logger system)]
-              (log-ports/error logger (str "Service operation failed: " operation-name) context))
+              ;; A typed 4xx is not a fault here either (BOU-704).
+              (let [log (case (problem-details/status-log-level
+                               (first (problem-details/exception-status exception {})))
+                          :error log-ports/error
+                          :warn  log-ports/warn
+                          log-ports/info)]
+                (log logger (str "Service operation failed: " operation-name) context)))
             ctx)})
 
 (def service-operation-metrics

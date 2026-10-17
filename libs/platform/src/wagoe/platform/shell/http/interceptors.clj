@@ -314,7 +314,11 @@
 ;; ==============================================================================
 
 (def http-request-logging
-  "Logs HTTP requests at entry and completion."
+  "Logs HTTP requests at entry and completion.
+
+   A thrown error is logged at the level of the status it answers
+   (`problem-details/status-log-level`): the one http-error-handler set, else
+   the problem-details mapping's."
   {:name :http-request-logging
    :enter (fn [{:keys [request system correlation-id] :as ctx}]
             (when-let [logger (:logger system)]
@@ -331,13 +335,22 @@
                                :status (:status response)
                                :correlation-id correlation-id}))
             ctx)
-   :error (fn [{:keys [request system correlation-id exception] :as ctx}]
+   :error (fn [{:keys [request response system correlation-id exception] :as ctx}]
             (when-let [logger (:logger system)]
-              (log-ports/error logger "HTTP request failed"
-                               {:method (:request-method request)
-                                :uri (:uri request)
-                                :error (.getMessage ^Throwable exception)
-                                :correlation-id correlation-id}))
+              (let [status (or (:status response)
+                               (first (problem-details/exception-status exception {})))
+                    level  (problem-details/status-log-level status)]
+                (log-ports/log* logger level
+                                (cond (= :error level) "HTTP request failed"
+                                      (< status 400)   "HTTP request redirected"
+                                      :else            "HTTP request refused")
+                                {:method (:request-method request)
+                                 :uri (:uri request)
+                                 :status status
+                                 :error-type (:type (ex-data exception))
+                                 :error (.getMessage ^Throwable exception)
+                                 :correlation-id correlation-id}
+                                nil)))
             ctx)})
 
 (def http-metrics-buckets
