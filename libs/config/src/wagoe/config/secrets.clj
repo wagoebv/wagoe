@@ -41,25 +41,21 @@
 ;; secret under a key no name pattern catches is still a secret.
 (defonce ^:private resolved (atom {}))
 
-(defn- bad-form [form]
-  (throw (ex-info (str "#secret takes a name, [:source \"name\"] or {:name \"name\" :default ...}, not "
-                       (pr-str form))
-                  {:type :configuration-error :form form})))
-
 (defn- secret-ref
-  "{:source :name}, and :default when the form gives one, from a #secret form."
+  "{:source :name}, and :default when the form gives one, from a #secret form.
+   wagoe.tools.doctor/secret-refs mirrors this; change both."
   [form default-source]
-  (let [ref (cond
-              (map? form)    (if (every? #{:name :source :default} (keys form))
-                               (update form :source #(or % default-source))
-                               (bad-form form))
-              (vector? form) (if (= 2 (count form))
-                               {:source (first form) :name (second form)}
-                               (bad-form form))
-              :else          {:source default-source :name form})]
-    (if (and (keyword? (:source ref)) (or (string? (:name ref)) (symbol? (:name ref))))
+  (let [ref (cond (map? form)    (update form :source #(or % default-source))
+                  (vector? form) (zipmap [:source :name] form)
+                  :else          {:source default-source :name form})]
+    (if (and (every? #{:name :source :default} (keys ref))
+             (not (and (vector? form) (not= 2 (count form))))
+             (keyword? (:source ref))
+             (or (string? (:name ref)) (symbol? (:name ref))))
       (update ref :name str)
-      (bad-form form))))
+      (throw (ex-info (str "#secret takes a name, [:source \"name\"] or {:name \"name\" :default ...}, not "
+                           (pr-str form))
+                      {:type :configuration-error :form form})))))
 
 (defn- label [source-key secret-name]
   (str (name source-key) ":" secret-name))
@@ -94,7 +90,6 @@
       (::optional? opts) nil
 
       :else
-      ;; #or no longer catches this: it did by overriding Aero's #or for the whole JVM.
       (throw (ex-info (str "Secret not found: " secret-name " (source " source-key
                            (when-let [dir (:dir source)] (str ", in " dir))
                            "). Provide it, or give it a default: #secret {:name \"" secret-name

@@ -167,11 +167,12 @@
 
 (defn secret-refs
   "Every #secret in `config-text`'s :active section, as {:source :name} plus
-   :default? when the form gives one. A name that is itself a tag is skipped."
+   :default? when the form gives one. A name that is itself a tag is skipped.
+   Mirrors wagoe.config.secrets/secret-ref, which Babashka cannot load."
   [config-text]
   (let [tree   (try (edn/read-string {:default tagged-literal} config-text)
                     (catch Exception _ nil))
-        active (if (map? tree) (:active tree tree) tree)]
+        active (when (map? tree) (:active tree))]
     (for [x     (tree-seq (some-fn coll? tagged-literal?) #(if (tagged-literal? %) [(:form %)] (seq %)) active)
           :when (and (tagged-literal? x) (= 'secret (:tag x)))
           :let  [form (:form x)
@@ -183,16 +184,17 @@
 
 (defn check-secret-refs
   "#secret references without a :default that the :env or :file source does
-   not have. Other sources cannot be asked from here. Names only, never values."
+   not have. Other sources cannot be asked from here. Names only, never values.
+   The directory and blank rule mirror wagoe.config.secrets/default-sources."
   [config-text env-map]
   (let [dir     (or (get env-map "WAGOE_SECRETS_DIR") "/run/secrets")
-        present (fn [{:keys [source name]}]
+        present (fn [{source :source n :name}]
                   (case source
-                    :env  (not (str/blank? (get env-map name)))
-                    :file (let [f (io/file dir name)] (and (.isFile f) (not (str/blank? (slurp f)))))
+                    :env  (not (str/blank? (get env-map n)))
+                    :file (let [f (io/file dir n)] (and (.isFile f) (not (str/blank? (slurp f)))))
                     true))
         missing (->> (secret-refs config-text) (remove :default?) (remove present)
-                     (map #(str (clojure.core/name (:source %)) ":" (:name %))) distinct sort)]
+                     (map #(str (name (:source %)) ":" (:name %))) distinct sort)]
     (if (seq missing)
       [{:id    :secret-refs
         :level :error

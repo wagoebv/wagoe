@@ -119,7 +119,12 @@
     (is (= "from-opts"
            (:pw (read-edn "{:secret-sources {:vault wagoe.config.secrets-test/vault-source}
                             :pw #secret [:vault \"db\"]}"
-                          {:secret-sources {:vault (map-source {"db" "from-opts"})}})))))
+                          {:secret-sources {:vault (map-source {"db" "from-opts"})}}))))
+    (is (= "from-opts"
+           (:pw (read-edn "{:secret-sources {:vault wagoe.config.secrets-test/not-a-source}
+                            :pw #secret [:vault \"db\"]}"
+                          {:secret-sources {:vault (map-source {"db" "from-opts"})}})))
+        "an overridden declaration is not built"))
   (testing "a bad declaration is a configuration error"
     (doseq [decl ["wagoe.config.secrets-test/not-a-source" "wagoe.config.secrets-test/nope"
                   "no.such.ns/source" "unqualified"]]

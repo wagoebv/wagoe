@@ -112,15 +112,16 @@
    `:secret-sources {:vault my.app/vault-source}`, each symbol naming an
    `ISecretSource` or a no-argument function returning one. Read before the
    config itself, so every reader of the file sees them — the migration CLI as
-   much as the app."
-  [resource]
-  (let [declared (:secret-sources (aero/read-config-into-tagged-literal resource))]
-    (when-not (or (nil? declared)
-                  (and (map? declared) (every? keyword? (keys declared)) (every? qualified-symbol? (vals declared))))
-      (throw (ex-info (str ":secret-sources must be a literal map of keyword to qualified symbol, not "
-                           (pr-str declared))
-                      {:type :configuration-error :config (str resource)})))
-    (into {} (map (fn [[k sym]] [k (secret-source k sym)])) declared)))
+   much as the app. Keys in `skip` are not built: the caller has its own."
+  ([resource] (declared-secret-sources resource #{}))
+  ([resource skip]
+   (let [declared (:secret-sources (aero/read-config-into-tagged-literal resource))]
+     (when-not (or (nil? declared)
+                   (and (map? declared) (every? keyword? (keys declared)) (every? qualified-symbol? (vals declared))))
+       (throw (ex-info (str ":secret-sources must be a literal map of keyword to qualified symbol, not "
+                            (pr-str declared))
+                       {:type :configuration-error :config (str resource)})))
+     (into {} (keep (fn [[k sym]] (when-not (contains? skip k) [k (secret-source k sym)]))) declared))))
 
 (defn read-config-resource
   "Read the config at `resource` (a URL) for `profile`. A missing #include
@@ -132,7 +133,7 @@
    `wagoe.config.secrets`."
   ([resource profile] (read-config-resource resource profile {}))
   ([resource profile opts]
-   (let [opts   (update opts :secret-sources #(merge (declared-secret-sources resource) %))
+   (let [opts   (update opts :secret-sources #(merge (declared-secret-sources resource (set (keys %))) %))
          config (aero/read-config resource (assoc opts :profile profile :resolver include-resolver))]
      (when-let [missing (seq (missing-includes config))]
        (throw (ex-info (str "Config include not found: " (str/join ", " missing)
