@@ -10,7 +10,8 @@
             [clojure.test :refer [deftest testing is]]
             [wagoe.user.shell.mfa :as mfa-shell]
             [wagoe.user.shell.mfa-crypto :as mfa-crypto]
-            [wagoe.user.ports :as ports]))
+            [wagoe.user.ports :as ports]
+            [wagoe.user.totp-clock :as totp-clock]))
 
 ;; =============================================================================
 ;; Test Fixtures
@@ -94,7 +95,9 @@
     (let [secret (mfa-shell/generate-totp-secret)]
 
       (testing "rejects invalid TOTP code"
-        (is (false? (mfa-shell/verify-totp-code "000000" secret))))
+        (binding [mfa-shell/*now* totp-clock/window-edge]
+          (let [wrong (format "%06d" (mod (inc (parse-long (totp-clock/code secret))) 1000000))]
+            (is (false? (mfa-shell/verify-totp-code wrong secret))))))
 
       (testing "rejects nil code"
         (is (false? (mfa-shell/verify-totp-code nil secret))))
@@ -107,6 +110,19 @@
 
       (testing "handles invalid secret gracefully"
         (is (false? (mfa-shell/verify-totp-code "123456" "INVALID")))))))
+
+(deftest ^:unit ^:security verify-totp-code-reads-the-bound-clock
+  (let [secret "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"
+        edge   totp-clock/window-edge
+        later  (.plusMillis edge 1)
+        code   (totp-clock/code secret edge)]
+    (testing "a code generated at the last millisecond of a window verifies at that instant"
+      (binding [mfa-shell/*now* edge]
+        (is (true? (mfa-shell/verify-totp-code code secret)))))
+    (testing "and not one millisecond later, in the next window"
+      (binding [mfa-shell/*now* later]
+        (is (not= code (totp-clock/code secret later)))
+        (is (false? (mfa-shell/verify-totp-code code secret)))))))
 
 ;; =============================================================================
 ;; Backup Code Generation Tests
