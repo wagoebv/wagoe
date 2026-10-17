@@ -888,6 +888,11 @@
                  _ (db/execute-update! tx {:delete-from :user_identities
                                            :where [:= :user_id user-id-str]})
 
+                 ;; The key cascades, but SQLite enforces keys only on
+                 ;; connections that ask.
+                 _ (db/execute-update! tx {:delete-from :user_group_members
+                                           :where [:= :user_id user-id-str]})
+
                  ;; Delete from users table first (FK constraint)
                  profile-query {:delete-from :users
                                 :where [:= :id user-id-str]}

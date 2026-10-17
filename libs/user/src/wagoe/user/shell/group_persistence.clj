@@ -75,9 +75,10 @@
 
   (modify-group [this group]
     (when (pos? (db/execute-update! ctx {:update :user_groups
-                                         :set    {:name        (:name group)
-                                                  :description (:description group)
-                                                  :updated_at  (tc/instant->string (Instant/now))}
+                                         :set    (cond-> {:name       (:name group)
+                                                          :updated_at (tc/instant->string (Instant/now))}
+                                                   (contains? group :description)
+                                                   (assoc :description (:description group)))
                                          :where  [:= :id (id-str (:id group))]}))
       (ports/find-group this (:id group))))
 
@@ -109,7 +110,10 @@
       true
       ;; A member already: the unique key refuses the row.
       (catch Exception e
-        (if (member? ctx group-id user-id) false (throw e)))))
+        (if (member? ctx group-id user-id)
+          false
+          ;; The group or user went meanwhile: a key refused the row.
+          (throw (ex-info "Could not add the member" {:type :conflict} e))))))
 
   (remove-member [_ group-id user-id]
     (pos? (db/execute-update! ctx {:delete-from :user_group_members
@@ -151,8 +155,9 @@
   (find-user-groups [_ user-id]
     (mapv db->group (db/execute-query! ctx {:select   [:g.id :g.name :g.description :g.created_at :g.updated_at]
                                             :from     [[:user_groups :g]]
-                                            :join     [[:user_group_members :m] [:= :m.group_id :g.id]]
-                                            :where    [:= :m.user_id (id-str user-id)]
+                                            :join     [[:user_group_members :m] [:= :m.group_id :g.id]
+                                                       [:auth_users :a] [:= :a.id :m.user_id]]
+                                            :where    [:and [:= :m.user_id (id-str user-id)] [:= :a.deleted_at nil]]
                                             :order-by [[:g.name :asc]]}))))
 
 (defn create-group-repository [ctx]

@@ -148,7 +148,8 @@
   ;; Generates :id and :created-at. Returns the stored group.
 
   (modify-group [this group])
-  ;; Takes :id, :name and :description. Returns the stored group, or nil.
+  ;; Takes :id and :name, and :description when it is to change. Returns the
+  ;; stored group, or nil.
 
   (remove-group [this group-id])
   ;; Removes the group, its memberships and grants. Returns boolean.
@@ -178,7 +179,7 @@
   ;; a soft-deleted user.
 
   (find-user-groups [this user-id]))
-  ;; The groups the user is in, by name.
+  ;; The groups the user is in, by name. None for a soft-deleted user.
 
 ;; =============================================================================
 ;; Service

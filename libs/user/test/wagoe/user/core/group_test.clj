@@ -30,6 +30,8 @@
                   [:domain-id {:optional true} :int]
                   [:director-general-id {:optional true} :uuid]]})
 
+(defrecord Tagged [v])
+
 (deftest ^:unit grants-checked-against-what-the-application-declares
   (is (nil? (sut/grant-refusal {:permission :invoice/approve :scope {:domain-id 4}} declared)))
   (is (nil? (sut/grant-refusal {:permission :report/view :scope {}} declared)))
@@ -48,7 +50,11 @@
     (is (= :scope (get-in (sut/grant-refusal {:permission :a :scope [1]} {}) [:error :field])))
     (is (= :scope (get-in (sut/grant-refusal {:permission :a :scope {:at (java.time.Instant/now)}} {})
                           [:error :field]))
-        "an Instant does not read back from EDN")))
+        "an Instant does not read back from EDN")
+    (testing "what prints but does not read back"
+      (doseq [x [(keyword "a b") (symbol "x,y") (sorted-map) (java.util.HashMap.)]]
+        (is (= (map? x) (sut/edn-value? x)) (pr-str x)))
+      (is (false? (sut/edn-value? (->Tagged 1)))))))
 
 (deftest ^:unit audit-entries-name-each-user-whose-rights-changed
   (let [ctx     {:actor-id (random-uuid) :actor-email "admin@example.com"}

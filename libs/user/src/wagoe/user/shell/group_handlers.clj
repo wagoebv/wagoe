@@ -85,12 +85,14 @@
 
 (defn- change
   "Run `f` on the group named in the path, redirecting back to it with
-   `flash-key`; a refused change re-renders the page saying why."
+   `flash-key`, or with no message when `f` answers falsey: nothing changed. A
+   refused change re-renders the page saying why."
   [group-service request flash-key f]
   (if-let [id (path-uuid request :id)]
     (try
-      (f id)
-      (redirect (group-ui/group-path id) flash-key)
+      (if (f id)
+        (redirect (group-ui/group-path id) flash-key)
+        (response/redirect (group-ui/group-path id) :see-other))
       (catch clojure.lang.ExceptionInfo e
         (if (refused? e)
           (do (log/info "Group change refused" (select-keys (ex-data e) [:type :field]))
@@ -109,8 +111,9 @@
 (defn delete-group [group-service]
   (fn [request]
     (if-let [id (path-uuid request :id)]
-      (do (ports/delete-group group-service id)
-          (redirect group-ui/base-path :user.groups/flash-deleted))
+      (if (ports/delete-group group-service id)
+        (redirect group-ui/base-path :user.groups/flash-deleted)
+        (not-found request))
       (not-found request))))
 
 (defn add-member [user-service group-service]

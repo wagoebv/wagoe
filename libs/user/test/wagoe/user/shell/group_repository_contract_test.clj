@@ -34,7 +34,9 @@
           (is (= {:name "Finance" :description "Pays"}
                  (select-keys (ports/find-group repo (:id finance)) [:name :description])))
           (is (= "Renamed" (:name (ports/modify-group repo {:id (:id audit) :name "Renamed" :description nil}))))
-          (ports/modify-group repo {:id (:id audit) :name "Audit" :description nil}))
+          (ports/modify-group repo {:id (:id audit) :name "Audit" :description nil})
+          (is (= "Pays" (:description (ports/modify-group repo {:id (:id finance) :name "Finance"})))
+              "a description not given is kept"))
 
         (testing "members"
           (is (true? (ports/insert-member repo (:id finance) (:id ada))))
@@ -66,6 +68,7 @@
         (testing "a soft-deleted user holds nothing and is not listed"
           (ports/soft-delete-user users (:id bob))
           (is (empty? (ports/find-user-grants repo (:id bob))))
+          (is (empty? (ports/find-user-groups repo (:id bob))))
           (is (= ["ada@example.com"] (map :email (ports/find-members repo (:id audit))))))
 
         (testing "erasing a user removes their memberships"

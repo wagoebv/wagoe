@@ -40,10 +40,14 @@
   "Whether `x` is plain EDN data: written out, it reads back as it was."
   [x]
   (cond
-    (or (nil? x) (boolean? x) (string? x) (keyword? x) (symbol? x)
+    (or (nil? x) (boolean? x) (string? x)
         (integer? x) (double? x) (decimal? x) (uuid? x)
         ;; Not an Instant: it prints as #object.
         (instance? java.util.Date x)) true
+    ;; (keyword "a b") prints as two forms.
+    (or (keyword? x) (symbol? x)) (boolean (re-matches #"[^\s,;()\[\]{}\"\\]+" (str x)))
+    ;; A record prints with a tag the EDN reader does not know.
+    (record? x)     false
     (map? x)        (and (every? edn-value? (keys x)) (every? edn-value? (vals x)))
     (or (vector? x) (set? x) (seq? x)) (every? edn-value? x)
     :else false))
