@@ -33,6 +33,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **Recurring jobs** (BOU-452): `:recurring {:nightly-report {:cron "0 2 * * *"}}` under `:wagoe/jobs`; one replica
   enqueues each tick. `enqueue-once!` and `:wagoe/idempotency-store` make a repeated enqueue a no-op.
+- **`#secret` config reader** (BOU-455): reads env vars or mounted files (`#secret [:file "db-password"]`), takes custom
+  sources such as Vault, and redacts values in devtools. See the config library page.
 - **CSV reports** (BOU-674): `:type :csv` renders the first `:table` section as RFC 4180 text, formula cells neutralised.
   Pass `:bom? true` for Excel.
 - **App modules can add HTTP middleware and components** (BOU-672): an `ig-config` returns only what it adds to the
@@ -112,6 +114,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **A concurrent promotion, demotion or deactivation could be undone past the last-admin guard** (BOU-685). Role and
+  active changes decide under the admin lock; edits and logins write only their own fields. No action needed.
+- **`wagoe session list` and `session invalidate` were unreachable, and are removed** (BOU-692). A role change or
+  deactivation already ends a user's sessions.
 - **Migrate, seed and reset picked their profile from `-Denv`, `ENV` or `ENVIRONMENT`; a blank `WAG_ENV` failed the boot** (BOU-686).
   Everything reads `WAG_ENV` now, blank meaning dev. Set it where you relied on the others, `clojure -M:prod:migrate` included.
 - **The storage README documented config keys the module never reads** (BOU-646). It is `{:provider :local :root …}`; see the README.

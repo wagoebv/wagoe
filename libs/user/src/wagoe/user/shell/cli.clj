@@ -15,7 +15,6 @@
             [wagoe.core.interceptor :as interceptor]
             [wagoe.core.interceptor-context :as interceptor-context]
             [wagoe.user.shell.interceptors :as user-interceptors]
-            [wagoe.user.ports :as user-ports]
             [cheshire.core :as json]
             [clojure.string :as str]
             [clojure.tools.cli :as cli])
@@ -88,18 +87,6 @@
 
 (def user-delete-options
   [[nil "--id UUID" "User ID (required)"
-    :parse-fn type-conv/parse-uuid-string
-    :validate [some? "Must be a valid UUID"]]])
-
-;; =============================================================================
-;; Session Command Options
-;; =============================================================================
-
-(def session-invalidate-options
-  [[nil "--token TOKEN" "Session token (required)"]])
-
-(def session-list-options
-  [[nil "--user-id UUID" "User UUID (required)"
     :parse-fn type-conv/parse-uuid-string
     :validate [some? "Must be a valid UUID"]]])
 
@@ -187,19 +174,6 @@
                   users)]
     (render-table headers rows)))
 
-(defn format-session-table
-  "Format sessions as a table."
-  [sessions]
-  (let [headers ["Token" "User ID" "Created" "Expires" "Revoked"]
-        rows (map (fn [session]
-                    [(:session-token session) ; Don't truncate token - needed for invalidation
-                     (truncate-string (str (:user-id session)) 36)
-                     (format-instant (:created-at session))
-                     (format-instant (:expires-at session))
-                     (if (:revoked-at session) "Yes" "No")])
-                  sessions)]
-    (render-table headers rows)))
-
 ;; =============================================================================
 ;; Output Formatting - JSON
 ;; =============================================================================
@@ -221,17 +195,6 @@
       (update :deleted-at format-instant-json)
       (update :last-login format-instant-json)))
 
-(defn session->json
-  "Transform session entity for JSON output."
-  [session]
-  (-> session
-      (update :id str)
-      (update :user-id str)
-      (update :created-at format-instant-json)
-      (update :expires-at format-instant-json)
-      (update :last-accessed-at format-instant-json)
-      (update :revoked-at format-instant-json)))
-
 (defn format-json
   "Format data as pretty JSON."
   [data]
@@ -246,7 +209,7 @@
 
    Args:
      format-type: :table or :json
-     entity-type: :user, :user-list, :session, :session-list
+     entity-type: :user or :user-list
      data: Entity or collection to format"
   [format-type entity-type data]
   (case format-type
@@ -254,16 +217,11 @@
             :user (format-json (user->json data))
             :user-list (format-json {:users (map user->json data)
                                      :count (count data)})
-            :session (format-json (session->json data))
-            :session-list (format-json {:sessions (map session->json data)
-                                        :count (count data)})
             ;; Fallback for unknown entity types in JSON mode
             (format-json data))
     :table (case entity-type
              :user (format-user-table [data])
              :user-list (format-user-table data)
-             :session (format-session-table [data])
-             :session-list (format-session-table data)
              ;; Fallback for unknown entity types in table mode
              (str data))
     ;; Default to table-style string formatting on unknown format-type
@@ -435,111 +393,27 @@
         result-context (interceptor/run-pipeline context pipeline)]
     (:response result-context)))
 
-(defn execute-session-validate-v2
-  "Execute session validate command using interceptor pipeline."
-  [service _error-reporter opts]
-  (let [context (create-cli-interceptor-context
-                 :session-validate
-                 service
-                 []
-                 opts)
-        pipeline (user-interceptors/create-session-validation-pipeline :cli)
-        result-context (interceptor/run-pipeline context pipeline)]
-    (:response result-context)))
-
-(defn execute-session-invalidate
-  "Execute session invalidate command using interceptor pipeline."
-  [service _error-reporter opts]
-  (let [context (create-cli-interceptor-context
-                 :session-invalidate
-                 service
-                 []
-                 opts)
-        pipeline (user-interceptors/create-session-invalidation-pipeline :cli)
-        result-context (interceptor/run-pipeline context pipeline)]
-    (:response result-context)))
-
-(defn execute-session-list
-  "Execute session list command."
-  [service _error-reporter opts]
-  (let [format-type (keyword (get opts :format "table"))]
-    (try
-      (if-let [user-id (:user-id opts)]
-        (let [sessions (user-ports/get-user-sessions service user-id)]
-          {:status 0
-           :entity-type :session-list
-           :data sessions})
-        {:status 1
-         :message (format-error format-type
-                                {:type :validation-error
-                                 :message "Missing required option: --user-id"})})
-      (catch Exception e
-        {:status 1
-         :message (format-error format-type
-                                {:type :session-list-error
-                                 :message (.getMessage e)})}))))
-
 ;; =============================================================================
 ;; Command Dispatch
 ;; =============================================================================
 
 (defn dispatch-command
-  "Dispatch command to appropriate executor using interceptor pipeline.
-
-   Args:
-     domain: :user or :session
-     verb: :create, :list, :find, :update, :delete, :invalidate
-     opts: Parsed command options
-     service: User service instance
-
-   Returns:
-     Map with :status, :entity-type, :data, or :message"
-  [domain verb opts service]
-  (case domain
-    :user (case verb
-            :create (execute-user-create service nil opts)
-            :list (execute-user-list service nil opts)
-            :find (execute-user-get service nil opts) ; Note: find -> get mapping
-            :update (execute-user-update service nil opts)
-            :delete (execute-user-delete service nil opts)
-            (throw (ex-info (str "Unknown user command: " (name verb))
-                            {:type :unknown-command
-                             :message (str "Unknown command: user " (name verb))})))
-    :session (case verb
-               :invalidate (execute-session-invalidate service nil opts)
-               :list (execute-session-list service nil opts)
-               (throw (ex-info (str "Unknown session command: " (name verb))
-                               {:type :unknown-command
-                                :message (str "Unknown command: session " (name verb))})))
-    (throw (ex-info (str "Unknown domain: " (name domain))
-                    {:type :unknown-domain
-                     :message (str "Unknown domain: " (name domain))}))))
+  "Run the user command `verb` with `opts`. Returns a map with :status and
+   :entity-type and :data, or :message."
+  [verb opts service]
+  (case verb
+    :create (execute-user-create service nil opts)
+    :list (execute-user-list service nil opts)
+    :find (execute-user-get service nil opts) ; Note: find -> get mapping
+    :update (execute-user-update service nil opts)
+    :delete (execute-user-delete service nil opts)
+    (throw (ex-info (str "Unknown user command: " (name verb))
+                    {:type :unknown-command
+                     :message (str "Unknown command: user " (name verb))}))))
 
 ;; =============================================================================
 ;; Help Text
 ;; =============================================================================
-
-(def root-help
-  "Wagoe CLI - User and Session Management
-
-Usage: wagoe <domain> <command> [options]
-
-Domains:
-  user       User management commands
-  session    Session management commands
-
-Global Options:
-  -f, --format FORMAT  Output format: table (default) or json
-  -h, --help           Show help
-
-Examples:
-  wagoe user create --email john@example.com --name \"John Doe\" --role user
-  wagoe user list --format json
-  wagoe session list --user-id UUID
-
-For domain-specific help:
-  wagoe user --help
-  wagoe session --help")
 
 (def user-help
   "User Management Commands
@@ -588,27 +462,6 @@ Examples:
   wagoe user update --id UUID --role admin
   wagoe user delete --id UUID")
 
-(def session-help
-  "Session Management Commands
-
-Usage: wagoe session <command> [options]
-
-Commands:
-  invalidate   Invalidate a session (logout)
-  list         List sessions for a user
-
-Sessions are created by logging in: POST /api/v1/auth/login.
-
-Options for 'invalidate':
-  --token TOKEN        Session token (required)
-
-Options for 'list':
-  --user-id UUID       User UUID (required)
-
-Examples:
-  wagoe session invalidate --token TOKEN
-  wagoe session list --user-id UUID")
-
 ;; =============================================================================
 ;; Main CLI Entry Point
 ;; =============================================================================
@@ -636,7 +489,6 @@ Examples:
           global-errors (:errors parsed-for-verb)
           verb-args (:arguments parsed-for-verb)
           [verb-str] verb-args
-          domain :user
           verb (when verb-str (keyword verb-str))
 
           ;; Check for help flags early
@@ -677,7 +529,7 @@ Examples:
               verb-count 1
               remaining-args (vec (drop verb-count args))
 
-              ;; Get command-specific options (domain is always :user here)
+              ;; Get command-specific options
               cmd-options (case verb
                             :create user-create-options
                             :list user-list-options
@@ -707,7 +559,7 @@ Examples:
                                             :message "Invalid arguments"
                                             :details (str/join ", " errors)})))
                   1)
-                (let [result (dispatch-command domain verb opts service)]
+                (let [result (dispatch-command verb opts service)]
                   (if (:message result)
                     (println (:message result))
                     (println (format-success format-type

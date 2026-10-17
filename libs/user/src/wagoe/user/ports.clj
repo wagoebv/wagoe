@@ -32,7 +32,8 @@
   ;; Throws on a duplicate email.
 
   (update-user [this user-entity])
-  ;; Takes a complete entity with :id, sets :updated-at.
+  ;; Takes :id and the keys to change; writes only those, so a partial
+  ;; entity leaves the rest as stored. Sets :updated-at.
   ;; Returns the stored entity; throws {:type :user-not-found} when absent.
 
   (soft-delete-user [this user-id])

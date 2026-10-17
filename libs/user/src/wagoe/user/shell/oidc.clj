@@ -220,7 +220,7 @@
                                               (ports/find-sessions-by-user session-repository (:id user))
                                               now)]
     (link-identity! client user sign-in now)
-    (ports/update-user user-repository (merge user (auth-core/prepare-successful-login-updates user now)))
+    (ports/update-user user-repository (assoc (auth-core/prepare-successful-login-updates user now) :id (:id user)))
     (let [{:keys [session]} (auth/open-session! (:auth-service client) user risk login-context now)]
       (audit! client user login-context provider-id true nil)
       (log/info "OIDC sign-in" {:user-id (:id user) :provider provider-id :linked? (boolean link?)})
@@ -367,13 +367,15 @@
       (let [check (when-not (str/blank? code) (mfa/verify-mfa-code mfa-service user code))]
         (if (:valid? check)
           (let [user (if (:used-backup-code? check)
-                       (let [u (merge user (:updates check))] (ports/update-user user-repository u) u)
+                       (do (ports/update-user user-repository (assoc (:updates check) :id (:id user)))
+                           (merge user (:updates check)))
                        user)]
             (finish! client user sign-in login-context))
           ;; Wrong codes count towards the lockout, as they do on the password form.
           (do (ports/update-user user-repository
-                                 (merge user (auth-core/calculate-failed-login-consequences
-                                              user (get-in client [:auth-service :auth-config]) (Instant/now))))
+                                 (assoc (auth-core/calculate-failed-login-consequences
+                                         user (get-in client [:auth-service :auth-config]) (Instant/now))
+                                        :id (:id user)))
               (audit! client user login-context (:provider-id sign-in) false "Invalid MFA code")
               {:error {:type :oidc/mfa-failed :message "Invalid MFA code"}}))))))
 

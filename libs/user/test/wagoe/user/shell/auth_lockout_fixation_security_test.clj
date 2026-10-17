@@ -111,3 +111,21 @@
           t2     (:session-token (:session (login (auth-service (atom (seed-user)) config) correct-password)))]
       (is (some? t1) "login establishes a session token")
       (is (not= t1 t2) "tokens are freshly minted per login — a fixed value cannot be reused"))))
+
+(deftest ^:security ^:unit a-login-writes-no-role-or-active
+  ;; It wrote back the whole row it read, so a login racing a demotion or a
+  ;; deactivation undid it (BOU-685).
+  (let [state  (atom (seed-user))
+        writes (atom [])
+        svc    (-> (auth-service state {:max-failed-attempts 5 :lockout-duration-minutes 15})
+                   (update :user-repository
+                           (fn [repo]
+                             (reify ports/IUserRepository
+                               (find-user-by-email [_ email] (ports/find-user-by-email repo email))
+                               (update-user [_ entity]
+                                 (swap! writes conj entity)
+                                 (ports/update-user repo entity))))))]
+    (is (false? (:success? (login svc "wrong-password"))))
+    (is (true? (:success? (login svc correct-password))))
+    (is (= 2 (count @writes)))
+    (is (not-any? #(or (contains? % :role) (contains? % :active)) @writes))))

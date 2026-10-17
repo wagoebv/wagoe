@@ -1080,3 +1080,19 @@
                           {:path-params {:id (str (:id user))}}))]
         (is (str/includes? out "Sessions retrieved") "the log was not captured")
         (is (not (str/includes? out token)))))))
+
+(deftest ^:unit profile-edits-send-only-the-edited-fields
+  ;; The whole user went along, so a role or active read before a concurrent
+  ;; demotion or deactivation was written back over it (BOU-685).
+  (let [uid   (UUID/randomUUID)
+        calls (atom [])
+        svc   (reify ports/IUserService
+                (get-user-by-id [_ id] {:id id :email "a@example.com" :name "A" :role :admin :active true})
+                (update-user-profile [_ u]
+                  (swap! calls conj u)
+                  (merge {:email "a@example.com" :name "A" :role :admin :active true} u)))]
+    ((web-handlers/profile-edit-handler svc {}) {:user {:id uid} :form-params {"name" "New"}})
+    ((web-handlers/preferences-edit-handler svc {})
+     {:user {:id uid} :form-params {"date-format" "iso" "time-format" "24h" "language" "en"}})
+    (is (= [#{:id :name} #{:id :date-format :time-format :language}]
+           (map (comp set keys) @calls)))))
