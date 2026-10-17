@@ -69,7 +69,7 @@
        [:h1.page-title
         (icons/icon :search {:size 24})
         [:t :search/page-indices-heading]]
-       [:a.button.secondary {:href (home/path)}
+       [:a.button.secondary {:href home/*path*}
         [:t :search/button-back-dashboard]]]
       [:p {:style "color: var(--muted-color); margin-top: 0;"}
        [:t :search/page-indices-description]]

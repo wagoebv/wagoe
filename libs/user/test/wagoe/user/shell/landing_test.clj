@@ -149,7 +149,7 @@
 
 (defn- home-under [settings]
   (((landing/wrap-home (landing/prepare (config settings)))
-    (fn [_] (home/path)))
+    (fn [_] home/*path*))
    {}))
 
 (deftest ^:contract home-path-reaches-the-layouts

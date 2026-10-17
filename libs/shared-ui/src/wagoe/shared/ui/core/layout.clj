@@ -46,7 +46,7 @@
   [& [opts]]
   (let [{:keys [user brand brand-href]} opts]
     [:nav
-     [:a.logo {:href (or brand-href (if user (home/path) "/"))}
+     [:a.logo {:href (or brand-href (if user home/*path* "/"))}
       (or brand
           (icons/brand-logo {:size 140}))]
      (when (platform-admin? user)
@@ -107,6 +107,8 @@
       ;; CSRF token for HTMX requests — read by the htmx:configRequest listener in init.js.
       (when csrf-token
         [:meta {:name "csrf-token" :content csrf-token}])
+      ;; Read by keyboard.js for its "g h" shortcut.
+      [:meta {:name "wagoe-home" :content home/*path*}]
       (when meta-description
         [:meta {:name "description" :content meta-description}])
       (when theme-color

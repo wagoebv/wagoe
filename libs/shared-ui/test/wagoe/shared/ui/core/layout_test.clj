@@ -58,7 +58,10 @@
   (is (= "/" (logo-href {})) "signed out, the logo goes to the site root")
   (binding [home/*path* "/app"]
     (is (= "/app" (logo-href {:user {:name "A"}})))
-    (is (= "/elsewhere" (logo-href {:user {:name "A"} :brand-href "/elsewhere"})))))
+    (is (= "/elsewhere" (logo-href {:user {:name "A"} :brand-href "/elsewhere"})))
+    (is (some #{[:meta {:name "wagoe-home" :content "/app"}]}
+              (tree-seq coll? seq (layout/page-layout "T" [:p])))
+        "keyboard.js reads it from the page")))
 
 (deftest ^:unit page-layout-test
   (testing "Basic page layout generation"

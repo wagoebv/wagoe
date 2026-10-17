@@ -69,7 +69,7 @@
             (icons/icon icon {:size 20})
             [:span.nav-text label]]]))]]
     [:div.admin-sidebar-footer
-     [:a (merge {:href (home/path)}
+     [:a (merge {:href home/*path*}
                 (alpine/sidebar-nav-link-attrs))
       (icons/icon :home {:size 20})
       [:span.nav-text [:t :admin/sidebar-dashboard]]]

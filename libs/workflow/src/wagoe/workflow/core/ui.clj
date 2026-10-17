@@ -257,7 +257,7 @@
        [:h1.page-title
         (icons/icon :layout-list {:size 24})
         [:t :workflow/page-instances-heading]]
-       [:a.button.secondary {:href (home/path)}
+       [:a.button.secondary {:href home/*path*}
         [:t :workflow/button-dashboard]]]
       (instances-filter-form params)
       (instances-table instances)]
