@@ -26,8 +26,11 @@
 
 (defn- home [config]
   (let [schema  (reify admin-ports/ISchemaProvider
+                  (fetch-table-metadata [_ _] nil)
+                  (get-entity-config [_ _] nil)
                   (list-available-entities [_] [])
-                  (get-entity-config [_ _] nil))
+                  (get-entity-label [_ _] nil)
+                  (validate-entity-exists [_ _] false))
         handler (list-handlers/admin-home-handler (reify admin-ports/IAdminService) schema {})]
     (str (:body (handler {:request-method :get :uri "/web/admin/"
                           :user {:id (random-uuid) :role :admin :active true}
