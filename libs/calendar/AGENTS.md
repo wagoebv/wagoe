@@ -19,14 +19,16 @@ It saves ~€3.2k–€4k per project by eliminating boilerplate around:
 | Namespace | Layer | Responsibility |
 |-----------|-------|----------------|
 | `wagoe.calendar.schema` | shared | Malli schemas: `EventData`, `EventDef`, `OccurrenceResult`, `ConflictResult` |
-| `wagoe.calendar.ports` | shared | `CalendarAdapterProtocol` interface |
+| `wagoe.calendar.ports` | shared | `CalendarAdapterProtocol`, implemented by the `:wagoe/calendar` component |
 | `wagoe.calendar.core.event` | core | Pure helpers: `duration`, `all-day?`, `within-range?`, `valid-event?` |
+| `wagoe.calendar.core.feed` | core | `ical-response`: Ring response for an iCal feed |
 | `wagoe.calendar.core.recurrence` | core | RRULE parsing, `occurrences`, `next-occurrence*`, `expand-event` |
 | `wagoe.calendar.core.conflict` | core | `overlaps?`, `conflicts?`, `find-conflicts` |
 | `wagoe.calendar.core.ui` | core | Pure Hiccup: `month-view`, `week-view`, `mini-calendar`, `event-badge` |
 | `wagoe.calendar.shell.registry` | shell | `defevent` macro, event type registry (`register-event-type!`, `get-event-type`, `list-event-types`, `clear-registry!`) |
 | `wagoe.calendar.shell.adapters.ical` | shell | ical4j adapter (`ICalAdapter`) |
-| `wagoe.calendar.shell.service` | shell | Public API: `export-ical`, `import-ical`, `ical-feed-response` |
+| `wagoe.calendar.shell.service` | shell | The same calls without Integrant: `export-ical`, `import-ical`, `ical-feed-response` |
+| `wagoe.calendar.shell.module-wiring` | shell | `:wagoe/calendar` init-key: returns the ical4j adapter |
 
 ---
 
@@ -154,45 +156,60 @@ All occurrence functions are pure and live in `wagoe.calendar.core.recurrence`.
 
 ## 6. iCal Export + HTTP Feed
 
+`:wagoe/calendar` is a `CalendarAdapterProtocol` (ical4j). Take
+`(ig/ref :wagoe/calendar)` and call it through the ports; an app needs no
+shell require, so `bb check:ports` stays green.
+
 ```clojure
-(require '[wagoe.calendar.shell.service :as cal])
+(require '[wagoe.calendar.ports :as cal]
+         '[wagoe.calendar.core.feed :as feed])
 
 ;; Export to RFC 5545 string
-(cal/export-ical [standup appointment] {})
+(cal/export-ical calendar [standup appointment] {})
 ;; => "BEGIN:VCALENDAR\nVERSION:2.0\n..."
 
 ;; Custom PRODID
-(cal/export-ical events {:product-id "-//MyApp//EN"})
+(cal/export-ical calendar events {:product-id "-//MyApp//EN"})
 
-;; Ring response for HTTP subscription feed
-(cal/ical-feed-response events {:filename "team.ics"})
+;; Ring response for an HTTP subscription feed (pure)
+(feed/ical-response ical-string {:filename "team.ics" :max-age 300})
 ;; => {:status 200
 ;;     :headers {"Content-Type" "text/calendar; charset=utf-8"
-;;               "Content-Disposition" "attachment; filename=\"team.ics\""}
+;;               "Content-Disposition" "attachment; filename=\"team.ics\""
+;;               "Cache-Control" "private, max-age=300"}
 ;;     :body "BEGIN:VCALENDAR..."}
 ```
 
 Wire into a Reitit route:
 ```clojure
 ["/calendar/feed.ics"
- {:get {:handler (fn [req]
-                   (let [events (db/list-events)]
-                     (cal/ical-feed-response events)))}}]
+ {:get {:handler (fn [_req]
+                   (feed/ical-response (cal/export-ical calendar (list-events) {})))}}]
 ```
+
+Without Integrant, `wagoe.calendar.shell.service` has `export-ical`,
+`import-ical` and `ical-feed-response` without the adapter argument.
+
+**All-day events.** `:all-day? true` is written as `DTSTART;VALUE=DATE` with an
+exclusive `DTEND` (the day after the last), dates taken in the event's
+`:timezone`. An end that is not local midnight still covers its day.
 
 ---
 
 ## 7. iCal Import
 
 ```clojure
-(cal/import-ical ical-string {})
+(cal/import-ical calendar ical-string {:timezone "Europe/Amsterdam"})
 ;; => [{:id #uuid "..." :title "..." :start #inst "..." :end #inst "..."
 ;;      :timezone "Europe/Amsterdam" :recurrence "FREQ=WEEKLY;BYDAY=MO"}
 ;;     ...]
 ```
 
 - `:start` and `:end` are `java.time.Instant` (UTC).
-- `:timezone` is extracted from the `DTSTART;TZID=...` parameter.
+- `:timezone` is extracted from the `DTSTART;TZID=...` parameter. Without one,
+  the `:timezone` option applies (default `"UTC"`), to dates and floating times.
+- `DTSTART;VALUE=DATE` comes back `:all-day? true`, starting at midnight in that
+  zone. Without a `DTEND` it lasts one day.
 - Unknown VEVENT properties are ignored.
 - `:recurrence` is the raw RRULE string (ready for `recurrence/occurrences`).
 
@@ -255,8 +272,8 @@ ical4j `DateTime` objects are mutable. The adapter always creates new instances 
 ### 6. Expansion window size
 `expand-event` calls `occurrences` which iterates all dates in the window. For `FREQ=DAILY` over 10 years, this produces ~3650 maps. Always pass a narrow window relevant to your use case.
 
-### 7. `all-day?` UTC assumption
-`all-day?` checks for midnight UTC. If your app treats events as all-day based on local midnight, compute this at the application layer before calling the library.
+### 7. All-day is a flag
+`event/all-day?` reads `:all-day? true` and nothing else. A timed event from midnight to midnight is not all-day: set the flag, or it is exported with times.
 
 ### 8. Registry pollution in tests
 Always use `(use-fixtures :each (fn [f] (registry/clear-registry!) (f) (registry/clear-registry!)))` (with `wagoe.calendar.shell.registry` aliased as `registry`) to prevent `defevent` definitions at namespace load time from leaking across tests.

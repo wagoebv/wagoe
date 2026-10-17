@@ -8,7 +8,7 @@
 
    FC/IS rule: no I/O here. All side effects live in the shell layer."
   (:require [wagoe.calendar.schema :as schema])
-  (:import [java.time Duration Instant ZoneId]))
+  (:import [java.time Duration Instant]))
 
 ;; =============================================================================
 ;; Pure helpers
@@ -25,22 +25,10 @@
   (Duration/between ^Instant (:start event) ^Instant (:end event)))
 
 (defn all-day?
-  "Return true if the event spans at least 24 hours and starts at midnight UTC.
-
-   Args:
-     event - EventData map
-
-   Returns boolean."
+  "True when the event is marked `:all-day? true`. The flag is the only
+   definition: a timed event that starts at midnight is not all-day."
   [event]
-  (let [dur     (duration event)
-        start   ^Instant (:start event)
-        zdt     (.atZone start (ZoneId/of "UTC"))
-        midnight? (and (zero? (.getHour zdt))
-                       (zero? (.getMinute zdt))
-                       (zero? (.getSecond zdt))
-                       (zero? (.getNano zdt)))]
-    (and midnight?
-         (>= (.toHours dur) 24))))
+  (true? (:all-day? event)))
 
 (defn within-range?
   "Return true if the event overlaps with [range-start, range-end).

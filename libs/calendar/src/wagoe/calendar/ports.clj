@@ -11,11 +11,13 @@
 (defprotocol CalendarAdapterProtocol
   "Adapter contract for iCal serialization and deserialization.
 
-   Implementations live in shell/adapters/. The ical4j-backed implementation
-   is in wagoe.calendar.shell.adapters.ical/ICalAdapter."
+   The `:wagoe/calendar` component implements it with ical4j, so an
+   application takes `(ig/ref :wagoe/calendar)` and needs only this namespace."
 
   (export-ical [this events opts]
     "Convert a seq of EventData maps → iCal string (RFC 5545 VCALENDAR format).
+     An `:all-day? true` event is written as DTSTART;VALUE=DATE with an
+     exclusive DTEND, its dates taken in the event's :timezone.
 
      Args:
        events - seq of EventData maps
@@ -30,7 +32,10 @@
 
      Args:
        ical-string - RFC 5545 VCALENDAR string
-       opts        - options map (reserved for future use)
+       opts        - options map; supported keys:
+                       :timezone  IANA zone for events without a TZID: dates
+                                  and floating times (default \"UTC\")
 
      Returns a vector of EventData maps. RRULE strings are preserved in :recurrence.
+     A VALUE=DATE event comes back `:all-day? true`.
      Unknown VEVENT properties are silently ignored."))

@@ -146,6 +146,10 @@ for what is public API, what is internal, and how deprecations are announced.
   code that authorises by address must refuse nil.
 - **Calendar month names were English only, and multi-day events showed on their first day only** (BOU-702). Month
   names are `[:t …]` markers now; add `:calendar/month-*` and `:calendar/all-day` to any custom catalogue.
+- **iCal export needed a calendar shell require** (BOU-703). `:wagoe/calendar` is a `CalendarAdapterProtocol` now; serve
+  its export with `core.feed/ical-response`. Feeds are cached privately for 300 s; pass `:max-age` to change that.
+- **iCal ignored `:all-day?`** (BOU-707): all-day events are `VALUE=DATE` both ways now. `event/all-day?` reads only the
+  flag, no longer guessing from UTC midnight; set `:all-day? true` where you relied on that.
 - **Security: session tokens were stored in plaintext, so a read of `user_sessions` was a login** (BOU-696). Only their
   SHA-256 is stored; boot or `migrate up` hashes existing rows in place. Upgrade every replica at once; a rollback signs everyone out.
 - **Security: parallel wrong passwords counted as one, so lockout came late** (BOU-696). The count is incremented in the

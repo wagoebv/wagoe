@@ -15,7 +15,8 @@
    Labels are [:t key] markers, resolved by wagoe.i18n.shell.render. A page
    rendered with plain hiccup2 shows them as <t> tags, so either render through
    i18n or pass a :t fn (key -> string) in opts to resolve them here."
-  (:require [wagoe.shared.ui.core.components :as ui]
+  (:require [wagoe.calendar.core.event :as event]
+            [wagoe.shared.ui.core.components :as ui]
             [clojure.string :as str])
   (:import [java.time Duration Instant ZoneId ZonedDateTime LocalDate]
            [java.time.format DateTimeFormatter]))
@@ -61,7 +62,7 @@
 (defn- event-span
   "[first-date last-date] the event covers."
   [ev ^String timezone]
-  (let [tz    (or (when (:all-day? ev) (:timezone ev)) timezone)
+  (let [tz    (or (when (event/all-day? ev) (:timezone ev)) timezone)
         start (instant->local-date (:start ev) tz)
         end   (some-> ^Instant (:end ev) (.minusNanos 1) (instant->local-date tz))]
     [start (if (and end (.isAfter ^LocalDate end start)) end start)]))
@@ -137,7 +138,7 @@
   ([event timezone]
    (event-badge event timezone {}))
   ([event timezone {:keys [event-href show-time?]
-                    :or   {show-time? (not (:all-day? event))}}]
+                    :or   {show-time? (not (event/all-day? event))}}]
    (let [href (safe-href (or (:href event) (when event-href (event-href event))))]
      [(if href :a :div)
       (cond-> {:class "event-badge"
@@ -286,7 +287,7 @@
          ;; the rest, overnight ones included, sit in the hour they start.
          {spanning true timed false}
          (group-by (fn [[ev]]
-                     (or (boolean (:all-day? ev))
+                     (or (event/all-day? ev)
                          (not (neg? (.compareTo (Duration/between ^Instant (:start ev) ^Instant (:end ev))
                                                 (Duration/ofDays 1))))))
                    (with-spans events timezone))
