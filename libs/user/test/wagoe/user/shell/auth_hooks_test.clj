@@ -3,7 +3,7 @@
    can read state a component holds rather than a process-global atom."
   (:require [clojure.test :refer [deftest is testing use-fixtures]]
             [integrant.core :as ig]
-            [acme.office.shell.module-wiring]
+            [acme.office.shell.module-wiring :as office]
             [wagoe.platform.shell.system.config :as system-config]
             [wagoe.user.ports :as ports]
             [wagoe.user.shell.auth :as auth]
@@ -56,17 +56,15 @@
   "The auth hooks and service of one system, with the office module's hook
    components for `office`."
   [office]
-  (let [users (mem/->MemoryUserRepository (atom {}))]
-    (ig/init {:wagoe/office-mfa-policy {:office office}
-              :wagoe/office-landing    {:office office}
-              :wagoe/auth-hooks        {:configured  {}
-                                        :contributed {:mfa-required?  (ig/ref :wagoe/office-mfa-policy)
-                                                      :login-redirect (ig/ref :wagoe/office-landing)}}
-              :wagoe/auth-service      {:user-repository    users
-                                        :session-repository (mem/->MemorySessionRepository (atom {}))
-                                        :mfa-service        (mfa/create-mfa-service users {})
-                                        :auth-config        {}
-                                        :hooks              (ig/ref :wagoe/auth-hooks)}})))
+  (let [users  (mem/->MemoryUserRepository (atom {}))
+        module (office/ig-config {:office office} nil)]
+    (ig/init (merge (dissoc (:components module) :wagoe/office)
+                    {:wagoe/auth-hooks   {:configured {} :contributed (:auth module)}
+                     :wagoe/auth-service {:user-repository    users
+                                          :session-repository (mem/->MemorySessionRepository (atom {}))
+                                          :mfa-service        (mfa/create-mfa-service users {})
+                                          :auth-config        {}
+                                          :hooks              (ig/ref :wagoe/auth-hooks)}}))))
 
 (defn- lands-at
   "Where a user signing in from `ip` lands, with `hooks`."

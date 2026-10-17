@@ -259,12 +259,8 @@
    collected into `:middleware`, in fold order, rather than taking a slot.
    `:auth` holds sign-in hooks, one module each, for the user module."
   [acc k {:keys [components http auth routes job-handlers]}]
-  (when-let [clash (some (set (keys (:components acc))) (keys components))]
-    (throw (ex-info (str "Two modules both wire " clash
-                         ". The later one would silently replace the earlier.")
-                    {:type :wagoe/module-key-conflict :key clash :module k})))
   (-> acc
-      (update :components merge components)
+      (update :components #(merge-slots "the system config" % k components))
       (update :http merge-http k (dissoc http :extra-middleware))
       (update :auth merge-auth k auth)
       (cond-> (contains? http :extra-middleware)

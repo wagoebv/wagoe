@@ -4,6 +4,7 @@
   (:require [clojure.tools.logging :as log]
             [malli.error :as me]
             [wagoe.core.utils.redirect :as redirect]
+            [wagoe.config :as wagoe-config]
             [wagoe.core.validation :as cv]
             [wagoe.shared.ui.core.home :as home]
             [wagoe.user.core.landing :as landing]
@@ -16,20 +17,11 @@
 (defn- resolve-fn
   "The function `x` names, or `x` itself when it is one already."
   [k x]
-  (if (symbol? x)
-    (let [v (try (requiring-resolve x)
-                 (catch Exception e
-                   (throw (ex-info (str ":wagoe/user " k " names " x ", whose namespace does not load")
-                                   {:type :configuration-error :key k :symbol x}
-                                   e))))]
-      (when-not v
-        (throw (ex-info (str ":wagoe/user " k " names " x ", which does not resolve")
-                        {:type :configuration-error :key k :symbol x})))
-      (when-not (fn? @v)
-        (throw (ex-info (str ":wagoe/user " k " names " x ", which is not a function")
-                        {:type :configuration-error :key k :symbol x})))
-      @v)
-    x))
+  (let [v (if (symbol? x) (wagoe-config/resolve-symbol x) x)]
+    (when-not (fn? v)
+      (throw (ex-info (str ":wagoe/user " k " names " x ", which is not a function")
+                      {:type :configuration-error :key k :symbol x})))
+    v))
 
 (defn prepare
   "`config` with `:login-redirect`, `:dashboard` and `:home` checked and the

@@ -441,9 +441,8 @@
           prepared-data {:email (get form-data "email")
                          :password (get form-data "password")
                          :remember (boolean (get form-data "remember"))
-                         :mfa-code (get form-data "mfa-code")
-                         :ip-address (client-ip/request-ip request)
-                         :user-agent (get-in request [:headers "user-agent"])}
+                         :mfa-code (get form-data "mfa-code")}
+          prepared-data (merge prepared-data (login-context request))
           [valid? validation-errors validated-data]
           (validate-request-data user-schema/LoginRequest prepared-data)
           logo-url (get-in config [:wagoe/settings :logo-url])]

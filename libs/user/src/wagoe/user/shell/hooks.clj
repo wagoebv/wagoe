@@ -5,27 +5,25 @@
   (:require [wagoe.config :as wagoe-config]
             [wagoe.user.ports :as ports]))
 
-(def hook-keys #{:mfa-required? :login-redirect})
+(def ^:private protocols
+  {:mfa-required?  [ports/IMfaPolicy ports/mfa-required? "IMfaPolicy"]
+   :login-redirect [ports/ILoginRedirect ports/login-path "ILoginRedirect"]})
+
+(def ^:private hook-keys (set (keys protocols)))
 
 (defn as-fn
   "Hook `x` as a `(fn [user login-context])`: a function, a qualified symbol
    naming one, or a component implementing the hook's protocol. Throws
    :configuration-error for anything else."
   [k x]
-  (let [v (if (qualified-symbol? x) (wagoe-config/resolve-symbol x) x)]
+  (let [v                     (if (qualified-symbol? x) (wagoe-config/resolve-symbol x) x)
+        [protocol method pname] (protocols k)]
     (cond
-      (and (= k :mfa-required?) (satisfies? ports/IMfaPolicy v))
-      (fn [user ctx] (ports/mfa-required? v user ctx))
-
-      (and (= k :login-redirect) (satisfies? ports/ILoginRedirect v))
-      (fn [user ctx] (ports/login-path v user ctx))
-
-      (or (fn? v) (instance? clojure.lang.MultiFn v))
-      v
-
+      (satisfies? protocol v)                         (fn [user ctx] (method v user ctx))
+      (or (fn? v) (instance? clojure.lang.MultiFn v)) v
       :else
       (throw (ex-info (str k " must be a function, a qualified symbol naming one, or a component"
-                           " implementing " (if (= k :mfa-required?) "IMfaPolicy" "ILoginRedirect"))
+                           " implementing " pname)
                       {:type :configuration-error :key k :value x})))))
 
 (defn prepare
