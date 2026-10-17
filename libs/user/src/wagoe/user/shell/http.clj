@@ -331,6 +331,17 @@
 ;; User Module Routes
 ;; =============================================================================
 
+(def ^:private credentials-body
+  "Body of POST /auth/login and POST /sessions. Coercion strips undeclared
+   keys, so `mfaCode` must be listed or an MFA user can never finish signing in."
+  [:map {:closed true}
+   [:email :string]
+   [:password :string]
+   [:mfaCode {:optional true} :string]
+   [:deviceInfo {:optional true} [:map
+                                  [:userAgent {:optional true} :string]
+                                  [:ipAddress {:optional true} :string]]]])
+
 (defn api-routes
   "The module's API routes, as Reitit data.
 
@@ -419,29 +430,13 @@
        :post {:handler    (login-handler user-service)
               :summary    "Authenticate user with email/password"
               :tags       ["authentication"]
-              :parameters {:body [:map {:closed true}
-                                  [:email :string]
-                                  [:password :string]
-                                  [:deviceInfo {:optional true} [:map
-                                                                 [:userAgent {:optional true} :string]
-                                                                 [:ipAddress {:optional true} :string]]]]}}}]
+              :parameters {:body credentials-body}}}]
      ["/sessions"
       {:public true
        :post {:handler    (create-session-handler user-service)
-              :summary    "Create session (login by user ID)"
+              :summary    "Create session with email/password"
               :tags       ["sessions"]
-              :parameters {:body [:or
-                                  [:map {:closed true}
-                                   [:userId :string]
-                                   [:deviceInfo {:optional true} [:map
-                                                                  [:userAgent {:optional true} :string]
-                                                                  [:ipAddress {:optional true} :string]]]]
-                                  [:map {:closed true}
-                                   [:email :string]
-                                   [:password :string]
-                                   [:deviceInfo {:optional true} [:map
-                                                                  [:userAgent {:optional true} :string]
-                                                                  [:ipAddress {:optional true} :string]]]]]}}}]
+              :parameters {:body credentials-body}}}]
      ;; The token in the path is the credential.
      ["/sessions/:token"
       {:public true

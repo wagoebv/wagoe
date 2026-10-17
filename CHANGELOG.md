@@ -110,6 +110,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **Job args came back as strings on the `:db` and `:redis` queues: keywords, UUIDs, instants** (BOU-689). Jobs are stored
   as transit, which older workers cannot read: upgrade them together. Old jobs keep string args, so convert only strings.
+- **Security: the rate limiter keyed on an unchecked `X-Api-Key`, so a caller could dodge its limit or drain another's** (BOU-690).
+  Buckets are now the signed-in user, else the client IP; the header is ignored.
+- **`POST /api/v1/sessions` accepted a `{userId}` body it could never sign in with** (BOU-690). It now answers 400; send email and password.
+- **`POST /api/v1/auth/login` and `/api/v1/sessions` dropped `mfaCode`, so an MFA user could not sign in over the API** (BOU-690). No action needed.
 - **Reports needed a shell require, and `generate-async` lost its output** (BOU-674). `:wagoe/reports` is now a
   `ReportServiceProtocol` and async output is stored and mailed. Call the port; `service/generate-async` is gone.
 - **Tables from Malli schemas take their column types from the adapter's `column-type`** (BOU-610). On fresh H2
@@ -118,6 +122,8 @@ for what is public API, what is internal, and how deprecations are announced.
   Set `:wagoe/http :trusted-proxies` to your proxies' CIDRs; read the address as `:client-ip`.
 - **PDF reports wrote data unescaped: `&` failed the render, and markup in data was rendered and its URLs fetched** (BOU-675, security).
   Strings holding HTML or entities like `&nbsp;` must be wrapped in `hiccup2.core/raw`; images load only from `data:` URIs.
+- **PDF reports rendered a vector or map in data as an element or its attributes** (BOU-687, security). They render as text now,
+  and `on*` attributes and non-http(s)/mailto link hrefs are dropped; markup in data must be wrapped in `hiccup2.core/raw`.
 - **A scaffolded field's `default=` was unreachable from the wizards and `bb scaffold ai`, and stayed required on create**
   (BOU-537). Both now take a default; a defaulted field is optional in the generated Create request.
 - **`wagoe.ai.core.parsing/module-spec->cli-args` rendered only the first entity** (BOU-541). Removed; nothing called it.

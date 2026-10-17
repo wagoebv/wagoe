@@ -802,94 +802,35 @@
 ;; -----------------------------------------------------------------------------
 
 (def validate-session-creation-input
-  "Validates input for creating a session (login).
-   
-   HTTP: Validates body has either userId OR (email + password)
-   CLI: Validates opts has user-id (or email/password for authentication)"
+  "Validates input for creating a session (login): email + password, on every
+   interface. A user id is not a credential, and `authenticate-user` never
+   read one (BOU-690)."
   {:name ::validate-session-creation-input
    :enter (fn [context]
             (let [interface-type (ctx/get-interface-type context)
-                  input-data (case interface-type
-                               :http (get-in context [:request :parameters :body])
-                               :cli (:opts context))
-                  user-id-str (case interface-type
-                                :http (:userId input-data)
-                                :cli (:user-id input-data))
-                  [email password] [(:email input-data) (:password input-data)]]
-
-              (cond
-                ;; HTTP: Must have either userId OR (email + password)
-                (= interface-type :http)
-                (cond
-                  ;; Valid user ID flow
-                  user-id-str
-                  (-> context
-                      (assoc :raw-session-data input-data)
-                      (ctx/add-breadcrumb :operation :session-create-validation-success
-                                          {:auth-type :user-id
-                                           :user-id user-id-str
-                                           :interface-type interface-type}))
-
-                  ;; Valid email/password flow
-                  (and email password)
-                  (-> context
-                      (assoc :raw-session-data input-data)
-                      (ctx/add-breadcrumb :operation :session-create-validation-success
-                                          {:auth-type :email-password
-                                           :email email
-                                           :interface-type interface-type}))
-
-                  ;; Invalid - missing required fields for either flow
-                  :else
-                  (ctx/fail-with-exception context
-                                           (ex-info "Invalid authentication parameters"
-                                                    {:type :validation-error
-                                                     :message "Must provide either userId or (email + password)"
-                                                     :provided-fields (keys input-data)
-                                                     :interface-type interface-type})))
-
-                ;; CLI: Check if we have either user-id or email/password
-                (= interface-type :cli)
-                (cond
-                  ;; Valid user ID flow
-                  user-id-str
-                  (-> context
-                      (assoc :raw-session-data input-data)
-                      (ctx/add-breadcrumb :operation :session-create-validation-success
-                                          {:auth-type :user-id
-                                           :user-id user-id-str
-                                           :interface-type interface-type}))
-
-                  ;; Valid email/password flow
-                  (and email password)
-                  (-> context
-                      (assoc :raw-session-data input-data)
-                      (ctx/add-breadcrumb :operation :session-create-validation-success
-                                          {:auth-type :email-password
-                                           :email email
-                                           :interface-type interface-type}))
-
-                  ;; Invalid - missing required fields
-                  :else
-                  (ctx/fail-with-exception context
-                                           (ex-info "Invalid authentication parameters"
-                                                    {:type :validation-error
-                                                     :message "Must provide either user-id or (email + password)"
-                                                     :provided-fields (keys input-data)
-                                                     :interface-type interface-type})))
-
-                ;; Should not reach here
-                :else
+                  input-data     (case interface-type
+                                   :http (get-in context [:request :parameters :body])
+                                   :cli (:opts context))
+                  {:keys [email password]} input-data]
+              (if (and email password)
+                (-> context
+                    (assoc :raw-session-data input-data)
+                    (ctx/add-breadcrumb :operation :session-create-validation-success
+                                        {:auth-type      :email-password
+                                         :email          email
+                                         :interface-type interface-type}))
                 (ctx/fail-with-exception context
-                                         (ex-info "Unknown interface type"
-                                                  {:type :system-error
+                                         (ex-info "Invalid authentication parameters"
+                                                  {:type :validation-error
+                                                   :message "Must provide email and password"
+                                                   :provided-fields (keys input-data)
                                                    :interface-type interface-type})))))})
 
 (def transform-session-creation-data
   "Transforms and normalizes session creation data.
 
-   HTTP: Supports both userId and email/password flows, extracts device info and MFA code
-   CLI: Uses provided data, handles both user-id and email/password flows with MFA support"
+   HTTP: Email/password, device info and MFA code
+   CLI: Email/password and MFA code"
   {:name ::transform-session-creation-data
    :enter (fn [context]
             (let [interface-type (ctx/get-interface-type context)
@@ -897,7 +838,6 @@
 
                   session-data (case interface-type
                                  :http (cond-> {}
-                                         (:userId body) (assoc :user-id (type-conv/string->uuid (:userId body)))
                                          (:email body) (assoc :email (:email body))
                                          (:password body) (assoc :password (:password body))
                                          (:mfaCode body) (assoc :mfa-code (:mfaCode body))
@@ -906,7 +846,6 @@
                                                      :ip-address (or (client-ip/request-ip (:request context)) "Unknown")))
 
                                  :cli (cond-> {}
-                                        (:user-id body) (assoc :user-id (:user-id body))
                                         (:email body) (assoc :email (:email body))
                                         (:password body) (assoc :password (:password body))
                                         (:mfa-code body) (assoc :mfa-code (:mfa-code body))
