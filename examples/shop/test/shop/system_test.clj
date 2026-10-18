@@ -1,0 +1,10 @@
+(ns shop.system-test
+  "Boots the whole application on the test profile and talks to it over Ring.
+   wagoe.test also signs in, runs jobs and drains events: see its README."
+  (:require [clojure.test :refer [deftest is]]
+            [shop.system-config :as app]
+            [wagoe.test :as t]))
+
+(deftest ^:integration the-app-boots-and-reaches-its-database
+  (t/with-test-system [sys app/ig-config]
+    (is (= 200 (:status (t/request (t/client sys) :get "/health/ready"))))))

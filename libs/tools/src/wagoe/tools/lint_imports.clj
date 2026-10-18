@@ -81,13 +81,14 @@
   (apply process/shell {:out :string :err :string :continue true} cmd))
 
 (defn classpath
-  "The project's full classpath, via `run`.
+  "The project's full classpath with its :test alias, via `run`: test-only
+   libraries such as wagoe-test export config too.
 
    Throws when clojure -Spath fails. Proceeding with an empty classpath would
    copy nothing and still exit 0 — the same silent success this task guards
    against everywhere else."
   [run]
-  (let [{:keys [exit out err]} (run ["clojure" "-Spath"])]
+  (let [{:keys [exit out err]} (run ["clojure" "-Spath" "-A:test"])]
     (when-not (zero? exit)
       (throw (ex-info (str "clojure -Spath failed (exit " exit ") — cannot resolve the "
                            "classpath, so no exported config can be found")
