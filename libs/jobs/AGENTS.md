@@ -31,7 +31,8 @@ Enabling `:wagoe/jobs` builds the runtime. Nothing else to assemble.
              :lease-ms 60000          ; :db only — in-flight lease
              :redis    {:host "localhost" :port 6379}
              :workers  {:count  1
-                        :queues [:default]}    ; one pool per queue
+                        :queues [:default]     ; one pool per queue
+                        :virtual-threads? false}  ; true: each worker loop on a virtual thread
              :recurring {:nightly-report {:cron "0 2 * * *" :zone "Europe/Amsterdam"}}
              :scheduler {:tick-ms 5000 :lease-ms 30000 :zone "UTC"}}
 ```
@@ -50,6 +51,11 @@ Enabling `:wagoe/jobs` builds the runtime. Nothing else to assemble.
 Set `:workers {:count 0}` on a web node in the web/worker split — it enqueues
 and processes nothing. The default of 1 is a single process that does both,
 which is what an application without a deployment topology has.
+
+`:virtual-threads? true` runs each worker loop on a virtual thread. A worker
+still runs one job at a time, so `:count` stays the concurrency bound; keep it
+within the database pool. Off by default; see the virtual threads section of
+`docs/modules/architecture/pages/scaling.adoc`.
 
 **A worker polls one queue.** Work enqueued on a queue no pool names is never
 processed and nothing reports it — push enqueued on `:push` while the only pool
