@@ -83,8 +83,8 @@ platform serves them from the classpath via Ring `wrap-resource "public"`
 Only layout namespaces reach for `ui-style`; feature code goes through the
 shared layout entry points instead.
 
-- `wagoe.shared.ui.core.layout` (lib `shared-ui`) binds `default-css`,
-  `pilot-css`, `admin-pilot-css`, and the matching `*-js` vars from
+- `wagoe.shared.ui.core.layout` (lib `shared-ui`) binds `pilot-css`,
+  `admin-pilot-css`, and the matching `*-js` vars from
   `ui-style/bundle` / `ui-style/js-bundle`, then injects them into the page
   `<head>`. Its `pilot-page-layout` / `admin-pilot-page-layout` helpers are what
   modules call.

@@ -149,7 +149,7 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Deprecated
 
-- **pico, open-props, `tokens-openprops.css` and the `:base` CSS bundle** (BOU-457): daisyUI/Tailwind on `wagoe-tokens.css`
+- **pico, open-props, `tokens-openprops.css` and the `:base` CSS bundle (`base-css`)** (BOU-457): daisyUI/Tailwind on `wagoe-tokens.css`
   is the one CSS system. `:base` still works when selected; it goes in 2.0.
 - **`/swagger.json` and `:swagger` route docs** (BOU-462): the path serves the 3.1 document and `:swagger` is
   translated to `:openapi` with a boot warning, both until 2.0. Use `/openapi.json` and `:openapi`.

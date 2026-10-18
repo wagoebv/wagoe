@@ -98,9 +98,11 @@
                 lang        "en"}} opts
         ;; On the default stack, wagoe-default gives bare elements the styling
         ;; pico used to; a caller's own body class is kept beside it.
+        ;; Hiccup also takes :class as a collection.
         body-attrs (cond-> body-attrs
-                     (nil? css) (assoc :class (str "wagoe-default"
-                                                   (some->> (:class body-attrs) (str " ")))))
+                     (nil? css) (update :class #(if (coll? %)
+                                                  (into ["wagoe-default"] %)
+                                                  (str "wagoe-default" (some->> % (str " "))))))
         css        (or css pilot-css)
         ;; Falls back to the token bound for the current request, so handlers need
         ;; not thread it explicitly. An explicit :csrf-token opt still overrides.

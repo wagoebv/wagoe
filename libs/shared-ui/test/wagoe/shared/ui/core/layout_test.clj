@@ -132,6 +132,9 @@
     (is (some #{[:body {:class "wagoe-default app" :id "b"}]}
               (map #(subvec % 0 2) (filter vector? (layout/page-layout "T" [:p] {:body-attrs {:class "app" :id "b"}}))))
         "a caller's body class does not drop it")
+    (is (some #{[:body {:class ["wagoe-default" "app" "dark"]}]}
+              (map #(subvec % 0 2) (filter vector? (layout/page-layout "T" [:p] {:body-attrs {:class ["app" "dark"]}}))))
+        "nor does a class given as a collection")
     (is (not (str/includes? (str (layout/page-layout "T" [:p] {:css ["/css/x.css"]})) "wagoe-default"))
         "a page that picks its own stack styles its own elements"))
 

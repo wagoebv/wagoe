@@ -481,11 +481,14 @@ Add a theme file that overrides the variables you want; the rest cascade from
 }
 ```
 
-2. Pass it to `page-layout` via the `:css` opt (replaces the default list):
+2. Pass it to `page-layout` via the `:css` opt (replaces the default list).
+   A page that picks its own `:css` loses `body.wagoe-default`; add it back for
+   the default element styling:
 ```clojure
 (layout/page-layout
   "My Page" content
-  {:css (conj (ui-style/bundle :pilot) "/css/my-brand.css")})
+  {:css        (conj (ui-style/bundle :pilot) "/css/my-brand.css")
+   :body-attrs {:class "wagoe-default"}})
 ```
 
 **Tips for custom themes**:

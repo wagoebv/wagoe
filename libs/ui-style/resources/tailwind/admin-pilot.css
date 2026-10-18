@@ -1736,9 +1736,10 @@ input[type="number"] {
     h2 { @apply mt-6 mb-3; font-size: 1.5rem; }
     h3 { @apply mt-5 mb-2; font-size: 1.25rem; }
     h4 { @apply mt-4 mb-2; font-size: 1.125rem; }
-    p, ul, ol, pre, blockquote, table, form { @apply mb-4; }
-    ul { @apply list-disc pl-6; }
-    ol { @apply list-decimal pl-6; }
+    /* Not in navigation: breadcrumbs and header forms keep their own spacing. */
+    :is(p, ul, ol, pre, blockquote, table, form):not(nav *, header *) { @apply mb-4; }
+    ul:not(nav *, header *) { @apply list-disc pl-6; }
+    ol:not(nav *, header *) { @apply list-decimal pl-6; }
     /* Plain declarations: daisy's components applied here would land in a
        sub-layer, which the preflight reset beats. */
     main a:not([class]) {
@@ -1751,7 +1752,7 @@ input[type="number"] {
     blockquote { @apply border-l-4 border-base-300 pl-4 italic; }
     hr { @apply my-6 border-base-300; }
 
-    table { @apply w-full rounded-box bg-base-100 text-left; }
+    table { @apply w-full bg-base-100 text-left; }
     th, td { @apply border-b border-base-300 px-4 py-3; }
     th { @apply font-semibold; }
 

@@ -4,7 +4,7 @@
    Keep CSS/JS asset ordering centralized here so modules can reuse the same
    rendering contract without hardcoding per-page lists.")
 
-(def base-css
+(def ^:deprecated base-css
   "DEPRECATED: pico and open-props; use `pilot-css`, the default. Kept for apps
    that select `:base` explicitly; removed in 2.0."
   ["/css/pico.min.css"
