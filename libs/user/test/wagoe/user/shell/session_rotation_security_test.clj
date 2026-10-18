@@ -27,10 +27,7 @@
 
 (defn- audit-repo []
   (reify ports/IUserAuditRepository
-    (create-audit-log [_ _] nil)
-    (find-audit-logs [_ _] {:audit-logs [] :total-count 0})
-    (find-audit-logs-by-user [_ _ _] [])
-    (delete-audit-logs-before [_ _] 0)))
+    (create-audit-log [_ _] nil)))
 
 (defn- service [state calls]
   (sut/->UserService (user-repo state) (session-repo calls) (audit-repo)

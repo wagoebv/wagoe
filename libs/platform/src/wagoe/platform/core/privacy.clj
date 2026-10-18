@@ -18,7 +18,7 @@
              :message (str "Export subject :type must be one of " (sort subject-types)
                            ", not " (pr-str type))}}
 
-    (or (nil? id) (str/blank? (str id)))
+    (str/blank? (str id))
     {:error {:type :validation-error :message "Export subject needs an :id"}}))
 
 (defn export-document
@@ -40,9 +40,8 @@
                    (try (Duration/parse s) (catch DateTimeParseException _ nil)))
         ;; A zero period would delete everything at the next run.
         positive? (fn [p] (if (instance? Period p)
-                            (and (not (.isZero ^Period p))
-                                 (not-any? neg? [(.getYears ^Period p) (.getMonths ^Period p) (.getDays ^Period p)]))
-                            (and (not (.isZero ^Duration p)) (not (.isNegative ^Duration p)))))]
+                            (not (or (.isZero ^Period p) (.isNegative ^Period p)))
+                            (not (or (.isZero ^Duration p) (.isNegative ^Duration p)))))]
     (if (and parsed (positive? parsed))
       parsed
       {:error {:type :configuration-error

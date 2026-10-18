@@ -291,9 +291,8 @@
 ;; =============================================================================
 
 (defmethod ig/init-key :wagoe/user-data-exporter
-  [_ {:keys [user-repository session-repository audit-repository identity-repository group-repository]}]
-  (data-export/->UserDataExporter user-repository session-repository audit-repository
-                                  identity-repository group-repository))
+  [_ repositories]
+  (data-export/map->UserDataExporter repositories))
 
 (defmethod ig/init-key :wagoe/user-audit-retention
   [_ {:keys [audit-repository]}]

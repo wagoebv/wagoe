@@ -25,8 +25,12 @@
                    :audit      (persistence/create-audit-repository ctx {:default-limit 20 :max-limit 100})
                    :identities (identity-persistence/create-identity-repository ctx)
                    :groups     (group-persistence/create-group-repository ctx)}]
-        (f (assoc repos :exporter (sut/->UserDataExporter (:users repos) (:sessions repos) (:audit repos)
-                                                          (:identities repos) (:groups repos))))))))
+        (f (assoc repos :exporter (sut/map->UserDataExporter
+                                   {:user-repository     (:users repos)
+                                    :session-repository  (:sessions repos)
+                                    :audit-repository    (:audit repos)
+                                    :identity-repository (:identities repos)
+                                    :group-repository    (:groups repos)})))))))
 
 (defn- user! [users email role]
   (ports/create-user users {:email email :name email :role role :active true

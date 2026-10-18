@@ -758,15 +758,16 @@
                            {:post {:handler (group-handlers/remove-grant group-service)}})]])}))
 
 (defn- export-response
-  "`subject`'s data export as a JSON download."
-  [data-export subject]
+  "User `user-id`'s data export as a JSON download, logged with who asked."
+  [data-export user-id request]
+  (log/info "Data export" {:subject-user-id user-id :actor-id (get-in request [:user :id])})
   {:status  200
    :headers {"Content-Type"        "application/json; charset=utf-8"
              "Content-Disposition" "attachment; filename=\"data-export.json\""
              "Cache-Control"       "no-store"}
    :body    (json/generate-string
              (case-conversion/deep-transform-keys case-conversion/kebab-case->camel-case-string
-                                                  (privacy/export-subject data-export subject)))})
+                                                  (privacy/export-subject data-export {:type :user :id user-id})))})
 
 (defn export-own-data-handler
   "The signed-in user's own data export (GDPR Art. 20)."
@@ -775,8 +776,7 @@
     (let [user-id (get-in request [:user :id])]
       (when-not user-id
         (throw (ex-info "User not authenticated" {:type :unauthorized})))
-      (log/info "Data export" {:subject-user-id user-id :actor-id user-id})
-      (export-response data-export {:type :user :id user-id}))))
+      (export-response data-export user-id request))))
 
 (defn export-user-data-handler
   "An admin's export of any user's data, for a request made another way."
@@ -785,19 +785,17 @@
     (let [user-id (parse-uuid (str (get-in request [:path-params :id])))]
       (when-not user-id
         (throw (ex-info "User id must be a UUID" {:type :validation-error})))
-      (log/info "Data export" {:subject-user-id user-id :actor-id (get-in request [:user :id])})
-      (export-response data-export {:type :user :id user-id}))))
+      (export-response data-export user-id request))))
 
 (defn export-routes
   "Data export: a user's own at GET /api/v1/me/export and /web/profile/export,
    anyone's for an admin at GET /api/v1/users/:id/export."
   [user-service data-export config]
   (let [auth (user-middleware/flexible-authentication-middleware user-service)
-        own  {:no-doc     true
-              :middleware [auth]
+        own  {:middleware [auth]
               :get        {:handler (export-own-data-handler data-export)
                            :summary "Download your data"}}]
-    {:api    [["/me/export" (-> own (dissoc :no-doc) (assoc-in [:get :tags] ["users"]))]
+    {:api    [["/me/export" (assoc-in own [:get :tags] ["users"])]
               ["/users/:id/export"
                {:middleware [auth user-middleware/require-admin-middleware]
                 :get        {:handler    (export-user-data-handler data-export)
@@ -805,5 +803,5 @@
                              :tags       ["users"]
                              :parameters {:path [:map [:id :string]]}}}]]
      :web    (when (web-ui-enabled? config)
-               [["/profile/export" own]])
+               [["/profile/export" (assoc own :no-doc true)]])
      :static []}))

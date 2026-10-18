@@ -2,7 +2,8 @@
   "The user module's contributions to data export and retention: a user's
    account, sessions, sign-in links, groups and audit trail, and the audit-log
    retention policy."
-  (:require [wagoe.platform.ports.privacy :as privacy]
+  (:require [wagoe.core.utils.type-conversion :as type-conversion]
+            [wagoe.platform.ports.privacy :as privacy]
             [wagoe.user.core.data-export :as core]
             [wagoe.user.ports :as ports]))
 
@@ -21,15 +22,13 @@
         acc
         (recur (+ offset page-size) acc)))))
 
-(defn- ->uuid [id]
-  (if (uuid? id) id (parse-uuid (str id))))
-
 (defrecord UserDataExporter [user-repository session-repository audit-repository
                              identity-repository group-repository]
   privacy/IDataExporter
   (export-data [_ {:keys [type id]}]
     (when (= :user type)
-      (when-let [user (some->> (->uuid id) (ports/find-user-by-id user-repository))]
+      (when-let [user (some->> (if (uuid? id) id (type-conversion/parse-uuid-string (str id)))
+                                (ports/find-user-by-id user-repository))]
         (let [user-id (:id user)]
           (core/user-export
            {:user          user

@@ -830,7 +830,7 @@
 ;; the first call.
 (defmethod ig/init-key :wagoe/rpc-server
   [_ {:keys [protocol implementation port host service-key auth max-request-body]
-      :or   {max-request-body default-max-request-body}}]
+       :or   {max-request-body default-max-request-body}}]
   (let [protocol-var (or (requiring-resolve protocol)
                          (throw (ex-info (str "RPC protocol not found: " protocol)
                                          {:type :configuration-error})))
@@ -855,7 +855,7 @@
 
 (defmethod ig/init-key :wagoe/http-server
   [_ {:keys [handler port host join? config drain-timeout-ms max-request-body]
-      :or   {max-request-body default-max-request-body}}]
+       :or   {max-request-body default-max-request-body}}]
   (let [http-config (or config {})
         port-allocation (port-manager/allocate-port port http-config)
         allocated-port (:port port-allocation)]
