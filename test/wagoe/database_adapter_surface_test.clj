@@ -288,6 +288,7 @@
    "sqlite"     (str "CREATE TABLE generated_probe (seq INTEGER PRIMARY KEY,"
                      " id VARCHAR(64) NOT NULL,"
                      " len INT GENERATED ALWAYS AS (length(id)) STORED NOT NULL,"
+                     " vlen INT GENERATED ALWAYS AS (length(id)) VIRTUAL,"
                      " plain INT NOT NULL)")})
 
 (deftest ^:integration get-table-info-marks-columns-the-database-fills
@@ -304,9 +305,13 @@
             (is (every? (comp boolean? :generated) info))
             (is (true? (:generated (by-name "seq"))) "identity / auto-increment / rowid")
             (is (false? (:generated (by-name "plain"))))
-            ;; PRAGMA table_info leaves generated columns out on SQLite.
-            (when-let [len (by-name "len")]
-              (is (true? (:generated len)) "computed")))
+            (is (= (contains? #{"h2" "postgresql"} label) (:generated-always (by-name "seq")))
+                "GENERATED ALWAYS refuses a value; auto_increment and the rowid take one")
+            (is (false? (:generated-always (by-name "plain"))))
+            (is (true? (:generated (by-name "len"))) "computed")
+            (is (true? (:generated-always (by-name "len"))) "computed")
+            (when (= "sqlite" label)
+              (is (true? (:generated-always (by-name "vlen"))) "virtual")))
           (finally
             (try (jdbc/execute! datasource ["DROP TABLE IF EXISTS generated_probe"])
                  (catch Exception _ nil))
