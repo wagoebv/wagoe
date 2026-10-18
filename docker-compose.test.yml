@@ -16,7 +16,8 @@
 # The ports are fixed, so there is only ever one set of these per machine. A
 # fixed project name makes every checkout and worktree manage that one set,
 # instead of each directory starting its own and colliding with the first.
-# So `bb test:services down` stops them for every worktree.
+# So `bb test:services down` stops them for every worktree, and `up` with a
+# different WAGOE_TEST_MYSQL_PORT recreates the MySQL the others are using.
 name: wagoe-test
 
 services:
