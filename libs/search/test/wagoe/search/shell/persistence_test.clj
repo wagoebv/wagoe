@@ -19,7 +19,7 @@
             [clojure.string :as str]
             [support.test-db :as test-db]
             [next.jdbc :as jdbc])
-  (:import [java.util UUID]))
+  (:import [java.util Locale UUID]))
 
 ;; =============================================================================
 ;; Test database setup
@@ -306,3 +306,18 @@
         (is (= [a-b] (map :entity-id (ports/search-documents @test-store :product-search :product
                                                              "a_b" {:limit 5 :offset 0}))))
         (is (= 1 (ports/count-results @test-store :product "a_b" {:index-id :product-search})))))))
+
+(deftest ^:integration fallback-search-under-a-turkish-locale-test
+  (testing "\"ID\" finds \"ID\" on a JVM whose locale lowers it to \"ıd\" (BOU-608)"
+    (let [id         (UUID/randomUUID)
+          like-store (assoc @test-store :trigram-state (atom :unusable))
+          default    (Locale/getDefault)]
+      (ports/upsert-document! @test-store (make-doc {:entity-id id :content-all "ID card"}))
+      (Locale/setDefault (Locale/forLanguageTag "tr-TR"))
+      (try
+        (is (= [id] (map :entity-id (ports/search-documents @test-store :product-search :product
+                                                            "ID" {:limit 5 :offset 0}))))
+        (is (= 1 (ports/count-results @test-store :product "ID" {:index-id :product-search})))
+        (is (= [id] (map :entity-id (ports/suggest-documents like-store :product-search :product
+                                                             "ID" {:limit 5}))))
+        (finally (Locale/setDefault default))))))

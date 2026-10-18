@@ -8,8 +8,8 @@
    Filter support: callers may pass a :filters map of keyword->string pairs.
    Filter values are matched against the JSON \"filters\" column using
    DB-appropriate JSON path syntax."
-  (:require [wagoe.platform.ports.database :as db-ports]
-            [wagoe.search.core.index :as index]
+  (:require [wagoe.search.core.index :as index]
+            [honey.sql :as sql]
             [clojure.string :as str]))
 
 ;; =============================================================================
@@ -210,44 +210,47 @@
         (conj limit))))
 
 ;; =============================================================================
-;; Fallback SQL builders (H2 / SQLite)
+;; Fallback SQL builders (H2 / SQLite / MySQL, and PostgreSQL without pg_trgm)
 ;; =============================================================================
+;;
+;; `match` is the HoneySQL condition the database adapter's `like` builds for
+;; content_all, e.g. (db-ports/like adapter :content_all :contains query).
+;; The adapter lowers both sides in SQL; lowering the query here would fold it
+;; with the JVM's locale, and a Turkish one turns "ID" into "ıd" (BOU-608).
 
-(def ^:private like-clause (str "LOWER(content_all) LIKE ? ESCAPE '" db-ports/like-escape "'"))
+(defn- fallback-sql
+  "The LIKE fallback query: `select` columns, `match` and `filter-sql` in the
+   WHERE clause, then `tail` SQL with its `tail-params`."
+  [select index-id entity-type match [filter-sql & filter-params] tail tail-params]
+  (let [[match-sql & match-params] (sql/format-expr match)]
+    (-> [(str "SELECT " select " FROM search_documents d "
+              "WHERE index_id = ? AND entity_type = ? AND " match-sql " "
+              filter-sql tail)
+         index-id entity-type]
+        (into match-params)
+        (into filter-params)
+        (into tail-params))))
 
-(defn- fallback-pattern
-  "A LIKE pattern containing `query`, lowercased, for like-clause (BOU-676)."
-  [query]
-  (db-ports/like-pattern :contains (str/lower-case (or (sanitize-query query) ""))))
+(def ^:private result-columns "entity_type, entity_id, metadata, NULL AS snippet, ")
 
 (defn build-fallback-search-sql
   "Build a parameterized JDBC SQL vector for LIKE-based fallback search.
-
-   Used for H2 (tests) and SQLite. Returns a static rank of 1.0, no snippet.
+   Returns a static rank of 1.0, no snippet.
 
    Args:
      index-id    - string
      entity-type - string
-     query       - string (user search query)
+     match       - the adapter's `like` condition on content_all
      limit       - integer
      offset      - integer
      filters     - map of keyword->any (optional, nil treated as empty)
 
    Returns:
      JDBC SQL vector [sql & params]"
-  [index-id entity-type query limit offset filters]
-  (let [pattern (fallback-pattern query)
-        [filter-sql & filter-params] (build-filter-sql-fallback (or filters {}))
-        sql (str "SELECT entity_type, entity_id, metadata, "
-                 "  1.0 AS score, "
-                 "  NULL AS snippet "
-                 "FROM search_documents "
-                 "WHERE index_id = ? AND entity_type = ? "
-                 "  AND " like-clause " "
-                 filter-sql " "
-                 "ORDER BY updated_at DESC "
-                 "LIMIT ? OFFSET ?")]
-    (into [sql index-id entity-type pattern] (concat filter-params [limit offset]))))
+  [index-id entity-type match limit offset filters]
+  (fallback-sql (str result-columns "1.0 AS score") index-id entity-type match
+                (build-filter-sql-fallback (or filters {}))
+                " ORDER BY updated_at DESC LIMIT ? OFFSET ?" [limit offset]))
 
 (defn build-fallback-count-sql
   "Build a parameterized count SQL for fallback search.
@@ -255,37 +258,20 @@
    Args:
      index-id    - string
      entity-type - string
-     query       - string
+     match       - the adapter's `like` condition on content_all
      filters     - map of keyword->any (optional, nil treated as empty)
 
    Returns:
      JDBC SQL vector [sql & params]"
-  [index-id entity-type query filters]
-  (let [pattern (fallback-pattern query)
-        [filter-sql & filter-params] (build-filter-sql-fallback (or filters {}))
-        sql (str "SELECT count(*) AS cnt "
-                 "FROM search_documents "
-                 "WHERE index_id = ? AND entity_type = ? "
-                 "  AND " like-clause " "
-                 filter-sql)]
-    (into [sql index-id entity-type pattern] filter-params)))
+  [index-id entity-type match filters]
+  (fallback-sql "count(*) AS cnt" index-id entity-type match
+                (build-filter-sql-fallback (or filters {})) "" []))
 
 (defn- like-suggest-sql
-  [build-filter-sql index-id entity-type query limit filters]
-  (let [[filter-sql & filter-params] (build-filter-sql (or filters {}))
-        pattern (fallback-pattern query)
-        sql (str "SELECT entity_type, entity_id, metadata, "
-                 "  0.5 AS score, "
-                 "  NULL AS snippet "
-                 "FROM search_documents d "
-                 "WHERE index_id = ? AND entity_type = ? "
-                 "  AND " like-clause " "
-                 filter-sql " "
-                 "ORDER BY updated_at DESC "
-                 "LIMIT ?")]
-    (-> [sql index-id entity-type pattern]
-        (into filter-params)
-        (conj limit))))
+  [build-filter-sql index-id entity-type match limit filters]
+  (fallback-sql (str result-columns "0.5 AS score") index-id entity-type match
+                (build-filter-sql (or filters {}))
+                " ORDER BY updated_at DESC LIMIT ?" [limit]))
 
 (defn build-fallback-suggest-sql
   "Build a LIKE-based fallback suggest query for H2/SQLite.
@@ -293,19 +279,19 @@
    Args:
      index-id    - string
      entity-type - string
-     query       - string
+     match       - the adapter's `like` condition on content_all
      limit       - integer
      filters     - map of keyword->any (optional)
 
    Returns:
      JDBC SQL vector [sql & params]"
-  ([index-id entity-type query limit]
-   (build-fallback-suggest-sql index-id entity-type query limit nil))
-  ([index-id entity-type query limit filters]
-   (like-suggest-sql build-filter-sql-fallback index-id entity-type query limit filters)))
+  ([index-id entity-type match limit]
+   (build-fallback-suggest-sql index-id entity-type match limit nil))
+  ([index-id entity-type match limit filters]
+   (like-suggest-sql build-filter-sql-fallback index-id entity-type match limit filters)))
 
 (defn build-postgres-like-suggest-sql
   "The LIKE suggest query with PostgreSQL's filter SQL, for a database without
    pg_trgm (BOU-661). Same arguments as build-fallback-suggest-sql."
-  [index-id entity-type query limit filters]
-  (like-suggest-sql build-filter-sql-postgres index-id entity-type query limit filters))
+  [index-id entity-type match limit filters]
+  (like-suggest-sql build-filter-sql-postgres index-id entity-type match limit filters))

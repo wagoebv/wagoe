@@ -104,7 +104,12 @@
 ;; ISearchStore implementation
 ;; =============================================================================
 
-(defrecord SearchStore [datasource full-text? on-conflict? trigram-state]
+(defn- content-match
+  "The adapter's case-insensitive LIKE on content_all, for the fallback queries."
+  [adapter query]
+  (db-ports/like adapter :content_all :contains (qry/sanitize-query query)))
+
+(defrecord SearchStore [datasource adapter full-text? on-conflict? trigram-state]
   ports/ISearchStore
 
   (upsert-document! [_ doc]
@@ -160,7 +165,7 @@
                      language query limit offset highlight? filters)
                     (qry/build-fallback-search-sql
                      (kw->str index-id) (kw->str entity-type)
-                     query limit offset filters))
+                     (content-match adapter query) limit offset filters))
           rows (jdbc/execute! datasource sql-vec
                               {:builder-fn rs/as-unqualified-lower-maps})]
       (mapv db->result rows)))
@@ -175,7 +180,7 @@
                      language query filters)
                     (qry/build-fallback-count-sql
                      (kw->str index-id) (kw->str entity-type)
-                     query filters))
+                     (content-match adapter query) filters))
           row (jdbc/execute-one! datasource sql-vec
                                  {:builder-fn rs/as-unqualified-lower-maps})]
       (int (or (:cnt row) 0))))
@@ -194,8 +199,8 @@
                                          (qry/build-postgres-suggest-sql idx et query limit filters)))
                       (jdbc/execute! datasource
                                      (if full-text?
-                                       (qry/build-postgres-like-suggest-sql idx et query limit filters)
-                                       (qry/build-fallback-suggest-sql idx et query limit filters))
+                                       (qry/build-postgres-like-suggest-sql idx et (content-match adapter query) limit filters)
+                                       (qry/build-fallback-suggest-sql idx et (content-match adapter query) limit filters))
                                      {:builder-fn rs/as-unqualified-lower-maps}))]
       (mapv db->result rows)))
 
@@ -222,6 +227,7 @@
   [datasource adapter]
   (let [capabilities (db-ports/capabilities adapter)]
     (->SearchStore datasource
+                   adapter
                    (contains? capabilities :full-text)
                    (contains? capabilities :on-conflict)
                    (atom nil))))

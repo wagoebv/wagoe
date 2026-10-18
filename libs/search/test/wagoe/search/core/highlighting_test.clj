@@ -417,3 +417,12 @@
        ;; Verify snippet extraction and highlighting
       (is (str/includes? highlighted-snippet "<mark>engineer</mark>"))
       (is (<= (count bio-snippet) 36)))))  ; 30 + ellipsis + adjustment
+
+(deftest matching-ignores-the-jvm-locale
+  ;; A Turkish locale lowers "ID" to "ıd", which "id" never matched (BOU-608).
+  (let [default (java.util.Locale/getDefault)]
+    (java.util.Locale/setDefault (java.util.Locale/forLanguageTag "tr-TR"))
+    (try
+      (is (= {:match-pos 5 :matched-term "id"} (hl/find-first-match-position "Your ID card" ["id"])))
+      (is (= {"id" 1} (hl/count-matches "Your ID card" ["id"])))
+      (finally (java.util.Locale/setDefault default)))))
