@@ -329,8 +329,8 @@
     (is (not (str/includes? (service/export-ical [dst-day]) "VTIMEZONE")))))
 
 (defn- parse-calendar
-  "An ical4j Calendar from `ical`. No registry: CalendarBuilder's default one
-   takes a JVM-wide zone ID per VTIMEZONE, from a pool of 1500 freed only by GC."
+  "An ical4j Calendar from `ical`, with no zone registry: the default one takes
+   a JVM-wide zone ID per VTIMEZONE, from a pool of 1500 freed only by GC."
   [^String ical]
   (.build (CalendarBuilder. (.get (CalendarParserFactory/getInstance)) nil) (StringReader. ical)))
 
@@ -470,26 +470,24 @@
         old    (assoc appointment :start (Instant/parse "1985-06-01T10:00:00Z")
                       :end (Instant/parse "1985-06-01T11:00:00Z"))
         every  (fn [^Instant from n] (map #(.plus from (Duration/ofHours (* 37 %))) (range n)))
-        ;; ical4j's pooled zone IDs, ical4j-local-<n>
+        ;; ical4j's own zone IDs: ical4j~<uuid> and pooled ical4j-local-<n>
         zones  (remove #(or (str/starts-with? % "ical4j")
                             (= ZoneOffset/UTC (.normalized (ZoneId/of %))))
                        (sort (ZoneId/getAvailableZoneIds)))
         bad    (fn [event samples]
                  (for [z zones :let [b (offset-mismatches z event samples)] :when (seq b)]
-                   [z (first b)]))
-        round  #(doseq [z zones]
-                  (service/import-ical (service/export-ical [(assoc weekly :timezone z)])))]
-    ;; Export loads ical4j's own copy of each zone once, which takes a pool ID.
-    (round)
+                   [z (first b)]))]
+    ;; This first export of each zone loads ical4j's own copy, taking a pool ID.
+    (testing "a recurring event: offsets agree from a year before it, years on"
+      (is (empty? (bad weekly (every (Instant/parse "2025-03-02T08:00:00Z") 1200)))))
+    (let [taken (zone-ids-taken
+                 #(testing "a single event decades ago: offsets agree a year either side"
+                    (is (empty? (bad old (every (Instant/parse "1984-06-01T10:00:00Z") 470))))))]
+      (is (zero? taken) "parsing every export must not drain ical4j's zone ID pool"))
     (testing "export and import take no more ical4j zone IDs"
-      (is (zero? (zone-ids-taken round))))
-    (is (zero? (zone-ids-taken
-                (fn []
-                  (testing "a recurring event: offsets agree from a year before it, years on"
-                    (is (empty? (bad weekly (every (Instant/parse "2025-03-02T08:00:00Z") 1200)))))
-                  (testing "a single event decades ago: offsets agree a year either side"
-                    (is (empty? (bad old (every (Instant/parse "1984-06-01T10:00:00Z") 470))))))))
-        "parsing every export must not drain ical4j's zone ID pool")))
+      (is (zero? (zone-ids-taken
+                  #(doseq [z zones]
+                     (service/import-ical (service/export-ical [(assoc weekly :timezone z)])))))))))
 
 (deftest ^:integration rule-without-rrule-form-test
   (testing "a rule spanning February and March is written out transition by transition"
