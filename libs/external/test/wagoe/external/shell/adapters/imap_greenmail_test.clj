@@ -11,10 +11,10 @@
            [java.io ByteArrayInputStream]
            [java.time Instant]
            [java.util Date Properties]
-           [javax.activation DataHandler]
-           [javax.mail Flags Flags$Flag Part Session]
-           [javax.mail.internet MimeBodyPart MimeMessage MimeMultipart]
-           [javax.mail.util ByteArrayDataSource]))
+           [jakarta.activation DataHandler]
+           [jakarta.mail Flags Flags$Flag Part Session]
+           [jakarta.mail.internet MimeBodyPart MimeMessage MimeMultipart]
+           [jakarta.mail.util ByteArrayDataSource]))
 
 (def ^:private user "inbox@example.com")
 (def ^:private password "secret")
@@ -51,7 +51,7 @@
 (defn- message ^MimeMessage [subject content]
   (let [msg (doto (MimeMessage. ^Session (session))
               (.setFrom "sender@example.com")
-              (.setRecipients javax.mail.Message$RecipientType/TO "inbox@example.com")
+              (.setRecipients jakarta.mail.Message$RecipientType/TO "inbox@example.com")
               (.setSubject ^String subject))]
     (if (string? content)
       (.setText msg ^String content "UTF-8")

@@ -124,6 +124,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Changed
 
+- **Mail moves to Jakarta Mail 2 (Angus Mail)** (BOU-457): `wagoe-external` drops `com.sun.mail/javax.mail`, and TLS to
+  SMTP/IMAP now checks the certificate names `:host`. An app using javax.mail classes itself must move to jakarta.mail.
 - **`wagoe-platform` no longer brings in `environ` or `com.lambdaisland/dotenv`** (BOU-457): nothing required them.
   Declare them yourself if your app uses them.
 - **An IMAP fetch without `:limit` takes 100 messages** (BOU-731), and `core.imap/filter-unread` and `filter-by-date`

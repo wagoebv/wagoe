@@ -7,8 +7,8 @@
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]])
   (:import [java.util Properties]
-           [javax.mail Session]
-           [javax.mail.internet MimeMultipart]))
+           [jakarta.mail Session]
+           [jakarta.mail.internet MimeMultipart]))
 
 (def ^:private test-config
   {:host "localhost-nonexistent.invalid"
@@ -150,7 +150,7 @@
       (is (= "<abc@wagoe>" (.getMessageID msg))))))
 
 (deftest ^:unit build-mime-message-default-message-id-test
-  (testing "no :message-id -> javax.mail generates one (unchanged default)"
+  (testing "no :message-id -> Jakarta Mail generates one (unchanged default)"
     (let [email {:to "dest@example.com" :subject "S" :body "B"}
           msg   (doto (#'smtp/build-mime-message (test-session) email "from@example.com")
                   (.saveChanges))]
