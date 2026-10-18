@@ -271,13 +271,16 @@
 
 (defn read-hidden-password
   "Read a password without echoing input. Piped input — bb create-admin — is
-   read without a prompt: nobody is there to see it."
+   read without a prompt: nobody is there to see it. Both are trimmed, and EOF
+   reads as blank."
   ([label]
    (read-hidden-password (terminal-console) label))
   ([console label]
-   (if console
-     (String. (.readPassword ^java.io.Console console (str label ": ") (object-array 0)))
-     (str/trim (or (read-line) "")))))
+   (str/trim (or (if console
+                   (some-> (.readPassword ^java.io.Console console (str label ": ") (object-array 0))
+                           String.)
+                   (read-line))
+                 ""))))
 
 ;; =============================================================================
 ;; Command Execution
