@@ -20,8 +20,8 @@ wagoe.external.core.imap        — Pure IMAP helpers (parse-message-headers, at
                                      build-inbound-message)
 wagoe.external.core.twilio      — Pure Twilio helpers (build-sms-params, build-whatsapp-params,
                                      parse-message-response, parse-twilio-error)
-wagoe.external.shell.adapters.smtp    — SmtpProviderAdapter (javax.mail)
-wagoe.external.shell.adapters.imap    — ImapMailboxAdapter (javax.mail, UIDFolder)
+wagoe.external.shell.adapters.smtp    — SmtpProviderAdapter (Jakarta Mail)
+wagoe.external.shell.adapters.imap    — ImapMailboxAdapter (Jakarta Mail, UIDFolder)
 wagoe.external.shell.adapters.twilio  — TwilioAdapter (clj-http, Basic auth)
 wagoe.external.core.ftps        — Pure FTPS helpers (select-files, retryable?, ftps-error)
 wagoe.external.shell.adapters.ftps    — FtpsFileSource implementing IFileSource (Commons Net)
@@ -37,13 +37,13 @@ libs/external/src/wagoe/external/
 ├── schema.clj          Malli schemas
 ├── ports.clj           Protocol definitions
 ├── core/
-│   ├── smtp.clj        Pure SMTP helpers (no javax.mail I/O)
+│   ├── smtp.clj        Pure SMTP helpers (no Jakarta Mail I/O)
 │   ├── imap.clj        Pure IMAP message parsing
 │   └── twilio.clj      Pure Twilio param building + response parsing
 └── shell/
     ├── adapters/
-    │   ├── smtp.clj    SmtpProviderAdapter — javax.mail Transport
-    │   ├── imap.clj    ImapMailboxAdapter — javax.mail Store/UIDFolder
+    │   ├── smtp.clj    SmtpProviderAdapter — Jakarta Mail Transport
+    │   ├── imap.clj    ImapMailboxAdapter — Jakarta Mail Store/UIDFolder
     │   └── twilio.clj  TwilioAdapter — clj-http REST
     └── module_wiring.clj  Integrant multimethods
 ```
@@ -108,7 +108,7 @@ failures), once per call after its retries. While open, calls return
 
 - `clj-http/clj-http 3.13.1` — Twilio REST calls
 - `cheshire/cheshire 6.2.0` — JSON parsing
-- `com.sun.mail/javax.mail 1.6.2` — SMTP and IMAP
+- `org.eclipse.angus/angus-mail 2.0.5` (Jakarta Mail 2) — SMTP and IMAP. `com.sun.mail/javax.mail` is still declared but unused; it goes in 2.0
 - `commons-net/commons-net 3.13.0` — FTPS
 - `metosin/malli 0.20.1` — schema validation
 
@@ -117,7 +117,7 @@ failures), once per call after its retries. While open, calls return
 ### IMAP UIDFolder Cast
 `Message.getMessageNumber()` is NOT the IMAP UID. Always cast the folder:
 ```clojure
-(let [uid-fld (cast com.sun.mail.imap.IMAPFolder folder)]
+(let [uid-fld (cast org.eclipse.angus.mail.imap.IMAPFolder folder)]
   (.getUID uid-fld message))
 ```
 
@@ -137,7 +137,7 @@ HTML body shows it by `cid:`. Filter on `:embedded?`, not on `"inline"`, since s
 real attachments inline: `(remove :embedded? (:attachments msg))`.
 
 ### IMAP adapter is reflection-free, and tested on GreenMail
-javax.mail hands back package-private classes, and the mocked tests never caught a call that failed on a real
+Jakarta Mail hands back package-private classes, and the mocked tests never caught a call that failed on a real
 server. The adapter ns sets `*warn-on-reflection*` and a test fails on any warning. `imap_greenmail_test.clj`
 needs the `:test/mail` alias: `clojure -M:test:test/mail :external`.
 

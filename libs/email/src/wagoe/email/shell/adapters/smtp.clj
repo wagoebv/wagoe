@@ -4,11 +4,11 @@
    This adapter sits at the boundary between the email library's domain model
    (Email with :id, :created-at, :attachments, :metadata) and the external
    library's transport layer (OutboundEmail). It translates between the two and
-   delegates all javax.mail work to wagoe.external.shell.adapters.smtp.
+   delegates all Jakarta Mail work to wagoe.external.shell.adapters.smtp.
 
    Responsibility split:
      libs/email  — Email domain model, validation, preparation, job queuing
-     libs/external — Raw SMTP transport (javax.mail, TLS/SSL, HTML multipart)
+     libs/external — Raw SMTP transport (Jakarta Mail, TLS/SSL, HTML multipart)
 
    Usage:
      (def sender (create-smtp-sender

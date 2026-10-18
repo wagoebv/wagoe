@@ -65,7 +65,7 @@
   ;; ==========================================================================
   {:target-prefix "wagoe.external.shell.adapters.smtp"
    :why "email's SMTP adapter exists to bridge its Email domain model onto
-         external's raw javax.mail transport, and constructing that transport
+         external's raw Jakarta Mail transport, and constructing that transport
          means naming it. It talks to wagoe.external.ports for everything else
          and declares wagoe/external in deps.edn. Closing this properly means
          external exposing a constructor through its ports — worth doing, not

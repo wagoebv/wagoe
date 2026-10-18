@@ -34,7 +34,7 @@ Supports sync, async (future-based), and queued (jobs library) sending modes.
 ----
 wagoe-email (application layer)  →  wagoe-external (transport layer)
   Email {id, created-at, metadata}  →  OutboundEmail {to, from, subject, body}
-  EmailSenderProtocol                →  ISmtpProvider (javax.mail)
+  EmailSenderProtocol                →  ISmtpProvider (Jakarta Mail)
 ----
 
 == Sending email

@@ -8,14 +8,18 @@
          org.clojure/tools.logging {:mvn/version "1.3.1"}
          clj-http/clj-http         {:mvn/version "3.13.1"}
          cheshire/cheshire         {:mvn/version "6.2.0"}
+         jakarta.mail/jakarta.mail-api {:mvn/version "2.1.5"}
+         org.eclipse.angus/angus-mail  {:mvn/version "2.0.5"}
+         ;; Deprecated: nothing here uses it any more. Kept for apps that import
+         ;; javax.mail themselves; removed in 2.0.
          com.sun.mail/javax.mail   {:mvn/version "1.6.2"}
          commons-net/commons-net   {:mvn/version "3.13.0"}}
 
  :aliases
  {:test      {:extra-paths ["test"]
               :extra-deps  {lambdaisland/kaocha    {:mvn/version "1.91.1392"}
-                            com.icegreen/greenmail {:mvn/version "1.6.15"
-                                                    :exclusions [com.sun.mail/jakarta.mail junit/junit]}
+                            com.icegreen/greenmail {:mvn/version "2.1.14"
+                                                    :exclusions [org.eclipse.angus/jakarta.mail junit/junit]}
                             org.apache.ftpserver/ftpserver-core {:mvn/version "1.2.1"}
                             org.apache.mina/mina-core {:mvn/version "2.2.10"}}
               :main-opts   ["-m" "kaocha.runner"]}
