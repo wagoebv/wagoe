@@ -16,7 +16,8 @@
 ;; it under this gate without anyone remembering to.
 
 (ns wagoe.tools.check-roadmap
-  (:require [babashka.process :as process]
+  (:require [wagoe.tools.text :as text]
+            [babashka.process :as process]
             [clojure.string :as str]
             [wagoe.tools.ansi :as ansi]))
 
@@ -58,7 +59,7 @@
    either way. Short words and connectives go, because they are what a rewrite
    changes while the claim stays the same."
   [s]
-  (->> (str/split (str/lower-case s) #"[^a-z0-9]+")
+  (->> (str/split (text/lower-case s) #"[^a-z0-9]+")
        (remove str/blank?)
        (remove stopwords)
        (filter #(>= (count %) 3))))

@@ -25,7 +25,7 @@
      (kebab->pascal \"user-profile\") => \"UserProfile\""
   [s]
   (->> (str/split (name s) #"-")
-       (map str/capitalize)
+       (map text/capitalize)
        (str/join "")))
 
 (defn pascal->kebab

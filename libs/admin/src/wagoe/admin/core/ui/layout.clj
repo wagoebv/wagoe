@@ -61,7 +61,7 @@
       (for [entity entities
             :let  [entity-config (get entity-configs entity)]
             :when (not (:sidebar-hidden entity-config))]
-        (let [label      (:label entity-config (str/capitalize (name entity)))
+        (let [label      (:label entity-config (text/capitalize (name entity)))
               icon       (keyword (or (:icon entity-config) "database"))
               is-active? (= entity current-entity)]
           [:li {:class (when is-active? "active")}

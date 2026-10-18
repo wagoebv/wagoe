@@ -3,7 +3,8 @@
 
    Pure Hiccup generators for the editable-cell display mode, the inline
    edit form, and the inline edit form with a validation error."
-  (:require [wagoe.admin.core.ui.base :as base]
+  (:require [wagoe.core.utils.text :as text]
+            [wagoe.admin.core.ui.base :as base]
             [wagoe.shared.ui.core.components :as ui]
             [wagoe.shared.ui.core.icons :as icons]
             [clojure.string :as str]))
@@ -22,7 +23,7 @@
    Returns:
      Hiccup td element"
   [entity-name record-id field value field-config & [display]]
-  (let [field-label (:label field-config (str/capitalize (name field)))]
+  (let [field-label (:label field-config (text/capitalize (name field)))]
     [:td {:class (str "field-" (name field) " editable")
           :data-label field-label
           :hx-get (str "/web/admin/" (name entity-name) "/" record-id "/" (name field) "/edit")

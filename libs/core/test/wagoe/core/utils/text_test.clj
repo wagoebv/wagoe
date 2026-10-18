@@ -17,7 +17,7 @@
      (testing "text/ ignores it"
        (is (= "id" (text/lower-case "ID")))
        (is (= "ID" (text/upper-case "id")))
-       (is (= "idr" (text/lower-case "IDR"))))
+       (is (= "Id" (text/capitalize "iD"))))
      (testing "case conversion keeps API and DB keys intact"
        (is (= {:user-id 1} (cc/camel-case->kebab-case-map {:userId 1})))
        (is (= {:userId 1} (cc/kebab-case->camel-case-map {:user-id 1})))

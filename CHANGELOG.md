@@ -145,7 +145,7 @@ for what is public API, what is internal, and how deprecations are announced.
 ### Fixed
 
 - **On a Turkish JVM `userId` became `user-ıd`** (BOU-732): case conversion no longer uses the JVM locale.
-  Use `wagoe.core.utils.text/lower-case` and `upper-case`; clj-kondo now flags `clojure.string`'s in src.
+  Use `wagoe.core.utils.text` (`lower-case`, `upper-case`, `capitalize`); clj-kondo flags `clojure.string`'s in src.
 - **Search without PostgreSQL full-text missed "ID" on a Turkish JVM** (BOU-608): the LIKE fallback and highlighting
   no longer lower text with the JVM's locale. No action needed.
 - **IMAP `mark-read!` and `delete-message!` ignored the fetch folder, and delete expunged every `\Deleted` message**

@@ -15,7 +15,8 @@
 ;; job, and a gate that tried would be one more thing to work around.
 
 (ns wagoe.tools.check-changelog
-  (:require [clojure.string :as str]
+  (:require [wagoe.tools.text :as text]
+            [clojure.string :as str]
             [babashka.process :as process]
             [clojure.edn :as edn]
             [edamame.core :as e]
@@ -205,7 +206,7 @@
                           [o n] (map vector ones (range 10))]
                       [(if (zero? n) t (str t "-" o)) (+ tens n)])))))
 
-(defn- number [word] (get number-words (some-> word str/lower-case)))
+(defn- number [word] (get number-words (some-> word text/lower-case)))
 
 (defn- section-breaks
   "The entries under `### Breaking` in the changelog section headed `heading`."

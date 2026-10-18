@@ -3,7 +3,8 @@
 
    Pure Hiccup generators for the filter UI: operator selection per field
    type, value inputs, filter rows, and the overall filter builder."
-  (:require [wagoe.shared.ui.core.icons :as icons]
+  (:require [wagoe.core.utils.text :as text]
+            [wagoe.shared.ui.core.icons :as icons]
             [wagoe.shared.ui.core.table :as table-ui]
             [clojure.string :as str]))
 
@@ -174,7 +175,7 @@
   (let [field-type (:type field-config :string)
         operators (get-operators-for-field-type field-type)
         current-op (:op filter-value :eq)
-        field-label (:label field-config (str/capitalize (name field-name)))]
+        field-label (:label field-config (text/capitalize (name field-name)))]
     [:div.filter-row
      ;; Field name (read-only label)
      [:span.filter-field-label field-label]
@@ -272,7 +273,7 @@
             (for [field-name filterable-fields
                   :when (not (contains? current-filters field-name))]
               (let [field-config (get-in entity-config [:fields field-name])
-                    field-label (:label field-config (str/capitalize (name field-name)))]
+                    field-label (:label field-config (text/capitalize (name field-name)))]
                 [:option {:value (name field-name)} field-label]))]])
 
       ;; Apply button (for manual submission if auto-trigger doesn't work)
@@ -372,7 +373,7 @@
         (when (seq current) [:span {:class "filter-count"} (str (count current))])]
        (for [[field spec] current
              :let [fc (get-in entity-config [:fields field])
-                   label (:label fc (str/capitalize (str/replace (name field) #"[-_]" " ")))]]
+                   label (:label fc (text/capitalize (str/replace (name field) #"[-_]" " ")))]]
          [:span {:class "filter-chip"}
           [:span (chip-text fc label spec)]
           [:button (merge swap {:type       "button"
@@ -390,7 +391,7 @@
   [entity-name field field-config spec]
   (let [operators (get-operators-for-field-type (:type field-config :string))
         op        (:op spec :eq)
-        label     (:label field-config (str/capitalize (str/replace (name field) #"[-_]" " ")))]
+        label     (:label field-config (text/capitalize (str/replace (name field) #"[-_]" " ")))]
     [:div {:class (str "filter-field" (when (and spec (not (blank-filter? spec))) " is-active"))}
      [:label {:class "filter-field-name" :for (str "filter-" (name field))} label]
      [:div {:class "filter-field-inputs"}

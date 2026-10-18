@@ -70,7 +70,7 @@
       (error :configuration-error (str "OIDC provider " id " :default-role must be :user or :viewer"))
 
       :else
-      {:ok (merge {:label          (str/capitalize (name id))
+      {:ok (merge {:label          (text/capitalize (name id))
                    :link-by-email? false
                    :trust-email?   false
                    :auto-create?   false}
@@ -112,7 +112,7 @@
   "The providers to offer on the login page, as [{:id :label}] in name order."
   [providers]
   (->> providers
-       (map (fn [[id p]] {:id (name id) :label (or (:label p) (str/capitalize (name id)))}))
+       (map (fn [[id p]] {:id (name id) :label (or (:label p) (text/capitalize (name id)))}))
        (sort-by :id)
        vec))
 

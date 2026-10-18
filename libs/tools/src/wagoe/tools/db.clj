@@ -9,7 +9,8 @@
 ;;   bb db:seed      # Seed database from dev seed file
 
 (ns wagoe.tools.db
-  (:require [wagoe.tools.ansi :refer [bold green red yellow dim]]
+  (:require [wagoe.tools.text :as text]
+            [wagoe.tools.ansi :refer [bold green red yellow dim]]
             [clojure.edn :as edn]
             [clojure.java.io :as io]
             [clojure.string :as str]
@@ -203,7 +204,7 @@
   (second (drop-while #(not= flag %) args)))
 
 (defn- normalize-profile [s]
-  (let [s (some-> s str/trim str/lower-case)]
+  (let [s (some-> s str/trim text/lower-case)]
     (get env-aliases s s)))
 
 (defn- wag-env

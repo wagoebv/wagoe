@@ -212,7 +212,7 @@
   [field]
   (let [field-str (name field)
         words (str/split field-str #"-")
-        capitalized (map str/capitalize words)]
+        capitalized (map text/capitalize words)]
     ;; Handle acronyms
     (->> capitalized
          (map #(cond

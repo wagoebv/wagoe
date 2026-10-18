@@ -341,7 +341,7 @@
   [field-name]
   (-> (name field-name)
       (str/replace #"[-_]" " ")
-      str/capitalize))
+      text/capitalize))
 
 (defn humanize-entity-name
   "Convert entity name to human-readable label (pluralized).
@@ -360,7 +360,7 @@
   (let [base-name (name entity-name)
         humanized (-> base-name
                       (str/replace #"[-_]" " ")
-                      str/capitalize)]
+                      text/capitalize)]
     ; Simple pluralization (can be improved with inflection library)
     (cond
       (str/ends-with? humanized "y") (str (subs humanized 0 (dec (count humanized))) "ies")
@@ -838,7 +838,7 @@
                     options (mapv (fn [v]
                                     [v (-> (name v)
                                            (str/replace #"[-_]" " ")
-                                           str/capitalize)])
+                                           text/capitalize)])
                                   enum-values)]
                 [field-key {:type :enum
                             :widget :select

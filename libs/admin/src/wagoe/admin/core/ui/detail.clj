@@ -3,7 +3,8 @@
    entity form, parent-context/related-records tables, and the detail page.
 
    Pure Hiccup generators. Depends on `base` for URL and field helpers."
-  (:require [wagoe.admin.core.ui.base :as base]
+  (:require [wagoe.core.utils.text :as text]
+            [wagoe.admin.core.ui.base :as base]
             [wagoe.admin.core.ui.cells :as cells]
             [wagoe.admin.core.forms :as forms]
             [wagoe.admin.core.schema-introspection :as introspection]
@@ -32,7 +33,7 @@
 (defn- field-widget
   [field-name value field-config errors display]
   (let [widget-type (:widget field-config :text-input)
-        label (:label field-config (str/capitalize (name field-name)))
+        label (:label field-config (text/capitalize (name field-name)))
         required? (:required field-config false)
         readonly? (:readonly field-config false)
         placeholder (:placeholder field-config)
@@ -582,7 +583,7 @@
         (when-let [v (get record f)]
           [:div.parent-context-field
            [:span.parent-context-field-label
-            (-> (name f) (str/replace #"-" " ") str/capitalize)]
+            (-> (name f) (str/replace #"-" " ") text/capitalize)]
            [:span.parent-context-field-value (str v)]]))]]))
 
 (defn- new-child-url
@@ -643,7 +644,7 @@
          [:thead
           [:tr
            (for [f fields]
-             [:th (-> (name f) (str/replace #"-" " ") str/capitalize)])
+             [:th (-> (name f) (str/replace #"-" " ") text/capitalize)])
            (when editable?
              [:th])]]
          [:tbody

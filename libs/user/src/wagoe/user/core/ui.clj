@@ -65,7 +65,7 @@
     [(:id user)
      (:name user)
      (:email user)
-     (ui/badge (-> role name str/capitalize)
+     (ui/badge (-> role name text/capitalize)
                {:variant (case role
                            :admin :info
                            :user :neutral
@@ -1183,7 +1183,7 @@
                   (:group-join :grant-add) :info
                   (:group-leave :grant-remove) :warning
                   :neutral)]
-    (ui/badge (str/capitalize (str/replace action-name "-" " ")) {:variant variant
+    (ui/badge (text/capitalize (str/replace action-name "-" " ")) {:variant variant
                                             :class "audit-action-badge"})))
 
 (defn result-badge

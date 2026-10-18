@@ -9,7 +9,8 @@
 (ns agents-gen
   (:require [clojure.edn :as edn]
             [clojure.java.io :as io]
-            [clojure.string :as str]))
+            [clojure.string :as str]
+            [wagoe.tools.text :as text]))
 
 (defn splice-region
   "Replace the content between <!-- gen:SECTION --> and <!-- /gen:SECTION -->
@@ -32,7 +33,7 @@
   "Human label for an FC/IS layer segment keyword (acronyms upper-cased)."
   [kw]
   (let [n (name kw)]
-    (get {"io" "IO" "fcis" "FC/IS"} n (str/capitalize n))))
+    (get {"io" "IO" "fcis" "FC/IS"} n (text/capitalize n))))
 
 (defn- esc-cell
   "Escape pipe chars so dynamic text can't break a markdown table cell."

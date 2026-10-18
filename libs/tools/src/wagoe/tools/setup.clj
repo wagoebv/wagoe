@@ -9,7 +9,8 @@
 ;;   bb setup --database postgresql --payment stripe       # Non-interactive flags
 
 (ns wagoe.tools.setup
-  (:require [wagoe.tools.ai :as ai]
+  (:require [wagoe.tools.text :as text]
+            [wagoe.tools.ai :as ai]
             [wagoe.tools.ansi :refer [bold green red cyan yellow dim]]
             [cheshire.core :as json]
             [clojure.edn :as edn]
@@ -87,7 +88,7 @@
    (let [hint (if default-yes? "Y/n" "y/N")]
      (print (str (cyan "? ") (bold label) " [" hint "]: "))
      (flush)
-     (let [input (str/trim (str/lower-case (read-answer)))]
+     (let [input (str/trim (text/lower-case (read-answer)))]
        (if (empty? input)
          default-yes?
          (= input "y"))))))
@@ -432,7 +433,7 @@
   "Assemble a full config.edn from a setup spec and environment name."
   [spec env]
   (let [sections [(str "{;; =============================================================================\n"
-                       " ;; " (str/capitalize env) " Environment Configuration\n"
+                       " ;; " (text/capitalize env) " Environment Configuration\n"
                        " ;; =============================================================================\n"
                        "\n"
                        " :active\n"

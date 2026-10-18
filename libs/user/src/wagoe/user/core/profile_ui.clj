@@ -3,7 +3,8 @@
    
    This namespace contains pure functions for generating profile-related Hiccup
    structures including profile viewing, editing, password changes, and MFA setup."
-  (:require [wagoe.shared.ui.core.components :as ui]
+  (:require [wagoe.core.utils.text :as text]
+            [wagoe.shared.ui.core.components :as ui]
             [wagoe.shared.ui.core.layout :as layout]
             [wagoe.shared.ui.core.icons :as icons]
             [wagoe.platform.core.csrf :as csrf]
@@ -35,7 +36,7 @@
   "Format role keyword for display."
   [role]
   (when role
-    (-> role name str/capitalize)))
+    (-> role name text/capitalize)))
 
 ;; =============================================================================
 ;; Profile Information Components

@@ -15,7 +15,8 @@
 ;;   bb scaffold ai "<description>" [--yes] -- AI-assisted module generation
 
 (ns wagoe.tools.scaffold
-  (:require [wagoe.tools.ansi :as ansi :refer [bold green cyan red yellow dim]]
+  (:require [wagoe.tools.text :as text]
+            [wagoe.tools.ansi :as ansi :refer [bold green cyan red yellow dim]]
             [wagoe.tools.ai :as ai]
             [wagoe.tools.project :as project]
             [cheshire.core :as json]
@@ -45,7 +46,7 @@
 
 (defn kebab->pascal [s]
   (->> (str/split s #"-")
-       (map str/capitalize)
+       (map text/capitalize)
        (str/join)))
 
 (defn pascal->kebab
@@ -54,7 +55,7 @@
   (-> s
       (str/replace #"([A-Z]+)([A-Z][a-z])" "$1-$2")
       (str/replace #"([a-z0-9])([A-Z])" "$1-$2")
-      str/lower-case))
+      text/lower-case))
 
 ;; =============================================================================
 ;; Prompts
@@ -95,7 +96,7 @@
      (flush)
      ;; A closed stdin is a no, whatever the default (BOU-585).
      (when-let [line (read-line)]
-       (let [input (str/trim (str/lower-case line))]
+       (let [input (str/trim (text/lower-case line))]
          (if (empty? input)
            default-yes?
            (contains? #{"y" "yes"} input)))))))

@@ -15,3 +15,12 @@
   "`s` upper-cased with the root locale."
   ^String [^CharSequence s]
   (.toUpperCase (.toString s) Locale/ROOT))
+
+(defn capitalize
+  "`s` with its first character upper-cased and the rest lower-cased, both
+   with the root locale."
+  ^String [^CharSequence s]
+  (let [s (.toString s)]
+    (if (< (count s) 2)
+      (upper-case s)
+      (str (upper-case (subs s 0 1)) (lower-case (subs s 1))))))

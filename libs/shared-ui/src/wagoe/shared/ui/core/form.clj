@@ -11,7 +11,8 @@
 
    Error messages are i18n markers (`[:t :validation/required]`); a page that
    is not rendered through wagoe-i18n resolves them with `plain-errors`."
-  (:require [clojure.string :as str]
+  (:require [wagoe.core.utils.text :as text]
+            [clojure.string :as str]
             [cheshire.core :as json]
             [malli.core :as m]
             [malli.transform :as mt]
@@ -302,7 +303,7 @@
 (defn label-text
   "A field's default label: its key, humanised."
   [field-key]
-  (str/capitalize (str/replace (name field-key) #"[-_]" " ")))
+  (text/capitalize (str/replace (name field-key) #"[-_]" " ")))
 
 (defn- display-value [v]
   (cond (nil? v)     ""
