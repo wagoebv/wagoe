@@ -1,4 +1,4 @@
-(ns wagoe.platform.shell.rpc.breaker-test
+(ns wagoe.platform.shell.breaker-test
   "The breaker against a real socket, counting what the far side receives.
 
    A breaker that returns the right error while the requests keep arriving has

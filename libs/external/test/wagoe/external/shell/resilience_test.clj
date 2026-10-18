@@ -17,8 +17,8 @@
      @calls]))
 
 (deftest ^:unit only-a-call-that-never-connected-is-retried
-  (let [settings (resilience/settings {:retry-delay-ms 1} "test:svc" nil)]
-    (testing "never connected: retried twice by default, then rethrown"
+  (let [settings (resilience/settings {:retries 2 :retry-delay-ms 1} "test:svc" nil)]
+    (testing "never connected: retried, then rethrown"
       (let [ex             (ConnectException. "Connection refused")
             [thrown calls] (counting-call settings ex)]
         (is (= 3 calls))
@@ -31,13 +31,18 @@
     (testing "a timeout may have sent the message, so it is not retried"
       (is (= 1 (second (counting-call settings (SocketTimeoutException. "Read timed out"))))))
 
-    (testing ":retries 0 turns retrying off"
-      (is (= 1 (second (counting-call (resilience/settings {:retries 0} "test:svc" nil)
+    (testing "no retries by default"
+      (is (= 1 (second (counting-call (resilience/settings {} "test:svc" nil)
                                       (ConnectException.))))))))
 
 (deftest ^:unit an-invalid-breaker-config-is-refused
   (is (thrown-with-msg? clojure.lang.ExceptionInfo #"failure-threshold"
-                        (resilience/settings {:circuit-breaker {:failure-threshold 0}} "test:svc" nil))))
+                        (resilience/settings {:circuit-breaker {:failure-threshold 0}} "test:svc" nil)))
+  (testing "an #env string is refused at construction, not at the first retry"
+    (is (thrown-with-msg? clojure.lang.ExceptionInfo #":retries"
+                          (resilience/settings {:retries "2"} "test:svc" nil)))
+    (is (thrown-with-msg? clojure.lang.ExceptionInfo #":retry-delay-ms"
+                          (resilience/settings {:retry-delay-ms "100"} "test:svc" nil)))))
 
 (deftest ^:integration an-unreachable-twilio-trips-the-breaker
   (let [adapter (twilio/create-twilio-adapter

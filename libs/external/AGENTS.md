@@ -87,11 +87,12 @@ All four keys are opt-in — add to `:active` in `config.edn` to enable:
 ## Retry and circuit breaker
 
 The adapters use the RPC client's resilience layer (`wagoe.platform.resilience`).
-SMTP, IMAP and Twilio retry only a call that never connected — one that did may
-have sent the message — with the RPC defaults:
+Both are opt-in. SMTP, IMAP and Twilio retry only a call that never connected —
+one that did may have sent the message. They set no connect timeout, so retries
+are off by default:
 
 ```clojure
-{:retries         2       ; extra attempts; 0 turns retrying off
+{:retries         2       ; extra attempts (default 0)
  :retry-delay-ms  100     ; ×1, ×2, … between attempts
  :cache           #ig/ref :wagoe/cache                    ; enables the breaker
  :circuit-breaker {:failure-threshold 5 :open-ms 30000}}
