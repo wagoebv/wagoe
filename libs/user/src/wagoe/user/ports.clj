@@ -112,9 +112,13 @@
   ;;           :filter-created-after :filter-created-before}
   ;; Returns {:audit-logs [...] :total-count n}.
 
-  (find-audit-logs-by-user [this user-id options]))
+  (find-audit-logs-by-user [this user-id options])
   ;; Entries where the user is the target. options: {:limit :offset :sort-by
   ;; :sort-direction}. Returns a seq of entries.
+
+  (delete-audit-logs-before [this cutoff]))
+  ;; Removes every entry created before `cutoff`, an Instant: the audit-log
+  ;; retention policy. Returns the count.
 
 (defprotocol IUserIdentityRepository
   "Links between an account and an external sign-in: an OpenID Connect
