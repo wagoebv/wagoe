@@ -179,6 +179,20 @@
 ;; Integration Tests - Tenant-Aware Job Processing
 ;; =============================================================================
 
+(deftest ^:unit tenant-job-without-an-adapter-runs-in-public
+  (let [ran-with (atom nil)
+        result (tenant-jobs/process-tenant-job!
+                {:id (java.util.UUID/randomUUID)
+                 :job-type :send-email
+                 :args {}
+                 :metadata {:tenant-id "tenant-1"}}
+                (fn [_ ctx] (reset! ran-with ctx) {:success? true})
+                {:datasource ::ds}
+                (create-mock-tenant-service)
+                (create-mock-tenant-schema-provider))]
+    (is (= {:datasource ::ds} @ran-with))
+    (is (true? (:success? result)))))
+
 (deftest ^:integration process-tenant-job-test
   (testing "Processing job with tenant context (non-PostgreSQL fallback)"
     (let [tenant-service (create-mock-tenant-service)
