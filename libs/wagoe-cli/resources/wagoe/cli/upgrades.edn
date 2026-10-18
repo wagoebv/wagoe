@@ -45,4 +45,9 @@
  {:ticket "BOU-462"
   :since  "1.0.2"
   :note   "/swagger.json and :swagger route docs (Swagger 2.0). The API docs are OpenAPI 3.1 at /openapi.json."
-  :manual "Move :swagger to :openapi, with a parameter's :type under :schema and a response's :schema under :content \"application/json\". Point clients at /openapi.json. A rewrite cannot reach parameter vectors built at runtime."}]
+  :manual "Move :swagger to :openapi, with a parameter's :type under :schema and a response's :schema under :content \"application/json\". Point clients at /openapi.json. A rewrite cannot reach parameter vectors built at runtime."}
+
+ {:ticket "BOU-737"
+  :since  "1.0.2"
+  :note   "Kebab-case keys in the user and session maps of the POST /auth/login and POST /sessions response."
+  :manual "Read the camelCase twin instead: session.sessionToken, not session.session-token. The readers are API clients, outside the project."}]

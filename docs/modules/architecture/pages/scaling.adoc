@@ -37,8 +37,8 @@ environment variables. Change the value, restart the process. No code.
 | HikariCP. prod default `min 10 / max 50`, dev `2 / 10`, test (H2) `1 / 5`. `DB_POOL_SIZE` env override. *These five only.* The pool map is a `:closed` Malli schema and the pool builder applies exactly this set, so adding `keepalive-time-ms`, `validation-timeout-ms` or `leak-detection-threshold-ms` does not tune anything — it fails the boot at `:wagoe/db-context` with "Invalid database configuration". Restoring one means adding the matching `.setKeepaliveTime` / `.setValidationTimeout` / `.setLeakDetectionThreshold` call in `adapters/database/common/connection.clj` first.
 
 | HTTP server
-| `:wagoe/http` — `:port`, `:host`, `:port-range`
-| Jetty. `HTTP_PORT` / `HTTP_HOST` env. Jetty manages its own thread pool.
+| `:wagoe/http` — `:port`, `:host`, `:port-range`, `:virtual-threads?`
+| Jetty. `HTTP_PORT` / `HTTP_HOST` env. Jetty manages its own thread pool; `:virtual-threads? true` swaps it for virtual threads (see below).
 
 | JVM heap / GC
 | `JAVA_OPTS` (see `docker-compose.yml`)
@@ -55,6 +55,31 @@ Watch the multiplication: with N replicas each holding a pool of `maximum-pool-s
 total Postgres connections = `N × max`. Keep `N × max` under the server's
 `max_connections`.
 ====
+
+=== Virtual threads
+
+Off by default. Turn them on per listener and for job workers:
+
+[source,clojure]
+----
+:wagoe/http {:virtual-threads? true}           ; each request on its own virtual thread
+:wagoe/rpc  {:virtual-threads? true}           ; same, for a service's RPC listener
+:wagoe/jobs {:workers {:virtual-threads? true}} ; each worker loop on one
+----
+
+A request that blocks on the database or an HTTP call then holds no platform
+thread. Jetty caps concurrent tasks at 200, its `VirtualThreadPool` default;
+the connector's acceptor and selectors hold a few of those.
+
+* *Context still applies.* Tenant schema, MDC and the tracing and error
+  contexts are set and read on the thread that serves the request or runs the
+  job, and each request gets a fresh one.
+* *Size the connection pool for 200.* Virtual threads add no connections; a
+  request beyond `maximum-pool-size` waits `connection-timeout-ms`, then fails.
+* *Pinning is why it is opt-in.* On JDK 21 a virtual thread blocked inside
+  `synchronized` holds its carrier. The PostgreSQL and MySQL drivers, HikariCP,
+  Logback and Clojure 1.12 avoid it; SQLite and H2 do not. Check with JFR's
+  `jdk.VirtualThreadPinned` event before turning it on in production.
 
 == How the architecture enables horizontal scaling
 
@@ -523,6 +548,7 @@ The architecture delivers the promise; these are the concrete pieces that make
 . ✅ *Graceful connection draining* — shipped in https://github.com/wagoebv/wagoe/pull/218[#218]. Configurable shutdown grace (`:wagoe/http :drain-timeout-ms`) lets rollouts finish in-flight requests; Jetty `GracefulHandler` + `setStopTimeout` wired in `wiring.clj`.
 . ✅ *Default rate-limit wiring* — shipped in https://github.com/wagoebv/wagoe/pull/219[#219]. Config-driven `http-rate-limit-protection` is in the default pipeline; enable via `:wagoe/http :rate-limit` and it uses the Redis cache for a cross-replica limit (per-process fallback documented).
 . ✅ *Jobs hardening* — shipped in https://github.com/wagoebv/wagoe/pull/220[#220]. Missing-handler jobs are re-enqueued (bounded) instead of silently dead-lettered, an empty-registry worker warns at startup, and scheduled-job promotion is an atomic claim (`ZREM` / `swap-vals!`) so a due job runs exactly once across workers.
+. ✅ *Opt-in virtual threads* — for HTTP and RPC listeners and job workers; see <<_virtual_threads>>.
 . ✅ *Deploy topology reference* — done (https://github.com/wagoebv/wagoe/pull/386[#386]). Compose + k8s with N replicas, Redis, a load balancer, the web/worker split and a module-as-a-service, in xref:architecture:deployment-topologies.adoc[Deployment Topologies]. No instance-id variable: nothing in the codebase reads one, so adding it would have been decoration.
 
 For *functional decomposition* (the bigger bet):

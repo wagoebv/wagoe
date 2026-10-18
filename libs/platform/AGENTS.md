@@ -434,6 +434,7 @@ nothing.
 - Keep exceptions typed (`:type` in `ex-data`) so HTTP error mapping stays deterministic.
 - Static resource routes bypass content negotiation — serve from `/public` directory.
 - Rate limiting without Redis is per-process only and resets on restart.
+- `:virtual-threads? true` on `:wagoe/http` or `:wagoe/rpc` serves requests on virtual threads. Off by default; see the virtual threads section of `docs/modules/architecture/pages/scaling.adoc`.
 
 ---
 
