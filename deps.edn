@@ -51,9 +51,7 @@
            ;; Environment / Setup
            integrant/integrant                        {:mvn/version "1.0.1"}
            integrant/repl                             {:mvn/version "0.5.1"}
-           environ/environ                            {:mvn/version "1.2.0"}
            aero/aero                                  {:mvn/version "1.1.6"}
-           com.lambdaisland/dotenv                    {:mvn/version "0.2.5"}
 
            ;; HTTP Server and Routing
            ring/ring-core                             {:mvn/version "1.15.5"}
@@ -150,8 +148,6 @@
            ;; FTPS client for the external file source
            commons-net/commons-net                    {:mvn/version "3.13.0"}
 
-           ;; HTTP clients
-           hato/hato                                  {:mvn/version "1.0.0"}
            ;; External service adapters - HTTP client for Stripe/Twilio REST APIs
            clj-http/clj-http                          {:mvn/version "3.13.1"}
 

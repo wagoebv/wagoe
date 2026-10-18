@@ -134,7 +134,7 @@
 (defn transactional-ddl?
   "Whether `engine` undoes DDL in a rolled-back transaction."
   [engine]
-  (contains? (protocols/capabilities (adapter-for engine)) :transactional-ddl))
+  (protocols/capable? (adapter-for engine) :transactional-ddl))
 
 (defn create-datasource
   "Create connection pool datasource using adapter and configuration.

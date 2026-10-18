@@ -219,7 +219,8 @@
 
   (capabilities [this]
     "The set of `capability-keywords` this database honours. The conformance
-     suite checks each claim both ways (ADR-039).")
+     suite checks each claim both ways (ADR-039). To ask about one, call
+     `capable?`.")
 
   (column-type [this logical]
     "The DDL type for `logical`, one of `logical-column-types`, or
@@ -283,6 +284,15 @@
      :alter-foreign-key     ALTER TABLE … ADD CONSTRAINT … FOREIGN KEY"
   #{:schemas :transactional-ddl :index-if-not-exists :column-if-not-exists
     :full-text :on-conflict :row-locks :alter-foreign-key})
+
+(defn capable?
+  "Whether `adapter` claims `capability`. A nil adapter claims nothing; an
+   unknown capability throws, so a typo cannot quietly turn a feature off."
+  [adapter capability]
+  (when-not (capability-keywords capability)
+    (throw (ex-info (str "Unknown database capability " capability)
+                    {:type :internal-error :capability capability})))
+  (contains? (some-> adapter capabilities) capability))
 
 (def default-string-length
   "How long `column-type` makes a :string given no length."

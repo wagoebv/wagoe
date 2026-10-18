@@ -226,9 +226,8 @@
    Returns:
      SearchStore implementing ISearchStore"
   [datasource adapter]
-  (let [capabilities (db-ports/capabilities adapter)]
-    (->SearchStore datasource
-                   adapter
-                   (contains? capabilities :full-text)
-                   (contains? capabilities :on-conflict)
-                   (atom nil))))
+  (->SearchStore datasource
+                 adapter
+                 (db-ports/capable? adapter :full-text)
+                 (db-ports/capable? adapter :on-conflict)
+                 (atom nil)))
