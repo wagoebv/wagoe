@@ -83,7 +83,7 @@
                      :override-builtin true
                      :task (apply clojure "-M:repl" "--interactive" *command-line-args*)}
   test              {:doc "Run tests via Kaocha (clojure -M:test [args])"
-                     :task (apply clojure "-M:test" *command-line-args*)}
+                     :task (apply clojure {:extra-env (dev/dotenv)} "-M:test" *command-line-args*)}
 
   ;; Database management
   migrate           {:doc "Run database migrations (bb migrate [up|status|rollback|create ...])"
