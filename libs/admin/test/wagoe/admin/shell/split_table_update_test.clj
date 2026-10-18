@@ -21,7 +21,9 @@
             [wagoe.observability.errors.shell.adapters.no-op :as error-reporting-no-op]
             [wagoe.test.logging :refer [logged-errors with-silent-logging]]
             [wagoe.admin.shell.http.handlers.crud :as crud]
+            [wagoe.admin.shell.http.handlers.detail :as detail]
             [wagoe.i18n.shell.catalogue :as catalogue]
+            [clojure.string :as str]
             [clojure.test :refer [deftest is testing use-fixtures]])
   (:import [java.util UUID]
            [java.time Instant]))
@@ -60,6 +62,7 @@
                        :active {:type :boolean :label "Active"}}
      :split-table-update {:secondary-table :test_auth
                           :secondary-fields #{:email :active}}
+     :create-redirect-url "/web/profiles/new"
      :query-overrides
      {:from          [[:test_auth :a]]
       :join          [[:test_profiles :p] [:= :a.id :p.id]]
@@ -271,3 +274,25 @@
     (is (= [] errors))
     (is (re-find #"has-errors\"><label for=\"email\"" body) "the email field is marked")
     (is (= "Mine" (:name (fetch-profile-row id))) "the primary table's write rolled back")))
+
+(deftest ^:integration creating-a-split-table-entity-without-its-own-flow-is-a-config-error-page
+  ;; It threw an :invalid-config ex-info into a bare JSON 500.
+  (let [cfg      (update-in admin-config [:entities :test-profiles] dissoc :create-redirect-url)
+        sp       (schema-repo/create-schema-repository *db-ctx* cfg)
+        request  {:request-method      :get
+                  :uri                 "/web/admin/test-profiles/new"
+                  :user                {:id (UUID/randomUUID) :role :admin :active true}
+                  :path-params         {:entity "test-profiles"}
+                  :i18n/catalogue      i18n-catalogue
+                  :i18n/default-locale :en}
+        [response _] (logged-errors #((detail/new-entity-handler *admin-service* sp cfg) request))
+        body     (str (:body response))]
+    (is (= 500 (:status response)))
+    (is (str/includes? (get-in response [:headers "Content-Type"]) "text/html"))
+    (is (str/includes? body "admin-shell") "inside the admin layout")
+    (is (str/includes? body "Test Profiles cannot be created here"))
+    (is (str/includes? body ":create-redirect-url"))
+
+    (testing "a :create-redirect-url makes it creatable"
+      (let [sp (schema-repo/create-schema-repository *db-ctx* admin-config)]
+        (is (= 303 (:status ((detail/new-entity-handler *admin-service* sp admin-config) request))))))))

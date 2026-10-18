@@ -777,6 +777,11 @@
               prev (assoc :prev-url (apply url prev))
               next (assoc :next-url (apply url next)))))))))
 
+(def ^:private sibling-cap
+  "The most siblings a child page reads for its prev/next navigation. A record
+   past them gets none; the count reads \"500+\"."
+  500)
+
 (defn build-entity-detail-opts
   "Builds opts for entity-detail-page and the surrounding admin-layout.
    Shared between entity-detail-handler and update-entity-handler.
@@ -842,14 +847,14 @@
                           (let [siblings   (ports/list-related-entities admin-service
                                                                         (:entity parent-ref)
                                                                         (:id parent-ref)
-                                                                        matching-rel)
-                                current-id record-id
-                                ids        (mapv #(str (:id %)) siblings)
-                                idx        (.indexOf ^java.util.List ids current-id)
+                                                                        (assoc matching-rel :limit (inc sibling-cap)))
+                                more?      (> (count siblings) sibling-cap)
+                                ids        (mapv #(str (get % primary-key)) (take sibling-cap siblings))
+                                idx        (.indexOf ^java.util.List ids record-id)
                                 nav-url    #(str "/web/admin/" (name entity-name) "/" %
                                                  "?return_to=" (ui-base/url-encode return-to))]
                             (when (>= idx 0)
-                              (cond-> {:position (inc idx) :total (count ids)}
+                              (cond-> {:position (inc idx) :total (if more? (str sibling-cap "+") (count ids))}
                                 (> idx 0)                (assoc :prev-url (nav-url (nth ids (dec idx))))
                                 (< idx (dec (count ids))) (assoc :next-url (nav-url (nth ids (inc idx))))))))))]
 

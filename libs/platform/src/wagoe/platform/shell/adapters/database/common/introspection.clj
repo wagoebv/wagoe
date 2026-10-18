@@ -8,10 +8,10 @@
    `PRAGMA table_info` instead.
 
    Both forms return the same column maps — `:name` (lower case), `:type`,
-   `:not-null`, `:default`, `:primary-key`, `:generated`, `:max-length` (a
-   character column's declared length, nil on SQLite) — which is what the
-   port promises and what the four separate copies did not consistently
-   deliver."
+   `:not-null`, `:default`, `:primary-key`, `:generated`, `:generated-always`,
+   `:max-length` (a character column's declared length, nil on SQLite) —
+   which is what the port promises and what the four separate copies did not
+   consistently deliver."
   (:require [wagoe.core.utils.text :as text]
             [honey.sql :as sql]
             [next.jdbc :as jdbc]
@@ -122,6 +122,16 @@
        (= "ALWAYS" (:is_generated col))
        (some->> (:extra col) (re-find #"(?i)auto_increment|(?:virtual|stored) generated")))))
 
+(defn- generated-always?
+  "Whether the database refuses a value for this column: a computed column,
+   or an identity GENERATED ALWAYS. An identity BY DEFAULT, an auto_increment
+   and the SQLite rowid accept one."
+  [col]
+  (boolean
+   (or (= "ALWAYS" (:is_generated col))
+       (and (= "YES" (:is_identity col)) (= "ALWAYS" (:identity_generation col)))
+       (some->> (:extra col) (re-find #"(?i)(?:virtual|stored) generated")))))
+
 (defn information-schema-table-info
   "Column information for `table-name`, per `information_schema`. See
    `information-schema-table-exists?` for `spec`; its `:generated-columns` are
@@ -157,6 +167,7 @@
              :default     (:column_default col)
              :primary-key (contains? pk-columns (:column_name col))
              :generated   (generated-column? col)
+             :generated-always (generated-always? col)
              :max-length  (some-> (:character_maximum_length col) long)})
           columns)))
 
@@ -196,5 +207,6 @@
              :default     (:dflt_value row)
              :primary-key (= (:pk row) 1)
              :generated   (= rowid-alias (:name row))
+             :generated-always false
              :max-length  nil})
           results)))

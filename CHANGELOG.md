@@ -154,6 +154,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Admin writes to a computed or `GENERATED ALWAYS` identity column failed** (BOU-546): those columns are read-only now.
+  A split-table entity without `:create-redirect-url` shows the config error page, not a raw 500. No action needed.
 - **On a Turkish JVM `userId` became `user-ıd`** (BOU-732): case conversion no longer uses the JVM locale.
   Ran on tr-TR? Re-lower stored emails. Use `wagoe.core.utils.text`; clj-kondo flags `clojure.string`'s case fns.
 - **An admin write a CHECK constraint refused answered 500** (BOU-734). It is a form error now, and elsewhere a

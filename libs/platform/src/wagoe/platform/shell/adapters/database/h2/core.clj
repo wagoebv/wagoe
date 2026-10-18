@@ -10,7 +10,7 @@
 
 (def ^:private introspection-spec
   {:schema "public" :honey {:dialect :ansi} :fold-table-name? true
-   :generated-columns [:is_identity :is_generated]})
+   :generated-columns [:is_identity :identity_generation :is_generated]})
 
 (def spec
   "What H2 does differently. See common.adapter for the keys."

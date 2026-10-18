@@ -322,6 +322,21 @@
 
       (is (= auto-config merged))))
 
+  (testing "a column the database refuses a value for stays read-only, whatever the config says"
+    (let [auto (introspection/parse-table-metadata
+                :tickets
+                [{:name "id" :type "VARCHAR(36)" :primary-key true}
+                 {:name "title" :type "VARCHAR(50)"}
+                 {:name "seq" :type "BIGINT" :generated true :generated-always true}
+                 {:name "ref" :type "BIGINT" :generated true :generated-always false}])]
+      (is (contains? (:readonly-fields auto) :seq) "detected")
+      (is (not (contains? (:readonly-fields auto) :ref)) "an identity BY DEFAULT takes a value")
+      (doseq [manual [{:readonly-fields #{:id}}
+                      {:readonly-fields #{:id} :editable-fields [:title :seq]}]]
+        (let [cfg (introspection/build-entity-config auto manual)]
+          (is (contains? (:readonly-fields cfg) :seq) (pr-str manual))
+          (is (not-any? #{:seq} (:editable-fields cfg)) (pr-str manual))))))
+
   (testing "Build config with empty manual overrides"
     (let [auto-config (introspection/parse-table-metadata :users sample-users-table-metadata)
           merged (introspection/build-entity-config auto-config {})]
@@ -787,7 +802,16 @@
 
     (testing "an entity with its own create flow is not the admin's to create"
       (is (empty? (create-errors (assoc config :create-redirect-url "/web/invoices/new")
-                                 invoices-columns)))))
+                                 invoices-columns))))
+
+    (testing "a split-table entity without one is a config error, which the insert would write half of"
+      (let [split  (assoc config :split-table-update {:secondary-table :auth :secondary-fields #{:email}})
+            [error & more] (create-errors split invoices-columns)]
+        (is (nil? more))
+        (is (= :split-table (:kind error)))
+        (is (str/includes? (:message error) ":create-redirect-url"))
+        (is (empty? (create-errors (assoc split :create-redirect-url "/web/invoices/new")
+                                   invoices-columns))))))
 
   (testing "a column read-only by detection counts, though a manual :readonly-fields replaced that set (PR #568 review)"
     ;; merge keeps the manual list only, so :version is not in it, but
