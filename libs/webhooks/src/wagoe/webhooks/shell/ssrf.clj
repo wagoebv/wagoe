@@ -7,9 +7,10 @@
    delivery log.
 
    Checked at create time and again before every attempt, because DNS can
-   change in between. The HTTP client resolves the name once more when it
-   connects, so a name that switches address between the two lookups is not
-   caught; `:allowed-hosts` is the way to reach a private host on purpose."
+   change in between. The attempt connects to the addresses that check
+   approved, so a name that answers differently a second time (DNS rebinding)
+   gets no second lookup. `:allowed-hosts` is the way to reach a private host
+   on purpose."
   (:require [wagoe.webhooks.core.delivery :as delivery])
   (:import (java.net Inet4Address Inet6Address InetAddress UnknownHostException)))
 
@@ -54,18 +55,32 @@
               (or (= 0xfc (bit-and (aget b 0) 0xfe))     ; fc00::/7
                   (some-> (embedded-v4 b) private-address?)))))))
 
-(defn host-problem
-  "Why the host of `url` may not be called, or nil.
+(defn system-resolve
+  "Every address `host` resolves to; throws UnknownHostException."
+  [host]
+  (InetAddress/getAllByName host))
 
-   `:refused` for a private address, `:unresolvable` when DNS has no answer —
-   the first will not change by retrying, the second may."
-  [url {:keys [allowed-hosts]}]   ; lower case
+(defn check-host
+  "Resolve the host of `url` once with `resolve` and judge the answer: `{:addresses [..]}` to
+   connect to, `{}` for a host in `:allowed-hosts` (not resolved), or
+   `{:problem {:type .. :message ..}}`. `:refused` for a private address,
+   `:unresolvable` when DNS has no answer — the first will not change by
+   retrying, the second may."
+  [url {:keys [allowed-hosts]} resolve]   ; lower case
   (let [host (delivery/url-host url)]
-    (when-not (contains? allowed-hosts host)
-      (try
-        (when-let [bad (first (filter private-address? (InetAddress/getAllByName host)))]
-          {:type    :refused
-           :message (str "Host " host " resolves to a private address (" (.getHostAddress ^InetAddress bad)
-                         "); add it to :allowed-hosts to allow it")})
-        (catch UnknownHostException _
-          {:type :unresolvable :message (str "Host " host " does not resolve")})))))
+    (if (contains? allowed-hosts host)
+      {}
+      (let [addrs (try (vec (resolve host)) (catch UnknownHostException _ []))
+            bad   (first (filter private-address? addrs))]
+        (cond
+          (empty? addrs)
+          {:problem {:type :unresolvable :message (str "Host " host " does not resolve")}}
+
+          bad
+          {:problem {:type    :refused
+                     :message (str "Host " host " resolves to a private address ("
+                                   (.getHostAddress ^InetAddress bad)
+                                   "); add it to :allowed-hosts to allow it")}}
+
+          :else
+          {:addresses addrs})))))

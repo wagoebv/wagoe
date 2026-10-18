@@ -44,7 +44,8 @@
   "Send one HTTP request."
 
   (send-request! [this request]
-    "POST `request` — `{:url :headers :body}` — and return
+    "POST `request` — `{:url :headers :body}`, and `:addresses` to connect to
+     those InetAddresses instead of resolving the host — and return
      `{:status int :body string :latency-ms long}`, or
      `{:error {:type kw :message string} :latency-ms long}` when no response
      arrived. Never follows a redirect."))
