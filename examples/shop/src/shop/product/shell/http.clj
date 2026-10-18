@@ -4,7 +4,7 @@
             [shop.product.schema :as schema]
             [malli.core :as m]
             [malli.error :as me]
-            [malli.swagger :as swagger]
+            [malli.json-schema :as json-schema]
             [malli.transform :as mt]
             [shop.product.shell.web-handlers :as web-handlers]))
 
@@ -53,10 +53,10 @@
     {:limit  (-> (n "limit" 20) (max 1) (min max-page))
      :offset (max 0 (n "offset" 0))}))
 
-;; For the swagger only: the platform coerces no response.
+;; For the API docs only: the platform coerces no response.
 (def ^:private shown
   "The product as the API answers it."
-  (swagger/transform schema/Product))
+  (json-schema/transform schema/Product))
 
 (def ^:private includable
   "What ?include= may name: the children schema/Product shows."
@@ -82,15 +82,15 @@
   [["/products"
     {:get  {:summary "List products, oldest first"
             :interceptors signed-in
-            :swagger {:parameters (cond-> [{:name "limit" :in "query" :required false :type "integer"
+            :openapi {:parameters (cond-> [{:name "limit" :in "query" :required false :schema {:type "integer"}
                                             :description "Default 20, at most 100"}
-                                           {:name "offset" :in "query" :required false :type "integer"}]
+                                           {:name "offset" :in "query" :required false :schema {:type "integer"}}]
                                     (seq includable)
-                                    (conj {:name "include" :in "query" :required false :type "string"
+                                    (conj {:name "include" :in "query" :required false :schema {:type "string"}
                                            :description (apply str "Children to embed, comma-separated: "
                                                                (interpose ", " (map name includable)))}))
                       :responses {200 {:description "A page of products"
-                                       :schema {:type "array" :items shown}}}}
+                                       :content {"application/json" {:schema {:type "array" :items shown}}}}}}
             :handler (fn [request]
                        {:status 200 :body (ports/list-products service (assoc (page-of request) :include (include-of request)))})}
      :post {:summary "Create a product"
@@ -101,10 +101,10 @@
                            {:status 201 :body (ports/create-product service data)}
                            (invalid (explain schema/CreateProductRequest data)))))}}]
    ["/products/:id"
-    {:swagger {:parameters [{:name "id" :in "path" :required true :type "string"}]}
+    {:openapi {:parameters [{:name "id" :in "path" :required true :schema {:type "string"}}]}
      :get    {:summary "Get a product, with its children"
               :interceptors signed-in
-              :swagger {:responses {200 {:description "The product" :schema shown}}}
+              :openapi {:responses {200 {:description "The product" :content {"application/json" {:schema shown}}}}}
               :handler (fn [request]
                          (if-let [found (some->> (id-of request) (ports/get-product service))]
                            {:status 200 :body found}

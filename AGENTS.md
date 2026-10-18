@@ -817,29 +817,29 @@ java.time.temporal.ChronoUnit/DAYS
   (let [svc (system-component :wagoe/my-service)] ...))
 ```
 
-### 11. Swagger/OpenAPI — parameters invisible without explicit declaration
+### 11. OpenAPI — parameters invisible without explicit declaration
 
-- **Symptom:** Routes with path or query parameters show no input fields in Swagger UI.
-- **Cause:** reitit-swagger only auto-generates parameter fields when a coercion layer is configured; without coercion, parameters render with no inputs.
-- **Fix:** Add a :swagger key with raw OpenAPI 2.0 parameter specs to every handler/route that has path or query parameters.
+- **Symptom:** Routes with path or query parameters show no input fields in the API docs (/api-docs/).
+- **Cause:** The OpenAPI 3.1 document (/openapi.json) only lists parameters a route declares: a Malli :parameters schema, or a raw :openapi spec. A handler that reads :path-params or :query-params itself declares neither.
+- **Fix:** Add an :openapi key with OpenAPI 3.x parameter specs (type under :schema) to every handler/route that has path or query parameters. A 2.0-style :swagger key is still translated, with a warning at boot, until 2.0.
 
 ```clojure
 ;; Path parameter — on the method
 :get {:handler ...
       :summary "Get product by slug"
-      :swagger {:parameters [{:name "slug" :in "path" :required true :type "string"
+      :openapi {:parameters [{:name "slug" :in "path" :required true :schema {:type "string"}
                               :description "Product slug (e.g. wagoe-tshirt)"}]}}
 
 ;; Query parameters — on the method
 :get {:handler ...
       :summary "List customer orders"
-      :swagger {:parameters [{:name "email"  :in "query" :required true  :type "string"}
-                             {:name "limit"  :in "query" :required false :type "integer"}
-                             {:name "offset" :in "query" :required false :type "integer"}]}}
+      :openapi {:parameters [{:name "email"  :in "query" :required true  :schema {:type "string"}}
+                             {:name "limit"  :in "query" :required false :schema {:type "integer"}}
+                             {:name "offset" :in "query" :required false :schema {:type "integer"}}]}}
 
-;; Shared path param when a route has multiple methods — put :swagger at route level
+;; Shared path param when a route has multiple methods — put :openapi at route level
 ["/api/cart/items/:product-id"
- {:swagger {:parameters [{:name "product-id" :in "path" :required true :type "string"}]}
+ {:openapi {:parameters [{:name "product-id" :in "path" :required true :schema {:type "string"}}]}
   :patch  {:handler ... :summary "Update item quantity"}
   :delete {:handler ... :summary "Remove item from cart"}}]
 ```

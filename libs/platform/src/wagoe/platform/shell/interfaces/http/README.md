@@ -20,7 +20,7 @@ contribution from its `:wagoe/<name>-routes` component, and
 `:wagoe/http-handler` merges every module's contribution and compiles the result
 through `wagoe.platform.shell.http.reitit-router/compile-routes` — the one path
 that attaches the security stack, the interceptor pipeline, coercion and the
-Swagger routes.
+OpenAPI routes.
 
 ```clojure
 (ns my-module.shell.http)
@@ -37,7 +37,7 @@ Swagger routes.
    :static []})
 ```
 
-Health checks and `/swagger.json` are mounted by `:wagoe/http-handler`; a module
+Health checks and `/openapi.json` are mounted by `:wagoe/http-handler`; a module
 does not add them. `bb scaffold endpoint` writes the shape above.
 
 ## Common utilities (`common.clj`)
@@ -79,7 +79,8 @@ Mounted by `:wagoe/http-handler` on every application:
 | `/health` | Full status, service name and version, plus any additional checks |
 | `/health/ready` | Readiness probe |
 | `/health/live` | Liveness probe |
-| `/swagger.json` | OpenAPI specification |
+| `/openapi.json` | OpenAPI 3.1 document |
+| `/swagger.json` | The same document, deprecated |
 | `/api-docs/` | Swagger UI |
 
 ## Dependencies

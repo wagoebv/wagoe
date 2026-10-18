@@ -1537,7 +1537,7 @@ DROP TABLE IF EXISTS %s;
    (str "[" base-ns "." module-name ".schema :as schema]")
    "[malli.core :as m]"
    "[malli.error :as me]"
-   "[malli.swagger :as swagger]"
+   "[malli.json-schema :as json-schema]"
    "[malli.transform :as mt]"])
 
 (defn- ns-form
@@ -1616,10 +1616,10 @@ DROP TABLE IF EXISTS %s;
          "    {:limit  (-> (n \"limit\" 20) (max 1) (min max-page))\n"
          "     :offset (max 0 (n \"offset\" 0))}))\n"
          "\n"
-         ";; For the swagger only: the platform coerces no response.\n"
+         ";; For the API docs only: the platform coerces no response.\n"
          "(def ^:private shown\n"
          "  \"The " e " as the API answers it.\"\n"
-         "  (swagger/transform schema/" entity-name "))\n"
+         "  (json-schema/transform schema/" entity-name "))\n"
          "\n"
          (when primary?
            (str "(def ^:private includable\n"
@@ -1648,18 +1648,18 @@ DROP TABLE IF EXISTS %s;
          "  [[\"/" plural "\"\n"
          "    {:get  {:summary \"List " plural ", oldest first\"" guard "\n"
          (if primary?
-           (str "            :swagger {:parameters (cond-> [{:name \"limit\" :in \"query\" :required false :type \"integer\"\n"
+           (str "            :openapi {:parameters (cond-> [{:name \"limit\" :in \"query\" :required false :schema {:type \"integer\"}\n"
                 "                                            :description \"Default 20, at most 100\"}\n"
-                "                                           {:name \"offset\" :in \"query\" :required false :type \"integer\"}]\n"
+                "                                           {:name \"offset\" :in \"query\" :required false :schema {:type \"integer\"}}]\n"
                 "                                    (seq includable)\n"
-                "                                    (conj {:name \"include\" :in \"query\" :required false :type \"string\"\n"
+                "                                    (conj {:name \"include\" :in \"query\" :required false :schema {:type \"string\"}\n"
                 "                                           :description (apply str \"Children to embed, comma-separated: \"\n"
                 "                                                               (interpose \", \" (map name includable)))}))\n")
-           (str "            :swagger {:parameters [{:name \"limit\" :in \"query\" :required false :type \"integer\"\n"
+           (str "            :openapi {:parameters [{:name \"limit\" :in \"query\" :required false :schema {:type \"integer\"}\n"
                 "                                    :description \"Default 20, at most 100\"}\n"
-                "                                   {:name \"offset\" :in \"query\" :required false :type \"integer\"}]\n"))
+                "                                   {:name \"offset\" :in \"query\" :required false :schema {:type \"integer\"}}]\n"))
          "                      :responses {200 {:description \"A page of " plural "\"\n"
-         "                                       :schema {:type \"array\" :items shown}}}}\n"
+         "                                       :content {\"application/json\" {:schema {:type \"array\" :items shown}}}}}}\n"
          "            :handler (fn [request]\n"
          (if primary?
            (str "                       {:status 200 :body (ports/list-" e "s service (assoc (page-of request) :include (include-of request)))})}\n")
@@ -1671,14 +1671,14 @@ DROP TABLE IF EXISTS %s;
          "                           {:status 201 :body (ports/create-" e " service data)}\n"
          "                           (invalid (explain schema/Create" entity-name "Request data)))))}}]\n"
          "   [\"/" plural "/:id\"\n"
-         "    {:swagger {:parameters [{:name \"id\" :in \"path\" :required true :type \"string\"}]}\n"
+         "    {:openapi {:parameters [{:name \"id\" :in \"path\" :required true :schema {:type \"string\"}}]}\n"
          "     :get    {:summary \"Get a " e
          (cond
            (and primary? (:workflow entity)) ", with its children and its workflow"
            primary? ", with its children"
            (:workflow entity) ", with its workflow")
          "\"" guard-id "\n"
-         "              :swagger {:responses {200 {:description \"The " e "\" :schema shown}}}\n"
+         "              :openapi {:responses {200 {:description \"The " e "\" :content {\"application/json\" {:schema shown}}}}}\n"
          "              :handler (fn [request]\n"
          "                         (if-let [found (some->> (id-of request) (ports/get-" e " service))]\n"
          "                           {:status 200 :body found}\n"
@@ -1703,7 +1703,7 @@ DROP TABLE IF EXISTS %s;
            (str "\n"
                 "   ;; The one way to change " (:field wf) ": a body of {\"transition\": \"<state>\"}.\n"
                 "   [\"/" plural "/:id/transition\"\n"
-                "    {:swagger {:parameters [{:name \"id\" :in \"path\" :required true :type \"string\"}]}\n"
+                "    {:openapi {:parameters [{:name \"id\" :in \"path\" :required true :schema {:type \"string\"}}]}\n"
                 "     :post {:summary \"Move a " e "'s " (:field wf) " along its workflow\"" guard "\n"
                 "            :handler (fn [request]\n"
                 "                       (let [id         (id-of request)\n"

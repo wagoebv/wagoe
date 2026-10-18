@@ -550,9 +550,58 @@
       ;; or rate limiting — a hole opened by writing less.
       (is (= 200 (:status (handler {:request-method :get :uri "/shorthand"}))))
       (is (stacked? handler "/shorthand")))
-    (testing "the Swagger routes still serve, outside the stack as before"
-      (is (= 200 (:status (handler {:request-method :get :uri "/swagger.json"}))))
-      (is (not (stacked? handler "/swagger.json"))))))
+    (testing "the API docs serve outside the stack"
+      (is (= 200 (:status (handler {:request-method :get :uri "/openapi.json"}))))
+      (is (not (stacked? handler "/openapi.json"))))))
+
+(deftest ^:unit the-api-docs-are-openapi-3-1
+  (let [ok      (fn [_] {:status 200 :body {}})
+        handler (reitit/compile-routes
+                 [["/typed" {:get {:handler ok
+                                   :parameters {:query [:map [:limit {:optional true} :int]]}}}]
+                  ["/raw/:id" {:openapi {:parameters [{:name "id" :in "path" :required true
+                                                       :schema {:type "string"}}]}
+                               :get {:handler ok}}]
+                  ;; Written for the 2.0 docs, before 3.1.
+                  ["/legacy/:slug" {:swagger {:parameters [{:name "slug" :in "path" :required true
+                                                            :type "string"}]}
+                                    :get {:handler ok
+                                          :swagger {:parameters [{:name "q" :in "query" :type "integer"
+                                                                  :minimum 0 :exclusiveMinimum true}
+                                                                 {:name "ids" :in "query" :type "array"
+                                                                  :items {:type "integer"}}]
+                                                    :responses {200 {:description "found"
+                                                                     :schema {:type "object"}
+                                                                     :headers {:X-Total {:type "integer"}}}}}}}]]
+                 {:system {}})
+        doc     (fn [uri] (response-body-as-map (handler {:request-method :get :uri uri})))
+        params  (fn [d path] (set (get-in d [:paths path :get :parameters])))
+        d       (doc "/openapi.json")]
+    (testing "the document is 3.1"
+      (is (= "3.1.0" (:openapi d)))
+      (is (= "Wagoe API" (get-in d [:info :title]))))
+    (testing "a Malli :parameters schema lists its inputs"
+      (is (= #{{:in "query" :name "limit" :required false :schema {:type "integer"}}}
+             (params d (keyword "/typed")))))
+    (testing "a raw :openapi spec lists its inputs"
+      (is (= #{{:name "id" :in "path" :required true :schema {:type "string"}}}
+             (params d (keyword "/raw/{id}")))))
+    (testing "a 2.0 :swagger spec is translated, so the docs UI keeps its inputs"
+      (is (= #{{:name "slug" :in "path" :required true :schema {:type "string"}}
+               {:name "q" :in "query" :schema {:type "integer" :exclusiveMinimum 0}}
+               ;; 2.0 defaults to csv, 3.x to ?ids=1&ids=2.
+               {:name "ids" :in "query" :style "form" :explode false
+                :schema {:type "array" :items {:type "integer"}}}}
+             (params d (keyword "/legacy/{slug}"))))
+      (is (= {:description "found"
+              :content {:application/json {:schema {:type "object"}}}
+              :headers {:X-Total {:schema {:type "integer"}}}}
+             (get-in d [:paths (keyword "/legacy/{slug}") :get :responses :200]))))
+    (testing "/swagger.json serves the same document, until 2.0"
+      (is (= d (doc "/swagger.json"))))
+    (testing "the docs UI reads the 3.1 document"
+      (let [config (handler {:request-method :get :uri "/api-docs/config.json"})]
+        (is (str/includes? (str (:body config)) "\"url\":\"/openapi.json\""))))))
 
 ;; ===========================================================================
 ;; BOU-356: two routes that can both match the same request

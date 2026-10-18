@@ -138,7 +138,7 @@ create entry too, and to the admin panel's `:fields`.
 `GET /api/v1/invoices/:id` answers with the line items under the same key.
 The list leaves them out unless asked: `GET /api/v1/invoices?include=invoice-line-items,payments`
 reads each named child once for the page, and an unknown name is a 400.
-The parent's schema (`Invoice`) lists them, and the swagger shows it. A
+The parent's schema (`Invoice`) lists them, and the API docs show it. A
 module generated before BOU-581 keeps its service and http files, and its
 GET stays as it was.
 

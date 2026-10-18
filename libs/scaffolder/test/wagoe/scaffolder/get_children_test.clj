@@ -142,18 +142,18 @@
           (is (= 2 (count @calls)) "one read per child entity")
           (is (every? #(= 2 (count %)) @calls) "each for both invoices")))
 
-      (testing "the response schema and the swagger say so"
+      (testing "the response schema and the API docs say so"
         (let [invoice (deref (ns-resolve (symbol (str base ".billing.schema")) 'Invoice))
               entries (into {} (map (fn [[k props s]] [k [props (m/form s)]])) (m/children invoice))]
           (is (= {:optional true} (first (entries :invoice-line-items))))
           (is (str/includes? (pr-str (second (entries :invoice-line-items))) "[:quantity")
               "a field added to the line items reaches it")
           (is (= {:optional true} (first (entries :workflow)))))
-        (let [by-id (get-in (route-data routes "/invoices/:id") [:get :swagger :responses 200 :schema :properties])
+        (let [by-id (get-in (route-data routes "/invoices/:id") [:get :openapi :responses 200 :content "application/json" :schema :properties])
               list  (route-data routes "/invoices")]
           (is (contains? by-id :invoice-line-items))
           (is (contains? by-id :workflow))
-          (is (some #(= "include" (:name %)) (get-in list [:get :swagger :parameters])))))
+          (is (some #(= "include" (:name %)) (get-in list [:get :openapi :parameters])))))
 
       (finally
         (ig/halt! system)

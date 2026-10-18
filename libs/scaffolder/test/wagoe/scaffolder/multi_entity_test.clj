@@ -921,9 +921,9 @@
           (reset! seen [])
           (is (= 200 (:status (call :get "/invoice-line-items" nil q))))
           (is (= [[:list opts]] @seen) (pr-str q)))))
-    (testing "swagger shows the two parameters"
+    (testing "the API docs show the two parameters"
       (let [routes @(ns-resolve 'bou539page.billing.shell.invoice-line-item-http 'api-routes)
-            params (get-in (into {} (routes nil)) ["/invoice-line-items" :get :swagger :parameters])]
+            params (get-in (into {} (routes nil)) ["/invoice-line-items" :get :openapi :parameters])]
         (is (= #{"limit" "offset"} (set (map :name params))))))))
 
 ;; =============================================================================
