@@ -305,8 +305,8 @@
 ;; Route Definitions
 ;; ============================================================================
 
-(def ^:private file-key-swagger
-  {:parameters [{:name "file-key" :in "path" :required true :type "string"
+(def ^:private file-key-openapi
+  {:parameters [{:name "file-key" :in "path" :required true :schema {:type "string"}
                  :description "Storage key of the file"}]})
 
 (defn storage-routes
@@ -338,19 +338,19 @@
      ;; works without a session. Without one this stays behind login (BOU-568).
        {:get (cond-> {:handler (download-file-handler storage-service signing-secret)
                       :summary "Download a file"
-                      :swagger file-key-swagger}
+                      :openapi file-key-openapi}
                signing-secret (assoc :public true))}]
 
       [(str base-path "/delete/{*file-key}")
        {:delete {:handler (delete-file-handler storage-service)
                  :summary "Delete a file"
-                 :swagger file-key-swagger}}]
+                 :openapi file-key-openapi}}]
 
       [(str base-path "/url/{*file-key}")
        {:get {:handler (get-file-url-handler storage-service)
               :summary "Get a direct or signed URL for a file"
-              :swagger {:parameters
-                        [{:name "file-key" :in "path" :required true :type "string"
+              :openapi {:parameters
+                        [{:name "file-key" :in "path" :required true :schema {:type "string"}
                           :description "Storage key of the file"}
-                         {:name "expiration" :in "query" :required false :type "integer"
+                         {:name "expiration" :in "query" :required false :schema {:type "integer"}
                           :description "Signed-URL lifetime in seconds (default 3600)"}]}}}]])))

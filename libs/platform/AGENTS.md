@@ -211,7 +211,7 @@ is added when the module's `:api` contribution is mounted.
 
 A module does not build a router — it returns a route contribution, and
 `:wagoe/http-handler` compiles every module's together. That is the only path
-that attaches the security stack, interceptors, coercion and Swagger.
+that attaches the security stack, interceptors, coercion and the OpenAPI docs.
 
 ```clojure
 (defn my-routes [service config]
@@ -222,7 +222,7 @@ that attaches the security stack, interceptors, coercion and Swagger.
    :static []})
 ```
 
-Health checks and `/swagger.json` are mounted for you.
+Health checks and the OpenAPI document (`/openapi.json`, UI at `/api-docs/`) are mounted for you.
 
 ### Adding components and middleware to an app module
 

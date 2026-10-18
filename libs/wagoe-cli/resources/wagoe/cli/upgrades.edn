@@ -40,4 +40,9 @@
  {:ticket "BOU-705"
   :since  "1.0.2"
   :note   "wagoe.search.shell.registry: defsearch, register-search! and the global registry."
-  :manual "Bind definitions with wagoe.search.core.index/defsearch and hand them to :wagoe/search, under :indexes in config or a module's :search part. A rewrite cannot tell which module owns an index."}]
+  :manual "Bind definitions with wagoe.search.core.index/defsearch and hand them to :wagoe/search, under :indexes in config or a module's :search part. A rewrite cannot tell which module owns an index."}
+
+ {:ticket "BOU-462"
+  :since  "1.0.2"
+  :note   "/swagger.json and :swagger route docs (Swagger 2.0). The API docs are OpenAPI 3.1 at /openapi.json."
+  :manual "Move :swagger to :openapi, with a parameter's :type under :schema and a response's :schema under :content \"application/json\". Point clients at /openapi.json. A rewrite cannot reach parameter vectors built at runtime."}]

@@ -249,7 +249,7 @@
    "reitit.ring.middleware" 'metosin/reitit-middleware
    "reitit.ring"            'metosin/reitit-ring
    "reitit.swagger-ui"      'metosin/reitit-swagger-ui
-   "reitit.swagger"         'metosin/reitit-swagger
+   "reitit.openapi"         'fi.metosin/reitit-openapi
    "rewrite-clj"            'rewrite-clj/rewrite-clj
    "ring.adapter.jetty"     'ring/ring-jetty-adapter
    "ring.core"              'ring/ring-core
