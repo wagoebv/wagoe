@@ -6,7 +6,8 @@
   {:kaocha.testable/meta {:unit true :search true}}
   (:require [clojure.test :refer [deftest testing is]]
             [clojure.string :as str]
-            [wagoe.search.core.highlighting :as hl]))
+            [wagoe.search.core.highlighting :as hl]
+            [wagoe.search.test.support :refer [call-with-locale]]))
 
 ;; ============================================================================
 ;; Highlighting
@@ -420,9 +421,6 @@
 
 (deftest matching-ignores-the-jvm-locale
   ;; A Turkish locale lowers "ID" to "ıd", which "id" never matched (BOU-608).
-  (let [default (java.util.Locale/getDefault)]
-    (java.util.Locale/setDefault (java.util.Locale/forLanguageTag "tr-TR"))
-    (try
-      (is (= {:match-pos 5 :matched-term "id"} (hl/find-first-match-position "Your ID card" ["id"])))
-      (is (= {"id" 1} (hl/count-matches "Your ID card" ["id"])))
-      (finally (java.util.Locale/setDefault default)))))
+  (call-with-locale "tr-TR"
+    #(do (is (= {:match-pos 5 :matched-term "id"} (hl/find-first-match-position "Your ID card" ["id"])))
+         (is (= {"id" 1} (hl/count-matches "Your ID card" ["id"]))))))

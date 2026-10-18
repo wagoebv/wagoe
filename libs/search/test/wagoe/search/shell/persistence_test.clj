@@ -11,7 +11,8 @@
    - suggest-documents (pg_trgm on PostgreSQL, LIKE without it)
    - count-documents"
   (:require [clojure.test :refer [deftest testing is use-fixtures]]
-            [wagoe.search.test.support :refer [create-search-documents-table! make-doc]]
+            [wagoe.search.test.support :refer [find-ID-under-a-turkish-locale
+                                                create-search-documents-table! make-doc]]
             [wagoe.search.ports :as ports]
             [wagoe.search.shell.persistence :as persistence]
             [wagoe.search.shell.trigram :as trigram]
@@ -19,7 +20,7 @@
             [clojure.string :as str]
             [support.test-db :as test-db]
             [next.jdbc :as jdbc])
-  (:import [java.util Locale UUID]))
+  (:import [java.util UUID]))
 
 ;; =============================================================================
 ;; Test database setup
@@ -308,16 +309,6 @@
         (is (= 1 (ports/count-results @test-store :product "a_b" {:index-id :product-search})))))))
 
 (deftest ^:integration fallback-search-under-a-turkish-locale-test
-  (testing "\"ID\" finds \"ID\" on a JVM whose locale lowers it to \"ıd\" (BOU-608)"
-    (let [id         (UUID/randomUUID)
-          like-store (assoc @test-store :trigram-state (atom :unusable))
-          default    (Locale/getDefault)]
-      (ports/upsert-document! @test-store (make-doc {:entity-id id :content-all "ID card"}))
-      (Locale/setDefault (Locale/forLanguageTag "tr-TR"))
-      (try
-        (is (= [id] (map :entity-id (ports/search-documents @test-store :product-search :product
-                                                            "ID" {:limit 5 :offset 0}))))
-        (is (= 1 (ports/count-results @test-store :product "ID" {:index-id :product-search})))
-        (is (= [id] (map :entity-id (ports/suggest-documents like-store :product-search :product
-                                                             "ID" {:limit 5}))))
-        (finally (Locale/setDefault default))))))
+  (let [[id found] (find-ID-under-a-turkish-locale
+                    @test-store (assoc @test-store :trigram-state (atom :unusable)))]
+    (is (= {:search [id] :count 1 :suggest [id]} found))))

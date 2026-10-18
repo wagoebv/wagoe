@@ -10,9 +10,10 @@
             [wagoe.platform.shell.adapters.database.factory :as db-factory]
             [wagoe.search.ports :as ports]
             [wagoe.search.shell.persistence :as persistence]
-            [wagoe.search.test.support :refer [create-search-documents-table! make-doc]])
+            [wagoe.search.test.support :refer [find-ID-under-a-turkish-locale
+                                                create-search-documents-table! make-doc]])
   (:import [java.io File]
-           [java.util Locale UUID]))
+           [java.util UUID]))
 
 (defn- with-sqlite-store
   "Call `f` with a datasource and a SearchStore on a fresh SQLite file."
@@ -48,14 +49,5 @@
 (deftest ^:integration like-fallback-under-a-turkish-locale-on-sqlite
   (with-sqlite-store
     (fn [_ store]
-      (let [id      (UUID/randomUUID)
-            default (Locale/getDefault)]
-        (ports/upsert-document! store (make-doc {:entity-id id :content-all "ID card"}))
-        (Locale/setDefault (Locale/forLanguageTag "tr-TR"))
-        (try
-          (is (= [id] (map :entity-id (ports/search-documents store :product-search :product
-                                                              "ID" {:limit 5 :offset 0}))))
-          (is (= 1 (ports/count-results store :product "ID" {:index-id :product-search})))
-          (is (= [id] (map :entity-id (ports/suggest-documents store :product-search :product
-                                                               "ID" {:limit 5}))))
-          (finally (Locale/setDefault default)))))))
+      (let [[id found] (find-ID-under-a-turkish-locale store store)]
+        (is (= {:search [id] :count 1 :suggest [id]} found))))))

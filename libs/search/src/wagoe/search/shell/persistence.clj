@@ -197,11 +197,12 @@
           rows    (or (when (and full-text? (trigram? trigram-state datasource))
                         (trigram-suggest datasource trigram-state threshold
                                          (qry/build-postgres-suggest-sql idx et query limit filters)))
-                      (jdbc/execute! datasource
-                                     (if full-text?
-                                       (qry/build-postgres-like-suggest-sql idx et (content-match adapter query) limit filters)
-                                       (qry/build-fallback-suggest-sql idx et (content-match adapter query) limit filters))
-                                     {:builder-fn rs/as-unqualified-lower-maps}))]
+                      (let [match (content-match adapter query)]
+                        (jdbc/execute! datasource
+                                       (if full-text?
+                                         (qry/build-postgres-like-suggest-sql idx et match limit filters)
+                                         (qry/build-fallback-suggest-sql idx et match limit filters))
+                                       {:builder-fn rs/as-unqualified-lower-maps})))]
       (mapv db->result rows)))
 
   (count-documents [_ index-id]

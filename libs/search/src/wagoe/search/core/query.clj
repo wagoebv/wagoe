@@ -219,9 +219,9 @@
 ;; with the JVM's locale, and a Turkish one turns "ID" into "ıd" (BOU-608).
 
 (defn- fallback-sql
-  "The LIKE fallback query: `select` columns, `match` and `filter-sql` in the
-   WHERE clause, then `tail` SQL with its `tail-params`."
-  [select index-id entity-type match [filter-sql & filter-params] tail tail-params]
+  "The LIKE fallback query: `select` columns, `match` and the filter in the
+   WHERE clause, then `tail`. The filter and tail are [sql & params]."
+  [select index-id entity-type match [filter-sql & filter-params] [tail & tail-params]]
   (let [[match-sql & match-params] (sql/format-expr match)]
     (-> [(str "SELECT " select " FROM search_documents d "
               "WHERE index_id = ? AND entity_type = ? AND " match-sql " "
@@ -232,6 +232,8 @@
         (into tail-params))))
 
 (def ^:private result-columns "entity_type, entity_id, metadata, NULL AS snippet, ")
+(def ^:private search-columns (str result-columns "1.0 AS score"))
+(def ^:private suggest-columns (str result-columns "0.5 AS score"))
 
 (defn build-fallback-search-sql
   "Build a parameterized JDBC SQL vector for LIKE-based fallback search.
@@ -248,9 +250,9 @@
    Returns:
      JDBC SQL vector [sql & params]"
   [index-id entity-type match limit offset filters]
-  (fallback-sql (str result-columns "1.0 AS score") index-id entity-type match
+  (fallback-sql search-columns index-id entity-type match
                 (build-filter-sql-fallback (or filters {}))
-                " ORDER BY updated_at DESC LIMIT ? OFFSET ?" [limit offset]))
+                [" ORDER BY updated_at DESC LIMIT ? OFFSET ?" limit offset]))
 
 (defn build-fallback-count-sql
   "Build a parameterized count SQL for fallback search.
@@ -265,13 +267,13 @@
      JDBC SQL vector [sql & params]"
   [index-id entity-type match filters]
   (fallback-sql "count(*) AS cnt" index-id entity-type match
-                (build-filter-sql-fallback (or filters {})) "" []))
+                (build-filter-sql-fallback (or filters {})) [""]))
 
 (defn- like-suggest-sql
   [build-filter-sql index-id entity-type match limit filters]
-  (fallback-sql (str result-columns "0.5 AS score") index-id entity-type match
+  (fallback-sql suggest-columns index-id entity-type match
                 (build-filter-sql (or filters {}))
-                " ORDER BY updated_at DESC LIMIT ?" [limit]))
+                [" ORDER BY updated_at DESC LIMIT ?" limit]))
 
 (defn build-fallback-suggest-sql
   "Build a LIKE-based fallback suggest query for H2/SQLite.
