@@ -106,6 +106,13 @@
             (is (some? (get-in body [m k])) (str m " " k))
             (is (= (get-in body [m k]) (get-in body [m camel])) (str m " " k))))))))
 
+(deftest ^:contract ^:security spent-backup-codes-stay-out-of-the-response
+  (let [{:keys [svc] :as f} (fixture)]
+    (update-bob! f {:mfa-backup-codes-used ["hash-of-a-spent-code"]})
+    (let [body (:body (post (user-http/login-handler svc) {:email "bob@x.org" :password password}))]
+      (is (some? (:user body)))
+      (is (not-any? #{:mfa-backup-codes-used :mfaBackupCodesUsed} (keys (:user body)))))))
+
 (deftest ^:unit a-lockout-auth-shell-reports-is-still-a-429
   ;; A lockout set by a concurrent request reaches us as :authentication-failed.
   (let [enter (:enter user-interceptors/format-session-creation-response)

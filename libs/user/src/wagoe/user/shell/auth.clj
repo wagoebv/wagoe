@@ -375,7 +375,7 @@
                     :requires-mfa? true
                     :error {:type    :mfa-required
                             :message "MFA code required"}
-                    :user (dissoc user :password-hash :mfa-secret :mfa-backup-codes)}
+                    :user (dissoc user :password-hash :mfa-secret :mfa-backup-codes :mfa-backup-codes-used)}
 
                    ;; MFA code provided but invalid
                    (and (:requires-mfa? mfa-requirement)
@@ -405,7 +405,7 @@
                                 :session-duration (:session-duration-hours session-policy)})
 
                      {:success? true
-                      :user (dissoc user :password-hash :mfa-secret :mfa-backup-codes) ; Don't return sensitive data
+                      :user (dissoc user :password-hash :mfa-secret :mfa-backup-codes :mfa-backup-codes-used) ; Don't return sensitive data
                       :session session
                       :risk-analysis login-risk
                       :mfa-verified? (or (not (:requires-mfa? mfa-requirement)) (:valid? mfa-verification))
