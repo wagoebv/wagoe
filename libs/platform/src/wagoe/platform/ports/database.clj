@@ -217,7 +217,8 @@
 
   (capabilities [this]
     "The set of `capability-keywords` this database honours. The conformance
-     suite checks each claim both ways (ADR-039).")
+     suite checks each claim both ways (ADR-039). To ask about one, call
+     `capable?`.")
 
   (column-type [this logical]
     "The DDL type for `logical`, one of `logical-column-types`, or
