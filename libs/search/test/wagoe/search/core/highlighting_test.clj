@@ -424,3 +424,11 @@
   (call-with-locale "tr-TR"
     #(do (is (= {:match-pos 5 :matched-term "id"} (hl/find-first-match-position "Your ID card" ["id"])))
          (is (= {"id" 1} (hl/count-matches "Your ID card" ["id"]))))))
+
+(deftest snippets-index-the-original-text
+  ;; "İ" lowers to two chars in most locales, which moved every later match
+  ;; past its place in the text (BOU-608).
+  (let [text (str (apply str (repeat 100 "İ")) " key")]
+    (is (= {:match-pos 101 :matched-term "key"} (hl/find-first-match-position text ["key"])))
+    (is (= "...İİİİİİİİİ key" (hl/extract-snippet text ["key"] 20)))
+    (is (= ["...İİİİİİİİİ key"] (hl/extract-multiple-snippets text ["key"] 3 20)))))

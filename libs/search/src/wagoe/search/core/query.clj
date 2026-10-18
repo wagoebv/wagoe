@@ -3,7 +3,8 @@
 
    Two query paths:
    - PostgreSQL: to_tsvector/plainto_tsquery + ts_rank + ts_headline
-   - Fallback (H2/SQLite/MySQL): LOWER/LIKE-based search
+   - Fallback (H2/SQLite/MySQL, PostgreSQL suggest without pg_trgm): the
+     database adapter's case-insensitive `like`
 
    Filter support: callers may pass a :filters map of keyword->string pairs.
    Filter values are matched against the JSON \"filters\" column using
@@ -276,7 +277,7 @@
                 [" ORDER BY updated_at DESC LIMIT ?" limit]))
 
 (defn build-fallback-suggest-sql
-  "Build a LIKE-based fallback suggest query for H2/SQLite.
+  "Build a LIKE-based fallback suggest query for H2, SQLite and MySQL.
 
    Args:
      index-id    - string

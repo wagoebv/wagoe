@@ -9,11 +9,11 @@
   (:require [clojure.string :as str]))
 
 (defn- lower
-  "`s` lowercased the same on every JVM. str/lower-case follows the default
-   locale, and a Turkish one turns \"ID\" into \"ıd\", so \"id\" never matched it
-   (BOU-608)."
+  "`s` lowercased char by char: the same on every JVM, unlike str/lower-case
+   (a Turkish locale turns \"ID\" into \"ıd\", BOU-608), and the same length, so
+   a match position indexes the original text (\"İ\" lowers to two chars)."
   ^String [^String s]
-  (.toLowerCase s java.util.Locale/ROOT))
+  (String. (char-array (map #(Character/toLowerCase (char %)) s))))
 
 ;; ============================================================================
 ;; Highlighting
