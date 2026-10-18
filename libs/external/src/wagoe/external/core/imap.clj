@@ -1,6 +1,7 @@
 (ns wagoe.external.core.imap
   "Pure functions for IMAP message parsing and filtering.
-   No I/O, no side effects.")
+   No I/O, no side effects."
+  (:require [clojure.string :as str]))
 
 ;; =============================================================================
 ;; Header Parsing
@@ -33,8 +34,7 @@
   "Lower-cased media type without parameters: \"text/plain; charset=UTF-8\" → \"text/plain\"."
   [content-type]
   (when content-type
-    (let [^String media (first (.split (str content-type) ";"))]
-      (.toLowerCase (.trim media)))))
+    (-> (str content-type) (str/split #";" 2) first str/trim str/lower-case not-empty)))
 
 (defn attachment-part?
   "True when a leaf MIME part is an attachment rather than body text: it has

@@ -47,6 +47,6 @@
   ;; The mocked tests never reached a reflective call that failed on a real
   ;; server; a hinted call cannot fail that way.
   (let [err (StringWriter.)]
-    (binding [*err* err]
+    (binding [*err* err *warn-on-reflection* true]
       (load "/wagoe/external/shell/adapters/imap"))
     (is (not (str/includes? (str err) "Reflection warning")) (str err))))

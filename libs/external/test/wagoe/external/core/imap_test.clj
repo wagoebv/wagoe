@@ -114,6 +114,10 @@
     (is (true? (imap/attachment-part? {:content-type "text/calendar; method=REQUEST"})))
     (is (true? (imap/attachment-part? {:content-type "application/pdf; name=a.pdf"})))))
 
+(deftest ^:unit base-content-type-test
+  (is (= "text/plain" (imap/base-content-type " Text/Plain ; charset=UTF-8")))
+  (is (nil? (imap/base-content-type ";"))))
+
 (deftest ^:unit build-attachment-test
   (is (= {:filename "a.pdf" :content-type "application/pdf" :size 3}
          (dissoc (imap/build-attachment {:content-type "application/pdf; name=a.pdf" :filename "a.pdf"}

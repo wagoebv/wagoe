@@ -82,8 +82,8 @@
     [part]))
 
 (defn- decoded-filename [^Part part]
-  (when-let [raw (.getFileName part)]
-    (try (MimeUtility/decodeText raw) (catch Exception _ raw))))
+  (when-let [raw (not-empty (.getFileName part))]
+    (not-empty (try (MimeUtility/decodeText raw) (catch Exception _ raw)))))
 
 (defn- read-bytes [^Part part]
   (with-open [^InputStream in (.getInputStream part)]
@@ -93,12 +93,17 @@
   "Body parts and attachments of msg. A text/plain attachment stays an attachment."
   [^Message msg]
   (reduce (fn [acc ^Part part]
-            (let [info {:content-type (.getContentType part)
-                        :disposition  (.getDisposition part)
-                        :filename     (decoded-filename part)}]
-              (if (imap-core/attachment-part? info)
-                (update acc :attachments conj (imap-core/build-attachment info (read-bytes part)))
-                (update acc :body-parts conj (assoc info :content (str (.getContent part)))))))
+            ;; One unreadable part must not cost the body and the other attachments.
+            (try
+              (let [info {:content-type (.getContentType part)
+                          :disposition  (.getDisposition part)
+                          :filename     (decoded-filename part)}]
+                (if (imap-core/attachment-part? info)
+                  (update acc :attachments conj (imap-core/build-attachment info (read-bytes part)))
+                  (update acc :body-parts conj (assoc info :content (str (.getContent part))))))
+              (catch Exception e
+                (log/warn e "Skipping unreadable IMAP message part")
+                acc)))
           {:body-parts [] :attachments []}
           (leaf-parts msg)))
 
@@ -150,9 +155,7 @@
                 unread-only? (conj (FlagTerm. (Flags. Flags$Flag/SEEN) false))
                 since        (conj (ReceivedDateTerm. ComparisonTerm/GE since)))]
     (when (seq terms)
-      (if (next terms)
-        (AndTerm. ^"[Ljavax.mail.search.SearchTerm;" (into-array SearchTerm terms))
-        (first terms)))))
+      (reduce (fn [^SearchTerm a ^SearchTerm b] (AndTerm. a b)) terms))))
 
 (defn- fetch! [^IMAPFolder fld msgs & items]
   (let [profile (FetchProfile.)]
@@ -165,13 +168,16 @@
    and UID are fetched in one batch, then headers and structure for the selected
    ones only."
   [^IMAPFolder fld {:keys [limit since unread-only? include-raw?]}]
-  (let [since    (when since (Date. (long (inst-ms since))))
-        term     (search-term unread-only? since)
+  (let [since-ms (when since (inst-ms since))
+        since    (when since-ms (Date. (long since-ms)))
+        ;; SEARCH SINCE takes a date in the JVM's timezone and the server compares
+        ;; it in its own, so widen by two days; the exact check follows below.
+        term     (search-term unread-only? (when since-ms (Date. (long (- since-ms (* 2 24 60 60 1000))))))
         found    (if term (.search fld term) (.getMessages fld))
         ;; Without since no date check follows, so limit can cut before the fetch.
         msgs     (cond->> found (and limit (not since)) (take limit))
         _        (fetch! fld msgs FetchProfile$Item/ENVELOPE FetchProfile$Item/FLAGS UIDFolder$FetchProfileItem/UID)
-        ;; SINCE matches by date only, so the exact instant is checked here.
+        ;; The exact instant is checked here.
         selected (vec (cond->> msgs
                         since (remove #(.before (received-at %) since))
                         limit (take limit)))]
