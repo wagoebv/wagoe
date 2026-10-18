@@ -12,10 +12,15 @@
 # The images match the `services:` containers in .github/workflows/ci.yml, so a
 # sweep that passes locally is comparing the same backends CI compares. A test
 # pins them together.
+#
+# The ports are fixed, so there is only ever one set of these per machine. A
+# fixed project name makes every checkout and worktree manage that one set,
+# instead of each directory starting its own and colliding with the first.
+name: wagoe-test
+
 services:
   redis:
     image: redis:7-alpine
-    container_name: wagoe-test-redis
     ports:
       - "6379:6379"
     healthcheck:
@@ -26,7 +31,6 @@ services:
 
   mysql:
     image: mysql:8
-    container_name: wagoe-test-mysql
     environment:
       MYSQL_ROOT_PASSWORD: probe
       MYSQL_DATABASE: audience

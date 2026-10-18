@@ -68,6 +68,16 @@
                  " registry probes " port-env " — publish on \"${" port-env
                  ":-<default>}:<container port>\""))))))
 
+(deftest ^:unit every-checkout-shares-one-compose-project
+  (testing "a fixed project name, and no container_name to collide on"
+    ;; Compose names the project after the directory, so a worktree started a
+    ;; second set of containers and failed on the fixed names and ports.
+    (let [text (compose-text)]
+      (is (some? (re-find #"(?m)^name:\s*\S+" text))
+          (str ts/compose-file " needs a top-level `name:`"))
+      (is (not (str/includes? text "container_name:"))
+          (str ts/compose-file " pins a container_name")))))
+
 (deftest ^:unit local-images-match-the-ones-ci-runs
   (testing "every image in the compose file is a service image in ci.yml"
     ;; A sweep is only worth running locally if it compares what CI compares.

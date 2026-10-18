@@ -124,7 +124,12 @@
   (case (first args)
     nil     (System/exit (status))
     "status" (System/exit (status))
-    "up"    (let [{:keys [exit]} (compose "up" "-d" "--wait")]
+    ;; Only what is not reachable: a service already up, whether another
+    ;; checkout started it or something other than compose did, holds the port.
+    "up"    (let [absent (missing)
+                  exit   (if (seq absent)
+                           (:exit (apply compose "up" "-d" "--wait" (map (comp name :id) absent)))
+                           0)]
               (when (zero? exit) (status))
               (System/exit exit))
     "down"  (System/exit (:exit (compose "down")))
