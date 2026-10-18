@@ -3,14 +3,16 @@
   (:require [clojure.tools.logging :as log]))
 
 (defn enforce-rate-limit!
-  "Block until `min-interval-ms` have passed since the previous request.
-   Locks so concurrent callers are spaced too, not just sequential ones."
+  "Block until `min-interval-ms` have passed since the previous request, and
+   return the slot this caller got. Each caller reserves its slot atomically, so
+   concurrent callers are spaced too, and none sleeps holding a monitor, which
+   would pin a virtual thread's carrier on JDK 21."
   [last-request-ms min-interval-ms]
-  (locking last-request-ms
-    (let [wait (- (+ @last-request-ms min-interval-ms) (System/currentTimeMillis))]
-      (when (pos? wait)
-        (Thread/sleep wait))
-      (reset! last-request-ms (System/currentTimeMillis)))))
+  (let [now  (System/currentTimeMillis)
+        slot (swap! last-request-ms #(max now (+ % min-interval-ms)))]
+    (when (> slot now)
+      (Thread/sleep (- slot now)))
+    slot))
 
 (defn parse-response
   "Apply `parse-fn` to a provider's result item. nil item means no match.

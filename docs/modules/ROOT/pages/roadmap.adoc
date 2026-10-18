@@ -176,7 +176,7 @@ promise; `2.0` is where the things that cannot are collected.
 * Removing the deprecated provider aliases and the duplicate choices that 1.x
   deprecates — one HTTP client, one config layer, one CSS system, one mail
   library
-* Virtual threads for request handling and the jobs worker pool
+* Virtual threads on by default for request handling and the jobs worker pool
 * A decision on the front-end stack
 
 == How this page is maintained
