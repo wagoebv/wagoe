@@ -110,8 +110,18 @@
    init: a service launch drops the modules it does not run, and their
    policies with them."
   [ig-config privacy-settings contributed]
-  (let [configured (:retention privacy-settings)]
+  (let [configured (:retention privacy-settings)
+        ;; A misspelled :retention would otherwise switch retention off, silently.
+        unknown    (seq (remove #{:retention :retention-schedule} (keys privacy-settings)))]
     (cond
+      unknown
+      (throw (ex-info (str ":wagoe/privacy does not know " (vec unknown) "; it takes :retention and :retention-schedule.")
+                      {:type :configuration-error :keys (vec unknown)}))
+
+      (and (some? configured) (not (map? configured)))
+      (throw (ex-info ":wagoe/privacy :retention takes {policy-id {:retain \"P2Y\"}}."
+                      {:type :configuration-error :retention configured}))
+
       (empty? configured)
       ig-config
 
@@ -125,8 +135,9 @@
         (-> ig-config
             (assoc :wagoe/retention {:policies configured :contributed contributed})
             (update-in [:wagoe/job-registry :handler-maps] (fnil conj []) (ig/ref :wagoe/retention))
-            (assoc-in [:wagoe/job-scheduler :recurring privacy/retention-job-type]
-                      (merge privacy/default-retention-schedule (:retention-schedule privacy-settings))))))))
+            ;; A schedule set under :wagoe/jobs :recurring wins.
+            (update-in [:wagoe/job-scheduler :recurring privacy/retention-job-type]
+                       #(or % (merge privacy/default-retention-schedule (:retention-schedule privacy-settings)))))))))
 
 (defn system-config
   "The Integrant configuration for `config`.

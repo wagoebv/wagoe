@@ -239,7 +239,7 @@ its `ig-config`; no module reads another's tables.
 `:wagoe/data-export` (`IDataExport`) collects every exporter's data about a subject,
 `{:type :user :id …}` or `{:type :tenant :id …}`; an exporter returns nil for a
 subject it holds nothing about. The user module serves it to a signed-in user at
-`GET /api/v1/me/export` and `/web/profile/export`, and to admins at
+`GET /api/v1/me/export` and `/web/profile/export`, and to platform admins at
 `GET /api/v1/users/:id/export`.
 
 Retention is off until you name a policy. It then runs as the recurring job

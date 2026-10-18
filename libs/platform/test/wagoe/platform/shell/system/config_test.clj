@@ -192,11 +192,20 @@
               :contributed {:archive/old (ig/ref :wagoe/archive-retention)}}
              (:wagoe/retention c)))
       (is (some #{(ig/ref :wagoe/retention)} (get-in c [:wagoe/job-registry :handler-maps])))
+      (is (= {:cron "0 1 * * *"}
+             (get-in (sut/system-config (config :wagoe/jobs {:recurring {:wagoe/retention {:cron "0 1 * * *"}}}
+                                                :wagoe/archive {:enabled? true}
+                                                :wagoe/privacy {:retention {:archive/old {:retain "P2Y"}}})
+                                        {:base-ns "acme"})
+                     [:wagoe/job-scheduler :recurring :wagoe/retention]))
+          "a schedule under :wagoe/jobs wins")
       (is (= {:cron "0 3 * * *" :zone "Europe/Amsterdam"}
              (get-in c [:wagoe/job-scheduler :recurring :wagoe/retention])))))
 
   (doseq [[why settings] {"a policy no module provides" {:retention {:archive/olf {:retain "P2Y"}}}
-                          "a period that is not one"    {:retention {:archive/old {:retain "2 years"}}}}]
+                          "a period that is not one"    {:retention {:archive/old {:retain "2 years"}}}
+                          "a misspelled key"            {:retension {:archive/old {:retain "P2Y"}}}
+                          "a retention that is no map"  {:retention "P2Y"}}]
     (testing (str why " fails the boot")
       (is (= :configuration-error
              (:type (ex-data (is (thrown? clojure.lang.ExceptionInfo

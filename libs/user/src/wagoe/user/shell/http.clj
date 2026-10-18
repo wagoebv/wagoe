@@ -36,6 +36,7 @@
    All observability is handled automatically by interceptors."
   (:require [wagoe.core.interceptor :as interceptor]
             [wagoe.core.interceptor-context :as interceptor-context]
+            [wagoe.platform.core.http.access :as access]
             [wagoe.platform.core.http.errors :as errors]
             [wagoe.user.shell.http-interceptors]
             [wagoe.user.shell.landing :as landing]
@@ -758,16 +759,15 @@
                            {:post {:handler (group-handlers/remove-grant group-service)}})]])}))
 
 (defn- export-response
-  "User `user-id`'s data export as a JSON download, logged with who asked."
-  [data-export user-id request]
-  (log/info "Data export" {:subject-user-id user-id :actor-id (get-in request [:user :id])})
+  "`doc`, a user's data export, as a JSON download, logged with who asked."
+  [doc request]
+  (log/info "Data export" {:subject-user-id (get-in doc [:subject :id]) :actor-id (get-in request [:user :id])})
   {:status  200
    :headers {"Content-Type"        "application/json; charset=utf-8"
              "Content-Disposition" "attachment; filename=\"data-export.json\""
              "Cache-Control"       "no-store"}
    :body    (json/generate-string
-             (case-conversion/deep-transform-keys case-conversion/kebab-case->camel-case-string
-                                                  (privacy/export-subject data-export {:type :user :id user-id})))})
+             (case-conversion/deep-transform-keys case-conversion/kebab-case->camel-case-string doc))})
 
 (defn export-own-data-handler
   "The signed-in user's own data export (GDPR Art. 20)."
@@ -776,7 +776,7 @@
     (let [user-id (get-in request [:user :id])]
       (when-not user-id
         (throw (ex-info "User not authenticated" {:type :unauthorized})))
-      (export-response data-export user-id request))))
+      (export-response (privacy/export-subject data-export {:type :user :id user-id}) request))))
 
 (defn export-user-data-handler
   "An admin's export of any user's data, for a request made another way."
@@ -785,7 +785,20 @@
     (let [user-id (parse-uuid (str (get-in request [:path-params :id])))]
       (when-not user-id
         (throw (ex-info "User id must be a UUID" {:type :validation-error})))
-      (export-response data-export user-id request))))
+      (let [doc (privacy/export-subject data-export {:type :user :id user-id})]
+        ;; Other modules' exporters may answer for any id; ours names the account.
+        (when-not (get-in doc [:sections :user])
+          (throw (ex-info "User not found" {:type :not-found :user-id user-id})))
+        (export-response doc request)))))
+
+(defn- require-platform-admin-middleware
+  "An admin outside any tenant only: the export carries the user's audit trail,
+   which only a platform admin reads (/web/audit)."
+  [handler]
+  (fn [request]
+    (if (access/platform-admin? (:user request))
+      (handler request)
+      (user-middleware/create-forbidden-response "Platform admin required" :insufficient-role request))))
 
 (defn export-routes
   "Data export: a user's own at GET /api/v1/me/export and /web/profile/export,
@@ -797,7 +810,7 @@
                            :summary "Download your data"}}]
     {:api    [["/me/export" (assoc-in own [:get :tags] ["users"])]
               ["/users/:id/export"
-               {:middleware [auth user-middleware/require-admin-middleware]
+               {:middleware [auth require-platform-admin-middleware]
                 :get        {:handler    (export-user-data-handler data-export)
                              :summary    "Download a user's data (admin)"
                              :tags       ["users"]

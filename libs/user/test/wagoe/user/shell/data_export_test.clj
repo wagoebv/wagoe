@@ -55,6 +55,7 @@
             _   (ports/insert-member groups (:id g) (:id ada))
             a1  (audit! audit ada ada)
             a2  (audit! audit ada bob)
+            a3  (audit! audit bob ada)
             _   (audit! audit bob bob)
             {:keys [profile sessions identities groups audit-log]} (privacy/export-data exporter {:type :user :id (:id ada)})]
         (is (= "ada@example.com" (:email profile)))
@@ -63,8 +64,10 @@
         (is (not-any? :session-token sessions))
         (is (= ["s-1"] (map :subject identities)))
         (is (= ["Finance"] (map :name groups)))
-        (is (= #{(:id a1) (:id a2)} (set (map :id audit-log)))
+        (is (= #{(:id a1) (:id a2) (:id a3)} (set (map :id audit-log)))
             "as target or actor, each once, and not bob's own")
+        (is (not (re-find #"bob@" (pr-str audit-log))) "nothing that identifies bob")
+        (is (= "ada@example.com" (:actor-email (first (filter #(= (:id a1) (:id %)) audit-log)))))
 
         (testing "a string id works, and an unknown or other-type subject has nothing"
           (is (= (:id ada) (get-in (privacy/export-data exporter {:type :user :id (str (:id ada))}) [:profile :id])))
@@ -74,7 +77,7 @@
 
         (testing "the audit trail is read past one page"
           (with-redefs-fn {#'sut/page-size 1}
-            #(is (= 2 (count (:audit-log (privacy/export-data exporter {:type :user :id (:id ada)})))))))))))
+            #(is (= 3 (count (:audit-log (privacy/export-data exporter {:type :user :id (:id ada)})))))))))))
 
 (defn- app [users audit exporter]
   (let [routes (http/export-routes (user-service/->UserService users nil audit {} nil)
@@ -105,9 +108,16 @@
 
         (testing "another user's data is an admin's to export"
           (is (= 403 (:status (fetch ada (str "/api/v1/users/" (:id bob) "/export")))))
+          (is (= 403 (:status (fetch (assoc admin :tenant-id "acme") (str "/api/v1/users/" (:id bob) "/export"))))
+              "a tenant's admin is not a platform admin")
           (let [r (fetch admin (str "/api/v1/users/" (:id bob) "/export"))]
             (is (= 200 (:status r)))
-            (is (= "bob@example.com" (get-in (json/parse-string (:body r)) ["sections" "user" "profile" "email"])))))))))
+            (is (= "bob@example.com" (get-in (json/parse-string (:body r)) ["sections" "user" "profile" "email"])))))
+
+        (testing "an unknown user is not found, not an empty export"
+          (is (= :not-found
+                 (:type (ex-data (try (fetch admin (str "/api/v1/users/" (random-uuid) "/export"))
+                                      (catch clojure.lang.ExceptionInfo e e)))))))))))
 
 (deftest ^:integration audit-log-retention-deletes-only-older-entries
   (with-repos
