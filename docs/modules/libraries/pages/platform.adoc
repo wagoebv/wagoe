@@ -240,7 +240,10 @@ its `ig-config`; no module reads another's tables.
 `{:type :user :id …}` or `{:type :tenant :id …}`; an exporter returns nil for a
 subject it holds nothing about. The user module serves it to a signed-in user at
 `GET /api/v1/me/export` and `/web/profile/export`, and to platform admins at
-`GET /api/v1/users/:id/export`.
+`GET /api/v1/users/:id/export`, which is recorded in the user's audit log. The
+tenant module serves a tenant's export to platform admins at
+`GET /api/v1/tenants/:id/export`. Sections are keyed by exporter id with its
+namespace, so `:orders` and `:billing/orders` do not collide.
 
 Retention is off until you name a policy. It then runs as the recurring job
 `:wagoe/retention`, so `:wagoe/jobs` must be on:
@@ -252,6 +255,17 @@ Retention is off until you name a policy. It then runs as the recurring job
 ----
 
 A policy no enabled module provides, or a period that is not positive, fails the boot.
+
+[cols="1,3"]
+|===
+| Policy | Deletes
+
+| `:user/audit-log` | audit entries older than the period
+| `:jobs/dead-letter` | dead-lettered jobs that finally failed before the period
+|===
+
+`wagoe.platform.database/delete-in-batches!` deletes in batches of 1000, so a
+first purge of years of rows does not hold one long lock.
 
 == Testing
 

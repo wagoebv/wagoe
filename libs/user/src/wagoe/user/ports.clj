@@ -109,8 +109,10 @@
   (find-audit-logs [this options])
   ;; options: {:limit :offset :sort-by :sort-direction :filter-target-user-id
   ;;           :filter-actor-id :filter-action :filter-result
-  ;;           :filter-created-after :filter-created-before}
-  ;; Returns {:audit-logs [...] :total-count n}.
+  ;;           :filter-created-after :filter-created-before
+  ;;           :after-id :count?}
+  ;; Returns {:audit-logs [...] :total-count n}. :after-id with :sort-by :id
+  ;; pages by key instead of offset; :count? false skips the total.
 
   (find-audit-logs-by-user [this user-id options])
   ;; Entries where the user is the target. options: {:limit :offset :sort-by

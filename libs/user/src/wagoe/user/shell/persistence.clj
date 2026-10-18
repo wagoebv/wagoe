@@ -134,7 +134,7 @@
 (defn- widen-audit-action-check!
   "Let user_audit_log's action CHECK take every `audit-actions` value on a
    database created before one was added: `:permanent-delete` (BOU-682),
-   `:session-revoked` (BOU-698).
+   `:session-revoked` (BOU-698), `:data-export` (BOU-735).
    Without it that audit entry is refused, and the refusal only warns. H2
    re-applies its checks at every boot already."
   [ctx]
@@ -1135,7 +1135,8 @@
        (let [{:keys [limit offset sort-by sort-direction
                      filter-target-user-id filter-actor-id filter-action
                      filter-result filter-created-after filter-created-before
-                     filter-target-email filter-actor-email]} (:options params)
+                     filter-target-email filter-actor-email after-id]
+              count? :count? :or {count? true}} (:options params)
              default-limit (get pagination-config :default-limit 20)
              limit (or limit default-limit)
              offset (or offset 0)
@@ -1166,7 +1167,10 @@
                              (conj [:>= :created_at (type-conversion/instant->string filter-created-after)])
 
                              filter-created-before
-                             (conj [:<= :created_at (type-conversion/instant->string filter-created-before)]))
+                             (conj [:<= :created_at (type-conversion/instant->string filter-created-before)])
+
+                             after-id
+                             (conj [:> :id (type-conversion/uuid->string after-id)]))
              where-clause (when (seq where-clauses)
                             (if (= 1 (count where-clauses))
                               (first where-clauses)
@@ -1180,10 +1184,9 @@
              count-query (cond-> {:select [[:%count.* :count]]
                                   :from [:user_audit_log]}
                            where-clause (assoc :where where-clause))
-             results (db/execute-query! ctx query)
-             total-count (:count (db/execute-one! ctx count-query))]
-         {:audit-logs (map db->audit-log-entity results)
-          :total-count total-count}))
+             results (db/execute-query! ctx query)]
+         (cond-> {:audit-logs (map db->audit-log-entity results)}
+           count? (assoc :total-count (:count (db/execute-one! ctx count-query))))))
      {:db-ctx ctx}))
 
   (find-audit-logs-by-user [_ user-id options]
@@ -1215,9 +1218,8 @@
      :delete-audit-logs-before
      {:cutoff cutoff}
      (fn [{:keys [params]}]
-       (db/execute-update! ctx {:delete-from :user_audit_log
-                                :where [:< :created_at
-                                        (type-conversion/instant->string (:cutoff params))]}))
+       (db/delete-in-batches! ctx :user_audit_log
+                              [:< :created_at (type-conversion/instant->string (:cutoff params))]))
      {:db-ctx ctx})))
 
 ;; =============================================================================

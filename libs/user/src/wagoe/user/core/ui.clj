@@ -1178,6 +1178,7 @@
                   :login :info
                   :logout :neutral
                   :session-revoked :warning
+                  :data-export :warning
                   :role-change :warning
                   :bulk-action :info
                   (:group-join :grant-add) :info
@@ -1424,7 +1425,8 @@
       [:option {:value "role-change" :selected (= "role-change" (:action filters))} [:t :common/audit-role-change]]
       [:option {:value "bulk-action" :selected (= "bulk-action" (:action filters))} [:t :common/audit-bulk-action]]
       (for [[action k] [["group-join" :common/audit-group-join] ["group-leave" :common/audit-group-leave]
-                        ["grant-add" :common/audit-grant-add] ["grant-remove" :common/audit-grant-remove]]]
+                        ["grant-add" :common/audit-grant-add] ["grant-remove" :common/audit-grant-remove]
+                        ["data-export" :common/audit-data-export]]]
         [:option {:value action :selected (= action (:action filters))} [:t k]])]]
 
     [:div.filter-group

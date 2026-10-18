@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **Tenant export and dead-letter retention** (BOU-735): platform admins download `GET /api/v1/tenants/:id/export`.
+  Add `:jobs/dead-letter {:retain "P90D"}` to `:wagoe/privacy :retention`; admin user exports now audit as `:data-export`.
 - **Data export and retention** (BOU-473): users download their data from `/web/profile/export` or `GET /api/v1/me/export`.
   `:wagoe/privacy {:retention {:user/audit-log {:retain "P2Y"}}}`, with `:wagoe/jobs` on, purges old audit entries nightly.
 - **IMAP attachments carry `:disposition`, `:content-id` and `:embedded?`** (BOU-733): inline parts are still returned.

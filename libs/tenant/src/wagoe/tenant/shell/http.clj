@@ -9,6 +9,8 @@
    All routes require the global admin role (BOU-568)."
   (:require [wagoe.platform.core.http.access :as access]
             [wagoe.platform.core.http.errors :as errors]
+            [wagoe.platform.ports.privacy :as privacy]
+            [wagoe.platform.core.privacy :as platform-privacy]
             [wagoe.tenant.ports :as tenant-ports]
             [wagoe.tenant.schema :as tenant-schema]
             [wagoe.tenant.shell.provisioning :as provisioning]
@@ -289,3 +291,41 @@
               :responses {200 {:description "Tenant provisioned successfully"}
                           404 {:description "Tenant not found"}
                           501 {:description "Not supported (requires PostgreSQL)"}}}}]])})
+
+;; =============================================================================
+;; Data export
+;; =============================================================================
+
+(defn export-tenant-handler
+  "A tenant's data export: what every module holds about it."
+  [data-export]
+  (fn [request]
+    (with-tenant-id request
+      (fn [tenant-id]
+        (let [doc (privacy/export-subject data-export {:type :tenant :id tenant-id})]
+          (if (get-in doc [:sections :tenant])
+            (do (log/info "Tenant data export" {:tenant-id tenant-id :actor-id (get-in request [:user :id])})
+                (platform-privacy/export-response doc))
+            (error-response 404 :not-found "Tenant not found")))))))
+
+(defn- require-platform-admin
+  "A tenant's export holds every member's data; a tenant's own admin does not
+   get it."
+  [handler]
+  (fn [request]
+    (if (access/platform-admin? (:user request))
+      (handler request)
+      (access/forbidden-response "Platform admin required" request
+                                 (access/correlation-id request (str (random-uuid)))))))
+
+(defn export-routes
+  "GET /api/v1/tenants/:id/export, for a platform admin."
+  [data-export]
+  {:api [["/tenants/:id/export"
+          {:middleware [require-platform-admin]
+           :get        {:handler   (export-tenant-handler data-export)
+                        :summary   "Download a tenant's data (platform admin)"
+                        :tags      ["tenants"]
+                        :swagger   {:parameters [{:name "id" :in "path" :required true :type "string"}]}
+                        :responses {200 {:description "The export, as a JSON download"}
+                                    404 {:description "Tenant not found"}}}}]]})

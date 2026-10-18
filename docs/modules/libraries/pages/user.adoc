@@ -84,7 +84,8 @@ password hash or MFA secret is included.
 curl http://localhost:3000/api/v1/me/export -H "Authorization: Bearer <token>"
 ----
 
-Platform admins (outside any tenant) export any user at `GET /api/v1/users/:id/export`. The audit log can expire
+Platform admins (outside any tenant) export any user at `GET /api/v1/users/:id/export`; each such export is
+recorded in the user's audit log as `:data-export`. The audit log can expire
 through the `:user/audit-log` retention policy; see
 xref:libraries:platform.adoc#_data_export_and_retention[data export and retention].
 

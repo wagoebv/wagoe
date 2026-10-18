@@ -299,9 +299,9 @@
   (data-export/->AuditLogRetention audit-repository))
 
 (defmethod ig/init-key :wagoe/user-export-routes
-  [_ {:keys [user-service data-export config]}]
+  [_ {:keys [user-service data-export audit-repository config]}]
   (require 'wagoe.user.shell.http)
-  ((ns-resolve 'wagoe.user.shell.http 'export-routes) user-service data-export config))
+  ((ns-resolve 'wagoe.user.shell.http 'export-routes) user-service data-export audit-repository config))
 
 ;; =============================================================================
 ;; Module graph
@@ -364,6 +364,7 @@
     ;; :wagoe/data-export is platform's, over every module's :data-export.
     :wagoe/user-export-routes {:user-service (ig/ref :wagoe/user-service)
                                :data-export  (ig/ref :wagoe/data-export)
+                               :audit-repository (ig/ref :wagoe/audit-repository)
                                :config       config}
 
     :wagoe/user-http-middleware {:user-service (ig/ref :wagoe/user-service)}

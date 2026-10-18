@@ -219,6 +219,23 @@
         (ports/enqueue-job! q :default (assoc (mk-job) :args args))
         (is (= args (:args (ports/dequeue-job! q :default "w"))))))))
 
+(deftest ^:integration dead-letter-retention-runs-on-each-engine
+  (test-db/with-db "jobs_dlq_retention"
+    (fn [{:keys [datasource]}]
+      (db/create-jobs-table! datasource)
+      (let [store (db/create-db-job-store datasource)
+            dead  (fn [] (let [j (assoc (mk-job) :max-retries 1 :retry-count 5)]
+                           (ports/save-job! store j)
+                           (ports/update-job-status! store (:id j) :failed {:error "boom"})
+                           j))
+            jobs  (vec (repeatedly 3 dead))
+            kept  (mk-job)]
+        (ports/save-job! store kept)
+        (is (zero? (ports/purge-dead-letters-before! store (.minusSeconds (Instant/now) 3600))))
+        (is (= 3 (ports/purge-dead-letters-before! store (.plusSeconds (Instant/now) 3600))))
+        (is (every? nil? (map #(ports/find-job store (:id %)) jobs)))
+        (is (some? (ports/find-job store (:id kept))))))))
+
 (deftest ^:integration a-job-queued-as-json-before-the-upgrade-still-runs
   (test-db/with-db "jobs_legacy"
     (fn [{:keys [datasource]}]

@@ -4,23 +4,25 @@
    retention policy."
   (:require [wagoe.core.utils.type-conversion :as type-conversion]
             [wagoe.platform.ports.privacy :as privacy]
+            [wagoe.user.core.audit :as audit]
             [wagoe.user.core.data-export :as core]
             [wagoe.user.ports :as ports]))
 
 (def ^:private page-size 500)
 
 (defn- audit-entries
-  "Every audit entry matching `filters`, read a page at a time. Ordered by id,
-   which is unique, so no entry falls between two pages."
+  "Every audit entry matching `filters`, a page at a time, each page starting
+   after the last id of the one before."
   [audit-repository filters]
-  (loop [offset 0 acc []]
-    (let [page (:audit-logs (ports/find-audit-logs audit-repository
-                                                   (assoc filters :limit page-size :offset offset
-                                                          :sort-by :id :sort-direction :asc)))
+  (loop [after-id nil acc []]
+    (let [page (vec (:audit-logs (ports/find-audit-logs audit-repository
+                                                        (assoc filters :limit page-size :after-id after-id
+                                                               :sort-by :id :sort-direction :asc
+                                                               :count? false))))
           acc  (into acc page)]
       (if (< (count page) page-size)
         acc
-        (recur (+ offset page-size) acc)))))
+        (recur (:id (peek page)) acc)))))
 
 (defrecord UserDataExporter [user-repository session-repository audit-repository
                              identity-repository group-repository]
@@ -42,3 +44,9 @@
   privacy/IRetentionPolicy
   (purge-before! [_ cutoff]
     (ports/delete-audit-logs-before audit-repository cutoff)))
+
+(defn record-admin-export!
+  "Audit an admin's download of `target`'s data. Before the response, and not
+   caught: an export nobody can trace afterwards is not served."
+  [audit-repository audit-context target]
+  (ports/create-audit-log audit-repository (audit/data-export-audit-entry audit-context target)))

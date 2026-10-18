@@ -113,7 +113,8 @@
              query (cond-> {:select [:*]
                             :from [:public.tenant_member_invites]
                             :where [:= :tenant_id (type-conversion/uuid->string tenant-id)]
-                            :order-by [[:created_at :desc]]
+                            ;; id breaks ties, so no row falls between two pages
+                            :order-by [[:created_at :desc] [:id :asc]]
                             :limit limit
                             :offset offset}
                      status (update :where (fn [w]

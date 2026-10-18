@@ -491,6 +491,24 @@
 
               retry-job)))))))
 
+(extend-type RedisJobStore
+  ports/IDeadLetterRetention
+  (purge-dead-letters-before! [{:keys [pool]} cutoff]
+    (with-redis pool
+      (fn [^Jedis redis]
+        (reduce (fn [n id]
+                  (let [k   (job-key (java.util.UUID/fromString id))
+                        job (some-> (.get redis k) codec/decode-job)
+                        at  (:completed-at job)]
+                    ;; A job whose key expired leaves its id behind; it goes too.
+                    (if (or (nil? job) (and at (.isBefore ^Instant at cutoff)))
+                      (do (.del redis ^String k)
+                          (.lrem redis (dead-letter-key) 0 id)
+                          (inc n))
+                      n)))
+                0
+                (.lrange redis (dead-letter-key) 0 -1))))))
+
 ;; =============================================================================
 ;; Job Statistics Implementation
 ;; =============================================================================

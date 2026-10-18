@@ -63,6 +63,7 @@
  :common/audit-group-leave "Left group"
  :common/audit-grant-add "Grant added"
  :common/audit-grant-remove "Grant removed"
+ :common/audit-data-export "Data exported"
  :common/audit-all-results  "All Results"
 
  ;; Form field messages (wagoe.shared.ui.core.form)

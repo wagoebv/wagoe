@@ -479,6 +479,23 @@
        (is (nil? (ports/retry-job! s (random-uuid)))
            (str label ": retry-job! on an unknown id did not answer nil"))))))
 
+(deftest ^:integration dead-letter-retention-deletes-only-older-dead-letters
+  (each-store
+   (fn [s label]
+     (let [dead  (stored :max-retries 1 :retry-count 5)
+           alive (stored)]
+       (ports/save-job! s dead)
+       (ports/save-job! s alive)
+       (ports/update-job-status! s (:id dead) :failed {:error "boom"})
+       (is (zero? (ports/purge-dead-letters-before! s (.minusSeconds (Instant/now) 3600)))
+           (str label ": a dead letter newer than the cutoff was purged"))
+       (is (= 1 (count (ports/failed-jobs s 10))) (str label ": setup"))
+       (is (= 1 (ports/purge-dead-letters-before! s (.plusSeconds (Instant/now) 3600)))
+           (str label ": the older dead letter was not purged"))
+       (is (empty? (ports/failed-jobs s 10)) (str label ": the dead-letter list"))
+       (is (nil? (ports/find-job s (:id dead))) (str label ": the purged job is gone"))
+       (is (some? (ports/find-job s (:id alive))) (str label ": a job not dead-lettered is kept"))))))
+
 (deftest ^:integration find-jobs-filters-on-what-it-documents
   (each-store
    (fn [s label]

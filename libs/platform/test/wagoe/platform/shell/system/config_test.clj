@@ -189,7 +189,8 @@
                                                        :retention-schedule {:zone "Europe/Amsterdam"}})
                                {:base-ns "acme"})]
       (is (= {:policies    {:archive/old {:retain "P2Y"}}
-              :contributed {:archive/old (ig/ref :wagoe/archive-retention)}}
+              :contributed {:archive/old      (ig/ref :wagoe/archive-retention)
+                            :jobs/dead-letter (ig/ref :wagoe/job-dead-letter-retention)}}
              (:wagoe/retention c)))
       (is (some #{(ig/ref :wagoe/retention)} (get-in c [:wagoe/job-registry :handler-maps])))
       (is (= {:cron "0 1 * * *"}

@@ -1,7 +1,9 @@
 (ns wagoe.platform.core.privacy
   "Pure halves of data export and retention: the export document, and which
   retention policies run with which cutoff."
-  (:require [clojure.string :as str])
+  (:require [cheshire.core :as json]
+            [clojure.string :as str]
+            [wagoe.core.utils.case-conversion :as case-conversion])
   (:import [java.time Duration Instant Period ZoneOffset]
            [java.time.format DateTimeParseException]))
 
@@ -30,6 +32,25 @@
    :subject     (select-keys subject [:type :id])
    :exported-at now
    :sections    (into (sorted-map) (remove (comp nil? val)) sections)})
+
+(defn- section-key
+  "Exporter `id` as a JSON key, its namespace kept: :user and :billing/user
+   would otherwise both become \"user\"."
+  [id]
+  (if (keyword? id) (subs (str id) 1) (str id)))
+
+(defn export-response
+  "`doc`, an export from `IDataExport`, as a JSON download. Keys are
+   camelCased, except section ids, which keep their namespace."
+  [doc]
+  {:status  200
+   :headers {"Content-Type"        "application/json; charset=utf-8"
+             "Content-Disposition" "attachment; filename=\"data-export.json\""
+             "Cache-Control"       "no-store"}
+   :body    (json/generate-string
+             (case-conversion/deep-transform-keys
+              case-conversion/kebab-case->camel-case-string
+              (update doc :sections update-keys section-key)))})
 
 (defn parse-retain
   "An ISO-8601 period (\"P2Y\", \"P90D\") or duration (\"PT12H\") as a

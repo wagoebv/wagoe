@@ -1,5 +1,6 @@
 (ns wagoe.tenant.shell.module-wiring
-  (:require [wagoe.tenant.shell.invite-persistence :as invite-persistence]
+  (:require [wagoe.tenant.shell.data-export :as data-export]
+            [wagoe.tenant.shell.invite-persistence :as invite-persistence]
             [wagoe.tenant.shell.invite-service :as invite-service]
             [wagoe.tenant.shell.membership-middleware :as membership-mw]
             [wagoe.tenant.shell.membership-persistence :as membership-persistence]
@@ -108,6 +109,19 @@
 (defmethod ig/halt-key! :wagoe/tenant-routes
   [_ _routes]
   (log/info "Tenant module routes halted (no cleanup needed)"))
+
+;; =============================================================================
+;; Data export
+;; =============================================================================
+
+(defmethod ig/init-key :wagoe/tenant-data-exporter
+  [_ repositories]
+  (data-export/map->TenantDataExporter repositories))
+
+(defmethod ig/init-key :wagoe/tenant-export-routes
+  [_ {:keys [data-export]}]
+  (require 'wagoe.tenant.shell.http)
+  ((ns-resolve 'wagoe.tenant.shell.http 'export-routes) data-export))
 
 ;; =============================================================================
 ;; Membership Repository
@@ -256,6 +270,11 @@
                                     :config         config}
       :wagoe/membership-routes     {:service (ig/ref :wagoe/membership-service)
                                     :config  config}
+      :wagoe/tenant-data-exporter  {:tenant-repository     (ig/ref :wagoe/tenant-repository)
+                                    :membership-repository (ig/ref :wagoe/membership-repository)
+                                    :invite-repository     (ig/ref :wagoe/invite-repository)}
+      ;; :wagoe/data-export is platform's, over every module's :data-export.
+      :wagoe/tenant-export-routes  {:data-export (ig/ref :wagoe/data-export)}
       ;; Builds the tenant HTTP middleware seq (tenant resolution + membership).
       ;; The http-handler takes it as :extra-middleware rather than constructing
       ;; it, so it does not need to know this module exists.
@@ -271,4 +290,6 @@
       :extra-middleware (ig/ref :wagoe/tenant-http-middleware)}
 
      :routes [(ig/ref :wagoe/tenant-routes)
-              (ig/ref :wagoe/membership-routes)]}))
+              (ig/ref :wagoe/membership-routes)
+              (ig/ref :wagoe/tenant-export-routes)]
+     :data-export {:tenant (ig/ref :wagoe/tenant-data-exporter)}}))

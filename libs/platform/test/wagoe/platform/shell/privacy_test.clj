@@ -1,6 +1,8 @@
 (ns wagoe.platform.shell.privacy-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [cheshire.core :as json]
+            [clojure.test :refer [deftest is testing]]
             [integrant.core :as ig]
+            [wagoe.platform.core.privacy :as privacy]
             [wagoe.platform.ports.privacy :as ports]
             [wagoe.platform.shell.privacy :as sut]
             [wagoe.platform.shell.system.wiring])
@@ -68,3 +70,14 @@
   (testing "a configured policy this service does not run is skipped"
     (let [handlers (ig/init-key :wagoe/retention {:policies {:p {:retain "P30D"}} :contributed {}})]
       (is (= {:deleted {} :failed {}} (:result ((get handlers sut/retention-job-type) {})))))))
+
+(deftest ^:unit an-export-response-keeps-section-namespaces
+  (let [doc  (ports/export-subject (sut/create-data-export
+                                    {:user         (exporter (fn [_] {:audit-log [{:created-at 1}]}))
+                                     :billing/user (exporter (fn [_] {:card-last4 "4242"}))})
+                                   {:type :user :id 7})
+        body (json/parse-string (:body (privacy/export-response doc)))]
+    (is (= #{"user" "billing/user"} (set (keys (get body "sections"))))
+        "two modules' :user sections do not collide")
+    (is (= [{"createdAt" 1}] (get-in body ["sections" "user" "auditLog"])) "other keys are camelCase")
+    (is (contains? body "exportedAt"))))

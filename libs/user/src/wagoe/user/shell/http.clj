@@ -46,8 +46,9 @@
             [wagoe.user.shell.web-handlers :as web-handlers]
             [wagoe.user.shell.group-handlers :as group-handlers]
             [wagoe.user.shell.mfa :as mfa]
-            [wagoe.core.utils.case-conversion :as case-conversion]
             [wagoe.platform.ports.privacy :as privacy]
+            [wagoe.platform.core.privacy :as platform-privacy]
+            [wagoe.user.shell.data-export :as data-export]
             [clojure.tools.logging :as log]
             [cheshire.core :as json]))
 
@@ -762,12 +763,7 @@
   "`doc`, a user's data export, as a JSON download, logged with who asked."
   [doc request]
   (log/info "Data export" {:subject-user-id (get-in doc [:subject :id]) :actor-id (get-in request [:user :id])})
-  {:status  200
-   :headers {"Content-Type"        "application/json; charset=utf-8"
-             "Content-Disposition" "attachment; filename=\"data-export.json\""
-             "Cache-Control"       "no-store"}
-   :body    (json/generate-string
-             (case-conversion/deep-transform-keys case-conversion/kebab-case->camel-case-string doc))})
+  (platform-privacy/export-response doc))
 
 (defn export-own-data-handler
   "The signed-in user's own data export (GDPR Art. 20)."
@@ -779,16 +775,19 @@
       (export-response (privacy/export-subject data-export {:type :user :id user-id}) request))))
 
 (defn export-user-data-handler
-  "An admin's export of any user's data, for a request made another way."
-  [data-export]
+  "An admin's export of any user's data, for a request made another way.
+   Recorded in the user's audit trail."
+  [data-export audit-repository]
   (fn [request]
     (let [user-id (parse-uuid (str (get-in request [:path-params :id])))]
       (when-not user-id
         (throw (ex-info "User id must be a UUID" {:type :validation-error})))
-      (let [doc (privacy/export-subject data-export {:type :user :id user-id})]
+      (let [doc     (privacy/export-subject data-export {:type :user :id user-id})
+            profile (get-in doc [:sections :user :profile])]
         ;; Other modules' exporters may answer for any id; ours names the account.
-        (when-not (get-in doc [:sections :user])
+        (when-not profile
           (throw (ex-info "User not found" {:type :not-found :user-id user-id})))
+        (data-export/record-admin-export! audit-repository (user-svc/request-audit-context request) profile)
         (export-response doc request)))))
 
 (defn- require-platform-admin-middleware
@@ -803,7 +802,7 @@
 (defn export-routes
   "Data export: a user's own at GET /api/v1/me/export and /web/profile/export,
    anyone's for an admin at GET /api/v1/users/:id/export."
-  [user-service data-export config]
+  [user-service data-export audit-repository config]
   (let [auth (user-middleware/flexible-authentication-middleware user-service)
         own  {:middleware [auth]
               :get        {:handler (export-own-data-handler data-export)
@@ -811,7 +810,7 @@
     {:api    [["/me/export" (assoc-in own [:get :tags] ["users"])]
               ["/users/:id/export"
                {:middleware [auth require-platform-admin-middleware]
-                :get        {:handler    (export-user-data-handler data-export)
+                :get        {:handler    (export-user-data-handler data-export audit-repository)
                              :summary    "Download a user's data (admin)"
                              :tags       ["users"]
                              :parameters {:path [:map [:id :string]]}}}]]

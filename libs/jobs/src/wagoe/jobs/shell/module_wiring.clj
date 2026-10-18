@@ -40,11 +40,16 @@
      web/worker split; the default of 1 is a single process that both enqueues
      and runs, which is what an application without a deployment topology has.
 
+   :wagoe/job-dead-letter-retention
+     The `:jobs/dead-letter` retention policy, contributed under `:retention`.
+     Runs only when `:wagoe/privacy :retention` names it.
+
    Until BOU-418 this namespace wired none of it: `:wagoe/jobs` was a settings
    passthrough, so `java -jar wagoe.jar worker` booted and processed nothing."
   (:require [clojure.tools.logging :as log]
             [integrant.core :as ig]
             [wagoe.jobs.ports :as ports]
+            [wagoe.platform.ports.privacy :as privacy]
             [wagoe.jobs.shell.adapters.db :as db]
             [wagoe.jobs.shell.adapters.in-memory :as mem]
             [wagoe.jobs.shell.adapters.redis :as redis]
@@ -154,6 +159,12 @@
 (defmethod ig/init-key :wagoe/idempotency-store [_ {:keys [runtime]}] (:idempotency runtime))
 (defmethod ig/halt-key! :wagoe/idempotency-store [_ _] nil)
 
+;; The job store is the policy: each adapter implements IDeadLetterRetention.
+(defmethod ig/init-key :wagoe/job-dead-letter-retention
+  [_ {:keys [store]}]
+  (reify privacy/IRetentionPolicy
+    (purge-before! [_ cutoff] (ports/purge-dead-letters-before! store cutoff))))
+
 ;; =============================================================================
 ;; Registry and workers
 ;; =============================================================================
@@ -239,4 +250,6 @@
       :wagoe/job-workers  {:queue    (ig/ref :wagoe/job-queue)
                            :store    (ig/ref :wagoe/job-store)
                            :registry (ig/ref :wagoe/job-registry)
-                           :workers  (:workers settings)}}}))
+                           :workers  (:workers settings)}
+      :wagoe/job-dead-letter-retention {:store (ig/ref :wagoe/job-store)}}
+     :retention {:jobs/dead-letter (ig/ref :wagoe/job-dead-letter-retention)}}))
