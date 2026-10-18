@@ -411,15 +411,13 @@
    Suitable for most operations that don't need specialized handling."
   [context-interceptor
    logging-start
-   metrics-start
-   logging-complete
-   metrics-complete])
+   op-metrics
+   logging-complete])
 
 (def error-handling-pipeline
   "Error handling interceptors for exception management."
   [error-capture
    logging-error
-   metrics-error
    error-normalize])
 
 (def http-response-pipeline

@@ -15,6 +15,7 @@
             [wagoe.core.interceptor :as interceptor]
             [wagoe.core.interceptor-context :as interceptor-context]
             [wagoe.user.shell.interceptors :as user-interceptors]
+            [wagoe.user.shell.service :as user-svc]
             [cheshire.core :as json]
             [clojure.string :as str]
             [clojure.tools.cli :as cli])
@@ -276,19 +277,12 @@
 ;; Command Execution
 ;; =============================================================================
 
-(defn extract-observability-services
-  "The interceptor :system for a user operation. Wiring puts the metrics
-   emitter on the service; the platform op-metrics interceptors read it."
-  [user-service]
-  {:user-service    user-service
-   :metrics-emitter (:metrics-emitter user-service)})
-
 (defn create-cli-interceptor-context
   "Creates interceptor context for CLI operations with real observability services."
   [operation-type user-service args options]
   (-> (interceptor-context/create-cli-context
        operation-type
-       (extract-observability-services user-service)
+       (user-svc/interceptor-system user-service)
        args
        options)
       (assoc :opts options)))
