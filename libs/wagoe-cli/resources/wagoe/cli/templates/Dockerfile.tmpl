@@ -44,4 +44,4 @@ EXPOSE 3000
 # The JDBC drivers send the JVM's timezone to the database, so the JVM's zone is
 # the session's zone. UTC keeps CURRENT_DATE and date_trunc off the host's
 # timezone, and keeps a column without one readable by any other process.
-ENTRYPOINT ["java", "-Duser.timezone=UTC", "-jar", "/app/app.jar"]
+ENTRYPOINT ["java", "--enable-native-access=ALL-UNNAMED", "-Duser.timezone=UTC", "-jar", "/app/app.jar"]

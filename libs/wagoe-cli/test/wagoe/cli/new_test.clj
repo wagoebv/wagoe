@@ -249,6 +249,16 @@
           (is (not (str/includes? (slurp (io/file tmp "deps.edn")) "{{devtools-version}}"))
               "unrendered version placeholder")))
 
+      (testing "every JVM that opens the database may load sqlite-jdbc's native library"
+        ;; Without the flag newer JDKs print four restricted-method warnings on
+        ;; every CLI task, and a later JDK blocks the call.
+        (let [deps (edn/read-string (slurp (io/file tmp "deps.edn")))]
+          (doseq [alias [:repl :test :run :migrate :seed :user-cli]]
+            (is (some #{"--enable-native-access=ALL-UNNAMED"}
+                      (get-in deps [:aliases alias :jvm-opts]))
+                (str alias)))
+          (is (str/includes? (slurp (io/file tmp "Dockerfile")) "\"--enable-native-access=ALL-UNNAMED\""))))
+
       (testing "wagoe-test is on the :test alias, and a test uses it"
         (let [deps (edn/read-string (slurp (io/file tmp "deps.edn")))
               test (slurp (io/file tmp "test/test_proj/system_test.clj"))]
