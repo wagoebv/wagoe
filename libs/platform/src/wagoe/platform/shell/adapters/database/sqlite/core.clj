@@ -2,7 +2,7 @@
   "SQLite adapter.
 
    Booleans as integers, no information_schema — introspection reads
-   sqlite_master and PRAGMA table_info — and a set of PRAGMAs applied per
+   sqlite_master and PRAGMA table_xinfo — and a set of PRAGMAs applied per
    connection, see sqlite.connection."
   (:require [wagoe.platform.shell.adapters.database.common.adapter :as adapter]
             [wagoe.platform.shell.adapters.database.common.introspection :as introspection]

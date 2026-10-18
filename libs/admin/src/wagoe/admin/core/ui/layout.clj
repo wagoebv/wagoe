@@ -294,7 +294,8 @@
 
 (defn create-config-error
   "Page content for an entity whose config leaves a NOT NULL column off the
-   create form, so no record of it can be created (BOU-494).
+   create form (BOU-494), or splits it over two tables with no create flow of
+   its own, so no record of it can be created.
 
    Args:
      entity-name:   Keyword entity name
@@ -304,9 +305,11 @@
         label (if (string? label) label (name entity-name))]
     [:div.error-page.admin-config-error
      [:h1 [:t :admin/page-config-error-title]]
-     (for [{:keys [column field]} (:create-config-errors entity-config)]
-       [:p.error-message [:t :admin/config-error-not-on-form
-                          {:entity label :column column :field (name field)}]])
+     (for [{:keys [kind column field]} (:create-config-errors entity-config)]
+       [:p.error-message (if (= :split-table kind)
+                           [:t :admin/config-error-split-table {:entity label}]
+                           [:t :admin/config-error-not-on-form
+                            {:entity label :column column :field (name field)}])])
      [:div.error-actions
       [:a.button {:href (str "/web/admin/" (name entity-name))} [:t :admin/button-back-to-list]]]]))
 
