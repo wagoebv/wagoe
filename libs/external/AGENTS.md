@@ -91,7 +91,7 @@ All three keys are opt-in — add to `:active` in `config.edn` to enable:
 ### IMAP UIDs are per folder
 A message carries its `:folder`. Pass the message as opts — `(ports/mark-read! mb (:uid msg) msg)` — or a
 UID from another folder hits a different message. `delete-message!` expunges only that UID (UID EXPUNGE, needs
-UIDPLUS); without UIDPLUS it only flags `\Deleted` and returns `:expunged? false`. A fetch without `:limit` takes
+UIDPLUS); without UIDPLUS it only flags `\Deleted`, returns `:expunged? false`, and fetches skip it. A fetch without `:limit` takes
 100 messages, since each is held in memory with its attachments.
 
 ### IMAP adapter is reflection-free, and tested on GreenMail

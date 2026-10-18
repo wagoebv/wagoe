@@ -78,7 +78,7 @@
   (delete-message! [this uid] [this uid opts]
     "Delete a message by UID, in (:folder opts) or the configured folder. Only
     that message is expunged, which needs the server's UIDPLUS; without it the
-    message is flagged \\Deleted and :expunged? is false.
+    message is flagged \\Deleted, which fetches skip, and :expunged? is false.
 
     Returns:
       Map with :success?, :expunged? and optional :error (:not-found when no

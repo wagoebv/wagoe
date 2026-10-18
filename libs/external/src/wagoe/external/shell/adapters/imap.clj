@@ -149,13 +149,13 @@
 ;; =============================================================================
 
 (defn- search-term
-  "IMAP SEARCH for the options, or nil to take the whole folder."
+  "IMAP SEARCH for the options. A message flagged \\Deleted is never selected:
+   without UIDPLUS that is all delete-message! does."
   ^SearchTerm [unread-only? ^Date since]
-  (let [terms (cond-> []
-                unread-only? (conj (FlagTerm. (Flags. Flags$Flag/SEEN) false))
-                since        (conj (ReceivedDateTerm. ComparisonTerm/GE since)))]
-    (when (seq terms)
-      (reduce (fn [^SearchTerm a ^SearchTerm b] (AndTerm. a b)) terms))))
+  (reduce (fn [^SearchTerm a ^SearchTerm b] (AndTerm. a b))
+          (cond-> [(FlagTerm. (Flags. Flags$Flag/DELETED) false)]
+            unread-only? (conj (FlagTerm. (Flags. Flags$Flag/SEEN) false))
+            since        (conj (ReceivedDateTerm. ComparisonTerm/GE since)))))
 
 (defn- fetch! [^IMAPFolder fld msgs & items]
   (let [profile (FetchProfile.)]
@@ -177,8 +177,8 @@
         since    (when since-ms (Date. (long since-ms)))
         ;; SEARCH SINCE takes a date in the JVM's timezone and the server compares
         ;; it in its own, so widen by two days; the exact check follows below.
-        term     (search-term unread-only? (when since-ms (Date. (long (- since-ms (* 2 24 60 60 1000))))))
-        found    (if term (.search fld term) (.getMessages fld))
+        found    (.search fld (search-term unread-only?
+                                           (when since-ms (Date. (long (- since-ms (* 2 24 60 60 1000)))))))
         selected (vec (if since
                         (do (fetch! fld found IMAPFolder$FetchProfileItem/INTERNALDATE)
                             (->> found (remove #(.before (received-at %) since)) (take limit)))
@@ -243,7 +243,8 @@
     ([this]
      (ports/fetch-unread! this nil))
     ([this limit]
-     (ports/fetch-messages! this {:unread-only? true :limit limit})))
+     (ports/fetch-messages! this (cond-> {:unread-only? true}
+                                   limit (assoc :limit limit)))))
 
   (mark-read!
     ([this uid]
@@ -262,9 +263,9 @@
        (fn [^IMAPFolder fld ^Message msg]
          (.setFlags msg (Flags. Flags$Flag/DELETED) true)
          ;; A plain EXPUNGE would also remove what other clients flagged \Deleted.
-         (let [expunge? (uidplus? fld)]
-           (when expunge? (.expunge fld (into-array Message [msg])))
-           {:success? true :expunged? expunge?})))))
+         (let [expunged? (and (uidplus? fld)
+                              (pos? (alength (.expunge fld (into-array Message [msg])))))]
+           {:success? true :expunged? expunged?})))))
 
   (close! [_this]
     ;; ImapMailboxAdapter is connection-per-call; nothing to close at the adapter level.

@@ -217,14 +217,17 @@
             :when (= "seen" (.getSubject (.getMimeMessage msg)))]
       (.setFlag msg Flags$Flag/DELETED true))
     (is (= {:success? true :expunged? true} (ports/delete-message! *mailbox* uid)))
-    (is (= ["alternative" "pdf" "text attachments" "nested" "seen"] (subjects {})))))
+    (is (= ["alternative" "pdf" "text attachments" "nested" "seen"]
+           (mapv #(.getSubject (.getMimeMessage ^StoredMessage %)) (.getMessages *inbox*))))
+    (testing "a message flagged \\Deleted is not fetched"
+      (is (= ["alternative" "pdf" "text attachments" "nested"] (subjects {}))))))
 
 (deftest ^:integration delete-without-uidplus-only-flags-test
   (let [uid (:uid (first (fetch {})))]
     (is (= {:success? true :expunged? false}
            (with-redefs-fn {#'imap/uidplus? (constantly false)}
              #(ports/delete-message! *mailbox* uid))))
-    (is (= (mapv first fixtures) (subjects {})))
+    (is (= (rest (map first fixtures)) (subjects {})))
     (is (= [true false false false false false] (mapv deleted? (.getMessages *inbox*))))))
 
 (deftest ^:integration fetch-has-a-default-limit-test
