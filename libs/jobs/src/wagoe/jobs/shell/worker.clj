@@ -478,9 +478,10 @@
         worker (->Worker worker-state nil queue store registry config)
         loop-fn #(worker-loop config queue store registry worker-state)
         thread-name (str "job-worker-" (:id worker-state))
-        ^Thread thread (if (:virtual-threads? config)
-                         (-> (Thread/ofVirtual) (.name thread-name) (.unstarted ^Runnable loop-fn))
-                         (doto (Thread. ^Runnable loop-fn thread-name) (.setDaemon true)))]
+        ^java.lang.Thread$Builder builder (if (:virtual-threads? config)
+                                              (Thread/ofVirtual)
+                                              (.daemon (Thread/ofPlatform) true))
+        thread (.unstarted (.name builder thread-name) ^Runnable loop-fn)]
 
     ;; Fail-loud guard: a worker with no handlers cannot run any job type — every
     ;; job it dequeues is re-enqueued and ultimately dead-lettered. Warn at startup

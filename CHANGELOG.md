@@ -31,8 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
-- **Opt-in virtual threads for HTTP requests and job workers** (BOU-471): `:wagoe/http {:virtual-threads? true}`,
-  `:wagoe/jobs {:workers {:virtual-threads? true}}`. Off by default; on JDK 21, check for pinning first.
+- **Opt-in virtual threads for requests and job workers** (BOU-471): `:virtual-threads? true` on `:wagoe/http`,
+  `:wagoe/rpc` or `:wagoe/jobs :workers`. Off by default; on JDK 21, check for pinning first.
 
 - **Tenant export and dead-letter retention** (BOU-735): platform admins download `GET /api/v1/tenants/:id/export`.
   Add `:jobs/dead-letter {:retain "P90D"}` to `:wagoe/privacy :retention`; admin user exports now audit as `:data-export`.

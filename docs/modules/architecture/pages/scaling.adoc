@@ -58,41 +58,27 @@ total Postgres connections = `N × max`. Keep `N × max` under the server's
 
 === Virtual threads
 
-Off by default. Turn them on per process:
+Off by default. Turn them on per listener and for job workers:
 
 [source,clojure]
 ----
-:wagoe/http {:virtual-threads? true}                     ; each request on its own virtual thread
-:wagoe/jobs {:workers {:count 16 :virtual-threads? true}} ; each worker loop on one
+:wagoe/http {:virtual-threads? true}           ; each request on its own virtual thread
+:wagoe/rpc  {:virtual-threads? true}           ; same, for a service's RPC listener
+:wagoe/jobs {:workers {:virtual-threads? true}} ; each worker loop on one
 ----
 
-A request or job that blocks on the database or an HTTP call then no longer
-holds a platform thread, so a process serves more of them in the same memory.
-Jetty still caps concurrent requests at 200 (its `VirtualThreadPool` default),
-so the database sees bounded demand.
+A request that blocks on the database or an HTTP call then holds no platform
+thread. Jetty caps concurrent requests at 200, its `VirtualThreadPool` default.
 
-What was checked before offering it:
-
-* *Tenant schema* rides on a dynamic binding of the transaction connection, and
-  *MDC*, OpenTelemetry's current context and the Sentry and Datadog contexts on
-  ThreadLocals. All are set and read on the thread that serves the request or
-  runs the job, which virtual threads keep. Each request gets a fresh thread, so
-  nothing leaks from the previous one.
-* *Pinning.* On JDK 21 a virtual thread blocked inside `synchronized` holds
-  its carrier. PostgreSQL JDBC, MySQL Connector/J, HikariCP, Logback and
-  Clojure 1.12's lazy seqs and delays use `java.util.concurrent` locks instead.
-  Wagoe's own `locking` blocks do no I/O; the geo rate limiter, which slept in
-  one, now reserves its slot without a lock. SQLite and H2 still synchronise
-  inside the driver. Later releases (JEP 491) remove this kind of pinning.
-* *The connection pool.* Virtual threads do not add connections. With 200
-  concurrent requests and `maximum-pool-size 50`, the other 150 wait up to
-  `connection-timeout-ms` for one and then fail. Size the pool for the
-  concurrency you allow, as you would with platform threads.
-* *core.async* is not a dependency of any library.
-
-It stays opt-in because the baseline is JDK 21, where pinning in a driver or
-library outside this list would stall a carrier. Look for it with JFR's
-`jdk.VirtualThreadPinned` event before turning it on in production.
+* *Context still applies.* Tenant schema, MDC and the tracing and error
+  contexts are set and read on the thread that serves the request or runs the
+  job, and each request gets a fresh one.
+* *Size the connection pool for 200.* Virtual threads add no connections; a
+  request beyond `maximum-pool-size` waits `connection-timeout-ms`, then fails.
+* *Pinning is why it is opt-in.* On JDK 21 a virtual thread blocked inside
+  `synchronized` holds its carrier. The PostgreSQL and MySQL drivers, HikariCP,
+  Logback and Clojure 1.12 avoid it; SQLite and H2 do not. Check with JFR's
+  `jdk.VirtualThreadPinned` event before turning it on in production.
 
 == How the architecture enables horizontal scaling
 
@@ -561,7 +547,7 @@ The architecture delivers the promise; these are the concrete pieces that make
 . ✅ *Graceful connection draining* — shipped in https://github.com/wagoebv/wagoe/pull/218[#218]. Configurable shutdown grace (`:wagoe/http :drain-timeout-ms`) lets rollouts finish in-flight requests; Jetty `GracefulHandler` + `setStopTimeout` wired in `wiring.clj`.
 . ✅ *Default rate-limit wiring* — shipped in https://github.com/wagoebv/wagoe/pull/219[#219]. Config-driven `http-rate-limit-protection` is in the default pipeline; enable via `:wagoe/http :rate-limit` and it uses the Redis cache for a cross-replica limit (per-process fallback documented).
 . ✅ *Jobs hardening* — shipped in https://github.com/wagoebv/wagoe/pull/220[#220]. Missing-handler jobs are re-enqueued (bounded) instead of silently dead-lettered, an empty-registry worker warns at startup, and scheduled-job promotion is an atomic claim (`ZREM` / `swap-vals!`) so a due job runs exactly once across workers.
-. ✅ *Opt-in virtual threads* — `:wagoe/http :virtual-threads?` serves requests on Jetty's `VirtualThreadPool`, and `:wagoe/jobs :workers :virtual-threads?` runs worker loops on virtual threads. See <<_virtual_threads>>.
+. ✅ *Opt-in virtual threads* — for HTTP and RPC listeners and job workers; see <<_virtual_threads>>.
 . ✅ *Deploy topology reference* — done (https://github.com/wagoebv/wagoe/pull/386[#386]). Compose + k8s with N replicas, Redis, a load balancer, the web/worker split and a module-as-a-service, in xref:architecture:deployment-topologies.adoc[Deployment Topologies]. No instance-id variable: nothing in the codebase reads one, so adding it would have been decoration.
 
 For *functional decomposition* (the bigger bet):

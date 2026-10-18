@@ -52,11 +52,10 @@ Set `:workers {:count 0}` on a web node in the web/worker split — it enqueues
 and processes nothing. The default of 1 is a single process that does both,
 which is what an application without a deployment topology has.
 
-`:virtual-threads? true` makes a worker cheap, so `:count` can follow how many
-jobs block on I/O at once rather than the CPU count. A job that uses the
-database still needs a connection; keep `:count` within the pool. Tenant schema
-and MDC still apply, since a job runs on its worker's thread. Why it is off by
-default: the virtual threads section of `docs/modules/architecture/pages/scaling.adoc`.
+`:virtual-threads? true` runs each worker loop on a virtual thread. A worker
+still runs one job at a time, so `:count` stays the concurrency bound; keep it
+within the database pool. Off by default; see the virtual threads section of
+`docs/modules/architecture/pages/scaling.adoc`.
 
 **A worker polls one queue.** Work enqueued on a queue no pool names is never
 processed and nothing reports it — push enqueued on `:push` while the only pool

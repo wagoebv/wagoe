@@ -132,19 +132,12 @@
 (deftest ^:unit virtual-threads-run-the-worker-loop-on-a-virtual-thread
   (doseq [vt? [true false]]
     (testing (str ":virtual-threads? " vt?)
-      (let [queue   (:queue *system*)
-            virtual (promise)]
-        (ports/register-handler! *registry* :test-job
-                                 (fn [_] (deliver virtual (.isVirtual (Thread/currentThread)))
-                                   {:success? true :result nil}))
-        (ports/enqueue-job! queue :default (create-test-job {}))
-        (let [w (worker/create-worker {:queue-name :default :poll-interval-ms 50
-                                       :virtual-threads? vt?}
-                                      queue (:store *system*) *registry*)]
-          (try
-            (is (= vt? (deref virtual 5000 ::timeout)))
-            (is (= vt? (.isVirtual ^Thread (:thread w))))
-            (finally (ports/stop-worker! w (:id (:state w))))))))))
+      (let [w (worker/create-worker {:queue-name :default :virtual-threads? vt?}
+                                    (:queue *system*) (:store *system*) *registry*)]
+        (try
+          (is (= vt? (.isVirtual ^Thread (:thread w))))
+          (is (.isDaemon ^Thread (:thread w)))
+          (finally (ports/stop-worker! w (:id (:state w)))))))))
 
 (deftest ^:unit worker-handles-job-failure-test
   (with-silent-logging

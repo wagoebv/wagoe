@@ -434,7 +434,7 @@ nothing.
 - Keep exceptions typed (`:type` in `ex-data`) so HTTP error mapping stays deterministic.
 - Static resource routes bypass content negotiation — serve from `/public` directory.
 - Rate limiting without Redis is per-process only and resets on restart.
-- `:wagoe/http {:virtual-threads? true}` serves requests on Jetty's `VirtualThreadPool` (200 concurrent, Jetty's default). Off by default: on JDK 21 a driver that blocks inside `synchronized` pins its carrier. The audit is in `docs/modules/architecture/pages/scaling.adoc`.
+- `:virtual-threads? true` on `:wagoe/http` or `:wagoe/rpc` serves requests on virtual threads. Off by default; see the virtual threads section of `docs/modules/architecture/pages/scaling.adoc`.
 
 ---
 
