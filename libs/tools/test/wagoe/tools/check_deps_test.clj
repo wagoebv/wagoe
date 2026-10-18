@@ -128,7 +128,7 @@
     (is (= 'metosin/reitit-core       (sut/provider-of "reitit.core")))
     (is (= 'metosin/reitit-ring       (sut/provider-of "reitit.ring")))
     (is (= 'metosin/reitit-malli      (sut/provider-of "reitit.coercion.malli")))
-    (is (= 'metosin/reitit-swagger    (sut/provider-of "reitit.swagger")))
+    (is (= 'fi.metosin/reitit-openapi (sut/provider-of "reitit.openapi")))
     (is (= 'metosin/reitit-middleware (sut/provider-of "reitit.ring.middleware.muuntaja"))
         "the longer prefix has to win over reitit.ring"))
 

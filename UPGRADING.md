@@ -9,6 +9,33 @@ mode you'd see without it, and the fix.
 > `upgrade-wiring` check names any namespace that moved between releases and
 > says where it went.
 
+## 1.0.x → unreleased (OpenAPI 3.1)
+
+### 1. API docs moved from Swagger 2.0 to OpenAPI 3.1 (BOU-462)
+
+The document is at `/openapi.json`, and `/api-docs/` reads it. `/swagger.json`
+serves the same 3.1 document for one more minor release, so a client that
+expects 2.0 there gets 3.1. Point it at `/openapi.json`.
+
+Routes with raw parameter docs move from `:swagger` to `:openapi`, with the
+type under `:schema`:
+
+```clojure
+;; Before
+:swagger {:parameters [{:name "id" :in "path" :required true :type "string"}]
+          :responses  {200 {:description "The product" :schema shown}}}
+;; After
+:openapi {:parameters [{:name "id" :in "path" :required true :schema {:type "string"}}]
+          :responses  {200 {:description "The product"
+                            :content {"application/json" {:schema shown}}}}}
+```
+
+Until you do, the router translates `:swagger` parameters and responses, so the
+docs keep their inputs. A generated module's `shown` uses `malli.swagger`;
+`malli.json-schema/transform` is the 3.1 equivalent. Routes with Malli
+`:parameters` need nothing. The `:swagger-enabled` and `:swagger-data` router
+config keys are unchanged.
+
 ## beta-5 → beta-6 (error shapes)
 
 ### 1. `wagoe.user.shell.auth/authenticate-user` and the MFA shell return `:error` as a map (BOU-323)

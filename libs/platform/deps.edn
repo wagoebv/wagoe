@@ -62,7 +62,7 @@
          metosin/reitit-ring               {:mvn/version "0.10.1"}
          metosin/reitit-malli              {:mvn/version "0.10.1"}
          metosin/reitit-middleware         {:mvn/version "0.10.1"}
-         metosin/reitit-swagger            {:mvn/version "0.10.1"}
+         fi.metosin/reitit-openapi         {:mvn/version "0.10.1"}
          metosin/reitit-swagger-ui         {:mvn/version "0.10.1"}
          metosin/muuntaja                  {:mvn/version "0.6.12"}
 

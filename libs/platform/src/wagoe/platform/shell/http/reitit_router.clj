@@ -3,7 +3,7 @@
 
    Modules emit Reitit route data and this namespace hands it to Reitit
    (ADR-037), so what is left here is behaviour rather than translation:
-   exception handling, the coercion error shape, the Swagger routes, gzip, and
+   exception handling, the coercion error shape, the OpenAPI routes, gzip, and
    the interceptor stack each route is decorated with."
   (:require [cheshire.core :as json]
             [clojure.java.io :as io]
@@ -12,13 +12,14 @@
             [malli.error :as me]
             [muuntaja.core :as m]
             [reitit.coercion.malli :as malli-coercion]
+            [reitit.core :as r]
             [reitit.middleware :as middleware]
+            [reitit.openapi :as openapi]
             [reitit.ring :as ring]
             [reitit.ring.coercion :as coercion]
             [reitit.ring.middleware.exception :as exception]
             [reitit.ring.middleware.muuntaja :as muuntaja]
             [reitit.ring.middleware.parameters :as parameters]
-            [reitit.swagger :as swagger]
             [reitit.swagger-ui :as swagger-ui]
             [ring.middleware.cookies :refer [wrap-cookies]]
             [ring.middleware.multipart-params :refer [multipart-params-request]]
@@ -488,6 +489,54 @@
                 (when (seq all)
                   (interceptors->middleware all system))))})
 
+;; =============================================================================
+;; OpenAPI Documentation Routes
+;; =============================================================================
+
+(def ^:private swagger-schema-keys
+  "Swagger 2.0 keys that sit on a parameter and belong under `:schema` in 3.x."
+  #{:type :format :items :enum :default :minimum :maximum :exclusiveMinimum
+    :exclusiveMaximum :minLength :maxLength :pattern :minItems :maxItems
+    :uniqueItems :multipleOf})
+
+(defn- swagger-parameter->openapi [p]
+  (let [schema (select-keys p swagger-schema-keys)]
+    (cond-> (apply dissoc p :collectionFormat swagger-schema-keys)
+      (seq schema) (assoc :schema schema))))
+
+(defn- swagger->openapi
+  "Swagger 2.0 route docs as OpenAPI 3.x. A body parameter becomes the request
+   body; formData has no 3.x equivalent and is dropped."
+  [{:keys [parameters responses] :as swagger}]
+  (let [body   (filter (comp #{"body"} :in) parameters)
+        others (remove (comp #{"body" "formData"} :in) parameters)]
+    (cond-> (dissoc swagger :parameters :responses :consumes :produces)
+      (seq others)
+      (assoc :parameters (mapv swagger-parameter->openapi others))
+      (seq body)
+      (assoc :requestBody {:content {"application/json" {:schema (:schema (first body))}}})
+      responses
+      (assoc :responses (update-vals responses
+                                     (fn [{:keys [schema] :as response}]
+                                       (cond-> (dissoc response :schema)
+                                         schema (assoc :content {"application/json" {:schema schema}}))))))))
+
+(defn- translate-swagger
+  "Route data with `:swagger` docs moved to `:openapi`, on the route and on each
+   of its methods, so routes written for the 2.0 docs keep their parameter
+   inputs. An `:openapi` the route already has wins."
+  [data]
+  (let [move (fn [d]
+               (if-let [swagger (and (map? d) (:swagger d))]
+                 (-> (dissoc d :swagger)
+                     (assoc :openapi (merge (swagger->openapi swagger) (:openapi d))))
+                 d))]
+    (if (map? data)
+      (reduce (fn [d method] (cond-> d (contains? d method) (update method move)))
+              (move data)
+              ring/http-methods)
+      data)))
+
 (defn- create-router-options
   "Create Reitit router options from config.
    
@@ -512,6 +561,7 @@
      ;; allowed — Reitit matches the literal first — while two routes neither
      ;; precedence nor anything else decides between fail the boot.
      :conflicts (get config :conflicts report-ambiguous-routes)
+     :expand (fn [arg opts] (translate-swagger (r/expand arg opts)))
      ;; Innermost, after the route's own middleware: interceptors see a fully
      ;; prepared request (session, body, coercions) (BOU-331).
      ::middleware/transform #(conj % (route-interceptors (:system config)))
@@ -539,46 +589,29 @@
       :method-not-allowed (answer 405 :method-not-allowed "The HTTP method is not allowed for this resource")
       :not-acceptable     (answer 406 :not-acceptable "The requested content type is not supported")})))
 
-;; =============================================================================
-;; Swagger Documentation Routes
-;; =============================================================================
+(defn- create-openapi-routes
+  "The OpenAPI 3.1 document at /openapi.json and Swagger UI at /api-docs/.
 
-(defn- create-swagger-routes
-  "Create Swagger documentation routes.
+   /swagger.json serves the same document for one more minor release, so a
+   client pointed at it keeps working.
 
-   Returns:
-     Vector of Swagger route specs:
-     - /swagger.json - OpenAPI/Swagger specification
-     - /api-docs/* - Swagger UI interface
-
-   Swagger UI will be available at:
-     http://localhost:PORT/api-docs/index.html
-
-   Configuration:
-     Swagger metadata (title, version, description) is configured via :swagger-data
-     in the router config passed to compile-routes.
-
-   Example swagger-data:
-     {:info {:title \"Wagoe API\"
-             :description \"Wagoe Framework REST API\"
-             :version \"0.1.0\"}
-      :tags [{:name \"users\" :description \"User management\"}
-             {:name \"inventory\" :description \"Inventory tracking\"}]}"
-  [swagger-data]
-  [["/swagger.json"
-    {:get {:no-doc true
-           :public true
-           :skip-interceptors? true
-           :swagger swagger-data
-           :handler (swagger/create-swagger-handler)}}]
-
-   ["/api-docs/*"
-    {:get {:no-doc true
-           :public true
-           :skip-interceptors? true
-           :handler (swagger-ui/create-swagger-ui-handler
-                     {:url "/swagger.json"
-                      :config {:validatorUrl nil}})}}]])
+   `docs-data` is the document's top level (`:info`, `:tags`), from
+   `:swagger-data` in the router config."
+  [docs-data]
+  (let [document {:get {:no-doc true
+                        :public true
+                        :skip-interceptors? true
+                        :openapi docs-data
+                        :handler (openapi/create-openapi-handler)}}]
+    [["/openapi.json" document]
+     ["/swagger.json" document]
+     ["/api-docs/*"
+      {:get {:no-doc true
+             :public true
+             :skip-interceptors? true
+             :handler (swagger-ui/create-swagger-ui-handler
+                       {:url "/openapi.json"
+                        :config {:validatorUrl nil}})}}]]))
 
 ;; =============================================================================
 ;; Gzip Compression Middleware
@@ -796,16 +829,14 @@
    are gone (ADR-037). The Reitit router is attached to the handler's metadata
    so devtools can read the route table without unwrapping middleware."
   [route-specs config]
-  (let [;; Extract Swagger configuration (optional)
-        swagger-enabled? (get config :swagger-enabled true)  ; Enabled by default
-        swagger-data (or (:swagger-data config)
-                         {:info {:title "Wagoe API"
-                                 :description "Wagoe Framework REST API"
-                                 :version "0.1.0"}})
-
-          ;; Add Swagger routes if enabled
-        all-routes (if swagger-enabled?
-                     (into (create-swagger-routes swagger-data) route-specs)
+  (let [;; API docs are on unless :swagger-enabled is false.
+        docs-enabled? (get config :swagger-enabled true)
+        docs-data (or (:swagger-data config)
+                      {:info {:title "Wagoe API"
+                              :description "Wagoe Framework REST API"
+                              :version "0.1.0"}})
+        all-routes (if docs-enabled?
+                     (into (create-openapi-routes docs-data) route-specs)
                      route-specs)
 
           ;; Create router options

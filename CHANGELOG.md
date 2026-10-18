@@ -102,6 +102,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Changed
 
+- **API docs are OpenAPI 3.1** (BOU-462), at `/openapi.json`; `/api-docs/` reads it. Write route docs under
+  `:openapi`, parameter types under `:schema` — see UPGRADING.md.
 - **Database errors are logged redacted unless their SQLState is known to quote no values** (BOU-629): the summary
   names SQLState, code and constraint. Read the driver's text in a debugger if you need it.
 - **Tables from Malli schemas gain the fields added since they were created** (BOU-622): boot adds them, a required one as
@@ -123,6 +125,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Deprecated
 
+- **`/swagger.json` and `:swagger` route docs** (BOU-462): the path serves the 3.1 document and `:swagger` is
+  translated to `:openapi`, both for one more minor. Point clients at `/openapi.json`.
 - **`wagoe.search.shell.registry` and its `defsearch`** (BOU-705): one registry for every system in the JVM. Hand
   definitions to `:wagoe/search`; the registry is still read, warns once, and goes in 2.0.
 - **`DBAdapter/like` with a hand-built pattern** (BOU-684): `%` and `_` from user input match

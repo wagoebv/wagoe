@@ -65,7 +65,7 @@
         (is (= #{:get :post}
                (set (keys (:data (r/match-by-path router "/products"))))))
         (is (= #{:get :put :delete}
-               (set (keys (dissoc (:data (r/match-by-path router "/products/42")) :swagger)))))))
+               (set (keys (dissoc (:data (r/match-by-path router "/products/42")) :openapi)))))))
 
     (testing "the web routes carry no /web prefix — the platform adds it"
       (doseq [path (map first (r/routes (r/router (:web contribution))))]
