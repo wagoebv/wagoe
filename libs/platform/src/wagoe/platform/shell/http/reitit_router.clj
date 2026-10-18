@@ -505,16 +505,13 @@
       (seq schema) (assoc :schema schema))))
 
 (defn- swagger->openapi
-  "Swagger 2.0 route docs as OpenAPI 3.x. A body parameter becomes the request
-   body; formData has no 3.x equivalent and is dropped."
+  "Swagger 2.0 route docs as OpenAPI 3.x: parameters and responses. Body and
+   formData parameters are not 3.x parameters and are dropped."
   [{:keys [parameters responses] :as swagger}]
-  (let [body   (filter (comp #{"body"} :in) parameters)
-        others (remove (comp #{"body" "formData"} :in) parameters)]
+  (let [kept (remove (comp #{"body" "formData"} :in) parameters)]
     (cond-> (dissoc swagger :parameters :responses :consumes :produces)
-      (seq others)
-      (assoc :parameters (mapv swagger-parameter->openapi others))
-      (seq body)
-      (assoc :requestBody {:content {"application/json" {:schema (:schema (first body))}}})
+      (seq kept)
+      (assoc :parameters (mapv swagger-parameter->openapi kept))
       responses
       (assoc :responses (update-vals responses
                                      (fn [{:keys [schema] :as response}]
@@ -531,11 +528,9 @@
                  (-> (dissoc d :swagger)
                      (assoc :openapi (merge (swagger->openapi swagger) (:openapi d))))
                  d))]
-    (if (map? data)
-      (reduce (fn [d method] (cond-> d (contains? d method) (update method move)))
-              (move data)
-              ring/http-methods)
-      data)))
+    (reduce (fn [d method] (cond-> d (contains? d method) (update method move)))
+            (move data)
+            ring/http-methods)))
 
 (defn- create-router-options
   "Create Reitit router options from config.
