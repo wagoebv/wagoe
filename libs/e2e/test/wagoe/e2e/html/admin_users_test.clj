@@ -170,7 +170,7 @@
       (loc/fill (page/locator pg "#password") "secret")
       (loc/click (page/locator pg "#create-user-form button[type='submit']"))
       (page/wait-for-selector pg "#create-user-form .validation-errors" {:timeout 10000.0})
-      (let [shown (page/evaluate pg "() => document.querySelector('#create-user-form .validation-errors').innerText")]
+      (let [shown (page/evaluate pg "() => Array.from(document.querySelectorAll('.validation-errors, .field-errors')).map(e => e.innerText).join('\\n')")]
         (is (str/includes? shown "At least 8 characters")
             "The password error the server rendered should be visible")
         ;; The requirements list took its cue from a nil violations argument and
