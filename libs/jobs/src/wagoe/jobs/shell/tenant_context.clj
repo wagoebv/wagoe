@@ -203,9 +203,8 @@
     (try
       ;; Asked of the adapter: this compared a :database-type the system's
       ;; db-context never has, so every tenant job ran in public (BOU-605).
-      ;; A db-ctx without an adapter has always run the job in public.
+      ;; A tenant job without an adapter throws here rather than run in public.
       (if (and tenant-schema
-               adapter
                (db-ports/capable? adapter :schemas))
         ;; Execute in tenant schema context (PostgreSQL only)
         (do
@@ -236,7 +235,7 @@
         ;; No tenant or non-PostgreSQL - use public schema
         (do
           (when tenant-id
-            (log/debug "Job has tenant but no adapter or no schemas, using default schema"
+            (log/debug "Job has tenant but the database has no schemas, using default schema"
                        {:job-id job-id
                         :tenant-id tenant-id
                         :engine (some-> adapter db-ports/engine)}))
@@ -244,7 +243,9 @@
           (handler-fn (:args job) db-ctx)))
 
       (catch Exception e
-        (let [failure (worker/failure e)]
+        (let [failure (cond-> (worker/failure e)
+                        (= :configuration-error (:type (ex-data e)))
+                        (assoc :type :configuration-error))]
           (log/error e "Error processing tenant job"
                      {:job-id job-id
                       :job-type job-type

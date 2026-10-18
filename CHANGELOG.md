@@ -32,7 +32,7 @@ for what is public API, what is internal, and how deprecations are announced.
 ### Added
 
 - **`capable?` on the database port** (BOU-609): `(capable? adapter :schemas)`.
-  An unknown capability or a nil adapter throws instead of reading as false.
+  An unknown capability or a nil adapter throws; a tenant job with no adapter now fails instead of running in public.
 - **Tenant export and dead-letter retention** (BOU-735): platform admins download `GET /api/v1/tenants/:id/export`.
   Add `:jobs/dead-letter {:retain "P90D"}` to `:wagoe/privacy :retention`; admin user exports now audit as `:data-export`.
 - **`:wagoe/user :landing` lets an app own `/` and `/web`** (BOU-736): both redirect there for everyone.
