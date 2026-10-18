@@ -33,6 +33,9 @@
            :uber-file uber-file
            :basis     (basis)
            :main      '{{project-ns}}.main
+           ;; `java -jar` reads this, so sqlite-jdbc loads its native library
+           ;; without a restricted-method warning.
+           :manifest  {"Enable-Native-Access" "ALL-UNNAMED"}
            ;; Several transitive dependencies ship signed jars and overlapping
            ;; META-INF entries; without this the uber step fails on duplicate
            ;; or invalid signature files.

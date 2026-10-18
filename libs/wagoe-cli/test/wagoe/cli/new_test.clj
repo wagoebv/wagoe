@@ -3,6 +3,7 @@
             [clojure.java.io :as io]
             [clojure.java.shell :as sh]
             [clojure.edn :as edn]
+            [clojure.set :as set]
             [clojure.string :as str]
             [wagoe.cli.new :as new])
   (:import [ch.qos.logback.classic LoggerContext]
@@ -248,6 +249,24 @@
               "and the production classpath must not")
           (is (not (str/includes? (slurp (io/file tmp "deps.edn")) "{{devtools-version}}"))
               "unrendered version placeholder")))
+
+      (testing "every JVM that opens the database may load sqlite-jdbc's native library"
+        ;; Without the flag newer JDKs print four restricted-method warnings on
+        ;; every CLI task, and a later JDK blocks the call.
+        ;; -Duser.timezone=UTC marks the aliases that open a connection, so a
+        ;; new one is covered without editing this list.
+        (let [deps     (edn/read-string (slurp (io/file tmp "deps.edn")))
+              opens-db (for [[alias {:keys [jvm-opts]}] (:aliases deps)
+                             :when (some #{"-Duser.timezone=UTC"} jvm-opts)]
+                         [alias jvm-opts])]
+          (is (set/subset? #{:repl :test :run :migrate :seed :user-cli}
+                           (set (map first opens-db))))
+          (doseq [[alias jvm-opts] opens-db]
+            (is (some #{"--enable-native-access=ALL-UNNAMED"} jvm-opts)
+                (str alias)))
+          (is (re-find #"\"Enable-Native-Access\"\s+\"ALL-UNNAMED\""
+                       (slurp (io/file tmp "build.clj")))
+              "the uberjar, for `java -jar`")))
 
       (testing "wagoe-test is on the :test alias, and a test uses it"
         (let [deps (edn/read-string (slurp (io/file tmp "deps.edn")))
