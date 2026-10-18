@@ -438,15 +438,15 @@
         field-type (infer-field-type sql-type field-name)  ; Pass field-name for heuristics
         widget (infer-widget-for-field field-name field-type sql-type)
         is-primary-key? (:primary-key column-meta false)
-        is-not-null? (:not-null column-meta false)]
+        is-not-null? (:not-null column-meta false)
+        generated-always? (boolean (:generated-always column-meta))]
     {:name field-name
      :label (humanize-field-name field-name)
      :type field-type
      :widget widget
      :required (and is-not-null? (not is-primary-key?))
-     :readonly (or (should-be-readonly? field-name is-primary-key?)
-                   (boolean (:generated-always column-meta)))
-     :generated-always (boolean (:generated-always column-meta))
+     :readonly (or (should-be-readonly? field-name is-primary-key?) generated-always?)
+     :generated-always generated-always?
      :hidden (or (should-be-hidden? field-name)
                  (str/includes? (text/lower-case (str sql-type)) "tsvector"))
      :searchable (should-be-searchable? field-type field-name)
