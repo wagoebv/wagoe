@@ -167,7 +167,7 @@ The SHA-256 cache key is computed from the **normalised** query (lowercased, tri
 When a provider throws an exception, the adapter returns `nil` and logs an error. A response without numeric coordinates logs a WARN naming the provider. The service layer treats this as a miss and continues to the next provider. Do not rely on exceptions propagating from `geocode!`.
 
 ### 8. Thread safety of rate-limit atoms
-`support/enforce-rate-limit!` locks on the adapter's `last-request-ms` atom, so concurrent requests are spaced as well as sequential ones. Against the public Nominatim server the interval never drops below 1000 ms, whatever `:rate-limit` says.
+`support/enforce-rate-limit!` reserves each request a slot on the adapter's `last-request-ms` atom, so concurrent requests are spaced as well as sequential ones. Against the public Nominatim server the interval never drops below 1000 ms, whatever `:rate-limit` says.
 
 ### 9. Multi-instance deployments
 **Rate limiting is per-JVM instance, not distributed.** In multi-instance deployments (Kubernetes, ECS), each pod independently enforces rate limits. This may exceed provider rate limits.

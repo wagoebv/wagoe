@@ -866,8 +866,15 @@
     (log/info "Stopping RPC endpoint")
     (.stop server)))
 
+(defn- virtual-thread-pool
+  "Jetty pool that runs each request on its own virtual thread. Jetty caps it at
+   200 concurrent tasks, so the database pool still sees bounded demand."
+  []
+  (doto (org.eclipse.jetty.util.thread.VirtualThreadPool.)
+    (.setName "wagoe-http")))
+
 (defmethod ig/init-key :wagoe/http-server
-  [_ {:keys [handler port host join? config drain-timeout-ms max-request-body]
+  [_ {:keys [handler port host join? config drain-timeout-ms max-request-body virtual-threads?]
        :or   {max-request-body default-max-request-body}}]
   (let [http-config (or config {})
         port-allocation (port-manager/allocate-port port http-config)
@@ -881,6 +888,7 @@
                                   {:port allocated-port
                                    :host host
                                    :join? (or join? false)
+                                   :thread-pool (when virtual-threads? (virtual-thread-pool))
                                    ;; Store the handler atom on the server so
                                    ;; halt-key! can clear the right one, and
                                    ;; enable graceful connection draining.
@@ -894,6 +902,7 @@
                  :host host
                  :url (str "http://" host ":" allocated-port)
                  :drain-timeout-ms drain-timeout-ms
+                 :virtual-threads? (boolean virtual-threads?)
                  :allocation-message (:message port-allocation)})
       server)))
 

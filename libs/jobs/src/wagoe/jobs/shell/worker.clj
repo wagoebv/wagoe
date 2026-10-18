@@ -465,6 +465,7 @@
               :queue-name - Queue to process (keyword, required)
               :poll-interval-ms - Milliseconds between polls (default 1000)
               :scheduled-interval-ms - Check scheduled jobs interval (default 5000)
+              :virtual-threads? - Run the loop on a virtual thread (default false)
      queue - IJobQueue implementation
      store - IJobStore implementation
      registry - IJobRegistry implementation
@@ -475,8 +476,11 @@
   (let [queue-name (or (:queue-name config) :default)
         worker-state (create-worker-state queue-name)
         worker (->Worker worker-state nil queue store registry config)
-        thread (Thread. #(worker-loop config queue store registry worker-state)
-                        (str "job-worker-" (:id worker-state)))]
+        loop-fn #(worker-loop config queue store registry worker-state)
+        thread-name (str "job-worker-" (:id worker-state))
+        ^Thread thread (if (:virtual-threads? config)
+                         (-> (Thread/ofVirtual) (.name thread-name) (.unstarted ^Runnable loop-fn))
+                         (doto (Thread. ^Runnable loop-fn thread-name) (.setDaemon true)))]
 
     ;; Fail-loud guard: a worker with no handlers cannot run any job type — every
     ;; job it dequeues is re-enqueued and ultimately dead-lettered. Warn at startup
@@ -485,7 +489,6 @@
       (log/warn "Job worker started with NO registered handlers — it cannot process any job type. Register handlers before starting workers."
                 {:worker-id (:id worker-state) :queue-name queue-name}))
 
-    (.setDaemon thread true)
     (.start thread)
     (redis-adapter/register-worker! queue (:id worker-state) queue-name)
 
