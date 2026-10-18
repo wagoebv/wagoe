@@ -27,18 +27,18 @@
 (defn- validation-error [message details]
   {:error {:type :validation-error :message message :details details}})
 
-(defn- target-problem
-  "Why `url` may not be a target under `settings`, or nil: `:refused` when it
-   never can be, `:unresolvable` when DNS has no answer now."
-  [url settings]
+(defn- check-target
+  "`ssrf/check-host` for `url`, with `:problem` `:refused` also for a URL whose
+   shape `settings` do not allow."
+  [{:keys [settings resolve]} url]
   (if-let [problem (delivery/url-problem url settings)]
-    {:type :refused :message problem}
-    (ssrf/host-problem url settings)))
+    {:problem {:type :refused :message problem}}
+    (ssrf/check-host url settings resolve)))
 
 (defn- invalid-target
-  "`target-problem` as a validation error, for create and change."
-  [url settings]
-  (when-let [{:keys [message]} (target-problem url settings)]
+  "A target problem as a validation error, for create and change."
+  [svc url]
+  (when-let [{:keys [message]} (:problem (check-target svc url))]
     {:error {:type :validation-error :message message}}))
 
 (defn- public-view [subscription] (dissoc subscription :secret))
@@ -56,7 +56,7 @@
   (or (nil? idempotency)
       (jobs/claim-key! idempotency "webhooks" (str subscription-id "/" event-id) claim-ttl-ms)))
 
-(defn- attempt! [{:keys [store transport settings key]} subscription args attempt]
+(defn- attempt! [{:keys [store transport settings key] :as svc} subscription args attempt]
   (let [{:keys [event-id topic body]} args
         record! (fn [fields]
                   (ports/record-attempt! store (merge {:id              (random-uuid)
@@ -67,7 +67,7 @@
                                                        :attempt         attempt
                                                        :created-at      (Instant/now)}
                                                       fields)))
-        problem (target-problem (:url subscription) settings)]
+        {:keys [problem addresses]} (check-target svc (:url subscription))]
     (if (= :refused (:type problem))
       ;; Retrying cannot make a refused target acceptable.
       (do (record! {:status :refused :error (:message problem)})
@@ -86,9 +86,11 @@
                        :else
                        (ports/send-request!
                         transport
-                        {:url     (:url subscription)
-                         :body    body
-                         :headers (delivery/headers
+                        {:url       (:url subscription)
+                         ;; Connect to what was checked, not to a second lookup.
+                         :addresses addresses
+                         :body      body
+                         :headers   (delivery/headers
                                    args
                                    (signature/signature-header
                                     secret (.getEpochSecond (Instant/now)) body))}))
@@ -103,12 +105,12 @@
           {:success? false :error {:type :webhooks/delivery-failed :message failure}}
           {:success? true :result {:status :delivered :status-code (:status response)}})))))
 
-(defrecord WebhookService [store transport job-queue idempotency settings key]
+(defrecord WebhookService [store transport job-queue idempotency resolve settings key]
   ports/IWebhooks
-  (create-subscription! [_ input]
+  (create-subscription! [this input]
     (if-not (m/validate schema/SubscriptionInput input)
       (validation-error "Invalid subscription" (me/humanize (m/explain schema/SubscriptionInput input)))
-      (or (invalid-target (:url input) settings)
+      (or (invalid-target this (:url input))
           (let [secret (or (:secret input) (crypto/generate-secret))
                 now    (Instant/now)
                 s      {:id            (str (random-uuid))
@@ -123,13 +125,13 @@
             (ports/save-subscription! store s)
             {:subscription (public-view s) :secret secret}))))
 
-  (change-subscription! [_ id changes]
+  (change-subscription! [this id changes]
     (cond
       (not (m/validate schema/SubscriptionChanges changes))
       (validation-error "Invalid changes" (me/humanize (m/explain schema/SubscriptionChanges changes)))
 
       :else
-      (or (some-> (:url changes) (invalid-target settings))
+      (or (some->> (:url changes) (invalid-target this))
           (some-> (ports/update-subscription! store id (assoc changes :updated-at (Instant/now)))
                   public-view))))
 
@@ -175,12 +177,13 @@
 
 (defn create-service
   "`deps`: `:store` (both store protocols), `:transport`, `:job-queue`, and
-   optionally `:idempotency`. `settings`: see `defaults`, plus
+   optionally `:idempotency` and `:resolve` (host -> addresses, default
+   `ssrf/system-resolve`). `settings`: see `defaults`, plus
    `:require-https?` and `:encryption-key`."
-  [{:keys [store transport job-queue idempotency]} settings]
+  [{:keys [store transport job-queue idempotency resolve]} settings]
   (let [settings (-> (merge defaults settings)
                      ;; Lower case once, not on every check.
                      (update :allowed-hosts #(into #{} (map str/lower-case) %)))]
-    (->WebhookService store transport job-queue idempotency
+    (->WebhookService store transport job-queue idempotency (or resolve ssrf/system-resolve)
                       (dissoc settings :encryption-key)
                       (crypto/derive-key (:encryption-key settings)))))
