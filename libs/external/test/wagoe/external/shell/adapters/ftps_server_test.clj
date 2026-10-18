@@ -2,6 +2,7 @@
   "FtpsFileSource against a real FTPS server (Apache MINA FtpServer, in-process,
    explicit TLS with a keystore generated per run)."
   (:require [clojure.java.io :as io]
+            [clojure.pprint :as pprint]
             [clojure.java.shell :as sh]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing use-fixtures]]
@@ -15,7 +16,7 @@
            [java.security KeyStore]
            [java.nio.file.attribute FileAttribute]
            [org.apache.ftpserver FtpServer FtpServerFactory]
-           [org.apache.ftpserver.ftplet DefaultFtplet FtpRequest FtpletResult]
+           [org.apache.ftpserver.ftplet DefaultFtpReply DefaultFtplet FtpRequest FtpSession FtpletResult]
            [org.apache.ftpserver.listener ListenerFactory]
            [org.apache.ftpserver.ssl SslConfigurationFactory]
            [org.apache.ftpserver.usermanager ClearTextPasswordEncryptor PropertiesUserManagerFactory]
@@ -29,6 +30,7 @@
 (def ^:private ^:dynamic *port* nil)
 (def ^:private ^:dynamic *trust-store* nil)
 (def ^:private commands (atom []))
+(def ^:private refuse-prot? (atom false))
 
 (defn- temp-dir ^File [prefix]
   (.toFile (Files/createTempDirectory prefix (make-array FileAttribute 0))))
@@ -60,9 +62,13 @@
 
 (defn- recording-ftplet []
   (proxy [DefaultFtplet] []
-    (beforeCommand [_session ^FtpRequest request]
-      (swap! commands conj (str/trim (.getRequestLine request)))
-      FtpletResult/DEFAULT)))
+    (beforeCommand [^FtpSession session ^FtpRequest request]
+      (let [line (str/trim (.getRequestLine request))]
+        (swap! commands conj line)
+        (if (and @refuse-prot? (= "PROT P" line))
+          (do (.write session (DefaultFtpReply. 534 "PROT P refused"))
+              FtpletResult/SKIP)
+          FtpletResult/DEFAULT)))))
 
 (defn- start-server! ^FtpServer [^File home ^File keystore]
   (let [ssl      (doto (SslConfigurationFactory.)
@@ -167,6 +173,15 @@
       (is (= 1 (:attempts error)))
       (is (= 550 (:reply-code error)))))
 
+  (testing "a refused PROT P keeps its reply code"
+    (reset! refuse-prot? true)
+    (try
+      (let [{:keys [success? error]} (ports/list-files! (source) "/outbox")]
+        (is (false? success?))
+        (is (= 1 (:attempts error)))
+        (is (= 534 (:reply-code error))))
+      (finally (reset! refuse-prot? false))))
+
   (testing "a certificate the JVM does not trust"
     (let [{:keys [success? error]} (ports/list-files! (source :trust-store nil) "/outbox")]
       (is (false? success?))
@@ -202,8 +217,15 @@
     (is (not (str/includes? (str err) "Reflection warning")) (str err))))
 
 (deftest ^:unit invalid-config-is-refused-test
-  (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Invalid FTPS configuration"
-                        (ftps/create-ftps-source {:host "localhost" :username "x"}))))
+  (let [e (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Invalid FTPS configuration"
+                                (ftps/create-ftps-source {:host "localhost" :username "x"})))]
+    (is (contains? (:errors (ex-data e)) :password))))
+
+(deftest ^:unit unreadable-trust-store-is-typed-test
+  (let [e (is (thrown? clojure.lang.ExceptionInfo
+                       (source :trust-store "/nonexistent/trust.p12")))]
+    (is (= :validation-error (:type (ex-data e))))))
 
 (deftest ^:unit printing-hides-the-password-test
-  (is (not (str/includes? (pr-str (source)) password))))
+  (is (not (str/includes? (pr-str (source)) password)))
+  (is (not (str/includes? (with-out-str (pprint/pprint {:source (source)})) password))))

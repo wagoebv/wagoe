@@ -11,7 +11,10 @@
                                       :password \"secret\"}))
      (ports/list-files! source \"/outbox\" {:match #\".*\\.csv\"})"
   (:require [clojure.java.io :as io]
+            [clojure.pprint :as pprint]
             [clojure.tools.logging :as log]
+            [malli.core :as m]
+            [malli.error :as me]
             [wagoe.external.core.ftps :as ftps-core]
             [wagoe.external.ports :as ports]
             [wagoe.external.schema :as schema])
@@ -20,7 +23,7 @@
            [java.security.cert CertificateException]
            [java.time Duration]
            [java.util Calendar]
-           [javax.net.ssl TrustManager]
+           [javax.net.ssl SSLException TrustManager]
            [org.apache.commons.net.ftp FTP FTPFile FTPReply FTPSClient]
            [org.apache.commons.net.util TrustManagerUtils]))
 
@@ -40,6 +43,18 @@
   (when-not (FTPReply/isPositiveCompletion (.getReplyCode client))
     (reply-failure! client step)))
 
+(defn- tls-step!
+  "Run (f). Commons Net reports a refused AUTH, PBSZ or PROT as a bare
+   SSLException; rethrow that with the reply code so a 5xx is not retried. A
+   failed handshake follows a positive reply and is rethrown as is."
+  [^FTPSClient client step f]
+  (try
+    (f)
+    (catch SSLException e
+      (if (FTPReply/isPositiveCompletion (.getReplyCode client))
+        (throw e)
+        (reply-failure! client step)))))
+
 (defn- connect!
   ^FTPSClient [{:keys [host port username password timeout-ms ^TrustManager trust-manager]}]
   (let [client (FTPSClient. "TLS" false)]
@@ -50,13 +65,12 @@
       (.setDefaultTimeout (int timeout-ms))
       (.setDataTimeout (Duration/ofMillis timeout-ms)))
     (try
-      (.connect client ^String host (int port))
+      (tls-step! client "AUTH TLS" #(.connect client ^String host (int port)))
       (check-reply! client "Connection")
       (when-not (.login client ^String username ^String password)
         (reply-failure! client "Login"))
-      (.execPBSZ client 0)
-      (.execPROT client "P")
-      (check-reply! client "PROT P")
+      (tls-step! client "PBSZ 0" #(.execPBSZ client 0))
+      (tls-step! client "PROT P" #(.execPROT client "P"))
       (.enterLocalPassiveMode client)
       (when-not (.setFileType client FTP/BINARY_FILE_TYPE)
         (reply-failure! client "Binary mode"))
@@ -149,6 +163,9 @@
 (defmethod print-method FtpsFileSource [^FtpsFileSource s ^java.io.Writer w]
   (.write w (str "#FtpsFileSource" (pr-str (select-keys s [:host :port :username])))))
 
+;; pprint dispatches records as maps and would bypass print-method.
+(defmethod pprint/simple-dispatch FtpsFileSource [s] (pr s))
+
 ;; =============================================================================
 ;; Constructor
 ;; =============================================================================
@@ -159,9 +176,14 @@
   ^TrustManager [{:keys [trust-store trust-store-password trust-store-type]}]
   (TrustManagerUtils/getDefaultTrustManager
    (when trust-store
-     (with-open [in (io/input-stream trust-store)]
-       (doto (KeyStore/getInstance ^String (or trust-store-type "PKCS12"))
-         (.load in (some-> ^String trust-store-password .toCharArray)))))))
+     (try
+       (with-open [in (io/input-stream trust-store)]
+         (doto (KeyStore/getInstance ^String (or trust-store-type "PKCS12"))
+           (.load in (some-> ^String trust-store-password .toCharArray))))
+       (catch Exception e
+         (throw (ex-info (str "Cannot load FTPS trust store " trust-store ": " (ex-message e))
+                         {:type :validation-error :trust-store trust-store}
+                         e)))))))
 
 (defn create-ftps-source
   "Create an FTPS file source.
@@ -183,7 +205,11 @@
     :as   config}]
   (when-not (schema/valid-ftps-config? config)
     (throw (ex-info "Invalid FTPS configuration"
-                    {:type :validation-error :host host :username username})))
+                    {:type     :validation-error
+                     :host     host
+                     :username username
+                     ;; humanize names the keys without echoing the password
+                     :errors   (me/humanize (m/explain schema/FtpsConfig config))})))
   (log/info "Creating FTPS file source" {:host host :port port})
   (->FtpsFileSource host port username password timeout-ms max-attempts backoff-ms
                     (trust-manager-for config)))

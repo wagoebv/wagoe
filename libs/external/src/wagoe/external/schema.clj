@@ -144,7 +144,7 @@
    [:port {:optional true} [:int {:min 1 :max 65535}]]
    [:username [:string {:min 1}]]
    [:password [:string {:min 1}]]
-   [:timeout-ms {:optional true} [:int {:min 1}]]
+   [:timeout-ms {:optional true} [:int {:min 1 :max Integer/MAX_VALUE}]]
    [:max-attempts {:optional true} [:int {:min 1 :max 10}]]
    [:backoff-ms {:optional true} [:int {:min 0}]]
    [:trust-store {:optional true} [:maybe [:string {:min 1}]]]
