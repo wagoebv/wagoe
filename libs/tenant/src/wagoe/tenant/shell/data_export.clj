@@ -9,14 +9,16 @@
 (def ^:private page-size 500)
 
 (defn- all-pages
-  "Every row `(read {:limit :offset})` returns, a page at a time."
+  "Every row `(read {:limit :offset})` returns, a page at a time, each once: a
+   row inserted mid-read shifts the offsets and repeats one already read."
   [read]
-  (loop [offset 0 acc []]
+  (loop [offset 0 seen #{} acc []]
     (let [page (read {:limit page-size :offset offset})
-          acc  (into acc page)]
+          acc  (into acc (remove (comp seen :id)) page)
+          seen (into seen (map :id) page)]
       (if (< (count page) page-size)
         acc
-        (recur (+ offset page-size) acc)))))
+        (recur (+ offset page-size) seen acc)))))
 
 (defrecord TenantDataExporter [tenant-repository membership-repository invite-repository]
   privacy/IDataExporter

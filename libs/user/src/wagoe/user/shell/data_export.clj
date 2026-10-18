@@ -18,10 +18,12 @@
                                                         (assoc filters :limit page-size :after-id after-id
                                                                :sort-by :id :sort-direction :asc
                                                                :count? false))))
-          acc  (into acc page)]
-      (if (< (count page) page-size)
+          acc  (into acc page)
+          last-id (:id (peek page))]
+      ;; A repository that ignores :after-id answers the same page again.
+      (if (or (< (count page) page-size) (= last-id after-id))
         acc
-        (recur (:id (peek page)) acc)))))
+        (recur last-id acc)))))
 
 (defrecord UserDataExporter [user-repository session-repository audit-repository
                              identity-repository group-repository]
@@ -43,4 +45,3 @@
   privacy/IRetentionPolicy
   (purge-before! [_ cutoff]
     (ports/delete-audit-logs-before audit-repository cutoff)))
-
