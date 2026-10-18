@@ -1,5 +1,5 @@
 (ns wagoe.external.core.imap
-  "Pure functions for IMAP message parsing and filtering.
+  "Pure functions for IMAP message parsing.
    No I/O, no side effects."
   (:require [clojure.string :as str]))
 
@@ -109,35 +109,6 @@
              :headers     (parse-message-headers headers)}
       text (assoc :body text)
       html (assoc :html-body html))))
-
-;; =============================================================================
-;; Filtering
-;; =============================================================================
-
-(defn filter-by-date
-  "Keep only messages received at or after since-inst.
-
-  Args:
-    messages   - seq of InboundMessage maps
-    since-inst - java.util.Date or inst?
-
-  Returns:
-    Filtered vector"
-  [messages since-inst]
-  (if (nil? since-inst)
-    (vec messages)
-    (vec (filter #(not (.before ^java.util.Date (:received-at %) since-inst)) messages))))
-
-(defn filter-unread
-  "Keep only messages with :seen? false or absent.
-
-  Args:
-    messages - seq of InboundMessage maps
-
-  Returns:
-    Filtered vector"
-  [messages]
-  (vec (filter #(not (:seen? %)) messages)))
 
 ;; =============================================================================
 ;; Summary
