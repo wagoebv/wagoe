@@ -26,11 +26,10 @@
                 (* delay-ms n))]
     (if max-delay-ms (min max-delay-ms delay) delay)))
 
-(defn retry?
-  "Whether to make another attempt after the `attempt`-th one failed with a
-   failure the caller judged `retryable?`."
-  [policy attempt retryable?]
-  (boolean (and retryable? (< attempt (:max-attempts (merge default-policy policy))))))
+(defn attempts-left?
+  "Whether `policy` allows another attempt after the `attempt`-th."
+  [policy attempt]
+  (< attempt (:max-attempts (merge default-policy policy))))
 
 (defn budget-ms
   "Longest a run of attempts can take: every attempt's timeout plus the delays

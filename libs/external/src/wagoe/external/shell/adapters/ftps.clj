@@ -18,9 +18,8 @@
             [wagoe.external.core.ftps :as ftps-core]
             [wagoe.external.ports :as ports]
             [wagoe.external.schema :as schema]
-            [wagoe.platform.core.circuit-breaker :as cb]
-            [wagoe.platform.core.retry :as retry]
-            [wagoe.platform.resilience :as resilience])
+            [wagoe.external.shell.resilience :as resilience]
+            [wagoe.platform.resilience :as platform-resilience])
   (:import [java.io ByteArrayOutputStream]
            [java.security KeyStore]
            [java.security.cert CertificateException]
@@ -113,21 +112,20 @@
   "Run (f client) on a fresh connection, retrying transient failures, behind
    the circuit breaker when the source has a :cache. Returns
    (assoc (f client) :success? true), or {:success? false :error ...}."
-  [{:keys [host policy cache breaker circuit] :as adapter} operation f]
+  [{:keys [host resilience] :as adapter} operation f]
   (let [outcome
-        (resilience/with-breaker
-          cache breaker circuit
-          transient?
-          (fn [retry-after-ms] {:open retry-after-ms})
-          (fn []
-            (resilience/with-retry
-              policy
-              transient?
-              (fn [n] (assoc (attempt adapter f) :attempts n))
-              {:on-retry (fn [{{:keys [cause]} :failure} n delay]
-                           (log/warn "FTPS attempt failed, retrying"
-                                     {:host host :operation operation :attempt n
-                                      :delay-ms delay :cause cause}))})))]
+        (platform-resilience/call
+          resilience
+          {:retryable? transient?
+           :failure?   transient?
+           :on-open    (fn [retry-after-ms]
+                         (log/warn "FTPS circuit open; not attempting" {:host host :operation operation})
+                         {:error (resilience/open-error (:circuit resilience) retry-after-ms)})
+           :on-retry   (fn [{{:keys [cause]} :failure} n delay]
+                         (log/warn "FTPS attempt failed, retrying"
+                                   {:host host :operation operation :attempt n
+                                    :delay-ms delay :cause cause}))}
+          (fn [n] (assoc (attempt adapter f) :attempts n)))]
     (cond
       (contains? outcome :value)
       (assoc (:value outcome) :success? true)
@@ -140,12 +138,7 @@
         {:success? false :error error})
 
       :else
-      (do (log/warn "FTPS circuit open; not attempting" {:host host :operation operation})
-          {:success? false
-           :error    (cond-> {:type    :circuit-open
-                              :message (str "Circuit open for " circuit "; not attempting the call")
-                              :host    host}
-                       (:open outcome) (assoc :retry-after-ms (:open outcome)))}))))
+      (assoc outcome :success? false))))
 
 ;; =============================================================================
 ;; Operations
@@ -175,7 +168,7 @@
 ;; Adapter Record
 ;; =============================================================================
 
-(defrecord FtpsFileSource [host port username password timeout-ms policy trust-manager cache breaker circuit]
+(defrecord FtpsFileSource [host port username password timeout-ms trust-manager]
   ports/IFileSource
   (list-files! [this dir]
     (ports/list-files! this dir {}))
@@ -242,14 +235,11 @@
                      ;; humanize names the keys without echoing the password
                      :errors   (me/humanize (m/explain schema/FtpsConfig config))})))
   (log/info "Creating FTPS file source" {:host host :port port})
-  (let [policy {:max-attempts max-attempts :delay-ms backoff-ms
-                :backoff :exponential :max-delay-ms 30000}
-        ;; Each attempt can wait on connect, control and data reads in turn.
-        cb-cfg (merge cb/default-config
-                      {:probe-lease-ms (retry/budget-ms policy (* 3 timeout-ms))}
-                      (:circuit-breaker config))]
-    (when-let [problem (and (:circuit-breaker config) (cb/config-problem cb-cfg))]
-      (throw (ex-info problem {:type :validation-error :host host})))
-    (->FtpsFileSource host port username password timeout-ms policy
-                      (trust-manager-for config)
-                      (:cache config) cb-cfg (str "ftps:" host ":" port))))
+  (assoc (->FtpsFileSource host port username password timeout-ms (trust-manager-for config))
+         :resilience (platform-resilience/settings
+                      config
+                      {:max-attempts max-attempts :delay-ms backoff-ms
+                       :backoff :exponential :max-delay-ms 30000}
+                      (str "ftps:" host ":" port)
+                      ;; Each attempt can wait on connect, control and data reads in turn.
+                      (* 3 timeout-ms))))

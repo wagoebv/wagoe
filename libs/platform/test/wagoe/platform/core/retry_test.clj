@@ -10,11 +10,10 @@
       (is (= [100 200 400] (map #(retry/delay-ms policy %) [1 2 3])))
       (is (= 30000 (retry/delay-ms (assoc policy :delay-ms 10000) 5))))))
 
-(deftest ^:unit retry?-test
-  (is (retry/retry? {:max-attempts 3} 2 true))
-  (is (not (retry/retry? {:max-attempts 3} 3 true)) "out of attempts")
-  (is (not (retry/retry? {:max-attempts 3} 1 false)) "not retryable")
-  (is (not (retry/retry? nil 1 true)) "one attempt by default"))
+(deftest ^:unit attempts-left?-test
+  (is (retry/attempts-left? {:max-attempts 3} 2))
+  (is (not (retry/attempts-left? {:max-attempts 3} 3)))
+  (is (not (retry/attempts-left? nil 1)) "one attempt by default"))
 
 (deftest ^:unit budget-ms-test
   (testing "every timeout plus every delay slept between attempts"

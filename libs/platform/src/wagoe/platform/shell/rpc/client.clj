@@ -13,7 +13,6 @@
    FC/IS: shell. The wire contract is pure and lives in
    `wagoe.platform.core.rpc`."
   (:require [wagoe.platform.core.circuit-breaker :as cb]
-            [wagoe.platform.core.retry :as retry]
             [wagoe.platform.core.rpc :as rpc]
             [wagoe.platform.resilience :as resilience]
             [clj-http.client :as http]
@@ -211,52 +210,45 @@
         ;; "http://payments:3001/" call one service and would otherwise keep
         ;; two failure counters and two probe leases for it.
         service  (rpc/service-url base-url "")
-        policy   {:max-attempts (inc (:retries opts 0))
-                  :delay-ms     (:retry-delay-ms opts 0)}
-        cb-cfg   (merge cb/default-config
-                        ;; The probe lease must outlive a probe, and only the
-                        ;; client knows how long one may take.
-                        {:probe-lease-ms (retry/budget-ms policy (:timeout-ms opts 0))}
-                        (:circuit-breaker opts))
-        _        (when-let [problem (and (:circuit-breaker opts) (cb/config-problem cb-cfg))]
-                   ;; A misconfigured breaker is inert or wrong, and either way
-                   ;; looks like a working one. `:trip-on #{:rpc/unavailble}`
-                   ;; never fires and nothing says so.
-                   (throw (ex-info problem {:type :configuration-error
-                                            :circuit-breaker (:circuit-breaker opts)})))
+        ;; A misconfigured breaker is inert or wrong, and either way looks like
+        ;; a working one: `:trip-on #{:rpc/unavailble}` never fires and nothing
+        ;; says so. `settings` refuses it.
+        settings (resilience/settings opts
+                                      {:max-attempts (inc (:retries opts 0))
+                                       :delay-ms     (:retry-delay-ms opts 0)}
+                                      (str "rpc:" service)
+                                      (:timeout-ms opts 0))
         error-type #(get-in % [:error :type])]
     (raise-if-thrown!
      operation
-     (resilience/with-breaker
-       (:cache opts) cb-cfg (str "rpc:" service)
-       ;; Decided on the error type alone, not on whether the call reached the
-       ;; service. That governs *retries* — re-sending something that already
-       ;; ran is the danger there. Tripping re-runs nothing, so the only
-       ;; question is whether the caller counts this as the service being
-       ;; unusable. `:trip-on` is where they say so, and a policy the validator
-       ;; accepts has to be one the client honours.
-       #(cb/counts-as-failure? cb-cfg (error-type %))
-       (fn [retry-after-ms]
-         (log/warn "rpc circuit open; not attempting" {:base-url base-url
-                                                       :operation operation})
-         (cb/error operation service retry-after-ms))
-       (fn []
-         (second
-          (resilience/with-retry
-            policy
-            ;; The service answered. Whatever the shape of that answer, the
-            ;; operation ran — re-sending it would run it a second time.
-            (fn [[outcome result]]
-              (and (= outcome :transport) (map? result) (retryable? opts result)))
-            (fn [_attempt] (post-envelope! url envelope opts))
-            {:on-retry   (fn [[_ result] attempt _delay]
-                           (log/warn "rpc retrying" {:operation operation
-                                                     :attempt   attempt
-                                                     :error     (error-type result)}))
-             :on-give-up (fn [[_ result] attempts]
-                           (log/warn "rpc gave up" {:operation operation
-                                                    :attempts  attempts
-                                                    :error     (error-type result)}))})))))))
+     (second
+      (resilience/call
+        settings
+        {;; The service answered. Whatever the shape of that answer, the
+         ;; operation ran — re-sending it would run it a second time.
+         :retryable? (fn [[outcome result]]
+                       (and (= outcome :transport) (map? result) (retryable? opts result)))
+         ;; Decided on the error type alone, not on whether the call reached
+         ;; the service. That governs *retries* — re-sending something that
+         ;; already ran is the danger there. Tripping re-runs nothing, so the
+         ;; only question is whether the caller counts this as the service
+         ;; being unusable. `:trip-on` is where they say so, and a policy the
+         ;; validator accepts has to be one the client honours.
+         :failure?   (fn [[_ result]]
+                       (cb/counts-as-failure? (:breaker settings) (error-type result)))
+         :on-open    (fn [retry-after-ms]
+                       (log/warn "rpc circuit open; not attempting" {:base-url base-url
+                                                                     :operation operation})
+                       [:open (cb/error operation service retry-after-ms)])
+         :on-retry   (fn [[_ result] attempt _delay]
+                       (log/warn "rpc retrying" {:operation operation
+                                                 :attempt   attempt
+                                                 :error     (error-type result)}))
+         :on-give-up (fn [[_ result] attempts]
+                       (log/warn "rpc gave up" {:operation operation
+                                                :attempts  attempts
+                                                :error     (error-type result)}))}
+        (fn [_attempt] (post-envelope! url envelope opts)))))))
 
 ;; =============================================================================
 ;; Protocol proxy

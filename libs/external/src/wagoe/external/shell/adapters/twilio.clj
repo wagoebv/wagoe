@@ -23,10 +23,11 @@
 
 (def ^:private default-base-url "https://api.twilio.com")
 
+(defn- api-root [base-url] (or base-url default-base-url))
+
 (defn- messages-url
   [{:keys [account-sid base-url]}]
-  (str (or base-url default-base-url)
-       "/2010-04-01/Accounts/" account-sid "/Messages.json"))
+  (str (api-root base-url) "/2010-04-01/Accounts/" account-sid "/Messages.json"))
 
 (defn- post-message
   [{:keys [account-sid auth-token] :as adapter} form-params]
@@ -89,7 +90,7 @@
   (get-message-status! [this sid]
     (log/info "Getting Twilio message status" {:sid sid})
     (try
-      (let [url      (str (or (:base-url this) default-base-url)
+      (let [url      (str (api-root (:base-url this))
                           "/2010-04-01/Accounts/" (:account-sid this)
                           "/Messages/" sid ".json")
             response (resilience/call! (:resilience this)
@@ -132,5 +133,5 @@
   (log/info "Creating Twilio adapter" {:account-sid account-sid})
   (assoc (->TwilioAdapter account-sid auth-token from-number base-url)
          :resilience (resilience/settings config
-                                          (str "twilio:" (or base-url default-base-url))
+                                          (str "twilio:" (api-root base-url))
                                           nil)))
