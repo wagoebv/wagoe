@@ -311,6 +311,9 @@
  :user/mfa-disable-prompt           "Om tweestapsverificatie uit te schakelen, bevestig uw wachtwoord:"
  :user/profile-page-title           "Profiel & beveiliging"
  :user/profile-label-sessions       "Sessies"
+ :user/profile-card-data-title      "Uw gegevens"
+ :user/profile-label-data-export    "Alles wat we over u bewaren, als JSON"
+ :user/button-download-data         "Download uw gegevens"
  :user/refused-own-admin-rights     "U kunt uw eigen beheerdersrechten niet intrekken."
  :user/refused-last-admin           "De laatste actieve beheerder kan de beheerdersrechten niet verliezen."
 

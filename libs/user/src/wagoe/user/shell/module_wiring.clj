@@ -17,6 +17,7 @@
             [wagoe.user.shell.oidc :as oidc]
             [wagoe.user.shell.middleware :as user-middleware]
             [wagoe.user.shell.session-pruner :as session-pruner]
+            [wagoe.user.shell.data-export :as data-export]
             [clojure.tools.logging :as log]
             [integrant.core :as ig]))
 
@@ -286,6 +287,23 @@
   ((ns-resolve 'wagoe.user.shell.http 'group-routes) user-service group-service config))
 
 ;; =============================================================================
+;; Data export and retention
+;; =============================================================================
+
+(defmethod ig/init-key :wagoe/user-data-exporter
+  [_ repositories]
+  (data-export/map->UserDataExporter repositories))
+
+(defmethod ig/init-key :wagoe/user-audit-retention
+  [_ {:keys [audit-repository]}]
+  (data-export/->AuditLogRetention audit-repository))
+
+(defmethod ig/init-key :wagoe/user-export-routes
+  [_ {:keys [user-service data-export config]}]
+  (require 'wagoe.user.shell.http)
+  ((ns-resolve 'wagoe.user.shell.http 'export-routes) user-service data-export config))
+
+;; =============================================================================
 ;; Module graph
 ;; =============================================================================
 
@@ -337,6 +355,17 @@
                                :group-service (ig/ref :wagoe/user-group-service)
                                :config        config}
 
+    :wagoe/user-data-exporter {:user-repository     (ig/ref :wagoe/user-repository)
+                               :session-repository  (ig/ref :wagoe/session-repository)
+                               :audit-repository    (ig/ref :wagoe/audit-repository)
+                               :identity-repository (ig/ref :wagoe/user-identity-repository)
+                               :group-repository    (ig/ref :wagoe/user-group-repository)}
+    :wagoe/user-audit-retention {:audit-repository (ig/ref :wagoe/audit-repository)}
+    ;; :wagoe/data-export is platform's, over every module's :data-export.
+    :wagoe/user-export-routes {:user-service (ig/ref :wagoe/user-service)
+                               :data-export  (ig/ref :wagoe/data-export)
+                               :config       config}
+
     :wagoe/user-http-middleware {:user-service (ig/ref :wagoe/user-service)}
     :wagoe/user-home-middleware {:config config}
     :wagoe/admin-only-middleware {:user-service (ig/ref :wagoe/user-service)}}
@@ -352,7 +381,10 @@
    :http   {:user-service     (ig/ref :wagoe/user-service)
             :auth-middleware  (ig/ref :wagoe/user-http-middleware)
             :extra-middleware (ig/ref :wagoe/user-home-middleware)}
-   :routes [(ig/ref :wagoe/user-routes) (ig/ref :wagoe/user-group-routes)]})
+   :routes [(ig/ref :wagoe/user-routes) (ig/ref :wagoe/user-group-routes)
+            (ig/ref :wagoe/user-export-routes)]
+   :data-export {:user (ig/ref :wagoe/user-data-exporter)}
+   :retention   {:user/audit-log (ig/ref :wagoe/user-audit-retention)}})
 
 (defn ig-config
   "This module's Integrant entries, for `wagoe.platform.shell.system.config`.

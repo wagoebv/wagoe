@@ -556,5 +556,15 @@
         [:span
          [:a {:href (str "/web/users/" (:id user) "/sessions")}
           [:t :user/button-manage-sessions] " "
+          (icons/icon :chevron-right {:size 16})]]]]]
+     [:div.profile-card
+      [:div.card-header
+       [:h2 [:t :user/profile-card-data-title]]]
+      [:div.card-body
+       [:div.info-row
+        [:label [:t :user/profile-label-data-export]]
+        [:span
+         [:a {:href "/web/profile/export" :download "data-export.json"}
+          [:t :user/button-download-data] " "
           (icons/icon :chevron-right {:size 16})]]]]]]]
    opts))

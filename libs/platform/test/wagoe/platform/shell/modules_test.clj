@@ -284,6 +284,24 @@
                      {:wagoe/visits {:enabled? true}} #{} "acme" (constantly true)
                      (constantly (constantly {:search {:c :r}}))))))))
 
+(deftest ^:unit exporters-and-retention-policies-are-collected-one-module-each
+  (let [{:keys [data-export retention]}
+        (assemble {:wagoe/tenant {} :wagoe/search {}}
+                  {'wagoe.tenant.shell.module-wiring {:data-export {:tenant :te} :retention {:t/x :tr}}
+                   'wagoe.search.shell.module-wiring {:data-export {:search :se}}})]
+    (is (= {:tenant :te :search :se} data-export))
+    (is (= {:t/x :tr} retention)))
+  (testing "two modules claiming one id fail rather than overwrite"
+    (is (= :t/x (:key (ex-data (is (thrown? clojure.lang.ExceptionInfo
+                                            (assemble {:wagoe/tenant {} :wagoe/search {}}
+                                                      {'wagoe.tenant.shell.module-wiring {:retention {:t/x :a}}
+                                                       'wagoe.search.shell.module-wiring {:retention {:t/x :b}}}))))))))
+  (testing "and a discovered module's are collected the same way"
+    (is (= {:visits :v}
+           (:data-export (sut/discover-module-config
+                          {:wagoe/visits {:enabled? true}} #{} "acme" (constantly true)
+                          (constantly (constantly {:data-export {:visits :v}}))))))))
+
 (deftest ^:unit a-module-sees-which-of-its-peers-are-on
   ;; audience takes a cache ref only when there is a cache to ref; without
   ;; this the config carries a dangling ref and the boot fails. Any module

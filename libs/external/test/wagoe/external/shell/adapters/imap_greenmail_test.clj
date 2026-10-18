@@ -161,6 +161,31 @@
             parsed (MimeMessage. ^Session (session) (ByteArrayInputStream. ^bytes (:raw msg)))]
         (is (= "plain" (.getSubject parsed)))))))
 
+(defn- cid-image-part [^bytes content ^String content-id]
+  (doto (MimeBodyPart.)
+    (.setDataHandler (DataHandler. (ByteArrayDataSource. content "image/png")))
+    (.setDisposition Part/INLINE)
+    (.setContentID content-id)))
+
+(deftest ^:integration inline-parts-test
+  (.appendMessage *inbox*
+                  (message "cid image"
+                           (multipart "mixed"
+                                      (nested-part (multipart "related"
+                                                              (html-part "<p>Hi</p><img src=\"cid:logo@example.com\">")
+                                                              (cid-image-part png-bytes "<logo@example.com>")))
+                                      (file-part pdf-bytes "application/pdf" "invoice.pdf" Part/ATTACHMENT)))
+                  (Flags.) (day 16))
+  (let [msg (get (by-subject (fetch {})) "cid image")
+        [logo pdf] (:attachments msg)]
+    (is (m/validate schema/InboundMessage msg))
+    (testing "the inline image and the attachment both come back; only the image the HTML shows is embedded"
+      (is (= {:disposition "inline" :content-id "logo@example.com" :content-type "image/png" :embedded? true}
+             (select-keys logo [:filename :disposition :content-id :content-type :embedded?])))
+      (is (java.util.Arrays/equals ^bytes png-bytes ^bytes (:content logo)))
+      (is (= {:filename "invoice.pdf" :disposition "attachment" :content-type "application/pdf" :embedded? false}
+             (select-keys pdf [:filename :disposition :content-id :content-type :embedded?]))))))
+
 (deftest ^:integration unread-limit-since-test
   (testing "unread-only? selects unseen messages"
     (is (= ["plain" "alternative" "pdf" "text attachments"]
