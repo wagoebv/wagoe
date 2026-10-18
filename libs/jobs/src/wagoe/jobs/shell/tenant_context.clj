@@ -202,7 +202,9 @@
     (try
       ;; Asked of the adapter: this compared a :database-type the system's
       ;; db-context never has, so every tenant job ran in public (BOU-605).
+      ;; A db-ctx without an adapter has always run the job in public.
       (if (and tenant-schema
+               (:adapter db-ctx)
                (db-ports/capable? (:adapter db-ctx) :schemas))
         ;; Execute in tenant schema context (PostgreSQL only)
         (do
