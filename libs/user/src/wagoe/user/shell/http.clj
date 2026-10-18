@@ -344,7 +344,7 @@
 
 (def ^:private login-responses
   "What POST /auth/login and POST /sessions answer (BOU-691)."
-  {200 {:description "Signed in: session, sessionToken, jwtToken. With requiresMfa true instead, the password was right; repeat the request with mfaCode."}
+  {200 {:description "Signed in: sessionToken, jwtToken, user and session. In user and session, read the camelCase keys: their kebab-case twins are deprecated. With requiresMfa true instead, the password was right; repeat the request with mfaCode."}
    400 {:description "Malformed body."}
    401 {:description "Wrong email or password (type unauthorized, the same body whether or not the account exists), or a wrong mfaCode (type mfa-verification-failed)."}
    403 {:description "MFA is required but the user has not enrolled (type mfa-enrolment-required)."}

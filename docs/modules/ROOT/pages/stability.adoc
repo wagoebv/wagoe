@@ -395,6 +395,11 @@ the xref:roadmap.adoc#_after_1_0_0[roadmap].
 | `/swagger.json` and `:swagger` route docs (Swagger 2.0)
 | `/openapi.json` and `:openapi` (OpenAPI 3.1). The old path serves the 3.1
   document; `:swagger` is translated and warns at boot.
+
+| Kebab-case keys in the `user` and `session` maps of the login response
+  (`session-token`, `expires-at`, ...)
+| Their camelCase twins (`sessionToken`, `expiresAt`), sent beside them with
+  the same value.
 |===
 
 == HTTP API versioning is a separate thing
