@@ -260,6 +260,13 @@
     Returns:
       Updated job"))
 
+(defprotocol IDeadLetterRetention
+  "The dead-letter queue's retention policy. Each job store implements it."
+
+  (purge-dead-letters-before! [this cutoff]
+    "Delete every dead-lettered job that finally failed before `cutoff`, an
+     Instant. Returns the count."))
+
 ;; =============================================================================
 ;; Job Statistics Ports
 ;; =============================================================================

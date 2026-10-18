@@ -1,7 +1,9 @@
 (ns wagoe.platform.core.privacy
   "Pure halves of data export and retention: the export document, and which
   retention policies run with which cutoff."
-  (:require [clojure.string :as str])
+  (:require [cheshire.core :as json]
+            [clojure.string :as str]
+            [wagoe.core.utils.case-conversion :as case-conversion])
   (:import [java.time Duration Instant Period ZoneOffset]
            [java.time.format DateTimeParseException]))
 
@@ -30,6 +32,23 @@
    :subject     (select-keys subject [:type :id])
    :exported-at now
    :sections    (into (sorted-map) (remove (comp nil? val)) sections)})
+
+(defn- json-key
+  "A keyword key camelCased with its namespace kept, at every depth: :user and
+   :billing/user, or :id and :billing/id, must not become one key."
+  [k]
+  (let [n (case-conversion/kebab-case->camel-case-string (name k))]
+    (if-let [ns (namespace k)] (str ns "/" n) n)))
+
+(defn export-response
+  "`doc`, an export from `IDataExport`, as a JSON download. Keys are
+   camelCased and keep their namespace."
+  [doc]
+  {:status  200
+   :headers {"Content-Type"        "application/json; charset=utf-8"
+             "Content-Disposition" "attachment; filename=\"data-export.json\""
+             "Cache-Control"       "no-store"}
+   :body    (json/generate-string doc {:key-fn json-key})})
 
 (defn parse-retain
   "An ISO-8601 period (\"P2Y\", \"P90D\") or duration (\"PT12H\") as a

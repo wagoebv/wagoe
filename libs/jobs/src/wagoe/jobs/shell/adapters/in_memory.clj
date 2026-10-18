@@ -350,6 +350,18 @@
 
         retry-job))))
 
+(extend-type InMemoryJobStore
+  ports/IDeadLetterRetention
+  (purge-dead-letters-before! [{:keys [state]} cutoff]
+    (let [jobs @(:jobs state)
+          old? (fn [id] (when-let [at (some-> (get jobs id) :completed-at)]
+                          (.isBefore ^Instant at cutoff)))
+          gone (filterv old? @(:failed state))
+          gone? (set gone)]
+      (swap! (:failed state) #(vec (remove gone? %)))
+      (swap! (:jobs state) #(apply dissoc % gone))
+      (count gone))))
+
 ;; =============================================================================
 ;; Job Statistics Implementation
 ;; =============================================================================

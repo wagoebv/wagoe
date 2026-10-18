@@ -291,6 +291,19 @@
          :metadata (cond-> {:all true :count n}
                      kept-session-id (assoc :kept-session-id (str kept-session-id)))))
 
+(defn data-export-audit-entry
+  "Audit log entry for an admin downloading `target`'s data export: who read
+   another person's data, and when."
+  [{:keys [actor-id actor-email ip-address user-agent]} target]
+  {:action :data-export
+   :actor-id actor-id
+   :actor-email actor-email
+   :target-user-id (:id target)
+   :target-user-email (:email target)
+   :ip-address ip-address
+   :user-agent user-agent
+   :result :success})
+
 ;; =============================================================================
 ;; Audit Entry Validation
 ;; =============================================================================

@@ -82,6 +82,7 @@
 (defn- app [users audit exporter]
   (let [routes (http/export-routes (user-service/->UserService users nil audit {} nil)
                                    (platform-privacy/create-data-export {:user exporter})
+                                   audit
                                    nil)]
     (ring/ring-handler (ring/router [["/api/v1" (:api routes)] ["/web" (:web routes)]]))))
 
@@ -113,6 +114,11 @@
           (let [r (fetch admin (str "/api/v1/users/" (:id bob) "/export"))]
             (is (= 200 (:status r)))
             (is (= "bob@example.com" (get-in (json/parse-string (:body r)) ["sections" "user" "profile" "email"])))))
+
+        (testing "an admin's export is in the audit trail; a user's own is not"
+          (is (= [[(:id admin) (:id bob)]]
+                 (map (juxt :actor-id :target-user-id)
+                      (:audit-logs (ports/find-audit-logs audit {:filter-action :data-export :limit 10}))))))
 
         (testing "an unknown user is not found, not an empty export"
           (is (= :not-found

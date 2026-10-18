@@ -10,24 +10,27 @@
 (def ^:private page-size 500)
 
 (defn- audit-entries
-  "Every audit entry matching `filters`, read a page at a time. Ordered by id,
-   which is unique, so no entry falls between two pages."
+  "Every audit entry matching `filters`, a page at a time, each page starting
+   after the last id of the one before."
   [audit-repository filters]
-  (loop [offset 0 acc []]
-    (let [page (:audit-logs (ports/find-audit-logs audit-repository
-                                                   (assoc filters :limit page-size :offset offset
-                                                          :sort-by :id :sort-direction :asc)))
-          acc  (into acc page)]
-      (if (< (count page) page-size)
+  (loop [after-id nil acc []]
+    (let [page (vec (:audit-logs (ports/find-audit-logs audit-repository
+                                                        (assoc filters :limit page-size :after-id after-id
+                                                               :sort-by :id :sort-direction :asc
+                                                               :count? false))))
+          acc  (into acc page)
+          last-id (:id (peek page))]
+      ;; A repository that ignores :after-id answers the same page again.
+      (if (or (< (count page) page-size) (= last-id after-id))
         acc
-        (recur (+ offset page-size) acc)))))
+        (recur last-id acc)))))
 
 (defrecord UserDataExporter [user-repository session-repository audit-repository
                              identity-repository group-repository]
   privacy/IDataExporter
   (export-data [_ {:keys [type id]}]
     (when (= :user type)
-      (when-let [user (some->> (if (uuid? id) id (type-conversion/parse-uuid-string (str id)))
+      (when-let [user (some->> (type-conversion/string->uuid (str id))
                                 (ports/find-user-by-id user-repository))]
         (let [user-id (:id user)]
           (core/user-export

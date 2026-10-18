@@ -438,6 +438,13 @@
         (insert-job! ds (or (:queue retried) :default) retried)
         retried))))
 
+(extend-type DbJobStore
+  ports/IDeadLetterRetention
+  (purge-dead-letters-before! [{:keys [ds]} cutoff]
+    ;; updated_at is when the job last failed: a dead letter is not written again.
+    (db/delete-in-batches! (db/context-of ds) :job_store
+                           [:and [:= :dead_letter true] [:< :updated_at (ts cutoff)]])))
+
 (defn create-db-job-store
   "Create a DB-backed job store over the given `next.jdbc` datasource `ds`.
    Call `create-job-store-table!` once before use (or run the migration)."

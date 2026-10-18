@@ -2,7 +2,7 @@
   "A database created before `:permanent-delete` checks user_audit_log's action
    against the old list, and refused the entry a permanent delete writes; the
    service only warns about a failed audit write (BOU-682). `:session-revoked`
-   is the same (BOU-698). Boot and `migrate
+   (BOU-698) and `:data-export` (BOU-735) are the same. Boot and `migrate
    up` widen the check, on every engine. H2 re-applies its checks at boot.
 
    Needs MySQL: `bb test:services up`."
@@ -18,9 +18,10 @@
             [wagoe.user.shell.persistence :as persistence]))
 
 (def ^:private old-audit-log
-  "UserAuditLog as it was before `:permanent-delete` and `:session-revoked`."
+  "UserAuditLog as it was before `:permanent-delete`, `:session-revoked` and
+   `:data-export`."
   (mapv #(if (and (vector? %) (= :action (first %)))
-           [:action (into [:enum] (remove #{:permanent-delete :session-revoked}) user-schema/audit-actions)]
+           [:action (into [:enum] (remove #{:permanent-delete :session-revoked :data-export}) user-schema/audit-actions)]
            %)
         user-schema/UserAuditLog))
 
@@ -41,7 +42,9 @@
     (ports/create-audit-log repo (entry audit/permanently-delete-user-audit-entry))
     (ports/create-audit-log repo (audit/session-revoked-audit-entry (random-uuid) (random-uuid) "admin@example.com"
                                                                     (random-uuid) "u@example.com" nil nil))
-    (is (= #{:delete :permanent-delete :session-revoked}
+    (ports/create-audit-log repo (audit/data-export-audit-entry {:actor-id (random-uuid) :actor-email "admin@example.com"}
+                                                                {:id (random-uuid) :email "u@example.com"}))
+    (is (= #{:delete :permanent-delete :session-revoked :data-export}
            (set (map :action (:audit-logs (ports/find-audit-logs repo {:limit 10})))))
         "the earlier entry is kept, and the new ones written")
     (is (thrown? Exception (ports/create-audit-log repo (assoc (entry audit/delete-user-audit-entry)

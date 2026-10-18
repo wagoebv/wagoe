@@ -45,6 +45,26 @@
   "Run one statement over many parameter sets."
   execution/execute-batch!)
 
+;; Retention purges call this: one DELETE of a year's rows holds its locks and
+;; undo for all of them at once, and blocks writers until it finishes.
+(defn delete-in-batches!
+  "Delete the rows of `table` matching `where`, at most `batch-size` per
+   statement, rows picked by `id-column`. Portable: MySQL takes no LIMIT in an
+   IN subquery and PostgreSQL no DELETE … LIMIT, so each batch selects its ids
+   first. Returns the number deleted."
+  ([ctx table where] (delete-in-batches! ctx table where {}))
+  ([ctx table where {:keys [id-column batch-size] :or {id-column :id batch-size 1000}}]
+   (loop [total 0]
+     (let [ids (mapv (comp val first)
+                     (execution/execute-query! ctx {:select [id-column] :from [table] :where where :limit batch-size}))]
+       (if (empty? ids)
+         total
+         (let [n (execution/execute-update! ctx {:delete-from table :where [:in id-column ids]})]
+           ;; Zero means a concurrent purge took them all.
+           (if (or (< (count ids) batch-size) (zero? n))
+             (+ total n)
+             (recur (+ total n)))))))))
+
 ;; =============================================================================
 ;; Which engine
 ;; =============================================================================
