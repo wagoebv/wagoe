@@ -285,6 +285,11 @@
            ;; HTTP client for the devtools dashboard server test only.
            :test/http {:extra-deps {org.clj-commons/clj-http-lite {:mvn/version "1.0.13"}}}
 
+           ;; In-process IMAP server for the external suite. Its jakarta.mail
+           ;; carries the same javax.mail packages; 1.6.2 is the one under test.
+           :test/mail {:extra-deps {com.icegreen/greenmail {:mvn/version "1.6.15"
+                                                            :exclusions [com.sun.mail/jakarta.mail junit/junit]}}}
+
            ;; Everything the root suite needs, for running it in one command.
            ;;
            ;; `clojure -M:test` alone runs kaocha's default, which discovers
@@ -303,7 +308,9 @@
                                     io.zonky.test.postgres/embedded-postgres-binaries-linux-amd64 {:mvn/version "18.6.0"}
                                     io.zonky.test.postgres/embedded-postgres-binaries-darwin-arm64v8 {:mvn/version "18.6.0"}
                                     io.opentelemetry/opentelemetry-sdk-testing {:mvn/version "1.66.0"}
-                                    org.clj-commons/clj-http-lite {:mvn/version "1.0.13"}}}
+                                    org.clj-commons/clj-http-lite {:mvn/version "1.0.13"}
+                                    com.icegreen/greenmail {:mvn/version "1.6.15"
+                                                            :exclusions [com.sun.mail/jakarta.mail junit/junit]}}}
            :outdated  {:extra-deps {olical/depot {:mvn/version "2.4.1"}}
                        :main-opts  ["-m" "depot.outdated.main"]}
            :build     {:main-opts  ["-m" "build"]

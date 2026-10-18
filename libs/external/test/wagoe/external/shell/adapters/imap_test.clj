@@ -2,9 +2,11 @@
   "Integration tests for the IMAP mailbox adapter.
    Tests verify record creation, protocol satisfaction, and graceful error handling
    against an unreachable host — no real IMAP server required."
-  (:require [wagoe.external.ports :as ports]
+  (:require [clojure.string :as str]
+            [wagoe.external.ports :as ports]
             [wagoe.external.shell.adapters.imap :as imap]
-            [clojure.test :refer [deftest is testing]]))
+            [clojure.test :refer [deftest is testing]])
+  (:import [java.io StringWriter]))
 
 (def ^:private test-config
   {:host     "localhost-nonexistent.invalid"
@@ -40,3 +42,11 @@
   (testing "close! always returns true (connection-per-call adapter)"
     (let [mailbox (imap/create-imap-mailbox test-config)]
       (is (true? (ports/close! mailbox))))))
+
+(deftest ^:unit adapter-has-no-reflection-test
+  ;; The mocked tests never reached a reflective call that failed on a real
+  ;; server; a hinted call cannot fail that way.
+  (let [err (StringWriter.)]
+    (binding [*err* err]
+      (load "/wagoe/external/shell/adapters/imap"))
+    (is (not (str/includes? (str err) "Reflection warning")) (str err))))

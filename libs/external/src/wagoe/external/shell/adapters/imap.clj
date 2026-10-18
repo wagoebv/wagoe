@@ -2,7 +2,8 @@
   "IMAP mailbox adapter implementing IImapMailbox.
 
    Uses javax.mail for IMAP access. Connections are opened per-call and closed
-   in a finally block. IMAP UIDs are accessed by casting the Folder to IMAPFolder.
+   in a finally block. Selection (unread, since, limit) runs as an IMAP SEARCH on
+   envelopes; content is read only for the selected messages.
 
    Usage:
      (def mailbox (create-imap-mailbox
@@ -15,9 +16,15 @@
   (:require [wagoe.external.core.imap :as imap-core]
             [wagoe.external.ports :as ports]
             [clojure.tools.logging :as log])
-  (:import [javax.mail Session Flags Flags$Flag]
-           [javax.mail.internet MimeMultipart]
-           [java.util Properties]))
+  (:import [com.sun.mail.imap IMAPFolder]
+           [java.io ByteArrayOutputStream InputStream]
+           [java.util Date Properties]
+           [javax.mail FetchProfile FetchProfile$Item Flags Flags$Flag Folder Header
+            Message Message$RecipientType Multipart Part Session Store UIDFolder$FetchProfileItem]
+           [javax.mail.internet MimeMessage MimeUtility]
+           [javax.mail.search AndTerm ComparisonTerm FlagTerm ReceivedDateTerm SearchTerm]))
+
+(set! *warn-on-reflection* true)
 
 ;; =============================================================================
 ;; Connection Helpers
@@ -25,24 +32,27 @@
 
 (defn- imap-properties
   [{:keys [host port ssl?]}]
+  ;; peek: read with BODY.PEEK, so fetching never sets \Seen; only mark-read! does.
   (let [props (Properties.)]
     (if ssl?
       (do
         (.put props "mail.imaps.host" (str host))
         (.put props "mail.imaps.port" (str port))
-        (.put props "mail.imaps.ssl.enable" "true"))
+        (.put props "mail.imaps.ssl.enable" "true")
+        (.put props "mail.imaps.peek" "true"))
       (do
         (.put props "mail.imap.host" (str host))
-        (.put props "mail.imap.port" (str port))))
+        (.put props "mail.imap.port" (str port))
+        (.put props "mail.imap.peek" "true")))
     props))
 
 (defn- open-store
-  [{:keys [host username password ssl?] :as adapter}]
+  ^Store [{:keys [host username password ssl?] :as adapter}]
   (let [props    (imap-properties adapter)
         session  (Session/getInstance props)
         protocol (if ssl? "imaps" "imap")
-        store    (.getStore session protocol)]
-    (.connect store host username password)
+        store    (.getStore session ^String protocol)]
+    (.connect store ^String host ^String username ^String password)
     store))
 
 (defn- with-imap-connection*
@@ -55,10 +65,10 @@
     read-only?  - boolean
     f           - fn of [store folder] → result"
   [adapter folder-name read-only? f]
-  (let [store  (open-store adapter)
-        folder (.getFolder store (str folder-name))]
+  (let [^Store store (open-store adapter)
+        folder      (.getFolder store (str folder-name))]
     (try
-      (.open folder (if read-only? javax.mail.Folder/READ_ONLY javax.mail.Folder/READ_WRITE))
+      (.open folder (if read-only? Folder/READ_ONLY Folder/READ_WRITE))
       (f store folder)
       (finally
         (try (.close folder false) (catch Exception _))
@@ -68,39 +78,100 @@
 ;; Message Conversion
 ;; =============================================================================
 
-(defn- get-text-parts
-  "Recursively collect content parts from a Message/MimeMultipart."
-  [part]
-  (let [content-type (str (.getContentType part))]
-    (cond
-      (.isMimeType part "text/*")
-      [{:content-type content-type :content (.getContent part)}]
+(defn- leaf-parts
+  "Depth-first leaves of a MIME tree; nested multiparts are walked."
+  [^Part part]
+  (if (.isMimeType part "multipart/*")
+    (let [^Multipart mp (.getContent part)]
+      (mapcat #(leaf-parts (.getBodyPart mp (int %))) (range (.getCount mp))))
+    [part]))
 
-      (.isMimeType part "multipart/*")
-      (let [mp ^MimeMultipart (.getContent part)]
-        (mapcat get-text-parts
-                (map #(.getBodyPart mp %) (range (.getCount mp)))))
+(defn- decoded-filename [^Part part]
+  (when-let [raw (.getFileName part)]
+    (try (MimeUtility/decodeText raw) (catch Exception _ raw))))
 
-      :else [])))
+(defn- read-bytes [^Part part]
+  (with-open [^InputStream in (.getInputStream part)]
+    (.readAllBytes in)))
+
+(defn- message-content
+  "Body parts and attachments of msg. A text/plain attachment stays an attachment."
+  [^Message msg]
+  (reduce (fn [acc ^Part part]
+            (let [info {:content-type (.getContentType part)
+                        :disposition  (.getDisposition part)
+                        :filename     (decoded-filename part)}]
+              (if (imap-core/attachment-part? info)
+                (update acc :attachments conj (imap-core/build-attachment info (read-bytes part)))
+                (update acc :body-parts conj (assoc info :content (str (.getContent part)))))))
+          {:body-parts [] :attachments []}
+          (leaf-parts msg)))
+
+(defn- raw-bytes [^Message msg]
+  (let [out (ByteArrayOutputStream.)]
+    (.writeTo msg out)
+    (.toByteArray out)))
+
+(defn- headers-map [^Message msg]
+  (reduce (fn [acc ^Header h] (assoc acc (.getName h) (.getValue h)))
+          {}
+          (enumeration-seq (.getAllHeaders msg))))
+
+(defn- received-at ^Date [^Message msg]
+  (or (.getReceivedDate msg) (.getSentDate msg) (Date.)))
 
 (defn- message->inbound
   "Convert a javax.mail.Message to an InboundMessage map.
    uid must be pre-fetched from the IMAPFolder."
-  [^javax.mail.Message msg uid]
-  (let [from     (first (.getFrom msg))
-        to-addrs (vec (map str (.getRecipients msg javax.mail.Message$RecipientType/TO)))
-        subject  (str (.getSubject msg))
-        received (or (.getReceivedDate msg) (.getSentDate msg) (java.util.Date.))
-        headers  (let [enum (.getAllHeaders msg)]
-                   (loop [result {}]
-                     (if (.hasMoreElements enum)
-                       (let [header (.nextElement enum)]
-                         (recur (assoc result (.getName header) (.getValue header))))
-                       result)))
-        parts    (try (get-text-parts msg) (catch Exception _ []))
-        seen?    (.isSet (.getFlags msg) Flags$Flag/SEEN)]
-    (-> (imap-core/build-inbound-message uid (str from) to-addrs subject parts received headers)
-        (assoc :seen? seen?))))
+  [^Message msg uid include-raw?]
+  (let [from       (first (.getFrom msg))
+        to-addrs   (mapv str (.getRecipients msg Message$RecipientType/TO))
+        {:keys [body-parts attachments]}
+        (try (message-content msg)
+             (catch Exception e
+               (log/warn e "Could not read IMAP message content" {:uid uid})
+               {:body-parts [] :attachments []}))
+        message-id (when (instance? MimeMessage msg) (.getMessageID ^MimeMessage msg))]
+    (cond-> (assoc (imap-core/build-inbound-message uid (str from) to-addrs (str (.getSubject msg))
+                                                    body-parts (received-at msg) (headers-map msg))
+                   :seen?       (.isSet msg Flags$Flag/SEEN)
+                   :attachments attachments)
+      message-id   (assoc :message-id message-id)
+      include-raw? (assoc :raw (raw-bytes msg)))))
+
+;; =============================================================================
+;; Server-side Selection
+;; =============================================================================
+
+(defn- search-term
+  "IMAP SEARCH for the options, or nil to take the whole folder. SINCE matches by
+   date only, so the exact instant is checked again on the envelope."
+  ^SearchTerm [{:keys [unread-only? since]}]
+  (let [terms (cond-> []
+                unread-only? (conj (FlagTerm. (Flags. Flags$Flag/SEEN) false))
+                since        (conj (ReceivedDateTerm. ComparisonTerm/GE ^Date since)))]
+    (case (count terms)
+      0 nil
+      1 (first terms)
+      (AndTerm. ^"[Ljavax.mail.search.SearchTerm;" (into-array SearchTerm terms)))))
+
+(defn- select-messages
+  "Messages matching opts, at most limit of them, oldest first. Only envelope,
+   flags and UID are fetched; content is read later for the selected ones."
+  [^IMAPFolder fld {:keys [limit since] :as opts}]
+  (let [term    (search-term opts)
+        found   (if term (.search fld term) (.getMessages fld))
+        ;; Without since no date check follows, so limit can cut before the fetch.
+        msgs    (into-array Message (cond->> found (and limit (not since)) (take limit)))
+        profile (doto (FetchProfile.)
+                  (.add FetchProfile$Item/ENVELOPE)
+                  (.add FetchProfile$Item/FLAGS)
+                  (.add UIDFolder$FetchProfileItem/UID))
+        _       (.fetch fld msgs profile)
+        dated   (imap-core/filter-by-date (map (fn [m] {:message m :received-at (received-at m)}) msgs)
+                                          since)]
+    (cond->> (map :message dated)
+      limit (take limit))))
 
 ;; =============================================================================
 ;; Adapter Record
@@ -114,22 +185,15 @@
   (fetch-messages!
     ([this]
      (ports/fetch-messages! this {}))
-    ([this {:keys [folder limit unread-only? since] :as _opts}]
+    ([this {:keys [folder include-raw? since] :as opts}]
      (let [folder-name (or folder (:folder this) "INBOX")]
        (log/info "Fetching IMAP messages" {:host (:host this) :folder folder-name})
        (try
          (with-imap-connection* this folder-name true
-           (fn [_store fld]
-             (let [messages  (.getMessages fld)
-                   uid-fld   (cast com.sun.mail.imap.IMAPFolder fld)
-                   all-msgs  (vec (map-indexed
-                                   (fn [_i m]
-                                     (message->inbound m (.getUID uid-fld m)))
-                                   messages))
-                   filtered  (cond-> all-msgs
-                               unread-only? imap-core/filter-unread
-                               since        (imap-core/filter-by-date since))
-                   result    (if limit (vec (take limit filtered)) filtered)]
+           (fn [_store ^IMAPFolder fld]
+             (let [opts   (cond-> opts since (assoc :since (Date. (long (inst-ms since)))))
+                   result (mapv #(message->inbound % (.getUID fld ^Message %) include-raw?)
+                                (select-messages fld opts))]
                {:success? true :messages result :count (count result)})))
          (catch Exception e
            (log/error e "IMAP fetch failed" {:host (:host this)})
@@ -149,11 +213,9 @@
     (let [folder-name (or (:folder this) "INBOX")]
       (try
         (with-imap-connection* this folder-name false
-          (fn [_store fld]
-            (let [uid-fld (cast com.sun.mail.imap.IMAPFolder fld)
-                  msg     (.getMessageByUID uid-fld uid)]
-              (when msg
-                (.setFlags msg (Flags. Flags$Flag/SEEN) true)))
+          (fn [_store ^IMAPFolder fld]
+            (when-let [msg (.getMessageByUID fld (long uid))]
+              (.setFlags msg (Flags. Flags$Flag/SEEN) true))
             {:success? true}))
         (catch Exception e
           (log/error e "IMAP mark-read failed" {:uid uid})
@@ -164,12 +226,10 @@
     (let [folder-name (or (:folder this) "INBOX")]
       (try
         (with-imap-connection* this folder-name false
-          (fn [_store fld]
-            (let [uid-fld (cast com.sun.mail.imap.IMAPFolder fld)
-                  msg     (.getMessageByUID uid-fld uid)]
-              (when msg
-                (.setFlags msg (Flags. Flags$Flag/DELETED) true))
-              (.expunge fld))
+          (fn [_store ^IMAPFolder fld]
+            (when-let [msg (.getMessageByUID fld (long uid))]
+              (.setFlags msg (Flags. Flags$Flag/DELETED) true))
+            (.expunge fld)
             {:success? true}))
         (catch Exception e
           (log/error e "IMAP delete failed" {:uid uid})

@@ -65,8 +65,19 @@
    [:ssl? {:optional true} :boolean]
    [:folder {:optional true} [:string {:min 1}]]])
 
+(def InboundAttachment
+  "A file from an inbound message: a part with Content-Disposition attachment,
+   a filename, or a type other than text/plain and text/html. :content is the
+   decoded bytes."
+  [:map
+   [:filename {:optional true} [:string {:min 1}]]
+   [:content-type [:string {:min 1}]]
+   [:size [:int {:min 0}]]
+   [:content bytes?]])
+
 (def InboundMessage
-  "Inbound email message from IMAP."
+  "Inbound email message from IMAP. :body and :html-body are the first inline
+   text/plain and text/html parts; :raw is the RFC 822 source, on request."
   [:map
    [:uid :int]
    [:message-id {:optional true} :string]
@@ -76,8 +87,10 @@
    [:body {:optional true} :string]
    [:html-body {:optional true} :string]
    [:received-at inst?]
+   [:seen? {:optional true} :boolean]
    [:headers {:optional true} [:map-of :keyword :string]]
-   [:attachments {:optional true} [:vector :map]]])
+   [:attachments {:optional true} [:vector InboundAttachment]]
+   [:raw {:optional true} bytes?]])
 
 (def ImapFetchOptions
   "Options for fetching messages from IMAP."
@@ -85,7 +98,8 @@
    [:folder {:optional true} [:string {:min 1}]]
    [:limit {:optional true} [:int {:min 1}]]
    [:unread-only? {:optional true} :boolean]
-   [:since {:optional true} inst?]])
+   [:since {:optional true} inst?]
+   [:include-raw? {:optional true} :boolean]])
 
 ;; =============================================================================
 ;; Twilio Schemas

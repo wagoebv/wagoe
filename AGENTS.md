@@ -46,6 +46,7 @@ JWT_SECRET="dev-secret-at-least-32-characters-long" WAG_ENV=test clojure -M:test
 #   :test/pg-mac  add to :test/pg on Apple Silicon — CI is ubuntu-only
 #   :test/otel    observability             (OpenTelemetry in-memory exporters)
 #   :test/http    devtools                  (clj-http-lite)
+#   :test/mail    external                  (GreenMail IMAP server)
 clojure -M:test:test/pg:test/pg-mac :admin         # one suite, only what it needs (macOS)
 WAGOE_TEST_DB=mysql clojure -M:test:test/pg :admin # admin, user, workflow, search, push on mysql or pg (support.test-db)
 
@@ -64,7 +65,7 @@ clojure -M:test:test/pg :tenant                    # Tenant library tests
 clojure -M:test :realtime                          # Realtime library tests
 clojure -M:test:test/pg :workflow                  # Workflow library tests
 clojure -M:test :search                            # Search library tests
-clojure -M:test :external                          # External adapters tests
+clojure -M:test:test/mail :external                # External adapters tests
 clojure -M:test :payments                          # Payments library tests
 clojure -M:test :reports                           # Reports library tests
 clojure -M:test :calendar                          # Calendar library tests

@@ -1307,12 +1307,12 @@ jobs:
       - name: Setup Clojure + warm deps
         uses: ./.github/actions/clojure-deps
         with:
-          aliases: -M:test
+          aliases: -M:test:test/mail
 
       - name: Run tests
         env:
           JWT_SECRET: "ci-test-secret-minimum-32-characters"
-        run: clojure -M:test :external
+        run: clojure -M:test:test/mail :external
 
   # =============================================================================
   # Test payments library
