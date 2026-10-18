@@ -6,7 +6,8 @@
             [wagoe.external.ports :as ports]
             [wagoe.external.schema :as schema]
             [wagoe.external.shell.adapters.imap :as imap])
-  (:import [com.icegreen.greenmail.util GreenMail ServerSetupTest]
+  (:import [com.icegreen.greenmail.store MailFolder StoredMessage]
+           [com.icegreen.greenmail.util GreenMail ServerSetupTest]
            [java.io ByteArrayInputStream]
            [java.time Instant]
            [java.util Date Properties]
@@ -21,6 +22,7 @@
 (def ^:private png-bytes (byte-array [-119 80 78 71 13 10 26 10 0 1 2 3]))
 
 (def ^:private ^:dynamic *mailbox* nil)
+(def ^:private ^:dynamic ^MailFolder *inbox* nil)
 
 (defn- session [] (Session/getInstance (Properties.)))
 
@@ -85,7 +87,11 @@
           (.appendMessage inbox (message subject content)
                           (if seen? (Flags. Flags$Flag/SEEN) (Flags.))
                           date))
-        (binding [*mailbox* (imap/create-imap-mailbox
+        (let [archive (-> gm .getManagers .getImapHostManager (.createMailbox gm-user "Archive"))]
+          (doseq [subject ["archived" "archived too"]]
+            (.appendMessage archive (message subject "Old") (Flags.) (day 1))))
+        (binding [*inbox*   inbox
+                  *mailbox* (imap/create-imap-mailbox
                              {:host "127.0.0.1" :port (.getPort (.getImap gm))
                               :username user :password password :ssl? false})]
           (f)))
@@ -177,3 +183,55 @@
       (is (:success? (ports/mark-read! *mailbox* uid)))
       (is (= ["alternative" "pdf" "text attachments"]
              (mapv :subject (fetch {:unread-only? true})))))))
+
+(defn- subjects [opts] (mapv :subject (fetch opts)))
+
+(deftest ^:integration folder-test
+  (let [[archived] (fetch {:folder "Archive"})
+        [plain]    (fetch {})]
+    (is (= "Archive" (:folder archived)))
+    (is (= "INBOX" (:folder plain)))
+    ;; UIDs are per folder, so the same UID names a message in each.
+    (is (= (:uid plain) (:uid archived)))
+
+    (testing "mark-read! acts on the folder the message came from"
+      (is (:success? (ports/mark-read! *mailbox* (:uid archived) archived)))
+      (is (= [true false] (mapv :seen? (fetch {:folder "Archive"}))))
+      (is (false? (:seen? (first (fetch {}))))))
+
+    (testing "delete-message! acts on the folder the message came from"
+      (is (:success? (ports/delete-message! *mailbox* (:uid archived) archived)))
+      (is (= ["archived too"] (subjects {:folder "Archive"})))
+      (is (= (mapv first fixtures) (subjects {}))))
+
+    (testing "a UID the folder does not have is not-found"
+      (is (= :not-found (get-in (ports/mark-read! *mailbox* 999) [:error :type])))
+      (is (= :not-found (get-in (ports/delete-message! *mailbox* 999 {:folder "Archive"}) [:error :type]))))))
+
+(defn- deleted? [^StoredMessage msg] (.contains (.getFlags msg) Flags$Flag/DELETED))
+
+(deftest ^:integration delete-removes-only-that-message-test
+  (let [uid (:uid (first (fetch {})))]
+    ;; Another client flagged "seen" \Deleted and has not expunged yet.
+    (doseq [^StoredMessage msg (.getMessages *inbox*)
+            :when (= "seen" (.getSubject (.getMimeMessage msg)))]
+      (.setFlag msg Flags$Flag/DELETED true))
+    (is (= {:success? true :expunged? true} (ports/delete-message! *mailbox* uid)))
+    (is (= ["alternative" "pdf" "text attachments" "nested" "seen"]
+           (mapv #(.getSubject (.getMimeMessage ^StoredMessage %)) (.getMessages *inbox*))))
+    (testing "a message flagged \\Deleted is not fetched"
+      (is (= ["alternative" "pdf" "text attachments" "nested"] (subjects {}))))))
+
+(deftest ^:integration delete-without-uidplus-only-flags-test
+  (let [uid (:uid (first (fetch {})))]
+    (is (= {:success? true :expunged? false}
+           (with-redefs-fn {#'imap/uidplus? (constantly false)}
+             #(ports/delete-message! *mailbox* uid))))
+    (is (= (rest (map first fixtures)) (subjects {})))
+    (is (= [true false false false false false] (mapv deleted? (.getMessages *inbox*))))))
+
+(deftest ^:integration fetch-has-a-default-limit-test
+  (with-redefs-fn {#'imap/default-limit 2}
+    #(do (is (= ["plain" "alternative"] (subjects {})))
+         (is (= ["plain" "alternative"] (subjects {:limit nil})))
+         (is (= ["text attachments" "nested"] (subjects {:since (day 13)}))))))
