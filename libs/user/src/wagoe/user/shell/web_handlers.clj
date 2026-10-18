@@ -117,12 +117,12 @@
 (defn- request-errors
   "{field [marker]} for `data` that failed `schema`. A blank or absent field
    is checked as missing, so it reads Required rather than \"at least 1
-   characters\"."
+   characters\". A blank optional field keeps its own error."
   [schema data]
   (let [schema  (form-schema schema)
         present (into {} (remove (fn [[_ v]] (or (nil? v) (and (string? v) (str/blank? v))))) data)]
-    (or (form/errors schema present)
-        (form/errors schema data))))
+    (merge (form/errors schema data)
+           (form/errors schema present))))
 
 (defn- validate-request-data
   "Validate request data against schema with transformation.
@@ -1673,7 +1673,8 @@
                   :password-policy-violation
                   (html-response request
                                  (profile-ui/password-section-fragment true
-                                                                       {:new-password (mapv error-message (:violations data))})
+                                                                       {:new-password (or (seq (map error-message (:violations data)))
+                                                                                          [[:t :user/error-password-policy]])})
                                  400
                                  htmx-no-cache-headers)
                   :user-not-found

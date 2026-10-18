@@ -267,11 +267,14 @@
                   (fn [{:keys [params]}]
                     (let [user-data (:user-data params)
                           ;; Each rule with its own :code, which step 1 reports as one
-                          ;; English sentence; a form shows them one by one.
+                          ;; English sentence; a form shows them one by one. This runs
+                          ;; before the schema check, so a non-string email is left out
+                          ;; rather than thrown on as a 500.
                           password-validation (when (:password user-data)
                                                 (auth-core/meets-password-policy? (:password user-data)
                                                                                   (:password-policy validation-config)
-                                                                                  {:email (:email user-data)}))]
+                                                                                  {:email (when (string? (:email user-data))
+                                                                                            (:email user-data))}))]
                       ;; 1. Validate request using pure core function with validation config
                       (let [validation-result (user-core/validate-user-creation-request user-data validation-config)]
                         (when-not (:valid? validation-result)
