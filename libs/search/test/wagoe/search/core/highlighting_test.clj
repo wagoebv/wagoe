@@ -419,13 +419,13 @@
       (is (str/includes? highlighted-snippet "<mark>engineer</mark>"))
       (is (<= (count bio-snippet) 36)))))  ; 30 + ellipsis + adjustment
 
-(deftest matching-ignores-the-jvm-locale
+(deftest ^:unit matching-ignores-the-jvm-locale
   ;; A Turkish locale lowers "ID" to "ıd", which "id" never matched (BOU-608).
   (call-with-locale "tr-TR"
     #(do (is (= {:match-pos 5 :matched-term "id"} (hl/find-first-match-position "Your ID card" ["id"])))
          (is (= {"id" 1} (hl/count-matches "Your ID card" ["id"]))))))
 
-(deftest snippets-index-the-original-text
+(deftest ^:unit snippets-index-the-original-text
   ;; "İ" lowers to two chars in most locales, which moved every later match
   ;; past its place in the text (BOU-608).
   (let [text (str (apply str (repeat 100 "İ")) " key")]
