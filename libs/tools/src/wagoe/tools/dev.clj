@@ -346,6 +346,23 @@
       (do (println "Usage: bb dev <migrate|check-links|smoke-check|install-hooks>")
           (System/exit 1)))))
 
+;; =============================================================================
+;; dotenv — what a project's .env assigns, for a task run without `source .env`
+;; =============================================================================
+
+(defn dotenv
+  "The variables `path` (default .env) assigns, minus those already set, so a
+   fresh project's `bb test` boots without `source .env`. {} without the file."
+  ([] (dotenv ".env"))
+  ([path]
+   (let [f (io/file path)]
+     (if-not (.isFile f)
+       {}
+       (into {} (for [line  (str/split-lines (slurp f))
+                      :let  [[_ k v] (re-matches #"\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)=(.*)" line)]
+                      :when (and k (nil? (System/getenv k)))]
+                  [k (str/replace (str/trim v) #"^([\"'])(.*)\1$" "$2")]))))))
+
 ;; Run when executed directly (not via bb.edn task)
 (when (= *file* (System/getProperty "babashka.file"))
   (apply -main *command-line-args*))

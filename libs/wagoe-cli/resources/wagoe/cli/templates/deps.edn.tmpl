@@ -77,7 +77,8 @@
                           "--port" "7888"]
              :jvm-opts   ["-Duser.timezone=UTC"]}
   :test     {:extra-paths ["test"]
-             :extra-deps  {lambdaisland/kaocha {:mvn/version "1.91.1392"}}
+             :extra-deps  {lambdaisland/kaocha {:mvn/version "1.91.1392"}
+                           com.wagoe/wagoe-test {:mvn/version "{{wagoe-test-version}}"}}
              :main-opts   ["-m" "kaocha.runner"]
              :jvm-opts    ["-Duser.timezone=UTC"]}
   ;; Foreground start — no REPL. What a container, a systemd unit or a smoke
