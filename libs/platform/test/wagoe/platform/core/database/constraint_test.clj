@@ -154,3 +154,44 @@
     (is (= {:kind :unique :field :number}
            (constraint/violation {:error-code 19
                                   :message "[SQLITE_CONSTRAINT_UNIQUE] A UNIQUE constraint failed (UNIQUE constraint failed: invoices.number)"})))))
+
+(deftest ^:unit check-violations-by-driver
+  ;; Captured from PostgreSQL 18, H2 2.5, sqlite-jdbc 3.53 and MySQL 8.4 on
+  ;; CHECK (color IN ('red','green')), CONSTRAINT chk_named and CHECK (lo < hi).
+  (testing "PostgreSQL: 23514, the column in its <table>_<col>_check name"
+    (is (= {:kind :check :field :color}
+           (constraint/violation {:sql-state "23514" :table "cc" :constraint "cc_color_check"
+                                  :message "ERROR: new row for relation \"cc\" violates check constraint \"cc_color_check\""})))
+    (is (= {:kind :check :field :color}
+           (constraint/violation {:sql-state "23514" :target "work_visit_statuss"
+                                  :message "ERROR: new row for relation \"work_visit_statuss\" violates check constraint \"work_visit_statuss_color_check\""}))
+        "the statement's table when the server reports none")
+    (is (= {:kind :check} (constraint/violation {:sql-state "23514" :table "cc" :constraint "cc_check"})))
+    (is (= {:kind :check} (constraint/violation {:sql-state "23514" :table "cc" :constraint "chk_named"}))))
+  (testing "H2: 23513, its generated names show no column"
+    (is (= {:kind :check}
+           (constraint/violation {:sql-state "23513" :error-code 23513 :target "cc"
+                                  :message "Check constraint violation: \"CONSTRAINT_C6: \"; SQL statement:\nINSERT INTO cc (id,color) VALUES (1,'blue') [23513-250]"})))
+    (is (= {:kind :check :field :color}
+           (constraint/violation {:sql-state "23513" :error-code 23513 :target "cc"
+                                  :message "Check constraint violation: \"chk_cc_color: \"; SQL statement:\nINSERT INTO cc (id,color) VALUES (1,'blue') [23513-250]"}))
+        "the enum constraint the platform names chk_<table>_<col>"))
+  (testing "SQLite: the expression"
+    (is (= {:kind :check :field :color}
+           (constraint/violation {:error-code 19 :target "cc"
+                                  :message "[SQLITE_CONSTRAINT_CHECK] A CHECK constraint failed (CHECK constraint failed: color IN ('red','green'))"})))
+    (is (= {:kind :check :field :name}
+           (constraint/violation {:message "[SQLITE_CONSTRAINT_CHECK] A CHECK constraint failed (CHECK constraint failed: length(\"name\") < 1e3)"}))
+        "not the function, nor the exponent")
+    (is (= {:kind :check}
+           (constraint/violation {:message "[SQLITE_CONSTRAINT_CHECK] A CHECK constraint failed (CHECK constraint failed: lo < hi)"}))
+        "two columns")
+    (is (= {:kind :check}
+           (constraint/violation {:target "cc" :message "[SQLITE_CONSTRAINT_CHECK] A CHECK constraint failed (CHECK constraint failed: chk_named)"}))))
+  (testing "MySQL: 3819, its generated names show no column"
+    (is (= {:kind :check}
+           (constraint/violation {:sql-state "HY000" :error-code 3819 :target "cc"
+                                  :message "Check constraint 'cc_chk_1' is violated."})))
+    (is (= {:kind :check :field :color}
+           (constraint/violation {:sql-state "HY000" :error-code 3819 :target "cc"
+                                  :message "Check constraint 'chk_cc_color' is violated."})))))

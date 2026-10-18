@@ -264,7 +264,7 @@
                                                ;; client-safe messages; anything else is
                                                ;; internal — logged above, generic flash
                                                ;; (BOU-182: never echo raw exception text).
-                                                :message (if conflict?
+                                                :message (if (or conflict? (:message-key (ex-data e)))
                                                            (support/refusal-message request e)
                                                            (or (client-safe-error-message e)
                                                                [:t :admin/flash-create-failed
@@ -352,7 +352,7 @@
                                      (support/attempt #(ports/update-entity admin-service entity-name id form-data)))
           ;; A value the database refused, such as a taken email: on its field.
           rejected (some-> refusal support/rejection)
-          conflict (when-not rejected refusal)]
+          conflict (when (some-> refusal support/refusal?) refusal)]
 
       (if (and valid? (not refusal))
         ; Update entity and re-render detail page with success flash
@@ -391,8 +391,9 @@
                                       (admin-ui/entity-detail-page entity-name entity-config merged errors permissions
                                                                    (assoc (:page-opts ctx) :flash
                                                                           {:type :error
-                                                                           :message (if conflict
-                                                                                      (support/refusal-message request conflict)
+                                                                           ;; A refusal on no one field says why.
+                                                                           :message (if-let [r (or conflict (when-not rejected refusal))]
+                                                                                      (support/refusal-message request r)
                                                                                       [:t :admin/flash-validation-errors])}))
                                       {:user user
                                        :current-entity entity-name
