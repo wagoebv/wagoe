@@ -6,7 +6,8 @@
    not ical4j's.
 
    Shell layer — may perform I/O via ical4j."
-  (:require [wagoe.calendar.core.event :as event]
+  (:require [wagoe.core.utils.text :as text]
+            [wagoe.calendar.core.event :as event]
             [wagoe.calendar.core.recurrence :as recurrence]
             [wagoe.calendar.ports :as ports]
             [wagoe.calendar.schema :as schema]
@@ -268,12 +269,12 @@
                 (startCalendar [_])
                 (endCalendar [_])
                 (startComponent [_ n]
-                  (vswap! stack conj {:name (str/upper-case n) :props [] :children []}))
+                  (vswap! stack conj {:name (text/upper-case n) :props [] :children []}))
                 (endComponent [_ _]
                   (vswap! stack (fn [s] (let [c (peek s) s (pop s)]
                                           (conj (pop s) (update (peek s) :children conj c))))))
-                (startProperty [_ n] (vreset! prop {:name (str/upper-case n) :params {}}))
-                (parameter [_ n v] (vswap! prop assoc-in [:params (str/upper-case n)] (Strings/unquote v)))
+                (startProperty [_ n] (vreset! prop {:name (text/upper-case n) :params {}}))
+                (parameter [_ n v] (vswap! prop assoc-in [:params (text/upper-case n)] (Strings/unquote v)))
                 (propertyValue [_ v] (vswap! prop assoc :value v))
                 (endProperty [_ _]
                   (vswap! stack (fn [s] (conj (pop s) (update (peek s) :props conj @prop))))))]
@@ -380,7 +381,7 @@
   (let [t (some-> p read-date)]
     (when-not (instance? LocalDateTime t)
       (throw (ex-info "VTIMEZONE observance times must be local times"
-                      {:type :validation-error :field (keyword (str/lower-case (:name p "DTSTART")))})))
+                      {:type :validation-error :field (keyword (text/lower-case (:name p "DTSTART")))})))
     t))
 
 (defn- observance-onsets

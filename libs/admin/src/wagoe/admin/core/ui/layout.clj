@@ -4,7 +4,8 @@
    Pure Hiccup generators for the admin chrome: sidebar navigation, the
    collapsible shell + topbar, the dashboard home, 403/404 error pages, the
    delete-confirmation modal, and the `build-table-url` helper."
-  (:require [wagoe.shared.ui.core.home :as home]
+  (:require [wagoe.core.utils.text :as text]
+            [wagoe.shared.ui.core.home :as home]
             [wagoe.shared.ui.core.icons :as icons]
             [wagoe.shared.ui.core.layout :as layout]
             [wagoe.shared.ui.core.table :as table-ui]
@@ -85,7 +86,7 @@
   [user]
   (let [name-words (some-> (:display-name user) str/trim not-empty (str/split #"\s+"))
         from-email (some-> (:email user) (str/split #"@") first)]
-    (str/upper-case
+    (text/upper-case
      (cond
        (< 1 (count name-words)) (str (ffirst name-words) (first (last name-words)))
        (seq name-words)         (subs (first name-words) 0 (min 2 (count (first name-words))))

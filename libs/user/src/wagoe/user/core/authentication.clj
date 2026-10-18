@@ -9,7 +9,8 @@
    
    All functions are pure and deterministic - no I/O operations.
    Password hashing and token operations are handled in the shell layer."
-  (:require [wagoe.user.core.password-policy :as password-policy]
+  (:require [wagoe.core.utils.text :as text]
+            [wagoe.user.core.password-policy :as password-policy]
             [wagoe.user.core.session :as session]
             [wagoe.user.schema :as schema]
             [clojure.string :as str]
@@ -227,8 +228,8 @@
                             :message "Must contain at least one special character"})
 
                      ;; Common password checks
-                     (some #(str/includes? (str/lower-case password)
-                                           (str/lower-case %))
+                     (some #(str/includes? (text/lower-case password)
+                                           (text/lower-case %))
                            forbidden-patterns)
                      (conj {:code :common-password
                             :message "Password is too common or predictable"})
@@ -236,9 +237,9 @@
                      ;; User-specific checks
                      ;; A local part under 3 characters matches too many passwords to
                      ;; mean anything: `c@b.cd` refused `Invoice2026!` (BOU-565).
-                     (when-let [local (some-> (:email user-context) (str/split #"@") first str/lower-case)]
+                     (when-let [local (some-> (:email user-context) (str/split #"@") first text/lower-case)]
                        (and (>= (count local) 3)
-                            (str/includes? (str/lower-case password) local)))
+                            (str/includes? (text/lower-case password) local)))
                      (conj {:code :contains-email
                             :message "Password cannot contain your email address"}))]
 

@@ -1,11 +1,12 @@
 (ns wagoe.tenant.core.invite
-  (:require [clojure.string :as str])
+  (:require [wagoe.core.utils.text :as text]
+            [clojure.string :as str])
   (:import (java.time Instant)))
 
 (defn normalize-email
   "Normalize invite email for consistent matching."
   [email]
-  (some-> email str str/trim str/lower-case))
+  (some-> email str str/trim text/lower-case))
 
 (defn prepare-invite*
   "Creates a new tenant invite in :pending status using explicit runtime inputs."

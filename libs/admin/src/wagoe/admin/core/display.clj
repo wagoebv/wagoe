@@ -5,7 +5,8 @@
    due date — and decides how a list cell renders it. Roles are derived from
    the field's type, its name and the entity's relations; an explicit
    `:display` in the field config wins. Pure: config in, data out."
-  (:require [clojure.string :as str]))
+  (:require [wagoe.core.utils.text :as text]
+            [clojure.string :as str]))
 
 (def roles
   "Every display role. Closed: the cell renderer and the CSS know each one."
@@ -23,7 +24,7 @@
 (defn- tokens
   "The words of a field name: `:invoice-total_amount` → [\"invoice\" \"total\" \"amount\"]."
   [field]
-  (str/split (str/lower-case (name field)) #"[-_]+"))
+  (str/split (text/lower-case (name field)) #"[-_]+"))
 
 (def ^:private money-words
   #{"amount" "price" "total" "subtotal" "cost" "fee" "bedrag" "prijs" "totaal"})

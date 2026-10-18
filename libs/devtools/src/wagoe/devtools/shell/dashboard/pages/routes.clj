@@ -1,5 +1,6 @@
 (ns wagoe.devtools.shell.dashboard.pages.routes
-  (:require [wagoe.devtools.shell.dashboard.layout :as layout]
+  (:require [wagoe.core.utils.text :as text]
+            [wagoe.devtools.shell.dashboard.layout :as layout]
             [wagoe.devtools.shell.dashboard.components :as c]
             [wagoe.devtools.shell.repl :as devtools-repl]
             [clojure.edn :as edn]
@@ -136,7 +137,7 @@
         module-options (into [{:value "" :label "All modules"}]
                              (map (fn [m] {:value m :label m}) modules))
         method-options (into [{:value "" :label "All methods"}]
-                             (map (fn [m] {:value (name m) :label (str/upper-case (name m))}) methods))]
+                             (map (fn [m] {:value (name m) :label (text/upper-case (name m))}) methods))]
     (layout/dashboard-page
      (merge opts {:active-path "/dashboard/routes"
                   :title       "Route Explorer"})

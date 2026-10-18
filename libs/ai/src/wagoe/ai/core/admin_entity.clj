@@ -5,7 +5,8 @@
    give them, so what the project already knows — its migrations — decides the
    types, and what the description asked for is checked before anything is
    written."
-  (:require [wagoe.ai.schema :as schema]
+  (:require [wagoe.core.utils.text :as text]
+            [wagoe.ai.schema :as schema]
             [clojure.string :as str]
             [malli.core :as m]
             [malli.error :as me]))
@@ -17,7 +18,7 @@
 (defn sql-type->field-type
   "The admin field type for a SQL column type, or nil when there is none."
   [sql-type]
-  (let [t (str/upper-case (str/trim (str sql-type)))]
+  (let [t (text/upper-case (str/trim (str sql-type)))]
     (condp re-find t
       #"^(TIMESTAMP|DATETIME)"                                :instant
       #"^DATE\b"                                              :date
@@ -99,7 +100,7 @@
   [s]
   (-> (last (re-seq ident-re (str s)))
       (str/replace #"^[\"`\[]|[\"`\]]$" "")
-      str/lower-case))
+      text/lower-case))
 
 (def ^:private constraint-item
   #"(?i)^(constraint|primary\s+key|foreign\s+key|unique|check|index|key)\b")
@@ -318,7 +319,7 @@
 ;; =============================================================================
 
 (defn- table-key [config]
-  (some-> (:table-name config) name (str/replace "-" "_") str/lower-case))
+  (some-> (:table-name config) name (str/replace "-" "_") text/lower-case))
 
 (defn- typed-entity [[k config] tables]
   (let [table (table-key config)

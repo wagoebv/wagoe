@@ -12,7 +12,7 @@
    character column's declared length, nil on SQLite) — which is what the
    port promises and what the four separate copies did not consistently
    deliver."
-  (:require [clojure.string :as str]
+  (:require [wagoe.core.utils.text :as text]
             [honey.sql :as sql]
             [next.jdbc :as jdbc]
             [next.jdbc.result-set :as rs]))
@@ -31,7 +31,7 @@
    there would fail to find a mixed-case table."
   [{:keys [fold-table-name?]} table-name]
   (cond-> (name table-name)
-    fold-table-name? str/lower-case))
+    fold-table-name? text/lower-case))
 
 ;; =============================================================================
 ;; information_schema — PostgreSQL, MySQL, H2
@@ -80,7 +80,7 @@
                      :from     [:information_schema.statistics]
                      :where    [:and
                                 (in-schema schema :table_schema (table-key spec table-name))
-                                [:= [:lower :table_name] (str/lower-case (name table-name))]
+                                [:= [:lower :table_name] (text/lower-case (name table-name))]
                                 [:= :index_name key-name]]
                      :order-by [:seq_in_index]}
                     honey)]
@@ -151,7 +151,7 @@
         columns       (rows datasource columns-query honey)
         pk-columns    (set (map :column_name (rows datasource pk-query honey)))]
     (mapv (fn [col]
-            {:name        (str/lower-case (:column_name col))
+            {:name        (text/lower-case (:column_name col))
              :type        (get col type-column)
              :not-null    (= "NO" (:is_nullable col))
              :default     (:column_default col)
@@ -187,10 +187,10 @@
         ;; Generated columns PRAGMA table_info does not list at all.
         rowid-alias (let [pks (filter #(pos? (:pk %)) results)]
                       (when (and (= 1 (count pks))
-                                 (= "INTEGER" (str/upper-case (str (:type (first pks))))))
+                                 (= "INTEGER" (text/upper-case (str (:type (first pks))))))
                         (:name (first pks))))]
     (mapv (fn [row]
-            {:name        (str/lower-case (:name row))
+            {:name        (text/lower-case (:name row))
              :type        (:type row)
              :not-null    (= (:notnull row) 1)
              :default     (:dflt_value row)

@@ -14,7 +14,8 @@
 
    Idempotent: a column that already carries a zone is left alone, so this is
    safe to run from a migration and from a boot-time schema check."
-  (:require [clojure.string :as str]
+  (:require [wagoe.core.utils.text :as text]
+            [clojure.string :as str]
             [clojure.tools.logging :as log]
             [next.jdbc :as jdbc]
             [wagoe.platform.shell.adapters.database.factory :as db-factory])
@@ -53,19 +54,19 @@
     ;; Unquoted identifiers fold to lower case on PostgreSQL and upper on H2,
     ;; and getColumns matches what is stored, so both spellings are tried.
     (or (lookup table column)
-        (lookup (str/upper-case table) (str/upper-case column)))))
+        (lookup (text/upper-case table) (text/upper-case column)))))
 
 (defn zone-aware?
   "Whether `type-name` is a timestamp that carries a zone.
 
    PostgreSQL spells it `timestamptz`, H2 `TIMESTAMP WITH TIME ZONE`."
   [type-name]
-  (let [t (str/lower-case (or type-name ""))]
+  (let [t (text/lower-case (or type-name ""))]
     (or (= "timestamptz" t)
         (str/includes? t "with time zone"))))
 
 (defn- zone-less-timestamp? [type-name]
-  (let [t (str/lower-case (or type-name ""))]
+  (let [t (text/lower-case (or type-name ""))]
     (and (str/starts-with? t "timestamp")
          (not (zone-aware? t)))))
 
@@ -74,7 +75,7 @@
    TEXT columns until BOU-502; H2 in PostgreSQL mode reports TEXT as
    CHARACTER VARYING, and in its own mode as CHARACTER LARGE OBJECT."
   [type-name]
-  (let [t (str/lower-case (or type-name ""))]
+  (let [t (text/lower-case (or type-name ""))]
     (or (#{"text" "varchar" "clob"} t)
         (str/starts-with? t "character"))))
 

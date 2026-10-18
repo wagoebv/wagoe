@@ -1,6 +1,7 @@
 (ns wagoe.platform.shell.adapters.database.common.schema
   "Common schema management and DDL utilities."
-  (:require [wagoe.platform.core.database.constraint :as constraint]
+  (:require [wagoe.core.utils.text :as text]
+            [wagoe.platform.core.database.constraint :as constraint]
             [wagoe.platform.ports.database :as protocols]
             [wagoe.platform.shell.adapters.database.common.execution :as execution]
             [clojure.string :as str]
@@ -178,7 +179,7 @@
   ([ctx table columns present]
    (let [native? (claims? ctx :column-if-not-exists)]
      (doseq [[column definition] columns
-             :when (not (present (str/lower-case (name column))))
+             :when (not (present (text/lower-case (name column))))
              :let  [stmt (fn [clause] (str "ALTER TABLE " (name table) " ADD COLUMN " clause
                                            (name column) " " definition))]]
        (log/info "Adding missing column" {:table (name table) :column (name column)})

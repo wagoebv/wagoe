@@ -23,7 +23,8 @@
      (def cfg (sys-config/ig-config (config/load-config)))
      (def system (ig/init cfg))
      (ig/halt! system)"
-  (:require [wagoe.platform.shell.adapters.database.factory :as db-factory]
+  (:require [wagoe.core.utils.text :as text]
+            [wagoe.platform.shell.adapters.database.factory :as db-factory]
             [wagoe.platform.shell.database.migrations :as migrations]
             [wagoe.observability.logging.shell.adapters.no-op :as logging-no-op]
             [wagoe.observability.metrics.shell.adapters.no-op :as metrics-no-op]
@@ -388,7 +389,7 @@
             (let [method (or (get-in request [:form-params "_method"])
                              (get-in request [:params "_method"]))]
               (if method
-                (handler (assoc request :request-method (keyword (str/lower-case method))))
+                (handler (assoc request :request-method (keyword (text/lower-case method))))
                 (handler request)))
             (handler request))))])))
 

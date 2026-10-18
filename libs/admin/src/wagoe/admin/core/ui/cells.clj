@@ -6,7 +6,8 @@
    the stylesheet styles roles, never fields. What a cell needs beyond the
    value — a relation's title, a has-many count, the time — arrives in the
    overview the shell computed for the page. Pure Hiccup."
-  (:require [wagoe.admin.core.display :as display]
+  (:require [wagoe.core.utils.text :as text]
+            [wagoe.admin.core.display :as display]
             [wagoe.admin.core.ui.base :as base]
             [wagoe.shared.ui.core.components :as ui]
             [wagoe.shared.ui.core.icons :as icons]
@@ -204,7 +205,7 @@
 
           :boolean
           (if (cond
-                (string? value) (contains? #{"true" "1" "t"} (str/lower-case value))
+                (string? value) (contains? #{"true" "1" "t"} (text/lower-case value))
                 ;; SQLite stores a boolean as 0 or 1
                 (number? value) (not (zero? value))
                 :else           (boolean value))

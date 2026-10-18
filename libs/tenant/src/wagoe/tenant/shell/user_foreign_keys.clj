@@ -4,7 +4,7 @@
    at nobody. Idempotent; skipped where auth_users is absent (no user module)
    or the engine cannot add a foreign key to a table (SQLite, which refuses
    tenancy anyway)."
-  (:require [clojure.string :as str]
+  (:require [wagoe.core.utils.text :as text]
             [wagoe.platform.database :as db]
             [wagoe.platform.ports.database :as protocols])
   (:import [java.sql Connection]
@@ -29,8 +29,8 @@
   (with-open [rs (.getImportedKeys (.getMetaData c) (.getCatalog c) nil table)]
     (loop []
       (when (.next rs)
-        (if (and (= column (str/lower-case (.getString rs "FKCOLUMN_NAME")))
-                 (= "auth_users" (str/lower-case (.getString rs "PKTABLE_NAME"))))
+        (if (and (= column (text/lower-case (.getString rs "FKCOLUMN_NAME")))
+                 (= "auth_users" (text/lower-case (.getString rs "PKTABLE_NAME"))))
           (.getString rs "FK_NAME")
           (recur))))))
 
@@ -39,7 +39,7 @@
    metadata, or nil when there is none."
   [ctx table column]
   (let [probe (fn [c] (some #(auth-users-key-name c % column)
-                            (distinct [table (str/upper-case table)])))
+                            (distinct [table (text/upper-case table)])))
         ds    (:datasource ctx)]
     (if (instance? Connection ds)
       (probe ds)

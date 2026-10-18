@@ -1,5 +1,6 @@
 (ns wagoe.devtools.shell.dashboard.pages.overview
-  (:require [wagoe.devtools.shell.dashboard.layout :as layout]
+  (:require [wagoe.core.utils.text :as text]
+            [wagoe.devtools.shell.dashboard.layout :as layout]
             [wagoe.devtools.shell.dashboard.components :as c]
             [wagoe.devtools.shell.dashboard.pages.errors :as dashboard-errors]
             [wagoe.devtools.shell.repl :as devtools-repl]
@@ -104,7 +105,7 @@
                     :sub (when-let [m (:route-methods data)]
                            (str/join " · "
                                      (for [[method cnt] (sort-by key m)]
-                                       (str cnt " " (str/upper-case (name method))))))})
+                                       (str cnt " " (text/upper-case (name method))))))})
       (c/stat-card {:label "Modules" :value (:module-count data)
                     :sub (when (:module-names data)
                            (str/join " · " (:module-names data)))})

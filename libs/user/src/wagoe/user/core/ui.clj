@@ -4,7 +4,8 @@
    This namespace contains pure functions for generating user-related Hiccup
    structures. Components are derived from the User schema and handle
    user-specific business logic for display and forms."
-  (:require [wagoe.shared.ui.core.components :as ui]
+  (:require [wagoe.core.utils.text :as text]
+            [wagoe.shared.ui.core.components :as ui]
             [wagoe.shared.ui.core.layout :as layout]
             [wagoe.shared.ui.core.table :as table-ui]
             [wagoe.shared.ui.core.icons :as icons]
@@ -516,7 +517,7 @@
     [:h3 [:t :user/message-updated]]
     [:p [:t :user/message-updated-details {:name (:name user) :email (:email user)}]]
     [:div.user-details
-     [:p [:t :user/updated-role {:role (str/upper-case (name (:role user)))}]]]
+     [:p [:t :user/updated-role {:role (text/upper-case (name (:role user)))}]]]
     [:a.button {:href (str "/web/users/" (:id user))} [:t :user/button-view-user]]]))
 (defn user-deleted-success
   "Generate success message for user deletion.

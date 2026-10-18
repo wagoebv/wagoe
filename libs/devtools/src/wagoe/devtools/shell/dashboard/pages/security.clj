@@ -1,6 +1,7 @@
 (ns wagoe.devtools.shell.dashboard.pages.security
   "Dashboard page for Security Status overview."
-  (:require [wagoe.devtools.shell.dashboard.layout :as layout]
+  (:require [wagoe.core.utils.text :as text]
+            [wagoe.devtools.shell.dashboard.layout :as layout]
             [wagoe.devtools.shell.dashboard.components :as c]
             [wagoe.devtools.core.security-analyzer :as sec]
             [clojure.string :as str]))
@@ -77,7 +78,7 @@
       (c/card {:title "Authentication & Access"}
               [:div {:style "font-family:var(--font-mono);font-size:12px;line-height:2"}
                (for [method (:methods auth)]
-                 (check-item true (str/upper-case (name method))))
+                 (check-item true (text/upper-case (name method))))
                (check-item (:configured? csp) (str "CSP: " (if (:configured? csp) "configured" "not configured")))
                [:div {:style "margin-top:12px"}
                 [:span.text-muted "Roles: "]

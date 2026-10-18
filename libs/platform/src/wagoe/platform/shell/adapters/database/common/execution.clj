@@ -3,7 +3,8 @@
    
    This is part of the imperative shell - it performs database I/O,
    manages transactions, and handles side effects like logging."
-  (:require [wagoe.platform.core.database.constraint :as constraint]
+  (:require [wagoe.core.utils.text :as text]
+            [wagoe.platform.core.database.constraint :as constraint]
             [wagoe.platform.core.http.problem-details :as problem]
             [wagoe.platform.core.database.query :as core-query]
             [wagoe.platform.shell.adapters.database.common.connection :as connection]
@@ -241,7 +242,7 @@
                           [(subs key-name 0 i) (subs key-name (inc i))]
                           [target key-name]))]
     (if (and (= :unique kind) (not (or field fields)) table
-             (= target (str/lower-case table))
+             (= target (text/lower-case table))
              ;; An English Detail that named no field is a key on an expression.
              (not (str/starts-with? (str (:detail reported)) "Key (")))
       (try
@@ -281,7 +282,7 @@
     (let [msg      (ex-message cause)
           required (some-> r redaction/not-null-field)]
       (log/error (str what " failed") {:adapter adapter-dialect :sql sql :error msg})
-      (throw (ex-info (str "Database " (str/lower-case what) " failed")
+      (throw (ex-info (str "Database " (text/lower-case what) " failed")
                       (cond-> {:type           :database-error
                                :adapter        adapter-dialect
                                :sql            sql

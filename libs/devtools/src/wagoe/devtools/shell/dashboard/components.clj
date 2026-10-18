@@ -1,6 +1,6 @@
 (ns wagoe.devtools.shell.dashboard.components
   "Reusable Hiccup UI components for the dev dashboard."
-  (:require [clojure.string :as str]))
+  (:require [wagoe.core.utils.text :as text]))
 
 (defn stat-card
   "Renders a stat card with a label, value, and optional sub text.
@@ -16,7 +16,7 @@
   "Renders a color-coded HTTP method badge.
    method — keyword :get :post :put :delete :patch"
   [method]
-  (let [method-name (str/upper-case (name method))
+  (let [method-name (text/upper-case (name method))
         css-class   (str "method-badge method-" (name method))]
     [:span {:class css-class} method-name]))
 

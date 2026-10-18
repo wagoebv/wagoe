@@ -11,7 +11,8 @@
    Times are wall-clock in the zone: each matching local time fires once. A
    local time skipped by a DST jump fires at the shifted instant; a local
    time that occurs twice fires on its first occurrence."
-  (:require [clojure.string :as str])
+  (:require [wagoe.core.utils.text :as text]
+            [clojure.string :as str])
   (:import [java.time Instant LocalDateTime ZoneId ZonedDateTime]
            [java.time.temporal ChronoUnit]))
 
@@ -38,7 +39,7 @@
   {:error {:type :validation-error :message message :expression expr}})
 
 (defn- parse-value [s {:keys [names]}]
-  (or (get names (str/upper-case s))
+  (or (get names (text/upper-case s))
       (when (re-matches #"\d{1,2}" s) (parse-long s))))
 
 (defn- parse-part
@@ -66,7 +67,7 @@
   "A schedule from cron expression `expr`, or `{:error …}`."
   [expr]
   (let [expr  (str/trim (str expr))
-        expr' (get macros (str/lower-case expr) expr)
+        expr' (get macros (text/lower-case expr) expr)
         parts (str/split expr' #"\s+")]
     (if (not= 5 (count parts))
       (error "A cron expression has five fields: minute hour day-of-month month day-of-week" expr)

@@ -1,5 +1,5 @@
 (ns wagoe.devtools.shell.dashboard.middleware
-  (:require [clojure.string :as str]
+  (:require [wagoe.core.utils.text :as text]
             [ring.middleware.params :as ring-params])
   (:import [java.time Instant]))
 
@@ -27,7 +27,7 @@
 
 (defn- sanitize-headers [headers]
   (reduce-kv (fn [m k v]
-               (assoc m k (if (contains? sensitive-headers (str/lower-case (str k)))
+               (assoc m k (if (contains? sensitive-headers (text/lower-case (str k)))
                             "[REDACTED]"
                             v)))
              {} headers))
@@ -39,7 +39,7 @@
     (cond
       (map? params)
       (reduce-kv (fn [m k v]
-                   (let [k-str (str/lower-case (str (if (keyword? k) (name k) k)))]
+                   (let [k-str (text/lower-case (str (if (keyword? k) (name k) k)))]
                      (assoc m k (if (contains? sensitive-param-keys k-str)
                                   "[REDACTED]"
                                   (sanitize-params v)))))

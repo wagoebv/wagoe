@@ -5,7 +5,8 @@
    JSON error the one shape of `wagoe.platform.core.http.errors`."
   (:require [cheshire.core]
             [wagoe.platform.core.http.client-ip :as client-ip]
-            [wagoe.platform.core.http.errors :as errors]))
+            [wagoe.platform.core.http.errors :as errors]
+            [wagoe.core.utils.text :as text]))
 
 ;; =============================================================================
 ;; Error Type Mappings
@@ -131,7 +132,7 @@
         (get headers "x-request-id") (assoc :request-id (get headers "x-request-id"))
         (get headers "user-agent") (assoc :user-agent (get headers "user-agent"))
         (:uri request) (assoc :uri (:uri request))
-        (:request-method request) (assoc :method (-> request :request-method name .toUpperCase))
+        (:request-method request) (assoc :method (-> request :request-method name text/upper-case))
         ;; Never X-Forwarded-For itself: the client writes it (see client-ip).
         (client-ip/request-ip request) (assoc :ip-address (client-ip/request-ip request)))))))
 

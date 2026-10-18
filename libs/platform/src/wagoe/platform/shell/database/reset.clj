@@ -6,7 +6,8 @@
    `wagoe/boot-tables/<lib>.edn`; `schema_migrations`; and the schema of each
    tenant in the `tenants` table. Nothing else in the database is touched, and
    when anything else depends on what would go, nothing is dropped (BOU-585)."
-  (:require [wagoe.platform.shell.adapters.database.config :as db-config]
+  (:require [wagoe.core.utils.text :as text]
+            [wagoe.platform.shell.adapters.database.config :as db-config]
             [wagoe.platform.shell.adapters.database.factory :as db-factory]
             [wagoe.platform.shell.adapters.database.common.schema :as schema]
             [wagoe.platform.shell.database.migrations :as migrations]
@@ -37,7 +38,7 @@
   [slug]
   (str "tenant_" (str/replace slug "-" "_")))
 
-(defn- lc [s] (when-not (str/blank? s) (str/lower-case s)))
+(defn- lc [s] (when-not (str/blank? s) (text/lower-case s)))
 
 (defn- rows [^ResultSet rs f]
   (with-open [rs rs]

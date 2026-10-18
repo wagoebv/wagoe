@@ -5,6 +5,7 @@
    the metrics protocols, making it easier for feature modules to collect
    metrics without dealing with protocol details directly."
   (:require
+   [wagoe.core.utils.text :as text]
    [wagoe.observability.metrics.ports :as ports]
    [clojure.string :as str]))
 
@@ -22,7 +23,7 @@
      Normalized metric name string"
   [name]
   (-> name
-      (str/lower-case)
+      (text/lower-case)
       (str/replace #"[^a-z0-9_]" "_")
       (str/replace #"_{2,}" "_")
       (str/replace #"^_|_$" "")))
@@ -227,7 +228,7 @@
      nil"
   [emitter method path status duration]
   (let [histogram-name (build-metric-name "http" "requests" "duration")
-        request-tags {:method (str/upper-case (name method))
+        request-tags {:method (text/upper-case (name method))
                       :path (str path)
                       :status (str status)}]
     (observe-histogram emitter histogram-name duration request-tags)))
@@ -304,7 +305,7 @@
      nil"
   [emitter endpoint method status duration]
   (let [base-tags {:endpoint (str endpoint)
-                   :method (str/upper-case (name method))
+                   :method (text/upper-case (name method))
                    :status (str status)}]
     ;; Count total requests
     (count-events emitter "api-request" base-tags)

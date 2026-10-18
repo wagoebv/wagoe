@@ -1,6 +1,7 @@
 (ns wagoe.payments.core.provider
   "Pure helper functions for payment provider logic — no I/O, no side effects."
-  (:require [clojure.string :as str]))
+  (:require [wagoe.core.utils.text :as text]
+            [clojure.string :as str]))
 
 (defn cents->euro
   "Convert integer cents to a euro amount string (e.g. 11900 -> \"119.00\").
@@ -59,7 +60,7 @@
 ;; =============================================================================
 
 (defn- mollie-amount [amount-cents currency]
-  {:currency (str/upper-case (or currency "EUR"))
+  {:currency (text/upper-case (or currency "EUR"))
    :value    (cents->euro amount-cents)})
 
 (defn- mollie-payment-base [{:keys [amount-cents currency description]} webhook-url]
@@ -194,7 +195,7 @@
   ;; the boundary; a pure fn must not throw).
   (let [setup-future-usage-param ({:off-session "off_session"
                                    :on-session  "on_session"} setup-future-usage)]
-    (cond-> {"line_items[0][price_data][currency]"           (str/lower-case (or currency "eur"))
+    (cond-> {"line_items[0][price_data][currency]"           (text/lower-case (or currency "eur"))
              "line_items[0][price_data][unit_amount]"        (str amount-cents)
              "line_items[0][price_data][product_data][name]" description
              "line_items[0][quantity]"                       "1"
@@ -234,7 +235,7 @@
   [{:keys [amount-cents currency description provider-customer-id
            provider-payment-method-id metadata]}]
   (cond-> {"amount"      (str amount-cents)
-           "currency"    (str/lower-case (or currency "eur"))
+           "currency"    (text/lower-case (or currency "eur"))
            "customer"    provider-customer-id
            "off_session" "true"
            "confirm"     "true"}

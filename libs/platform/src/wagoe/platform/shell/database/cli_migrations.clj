@@ -11,7 +11,8 @@
      create <name>   - Create a new migration file
      reset           - Drop what the app owns and migrate (dev, test, acc only)
      init            - Initialize migration system"
-  (:require [wagoe.platform.shell.database.migrations :as migrations]
+  (:require [wagoe.core.utils.text :as text]
+            [wagoe.platform.shell.database.migrations :as migrations]
             [wagoe.platform.shell.database.reset :as reset]
             [clojure.tools.cli :as cli]
             [clojure.string :as str])
@@ -143,7 +144,7 @@
                 (reset/execute! plan)
                 (println "✅ Database reset completed\n")
                 (migrations/print-status)
-                (when (some #(= "users" (str/lower-case %)) (:tables plan))
+                (when (some #(= "users" (text/lower-case %)) (:tables plan))
                   (println "\nThe reset dropped every user account. Next: bb create-admin\n"))
                 0)
             ;; Non-zero: a cancelled destructive operation is not success for

@@ -12,6 +12,7 @@
    - Merge auto-detected configuration with manual overrides
    - Generate sensible defaults for labels and field ordering"
   (:require
+   [wagoe.core.utils.text :as text]
    [clojure.string :as str]
    [wagoe.admin.schema :as admin-schema]
    [wagoe.core.utils.case-conversion :as case-conversion]))
@@ -83,7 +84,7 @@
   [sql-type]
   (when sql-type
     (-> sql-type
-        str/lower-case
+        text/lower-case
         (str/replace #"\(.*\)" "")  ; Remove size/precision
         (str/replace #"\s+(unsigned|zerofill)" "")  ; MySQL's column_type
         str/trim)))
@@ -111,7 +112,7 @@
   ([sql-type field-name]
    ;; The full type first: char(36) and tinyint(1) mean something their base
    ;; type does not (BOU-649).
-   (let [base-type (or (some->> sql-type str/lower-case str/trim (get sql-type->field-type))
+   (let [base-type (or (some->> sql-type text/lower-case str/trim (get sql-type->field-type))
                        (get sql-type->field-type (normalize-sql-type sql-type) :string))]
      ;; Apply heuristics if field is text type
      (if (and (= base-type :text) field-name)
@@ -164,7 +165,7 @@
   (if-not field-name
     :text-input
     (let [field-name-str (name field-name)
-          field-name-lower (str/lower-case field-name-str)]
+          field-name-lower (text/lower-case field-name-str)]
       (cond
         ; Special field name heuristics
         (str/includes? field-name-lower "email") :email-input
@@ -445,7 +446,7 @@
      :required (and is-not-null? (not is-primary-key?))
      :readonly (should-be-readonly? field-name is-primary-key?)
      :hidden (or (should-be-hidden? field-name)
-                 (str/includes? (str/lower-case (str sql-type)) "tsvector"))
+                 (str/includes? (text/lower-case (str sql-type)) "tsvector"))
      :searchable (should-be-searchable? field-type field-name)
      :sortable (should-be-sortable? field-type)
      :filterable (should-be-sortable? field-type)

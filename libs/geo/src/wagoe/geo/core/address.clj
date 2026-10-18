@@ -1,6 +1,7 @@
 (ns wagoe.geo.core.address
   "Pure address query normalisation and hashing — no I/O, no side effects."
-  (:require [clojure.string :as str])
+  (:require [wagoe.core.utils.text :as text]
+            [clojure.string :as str])
   (:import [java.security MessageDigest]
            [java.nio.charset StandardCharsets]))
 
@@ -19,10 +20,10 @@
      A non-empty lowercase string suitable for hashing."
   [{:keys [address postcode city country]}]
   (let [parts (cond-> []
-                address  (conj (str/lower-case (str/trim address)))
-                postcode (conj (str/lower-case (str/trim postcode)))
-                city     (conj (str/lower-case (str/trim city)))
-                true     (conj (str/lower-case
+                address  (conj (text/lower-case (str/trim address)))
+                postcode (conj (text/lower-case (str/trim postcode)))
+                city     (conj (text/lower-case (str/trim city)))
+                true     (conj (text/lower-case
                                 (str/trim (or country default-country)))))]
     (str/join ", " parts)))
 

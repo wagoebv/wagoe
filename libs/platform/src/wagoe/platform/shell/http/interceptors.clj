@@ -39,7 +39,8 @@
    
    Route data may also carry an :interceptors vector; when the routes are
    compiled, it becomes :middleware running through this same runner."
-  (:require [wagoe.cache.ports :as cache-ports]
+  (:require [wagoe.core.utils.text :as text]
+            [wagoe.cache.ports :as cache-ports]
             [wagoe.core.interceptor :as interceptor]
             [wagoe.observability.logging.ports :as log-ports]
             [wagoe.observability.metrics.ports :as metrics-ports]
@@ -241,7 +242,7 @@
   "Parse common textual boolean values."
   [value]
   (when value
-    (let [token (-> value str str/lower-case str/trim)]
+    (let [token (-> value str text/lower-case str/trim)]
       (cond
         (truthy-config-values token) true
         (falsy-config-values token) false
@@ -447,7 +448,7 @@
               (let [method (name (:request-method request))
                     span   (tracing-ports/start-span!
                             tracer
-                            (str "HTTP " (str/upper-case method) " " (:uri request))
+                            (str "HTTP " (text/upper-case method) " " (:uri request))
                             {:http.request.method method
                              :url.path            (:uri request)
                              :correlation-id      (str correlation-id)})]

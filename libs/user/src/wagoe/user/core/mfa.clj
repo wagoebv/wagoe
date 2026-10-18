@@ -9,7 +9,8 @@
    
    All functions are pure and deterministic - no I/O operations.
    TOTP generation and cryptographic operations are handled in the shell layer."
-  (:require [clojure.string :as str]))
+  (:require [wagoe.core.utils.text :as text]
+            [clojure.string :as str]))
 
 ;; =============================================================================
 ;; MFA Business Rules
@@ -192,7 +193,7 @@
    Pure - backup code formatting."
   [code]
   (let [clean-code (str/replace code #"[^A-Za-z0-9]" "")
-        uppercase-code (str/upper-case clean-code)]
+        uppercase-code (text/upper-case clean-code)]
     (if (>= (count uppercase-code) 12)
       (str (subs uppercase-code 0 4) "-"
            (subs uppercase-code 4 8) "-"

@@ -13,11 +13,20 @@
            wagoe.push.shell.registry/defpush clojure.core/def
            wagoe.workflow.shell.registry/defworkflow clojure.core/def
            wagoe.audience.shell.registry/defaudience clojure.core/def}
- :linters {:unresolved-symbol {:exclude [(wagoe.platform.database/with-transaction [tx])
+ ;; JVM-locale case conversion: on tr-TR `I` lowers to dotless `ı`, so userId
+ ;; became user-ıd. Use wagoe.core.utils.text. Tests and Babashka tooling,
+ ;; which cannot reach libs/core, are exempt via the ns-groups below.
+ :ns-groups [{:filename-pattern "(^|.*/)(test|dev)/.*" :name not-src}
+             {:pattern "^wagoe\\.(tools|cli)(\\..*)?$" :name babashka-tooling}]
+ :linters {:discouraged-var {clojure.string/lower-case {:message "Locale-dependent. Use wagoe.core.utils.text/lower-case."}
+                             clojure.string/upper-case {:message "Locale-dependent. Use wagoe.core.utils.text/upper-case."}}
+           :unresolved-symbol {:exclude [(wagoe.platform.database/with-transaction [tx])
                                          (wagoe.platform.shell.adapters.database.common.core/with-transaction [tx])
                                          ;; spel (Playwright) binding macro: binds the page symbol from a vector.
                                          (com.blockether.spel.core/with-testing-page [pg])]}}
- :config-in-ns {wagoe.search.shell.registry-test {:linters {:inline-def {:level :off}}}
+ :config-in-ns {not-src {:linters {:discouraged-var {:level :off}}}
+                babashka-tooling {:linters {:discouraged-var {:level :off}}}
+                wagoe.search.shell.registry-test {:linters {:inline-def {:level :off}}}
                 wagoe.audience.shell.registry-test {:linters {:inline-def {:level :off}}}
                 ;; test stubs intentionally reify only the protocol methods they exercise
                 wagoe.admin.shell.http-test {:linters {:missing-protocol-method {:level :off}}}

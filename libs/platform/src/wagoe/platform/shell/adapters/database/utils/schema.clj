@@ -19,7 +19,8 @@
 
      (schema/generate-table-ddl ctx \"users\" some-malli-schema)
      (schema/initialize-tables-from-schemas! ctx schema-map)"
-  (:require [wagoe.platform.ports.database :as protocols]
+  (:require [wagoe.core.utils.text :as text]
+            [wagoe.platform.ports.database :as protocols]
             [wagoe.platform.shell.adapters.database.common.core :as db-core]
             [clojure.string :as str]
             [clojure.tools.logging :as log]))
@@ -214,7 +215,7 @@
     (str "CONSTRAINT fk_" table-name "_" (col-name name)
          " FOREIGN KEY (" (col-name name) ") REFERENCES " (clojure.core/name references) "(id)"
          (when on-delete
-           (str " ON DELETE " (str/upper-case (str/replace (clojure.core/name on-delete) "-" " ")))))))
+           (str " ON DELETE " (text/upper-case (str/replace (clojure.core/name on-delete) "-" " ")))))))
 
 (defn- generate-table-constraints
   "Generate table-level constraints (unique, foreign keys) based on table name and fields.
@@ -378,7 +379,7 @@
   [ctx table-name malli-schema columns]
   (let [present (set (map :name columns))]
     (when-let [missing (and (seq present)
-                            (seq (remove #(present (str/lower-case (col-name (:name %))))
+                            (seq (remove #(present (text/lower-case (col-name (:name %))))
                                          (keep extract-field-info (rest malli-schema)))))]
       (doseq [{:keys [name optional?]} missing :when (not optional?)]
         (log/warn "Added a required field as nullable: backfill it and add NOT NULL in a migration"
@@ -433,7 +434,7 @@
         mysql?  (= :mysql (protocols/engine (:adapter ctx)))]
     (doseq [f (keep extract-field-info (rest malli-schema))
             :let [column (col-name (:name f))
-                  {:keys [max-length not-null default]} (present (str/lower-case column))
+                  {:keys [max-length not-null default]} (present (text/lower-case column))
                   wanted (wanted-length f)]
             :when (and wanted max-length (< max-length wanted))]
       (if (and mysql? (some? default))

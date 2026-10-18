@@ -2,7 +2,8 @@
   "Shell REPL helpers that access the running Integrant system.
    These functions take system components as arguments — they do NOT directly
    access the running system. Wiring happens in dev/repl/user.clj."
-  (:require [wagoe.devtools.core.documentation :as docs]
+  (:require [wagoe.core.utils.text :as text]
+            [wagoe.devtools.core.documentation :as docs]
             [wagoe.platform.database :as db]
             [cheshire.core :as json]
             [clojure.java.shell :as shell]
@@ -93,7 +94,7 @@
                        {"content-type" "application/json"
                         "accept"       "application/json"})
         all-headers (merge base-headers headers)
-        request (cond-> {:request-method (keyword (str/lower-case (name method)))
+        request (cond-> {:request-method (keyword (text/lower-case (name method)))
                          :uri            path
                          :headers        all-headers
                          :server-name    "localhost"

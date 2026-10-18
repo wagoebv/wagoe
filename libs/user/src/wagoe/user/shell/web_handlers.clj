@@ -9,7 +9,8 @@
    - HTMX Handlers: Return HTML fragments for dynamic updates
 
    All handlers use the shared UI components and user shell services."
-  (:require [wagoe.config :as wagoe-config]
+  (:require [wagoe.core.utils.text :as text]
+            [wagoe.config :as wagoe-config]
             [wagoe.core.utils.redirect :as redirect]
             [wagoe.core.validation :as cv]
             [wagoe.i18n.shell.middleware :as i18n-middleware]
@@ -1383,7 +1384,7 @@
       (let [current-user (:user request)
             user-id (:id current-user)
             hx-request? (some-> (get-in request [:headers "hx-request"])
-                                str/lower-case
+                                text/lower-case
                                 (= "true"))
             hx-target (get-in request [:headers "hx-target"])
             ;; Get fresh user data

@@ -11,7 +11,8 @@
      (def pdf-gen (create-pdf-generator))
      (generate! pdf-gen my-report-def data {})
      ;; => {:bytes #bytes[...] :type :pdf :filename \"my-report.pdf\"}"
-  (:require [wagoe.reports.core.report :as core]
+  (:require [wagoe.core.utils.text :as text]
+            [wagoe.reports.core.report :as core]
             [wagoe.reports.ports :as ports]
             [clojure.java.io :as io]
             [clojure.string :as str]
@@ -100,7 +101,7 @@
   (boolean (re-matches #"(?i)a(?:[.#].*)?" (name tag))))
 
 (defn- unsafe-attr? [a? k v]
-  (let [k (str/lower-case (name k))]
+  (let [k (text/lower-case (name k))]
     (or (str/starts-with? k "on")
         (and a? (= "href" k)
              (not (re-find safe-href (str/replace (str v) #"[\x00-\x20]" "")))))))

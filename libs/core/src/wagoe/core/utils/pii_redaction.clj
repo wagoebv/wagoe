@@ -1,6 +1,7 @@
 (ns wagoe.core.utils.pii-redaction
   "Shared PII redaction utilities used by error reporting adapters."
-  (:require [clojure.string :as str]))
+  (:require [wagoe.core.utils.text :as text]
+            [clojure.string :as str]))
 
 (def default-redact-keys
   "Default set of keys whose values should be redacted before sending to external systems.
@@ -31,7 +32,7 @@
         (string? k) k
         :else (str k))
       (str/replace #"([a-z0-9])([A-Z])" "$1-$2")
-      (str/lower-case)
+      (text/lower-case)
       (str/replace "_" "-")))
 
 (defn sensitive-key-name?

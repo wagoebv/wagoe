@@ -3,7 +3,8 @@
    
    This namespace provides pure functions for transforming entity definitions
    into code templates. All functions are deterministic and have no side effects."
-  (:require [clojure.string :as str]))
+  (:require [wagoe.core.utils.text :as text]
+            [clojure.string :as str]))
 
 ;; =============================================================================
 ;; String Transformation Utilities
@@ -52,7 +53,7 @@
       (str/replace #"([a-z0-9])([A-Z])" "$1-$2")
       ;; Whitespace and underscores are word boundaries too: "Line Item"
       (str/replace #"[\s_]+" "-")
-      (str/lower-case)))
+      (text/lower-case)))
 
 (defn kebab->snake
   "Convert kebab-case to snake_case.

@@ -2,7 +2,7 @@
   "One instance per workflow and entity (BOU-581). Without the unique index two
    lazy starts could both find none and both insert. Idempotent, and refuses by
    name a table that already holds duplicates."
-  (:require [clojure.string :as str]
+  (:require [wagoe.core.utils.text :as text]
             [next.jdbc :as jdbc]
             [next.jdbc.result-set :as rs]
             [wagoe.platform.database :as db])
@@ -27,7 +27,7 @@
                (with-open [rs (.getIndexInfo md (.getCatalog c) nil t true false)]
                  (loop []
                    (when (.next rs)
-                     (or (= index-name (some-> (.getString rs "INDEX_NAME") str/lower-case))
+                     (or (= index-name (some-> (.getString rs "INDEX_NAME") text/lower-case))
                          (recur))))))
              ["workflow_instances" "WORKFLOW_INSTANCES"])))))
 

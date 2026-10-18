@@ -35,7 +35,7 @@
 (defn normalize-env
   "Normalize a WAG_ENV value to one of the short config directory names (dev, test, prod, acc)."
   [env]
-  (let [s (some-> env str .trim .toLowerCase)]
+  (let [s (some-> env str .trim (.toLowerCase java.util.Locale/ROOT))]
     (get env-aliases s s)))
 
 (defn named-profile

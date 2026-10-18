@@ -7,7 +7,8 @@
    - api-enabled?          — whether the generic search API serves an index
    - build-document*       — construct a SearchDocument from field values
    - filter-key->json-key  — convert a filter keyword to a snake_case JSON key"
-  (:require [clojure.string :as str]))
+  (:require [wagoe.core.utils.text :as text]
+            [clojure.string :as str]))
 
 ;; =============================================================================
 ;; Definitions
@@ -94,7 +95,7 @@
         weight-map  (reduce
                      (fn [acc {:keys [name weight]}]
                        (let [weight-key (keyword (str "weight-"
-                                                      (str/lower-case
+                                                      (text/lower-case
                                                        (clojure.core/name weight))))
                              raw-val    (get field-values name)
                              str-val    (cond
