@@ -16,9 +16,9 @@
  ;; JVM-locale case conversion: on tr-TR `I` lowers to dotless `ı`, so userId
  ;; became user-ıd. src uses wagoe.core.utils.text; tests and dev/ are exempt.
  :ns-groups [{:filename-pattern "(^|.*/)(test|dev)/.*" :name not-src}]
- :linters {:discouraged-var {clojure.string/lower-case {:message "Locale-dependent. Use wagoe.core.utils.text/lower-case."}
-                             clojure.string/upper-case {:message "Locale-dependent. Use wagoe.core.utils.text/upper-case."}
-                             clojure.string/capitalize {:message "Locale-dependent. Use wagoe.core.utils.text/capitalize."}}
+ :linters {:discouraged-var {clojure.string/lower-case {:message "Locale-dependent. Use wagoe.core.utils.text/lower-case (wagoe.tools.text in Babashka code)."}
+                             clojure.string/upper-case {:message "Locale-dependent. Use wagoe.core.utils.text/upper-case (wagoe.tools.text in Babashka code)."}
+                             clojure.string/capitalize {:message "Locale-dependent. Use wagoe.core.utils.text/capitalize (wagoe.tools.text in Babashka code)."}}
            :unresolved-symbol {:exclude [(wagoe.platform.database/with-transaction [tx])
                                          (wagoe.platform.shell.adapters.database.common.core/with-transaction [tx])
                                          ;; spel (Playwright) binding macro: binds the page symbol from a vector.
