@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **IMAP attachments carry `:disposition` and `:content-id`** (BOU-733): inline parts are still returned. Drop body
+  images with `(remove #(imap/embedded-in-html? (:html-body msg) %) (:attachments msg))`.
 - **FTPS file source in `external`** (BOU-730): `IFileSource` lists and downloads files over explicit TLS, retrying
   transient failures. Enable `:wagoe.external/ftps`.
 - **Mollie recurring payments and checkout expiry; `payments` is now stable** (BOU-453): mandates via `:setup-future-usage`,

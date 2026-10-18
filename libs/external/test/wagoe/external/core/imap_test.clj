@@ -100,7 +100,29 @@
                                         (byte-array 3))
                  :content)))
   (is (= "application/octet-stream"
-         (:content-type (imap/build-attachment {:content-type nil} (byte-array 0))))))
+         (:content-type (imap/build-attachment {:content-type nil} (byte-array 0)))))
+
+  (testing "disposition is lower-cased and the content-id loses its angle brackets"
+    (is (= {:disposition "inline" :content-id "logo@example.com"}
+           (select-keys (imap/build-attachment {:content-type "image/png" :disposition "INLINE"
+                                                :content-id " <logo@example.com> "}
+                                               (byte-array 1))
+                        [:disposition :content-id]))))
+
+  (testing "no header, no key"
+    (is (= #{:content-type :size :content}
+           (set (keys (imap/build-attachment {:content-type "image/png" :disposition nil :content-id ""}
+                                             (byte-array 1))))))))
+
+(deftest ^:unit embedded-in-html-test
+  (let [html "<p>Hi</p><img src=\"CID:logo@example.com\"><img src='cid:chart2@x'>"]
+    (is (true? (imap/embedded-in-html? html {:content-id "logo@example.com"})))
+    (is (true? (imap/embedded-in-html? html {:content-id "chart2@x"})))
+    (testing "a prefix of a referenced id is not referenced"
+      (is (false? (imap/embedded-in-html? html {:content-id "logo@example"}))))
+    (is (false? (imap/embedded-in-html? html {:content-id "invoice@x"})))
+    (is (false? (imap/embedded-in-html? html {})))
+    (is (false? (imap/embedded-in-html? nil {:content-id "logo@example.com"})))))
 
 (deftest ^:unit extract-body-text-first-wins-test
   (is (= {:text "first" :html "<p>first</p>"}

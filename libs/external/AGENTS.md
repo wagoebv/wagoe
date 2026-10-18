@@ -16,7 +16,8 @@ wagoe.external.schema           — Malli schemas for all three adapters
 wagoe.external.ports            — Protocol definitions (ISmtpProvider, IImapMailbox, ITwilioMessaging)
 wagoe.external.core.smtp        — Pure SMTP helpers (normalize-recipients, build-mime-properties)
 wagoe.external.core.imap        — Pure IMAP helpers (parse-message-headers, attachment-part?,
-                                     build-attachment, extract-body-text, build-inbound-message)
+                                     build-attachment, embedded-in-html?, extract-body-text,
+                                     build-inbound-message)
 wagoe.external.core.twilio      — Pure Twilio helpers (build-sms-params, build-whatsapp-params,
                                      parse-message-response, parse-twilio-error)
 wagoe.external.shell.adapters.smtp    — SmtpProviderAdapter (javax.mail)
@@ -107,6 +108,14 @@ A message carries its `:folder`. Pass the message as opts — `(ports/mark-read!
 UID from another folder hits a different message. `delete-message!` expunges only that UID (UID EXPUNGE, needs
 UIDPLUS); without UIDPLUS it only flags `\Deleted`, returns `:expunged? false`, and fetches skip it. A fetch without `:limit` takes
 100 messages, since each is held in memory with its attachments.
+
+### IMAP inline parts are attachments too
+`:attachments` holds every part with a filename or a non-text type, so a signature logo or a `cid:` image
+comes back next to the real files. Each carries `:disposition` and `:content-id`. Filter on the HTML, not on
+`"inline"` alone, since some clients (Apple Mail) send real attachments inline:
+```clojure
+(remove #(imap-core/embedded-in-html? (:html-body msg) %) (:attachments msg))
+```
 
 ### IMAP adapter is reflection-free, and tested on GreenMail
 javax.mail hands back package-private classes, and the mocked tests never caught a call that failed on a real

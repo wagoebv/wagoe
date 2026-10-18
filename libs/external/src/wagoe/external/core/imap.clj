@@ -49,13 +49,34 @@
        (some? filename)
        (not (#{"text/plain" "text/html"} (base-content-type content-type))))))
 
+(defn- normalize-content-id
+  "\"<logo@x>\" → \"logo@x\"."
+  [content-id]
+  (some-> content-id str str/trim (str/replace #"^<|>$" "") str/trim not-empty))
+
 (defn build-attachment
-  "InboundAttachment map for an attachment part and its decoded bytes."
-  [{:keys [content-type filename]} ^bytes content]
-  (cond-> {:content-type (or (base-content-type content-type) "application/octet-stream")
-           :size         (alength content)
-           :content      content}
-    filename (assoc :filename filename)))
+  "InboundAttachment map for an attachment part and its decoded bytes.
+   :disposition and :content-id are left out when the part has no such header."
+  [{:keys [content-type filename disposition content-id]} ^bytes content]
+  (let [disposition (some-> disposition str str/trim str/lower-case not-empty)
+        content-id  (normalize-content-id content-id)]
+    (cond-> {:content-type (or (base-content-type content-type) "application/octet-stream")
+             :size         (alength content)
+             :content      content}
+      filename    (assoc :filename filename)
+      disposition (assoc :disposition disposition)
+      content-id  (assoc :content-id content-id))))
+
+(defn embedded-in-html?
+  "True when html-body references the attachment by cid: — an image shown in the
+   body, such as a signature logo, rather than a file the sender attached.
+   Disposition alone does not tell: some clients send real attachments inline."
+  [html-body {:keys [content-id]}]
+  (boolean
+   (and content-id html-body
+        ;; The lookahead keeps cid:logo from matching cid:logo2.
+        (re-find (re-pattern (str "(?i)cid:" (java.util.regex.Pattern/quote content-id) "(?![^\\s\"'<>)])"))
+                 html-body))))
 
 ;; =============================================================================
 ;; Body Extraction

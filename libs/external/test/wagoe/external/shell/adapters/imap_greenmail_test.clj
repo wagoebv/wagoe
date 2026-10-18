@@ -3,6 +3,7 @@
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest is testing use-fixtures]]
             [malli.core :as m]
+            [wagoe.external.core.imap :as imap-core]
             [wagoe.external.ports :as ports]
             [wagoe.external.schema :as schema]
             [wagoe.external.shell.adapters.imap :as imap])
@@ -160,6 +161,33 @@
       (let [[msg] (fetch {:limit 1 :include-raw? true})
             parsed (MimeMessage. ^Session (session) (ByteArrayInputStream. ^bytes (:raw msg)))]
         (is (= "plain" (.getSubject parsed)))))))
+
+(defn- cid-image-part [^bytes content ^String content-id]
+  (doto (MimeBodyPart.)
+    (.setDataHandler (DataHandler. (ByteArrayDataSource. content "image/png")))
+    (.setDisposition Part/INLINE)
+    (.setContentID content-id)))
+
+(deftest ^:integration inline-parts-test
+  (.appendMessage *inbox*
+                  (message "cid image"
+                           (multipart "mixed"
+                                      (nested-part (multipart "related"
+                                                              (html-part "<p>Hi</p><img src=\"cid:logo@example.com\">")
+                                                              (cid-image-part png-bytes "<logo@example.com>")))
+                                      (file-part pdf-bytes "application/pdf" "invoice.pdf" Part/ATTACHMENT)))
+                  (Flags.) (day 16))
+  (let [msg (get (by-subject (fetch {})) "cid image")
+        [logo pdf] (:attachments msg)]
+    (is (m/validate schema/InboundMessage msg))
+    (testing "the inline image and the attachment both come back, told apart by disposition and content-id"
+      (is (= {:disposition "inline" :content-id "logo@example.com" :content-type "image/png"}
+             (select-keys logo [:filename :disposition :content-id :content-type])))
+      (is (java.util.Arrays/equals ^bytes png-bytes ^bytes (:content logo)))
+      (is (= {:filename "invoice.pdf" :disposition "attachment" :content-type "application/pdf"}
+             (select-keys pdf [:filename :disposition :content-id :content-type]))))
+    (testing "the HTML body references only the inline image"
+      (is (= [true false] (mapv #(imap-core/embedded-in-html? (:html-body msg) %) [logo pdf]))))))
 
 (deftest ^:integration unread-limit-since-test
   (testing "unread-only? selects unseen messages"
