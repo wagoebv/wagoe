@@ -75,29 +75,31 @@
                           cider/cider-nrepl {:mvn/version "0.62.2"}}
              :main-opts  ["-m" "nrepl.cmdline" "--middleware" "[cider.nrepl/cider-middleware]"
                           "--port" "7888"]
-             :jvm-opts   ["-Duser.timezone=UTC"]}
+             :jvm-opts   ["--enable-native-access=ALL-UNNAMED" "-Duser.timezone=UTC"]}
   :test     {:extra-paths ["test"]
              :extra-deps  {lambdaisland/kaocha {:mvn/version "1.91.1392"}
                            com.wagoe/wagoe-test {:local/root "../../libs/test"}}
              :main-opts   ["-m" "kaocha.runner"]
-             :jvm-opts    ["-Duser.timezone=UTC"]}
+             :jvm-opts    ["--enable-native-access=ALL-UNNAMED" "-Duser.timezone=UTC"]}
   ;; Foreground start — no REPL. What a container, a systemd unit or a smoke
   ;; test uses; `clojure -M:repl` + (go) remains the development path.
   ;; -Duser.timezone=UTC on every alias that can open a connection: the JDBC
   ;; drivers send the JVM's zone to the database, so the JVM's zone becomes the
   ;; session's. A host in local time makes CURRENT_DATE and date_trunc local.
+  ;; --enable-native-access lets sqlite-jdbc load its native library without
+  ;; the JDK warning on every task.
   :run      {:main-opts ["-m" "shop.main"]
-             :jvm-opts  ["-Duser.timezone=UTC"]}
+             :jvm-opts  ["--enable-native-access=ALL-UNNAMED" "-Duser.timezone=UTC"]}
   ;; Uberjar. `clojure -T:build uber` -> target/shop-<version>.jar
   :build    {:extra-deps {io.github.clojure/tools.build {:mvn/version "0.10.14"}}
              :ns-default build}
   :migrate  {:main-opts ["-m" "wagoe.platform.shell.database.cli-migrations"]
-             :jvm-opts  ["-Duser.timezone=UTC"]}
+             :jvm-opts  ["--enable-native-access=ALL-UNNAMED" "-Duser.timezone=UTC"]}
   ;; Backs `bb db:seed`. Separate alias rather than a flag on :migrate — seeding
   ;; is data, migrations are schema, and conflating them makes it too easy to
   ;; ship demo rows to production.
   :seed     {:main-opts ["-m" "wagoe.platform.shell.database.cli-seed"]
-             :jvm-opts  ["-Duser.timezone=UTC"]}
+             :jvm-opts  ["--enable-native-access=ALL-UNNAMED" "-Duser.timezone=UTC"]}
   ;; clj-kondo static analysis. Isolated via :replace-deps so it pulls only the
   ;; linter, not the project's deps. Used by the .githooks/pre-commit gate.
   :clj-kondo {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2026.08.04"}}
@@ -111,7 +113,7 @@
              ;; `create` in `bb create-admin` was dropped and the CLI rejected
              ;; --email as an unknown global option.
              :main-opts  ["-m" "wagoe.user.shell.cli-entry"]
-             :jvm-opts   ["-Duser.timezone=UTC"]}
+             :jvm-opts   ["--enable-native-access=ALL-UNNAMED" "-Duser.timezone=UTC"]}
   ;; Wagoe MCP server for editor agents (Claude Code / Cursor). Kept in an
   ;; alias — NOT in :deps — so the app runtime never pulls the MCP server.
   ;; Launched by .mcp.json via `clojure -M:mcp`. wagoe-mcp's pom now declares
