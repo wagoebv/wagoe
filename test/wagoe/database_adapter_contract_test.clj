@@ -532,7 +532,7 @@
                 "every capability has a probe")
             (doseq [[capability probe] (sort-by key capability-probes)]
               (let [failure (try (probe ctx) (catch Exception e (str "threw " (ex-message e))))]
-                (if (protocols/capable? (adapter ctx) capability)
+                (if (claimed capability)
                   (is (nil? failure) (str engine " claims " capability " but: " failure))
                   (is (some? failure) (str engine " honours " capability " but does not claim it"))))))
           (finally (close!)))))))
