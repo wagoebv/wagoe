@@ -222,6 +222,37 @@ Discovery builds a scaffolded module's four keys (`:wagoe/<name>`, `-repository`
   sorted by module key, then the handler's own `:extra-middleware`.
 * Any other `:http` key is a single slot; two modules setting it fail the boot.
 
+== Data export and retention
+
+A module exports the data it holds about a person, and expires what it keeps,
+through `wagoe.platform.ports.privacy`. It contributes implementations by id from
+its `ig-config`; no module reads another's tables.
+
+[source,clojure]
+----
+{:components  {:wagoe/orders-exporter  {:repo (ig/ref :wagoe/orders-repository)}
+               :wagoe/orders-retention {:repo (ig/ref :wagoe/orders-repository)}}
+ :data-export {:orders (ig/ref :wagoe/orders-exporter)}         ; IDataExporter
+ :retention   {:orders/drafts (ig/ref :wagoe/orders-retention)}} ; IRetentionPolicy
+----
+
+`:wagoe/data-export` (`IDataExport`) collects every exporter's data about a subject,
+`{:type :user :id …}` or `{:type :tenant :id …}`; an exporter returns nil for a
+subject it holds nothing about. The user module serves it to a signed-in user at
+`GET /api/v1/me/export` and `/web/profile/export`, and to platform admins at
+`GET /api/v1/users/:id/export`.
+
+Retention is off until you name a policy. It then runs as the recurring job
+`:wagoe/retention`, so `:wagoe/jobs` must be on:
+
+[source,clojure]
+----
+:wagoe/privacy {:retention          {:user/audit-log {:retain "P2Y"}} ; ISO-8601 period
+                :retention-schedule {:cron "0 3 * * *" :zone "UTC"}}  ; the default
+----
+
+A policy no enabled module provides, or a period that is not positive, fails the boot.
+
 == Testing
 
 [source,bash]

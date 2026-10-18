@@ -51,9 +51,11 @@
                                                             :client-id "app"}}}}
                                {:config {}})]
     (is (not (contains? (:components without) :wagoe/user-oidc)))
-    (is (= [(ig/ref :wagoe/user-routes) (ig/ref :wagoe/user-group-routes)] (:routes without)))
+    (is (= [(ig/ref :wagoe/user-routes) (ig/ref :wagoe/user-group-routes) (ig/ref :wagoe/user-export-routes)]
+           (:routes without)))
     (is (contains? (:components with) :wagoe/user-oidc))
-    (is (= [(ig/ref :wagoe/user-routes) (ig/ref :wagoe/user-group-routes) (ig/ref :wagoe/user-oidc-routes)]
+    (is (= [(ig/ref :wagoe/user-routes) (ig/ref :wagoe/user-group-routes)
+            (ig/ref :wagoe/user-export-routes) (ig/ref :wagoe/user-oidc-routes)]
            (:routes with)))))
 
 (deftest ^:unit oidc-refuses-to-boot-misconfigured

@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **Data export and retention** (BOU-473): users download their data from `/web/profile/export` or `GET /api/v1/me/export`.
+  `:wagoe/privacy {:retention {:user/audit-log {:retain "P2Y"}}}`, with `:wagoe/jobs` on, purges old audit entries nightly.
 - **IMAP attachments carry `:disposition`, `:content-id` and `:embedded?`** (BOU-733): inline parts are still returned.
   Drop images the HTML body shows (signature logos) with `(remove :embedded? (:attachments msg))`.
 - **`external` adapters share the RPC client's retry and circuit breaker** (BOU-459): opt in with `:retries`

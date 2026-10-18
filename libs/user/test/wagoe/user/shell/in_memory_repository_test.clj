@@ -156,7 +156,11 @@
     (->> (reverse @state)
          (filter #(= user-id (:target-user-id %)))
          (take (or limit 50))
-         vec)))
+         vec))
+
+  (delete-audit-logs-before [_ cutoff]
+    (let [[before after] (swap-vals! state (fn [es] (into [] (remove #(.isBefore ^Instant (:created-at %) cutoff)) es)))]
+      (- (count before) (count after)))))
 
 (defn- memory-service []
   (service/create-user-service (->MemoryUserRepository (atom {}))

@@ -73,6 +73,21 @@ curl -X DELETE http://localhost:3000/api/auth/sessions/{session-id} \
   -H "Authorization: Bearer <token>"
 ----
 
+== Data export
+
+A signed-in user downloads what the framework holds about them as JSON: profile,
+sessions, sign-in links, groups and the audit entries naming them. No
+password hash or MFA secret is included.
+
+[source,bash]
+----
+curl http://localhost:3000/api/v1/me/export -H "Authorization: Bearer <token>"
+----
+
+Platform admins (outside any tenant) export any user at `GET /api/v1/users/:id/export`. The audit log can expire
+through the `:user/audit-log` retention policy; see
+xref:libraries:platform.adoc#_data_export_and_retention[data export and retention].
+
 == Conventions
 
 * `JWT_SECRET` must be set (minimum 32 characters)

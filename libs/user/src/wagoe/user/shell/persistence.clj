@@ -1208,6 +1208,16 @@
                     :offset offset}
              results (db/execute-query! ctx query)]
          (map db->audit-log-entity results)))
+     {:db-ctx ctx}))
+
+  (delete-audit-logs-before [_ cutoff]
+    (persistence-interceptors/execute-persistence-operation
+     :delete-audit-logs-before
+     {:cutoff cutoff}
+     (fn [{:keys [params]}]
+       (db/execute-update! ctx {:delete-from :user_audit_log
+                                :where [:< :created_at
+                                        (type-conversion/instant->string (:cutoff params))]}))
      {:db-ctx ctx})))
 
 ;; =============================================================================

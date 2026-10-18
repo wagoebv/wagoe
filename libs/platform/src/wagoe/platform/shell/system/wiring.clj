@@ -48,6 +48,7 @@
             [wagoe.platform.shell.http.versioning :as http-versioning]
             [wagoe.platform.shell.utils.port-manager :as port-manager]
             [wagoe.platform.shell.rpc.server :as rpc-server]
+            [wagoe.platform.shell.privacy :as privacy]
             ;; NOTE: no module-wiring is required here any more (BOU-131). Each
             ;; was a static require, so every consumer of platform had to ship
             ;; every module's jar whether or not it used it — a missing one is a
@@ -980,6 +981,26 @@
    started from a REPL to find out (BOU-508)."
   []
   @started-config-state)
+
+;; =============================================================================
+;; Data export and retention
+;; =============================================================================
+
+;; :contributed is what modules contribute under :data-export / :retention.
+(defmethod ig/init-key :wagoe/data-export
+  [_ {:keys [contributed]}]
+  (log/info "Data export: exporters" {:exporters (vec (sort (keys contributed)))})
+  (privacy/create-data-export contributed))
+
+;; Returns the job handler map the job registry takes. system-config checked
+;; the policies against every module; one missing here belongs to a module this
+;; service launch does not run.
+(defmethod ig/init-key :wagoe/retention
+  [_ {:keys [policies contributed]}]
+  (let [plan (privacy/retention-plan! (select-keys policies (keys contributed)) contributed)]
+    (log/info "Retention: policies" {:policies (update-vals plan str)
+                                     :not-run  (vec (remove contributed (keys policies)))})
+    {privacy/retention-job-type (privacy/retention-job-handler plan contributed)}))
 
 ;; =============================================================================
 ;; Integrant REPL Setup

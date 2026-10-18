@@ -44,7 +44,8 @@
   ports/IUserAuditRepository
   (create-audit-log [_ audit-entity] audit-entity)
   (find-audit-logs [_ _options] {:audit-logs [] :total-count 0})
-  (find-audit-logs-by-user [_ _user-id _options] []))
+  (find-audit-logs-by-user [_ _user-id _options] [])
+  (delete-audit-logs-before [_ _cutoff] 0))
 
 (defrecord AuditRepoCapture [entries]
   ports/IUserAuditRepository
@@ -52,7 +53,8 @@
     (swap! entries conj audit-entity)
     audit-entity)
   (find-audit-logs [_ _options] {:audit-logs [] :total-count 0})
-  (find-audit-logs-by-user [_ _user-id _options] []))
+  (find-audit-logs-by-user [_ _user-id _options] [])
+  (delete-audit-logs-before [_ _cutoff] 0))
 
 (deftest ^:unit validate-session-survives-nil-update-test
   (testing "a valid session is returned even when update-session returns nil"
