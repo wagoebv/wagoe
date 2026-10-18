@@ -261,27 +261,23 @@
 ;; =============================================================================
 
 (defn- terminal-console
-  "The console, when input comes from a terminal. On some JDKs System/console
-   can be non-nil with stdin piped, so ask Console.isTerminal where it exists."
+  "System/console, when a person is at it. Newer JDKs return a console with
+   stdin piped; isTerminal is asked reflectively because the baseline JDK lacks it."
   []
-  (when-let [console (System/console)]
-    (if-let [terminal? (try (.getMethod java.io.Console "isTerminal" (make-array Class 0))
-                            (catch NoSuchMethodException _ nil))]
-      (when (.invoke ^java.lang.reflect.Method terminal? console (object-array 0)) console)
-      console)))
-
-(defn- read-password
-  "Hidden prompt on a terminal. Piped input — bb create-admin — is read
-   without a prompt: nobody is there to see it."
-  [console label]
-  (if console
-    (String. (.readPassword ^java.io.Console console (str label ": ") (object-array 0)))
-    (str/trim (or (read-line) ""))))
+  (when-let [c (System/console)]
+    (when (try (clojure.lang.Reflector/invokeInstanceMethod c "isTerminal" (object-array 0))
+               (catch Exception _ true))
+      c)))
 
 (defn read-hidden-password
-  "Read a password without echoing input."
-  [label]
-  (read-password (terminal-console) label))
+  "Read a password without echoing input. Piped input — bb create-admin — is
+   read without a prompt: nobody is there to see it."
+  ([label]
+   (read-hidden-password (terminal-console) label))
+  ([console label]
+   (if console
+     (String. (.readPassword ^java.io.Console console (str label ": ") (object-array 0)))
+     (str/trim (or (read-line) "")))))
 
 ;; =============================================================================
 ;; Command Execution

@@ -5,10 +5,9 @@
             [wagoe.user.shell.cli :as cli]))
 
 (deftest ^:unit piped-password-is-read-without-a-prompt
-  (let [read-password #'cli/read-password
-        result (atom nil)
+  (let [result (atom nil)
         out (with-out-str
               (binding [*in* (java.io.BufferedReader. (java.io.StringReader. "s3cret!\n"))]
-                (reset! result (read-password nil "Password"))))]
+                (reset! result (cli/read-hidden-password nil "Password"))))]
     (is (= "s3cret!" @result))
     (is (= "" out))))
