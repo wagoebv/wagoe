@@ -905,7 +905,9 @@
                 (:authenticated auth-result)
                 (-> context
                     (assoc :response {:status 200
-                                      :body (schema/user-specific-kebab->camel auth-result)})
+                                      :body (-> (schema/user-specific-kebab->camel auth-result)
+                                                (update :user schema/with-camel-twins)
+                                                (update :session schema/with-camel-twins))})
                     (ctx/add-breadcrumb :operation :session-create-formatted
                                         {:user-id (get-in auth-result [:user :id])}))
 

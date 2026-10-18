@@ -151,6 +151,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Deprecated
 
+- **Kebab-case keys in the login response's `user` and `session`** (BOU-737): each now has a camelCase twin with the same
+  value, and goes in 2.0. Read `session.sessionToken`, `session.expiresAt` and so on.
 - **`/swagger.json` and `:swagger` route docs** (BOU-462): the path serves the 3.1 document and `:swagger` is
   translated to `:openapi` with a boot warning, both until 2.0. Use `/openapi.json` and `:openapi`.
 - **`wagoe.search.shell.registry` and its `defsearch`** (BOU-705): one registry for every system in the JVM. Hand
@@ -162,6 +164,7 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **The login response's `user` carried the hashes of spent MFA backup codes** (BOU-737). Upgrade if you use MFA.
 - **Generated projects printed JDK restricted-method warnings on every SQLite task** (BOU-593). New projects pass
   `--enable-native-access=ALL-UNNAMED`; add it to your aliases' `:jvm-opts`, and `:manifest {"Enable-Native-Access" "ALL-UNNAMED"}` to `b/uber`.
 - **Admin writes to a computed or `GENERATED ALWAYS` identity column failed** (BOU-546): those columns are read-only now.
