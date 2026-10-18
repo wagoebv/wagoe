@@ -404,12 +404,11 @@
     (when (= :validation-error type) (not-empty errors))))
 
 (defn attempt
-  "Call `f`: [result nil], or [nil e] when it throws a refusal or a
-   :validation-error, with field errors or without."
+  "Call `f`: [result nil], or [nil e] when it throws a refusal or a rejection."
   [f]
   (try [(f) nil]
        (catch clojure.lang.ExceptionInfo e
-         (if (or (refusal? e) (= :validation-error (:type (ex-data e)))) [nil e] (throw e)))))
+         (if (or (refusal? e) (rejection e)) [nil e] (throw e)))))
 
 (defn refusal-message
   "What to tell the user about refusal `e`: its :message-key translated, a
@@ -419,6 +418,7 @@
     (cond
       message-key            ((t-fn request) message-key)
       (= :unique constraint) ((t-fn request) :admin/refused-duplicate-values)
+      (= :check constraint)  ((t-fn request) :admin/refused-check)
       :else                  (ex-message e))))
 
 (defn conflict-errors

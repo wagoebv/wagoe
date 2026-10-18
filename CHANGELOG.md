@@ -144,7 +144,7 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
-- **An admin write a CHECK constraint refused answered 500** (BOU-734). It is a 422 form error now, and elsewhere a
+- **An admin write a CHECK constraint refused answered 500** (BOU-734). It is a form error now, and elsewhere a
   `:conflict` with `:constraint :check` (409) rather than a `:database-error`. No action needed.
 - **Rate limiting on in prod without an active cache was found only at boot** (BOU-456): `bb doctor --env prod` now
   reports it, and the boot error names the edit. Run it before deploying.

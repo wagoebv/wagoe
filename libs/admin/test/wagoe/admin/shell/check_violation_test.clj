@@ -1,9 +1,9 @@
 (ns wagoe.admin.shell.check-violation-test
   "BOU-734: a value a CHECK constraint refuses answered 500 and logged an
-   ERROR. It is a 422 now, on the field when the constraint shows which
-   (PostgreSQL's name, SQLite's expression), else above the form (H2's and
-   MySQL's generated names). Swept over H2, SQLite and PostgreSQL, and MySQL
-   with WAGOE_TEST_DB=mysql."
+   ERROR. It is a 422 on the field when the constraint shows which
+   (PostgreSQL's name, SQLite's expression), else a 409 above the form, as a
+   key over several columns is (H2's and MySQL's generated names). Swept over
+   H2, SQLite and PostgreSQL, and MySQL with WAGOE_TEST_DB=mysql."
   (:require [wagoe.admin.ports :as ports]
             [wagoe.admin.shell.service :as service]
             [wagoe.admin.shell.schema-repository :as schema-repo]
@@ -93,66 +93,54 @@
   "Whether the engine's report on the inline CHECK shows its column."
   #{:postgresql :sqlite})
 
-(deftest ^:integration a-refused-color-is-a-422
+(defn- submit
+  "[status errors-logged body] of a create (no `id`) or an edit of `id`."
+  [svc schema id form]
+  (let [[response errors]
+        (logged-errors #(if id
+                          ((crud/update-entity-handler svc schema admin-config)
+                           (request :put (str "/web/admin/swatches/" id) {:entity "swatches" :id id} form))
+                          ((crud/create-entity-handler svc schema admin-config)
+                           (request :post "/web/admin/swatches" {:entity "swatches"} form))))]
+    [(:status response) errors (str (:body response))]))
+
+(defn- refused-above-the-form [[status errors body] & fields]
+  (is (= 409 status))
+  (is (= [] errors))
+  (is (str/includes? body "A value is not allowed"))
+  (doseq [f fields] (is (not (marked? body f)))))
+
+(deftest ^:integration a-refused-color-is-a-form-error
   (doseq [[backend db-ctx] @backends
           :let [{:keys [schema svc]} (system db-ctx)
                 on-field? (contains? names-the-column? backend)
-                existing  (ports/create-entity svc :swatches {:name "ok" :color "red"})]]
+                id        (str (:id (ports/create-entity svc :swatches {:name "ok" :color "red"})))]]
     (testing (str backend)
-      (testing "the service: a validation error, on :color where the engine shows it"
+      (testing "the service: a validation error on :color where the engine shows it, else a :conflict"
         (let [ex (try (ports/create-entity svc :swatches {:name "x" :color "blue"})
                       nil
                       (catch clojure.lang.ExceptionInfo e e))]
-          (is (= :validation-error (:type (ex-data ex))) (pr-str (ex-data ex)))
+          (is (= (if on-field? :validation-error :conflict) (:type (ex-data ex))) (pr-str (ex-data ex)))
           (is (= (when on-field? :color) (:field (ex-data ex))))))
 
-      (testing "create: 422, nothing at ERROR"
-        (let [[response errors] (logged-errors #((crud/create-entity-handler svc schema admin-config)
-                                                 (request :post "/web/admin/swatches" {:entity "swatches"}
-                                                          {"name" "x" "color" "blue"})))
-              body (str (:body response))]
-          (is (= 422 (:status response)))
-          (is (= [] errors))
-          (is (= on-field? (marked? body "color")))
-          (when-not on-field?
-            (is (str/includes? body "A value is not allowed")))))
+      (doseq [[label id form] [["create" nil {"name" "x" "color" "blue"}]
+                               ["edit" id {"color" "blue"}]]]
+        (testing label
+          (let [[status errors body :as response] (submit svc schema id form)]
+            (if on-field?
+              (do (is (= 422 status))
+                  (is (= [] errors))
+                  (is (marked? body "color")))
+              (refused-above-the-form response "color"))))))))
 
-      (testing "edit: 422, nothing at ERROR"
-        (let [id (str (:id existing))
-              [response errors] (logged-errors #((crud/update-entity-handler svc schema admin-config)
-                                                 (request :put (str "/web/admin/swatches/" id)
-                                                          {:entity "swatches" :id id}
-                                                          {"color" "blue"})))
-              body (str (:body response))]
-          (is (= 422 (:status response)))
-          (is (= [] errors))
-          (is (= on-field? (marked? body "color")))
-          (when-not on-field?
-            (is (str/includes? body "A value is not allowed"))))))))
-
-(deftest ^:integration a-check-over-two-columns-is-a-422-above-the-form
+(deftest ^:integration a-check-over-two-columns-is-a-409-above-the-form
   (doseq [[backend db-ctx] @backends
           :let [{:keys [schema svc]} (system db-ctx)
-                existing (ports/create-entity svc :swatches {:name "ok" :color "green" :lo 1 :hi 2})]]
+                id (str (:id (ports/create-entity svc :swatches {:name "ok" :color "green" :lo 1 :hi 2})))]]
     (testing (str backend)
-      (testing "create"
-        (let [[response errors] (logged-errors #((crud/create-entity-handler svc schema admin-config)
-                                                 (request :post "/web/admin/swatches" {:entity "swatches"}
-                                                          {"name" "x" "color" "red" "lo" "3" "hi" "2"})))
-              body (str (:body response))]
-          (is (= 422 (:status response)))
-          (is (= [] errors))
-          (is (str/includes? body "A value is not allowed"))
-          (is (not (marked? body "lo")))
-          (is (not (marked? body "hi")))))
-
-      (testing "edit"
-        (let [id (str (:id existing))
-              [response errors] (logged-errors #((crud/update-entity-handler svc schema admin-config)
-                                                 (request :put (str "/web/admin/swatches/" id)
-                                                          {:entity "swatches" :id id}
-                                                          {"lo" "5"})))
-              body (str (:body response))]
-          (is (= 422 (:status response)))
-          (is (= [] errors))
-          (is (str/includes? body "A value is not allowed")))))))
+      (doseq [[label id form] [["create" nil {"name" "x" "color" "red" "lo" "3" "hi" "2"}]
+                               ["edit" id {"lo" "5"}]]]
+        (testing label
+          (let [response (submit svc schema id form)]
+            (is (= 409 (first response)))
+            (refused-above-the-form response "lo" "hi")))))))
