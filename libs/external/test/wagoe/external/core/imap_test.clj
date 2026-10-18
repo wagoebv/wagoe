@@ -102,3 +102,33 @@
       (is (= "a@b.com" (:from sum)))
       (is (= "Hi" (:subject sum)))
       (is (false? (:seen? sum))))))
+
+(deftest ^:unit attachment-part-test
+  (testing "inline text/plain and text/html are body"
+    (is (false? (imap/attachment-part? {:content-type "text/plain; charset=UTF-8"})))
+    (is (false? (imap/attachment-part? {:content-type "TEXT/HTML" :disposition "inline"}))))
+
+  (testing "a disposition, a filename or another type makes an attachment"
+    (is (true? (imap/attachment-part? {:content-type "text/plain" :disposition "ATTACHMENT"})))
+    (is (true? (imap/attachment-part? {:content-type "text/plain" :filename "notes.txt"})))
+    (is (true? (imap/attachment-part? {:content-type "text/calendar; method=REQUEST"})))
+    (is (true? (imap/attachment-part? {:content-type "application/pdf; name=a.pdf"})))))
+
+(deftest ^:unit base-content-type-test
+  (is (= "text/plain" (imap/base-content-type " Text/Plain ; charset=UTF-8")))
+  (is (nil? (imap/base-content-type ";"))))
+
+(deftest ^:unit build-attachment-test
+  (is (= {:filename "a.pdf" :content-type "application/pdf" :size 3}
+         (dissoc (imap/build-attachment {:content-type "application/pdf; name=a.pdf" :filename "a.pdf"}
+                                        (byte-array 3))
+                 :content)))
+  (is (= "application/octet-stream"
+         (:content-type (imap/build-attachment {:content-type nil} (byte-array 0))))))
+
+(deftest ^:unit extract-body-text-first-wins-test
+  (is (= {:text "first" :html "<p>first</p>"}
+         (imap/extract-body-text [{:content-type "text/plain" :content "first"}
+                                  {:content-type "text/html" :content "<p>first</p>"}
+                                  {:content-type "text/plain" :content "second"}
+                                  {:content-type "text/html" :content "<p>second</p>"}]))))

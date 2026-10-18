@@ -11,7 +11,9 @@
 
  :aliases
  {:test      {:extra-paths ["test"]
-              :extra-deps  {lambdaisland/kaocha {:mvn/version "1.91.1392"}}
+              :extra-deps  {lambdaisland/kaocha    {:mvn/version "1.91.1392"}
+                            com.icegreen/greenmail {:mvn/version "1.6.15"
+                                                    :exclusions [com.sun.mail/jakarta.mail junit/junit]}}
               :main-opts   ["-m" "kaocha.runner"]}
 
   :clj-kondo {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2026.08.04"}}

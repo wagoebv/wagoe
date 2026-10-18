@@ -44,19 +44,22 @@
   "Protocol for reading messages from an IMAP mailbox."
 
   (fetch-messages! [this] [this opts]
-    "Fetch messages from the mailbox.
+    "Fetch messages from the mailbox, oldest first. Selection runs on the
+    server; content is read only for the selected messages, and reading does
+    not mark them read.
 
     Args:
       opts - ImapFetchOptions map (optional):
-             :folder      - folder name (default INBOX)
-             :limit       - max messages to fetch
+             :folder       - folder name (default INBOX)
+             :limit        - max messages to fetch
              :unread-only? - fetch only unread messages
-             :since       - only messages after this inst
+             :since        - only messages received at or after this inst
+             :include-raw? - add :raw, the RFC 822 bytes, to each message
 
     Returns:
       Map with:
         :success?  - boolean
-        :messages  - vector of InboundMessage maps
+        :messages  - vector of InboundMessage maps, with :attachments
         :count     - integer
         :error     - map {:message :type} (if failed)")
 

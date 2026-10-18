@@ -135,6 +135,7 @@
            :ns-patterns ["wagoe.payments.*-test"]}
 
           {:id :external
+           ;; Needs :test/mail: the IMAP adapter test runs against GreenMail.
            :test-paths ["libs/external/test"]
            :ns-patterns ["wagoe.external.*-test"]}
 

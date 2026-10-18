@@ -485,6 +485,9 @@
     (testing "clj-http-lite"
       (is (str/includes? (get in-ci "devtools" "") ":test/http")))
 
+    (testing "greenmail"
+      (is (str/includes? (get in-ci "external" "") ":test/mail")))
+
     (testing "and the app suite asks for all of them"
       ;; The root test/ tree boots the whole system, embedded PostgreSQL
       ;; included, so it needs every heavy dep (BOU-422, BOU-615).
@@ -498,7 +501,7 @@
       ;; jobs its DB queue test (BOU-689).
       (doseq [[s alias] in-ci
               :when (not (#{"admin" "platform" "tenant" "scaffolder" "workflow" "observability"
-                            "devtools" "app" "events" "jobs"} s))]
+                            "devtools" "app" "events" "jobs" "external"} s))]
         (is (= "-M:test" alias)
             (str s " requests " alias " but needs nothing beyond :test"))))))
 

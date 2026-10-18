@@ -140,6 +140,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **IMAP fetch failed on every real mailbox, and dropped attachments** (BOU-729): messages now carry `:attachments`,
+  a text attachment is no longer the body, and unread/since/limit select on the server. No action needed.
 - **Operation metrics never fired, and failed operations were not counted** (BOU-727): the interceptors read
   `:metrics-emitter` now (custom `:system` maps: rename `:metrics`), and `metrics.core` helpers register on first use.
 - **Mollie webhooks for an open payment returned 500**, so Mollie retried them (BOU-453). They now return

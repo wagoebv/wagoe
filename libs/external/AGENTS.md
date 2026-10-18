@@ -15,8 +15,9 @@ For payment processing (Mollie, Stripe), see [`libs/payments/AGENTS.md`](../paym
 wagoe.external.schema           — Malli schemas for all three adapters
 wagoe.external.ports            — Protocol definitions (ISmtpProvider, IImapMailbox, ITwilioMessaging)
 wagoe.external.core.smtp        — Pure SMTP helpers (normalize-recipients, build-mime-properties)
-wagoe.external.core.imap        — Pure IMAP helpers (parse-message-headers, extract-body-text,
-                                     build-inbound-message, filter-by-date, filter-unread)
+wagoe.external.core.imap        — Pure IMAP helpers (parse-message-headers, attachment-part?,
+                                     build-attachment, extract-body-text, build-inbound-message,
+                                     filter-by-date, filter-unread)
 wagoe.external.core.twilio      — Pure Twilio helpers (build-sms-params, build-whatsapp-params,
                                      parse-message-response, parse-twilio-error)
 wagoe.external.shell.adapters.smtp    — SmtpProviderAdapter (javax.mail)
@@ -87,6 +88,11 @@ All three keys are opt-in — add to `:active` in `config.edn` to enable:
 
 ### IMAP Connection-Per-Call
 `ImapMailboxAdapter` opens and closes a Store + Folder per operation. `close!` is a no-op (returns `true`). Use `try/finally` inside `with-imap-connection`.
+
+### IMAP adapter is reflection-free, and tested on GreenMail
+javax.mail hands back package-private classes, and the mocked tests never caught a call that failed on a real
+server. The adapter ns sets `*warn-on-reflection*` and a test fails on any warning. `imap_greenmail_test.clj`
+needs the `:test/mail` alias: `clojure -M:test:test/mail :external`.
 
 ### Twilio WhatsApp Sandbox
 In dev, Twilio sandbox requires the sandbox number (`whatsapp:+14155238886`) as the From number. The adapter is config-agnostic — set `:from-number` accordingly.
