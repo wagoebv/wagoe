@@ -50,15 +50,23 @@
     (catch IllegalArgumentException _
       nil)))
 
-(defn- require-admin
-  "Tenant management is for global admins. The platform has already refused
-   anyone not signed in."
-  [handler]
-  (fn [request]
-    (if (access/admin? request)
-      (handler request)
-      (access/forbidden-response "Admin role required" request
-                                 (access/correlation-id request (str (random-uuid)))))))
+(defn- require-role
+  "Answer 403 with `message` unless `allowed?` holds for the request. The
+   platform has already refused anyone not signed in."
+  [allowed? message]
+  (fn [handler]
+    (fn [request]
+      (if (allowed? request)
+        (handler request)
+        (access/forbidden-response message request
+                                   (access/correlation-id request (str (random-uuid))))))))
+
+;; Tenant management is for global admins.
+(def ^:private require-admin (require-role access/admin? "Admin role required"))
+
+;; A tenant's export holds every member's data; a tenant's own admin does not get it.
+(def ^:private require-platform-admin
+  (require-role (comp access/platform-admin? :user) "Platform admin required"))
 
 (def ^:private tenant-input-explainer (m/explainer tenant-schema/TenantInput))
 (def ^:private tenant-update-explainer (m/explainer tenant-schema/TenantUpdate))
@@ -307,16 +315,6 @@
             (do (log/info "Tenant data export" {:tenant-id tenant-id :actor-id (get-in request [:user :id])})
                 (platform-privacy/export-response doc))
             (error-response 404 :not-found "Tenant not found")))))))
-
-(defn- require-platform-admin
-  "A tenant's export holds every member's data; a tenant's own admin does not
-   get it."
-  [handler]
-  (fn [request]
-    (if (access/platform-admin? (:user request))
-      (handler request)
-      (access/forbidden-response "Platform admin required" request
-                                 (access/correlation-id request (str (random-uuid)))))))
 
 (defn export-routes
   "GET /api/v1/tenants/:id/export, for a platform admin."

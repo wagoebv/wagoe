@@ -21,7 +21,7 @@
 (defrecord TenantDataExporter [tenant-repository membership-repository invite-repository]
   privacy/IDataExporter
   (export-data [_ {:keys [type id]}]
-    (when-let [id (if (uuid? id) id (type-conversion/parse-uuid-string (str id)))]
+    (when-let [id (type-conversion/string->uuid (str id))]
       (case type
         :tenant (when-let [tenant (ports/find-tenant-by-id tenant-repository id)]
                   (core/tenant-export

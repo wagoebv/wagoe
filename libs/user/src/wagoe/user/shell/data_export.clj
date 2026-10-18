@@ -4,7 +4,6 @@
    retention policy."
   (:require [wagoe.core.utils.type-conversion :as type-conversion]
             [wagoe.platform.ports.privacy :as privacy]
-            [wagoe.user.core.audit :as audit]
             [wagoe.user.core.data-export :as core]
             [wagoe.user.ports :as ports]))
 
@@ -29,7 +28,7 @@
   privacy/IDataExporter
   (export-data [_ {:keys [type id]}]
     (when (= :user type)
-      (when-let [user (some->> (if (uuid? id) id (type-conversion/parse-uuid-string (str id)))
+      (when-let [user (some->> (type-conversion/string->uuid (str id))
                                 (ports/find-user-by-id user-repository))]
         (let [user-id (:id user)]
           (core/user-export
@@ -45,8 +44,3 @@
   (purge-before! [_ cutoff]
     (ports/delete-audit-logs-before audit-repository cutoff)))
 
-(defn record-admin-export!
-  "Audit an admin's download of `target`'s data. Before the response, and not
-   caught: an export nobody can trace afterwards is not served."
-  [audit-repository audit-context target]
-  (ports/create-audit-log audit-repository (audit/data-export-audit-entry audit-context target)))

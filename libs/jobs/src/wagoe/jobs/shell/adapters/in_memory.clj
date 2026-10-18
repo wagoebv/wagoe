@@ -356,8 +356,9 @@
     (let [jobs @(:jobs state)
           old? (fn [id] (when-let [at (some-> (get jobs id) :completed-at)]
                           (.isBefore ^Instant at cutoff)))
-          gone (filterv old? @(:failed state))]
-      (swap! (:failed state) #(vec (remove (set gone) %)))
+          gone (filterv old? @(:failed state))
+          gone? (set gone)]
+      (swap! (:failed state) #(vec (remove gone? %)))
       (swap! (:jobs state) #(apply dissoc % gone))
       (count gone))))
 

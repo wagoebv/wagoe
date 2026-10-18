@@ -48,7 +48,8 @@
             [wagoe.user.shell.mfa :as mfa]
             [wagoe.platform.ports.privacy :as privacy]
             [wagoe.platform.core.privacy :as platform-privacy]
-            [wagoe.user.shell.data-export :as data-export]
+            [wagoe.user.core.audit :as audit]
+            [wagoe.user.ports :as user-ports]
             [clojure.tools.logging :as log]
             [cheshire.core :as json]))
 
@@ -787,7 +788,9 @@
         ;; Other modules' exporters may answer for any id; ours names the account.
         (when-not profile
           (throw (ex-info "User not found" {:type :not-found :user-id user-id})))
-        (data-export/record-admin-export! audit-repository (user-svc/request-audit-context request) profile)
+        ;; Before the response, and not caught: an export nobody can trace is not served.
+        (user-ports/create-audit-log audit-repository
+                                     (audit/data-export-audit-entry (user-svc/request-audit-context request) profile))
         (export-response doc request)))))
 
 (defn- require-platform-admin-middleware

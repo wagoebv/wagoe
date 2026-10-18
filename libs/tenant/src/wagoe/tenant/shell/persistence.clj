@@ -108,7 +108,7 @@
                                       (db-ports/like adapter :slug :contains search)]))
              query (cond-> {:select [:*]
                             :from [:tenants]
-                            :order-by [[:created_at :desc]]
+                            :order-by [[:created_at :desc] [:id :asc]]
                             :limit limit
                             :offset offset}
                      (next where) (assoc :where where))

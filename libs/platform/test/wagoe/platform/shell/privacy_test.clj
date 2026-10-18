@@ -74,10 +74,12 @@
 (deftest ^:unit an-export-response-keeps-section-namespaces
   (let [doc  (ports/export-subject (sut/create-data-export
                                     {:user         (exporter (fn [_] {:audit-log [{:created-at 1}]}))
-                                     :billing/user (exporter (fn [_] {:card-last4 "4242"}))})
+                                     :billing/user (exporter (fn [_] {:card-last4 "4242" :id 1 :billing/id 2 "raw" 3}))})
                                    {:type :user :id 7})
         body (json/parse-string (:body (privacy/export-response doc)))]
     (is (= #{"user" "billing/user"} (set (keys (get body "sections"))))
         "two modules' :user sections do not collide")
     (is (= [{"createdAt" 1}] (get-in body ["sections" "user" "auditLog"])) "other keys are camelCase")
+    (is (= {"cardLast4" "4242" "id" 1 "billing/id" 2 "raw" 3} (get-in body ["sections" "billing/user"]))
+        "and at every depth")
     (is (contains? body "exportedAt"))))
