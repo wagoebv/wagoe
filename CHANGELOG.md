@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **`capable?` on the database port** (BOU-609): `(capable? adapter :schemas)`.
+  An unknown capability or a nil adapter throws; a tenant job with no adapter now fails instead of running in public.
 - **Opt-in virtual threads for requests and job workers** (BOU-471): `:virtual-threads? true` on `:wagoe/http`,
   `:wagoe/rpc` or `:wagoe/jobs :workers`. Off by default; on JDK 21, check for pinning first.
 - **`capable?` on the database port** (BOU-609): `(capable? adapter :schemas)`; a nil adapter claims nothing.
