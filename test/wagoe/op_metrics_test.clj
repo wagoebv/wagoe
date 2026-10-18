@@ -6,8 +6,8 @@
             [integrant.core :as ig]
             [wagoe.config :as config]
             [wagoe.observability.metrics.ports :as metrics]
-            [wagoe.system-config :as sys-config])
-  (:import [java.util UUID]))
+            [wagoe.system-config :as sys-config]
+            [wagoe.user.ports :as user-ports]))
 
 (defn- route-handler
   "The `method` handler of the route at `path` in reitit route data."
@@ -23,20 +23,25 @@
 (deftest ^:integration user-op-metrics-reach-the-configured-emitter
   (let [cfg    (-> (config/load-config {:profile :test})
                    (assoc-in [:active :wagoe/metrics] {:provider :prometheus}))
-        system (ig/init (sys-config/ig-config cfg) [:wagoe/user-routes])]
+        system (ig/init (sys-config/ig-config cfg) [:wagoe/user-db-schema :wagoe/user-routes])]
     (try
       (let [emitter (:wagoe/metrics system)
-            handler (route-handler (:api (:wagoe/user-routes system)) "/users/:id" :get)]
+            handler (route-handler (:api (:wagoe/user-routes system)) "/users/:id" :get)
+            user    (user-ports/register-user (:wagoe/user-service system)
+                                              {:email "op-metrics@example.com" :name "Op" :role :user
+                                               :password "Kit-Passw0rd-469!"})]
         (is (some? handler) "GET /users/:id is not in the user module's routes")
-        (handler {:request-method :get
-                  :uri            "/api/v1/users/x"
-                  :path-params    {:id (str (UUID/randomUUID))}
-                  :headers        {}})
+        (is (= 200 (:status (handler {:request-method :get
+                                      :uri            (str "/api/v1/users/" (:id user))
+                                      :parameters     {:path {:id (str (:id user))}}
+                                      :headers        {}}))))
         (testing "the attempt is counted on the system's emitter"
           (is (= 1 (counter-total emitter "user-get.attempt"))))
-        (testing "and the outcome and latency with it"
-          (is (= 1 (+ (counter-total emitter "user-get.success")
-                      (counter-total emitter "user-get.error"))))
+        ;; User ops answer with a :response and no :result; a 200 counted as an
+        ;; error until op-metrics read the response.
+        (testing "a 200 counts as a success, with its latency"
+          (is (= 1 (counter-total emitter "user-get.success")))
+          (is (= 0 (counter-total emitter "user-get.error")))
           (is (= 1 (-> (metrics/get-metric-values emitter "user-get.latency.seconds")
                        :series vals first :count)))))
       (finally (ig/halt! system)))))

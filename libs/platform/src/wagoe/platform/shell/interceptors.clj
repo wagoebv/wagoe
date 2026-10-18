@@ -84,6 +84,17 @@
               (metrics/increment metric-collector (str (name op) ".attempt") {}))
             (assoc-in ctx [:timing :start] (System/nanoTime)))})
 
+(defn- op-succeeded?
+  "Ops that answer with a :response and no :result (the user ops) succeed on a
+   status below 400, CLI exit 0 included."
+  [ctx]
+  (and (nil? (:exception ctx))
+       (if-let [status (get-in ctx [:result :status])]
+         (= :success status)
+         (let [status (get-in ctx [:response :status])]
+           (or (= :success status)
+               (and (int? status) (< status 400)))))))
+
 (def metrics-complete
   "Records operation completion metrics including success/failure and latency."
   {:name :metrics-complete
@@ -92,7 +103,7 @@
               (let [start-time (get-in ctx [:timing :start])
                     duration-ms (when start-time
                                   (/ (- (System/nanoTime) start-time) 1e6))
-                    success? (= :success (get-in ctx [:result :status]))
+                    success? (op-succeeded? ctx)
                     op-name (name op)]
 
                 ;; Record latency

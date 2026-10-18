@@ -195,6 +195,18 @@
       (is (= ctx result-ctx))
       (is (= 1 (counter-total metrics "operation.error")))))
 
+  (testing "metrics-complete reads the outcome from a :response when there is no :result"
+    (let [outcome (fn [ctx]
+                    (let [metrics (mock-metrics)]
+                      ((:leave interceptors/metrics-complete)
+                       (merge {:op :test/operation :system {:metrics-emitter metrics}} ctx))
+                      [(counter-total metrics "operation.success")
+                       (counter-total metrics "operation.error")]))]
+      (is (= [1 0] (outcome {:response {:status 200}})))
+      (is (= [1 0] (outcome {:response {:status 0}})) "CLI exit 0")
+      (is (= [0 1] (outcome {:response {:status 404}})))
+      (is (= [0 1] (outcome {:response {:status 400} :exception (ex-info "x" {})})))))
+
   (testing "metrics-error records failures"
     (let [metrics (mock-metrics)
           ctx {:op :test/operation :system {:metrics-emitter metrics}}
