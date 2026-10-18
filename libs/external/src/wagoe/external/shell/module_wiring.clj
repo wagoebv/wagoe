@@ -5,13 +5,15 @@
      :wagoe.external/smtp   — SMTP transport provider
      :wagoe.external/imap   — IMAP mailbox reader
      :wagoe.external/twilio — Twilio SMS / WhatsApp
+     :wagoe.external/ftps   — FTPS file source
 
-   All three keys are opt-in: add them to :active in config.edn to enable.
+   All four keys are opt-in: add them to :active in config.edn to enable.
    They are shipped in :inactive by default."
   (:require [wagoe.external.ports :as ports]
             [wagoe.external.shell.adapters.smtp :as smtp-adapter]
             [wagoe.external.shell.adapters.imap :as imap-adapter]
             [wagoe.external.shell.adapters.twilio :as twilio-adapter]
+            [wagoe.external.shell.adapters.ftps :as ftps-adapter]
             [clojure.tools.logging :as log]
             [integrant.core :as ig]))
 
@@ -63,3 +65,16 @@
 (defmethod ig/halt-key! :wagoe.external/twilio
   [_ _adapter]
   (log/info "Twilio adapter halted (no cleanup required)"))
+
+;; =============================================================================
+;; FTPS
+;; =============================================================================
+
+(defmethod ig/init-key :wagoe.external/ftps
+  [_ config]
+  (log/info "Initializing FTPS file source" {:host (:host config)})
+  (ftps-adapter/create-ftps-source config))
+
+(defmethod ig/halt-key! :wagoe.external/ftps
+  [_ _adapter]
+  (log/info "FTPS file source halted (no cleanup required)"))

@@ -47,6 +47,7 @@ JWT_SECRET="dev-secret-at-least-32-characters-long" WAG_ENV=test clojure -M:test
 #   :test/otel    observability             (OpenTelemetry in-memory exporters)
 #   :test/http    devtools                  (clj-http-lite)
 #   :test/mail    external                  (GreenMail IMAP server)
+#   :test/ftp     external                  (MINA FTPS server)
 clojure -M:test:test/pg:test/pg-mac :admin         # one suite, only what it needs (macOS)
 WAGOE_TEST_DB=mysql clojure -M:test:test/pg :admin # admin, user, workflow, search, push on mysql or pg (support.test-db)
 
@@ -65,7 +66,7 @@ clojure -M:test:test/pg :tenant                    # Tenant library tests
 clojure -M:test :realtime                          # Realtime library tests
 clojure -M:test:test/pg :workflow                  # Workflow library tests
 clojure -M:test :search                            # Search library tests
-clojure -M:test:test/mail :external                # External adapters tests
+clojure -M:test:test/mail:test/ftp :external       # External adapters tests
 clojure -M:test :payments                          # Payments library tests
 clojure -M:test :reports                           # Reports library tests
 clojure -M:test :calendar                          # Calendar library tests
@@ -225,7 +226,7 @@ clj-paren-repair --help
 | ├── workflow/      # State machine workflows with audit trails
 | ├── search/        # Full-text search (PostgreSQL FTS / H2 LIKE)
 | ├── payments/      # PSP abstraction: Mollie, Stripe, Mock (checkout-session flow)
-| ├── external/      # External communication adapters: SMTP, IMAP, Twilio
+| ├── external/      # External communication adapters: SMTP, IMAP, Twilio, FTPS
 | ├── reports/       # Report definitions, PDF/CSV export, scheduling (defreport macro)
 | ├── calendar/      # Calendar events, RRULE recurrence, iCal export/import, conflict detection
 | ├── geo/           # Geocoding (OSM/Google/Mapbox), DB-backed cache, Haversine distance
@@ -1044,7 +1045,7 @@ Automated safeguards run in CI (and `check:fcis` + `check:ports` in pre-commit) 
 | [devtools](https://github.com/wagoebv/wagoe/blob/main/libs/devtools/AGENTS.md)           | Dev-only: error pipeline with WGE codes, REPL helpers, dashboard component                          |
 | [email](https://github.com/wagoebv/wagoe/blob/main/libs/email/AGENTS.md)                 | SMTP email sending, async and queued modes                                                          |
 | [events](https://github.com/wagoebv/wagoe/blob/main/libs/events/AGENTS.md)               | Event bus for cross-process, asynchronous module communication — in-memory and Redis Streams        |
-| [external](https://github.com/wagoebv/wagoe/blob/main/libs/external/AGENTS.md)           | External service adapters — Twilio, SMTP, IMAP                                                      |
+| [external](https://github.com/wagoebv/wagoe/blob/main/libs/external/AGENTS.md)           | External service adapters — Twilio, SMTP, IMAP, FTPS                                                |
 | [geo](https://github.com/wagoebv/wagoe/blob/main/libs/geo/AGENTS.md)                     | Multi-provider geocoding (OSM/Google/Mapbox), Haversine distance                                    |
 | [i18n](https://github.com/wagoebv/wagoe/blob/main/libs/i18n/AGENTS.md)                   | Marker-based i18n, translation catalogues, locale chains                                            |
 | [jobs](https://github.com/wagoebv/wagoe/blob/main/libs/jobs/AGENTS.md)                   | Background job processing with retry logic                                                          |

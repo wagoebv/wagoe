@@ -4,7 +4,8 @@
    Defines three integration protocols:
    - ISmtpProvider    — outbound email via SMTP
    - IImapMailbox     — inbound email via IMAP
-   - ITwilioMessaging — Twilio SMS and WhatsApp messaging")
+   - ITwilioMessaging — Twilio SMS and WhatsApp messaging
+   - IFileSource      — remote files to import (FTPS)")
 
 ;; =============================================================================
 ;; SMTP Protocol
@@ -120,3 +121,33 @@
         :success? - boolean
         :status   - string (e.g. \"delivered\", \"failed\")
         :error    - map {:message :type} (if failed)"))
+
+;; =============================================================================
+;; File Source Protocol
+;; =============================================================================
+
+(defprotocol IFileSource
+  "Protocol for reading files a remote system drops in a directory."
+
+  (list-files! [this dir] [this dir opts]
+    "List the regular files in dir, sorted by name.
+
+    Args:
+      opts - map (optional):
+             :match - exact name, regex (whole name) or collection of names
+             :skip  - names to leave out, e.g. files already processed
+
+    Returns:
+      Map with:
+        :success? - boolean
+        :files    - vector of RemoteFile maps {:name :path :size :modified-at}
+        :error    - map {:type :external-error :message :host :attempts :cause} (if failed)")
+
+  (fetch-file! [this path]
+    "Download the file at path.
+
+    Returns:
+      Map with:
+        :success? - boolean
+        :content  - bytes
+        :error    - map, as for list-files! (if failed)"))
