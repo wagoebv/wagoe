@@ -158,6 +158,9 @@ GET /web/payment/mock-return?checkout-id=<uuid>
 * Mollie does NOT sign webhooks with HMAC — `verify-webhook-signature` always returns `true`.
 * Verify by calling `get-payment-status` with the payment ID received in the webhook body.
 * `:webhook-base-url` is your application's public base URL; the adapter appends `/api/v1/payments/webhook`.
+* Recurring billing: a checkout with `:setup-future-usage` is Mollie's first payment and stores a mandate.
+  `create-off-session-payment` charges it later, usually as `:pending` until SEPA settles.
+* `expire-checkout-session` cancels the open payment; the webhook reports `:payment.cancelled`.
 
 === Stripe
 

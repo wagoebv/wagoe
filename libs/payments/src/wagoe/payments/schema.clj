@@ -56,7 +56,7 @@
    ;; Optional provider-side idempotency key — the stable business identity of
    ;; the charge (e.g. "incasso-<subscription>-<period>"). A retry with the same
    ;; key returns the original charge instead of creating a duplicate (Stripe:
-   ;; Idempotency-Key header; Mock: in-memory cache; Mollie: n/a).
+   ;; and Mollie: Idempotency-Key header; Mock: in-memory cache).
    [:idempotency-key       {:optional true} [:maybe :string]]])
 
 (def OffSessionPaymentResult

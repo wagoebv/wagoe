@@ -55,6 +55,46 @@
   (normalize-event-type event-type :stripe))
 
 ;; =============================================================================
+;; Mollie — request shaping and recurring status
+;; =============================================================================
+
+(defn- mollie-amount [amount-cents currency]
+  {:currency (str/upper-case (or currency "EUR"))
+   :value    (cents->euro amount-cents)})
+
+(defn- mollie-payment-base [{:keys [amount-cents currency description]} webhook-url]
+  {:amount      (mollie-amount amount-cents currency)
+   :description description
+   :webhookUrl  webhook-url})
+
+(defn mollie-checkout-payload
+  "Body for POST /v2/payments that starts a hosted checkout. A
+   :customer-id makes it the first payment of a mandate (sequenceType=first).
+   The internal :checkout-id is merged last so user metadata cannot clobber it."
+  [{:keys [redirect-url metadata] :as opts} {:keys [checkout-id webhook-url customer-id]}]
+  (cond-> (assoc (mollie-payment-base opts webhook-url)
+                 :redirectUrl redirect-url
+                 :metadata    (merge metadata {:checkout-id checkout-id}))
+    customer-id (assoc :customerId customer-id :sequenceType "first")))
+
+(defn mollie-recurring-payload
+  "Body for POST /v2/payments that charges a stored mandate. Without
+   :provider-payment-method-id Mollie picks the customer's valid mandate."
+  [{:keys [provider-customer-id provider-payment-method-id metadata] :as opts} webhook-url]
+  (cond-> (assoc (mollie-payment-base opts webhook-url)
+                 :customerId   provider-customer-id
+                 :sequenceType "recurring")
+    provider-payment-method-id (assoc :mandateId provider-payment-method-id)
+    (seq metadata)             (assoc :metadata metadata)))
+
+(defn mollie-recurring-status
+  "Map a just-created recurring payment's Mollie status onto the off-session
+   contract (:pending|:paid|:failed). A charge that ended without money is :failed."
+  [status]
+  (let [s (mollie-status->payment-status status)]
+    (if (#{:cancelled :expired} s) :failed s)))
+
+;; =============================================================================
 ;; Stripe — id dispatch & expandable fields
 ;; =============================================================================
 
