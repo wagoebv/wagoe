@@ -49,17 +49,12 @@
        (some? filename)
        (not (#{"text/plain" "text/html"} (base-content-type content-type))))))
 
-(defn- normalize-content-id
-  "\"<logo@x>\" → \"logo@x\"."
-  [content-id]
-  (some-> content-id str str/trim (str/replace #"^<|>$" "") str/trim not-empty))
-
 (defn build-attachment
   "InboundAttachment map for an attachment part and its decoded bytes.
    :disposition and :content-id are left out when the part has no such header."
   [{:keys [content-type filename disposition content-id]} ^bytes content]
-  (let [disposition (some-> disposition str str/trim str/lower-case not-empty)
-        content-id  (normalize-content-id content-id)]
+  (let [disposition (some-> disposition str/trim str/lower-case not-empty)
+        content-id  (some-> content-id str/trim (str/replace #"^<|>$" "") str/trim not-empty)]
     (cond-> {:content-type (or (base-content-type content-type) "application/octet-stream")
              :size         (alength content)
              :content      content}
@@ -67,16 +62,15 @@
       disposition (assoc :disposition disposition)
       content-id  (assoc :content-id content-id))))
 
-(defn embedded-in-html?
-  "True when html-body references the attachment by cid: — an image shown in the
-   body, such as a signature logo, rather than a file the sender attached.
-   Disposition alone does not tell: some clients send real attachments inline."
-  [html-body {:keys [content-id]}]
-  (boolean
-   (and content-id html-body
-        ;; The lookahead keeps cid:logo from matching cid:logo2.
-        (re-find (re-pattern (str "(?i)cid:" (java.util.regex.Pattern/quote content-id) "(?![^\\s\"'<>)])"))
-                 html-body))))
+(defn mark-embedded
+  "Set :embedded? on each attachment: true when html-body shows it by cid:, as
+   with a signature logo, rather than the sender attaching it. Disposition alone
+   does not tell: some clients send real attachments inline."
+  [html-body attachments]
+  (let [cids (into #{} (map (comp str/lower-case second))
+                   (re-seq #"(?i)cid:([^\s\"'<>)]+)" (str html-body)))]
+    (mapv #(assoc % :embedded? (contains? cids (some-> (:content-id %) str/lower-case)))
+          attachments)))
 
 ;; =============================================================================
 ;; Body Extraction

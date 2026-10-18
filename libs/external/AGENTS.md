@@ -16,7 +16,7 @@ wagoe.external.schema           — Malli schemas for all three adapters
 wagoe.external.ports            — Protocol definitions (ISmtpProvider, IImapMailbox, ITwilioMessaging)
 wagoe.external.core.smtp        — Pure SMTP helpers (normalize-recipients, build-mime-properties)
 wagoe.external.core.imap        — Pure IMAP helpers (parse-message-headers, attachment-part?,
-                                     build-attachment, embedded-in-html?, extract-body-text,
+                                     build-attachment, mark-embedded, extract-body-text,
                                      build-inbound-message)
 wagoe.external.core.twilio      — Pure Twilio helpers (build-sms-params, build-whatsapp-params,
                                      parse-message-response, parse-twilio-error)
@@ -111,11 +111,9 @@ UIDPLUS); without UIDPLUS it only flags `\Deleted`, returns `:expunged? false`, 
 
 ### IMAP inline parts are attachments too
 `:attachments` holds every part with a filename or a non-text type, so a signature logo or a `cid:` image
-comes back next to the real files. Each carries `:disposition` and `:content-id`. Filter on the HTML, not on
-`"inline"` alone, since some clients (Apple Mail) send real attachments inline:
-```clojure
-(remove #(imap-core/embedded-in-html? (:html-body msg) %) (:attachments msg))
-```
+comes back next to the real files. Each carries `:disposition`, `:content-id` and `:embedded?`, true when the
+HTML body shows it by `cid:`. Filter on `:embedded?`, not on `"inline"`, since some clients (Apple Mail) send
+real attachments inline: `(remove :embedded? (:attachments msg))`.
 
 ### IMAP adapter is reflection-free, and tested on GreenMail
 javax.mail hands back package-private classes, and the mocked tests never caught a call that failed on a real

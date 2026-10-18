@@ -3,7 +3,6 @@
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest is testing use-fixtures]]
             [malli.core :as m]
-            [wagoe.external.core.imap :as imap-core]
             [wagoe.external.ports :as ports]
             [wagoe.external.schema :as schema]
             [wagoe.external.shell.adapters.imap :as imap])
@@ -180,14 +179,12 @@
   (let [msg (get (by-subject (fetch {})) "cid image")
         [logo pdf] (:attachments msg)]
     (is (m/validate schema/InboundMessage msg))
-    (testing "the inline image and the attachment both come back, told apart by disposition and content-id"
-      (is (= {:disposition "inline" :content-id "logo@example.com" :content-type "image/png"}
-             (select-keys logo [:filename :disposition :content-id :content-type])))
+    (testing "the inline image and the attachment both come back; only the image the HTML shows is embedded"
+      (is (= {:disposition "inline" :content-id "logo@example.com" :content-type "image/png" :embedded? true}
+             (select-keys logo [:filename :disposition :content-id :content-type :embedded?])))
       (is (java.util.Arrays/equals ^bytes png-bytes ^bytes (:content logo)))
-      (is (= {:filename "invoice.pdf" :disposition "attachment" :content-type "application/pdf"}
-             (select-keys pdf [:filename :disposition :content-id :content-type]))))
-    (testing "the HTML body references only the inline image"
-      (is (= [true false] (mapv #(imap-core/embedded-in-html? (:html-body msg) %) [logo pdf]))))))
+      (is (= {:filename "invoice.pdf" :disposition "attachment" :content-type "application/pdf" :embedded? false}
+             (select-keys pdf [:filename :disposition :content-id :content-type :embedded?]))))))
 
 (deftest ^:integration unread-limit-since-test
   (testing "unread-only? selects unseen messages"
