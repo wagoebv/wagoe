@@ -27,7 +27,7 @@
   "A runner that answers `-Spath` with a classpath and the import with `result`."
   [result]
   (fn [cmd]
-    (if (= ["clojure" "-Spath"] cmd)
+    (if (= ["clojure" "-Spath" "-A:test"] cmd)
       {:exit 0 :out "/tmp/a.jar:/tmp/b.jar\n" :err ""}
       result)))
 

@@ -16,7 +16,7 @@
 ;;
 ;; Project-specific linter settings go here.
 ;;
-;; wagoe-test exports these too, but it is on the :test alias, which
-;; `bb lint:imports` does not read, and a fresh project has run no import.
+;; wagoe-test exports these too; here so the generated test lints before the
+;; first `bb lint:imports`.
 {:lint-as {wagoe.test/with-test-system clojure.core/let
            wagoe.test/with-test-tenant clojure.core/let}}
