@@ -282,6 +282,15 @@
   #{:schemas :transactional-ddl :index-if-not-exists :column-if-not-exists
     :full-text :on-conflict :row-locks :alter-foreign-key})
 
+(defn capable?
+  "Whether `adapter` claims `capability`. A nil adapter claims nothing; an
+   unknown capability throws, so a typo cannot quietly turn a feature off."
+  [adapter capability]
+  (when-not (capability-keywords capability)
+    (throw (ex-info (str "Unknown database capability " capability)
+                    {:type :internal-error :capability capability})))
+  (contains? (some-> adapter capabilities) capability))
+
 (def default-string-length
   "How long `column-type` makes a :string given no length."
   255)

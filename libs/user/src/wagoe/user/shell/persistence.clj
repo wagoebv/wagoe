@@ -234,7 +234,7 @@
   (invalidate-legacy-plaintext-mfa! ctx)
 
   ;; Full-text search vector, where the database has it (ADR-039)
-  (when (contains? (protocols/capabilities (:adapter ctx)) :full-text)
+  (when (protocols/capable? (:adapter ctx) :full-text)
     (log/info "Adding full-text search vector to users table")
     (db/add-column-if-not-exists! ctx :users :search_vector
                                   (str "tsvector GENERATED ALWAYS AS"
