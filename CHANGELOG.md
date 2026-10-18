@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **`external` adapters share the RPC client's retry and circuit breaker** (BOU-459): SMTP, IMAP and Twilio retry
+  a call that never connected; pass `:cache` to enable the breaker. Set `:retries 0` to keep the old behaviour.
 - **FTPS file source in `external`** (BOU-730): `IFileSource` lists and downloads files over explicit TLS, retrying
   transient failures. Enable `:wagoe.external/ftps`.
 - **Mollie recurring payments and checkout expiry; `payments` is now stable** (BOU-453): mandates via `:setup-future-usage`,

@@ -15,6 +15,7 @@
      (fetch-unread! mailbox)"
   (:require [wagoe.external.core.imap :as imap-core]
             [wagoe.external.ports :as ports]
+            [wagoe.external.shell.resilience :as resilience]
             [clojure.tools.logging :as log])
   (:import [com.sun.mail.imap IMAPFolder IMAPFolder$FetchProfileItem IMAPStore]
            [java.io ByteArrayInputStream ByteArrayOutputStream InputStream]
@@ -47,7 +48,8 @@
         session  (Session/getInstance props)
         protocol (if ssl? "imaps" "imap")
         store    (.getStore session ^String protocol)]
-    (.connect store ^String host ^String username ^String password)
+    (resilience/call! (:resilience adapter)
+                      #(.connect store ^String host ^String username ^String password))
     store))
 
 (defn- with-imap-connection*
@@ -214,7 +216,7 @@
       (catch Exception e
         (log/error e (str "IMAP " op " failed") {:uid uid :folder fld-name})
         {:success? false
-         :error    {:message (.getMessage e) :type :imap-error}}))))
+         :error    {:message (.getMessage e) :type (resilience/error-type e :imap-error)}}))))
 
 (extend-protocol ports/IImapMailbox
   ImapMailboxAdapter
@@ -237,7 +239,7 @@
            {:success? false
             :messages []
             :count    0
-            :error    {:message (.getMessage e) :type :imap-error}})))))
+            :error    {:message (.getMessage e) :type (resilience/error-type e :imap-error)}})))))
 
   (fetch-unread!
     ([this]
@@ -285,11 +287,15 @@
     :password - IMAP auth password (required)
     :ssl?     - Enable SSL/TLS (default true)
     :folder   - Default folder name (default \"INBOX\")
+    :retries, :retry-delay-ms, :cache, :circuit-breaker
+              - see wagoe.external.shell.resilience/settings
 
   Returns:
     ImapMailboxAdapter implementing IImapMailbox"
   [{:keys [host port username password ssl? folder]
-    :or   {ssl? true folder "INBOX"}}]
+    :or   {ssl? true folder "INBOX"}
+    :as   config}]
   {:pre [(string? host) (some? port) (string? username) (string? password)]}
   (log/info "Creating IMAP mailbox adapter" {:host host :port port :ssl? ssl? :folder folder})
-  (->ImapMailboxAdapter host port username password ssl? folder))
+  (assoc (->ImapMailboxAdapter host port username password ssl? folder)
+         :resilience (resilience/settings config (str "imap:" host ":" port) nil)))
