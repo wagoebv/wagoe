@@ -74,7 +74,7 @@
 
 (defn- pending-payment-status
   "Degrade a failed status poll to :pending — same convention as the Mollie
-   adapter — except for auth/config errors (401/403), which throw.
+   adapter, which also throws on 401/403 — except for auth/config errors (401/403), which throw.
    :provider-payment-id is deliberately absent (not nil) so callers merging
    the result cannot clobber a stored payment id."
   [provider-id status body]

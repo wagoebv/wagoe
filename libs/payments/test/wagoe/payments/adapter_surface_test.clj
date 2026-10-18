@@ -21,18 +21,13 @@
             [wagoe.payments.schema :as schema]
             [wagoe.payments.shell.adapters.mock :as mock]
             [wagoe.payments.shell.adapters.mollie :as mollie]
-            [wagoe.payments.shell.adapters.stripe :as stripe])
-  (:import [java.net URLDecoder]
-           [java.nio.charset StandardCharsets]
-           [javax.crypto Mac]
-           [javax.crypto.spec SecretKeySpec]))
+            [wagoe.payments.shell.adapters.stripe :as stripe]
+            [wagoe.payments.shell.module-wiring :as wiring]
+            [wagoe.payments.test-support :refer [form-decode json-response stripe-sig-header]]))
 
 ;; =============================================================================
 ;; Fake PSPs — just enough of each API, keyed on method + path
 ;; =============================================================================
-
-(defn- respond [status body]
-  {:status status :body (json/generate-string body)})
 
 (defn- next-id [psp prefix]
   (str prefix (:n (swap! psp update :n (fnil inc 0)))))
@@ -46,21 +41,18 @@
           (when k (swap! psp assoc-in [:idempotency k] resp))
           resp))))
 
-(defn- form-decode [body]
-  (into {}
-        (for [pair (str/split (str body) #"&")
-              :let [[k v] (str/split pair #"=" 2)]]
-          [(URLDecoder/decode ^String k "UTF-8") (URLDecoder/decode (str v) "UTF-8")])))
-
 (defn- fake-mollie [psp method url req]
   (let [path (str/replace url "https://api.mollie.com/v2" "")
         body (some-> (:body req) (json/parse-string true))]
     (cond
       (:down? @psp)
-      (respond 503 {:title "Service Unavailable"})
+      (json-response 503 {:title "Service Unavailable"})
+
+      (:bad-key? @psp)
+      (json-response 401 {:title "Unauthorized Request"})
 
       (and (= :post method) (= "/customers" path))
-      (respond 201 {:id (next-id psp "cst_")})
+      (json-response 201 {:id (next-id psp "cst_")})
 
       (and (= :post method) (= "/payments" path) (= "recurring" (:sequenceType body)))
       (idempotent psp req
@@ -68,30 +60,33 @@
                      (swap! psp assoc-in [:payments id]
                             (assoc body :id id :status "pending"
                                    :mandateId (or (:mandateId body) "mdt_default")))
-                     (respond 201 (get-in @psp [:payments id]))))
+                     (json-response 201 (get-in @psp [:payments id]))))
 
       (and (= :post method) (= "/payments" path))
       (let [id (next-id psp "tr_")]
         (swap! psp assoc-in [:payments id]
                (assoc body :id id :status "open"
                       :_links {:checkout {:href (str "https://www.mollie.com/checkout/" id)}}))
-        (respond 201 (get-in @psp [:payments id])))
+        (json-response 201 (get-in @psp [:payments id])))
 
       :else
       (let [[_ id] (re-matches #"/payments/([^/]+)" path)
             payment (get-in @psp [:payments id])]
         (cond
-          (nil? payment)     (respond 404 {:title "Not Found"})
-          (= :get method)    (respond 200 payment)
+          (nil? payment)     (json-response 404 {:title "Not Found"})
+          (= :get method)    (json-response 200 payment)
           (= :delete method) (do (swap! psp assoc-in [:payments id :status] "canceled")
-                                 (respond 200 (get-in @psp [:payments id]))))))))
+                                 (json-response 200 (get-in @psp [:payments id]))))))))
 
 (defn- fake-stripe [psp method url req]
   (let [path (str/replace url "https://api.stripe.com/v1" "")
         form (form-decode (:body req))]
     (cond
       (:down? @psp)
-      (respond 503 {:error {:type "api_error"}})
+      (json-response 503 {:error {:type "api_error"}})
+
+      (:bad-key? @psp)
+      (json-response 401 {:error {:type "invalid_request_error"}})
 
       (and (= :post method) (= "/checkout/sessions" path))
       (let [id (next-id psp "cs_")
@@ -101,20 +96,20 @@
                 :status "open" :payment_status "unpaid"
                 :payment_intent {:id pi :status "requires_payment_method"
                                  :metadata {:checkout_id (form "payment_intent_data[metadata][checkout_id]")}}})
-        (respond 200 (-> (get-in @psp [:sessions id]) (assoc :payment_intent nil))))
+        (json-response 200 (-> (get-in @psp [:sessions id]) (assoc :payment_intent nil))))
 
       (and (= :post method) (= "/payment_intents" path))
-      (idempotent psp req #(respond 200 {:id (next-id psp "pi_") :status "processing"}))
+      (idempotent psp req #(json-response 200 {:id (next-id psp "pi_") :status "processing"}))
 
       (and (= :post method) (str/ends-with? path "/expire"))
       (let [id (second (re-matches #"/checkout/sessions/([^/]+)/expire" path))]
         (swap! psp assoc-in [:sessions id :status] "expired")
-        (respond 200 (get-in @psp [:sessions id])))
+        (json-response 200 (get-in @psp [:sessions id])))
 
       (= :get method)
       (if-let [session (get-in @psp [:sessions (second (re-matches #"/checkout/sessions/([^/]+)" path))])]
-        (respond 200 session)
-        (respond 404 {:error {:type "invalid_request_error"}})))))
+        (json-response 200 session)
+        (json-response 404 {:error {:type "invalid_request_error"}})))))
 
 (defn- offline
   "Stands in for clj-http. Anything the fake does not answer is a test bug,
@@ -132,21 +127,14 @@
 (def ^:private stripe-secret "whsec_surface_test_secret_000000000")
 
 (defn- stripe-sign [raw secret]
-  (let [ts  (str (quot (System/currentTimeMillis) 1000))
-        mac (doto (Mac/getInstance "HmacSHA256")
-              (.init (SecretKeySpec. (.getBytes ^String secret StandardCharsets/UTF_8) "HmacSHA256")))
-        sig (->> (.doFinal mac (.getBytes (str ts "." raw) StandardCharsets/UTF_8))
-                 (map #(format "%02x" (bit-and % 0xff)))
-                 (apply str))]
-    {"stripe-signature" (str "t=" ts ",v1=" sig)}))
+  {"stripe-signature" (stripe-sig-header raw (quot (System/currentTimeMillis) 1000) secret)})
 
 (defn- stripe-session [psp checkout]
   (get-in @psp [:sessions (:provider-checkout-id checkout)]))
 
 (defn- stripe-set! [psp checkout status payment-status]
   (swap! psp update-in [:sessions (:provider-checkout-id checkout)]
-         assoc :status status :payment_status payment-status)
-  (:provider-checkout-id checkout))
+         assoc :status status :payment_status payment-status))
 
 (defn- stripe-event [psp checkout type]
   (let [raw (json/generate-string
@@ -155,8 +143,7 @@
     [raw (stripe-sign raw stripe-secret)]))
 
 (defn- mollie-set! [psp checkout status]
-  (swap! psp assoc-in [:payments (:provider-checkout-id checkout) :status] status)
-  (:provider-checkout-id checkout))
+  (swap! psp assoc-in [:payments (:provider-checkout-id checkout) :status] status))
 
 (defn- mollie-event [psp checkout status]
   (mollie-set! psp checkout status)
@@ -164,11 +151,11 @@
 
 (def ^:private fixtures
   "Each fixture's functions take the fake PSP state and a CheckoutResult.
-   `:statuses` maps a port status to a fn that puts the PSP in it and returns
-   the id to poll; a status the adapter cannot express is simply absent."
+   `:statuses` maps a port status to a fn that puts the PSP in it; a status
+   the adapter cannot express is simply absent."
   [{:label    "mock"
     :make     (fn [] [(mock/make-mock-provider) nil])
-    :statuses {:paid (fn [_ c] (:provider-checkout-id c))}
+    :statuses {:paid (fn [_ _])}
     :paid-webhook (fn [_ c] [(json/generate-string {:checkout-id (:correlation-id c)}) {}])}
 
    {:label    "stripe"
@@ -235,7 +222,8 @@
 ;; =============================================================================
 
 (deftest ^:integration the-sweep-covers-every-adapter
-  (is (= #{"mock" "stripe" "mollie"} (set (map :label fixtures)))))
+  (is (= wiring/providers (set (map (comp keyword :label) fixtures)))
+      "an adapter :wagoe/payment-provider accepts has no fixture here"))
 
 (deftest ^:integration provider-name-is-the-config-keyword
   (each-adapter
@@ -281,7 +269,8 @@
      (doseq [[expected put!] statuses]
        (testing (str "the PSP says " (name expected))
          (let [c      (ports/create-checkout-session p checkout-request)
-               result (ports/get-payment-status p (put! psp c))]
+               _      (put! psp c)
+               result (ports/get-payment-status p (:provider-checkout-id c))]
            (conforms? schema/PaymentStatusResult result)
            (is (= expected (:status result))))))
 
@@ -290,7 +279,8 @@
          (let [c (ports/create-checkout-session
                   p (assoc checkout-request :setup-future-usage :off-session))
                _ (mandate! psp c)
-               result (ports/get-payment-status p ((:paid statuses) psp c))]
+               _ ((:paid statuses) psp c)
+               result (ports/get-payment-status p (:provider-checkout-id c))]
            (is (string? (:provider-customer-id result)))
            (is (string? (:provider-payment-method-id result))))))
 
@@ -299,7 +289,13 @@
          (let [c (ports/create-checkout-session p checkout-request)]
            (swap! psp assoc :down? true)
            (is (= {:status :pending} (ports/get-payment-status p (:provider-checkout-id c))))
-           (swap! psp dissoc :down?)))))))
+           (swap! psp dissoc :down?)))
+       (testing "a rejected API key throws rather than reading as :pending forever"
+         (let [c (ports/create-checkout-session p checkout-request)]
+           (swap! psp assoc :bad-key? true)
+           (is (thrown? clojure.lang.ExceptionInfo
+                        (ports/get-payment-status p (:provider-checkout-id c))))
+           (swap! psp dissoc :bad-key?)))))))
 
 (deftest ^:integration mock-mandate-fields
   ;; The mock has no PSP state to set, and reports mandate fields always.

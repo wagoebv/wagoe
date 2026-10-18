@@ -148,6 +148,7 @@ Which id appears where:
 - **Off-session**: `POST /v2/payments` with `sequenceType=recurring`, `customerId` and optional `mandateId`; `:idempotency-key` goes in the `Idempotency-Key` header. Usually `:pending` (SEPA settles later, via the webhook). A 422 (no valid mandate) throws `{:type :internal-error}`
 - **Expire**: `DELETE /v2/payments/<id>` cancels the open payment; a payment Mollie will not cancel throws
 - **Webhook**: a status with no `payment.*` outcome (`open`, `pending`) returns `:event-type nil`; a payment that cannot be fetched throws, so Mollie retries
+- **Status poll**: 401/403 throws; other failures read as `{:status :pending}`, as on Stripe
 
 ### Stripe (`:stripe`)
 - REST API: `https://api.stripe.com/v1` (Checkout Sessions + PaymentIntents)

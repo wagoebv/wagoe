@@ -6,13 +6,11 @@
             [clj-http.client :as http]
             [clojure.test :refer [deftest testing is]]
             [wagoe.payments.ports :as ports]
-            [wagoe.payments.shell.adapters.mollie :as mollie]))
+            [wagoe.payments.shell.adapters.mollie :as mollie]
+            [wagoe.payments.test-support :refer [json-response]]))
 
 (def ^:private provider
   (mollie/->MolliePaymentProvider "test_api_key" "https://example.com"))
-
-(defn- respond [status body]
-  {:status status :body (json/generate-string body)})
 
 (defn- recording
   "A clj-http stand-in that records [method url req] and answers with `f`."
@@ -33,8 +31,8 @@
       (with-redefs [http/post (recording calls :post
                                          (fn [url _]
                                            (if (re-find #"/customers$" url)
-                                             (respond 201 {:id "cst_new"})
-                                             (respond 201 {:id "tr_1" :_links {:checkout {:href "https://mollie/c"}}}))))]
+                                             (json-response 201 {:id "cst_new"})
+                                             (json-response 201 {:id "tr_1" :_links {:checkout {:href "https://mollie/c"}}}))))]
         (ports/create-checkout-session provider {:amount-cents       100
                                                  :currency           "eur"
                                                  :description        "First"
@@ -51,7 +49,7 @@
   (testing "an existing customer is reused"
     (let [calls (atom [])]
       (with-redefs [http/post (recording calls :post
-                                         (fn [_ _] (respond 201 {:id "tr_1" :_links {:checkout {:href "x"}}})))]
+                                         (fn [_ _] (json-response 201 {:id "tr_1" :_links {:checkout {:href "x"}}})))]
         (ports/create-checkout-session provider {:amount-cents         100
                                                  :currency             "EUR"
                                                  :description          "First"
@@ -64,7 +62,7 @@
   (testing "a plain checkout creates no customer and no mandate"
     (let [calls (atom [])]
       (with-redefs [http/post (recording calls :post
-                                         (fn [_ _] (respond 201 {:id "tr_1" :_links {:checkout {:href "x"}}})))]
+                                         (fn [_ _] (json-response 201 {:id "tr_1" :_links {:checkout {:href "x"}}})))]
         (ports/create-checkout-session provider {:amount-cents 100 :currency "EUR" :description "One-off"
                                                  :redirect-url "https://example.com/done"}))
       (is (= 1 (count @calls)))
@@ -73,7 +71,7 @@
 (deftest ^:integration off-session-payment-test
   (testing "charges the mandate as sequenceType=recurring, with the idempotency key as a header"
     (let [calls (atom [])]
-      (with-redefs [http/post (recording calls :post (fn [_ _] (respond 201 {:id "tr_r" :status "pending"})))]
+      (with-redefs [http/post (recording calls :post (fn [_ _] (json-response 201 {:id "tr_r" :status "pending"})))]
         (is (= {:provider-payment-id "tr_r" :status :pending}
                (ports/create-off-session-payment provider {:amount-cents               995
                                                            :currency                   "EUR"
@@ -89,13 +87,13 @@
                (select-keys (sent-json call) [:customerId :mandateId :sequenceType :webhookUrl]))))))
 
   (testing "a payment that ended without money is :failed"
-    (with-redefs [http/post (fn [& _] (respond 201 {:id "tr_r" :status "failed"}))]
+    (with-redefs [http/post (fn [& _] (json-response 201 {:id "tr_r" :status "failed"}))]
       (is (= :failed (:status (ports/create-off-session-payment
                                provider {:amount-cents 1 :currency "EUR" :description "x"
                                          :provider-customer-id "cst_1"}))))))
 
   (testing "no valid mandate (422) throws a typed error"
-    (with-redefs [http/post (fn [& _] (respond 422 {:detail "The customer has no valid mandate"}))]
+    (with-redefs [http/post (fn [& _] (json-response 422 {:detail "The customer has no valid mandate"}))]
       (let [data (ex-data-of #(ports/create-off-session-payment
                                provider {:amount-cents 1 :currency "EUR" :description "x"
                                          :provider-customer-id "cst_1"}))]
@@ -105,18 +103,18 @@
 (deftest ^:integration expire-checkout-session-test
   (testing "cancels the open payment"
     (let [calls (atom [])]
-      (with-redefs [http/delete (recording calls :delete (fn [_ _] (respond 200 {:id "tr_1" :status "canceled"})))]
+      (with-redefs [http/delete (recording calls :delete (fn [_ _] (json-response 200 {:id "tr_1" :status "canceled"})))]
         (is (= {:provider-checkout-id "tr_1" :status :expired}
                (ports/expire-checkout-session provider "tr_1"))))
       (is (= "https://api.mollie.com/v2/payments/tr_1" (second (first @calls))))))
 
   (testing "a payment Mollie will not cancel throws"
-    (with-redefs [http/delete (fn [& _] (respond 422 {:detail "The payment cannot be canceled"}))]
+    (with-redefs [http/delete (fn [& _] (json-response 422 {:detail "The payment cannot be canceled"}))]
       (is (= :internal-error (:type (ex-data-of #(ports/expire-checkout-session provider "tr_1"))))))))
 
 (deftest ^:integration process-webhook-test
   (testing "a payment Mollie cannot be asked about throws, so the webhook is retried"
-    (with-redefs [http/get (fn [& _] (respond 503 {}))]
+    (with-redefs [http/get (fn [& _] (json-response 503 {}))]
       (is (= :internal-error (:type (ex-data-of #(ports/process-webhook provider "id=tr_1" {})))))))
 
   (testing "a body without an id throws"

@@ -62,30 +62,28 @@
   {:currency (str/upper-case (or currency "EUR"))
    :value    (cents->euro amount-cents)})
 
+(defn- mollie-payment-base [{:keys [amount-cents currency description]} webhook-url]
+  {:amount      (mollie-amount amount-cents currency)
+   :description description
+   :webhookUrl  webhook-url})
+
 (defn mollie-checkout-payload
   "Body for POST /v2/payments that starts a hosted checkout. A
    :customer-id makes it the first payment of a mandate (sequenceType=first).
    The internal :checkout-id is merged last so user metadata cannot clobber it."
-  [{:keys [amount-cents currency description redirect-url metadata]}
-   {:keys [checkout-id webhook-url customer-id]}]
-  (cond-> {:amount      (mollie-amount amount-cents currency)
-           :description description
-           :redirectUrl redirect-url
-           :webhookUrl  webhook-url
-           :metadata    (merge metadata {:checkout-id checkout-id})}
+  [{:keys [redirect-url metadata] :as opts} {:keys [checkout-id webhook-url customer-id]}]
+  (cond-> (assoc (mollie-payment-base opts webhook-url)
+                 :redirectUrl redirect-url
+                 :metadata    (merge metadata {:checkout-id checkout-id}))
     customer-id (assoc :customerId customer-id :sequenceType "first")))
 
 (defn mollie-recurring-payload
   "Body for POST /v2/payments that charges a stored mandate. Without
    :provider-payment-method-id Mollie picks the customer's valid mandate."
-  [{:keys [amount-cents currency description provider-customer-id
-           provider-payment-method-id metadata]}
-   webhook-url]
-  (cond-> {:amount       (mollie-amount amount-cents currency)
-           :description  description
-           :customerId   provider-customer-id
-           :sequenceType "recurring"
-           :webhookUrl   webhook-url}
+  [{:keys [provider-customer-id provider-payment-method-id metadata] :as opts} webhook-url]
+  (cond-> (assoc (mollie-payment-base opts webhook-url)
+                 :customerId   provider-customer-id
+                 :sequenceType "recurring")
     provider-payment-method-id (assoc :mandateId provider-payment-method-id)
     (seq metadata)             (assoc :metadata metadata)))
 
@@ -93,10 +91,8 @@
   "Map a just-created recurring payment's Mollie status onto the off-session
    contract (:pending|:paid|:failed). A charge that ended without money is :failed."
   [status]
-  (case status
-    "paid"                         :paid
-    ("failed" "canceled" "expired") :failed
-    :pending))
+  (let [s (mollie-status->payment-status status)]
+    (if (#{:cancelled :expired} s) :failed s)))
 
 ;; =============================================================================
 ;; Stripe — id dispatch & expandable fields
