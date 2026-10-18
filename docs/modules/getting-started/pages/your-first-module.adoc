@@ -227,7 +227,7 @@ The handlers go through the service's port, so what you add to the service —
 the validation above — applies to the API without touching this file.
 
 Every route requires a signed-in user and answers 401 without one: send the
-`jwt-token` from `POST /api/v1/auth/login` as `Authorization: Bearer <token>`,
+`jwtToken` from `POST /api/v1/auth/login` as `Authorization: Bearer <token>`,
 or the session cookie a browser gets at `/web/login`. For an API open to
 anyone, generate with `--public-api`, or drop `:interceptors signed-in` from
 the routes you want public. The web page at `/web/products` is guarded the

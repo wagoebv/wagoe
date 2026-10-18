@@ -43,6 +43,12 @@
       ;; User map present
       (is (map? (:user body)))
       (is (= (-> fx/*seed* :admin :email) (get-in body [:user :email])))
+      ;; Nested keys in both styles until 2.0; the kebab-case ones are deprecated
+      (is (= (:sessionToken body)
+             (get-in body [:session :sessionToken])
+             (get-in body [:session :session-token])))
+      (is (some? (get-in body [:session :expiresAt])))
+      (is (= (get-in body [:session :expiresAt]) (get-in body [:session :expires-at])))
       ;; No password-hash leak anywhere in response
       (let [s (body-str resp)]
         (is (not (str/includes? s "password-hash")))

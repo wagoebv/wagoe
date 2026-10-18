@@ -92,6 +92,20 @@
           (is (= 200 (:status resp)))
           (is (string? (get-in resp [:body :sessionToken]))))))))
 
+(deftest ^:contract nested-maps-carry-both-key-styles
+  ;; The kebab-case keys are deprecated; until 2.0 both are sent (BOU-737).
+  (let [{:keys [svc]} (fixture)]
+    (doseq [[path handler] (login-routes svc)]
+      (testing path
+        (let [body (:body (post handler {:email "bob@x.org" :password password}))]
+          (is (= (:sessionToken body) (get-in body [:session :sessionToken]) (get-in body [:session :session-token])))
+          (is (= (:jwtToken body) (get-in body [:session :jwtToken]) (get-in body [:session :jwt-token])))
+          (doseq [[k camel] [[:user-id :userId] [:expires-at :expiresAt] [:user-agent :userAgent]]]
+            (is (some? (get-in body [:session k])) (str k))
+            (is (= (get-in body [:session k]) (get-in body [:session camel])) (str k)))
+          (is (some? (get-in body [:user :created-at])))
+          (is (= (get-in body [:user :created-at]) (get-in body [:user :createdAt]))))))))
+
 (deftest ^:unit a-lockout-auth-shell-reports-is-still-a-429
   ;; A lockout set by a concurrent request reaches us as :authentication-failed.
   (let [enter (:enter user-interceptors/format-session-creation-response)

@@ -409,6 +409,14 @@
       ;; Remove null values for cleaner API responses
       (#(into {} (remove (fn [[_ v]] (nil? v)) %)))))
 
+(defn with-camel-twins
+  "`m` with a camelCase key beside each kebab-case one, holding the same value.
+   For maps nested in a response, which `user-specific-kebab->camel` leaves
+   alone. The kebab-case keys are deprecated and go in 2.0."
+  [m]
+  (when m
+    (merge (case-conversion/kebab-case->camel-case-map m) m)))
+
 ;; =============================================================================
 ;; Schema Transformers
 ;; =============================================================================

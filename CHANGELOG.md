@@ -143,6 +143,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Deprecated
 
+- **Kebab-case keys in the login response's `user` and `session`** (BOU-737): each now has a camelCase twin with the same
+  value, and goes in 2.0. Read `session.sessionToken`, `session.expiresAt` and so on.
 - **`/swagger.json` and `:swagger` route docs** (BOU-462): the path serves the 3.1 document and `:swagger` is
   translated to `:openapi` with a boot warning, both until 2.0. Use `/openapi.json` and `:openapi`.
 - **`wagoe.search.shell.registry` and its `defsearch`** (BOU-705): one registry for every system in the JVM. Hand
