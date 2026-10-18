@@ -95,7 +95,12 @@
                     {:dashboard "off"}
                     {:dashboard {:handler 'no.such.ns/page}}
                     {:dashboard {:handler `landing-of :extra 1}}
-                    {:home "https://evil.example"}]]
+                    {:home "https://evil.example"}
+                    {:landing "https://evil.example"}
+                    {:landing "/"}
+                    {:landing "/web"}
+                    {:landing "/?ref=home"}
+                    {:landing "/web#top"}]]
     (is (= :configuration-error
            (:type (ex-data (try (landing/prepare (config settings)) nil
                                 (catch Exception e e)))))
@@ -158,3 +163,34 @@
       "the app owns /web/dashboard, so home is /web, which sends a user to their landing")
   (is (= "/app" (home-under {:dashboard false :home "/app"})))
   (is (= "/app" (home-under {:home "/app"}))))
+
+;; =============================================================================
+;; :landing — where / and /web send everyone
+;; =============================================================================
+
+(defn- web-root [settings session]
+  ((web-handlers/web-root-page-handler
+    (reify ports/IUserService (validate-session [_ _] session))
+    (landing/prepare (config settings)))
+   {:cookies {"session-token" {:value "t"}}}))
+
+(defn- root-location [settings]
+  (let [routes (:static (http/user-routes (reify ports/IUserService) nil (landing/prepare (config settings))))]
+    (when-let [[_ data] (first (filter #(= "/" (first %)) routes))]
+      (is (true? (:public data)) "a signed-out visitor must reach it")
+      (get-in ((get-in data [:get :handler]) {}) [:headers "Location"]))))
+
+(deftest ^:contract landing-unset-keeps-the-defaults
+  (is (= 200 (:status (web-root {} nil))) "the welcome page")
+  (is (= "/web/dashboard" (get-in (web-root {} {:user {:role :user}}) [:headers "Location"])))
+  (is (nil? (root-location {})) "the platform's / stays"))
+
+(deftest ^:contract landing-sends-everyone-there
+  (let [settings {:landing "/web/welkom" :login-redirect {:user "/web/overzicht"}}]
+    (testing "/web, signed out and signed in"
+      (is (= "/web/welkom" (get-in (web-root settings nil) [:headers "Location"])))
+      (is (= "/web/welkom" (get-in (web-root settings {:user {:role :user}}) [:headers "Location"]))))
+    (testing "/, which the module contributes for everyone"
+      (is (= "/web/welkom" (root-location settings))))
+    (testing ":login-redirect still decides where signing in lands"
+      (is (= "/web/overzicht" (login-location (config settings) :user))))))

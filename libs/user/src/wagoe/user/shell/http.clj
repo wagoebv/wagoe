@@ -723,11 +723,11 @@
 
    :api    versioned, mounted under /api/v1
    :web    mounted under /web, and absent when the web UI is switched off
-   :static nothing — user's assets are served at handler level"
+   :static `/` when `:landing` is set; user's assets are served at handler level"
   [user-service mfa-service config]
   {:api    (api-routes user-service mfa-service)
    :web    (when (web-ui-enabled? config) (web-routes user-service mfa-service config))
-   :static []})
+   :static (landing/root-routes config)})
 
 (defn group-routes
   "Group management, mounted under /web/admin beside the admin UI: admins only.

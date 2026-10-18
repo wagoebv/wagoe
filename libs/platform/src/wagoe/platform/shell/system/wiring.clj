@@ -469,10 +469,20 @@
 
     {:csrf csrf-config :rate-limit rate-limit-config :trusted-proxies cidrs}))
 
+(defn- without-claimed-root
+  "`platform-routes` minus the `/` redirect when a module's `:static` routes
+   claim `/`, so an application can own its landing page."
+  [platform-routes module-static]
+  (let [root? #(= "/" (first %))]
+    (if (some root? module-static)
+      (remove root? platform-routes)
+      platform-routes)))
+
 (defn- platform-routes
   "The endpoints every Wagoe application serves, whoever it is.
 
-   Health, readiness, liveness, the Prometheus scrape and the `/` redirect.
+   Health, readiness, liveness, the Prometheus scrape and the `/` redirect,
+   which a module's `:static` route at `/` replaces.
    `:skip-interceptors?` and `:public` on all of them: a liveness probe that
    needs a session is not a liveness probe.
 
@@ -557,7 +567,7 @@
                             :db-context     db-context})
 
         ;; Combine all routes: platform, static, web, and versioned API
-        all-routes (concat platform-routes
+        all-routes (concat (without-claimed-root platform-routes module-static)
                            module-static
                            module-web
                            versioned-api-routes
