@@ -33,6 +33,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **Opt-in virtual threads for requests and job workers** (BOU-471): `:virtual-threads? true` on `:wagoe/http`,
   `:wagoe/rpc` or `:wagoe/jobs :workers`. Off by default; on JDK 21, check for pinning first.
+- **`capable?` on the database port** (BOU-609): `(capable? adapter :schemas)`; a nil adapter claims nothing.
+  An unknown capability throws instead of reading as false.
 - **Tenant export and dead-letter retention** (BOU-735): platform admins download `GET /api/v1/tenants/:id/export`.
   Add `:jobs/dead-letter {:retain "P90D"}` to `:wagoe/privacy :retention`; admin user exports now audit as `:data-export`.
 - **`:wagoe/user :landing` lets an app own `/` and `/web`** (BOU-736): both redirect there for everyone.
@@ -120,6 +122,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Changed
 
+- **`wagoe-platform` no longer brings in `environ` or `com.lambdaisland/dotenv`** (BOU-457): nothing required them.
+  Declare them yourself if your app uses them.
 - **An IMAP fetch without `:limit` takes 100 messages** (BOU-731), and `core.imap/filter-unread` and `filter-by-date`
   are removed. Pass a larger `:limit` to read more.
 - **API docs are OpenAPI 3.1** (BOU-462), at `/openapi.json`; `/api-docs/` reads it. Write route docs under
