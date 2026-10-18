@@ -16,6 +16,10 @@
 ;; libs/shared-ui/build.clj version.
 (def ^:private wagoe-shared-ui-version "1.0.1")
 
+;; Not in modules-catalogue.edn either: it is a test dependency, not a module.
+;; Keep in sync with libs/test/build.clj version.
+(def ^:private wagoe-test-version "1.0.1")
+
 (defn validate-name [n]
   (cond
     (str/blank? n)                            "Project name cannot be empty"
@@ -71,6 +75,7 @@
                      :wagoe-tools-version   wagoe-tools-version
                      :wagoe-mcp-version     wagoe-mcp-version
                      :shared-ui-version     wagoe-shared-ui-version
+                     :wagoe-test-version    wagoe-test-version
                      :config-version        (:version (cat/find-module "config"))
                      :core-version             (:version (cat/find-module "core"))
                      :observability-version (:version (cat/find-module "observability"))
@@ -135,6 +140,8 @@
                      ;; from an editor-connected REPL, so it could not be
                      ;; containerised, supervised, or smoke-tested (BOU-254).
                      (str "src/" project-dir "/main.clj")   "main.clj.tmpl"
+                     ;; One integration test through wagoe.test, to copy from.
+                     (str "test/" project-dir "/system_test.clj") "system-test.clj.tmpl"
                      "build.clj"                           "build.clj.tmpl"
                      "Dockerfile"                          "Dockerfile.tmpl"
                      ".mcp.json"                           "mcp.json.tmpl"
