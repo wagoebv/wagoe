@@ -368,13 +368,28 @@
    wagoe.platform.shell.system.wiring/security-config decides. `active` is the
    :active map with #env resolved: prod switches the limiter on by env var."
   [active env-name]
-  (let [prod? (= "prod" env-name)]
+  (let [prod?  (= "prod" env-name)
+        cache? (contains? active :wagoe/cache)]
     [(assoc
       (cond
+        ;; Resolved from this shell's env, which need not be the deployment's.
         (not (get-in active [:wagoe/http :rate-limit :enabled?]))
-        {:level :pass :msg "Rate limiting is off"}
+        {:level :pass
+         :msg   (str "Rate limiting is off with this shell's environment"
+                     (when (and prod? (not cache?))
+                       "; turning it on also needs :wagoe/cache active"))}
 
-        (contains? active :wagoe/cache)
+        ;; dev and test are single-node; the boot's fallback warning is enough.
+        (#{"dev" "test"} env-name)
+        {:level :pass :msg "Rate limiting is on (single-node profile)"}
+
+        ;; Boot accepts it, but an in-process cache is the same per-replica count.
+        (#{:memory :in-memory} (get-in active [:wagoe/cache :provider]))
+        {:level :warn
+         :msg   "Rate limiting is on with a :memory cache — each process counts on its own, so N replicas allow limit x N"
+         :fix   "Set :wagoe/cache :provider :redis for a limit shared across replicas"}
+
+        cache?
         {:level :pass :msg "Rate limiting is on, with :wagoe/cache active"}
 
         :else

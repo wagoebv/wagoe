@@ -324,13 +324,18 @@
     (is (re-find #"from :inactive to :active in resources/conf/prod/config.edn" (:fix result)))))
 
 (deftest ^:unit rate-limit-without-cache-warns-outside-prod
-  (is (= :warn (:level (first (doctor/check-rate-limit-cache rate-limit-on "acc"))))))
+  (is (= :warn (:level (first (doctor/check-rate-limit-cache rate-limit-on "acc")))))
+  (is (= :pass (:level (first (doctor/check-rate-limit-cache rate-limit-on "dev"))))))
 
 (deftest ^:unit rate-limit-passes-with-cache-or-when-off
   (is (= :pass (:level (first (doctor/check-rate-limit-cache
                                (assoc rate-limit-on :wagoe/cache {:provider :redis}) "prod")))))
   (is (= :pass (:level (first (doctor/check-rate-limit-cache
                                {:wagoe/http {:rate-limit {:enabled? false}}} "prod"))))))
+
+(deftest ^:unit rate-limit-with-a-memory-cache-warns
+  (is (= :warn (:level (first (doctor/check-rate-limit-cache
+                               (assoc rate-limit-on :wagoe/cache {:provider :memory}) "prod"))))))
 
 (deftest ^:unit rate-limit-enabled-is-read-from-the-env-var
   (let [text   "{:active {:wagoe/http {:rate-limit {:enabled? #boolean #or [#env HTTP_RATE_LIMIT_ENABLED \"false\"]}}}}"
