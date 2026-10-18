@@ -1,6 +1,6 @@
 (ns wagoe.external.core.ftps
-  "Pure functions for the FTPS file source: file selection, retry policy and
-   error values. No I/O."
+  "Pure functions for the FTPS file source: file selection, which failures to
+   retry and error values. No I/O."
   (:require [clojure.string :as str]))
 
 ;; =============================================================================
@@ -57,12 +57,6 @@
     certificate? false
     reply-code   (< reply-code 500)
     :else        true))
-
-(defn backoff-ms
-  "Delay before attempt (1-based) number attempt+1: base-ms doubled per attempt,
-   capped at 30 seconds."
-  [base-ms attempt]
-  (min 30000 (* base-ms (bit-shift-left 1 (max 0 (dec attempt))))))
 
 ;; =============================================================================
 ;; Error values

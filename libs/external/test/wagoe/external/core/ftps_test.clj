@@ -38,10 +38,6 @@
     (is (not (ftps/retryable? {:reply-code 550})))
     (is (not (ftps/retryable? {:certificate? true})))))
 
-(deftest ^:unit backoff-ms-test
-  (is (= [100 200 400] (map #(ftps/backoff-ms 100 %) [1 2 3])))
-  (is (= 30000 (ftps/backoff-ms 10000 5))))
-
 (deftest ^:unit ftps-error-test
   (let [err (ftps/ftps-error {:host "ftp.example.org" :operation :list :attempts 3
                               :cause "java.net.UnknownHostException: ftp.example.org"})]
