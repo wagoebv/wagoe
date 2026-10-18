@@ -19,6 +19,8 @@
  :linters {:discouraged-var {clojure.string/lower-case {:message "Locale-dependent. Use wagoe.core.utils.text/lower-case (wagoe.tools.text in Babashka code)."}
                              clojure.string/upper-case {:message "Locale-dependent. Use wagoe.core.utils.text/upper-case (wagoe.tools.text in Babashka code)."}
                              clojure.string/capitalize {:message "Locale-dependent. Use wagoe.core.utils.text/capitalize (wagoe.tools.text in Babashka code)."}}
+           ;; The :base bundle still has to be registered and tested until 2.0 (BOU-457).
+           :deprecated-var {:exclude {wagoe.ui-style/base-css {:namespaces [wagoe.ui-style wagoe.ui-style-test]}}}
            :unresolved-symbol {:exclude [(wagoe.platform.database/with-transaction [tx])
                                          (wagoe.platform.shell.adapters.database.common.core/with-transaction [tx])
                                          ;; spel (Playwright) binding macro: binds the page symbol from a vector.

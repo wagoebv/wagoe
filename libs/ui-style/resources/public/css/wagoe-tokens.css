@@ -7,15 +7,13 @@
    (app.css, admin.css, etc.) is written against. It defines neutral,
    professional defaults using the original Wagoe navy/green palette.
 
-   LOADING ORDER:
-   1. pico.min.css          (CSS reset / base styles)
-   2. wagoe-tokens.css   (THIS FILE — neutral defaults)
-   3. tokens-openprops.css  (optional theme override — Cyberpunk Professionalism)
-   4. admin.css / app.css   (component styles)
+   LOADING ORDER (see wagoe.ui-style):
+   1. wagoe-tokens.css      (THIS FILE — neutral defaults)
+   2. admin.css / app.css   (component styles)
+   3. daisy-admin.css       (daisyUI/Tailwind)
 
    CUSTOMIZATION:
    Override any variable in your own theme file loaded after this one.
-   The tokens-openprops.css file demonstrates how to apply a full theme.
 
    NO @imports — fully self-contained, works offline and in JAR-based deployments.
    ============================================================================= */

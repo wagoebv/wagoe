@@ -1726,3 +1726,50 @@ input[type="number"] {
     @apply w-full justify-start;
   }
 }
+
+/* Element styles for pages on the default layout (body.wagoe-default), which
+   used to get them from pico. Layered base, so any class wins over them. */
+@layer base {
+  :where(.wagoe-default) {
+    h1, h2, h3, h4 { @apply font-semibold leading-tight text-base-content; }
+    h1 { @apply mb-4 font-bold; font-size: 2rem; }
+    h2 { @apply mt-6 mb-3; font-size: 1.5rem; }
+    h3 { @apply mt-5 mb-2; font-size: 1.25rem; }
+    h4 { @apply mt-4 mb-2; font-size: 1.125rem; }
+    /* Not in navigation: breadcrumbs and header forms keep their own spacing. */
+    :is(p, ul, ol, pre, blockquote, table, form):not(nav *, header *) { @apply mb-4; }
+    ul:not(nav *, header *) { @apply list-disc pl-6; }
+    ol:not(nav *, header *) { @apply list-decimal pl-6; }
+    /* Plain declarations: daisy's components applied here would land in a
+       sub-layer, which the preflight reset beats. */
+    main a:not([class]) {
+      color: var(--color-primary);
+      text-decoration: underline;
+    }
+    code, pre { @apply rounded bg-base-300 font-mono text-sm; }
+    code { @apply px-1; }
+    pre { @apply overflow-x-auto p-3; }
+    blockquote { @apply border-l-4 border-base-300 pl-4 italic; }
+    hr { @apply my-6 border-base-300; }
+
+    table { @apply w-full bg-base-100 text-left; }
+    th, td { @apply border-b border-base-300 px-4 py-3; }
+    th { @apply font-semibold; }
+
+    /* app.css shapes bare buttons; this adds pico's primary colour. */
+    button:not([class]), input[type="submit"] {
+      background-color: var(--color-primary);
+      color: var(--color-primary-content);
+    }
+    input[type="submit"] { @apply cursor-pointer rounded-field px-5 py-2 font-semibold; }
+    button:not([class]):hover, input[type="submit"]:hover {
+      background-color: color-mix(in oklab, var(--color-primary), #000 10%);
+    }
+  }
+}
+
+/* A document width; admin's full-bleed main-content does not suit these pages. */
+.wagoe-default {
+  .main-content { @apply mx-auto max-w-4xl; }
+  .error-page { @apply mx-auto my-12 max-w-2xl; }
+}

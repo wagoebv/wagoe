@@ -124,6 +124,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Changed
 
+- **Pages on the default layout load daisyUI, not pico** (BOU-457): `page-layout` and `error-layout` use the `:pilot`
+  stack; bare elements are styled under `body.wagoe-default`. Pass `:css (ui-style/bundle :base)` to keep pico until 2.0.
 - **Mail moves to Jakarta Mail 2 (Angus Mail)** (BOU-457): `wagoe-external` drops `com.sun.mail/javax.mail`, and TLS to
   SMTP/IMAP now checks the certificate names `:host`. An app using javax.mail classes itself must move to jakarta.mail.
 - **`wagoe-platform` no longer brings in `environ` or `com.lambdaisland/dotenv`** (BOU-457): nothing required them.
@@ -153,6 +155,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Deprecated
 
+- **pico, open-props, `tokens-openprops.css` and the `:base` CSS bundle (`base-css`)** (BOU-457): daisyUI/Tailwind on `wagoe-tokens.css`
+  is the one CSS system. `:base` still works when selected; it goes in 2.0.
 - **Kebab-case keys in the login response's `user` and `session`** (BOU-737): each now has a camelCase twin with the same
   value, and goes in 2.0. Read `session.sessionToken`, `session.expiresAt` and so on.
 - **`/swagger.json` and `:swagger` route docs** (BOU-462): the path serves the 3.1 document and `:swagger` is

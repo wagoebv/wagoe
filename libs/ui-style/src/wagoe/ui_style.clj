@@ -4,15 +4,16 @@
    Keep CSS/JS asset ordering centralized here so modules can reuse the same
    rendering contract without hardcoding per-page lists.")
 
-(def base-css
-  "Legacy-compatible base stack."
+(def ^:deprecated base-css
+  "DEPRECATED: pico and open-props; use `pilot-css`, the default. Kept for apps
+   that select `:base` explicitly; removed in 2.0."
   ["/css/pico.min.css"
    "/css/wagoe-tokens.css"
    "/css/tokens-openprops.css"
    "/css/app.css"])
 
 (def pilot-css
-  "General daisy pilot stack."
+  "The default stack: daisyUI/Tailwind on wagoe-tokens."
   ["/css/wagoe-tokens.css"
    "/css/app.css"
    "/css/daisy-admin.css"])
@@ -34,8 +35,8 @@
    :pilot       pilot-css
    :admin-pilot admin-pilot-css})
 
-(def base-js
-  "Base JavaScript stack.
+(def pilot-js
+  "The default JavaScript stack.
    components.js must load before alpine.min.js to register shared Alpine components.
 
    forms.js is here rather than in the admin bundle because it makes htmx swap
@@ -50,9 +51,9 @@
    "/js/htmx-ext-sse.min.js"
    "/js/forms.js"])
 
-(def pilot-js
-  "Pilot JavaScript stack."
-  base-js)
+(def base-js
+  "Same as `pilot-js`; the `:base` key's JavaScript."
+  pilot-js)
 
 (def admin-pilot-js
   "Admin pilot JavaScript stack.
@@ -65,7 +66,7 @@
    "/js/htmx.min.js"
    "/js/htmx-ext-sse.min.js"
    "/js/forms.js"
-   "/js/keyboard.js"]) ;; forms.js is also in base-js; the two bundles are alternatives, not layers
+   "/js/keyboard.js"]) ;; forms.js is also in pilot-js; the two bundles are alternatives, not layers
 
 (def js-bundles
   "Registry of known JavaScript bundles."
@@ -75,12 +76,12 @@
 
 (defn bundle
   "Return stylesheet list for `k` bundle key.
-   Falls back to `:base`."
+   Falls back to `:pilot`."
   [k]
-  (get css-bundles k base-css))
+  (get css-bundles k pilot-css))
 
 (defn js-bundle
   "Return JavaScript list for `k` bundle key.
-   Falls back to `:base`."
+   Falls back to `:pilot`."
   [k]
-  (get js-bundles k base-js))
+  (get js-bundles k pilot-js))

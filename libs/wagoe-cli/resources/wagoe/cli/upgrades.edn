@@ -47,6 +47,11 @@
   :note   "/swagger.json and :swagger route docs (Swagger 2.0). The API docs are OpenAPI 3.1 at /openapi.json."
   :manual "Move :swagger to :openapi, with a parameter's :type under :schema and a response's :schema under :content \"application/json\". Point clients at /openapi.json. A rewrite cannot reach parameter vectors built at runtime."}
 
+ {:ticket "BOU-457"
+  :since  "1.0.2"
+  :note   "The :base CSS bundle (pico.min.css, tokens-openprops.css, open-props). daisyUI/Tailwind on wagoe-tokens.css is the one CSS system."
+  :manual "Drop :css (ui-style/bundle :base) and restyle pages that relied on pico's element styling with daisy classes. A rewrite cannot see what a page looks like."}
+
  {:ticket "BOU-737"
   :since  "1.0.2"
   :note   "Kebab-case keys in the user and session maps of the POST /auth/login and POST /sessions response."

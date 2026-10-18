@@ -8,7 +8,7 @@ All modules must consume style bundles from `wagoe.ui-style`.
 Do not hardcode CSS file lists inside module/page namespaces.
 
 Namespace/API:
-- `wagoe.ui-style/base-css`
+- `wagoe.ui-style/base-css` (deprecated)
 - `wagoe.ui-style/pilot-css`
 - `wagoe.ui-style/admin-pilot-css`
 - `wagoe.ui-style/base-js`
@@ -22,12 +22,12 @@ Rules:
 2. Tables are rendered with shared table classes and the same sort/hover/selection behavior.
 3. Badges use shared badge classes and fixed-width variants where applicable.
 4. Layout namespaces (`layout.clj`) decide which bundle to load; feature namespaces do not provide ad-hoc CSS stacks.
-5. Theme overrides must be token-based (`wagoe-tokens.css`/`tokens-openprops.css`), not hardcoded colors in component CSS.
+5. Theme overrides must be token-based (`wagoe-tokens.css`), not hardcoded colors in component CSS.
 
 Recommended bundle usage:
-- Public/auth/basic pages: `:base`
-- User/profile/audit pilot pages: `:pilot`
+- Everything but admin: `:pilot`, the default
 - Admin CRUD pages: `:admin-pilot`
+- `:base` (pico + open-props) is deprecated and goes in 2.0
 
 Example:
 ```clojure
@@ -46,11 +46,9 @@ Contains:
 - Compiled CSS output: `resources/public/css/daisy-admin.css`
 - Shared CSS tokens/components:
   - `resources/public/css/wagoe-tokens.css`
-  - `resources/public/css/tokens-openprops.css`
   - `resources/public/css/app.css`
   - `resources/public/css/admin.css`
-  - `resources/public/css/pico.min.css`
-  - `resources/public/css/vendor/open-props/*`
+  - deprecated: `pico.min.css`, `tokens-openprops.css`, `vendor/open-props/*`
 - Shared JavaScript assets:
   - `resources/public/js/theme.js`
   - `resources/public/js/alpine.min.js`
@@ -71,11 +69,10 @@ Use this checklist when onboarding a new module or converting an existing module
 
 1. Use shared layout entry points (`layout/page-layout`, `layout/pilot-page-layout`, `layout/admin-pilot-page-layout`), not custom HTML wrappers.
 2. Pick one bundle key based on page type:
-   - `:base` for public/auth/basic pages
-   - `:pilot` for user/profile/audit pilot pages
+   - `:pilot` (the default) for everything but admin
    - `:admin-pilot` for admin CRUD pages
 3. Do not define module-local `:css [...]` stacks in feature namespaces; let layout resolve bundles via `wagoe.ui-style`.
 4. Render forms with shared form classes/components and token variables only (no hardcoded per-page colors).
 5. Render tables with shared table classes/components so sort, hover, row states, and spacing stay consistent.
 6. Use shared badge classes (including fixed-width badge variants where provided) for role/status/action/result labels.
-7. If theme adjustments are needed, change token files (`wagoe-tokens.css` / `tokens-openprops.css`) instead of component one-offs.
+7. If theme adjustments are needed, change `wagoe-tokens.css` instead of component one-offs.

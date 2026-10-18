@@ -54,7 +54,7 @@
    Options: :title :active-path :system-status :component-count :error-count :http-port"
   [opts & body]
   (let [{:keys [title]} opts
-        js-files (ui-style/js-bundle :base)]
+        js-files (ui-style/js-bundle :pilot)]
     (str
      "<!DOCTYPE html>"
      (h/html

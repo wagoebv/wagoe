@@ -16,8 +16,8 @@ Generates admin interfaces automatically from entity configuration — no manual
 | HTMX
 | Dynamic interactions without a frontend build step
 
-| Pico CSS
-| Minimal, semantic CSS framework
+| daisyUI / Tailwind
+| Component classes on the Wagoe design tokens
 
 | Lucide icons
 | Icon set via `wagoe.shared.ui.core.icons`

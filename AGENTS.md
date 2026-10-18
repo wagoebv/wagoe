@@ -1061,7 +1061,7 @@ Automated safeguards run in CI (and `check:fcis` + `check:ports` in pre-commit) 
 | [tenant](https://github.com/wagoebv/wagoe/blob/main/libs/tenant/AGENTS.md)               | Multi-tenancy with schema-per-tenant isolation                                                      |
 | [test](https://github.com/wagoebv/wagoe/blob/main/libs/test/README.md)                   | Test kit for apps: test system, Ring client with session + CSRF, deterministic jobs/events/realtime |
 | [tools](https://github.com/wagoebv/wagoe/blob/main/libs/tools/AGENTS.md)                 | Developer CLI: scaffolding, AI, config, i18n, deployment                                            |
-| [ui-style](https://github.com/wagoebv/wagoe/blob/main/libs/ui-style/AGENTS.md)           | Shared CSS/JS style bundles — :base, :pilot, :admin-pilot                                           |
+| [ui-style](https://github.com/wagoebv/wagoe/blob/main/libs/ui-style/AGENTS.md)           | daisyUI/Tailwind CSS and JS bundles — :pilot (default), :admin-pilot                                |
 | [user](https://github.com/wagoebv/wagoe/blob/main/libs/user/AGENTS.md)                   | Authentication, JWT, MFA, user management                                                           |
 | [wagoe-mcp](https://github.com/wagoebv/wagoe/blob/main/libs/wagoe-mcp/AGENTS.md)         | MCP server (stdio): tool/resource registry + JSON-RPC transport for editor agents                   |
 | [webhooks](https://github.com/wagoebv/wagoe/blob/main/libs/webhooks/AGENTS.md)           | Outbound webhooks: signed, retried, per-tenant delivery of bus events                               |

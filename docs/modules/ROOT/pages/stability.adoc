@@ -396,6 +396,10 @@ the xref:roadmap.adoc#_after_1_0_0[roadmap].
 | `/openapi.json` and `:openapi` (OpenAPI 3.1). The old path serves the 3.1
   document; `:swagger` is translated and warns at boot.
 
+| The `:base` CSS bundle: `pico.min.css`, `tokens-openprops.css` and the
+  vendored open-props files
+| The `:pilot` bundle, daisyUI/Tailwind on `wagoe-tokens.css`, which the
+  default layout loads. `:base` still works when a page selects it.
 | Kebab-case keys in the `user` and `session` maps of the login response
   (`session-token`, `expires-at`, ...)
 | Their camelCase twins (`sessionToken`, `expiresAt`), sent beside them with

@@ -8,16 +8,16 @@
     (is (= sut/base-css (sut/bundle :base)))
     (is (= sut/pilot-css (sut/bundle :pilot)))
     (is (= sut/admin-pilot-css (sut/bundle :admin-pilot))))
-  (testing "unknown bundle key falls back to base"
-    (is (= sut/base-css (sut/bundle :unknown)))))
+  (testing "unknown bundle key falls back to pilot, the default"
+    (is (= sut/pilot-css (sut/bundle :unknown)))))
 
 (deftest ^:unit js-bundle-selection-test
   (testing "known bundle keys return configured stacks"
     (is (= sut/base-js (sut/js-bundle :base)))
     (is (= sut/pilot-js (sut/js-bundle :pilot)))
     (is (= sut/admin-pilot-js (sut/js-bundle :admin-pilot))))
-  (testing "unknown bundle key falls back to base"
-    (is (= sut/base-js (sut/js-bundle :unknown)))))
+  (testing "unknown bundle key falls back to pilot, the default"
+    (is (= sut/pilot-js (sut/js-bundle :unknown)))))
 
 (deftest ^:unit every-bundled-asset-ships
   (doseq [path (distinct (concat (mapcat val sut/css-bundles) (mapcat val sut/js-bundles)))]
