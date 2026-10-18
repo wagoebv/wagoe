@@ -301,7 +301,7 @@
 
    Shows logo, welcome message and login link for unauthenticated users.
    Authenticated users (valid session cookie present) are redirected to their
-   landing page.
+   landing page. With `:landing` set, everyone is redirected there.
 
    Args:
      user-service: User service instance for session validation
@@ -310,15 +310,17 @@
    Returns:
      Ring handler function"
   [user-service config]
-  (fn [request]
-    (let [session-token (user-middleware/extract-session-token request)
-          session (when session-token
-                    (try
-                      (user-ports/validate-session user-service session-token)
-                      (catch Exception _ nil)))]
-      (if session
-        (response/redirect (landing-path config (:user session) request))
-        (html-response request (user-ui/web-root-page {}))))))
+  (if-let [path (landing/front-page config)]
+    (constantly (response/redirect path))
+    (fn [request]
+      (let [session-token (user-middleware/extract-session-token request)
+            session (when session-token
+                      (try
+                        (user-ports/validate-session user-service session-token)
+                        (catch Exception _ nil)))]
+        (if session
+          (response/redirect (landing-path config (:user session) request))
+          (html-response request (user-ui/web-root-page {})))))))
 
 (defn dashboard-page-handler
   "Handler for the dashboard page (GET /web/dashboard).

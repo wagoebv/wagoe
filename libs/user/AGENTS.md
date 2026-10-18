@@ -325,7 +325,7 @@ The wizard accepts `--env dev|test|acc|prod` to pick the Aero config profile and
 
 ## Landing Page and Dashboard
 
-Three `:wagoe/user` keys, all checked at boot; a bad value fails it.
+Four `:wagoe/user` keys, all checked at boot; a bad value fails it.
 
 ```clojure
 :wagoe/user
@@ -341,11 +341,15 @@ Three `:wagoe/user` keys, all checked at boot; a bad value fails it.
 
  ;; Where the layouts' logo, "back" and dashboard links point. Defaults to
  ;; /web/dashboard, or /web with :dashboard false.
- :home "/web/overzicht"}
+ :home "/web/overzicht"
+
+ ;; Where / and /web redirect everyone, signed in or not. Unset: / goes to
+ ;; login (or /web/users), /web shows the welcome page or the user's landing.
+ :landing "/web/welkom"}
 ```
 
 `:login-redirect` applies to password login, MFA completion, OIDC sign-in and
-`/web` for a signed-in user. A safe `return-to` still wins. The function's
+`/web` for a signed-in user, unless `:landing` is set. A safe `return-to` still wins. The function's
 login context has `:ip-address` (the client IP), `:user-agent` and the Ring
 `:request`. An app module can contribute it as `:auth {:login-redirect (ig/ref …)}`
 instead, a function or an `ports/ILoginRedirect`, like `:mfa-required?` above. With
@@ -353,7 +357,12 @@ instead, a function or an `ports/ILoginRedirect`, like `:mfa-required?` above. W
 serve it or point the redirect elsewhere. `:home` is bound per request
 (`wagoe.shared.ui.core.home/*path*`), so the shared, admin, search and workflow
 layouts read it without a config argument; `/web`, its fallback, sends a
-signed-in user on to their landing path.
+signed-in user on to their landing path, or to `:landing` when that is set.
+
+`:landing` must be served by a route marked `:public true`, or a signed-out
+visitor is sent to log in. The user module contributes `/` as a `:static`
+route for it; the platform drops its own `/` whenever a module's `:static`
+routes claim `/`, so an app without the user module can do the same.
 
 ## Session Pruning
 

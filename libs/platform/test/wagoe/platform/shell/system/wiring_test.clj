@@ -199,6 +199,36 @@
                        :config {:wagoe/profile :prod
                                 :active {:wagoe/http {:rate-limit {:enabled? true}}}}})))))
 
+(defn- root-routes
+  "The routes at / that the handler built from `module-routes` mounts."
+  [module-routes]
+  (let [captured (atom nil)]
+    (with-redefs [wagoe.platform.shell.http.reitit-router/compile-routes
+                  (fn [routes _] (reset! captured routes) identity)]
+      (ig/init-key :wagoe/http-handler
+                   {:module-routes   module-routes
+                    :router          ::router
+                    :logger          ::logger
+                    :metrics-emitter ::metrics
+                    :error-reporter  ::error-reporter
+                    :config {:active {:wagoe/settings {:name "Wagoe" :version "1.2.3"}}}}))
+    (filter #(= "/" (first %)) @captured)))
+
+(defn- location [route request]
+  (get-in ((get-in route [1 :get :handler]) request) [:headers "Location"]))
+
+(deftest ^:unit a-modules-root-route-replaces-the-platform-redirect
+  (testing "unclaimed, / is the platform's redirect"
+    (let [[route & more] (root-routes [])]
+      (is (empty? more))
+      (is (= "/web/login" (location route {})))
+      (is (= "/web/users" (location route {:user {:id 1}})))))
+  (testing "claimed by a module's :static route, only the module's is mounted"
+    (let [mine  ["/" {:public true
+                      :get {:handler (fn [_] {:status 302 :headers {"Location" "/web/welkom"}})}}]
+          routes (root-routes [{:static [mine]}])]
+      (is (= [mine] routes)))))
+
 (deftest ^:security ^:unit invalid-trusted-proxies-fail-the-boot
   (is (thrown-with-msg?
        clojure.lang.ExceptionInfo
