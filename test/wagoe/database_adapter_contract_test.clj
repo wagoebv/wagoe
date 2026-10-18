@@ -280,7 +280,7 @@
    tenant schema's table gets the column public's already has, and a table only
    public has is still found."
   [ctx]
-  (when ((protocols/capabilities (adapter ctx)) :schemas)
+  (when (protocols/capable? (adapter ctx) :schemas)
     (let [schema (str "contract_" (System/nanoTime))]
       (ddl! ctx "DROP TABLE IF EXISTS in_path")
       (ddl! ctx "DROP TABLE IF EXISTS only_public")

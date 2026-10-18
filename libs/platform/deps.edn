@@ -70,8 +70,6 @@
          integrant/integrant               {:mvn/version "1.0.1"}
          integrant/repl                    {:mvn/version "0.5.1"}
          aero/aero                         {:mvn/version "1.1.6"}
-         environ/environ                   {:mvn/version "1.2.0"}
-         com.lambdaisland/dotenv           {:mvn/version "0.2.5"}
 
          ;; JSON
          ;; cheshire brings jackson-core and -databind below 2.22.3: CVE-2026-89407, CVE-2026-89425, CVE-2026-91776, CVE-2026-91777 (BOU-618).
