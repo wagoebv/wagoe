@@ -8,7 +8,7 @@
        {:provider :memory | :db | :redis     ; default :memory
         :lease-ms 60000                      ; :db only, in-flight lease
         :redis    {:host \"localhost\" :port 6379}
-        :workers  {:count 1 :queue-name :default}
+        :workers  {:count 1 :queue-name :default :virtual-threads? false}
         :recurring {:nightly-report {:cron \"0 2 * * *\" :zone \"Europe/Amsterdam\"}}
         :scheduler {:tick-ms 5000 :lease-ms 30000 :zone \"UTC\"}}
 

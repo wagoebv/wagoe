@@ -831,6 +831,12 @@
       (.setHandler limiter (.getHandler s))
       (.setHandler s limiter))))
 
+(defn- virtual-thread-pool
+  "nil unless `on?`, which run-jetty reads as: build the platform pool."
+  [on? pool-name]
+  (when on?
+    (doto (org.eclipse.jetty.util.thread.VirtualThreadPool.) (.setName pool-name))))
+
 ;; A listener serving one module's protocol to the rest of the deployment.
 ;;
 ;; Its own port, not the application's. The endpoint invokes port methods
@@ -842,7 +848,7 @@
 ;; resolved here, where a name that no longer exists fails the boot rather than
 ;; the first call.
 (defmethod ig/init-key :wagoe/rpc-server
-  [_ {:keys [protocol implementation port host service-key auth max-request-body]
+  [_ {:keys [protocol implementation port host service-key auth max-request-body virtual-threads?]
        :or   {max-request-body default-max-request-body}}]
   (let [protocol-var (or (requiring-resolve protocol)
                          (throw (ex-info (str "RPC protocol not found: " protocol)
@@ -855,6 +861,7 @@
         server       (jetty/run-jetty app {:port         port
                                            :host         (or host "0.0.0.0")
                                            :join?        false
+                                           :thread-pool  (virtual-thread-pool virtual-threads? "wagoe-rpc")
                                            :configurator #(limit-request-body! % max-request-body)})]
     (log/info "RPC endpoint started"
               {:protocol (str protocol) :port port :path rpc-server/default-path})
@@ -867,7 +874,7 @@
     (.stop server)))
 
 (defmethod ig/init-key :wagoe/http-server
-  [_ {:keys [handler port host join? config drain-timeout-ms max-request-body]
+  [_ {:keys [handler port host join? config drain-timeout-ms max-request-body virtual-threads?]
        :or   {max-request-body default-max-request-body}}]
   (let [http-config (or config {})
         port-allocation (port-manager/allocate-port port http-config)
@@ -881,6 +888,7 @@
                                   {:port allocated-port
                                    :host host
                                    :join? (or join? false)
+                                   :thread-pool (virtual-thread-pool virtual-threads? "wagoe-http")
                                    ;; Store the handler atom on the server so
                                    ;; halt-key! can clear the right one, and
                                    ;; enable graceful connection draining.
@@ -894,6 +902,7 @@
                  :host host
                  :url (str "http://" host ":" allocated-port)
                  :drain-timeout-ms drain-timeout-ms
+                 :virtual-threads? (boolean virtual-threads?)
                  :allocation-message (:message port-allocation)})
       server)))
 

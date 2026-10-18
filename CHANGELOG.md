@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **Opt-in virtual threads for requests and job workers** (BOU-471): `:virtual-threads? true` on `:wagoe/http`,
+  `:wagoe/rpc` or `:wagoe/jobs :workers`. Off by default; on JDK 21, check for pinning first.
 - **`capable?` on the database port** (BOU-609): `(capable? adapter :schemas)`; a nil adapter claims nothing.
   An unknown capability throws instead of reading as false.
 - **Tenant export and dead-letter retention** (BOU-735): platform admins download `GET /api/v1/tenants/:id/export`.
