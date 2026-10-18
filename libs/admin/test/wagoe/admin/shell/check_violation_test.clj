@@ -104,8 +104,9 @@
                            (request :post "/web/admin/swatches" {:entity "swatches"} form))))]
     [(:status response) errors (str (:body response))]))
 
-(defn- refused-above-the-form [[status errors body] & fields]
-  (is (= 409 status))
+(defn- refused-above-the-form
+  "The checks on a 409's page: nothing at ERROR, the refusal above the form."
+  [[_ errors body] & fields]
   (is (= [] errors))
   (is (str/includes? body "A value is not allowed"))
   (doseq [f fields] (is (not (marked? body f)))))
@@ -131,7 +132,8 @@
               (do (is (= 422 status))
                   (is (= [] errors))
                   (is (marked? body "color")))
-              (refused-above-the-form response "color"))))))))
+              (do (is (= 409 status))
+                  (refused-above-the-form response "color")))))))))
 
 (deftest ^:integration a-check-over-two-columns-is-a-409-above-the-form
   (doseq [[backend db-ctx] @backends

@@ -643,13 +643,13 @@
   (apply dissoc data (conj (:readonly-fields entity-config #{}) (:primary-key entity-config :id))))
 
 (defn- written-update!
-  "Update through `writer`, returning the record read back. A duplicate is
-   shown on its field, as the SQL path shows it (BOU-673)."
+  "Update through `writer`, returning the record read back. A duplicate or a
+   CHECK is shown on its field, as the SQL path shows it (BOU-673)."
   [svc writer entity-config entity-name id data]
   (try
     (ports/update-record! writer id (writable-data entity-config data))
     (catch clojure.lang.ExceptionInfo e
-      (throw (or (unique-violation e) e))))
+      (throw (or (unique-violation e) (check-violation entity-config e) e))))
   (ports/get-entity svc entity-name id))
 
 (defn- written-delete!

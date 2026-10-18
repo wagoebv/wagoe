@@ -187,7 +187,13 @@
            (constraint/violation {:message "[SQLITE_CONSTRAINT_CHECK] A CHECK constraint failed (CHECK constraint failed: lo < hi)"}))
         "two columns")
     (is (= {:kind :check}
-           (constraint/violation {:target "cc" :message "[SQLITE_CONSTRAINT_CHECK] A CHECK constraint failed (CHECK constraint failed: chk_named)"}))))
+           (constraint/violation {:target "cc" :message "[SQLITE_CONSTRAINT_CHECK] A CHECK constraint failed (CHECK constraint failed: chk_named)"})))
+    (is (= {:kind :check}
+           (constraint/violation {:message "[SQLITE_CONSTRAINT_CHECK] A CHECK constraint failed (CHECK constraint failed: \"end\" > \"start\")"}))
+        "a quoted keyword is a column")
+    (is (= {:kind :check :field :color}
+           (constraint/violation {:message "[SQLITE_CONSTRAINT_CHECK] A CHECK constraint failed (CHECK constraint failed: Color IN ('red')\n OR color IS NULL)"}))
+        "one column in two cases, over two lines"))
   (testing "MySQL: 3819, its generated names show no column"
     (is (= {:kind :check}
            (constraint/violation {:sql-state "HY000" :error-code 3819 :target "cc"

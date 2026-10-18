@@ -108,7 +108,7 @@
    shape. Nil when it shows none or several: H2 and MySQL name an inline
    CHECK `CONSTRAINT_C6`, `t_chk_1`."
   [{:keys [message table target] :as reported}]
-  (let [subject (or (second (re-find #"^\[SQLITE_CONSTRAINT_CHECK\].*\(CHECK constraint failed: (.+)\)\s*$" (str message)))
+  (let [subject (or (second (re-find #"(?s)^\[SQLITE_CONSTRAINT_CHECK\].*\(CHECK constraint failed: (.+)\)\s*$" (str message)))
                     (redaction/constraint-name reported))
         table   (or table target)]
     (cond
@@ -123,8 +123,11 @@
       :else
       (let [ids (->> (str/replace subject #"'(?:[^']|'')*'" "")
                      (re-seq #"(?<![\p{L}\p{N}_$])([\"`]?)([\p{L}_][\p{L}\p{N}_$]*)\1(\s*\()?")
-                     ;; A function's name is followed by its arguments.
-                     (keep (fn [[_ _ id call]] (when-not (or call (re-matches sql-word id)) id)))
+                     ;; A function's name is followed by its arguments. A quoted
+                     ;; keyword is a column: "end" > "start" shows two.
+                     (keep (fn [[_ q id call]]
+                             (when-not (or call (and (empty? q) (re-matches sql-word id))) id)))
+                     (map #(.toLowerCase ^String % java.util.Locale/ROOT))
                      distinct)]
         (when (= 1 (count ids))
           (first ids))))))
