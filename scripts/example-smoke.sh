@@ -34,6 +34,13 @@ cd "$REPO_ROOT/examples/shop"
 export WAG_ENV=test
 export JWT_SECRET="example-smoke-secret-minimum-32-characters"
 
+# The generated integration test boots the app through wagoe-test.
+clojure -M:test --focus shop.system-test > /tmp/shop-test.log 2>&1 \
+  || { log_excerpt /tmp/shop-test.log 30; fail "clojure -M:test --focus shop.system-test failed"; }
+grep -q "1 tests, 1 assertions, 0 failures" /tmp/shop-test.log \
+  || { log_excerpt /tmp/shop-test.log 30; fail "the generated system test did not run"; }
+ok "the generated integration test passes through wagoe.test"
+
 clojure -M:run > /tmp/shop-smoke.log 2>&1 &
 APP_PID=$!
 # shellcheck disable=SC2317

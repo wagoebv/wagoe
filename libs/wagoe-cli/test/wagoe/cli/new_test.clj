@@ -249,6 +249,19 @@
           (is (not (str/includes? (slurp (io/file tmp "deps.edn")) "{{devtools-version}}"))
               "unrendered version placeholder")))
 
+      (testing "wagoe-test is on the :test alias, and a test uses it"
+        (let [deps (edn/read-string (slurp (io/file tmp "deps.edn")))
+              test (slurp (io/file tmp "test/test_proj/system_test.clj"))]
+          (is (string? (get-in deps [:aliases :test :extra-deps 'com.wagoe/wagoe-test :mvn/version])))
+          (is (nil? (get-in deps [:deps 'com.wagoe/wagoe-test]))
+              "a test kit has no place in the uberjar")
+          (is (str/includes? test "[wagoe.test :as t]"))
+          (is (str/includes? test "[test-proj.system-config :as app]"))))
+
+      (testing "clj-kondo reads with-test-system as a let before any import"
+        (let [kondo (edn/read-string (slurp (io/file tmp ".clj-kondo/config.edn")))]
+          (is (= 'clojure.core/let (get-in kondo [:lint-as 'wagoe.test/with-test-system])))))
+
       (testing "dev/user.clj defines the helpers quickstart tells users to run"
         ;; `bb quickstart` closes with "run (status), run (commands)". They did
         ;; not exist: the generated dev/user.clj was go/reset/halt, so the

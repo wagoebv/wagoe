@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **`wagoe new` ships `wagoe-test` and one integration test through it** (BOU-677): `test/<app>/system_test.clj`.
+  Existing projects: add `com.wagoe/wagoe-test` to the `:test` alias's `:extra-deps`.
 - **Outbound webhooks: `com.wagoe/wagoe-webhooks`** (BOU-472): bus events go to subscriber URLs, signed, retried as jobs,
   per tenant, logged in the admin. Enable `:wagoe/webhooks` beside `:wagoe/jobs`; receivers use `verify-signature`.
 - **Form fields from malli schemas, checked by the server as you type** (BOU-465): `wagoe.shared.ui.core.form`.
