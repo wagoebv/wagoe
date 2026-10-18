@@ -118,6 +118,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Changed
 
+- **`hato`, `environ` and `lambdaisland/dotenv` are no longer dependencies** (BOU-457): nothing required them.
+  Declare them yourself if your app uses them.
 - **An IMAP fetch without `:limit` takes 100 messages** (BOU-731), and `core.imap/filter-unread` and `filter-by-date`
   are removed. Pass a larger `:limit` to read more.
 - **API docs are OpenAPI 3.1** (BOU-462), at `/openapi.json`; `/api-docs/` reads it. Write route docs under
