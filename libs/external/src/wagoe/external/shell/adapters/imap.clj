@@ -169,9 +169,8 @@
   100)
 
 (defn- select-messages
-  "Messages matching opts, at most limit of them, oldest first. Envelope, flags
-   and UID are fetched in one batch, then headers and structure for the selected
-   ones only."
+  "Messages matching opts, at most limit of them, oldest first. Only the selected
+   ones are fetched beyond their date, in one batch."
   [^IMAPFolder fld {:keys [limit since unread-only? include-raw?]}]
   (let [limit    (or limit default-limit)
         since-ms (when since (inst-ms since))
@@ -180,15 +179,12 @@
         ;; it in its own, so widen by two days; the exact check follows below.
         term     (search-term unread-only? (when since-ms (Date. (long (- since-ms (* 2 24 60 60 1000))))))
         found    (if term (.search fld term) (.getMessages fld))
-        ;; Without since no date check follows, so limit can cut before the fetch.
-        msgs     (cond->> found (not since) (take limit))
-        _        (fetch! fld msgs FetchProfile$Item/ENVELOPE FetchProfile$Item/FLAGS UIDFolder$FetchProfileItem/UID)
-        ;; The exact instant is checked here.
-        selected (vec (cond->> msgs
-                        since (remove #(.before (received-at %) since))
-                        true  (take limit)))]
-    (when-not include-raw?
-      (fetch! fld selected IMAPFolder$FetchProfileItem/HEADERS FetchProfile$Item/CONTENT_INFO))
+        selected (vec (if since
+                        (do (fetch! fld found IMAPFolder$FetchProfileItem/INTERNALDATE)
+                            (->> found (remove #(.before (received-at %) since)) (take limit)))
+                        (take limit found)))]
+    (apply fetch! fld selected FetchProfile$Item/ENVELOPE FetchProfile$Item/FLAGS UIDFolder$FetchProfileItem/UID
+           (when-not include-raw? [IMAPFolder$FetchProfileItem/HEADERS FetchProfile$Item/CONTENT_INFO]))
     selected))
 
 ;; =============================================================================
@@ -200,19 +196,19 @@
 (defn- folder-name [adapter opts]
   (or (:folder opts) (:folder adapter) "INBOX"))
 
-(defn- uidplus? [^IMAPStore store]
-  (.hasCapability store "UIDPLUS"))
+(defn- uidplus? [^IMAPFolder fld]
+  (.hasCapability ^IMAPStore (.getStore fld) "UIDPLUS"))
 
 (defn- with-message
-  "Open the folder read-write and call f with [store folder msg] for the message
+  "Open the folder read-write and call f with [folder msg] for the message
    with uid; a missing message is a :not-found error."
   [adapter uid opts op f]
   (let [fld-name (folder-name adapter opts)]
     (try
       (with-imap-connection* adapter fld-name false
-        (fn [store ^IMAPFolder fld]
+        (fn [_store ^IMAPFolder fld]
           (if-let [msg (.getMessageByUID fld (long uid))]
-            (f store fld msg)
+            (f fld msg)
             {:success? false
              :error    {:message (str "No message with UID " uid " in " fld-name) :type :not-found}})))
       (catch Exception e
@@ -247,15 +243,14 @@
     ([this]
      (ports/fetch-unread! this nil))
     ([this limit]
-     (ports/fetch-messages! this (cond-> {:unread-only? true}
-                                   limit (assoc :limit limit)))))
+     (ports/fetch-messages! this {:unread-only? true :limit limit})))
 
   (mark-read!
     ([this uid]
      (ports/mark-read! this uid {}))
     ([this uid opts]
      (with-message this uid opts "mark-read"
-       (fn [_store _fld ^Message msg]
+       (fn [_fld ^Message msg]
          (.setFlags msg (Flags. Flags$Flag/SEEN) true)
          {:success? true}))))
 
@@ -264,13 +259,12 @@
      (ports/delete-message! this uid {}))
     ([this uid opts]
      (with-message this uid opts "delete"
-       (fn [store ^IMAPFolder fld ^Message msg]
+       (fn [^IMAPFolder fld ^Message msg]
          (.setFlags msg (Flags. Flags$Flag/DELETED) true)
          ;; A plain EXPUNGE would also remove what other clients flagged \Deleted.
-         (if (uidplus? store)
-           (do (.expunge fld (into-array Message [msg]))
-               {:success? true :expunged? true})
-           {:success? true :expunged? false})))))
+         (let [expunge? (uidplus? fld)]
+           (when expunge? (.expunge fld (into-array Message [msg])))
+           {:success? true :expunged? expunge?})))))
 
   (close! [_this]
     ;; ImapMailboxAdapter is connection-per-call; nothing to close at the adapter level.
