@@ -12,7 +12,7 @@
             [wagoe.user.shell.service :as service]
             [wagoe.user.shell.in-memory-repository-test :as mem]
             [wagoe.email.ports :as email-ports]
-            [wagoe.i18n.core.translate :as translate]
+            [wagoe.i18n.shell.middleware :as i18n-middleware]
             [wagoe.i18n.shell.catalogue :as catalogue]
             [clojure.test :refer [deftest testing is]]
             [clojure.tools.logging.test :as log-test]
@@ -32,11 +32,9 @@
 
 (def ^:private dutch
   "Request keys that render a page through the real Dutch catalogue."
-  (let [cat (catalogue/load-catalogue "wagoe/i18n/translations")]
-    {:i18n/t (fn
-               ([k] (translate/t cat [:nl] k))
-               ([k params] (translate/t cat [:nl] k params))
-               ([k params n] (translate/t cat [:nl] k params n)))}))
+  {:i18n/t (i18n-middleware/resolve-t-fn
+            {:i18n/catalogue      (catalogue/load-catalogue "wagoe/i18n/translations")
+             :i18n/default-locale :nl})})
 
 (defn- has-header?
   "Check if response has a header with specific value."
