@@ -147,7 +147,7 @@
 (defn- schemas?
   "Whether `ctx`'s adapter claims :schemas, a schema per tenant (ADR-039)."
   [ctx]
-  (contains? (protocols/capabilities (:adapter ctx)) :schemas))
+  (protocols/capable? (:adapter ctx) :schemas))
 
 (defn- engine [ctx] (protocols/engine (:adapter ctx)))
 

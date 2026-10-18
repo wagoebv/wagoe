@@ -95,7 +95,7 @@
 (defn- claims?
   [ctx capability]
   (execution/validate-context ctx)
-  (contains? (protocols/capabilities (:adapter ctx)) capability))
+  (protocols/capable? (:adapter ctx) capability))
 
 (defn quote-identifier
   "`ident` quoted for `engine`, as stored: backticks on MySQL, double quotes

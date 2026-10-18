@@ -265,6 +265,14 @@
   (is (= :validation-error (:type (ex-data (try (protocols/like-pattern :prefix "a")
                                                 (catch clojure.lang.ExceptionInfo e e)))))))
 
+(deftest ^:unit capable?-reads-the-adapters-claims
+  (is (true? (protocols/capable? (sqlite/new-adapter) :transactional-ddl)))
+  (is (false? (protocols/capable? (h2/new-adapter) :transactional-ddl)))
+  (is (false? (protocols/capable? nil :schemas)) "a nil adapter claims nothing")
+  (is (= :internal-error (:type (ex-data (try (protocols/capable? (h2/new-adapter) :schema)
+                                              (catch clojure.lang.ExceptionInfo e e)))))
+      "a typo throws rather than reading as unclaimed"))
+
 (deftest ^:integration test-build-pagination
   (testing "Pagination building with safe limits"
     ;; Test default values

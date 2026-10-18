@@ -110,7 +110,7 @@
   "The references still to key, a PostgreSQL key never validated carrying its
    name as `:existing`. None where they do not apply."
   [ctx]
-  (when (and (contains? (protocols/capabilities (:adapter ctx)) :alter-foreign-key)
+  (when (and (protocols/capable? (:adapter ctx) :alter-foreign-key)
              (db/table-exists? ctx :auth_users))
     (into []
           (keep (fn [{:keys [table column] :as reference}]
