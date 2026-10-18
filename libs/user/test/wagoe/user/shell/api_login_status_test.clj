@@ -98,13 +98,13 @@
     (doseq [[path handler] (login-routes svc)]
       (testing path
         (let [body (:body (post handler {:email "bob@x.org" :password password}))]
-          (is (= (:sessionToken body) (get-in body [:session :sessionToken]) (get-in body [:session :session-token])))
-          (is (= (:jwtToken body) (get-in body [:session :jwtToken]) (get-in body [:session :jwt-token])))
-          (doseq [[k camel] [[:user-id :userId] [:expires-at :expiresAt] [:user-agent :userAgent]]]
-            (is (some? (get-in body [:session k])) (str k))
-            (is (= (get-in body [:session k]) (get-in body [:session camel])) (str k)))
-          (is (some? (get-in body [:user :created-at])))
-          (is (= (get-in body [:user :created-at]) (get-in body [:user :createdAt]))))))))
+          (is (= (:sessionToken body) (get-in body [:session :sessionToken])))
+          (is (= (:jwtToken body) (get-in body [:session :jwtToken])))
+          (doseq [[m k camel] [[:session :session-token :sessionToken] [:session :jwt-token :jwtToken]
+                               [:session :user-id :userId] [:session :expires-at :expiresAt]
+                               [:session :user-agent :userAgent] [:user :created-at :createdAt]]]
+            (is (some? (get-in body [m k])) (str m " " k))
+            (is (= (get-in body [m k]) (get-in body [m camel])) (str m " " k))))))))
 
 (deftest ^:unit a-lockout-auth-shell-reports-is-still-a-429
   ;; A lockout set by a concurrent request reaches us as :authentication-failed.
