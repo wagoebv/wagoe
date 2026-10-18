@@ -362,6 +362,29 @@
         :level :pass
         :msg   ":test/reset-endpoint-enabled? not enabled"}])))
 
+(defn check-rate-limit-cache
+  "Rate limiting on with no :wagoe/cache active. The :prod boot refuses this and
+   other profiles fall back to a per-process counter, as
+   wagoe.platform.shell.system.wiring/security-config decides. `active` is the
+   :active map with #env resolved: prod switches the limiter on by env var."
+  [active env-name]
+  (cond
+    (not (true? (get-in active [:wagoe/http :rate-limit :enabled?])))
+    [{:id :rate-limit-cache :level :pass :msg "Rate limiting is off"}]
+
+    (contains? active :wagoe/cache)
+    [{:id :rate-limit-cache :level :pass :msg "Rate limiting is on, with :wagoe/cache active"}]
+
+    :else
+    [{:id    :rate-limit-cache
+      :level (if (= "prod" env-name) :error :warn)
+      :msg   (str "Rate limiting is on but :wagoe/cache is not active — "
+                  (if (= "prod" env-name)
+                    "the app will refuse to boot"
+                    "each process counts on its own, so N replicas allow limit x N"))
+      :fix   (str "Move :wagoe/cache from :inactive to :active in resources/conf/"
+                  env-name "/config.edn and set REDIS_HOST, or set HTTP_RATE_LIMIT_ENABLED=false")}]))
+
 (def ^:private relocated-namespaces
   "Namespaces that moved during the Phase-2 refactors (framework upgrade aid).
    Requiring the old name fails at compile; doctor points at the new home."
@@ -425,14 +448,21 @@
 
 (defn- parse-config-minimal
   "Parse config.edn with a minimal reader that replaces Aero tags with placeholders.
-   Returns the parsed EDN map."
-  [config-text]
+   Given `env-map`, #env, #or and #boolean resolve against it the way Aero
+   would instead. Returns the parsed EDN map."
+  [config-text & [env-map]]
   (let [;; Custom readers that handle Aero tags by returning placeholder values
-        readers {'env      (fn [v] (str "ENV:" v))
-                 'or       (fn [v] (if (vector? v) (last v) v))
+        readers {'env      (if env-map
+                             (fn [v] (get env-map (str v)))
+                             (fn [v] (str "ENV:" v)))
+                 'or       (if env-map
+                             (fn [v] (if (vector? v) (some identity v) v))
+                             (fn [v] (if (vector? v) (last v) v)))
                  'long     (fn [v] (if (number? v) v 0))
                  'double   (fn [v] (if (number? v) v 0.0))
-                 'boolean  (fn [v] (boolean v))
+                 'boolean  (if env-map
+                             (fn [v] (Boolean/parseBoolean (str v)))
+                             (fn [v] (boolean v)))
                  'merge    (fn [v] (if (vector? v) (apply merge v) v))
                  'include  (fn [_v] {})
                  'str      (fn [v] (str v))
@@ -588,6 +618,7 @@
                                (or (list-admin-files "test") [])))
          (check-prod-placeholders config-text env)
          (check-reset-endpoint-flag (or parsed {}) env)
+         (check-rate-limit-cache (or (:active (parse-config-minimal config-text env-map)) {}) env)
          (check-upgrade-wiring src-text))))))
 
 ;; =============================================================================
@@ -630,6 +661,7 @@
   (println "  admin-parity        Admin entity files exist in both dev and test")
   (println "  prod-placeholders   No placeholder values in prod config")
   (println "  reset-endpoint-flag :test/reset-endpoint-enabled? only true in test/dev")
+  (println "  rate-limit-cache    Rate limiting on only with :wagoe/cache active (prod refuses to boot)")
   (println "  upgrade-wiring      No stale pre-Phase-2 framework wiring (BOU-198/200)"))
 
 ;; =============================================================================
