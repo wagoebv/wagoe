@@ -106,8 +106,9 @@
         (:attachments msg)))
 
 (deftest ^:integration body-and-attachments-test
-  (let [msgs (by-subject (fetch {}))]
-    (is (= (mapv first fixtures) (mapv :subject (fetch {}))))
+  (let [all  (fetch {})
+        msgs (by-subject all)]
+    (is (= (mapv first fixtures) (mapv :subject all)))
     (is (every? #(m/validate schema/InboundMessage %) (vals msgs)))
 
     (testing "plain message"

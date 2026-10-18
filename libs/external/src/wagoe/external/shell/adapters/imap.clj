@@ -16,8 +16,8 @@
   (:require [wagoe.external.core.imap :as imap-core]
             [wagoe.external.ports :as ports]
             [clojure.tools.logging :as log])
-  (:import [com.sun.mail.imap IMAPFolder]
-           [java.io ByteArrayOutputStream InputStream]
+  (:import [com.sun.mail.imap IMAPFolder IMAPFolder$FetchProfileItem]
+           [java.io ByteArrayInputStream ByteArrayOutputStream InputStream]
            [java.util Date Properties]
            [javax.mail FetchProfile FetchProfile$Item Flags Flags$Flag Folder Header
             Message Message$RecipientType Multipart Part Session Store UIDFolder$FetchProfileItem]
@@ -32,18 +32,13 @@
 
 (defn- imap-properties
   [{:keys [host port ssl?]}]
-  ;; peek: read with BODY.PEEK, so fetching never sets \Seen; only mark-read! does.
-  (let [props (Properties.)]
-    (if ssl?
-      (do
-        (.put props "mail.imaps.host" (str host))
-        (.put props "mail.imaps.port" (str port))
-        (.put props "mail.imaps.ssl.enable" "true")
-        (.put props "mail.imaps.peek" "true"))
-      (do
-        (.put props "mail.imap.host" (str host))
-        (.put props "mail.imap.port" (str port))
-        (.put props "mail.imap.peek" "true")))
+  (let [prefix (if ssl? "mail.imaps." "mail.imap.")
+        props  (doto (Properties.)
+                 (.put (str prefix "host") (str host))
+                 (.put (str prefix "port") (str port))
+                 ;; BODY.PEEK, so fetching never sets \Seen; only mark-read! does.
+                 (.put (str prefix "peek") "true"))]
+    (when ssl? (.put props "mail.imaps.ssl.enable" "true"))
     props))
 
 (defn- open-store
@@ -112,6 +107,9 @@
     (.writeTo msg out)
     (.toByteArray out)))
 
+(defn- parse-raw ^MimeMessage [^bytes raw]
+  (MimeMessage. (Session/getInstance (Properties.)) (ByteArrayInputStream. raw)))
+
 (defn- headers-map [^Message msg]
   (reduce (fn [acc ^Header h] (assoc acc (.getName h) (.getValue h)))
           {}
@@ -121,57 +119,65 @@
   (or (.getReceivedDate msg) (.getSentDate msg) (Date.)))
 
 (defn- message->inbound
-  "Convert a javax.mail.Message to an InboundMessage map.
-   uid must be pre-fetched from the IMAPFolder."
+  "Convert a javax.mail.Message to an InboundMessage map. With include-raw? the
+   message is downloaded once and parsed locally, rather than part by part."
   [^Message msg uid include-raw?]
-  (let [from       (first (.getFrom msg))
-        to-addrs   (mapv str (.getRecipients msg Message$RecipientType/TO))
+  (let [raw          (when include-raw? (raw-bytes msg))
+        ^Message src (if raw (parse-raw raw) msg)
         {:keys [body-parts attachments]}
-        (try (message-content msg)
+        (try (message-content src)
              (catch Exception e
                (log/warn e "Could not read IMAP message content" {:uid uid})
                {:body-parts [] :attachments []}))
-        message-id (when (instance? MimeMessage msg) (.getMessageID ^MimeMessage msg))]
-    (cond-> (assoc (imap-core/build-inbound-message uid (str from) to-addrs (str (.getSubject msg))
-                                                    body-parts (received-at msg) (headers-map msg))
+        message-id (when (instance? MimeMessage src) (.getMessageID ^MimeMessage src))]
+    (cond-> (assoc (imap-core/build-inbound-message uid (str (first (.getFrom src)))
+                                                    (mapv str (.getRecipients src Message$RecipientType/TO))
+                                                    (str (.getSubject src))
+                                                    body-parts (received-at msg) (headers-map src))
                    :seen?       (.isSet msg Flags$Flag/SEEN)
                    :attachments attachments)
-      message-id   (assoc :message-id message-id)
-      include-raw? (assoc :raw (raw-bytes msg)))))
+      message-id (assoc :message-id message-id)
+      raw        (assoc :raw raw))))
 
 ;; =============================================================================
 ;; Server-side Selection
 ;; =============================================================================
 
 (defn- search-term
-  "IMAP SEARCH for the options, or nil to take the whole folder. SINCE matches by
-   date only, so the exact instant is checked again on the envelope."
-  ^SearchTerm [{:keys [unread-only? since]}]
+  "IMAP SEARCH for the options, or nil to take the whole folder."
+  ^SearchTerm [unread-only? ^Date since]
   (let [terms (cond-> []
                 unread-only? (conj (FlagTerm. (Flags. Flags$Flag/SEEN) false))
-                since        (conj (ReceivedDateTerm. ComparisonTerm/GE ^Date since)))]
-    (case (count terms)
-      0 nil
-      1 (first terms)
-      (AndTerm. ^"[Ljavax.mail.search.SearchTerm;" (into-array SearchTerm terms)))))
+                since        (conj (ReceivedDateTerm. ComparisonTerm/GE since)))]
+    (when (seq terms)
+      (if (next terms)
+        (AndTerm. ^"[Ljavax.mail.search.SearchTerm;" (into-array SearchTerm terms))
+        (first terms)))))
+
+(defn- fetch! [^IMAPFolder fld msgs & items]
+  (let [profile (FetchProfile.)]
+    (doseq [^FetchProfile$Item item items]
+      (.add profile item))
+    (.fetch fld (into-array Message msgs) profile)))
 
 (defn- select-messages
-  "Messages matching opts, at most limit of them, oldest first. Only envelope,
-   flags and UID are fetched; content is read later for the selected ones."
-  [^IMAPFolder fld {:keys [limit since] :as opts}]
-  (let [term    (search-term opts)
-        found   (if term (.search fld term) (.getMessages fld))
+  "Messages matching opts, at most limit of them, oldest first. Envelope, flags
+   and UID are fetched in one batch, then headers and structure for the selected
+   ones only."
+  [^IMAPFolder fld {:keys [limit since unread-only? include-raw?]}]
+  (let [since    (when since (Date. (long (inst-ms since))))
+        term     (search-term unread-only? since)
+        found    (if term (.search fld term) (.getMessages fld))
         ;; Without since no date check follows, so limit can cut before the fetch.
-        msgs    (into-array Message (cond->> found (and limit (not since)) (take limit)))
-        profile (doto (FetchProfile.)
-                  (.add FetchProfile$Item/ENVELOPE)
-                  (.add FetchProfile$Item/FLAGS)
-                  (.add UIDFolder$FetchProfileItem/UID))
-        _       (.fetch fld msgs profile)
-        dated   (imap-core/filter-by-date (map (fn [m] {:message m :received-at (received-at m)}) msgs)
-                                          since)]
-    (cond->> (map :message dated)
-      limit (take limit))))
+        msgs     (cond->> found (and limit (not since)) (take limit))
+        _        (fetch! fld msgs FetchProfile$Item/ENVELOPE FetchProfile$Item/FLAGS UIDFolder$FetchProfileItem/UID)
+        ;; SINCE matches by date only, so the exact instant is checked here.
+        selected (vec (cond->> msgs
+                        since (remove #(.before (received-at %) since))
+                        limit (take limit)))]
+    (when-not include-raw?
+      (fetch! fld selected IMAPFolder$FetchProfileItem/HEADERS FetchProfile$Item/CONTENT_INFO))
+    selected))
 
 ;; =============================================================================
 ;; Adapter Record
@@ -185,14 +191,13 @@
   (fetch-messages!
     ([this]
      (ports/fetch-messages! this {}))
-    ([this {:keys [folder include-raw? since] :as opts}]
+    ([this {:keys [folder include-raw?] :as opts}]
      (let [folder-name (or folder (:folder this) "INBOX")]
        (log/info "Fetching IMAP messages" {:host (:host this) :folder folder-name})
        (try
          (with-imap-connection* this folder-name true
            (fn [_store ^IMAPFolder fld]
-             (let [opts   (cond-> opts since (assoc :since (Date. (long (inst-ms since)))))
-                   result (mapv #(message->inbound % (.getUID fld ^Message %) include-raw?)
+             (let [result (mapv #(message->inbound % (.getUID fld ^Message %) include-raw?)
                                 (select-messages fld opts))]
                {:success? true :messages result :count (count result)})))
          (catch Exception e
