@@ -60,6 +60,10 @@
 
       :else {:components {:wagoe/payment-provider settings}})))
 
+(def providers
+  "Every adapter :provider accepts. The contract sweep covers exactly these."
+  #{:mock :mollie :stripe})
+
 (defmethod ig/init-key :wagoe/payment-provider
   [_ {:keys [provider api-key webhook-secret webhook-base-url] :as config}]
   (log/infof "Initializing payment provider: %s" provider)
@@ -77,7 +81,7 @@
     (throw (ex-info "Unknown payment provider"
                     {:type     :unknown-provider
                      :provider provider
-                     :valid    #{:mock :mollie :stripe}}))))
+                     :valid    providers}))))
 
 (defmethod ig/halt-key! :wagoe/payment-provider
   [_ _]

@@ -4,14 +4,10 @@
    only local HMAC, request shaping and JSON parsing are exercised."
   (:require [cheshire.core :as json]
             [clj-http.client :as http]
-            [clojure.string :as str]
             [clojure.test :refer [deftest testing is]]
             [wagoe.payments.ports :as ports]
-            [wagoe.payments.shell.adapters.stripe :as stripe])
-  (:import [java.net URLDecoder]
-           [java.nio.charset StandardCharsets]
-           [javax.crypto Mac]
-           [javax.crypto.spec SecretKeySpec]))
+            [wagoe.payments.shell.adapters.stripe :as stripe]
+            [wagoe.payments.test-support :refer [form-decode json-response stripe-sig-header]]))
 
 ;; =============================================================================
 ;; Test helpers
@@ -21,20 +17,6 @@
 
 (def ^:private provider
   (stripe/->StripePaymentProvider "sk_test_key" test-secret))
-
-(defn- compute-signature
-  "Replicate the Stripe HMAC-SHA256 signature computation for use in tests."
-  [raw-body timestamp secret]
-  (let [signed-payload (str timestamp "." raw-body)
-        mac            (Mac/getInstance "HmacSHA256")
-        key            (SecretKeySpec. (.getBytes ^String secret StandardCharsets/UTF_8)
-                                       "HmacSHA256")]
-    (.init mac key)
-    (apply str (map #(format "%02x" (bit-and % 0xff))
-                    (.doFinal mac (.getBytes ^String signed-payload StandardCharsets/UTF_8))))))
-
-(defn- stripe-sig-header [body timestamp secret]
-  (str "t=" timestamp ",v1=" (compute-signature body timestamp secret)))
 
 (defn- fresh-timestamp
   "Seconds since the epoch, read now.
@@ -54,19 +36,6 @@
                    ;; checkout_id is the adapter-internal correlation UUID set at
                    ;; session creation — NOT the cs_… session id.
                    :metadata {:checkout_id "corr_test_abc"}}}})
-
-(defn- form-decode
-  "Decode an application/x-www-form-urlencoded body into a string->string map."
-  [body]
-  (into {}
-        (for [pair (str/split (str body) #"&")
-              :let [[k v] (str/split pair #"=" 2)]]
-          [(URLDecoder/decode ^String k "UTF-8")
-           (URLDecoder/decode (str v) "UTF-8")])))
-
-(defn- json-response [status body-map]
-  {:status status
-   :body   (json/generate-string body-map)})
 
 ;; =============================================================================
 ;; verify-webhook-signature

@@ -67,7 +67,7 @@
    :clojars             com.wagoe/wagoe-payments
    :version             "1.0.1"
    :category            :optional
-   :tier                :incubating
+   :tier                :stable
    ;; The mock accepts any webhook as paid, so it stays in dev and test
    ;; (BOU-564). Prod gets no provider until one is chosen.
    :dev-config-snippet  "  :wagoe/payment-provider\n  {:provider :mock}\n"

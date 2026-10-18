@@ -12,8 +12,8 @@
                                          provider-customer-id]}])
   ;; Hosted checkout for the first payment. Pass :setup-future-usage :off-session
   ;; to store a mandate/payment-method for later off-session charges
-  ;; (Stripe: setup_future_usage=off_session; Mollie throws {:type :not-implemented}
-  ;; until sequenceType=first support lands).
+  ;; (Stripe: setup_future_usage=off_session; Mollie: sequenceType=first, creating
+  ;; a customer unless :provider-customer-id is given).
   ;; :success-url/:cancel-url override :redirect-url when given (Stripe).
   ;; Returns {:checkout-url "..." :provider-checkout-id "..."
   ;;          :correlation-id "..."         ; internal id echoed by the webhook —
@@ -30,7 +30,8 @@
   ;; :idempotency-key is optional — the stable business identity of the charge
   ;; (e.g. "incasso-<subscription>-<period>"). A retry with the same key returns
   ;; the original charge instead of double-charging (Stripe: Idempotency-Key
-  ;; header; Mock: in-memory cache; Mollie: n/a, throws :not-implemented).
+  ;; header, kept 24h; Mollie: the same header, kept about an hour; Mock:
+  ;; in-memory cache).
   ;; Returns {:provider-payment-id "..." :status :pending|:paid|:failed}
 
   (get-payment-status [this provider-checkout-id])
@@ -42,7 +43,8 @@
   ;;          :provider-payment-method-id "..."}   ; optional, mandate follow-up
 
   (expire-checkout-session [this provider-checkout-id])
-  ;; Expire an abandoned checkout session so it can no longer be completed.
+  ;; Expire an abandoned checkout session so it can no longer be completed
+  ;; (Mollie cancels the open payment; its webhook reports :payment.cancelled).
   ;; Returns {:provider-checkout-id "..." :status :expired}
 
   (process-webhook [this raw-body headers])
