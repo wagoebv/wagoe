@@ -8,7 +8,8 @@
 
    FC/IS: shell. The envelope contract is pure and lives in
    `wagoe.platform.core.rpc`."
-  (:require [wagoe.platform.core.http.problem-details :as problem-details]
+  (:require [wagoe.core.utils.text :as text]
+            [wagoe.platform.core.http.problem-details :as problem-details]
             [wagoe.platform.core.rpc :as rpc]
             [clojure.string]
             [clojure.tools.logging :as log]
@@ -93,7 +94,7 @@
    test, another middleware stack — may not, and missing the service key
    because of a capital letter would reject a legitimate caller."
   [headers]
-  (reduce-kv (fn [m k v] (assoc m (clojure.string/lower-case (name k)) v))
+  (reduce-kv (fn [m k v] (assoc m (text/lower-case (name k)) v))
              {} (or headers {})))
 
 (def ^:private malformed-request-types

@@ -1,7 +1,8 @@
 (ns wagoe.devtools.core.recording
   "Pure functions for recording session data structures.
    No I/O, no atoms — just data transformations."
-  (:require [cheshire.core :as json]
+  (:require [wagoe.core.utils.text :as text]
+            [cheshire.core :as json]
             [clojure.string :as str]
             [clojure.edn :as edn]))
 
@@ -64,7 +65,7 @@
         sep (apply str (repeat (count header) "─"))
         rows (map (fn [{:keys [idx request response duration-ms]}]
                     (format "%-5d %-7s %-30s %-8d %-10s"
-                            idx (str/upper-case (name (:method request)))
+                            idx (text/upper-case (name (:method request)))
                             (:uri request) (:status response) (str duration-ms "ms")))
                   entries)]
     (str/join "\n" (concat [header sep] rows))))

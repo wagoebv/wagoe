@@ -5,6 +5,7 @@
    the error reporting protocols, making it easier for feature modules to
    report errors without dealing with protocol details directly."
   (:require
+   [wagoe.core.utils.text :as text]
    [wagoe.observability.errors.ports :as ports]
    [wagoe.observability.core.sql-redaction :as redaction]
    [clojure.string :as str]))
@@ -57,7 +58,7 @@
   [context request-id method path headers]
   (assoc context
          :request-id request-id
-         :http-method (str/upper-case (name method))
+         :http-method (text/upper-case (name method))
          :http-path (str path)
          :http-headers headers))
 
@@ -420,7 +421,7 @@
      nil"
   [context path method]
   (add-breadcrumb context
-                  (str (str/upper-case (name method)) " " path)
+                  (str (text/upper-case (name method)) " " path)
                   "navigation"
                   :info
                   {:path path :method method}))

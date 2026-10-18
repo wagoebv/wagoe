@@ -8,7 +8,8 @@
    and audits the outcome.
 
    See ADR-031 for the threat model and rationale."
-  (:require [clojure.string :as str]))
+  (:require [wagoe.core.utils.text :as text]
+            [clojure.string :as str]))
 
 ;; --- Capability tiers -------------------------------------------------------
 ;; Ordered least → most dangerous. Every tool declares exactly one.
@@ -48,7 +49,7 @@
 (def bnd-env-var  "WAG_ENV")
 (def ci-var       "CI")
 
-(defn- normalise [s] (some-> s str/trim str/lower-case))
+(defn- normalise [s] (some-> s str/trim text/lower-case))
 
 (defn- parse-mode [s]
   (get {"full"       :full

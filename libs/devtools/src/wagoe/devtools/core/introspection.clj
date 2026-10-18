@@ -1,7 +1,8 @@
 (ns wagoe.devtools.core.introspection
   "Pure formatting functions for REPL display of routes, config, and modules.
    No I/O, no side effects — data in, formatted strings out."
-  (:require [clojure.string :as str]))
+  (:require [wagoe.core.utils.text :as text]
+            [clojure.string :as str]))
 
 ;; =============================================================================
 ;; Constants
@@ -65,7 +66,7 @@
     "No routes found."
     (let [header     ["METHOD" "PATH" "HANDLER"]
           rows       (mapv (fn [{:keys [method path handler]}]
-                             [(str/upper-case (name (or method "")))
+                             [(text/upper-case (name (or method "")))
                               (str path)
                               (handler-short-name (str handler))])
                            routes)

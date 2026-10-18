@@ -15,7 +15,8 @@
    
    (case-conversion/camel-case->kebab-case-map {:userId \"123\" :tenantId \"456\"})
    ;; => {:user-id \"123\" :tenant-id \"456\"}"
-  (:require [clojure.string :as str]))
+  (:require [clojure.string :as str]
+            [wagoe.core.utils.text :as text]))
 
 ;; =============================================================================
 ;; camelCase <-> kebab-case Conversions
@@ -41,7 +42,7 @@
     (reduce-kv (fn [acc k v]
                  (let [kebab-key (-> (name k)
                                      (str/replace #"([a-z])([A-Z])" "$1-$2")
-                                     str/lower-case
+                                     text/lower-case
                                      keyword)]
                    (assoc acc kebab-key v)))
                {} m)))
@@ -66,7 +67,7 @@
   (when m
     (reduce-kv (fn [acc k v]
                  (let [camel-key (-> (name k)
-                                     (str/replace #"-(.)" #(str/upper-case (second %1)))
+                                     (str/replace #"-(.)" #(text/upper-case (second %1)))
                                      keyword)]
                    (assoc acc camel-key v)))
                {} m)))
@@ -90,7 +91,7 @@
   (when s
     (-> s
         (str/replace #"([a-z])([A-Z])" "$1-$2")
-        str/lower-case)))
+        text/lower-case)))
 
 (defn kebab-case->camel-case-string
   "Convert a kebab-case string to camelCase string.
@@ -105,7 +106,7 @@
      (kebab-case->camel-case-string \"user-id\") ;; => \"userId\""
   [s]
   (when s
-    (str/replace s #"-(.)" #(str/upper-case (second %1)))))
+    (str/replace s #"-(.)" #(text/upper-case (second %1)))))
 
 ;; =============================================================================
 ;; Deep Transformation Utilities

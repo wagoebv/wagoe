@@ -7,7 +7,8 @@
 
    Every step returns {:ok …} or {:error {:type :oidc/… :message …}}; only a
    bad configuration throws, at boot."
-  (:require [buddy.core.codecs :as codecs]
+  (:require [wagoe.core.utils.text :as text]
+            [buddy.core.codecs :as codecs]
             [buddy.core.hash :as hash]
             [buddy.core.keys :as keys]
             [buddy.sign.jws :as jws]
@@ -133,7 +134,7 @@
       (:error jwk)  jwk
       :else
       (try
-        (let [alg     (keyword (str/lower-case (name (:alg header))))
+        (let [alg     (keyword (text/lower-case (name (:alg header))))
               payload (jws/unsign id-token (keys/jwk->public-key (:ok jwk)) {:alg alg})]
           {:ok (json/parse-string (String. ^bytes payload StandardCharsets/UTF_8) true)})
         (catch Exception _

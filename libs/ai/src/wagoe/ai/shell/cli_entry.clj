@@ -10,7 +10,8 @@
      gen-tests <source-file>                   -- test generator
      sql <description>                         -- SQL copilot
      docs --module <path> --type <type>        -- documentation wizard"
-  (:require [wagoe.config :as config]
+  (:require [wagoe.core.utils.text :as text]
+            [wagoe.config :as config]
             [wagoe.ai.core.context :as ctx]
             [wagoe.ai.core.parsing :as parsing]
             [wagoe.ai.shell.module-wiring]
@@ -315,7 +316,7 @@
   (print (str label " [Y/n]: "))
   (flush)
   (when-let [line (read-line)]
-    (let [input (-> line str/trim str/lower-case)]
+    (let [input (-> line str/trim text/lower-case)]
       (or (empty? input) (= input "y") (= input "yes")))))
 
 (defn cmd-scaffold-parse

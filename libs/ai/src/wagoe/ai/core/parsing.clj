@@ -3,7 +3,8 @@
 
    FC/IS rule: no I/O here — receives raw AI response strings,
    returns parsed data or error maps."
-  (:require [cheshire.core :as json]
+  (:require [wagoe.core.utils.text :as text]
+            [cheshire.core :as json]
             [clojure.edn :as edn]
             [clojure.string :as str]))
 
@@ -49,7 +50,7 @@
                   (cond
                     (nil? open)
                     (if-let [[_ info] (re-matches fence-opener line)]
-                      (assoc acc :open {:info (str/lower-case info) :lines [] :in-string? false})
+                      (assoc acc :open {:info (text/lower-case info) :lines [] :in-string? false})
                       acc)
 
                     (and (not (:in-string? open)) (re-matches fence-closer line))

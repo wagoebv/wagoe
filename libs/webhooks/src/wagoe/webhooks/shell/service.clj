@@ -1,8 +1,8 @@
 (ns wagoe.webhooks.shell.service
   "`IWebhooks`: subscriptions in, one job per delivery out, one log row per
    attempt."
-  (:require [clojure.tools.logging :as log]
-            [clojure.string :as str]
+  (:require [wagoe.core.utils.text :as text]
+            [clojure.tools.logging :as log]
             [malli.core :as m]
             [malli.error :as me]
             [wagoe.jobs.core.job :as job]
@@ -183,7 +183,7 @@
   [{:keys [store transport job-queue idempotency resolve]} settings]
   (let [settings (-> (merge defaults settings)
                      ;; Lower case once, not on every check.
-                     (update :allowed-hosts #(into #{} (map str/lower-case) %)))]
+                     (update :allowed-hosts #(into #{} (map text/lower-case) %)))]
     (->WebhookService store transport job-queue idempotency (or resolve ssrf/system-resolve)
                       (dissoc settings :encryption-key)
                       (crypto/derive-key (:encryption-key settings)))))

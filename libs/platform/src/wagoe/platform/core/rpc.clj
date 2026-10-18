@@ -12,7 +12,8 @@
    `…rpc.server` for that.
 
    FC/IS: pure. Everything here is data in, data out."
-  (:require [clojure.string :as str]))
+  (:require [wagoe.core.utils.text :as text]
+            [clojure.string :as str]))
 
 ;; =============================================================================
 ;; Envelope
@@ -118,7 +119,7 @@
    but a caller constructing a request by hand may not, and losing the
    correlation-id to a capital letter would be silent."
   [headers]
-  (let [lower (reduce-kv (fn [m k v] (assoc m (str/lower-case (name k)) v)) {} (or headers {}))]
+  (let [lower (reduce-kv (fn [m k v] (assoc m (text/lower-case (name k)) v)) {} (or headers {}))]
     (reduce-kv (fn [ctx k header]
                  (if-let [v (get lower header)]
                    (assoc ctx k (if (= :auth-token k)
@@ -251,7 +252,7 @@
 
 (defn- never-connected?
   [^Exception e]
-  (let [message (str/lower-case (or (.getMessage e) ""))]
+  (let [message (text/lower-case (or (.getMessage e) ""))]
     (boolean (some #(str/includes? message %) never-connected-messages))))
 
 (defn classify-exception

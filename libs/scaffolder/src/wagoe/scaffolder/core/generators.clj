@@ -3,7 +3,8 @@
 
    Each generator function takes a template context and returns
    file content as a string. All functions are pure and deterministic."
-  (:require [clojure.string :as str]
+  (:require [wagoe.core.utils.text :as text]
+            [clojure.string :as str]
             [rewrite-clj.zip :as z]
             [rewrite-clj.node :as n]
             [wagoe.scaffolder.core.template :as template]))
@@ -269,7 +270,7 @@
         module-name (:module-name ctx)
         {:keys [repository service]} (ports-parts (first (:entities ctx)))]
     (str "(ns " base-ns "." module-name ".ports\n"
-         "  \"" (str/capitalize module-name) " module port definitions (abstract interfaces).\")\n"
+         "  \"" (text/capitalize module-name) " module port definitions (abstract interfaces).\")\n"
          "\n"
          (banner "Repository Ports")
          repository
@@ -519,7 +520,7 @@ DROP TABLE IF EXISTS %s;
         ;; Plain strings, not [:t ...] markers: the page renders through
         ;; hiccup2, and wagoe-i18n is a library a project may drop (BOU-484).
         headers (->> field-names
-                     (map #(str "[:th \"" (str/capitalize (str/replace % "-" " ")) "\"]"))
+                     (map #(str "[:th \"" (text/capitalize (str/replace % "-" " ")) "\"]"))
                      (str/join " "))
         cells (->> field-names
                    (map #(str "[:td (str (:" % " item))]"))
@@ -535,7 +536,7 @@ DROP TABLE IF EXISTS %s;
          "  \"Generate " entity-lower " listing page.\"\n"
          "  [" entity-plural " _opts]\n"
          "  [:div.page\n"
-         "   [:h1 \"" (str/capitalize entity-plural) "\"]\n"
+         "   [:h1 \"" (text/capitalize entity-plural) "\"]\n"
          "   [:p [:a {:href \"/web/" entity-plural "/new\"} \"" title "\"]]\n"
          "   [:table.items\n"
          "    [:thead [:tr " headers "]]\n"
@@ -1280,7 +1281,7 @@ DROP TABLE IF EXISTS %s;
 ;; the status column, which no request may set.
 
 (defn- state-label [s]
-  (str/capitalize (str/replace s "-" " ")))
+  (text/capitalize (str/replace s "-" " ")))
 
 (defn generate-workflow-file
   "shell/<entity>_workflow.clj: the definition, its registration and the
@@ -3041,18 +3042,18 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s%s%s;%s"
             base-ns
             module-name
             adapter-name
-            (str/capitalize adapter-name)
+            (text/capitalize adapter-name)
             module-name
             port-name
             base-ns
             module-name
-            (str/capitalize adapter-name)
+            (text/capitalize adapter-name)
             record-name
             port-name
             methods-str
             adapter-name
             module-name
-            (str/capitalize adapter-name)
+            (text/capitalize adapter-name)
             module-name
             record-name
             port-name
@@ -3069,7 +3070,7 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s%s%s;%s"
 ;; `#merge` as syntax and keeps every comment.
 
 (defn- humanize [s]
-  (str/capitalize (str/replace (name s) "-" " ")))
+  (text/capitalize (str/replace (name s) "-" " ")))
 
 (defn- edn-str
   "`x` printed without the commas pr-str puts between map entries. Only

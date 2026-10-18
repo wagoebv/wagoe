@@ -1,7 +1,8 @@
 (ns wagoe.webhooks.core.delivery
   "Which subscriptions an event goes to, what is sent, and what an attempt's
    outcome means. Pure: the clock, ids and I/O come from the shell."
-  (:require [cheshire.core :as json]
+  (:require [wagoe.core.utils.text :as text]
+            [cheshire.core :as json]
             [clojure.string :as str]
             [wagoe.events.core.event :as event])
   (:import (java.net URI URISyntaxException)))
@@ -75,7 +76,7 @@
    the host is private is the shell's question, since it needs DNS."
   [url {:keys [require-https?]}]
   (let [uri (try (URI. (str url)) (catch URISyntaxException _ nil))
-        scheme (some-> uri .getScheme str/lower-case)]
+        scheme (some-> uri .getScheme text/lower-case)]
     (cond
       (str/blank? (str url))                 "URL is required"
       (nil? uri)                             "URL is not a valid URI"
@@ -87,7 +88,7 @@
 (defn url-host
   "The host of `url`, lower case, without IPv6 brackets."
   [url]
-  (some-> (URI. (str url)) .getHost str/lower-case (str/replace #"^\[|\]$" "")))
+  (some-> (URI. (str url)) .getHost text/lower-case (str/replace #"^\[|\]$" "")))
 
 ;; =============================================================================
 ;; Outcome

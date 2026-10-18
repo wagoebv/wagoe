@@ -3,7 +3,8 @@
 
   This namespace contains no side effects - only pure functions for validating
   files based on size, type, extension, etc."
-  (:require [clojure.string :as str]))
+  (:require [wagoe.core.utils.text :as text]
+            [clojure.string :as str]))
 
 ;; ============================================================================
 ;; Constants
@@ -82,7 +83,7 @@
     (when-let [dot-index (str/last-index-of filename ".")]
       (-> filename
           (subs (inc dot-index))
-          str/lower-case))))
+          text/lower-case))))
 
 (defn mime-type-from-extension
   "Get MIME type from file extension."

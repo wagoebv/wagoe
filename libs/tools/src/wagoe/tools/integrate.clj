@@ -23,7 +23,8 @@
 ;; `shell/module_wiring.clj`, the require to add to the app's config namespace.
 
 (ns wagoe.tools.integrate
-  (:require [wagoe.tools.ansi :refer [bold green red cyan dim]]
+  (:require [wagoe.tools.text :as text]
+            [wagoe.tools.ansi :refer [bold green red cyan dim]]
             [wagoe.tools.config-edn :as config-edn]
             [wagoe.tools.project :as project]
             [clojure.java.io :as io]
@@ -107,7 +108,7 @@
    /web, and nothing read it (BOU-562)."
   [module-name]
   (let [ns-name (module-ns-name module-name)]
-    (str "  ;; " (str/capitalize ns-name) " module (bb scaffold integrate)\n"
+    (str "  ;; " (text/capitalize ns-name) " module (bb scaffold integrate)\n"
          "  :wagoe/" ns-name "\n"
          "  {:enabled? true}")))
 

@@ -4,14 +4,14 @@
    The pure parts — validation, kebab->snake conversion, plan building — live in
    `wagoe.platform.core.database.seed`. This namespace owns the I/O: reading the
    file, acquiring the datasource, and executing the inserts."
-  (:require [wagoe.platform.core.database.seed :as core-seed]
+  (:require [wagoe.core.utils.text :as text]
+            [wagoe.platform.core.database.seed :as core-seed]
             [wagoe.platform.shell.adapters.database.common.execution :as execution]
             [wagoe.platform.shell.adapters.database.config :as db-config]
             [wagoe.platform.shell.adapters.database.factory :as factory]
             [wagoe.platform.ports.database :as db-ports]
             [clojure.edn :as edn]
             [clojure.java.io :as io]
-            [clojure.string :as str]
             [clojure.tools.logging :as log]
             [honey.sql :as sql]
             [integrant.core :as ig]
@@ -106,7 +106,7 @@
   (let [md     (.getMetaData c)
         catalog (try (.getCatalog c) (catch Exception _ nil))
         schema (try (.getSchema c) (catch Exception _ nil))
-        lc     #(some-> ^String % str/lower-case)
+        lc     #(some-> ^String % text/lower-case)
         ;; Where the engine has no uuid type (MySQL: CHAR(36)), the adapter's.
         uuid   (lc (db-ports/column-type adapter :uuid))
         type-of #(let [t (lc (.getString ^ResultSet % "TYPE_NAME"))]
@@ -114,7 +114,7 @@
         cols   (fn [t] (into {} (metadata-rows (.getColumns md catalog schema t "%")
                                                #(vector (lc (.getString ^ResultSet % "COLUMN_NAME"))
                                                         (type-of %)))))
-        [t columns] (some #(let [c (cols %)] (when (seq c) [% c])) [table (str/upper-case table)])]
+        [t columns] (some #(let [c (cols %)] (when (seq c) [% c])) [table (text/upper-case table)])]
     (when t
       (let [pk (set (metadata-rows (.getPrimaryKeys md catalog schema t)
                                    #(lc (.getString ^ResultSet % "COLUMN_NAME"))))]

@@ -7,7 +7,8 @@
    - Orchestrate scaffolder service calls
    - Format output (list files, success/error messages)
    - Handle errors and exit codes"
-  (:require [wagoe.scaffolder.ports :as ports]
+  (:require [wagoe.core.utils.text :as text]
+            [wagoe.scaffolder.ports :as ports]
             [wagoe.scaffolder.core.template :as template]
             [cheshire.core :as json]
             [clojure.string :as str]
@@ -159,7 +160,7 @@
     :validate [#(re-matches #"^/.*$" %)
                "Must start with /"]]
    [nil "--method METHOD" "HTTP method (GET, POST, PUT, DELETE, PATCH) (required)"
-    :parse-fn str/upper-case
+    :parse-fn text/upper-case
     :validate [#(contains? #{"GET" "POST" "PUT" "DELETE" "PATCH"} %)
                "Must be GET, POST, PUT, DELETE, or PATCH"]]
    [nil "--handler-name NAME" "Handler function name (kebab-case) (required)"
@@ -845,7 +846,7 @@
        :errors errors}
       (let [request {:module-name (:module-name opts)
                      :path (:path opts)
-                     :method (keyword (str/lower-case (:method opts)))
+                     :method (keyword (text/lower-case (:method opts)))
                      :handler-name (:handler-name opts)
                      :output-dir (:output-dir opts)
                      :dry-run (:dry-run opts)

@@ -14,7 +14,8 @@
      WGE-6xx  FC/IS boundary violations
      WGE-7xx  Tooling / build errors
      WGE-8xx  MCP guardrails (wagoe-mcp)"
-  (:require [clojure.edn :as edn]
+  (:require [wagoe.core.utils.text :as text]
+            [clojure.edn :as edn]
             [clojure.java.io :as io]
             [clojure.string :as str]))
 
@@ -39,7 +40,7 @@
    from an old log or doc still resolves."
   [code]
   (when (string? code)
-    (str/replace (str/upper-case code) #"^BND-" "WGE-")))
+    (str/replace (text/upper-case code) #"^BND-" "WGE-")))
 
 (defn lookup
   "Look up an error code. Returns the error definition map or nil."

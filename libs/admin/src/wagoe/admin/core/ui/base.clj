@@ -5,7 +5,8 @@
    heuristics, and small formatting/label utilities. Must NOT require any
    other wagoe.admin.core.ui.* implementation namespace — it is the
    dependency root that the focused sections build on."
-  (:require [wagoe.core.utils.type-conversion :as tc]
+  (:require [wagoe.core.utils.text :as text]
+            [wagoe.core.utils.type-conversion :as tc]
             [wagoe.shared.ui.core.components :as ui]
             [wagoe.shared.ui.core.table :as table-ui]
             [clojure.string :as str])
@@ -396,7 +397,7 @@
 
        (= field-type :enum)
        [:span.enum-badge {:class "badge ui-badge ui-badge-outline enum-badge"}
-        (str/capitalize (name value))]
+        (text/capitalize (name value))]
 
        (= field-type :json)
        [:code (str value)]
@@ -416,7 +417,7 @@
   (if-let [{:keys [instance-id state]} workflow]
     [:a.workflow-state {:href (str "/web/admin/workflows/" instance-id)}
      [:span.enum-badge {:class "badge ui-badge ui-badge-outline enum-badge"}
-      (str/capitalize (name state))]]
+      (text/capitalize (name state))]]
     [:span.null-value {:class "badge ui-badge ui-badge-neutral null-value"} "—"]))
 
 ;; =============================================================================
@@ -527,7 +528,7 @@
   (-> field-name
       name
       (str/replace #"[-_]" " ")
-      str/capitalize))
+      text/capitalize))
 
 (defn get-field-errors
   "Extract errors for a specific field from validation result.

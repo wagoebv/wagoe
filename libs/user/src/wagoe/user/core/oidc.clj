@@ -4,7 +4,8 @@
 
    Pure. Fetching documents, verifying signatures and writing sessions is
    wagoe.user.shell.oidc. Failures are values: {:error {:type … :message …}}."
-  (:require [buddy.core.bytes :as bytes]
+  (:require [wagoe.core.utils.text :as text]
+            [buddy.core.bytes :as bytes]
             [buddy.core.codecs :as codecs]
             [buddy.core.hash :as hash]
             [clojure.string :as str])
@@ -69,7 +70,7 @@
       (error :configuration-error (str "OIDC provider " id " :default-role must be :user or :viewer"))
 
       :else
-      {:ok (merge {:label          (str/capitalize (name id))
+      {:ok (merge {:label          (text/capitalize (name id))
                    :link-by-email? false
                    :trust-email?   false
                    :auto-create?   false}
@@ -111,7 +112,7 @@
   "The providers to offer on the login page, as [{:id :label}] in name order."
   [providers]
   (->> providers
-       (map (fn [[id p]] {:id (name id) :label (or (:label p) (str/capitalize (name id)))}))
+       (map (fn [[id p]] {:id (name id) :label (or (:label p) (text/capitalize (name id)))}))
        (sort-by :id)
        vec))
 
@@ -212,7 +213,7 @@
    must agree. Returns {:ok jwk} or {:error {:type :oidc/unknown-key …}}, the
    one a caller answers by refetching the key set."
   [jwks {:keys [alg kid]}]
-  (let [alg (some-> alg name str/upper-case)]
+  (let [alg (some-> alg name text/upper-case)]
     (if-not (contains? signing-algs alg)
       (error :oidc/invalid-token "Unsupported id token algorithm" :alg alg)
       (let [kty      (if (str/starts-with? alg "ES") "EC" "RSA")
@@ -264,7 +265,7 @@
   (let [v (:email_verified claims)]
     (when (and (not (blank-string? (:email claims)))
                (or (true? v) (= "true" v) (true? (:trust-email? provider))))
-      (str/lower-case (:email claims)))))
+      (text/lower-case (:email claims)))))
 
 (defn- display-name [claims email]
   (let [n (str/trim (str (or (:name claims)

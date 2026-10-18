@@ -2,7 +2,8 @@
   "Pure functions for the guidance engine.
    Renders contextual help messages, startup dashboards, and tips.
    No I/O, no logging — all pure data transformations."
-  (:require [clojure.string]))
+  (:require [wagoe.core.utils.text :as text]
+            [clojure.string]))
 
 ;; =============================================================================
 ;; Guidance levels
@@ -195,7 +196,7 @@
    defect as no palette at all (BOU-319)."
   [groups]
   (let [format-group (fn [[group cmds]]
-                       (str "  " (clojure.string/upper-case (name group)) ":\n"
+                       (str "  " (text/upper-case (name group)) ":\n"
                             (clojure.string/join
                              "\n"
                              (map (fn [{:keys [name desc]}]

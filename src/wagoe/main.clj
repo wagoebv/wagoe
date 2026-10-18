@@ -14,7 +14,8 @@
      java -jar wagoe-standalone.jar worker            # Start a background worker
      java -jar wagoe-standalone.jar service payments  # Start one module as a service
      java -jar wagoe-standalone.jar cli [args]        # Run CLI commands"
-  (:require [wagoe.config :as config]
+  (:require [wagoe.core.utils.text :as text]
+            [wagoe.config :as config]
             [wagoe.system-config :as sys-config]
             [wagoe.platform.shell.system.wiring :as wiring] ; Integrant init functions, and start!/stop!
             ;; Load feature modules' Integrant init/halt methods at the app layer
@@ -236,7 +237,7 @@
   [& args]
   (let [mode (first args)
         remaining-args (rest args)]
-    (case (str/lower-case (or mode "server"))
+    (case (text/lower-case (or mode "server"))
       "server"
       (start-server!)
 

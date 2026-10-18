@@ -31,7 +31,8 @@
 ;; per entry (BOU-250 — an allowlist without a stated reason is where bugs hide).
 
 (ns wagoe.tools.check-doc-counts
-  (:require [clojure.edn :as edn]
+  (:require [wagoe.tools.text :as text]
+            [clojure.edn :as edn]
             [clojure.java.io :as io]
             [clojure.set]
             [clojure.string :as str]
@@ -133,7 +134,7 @@
   "`\"29\"` and `\"Twenty-nine\"` both as 29; nil when neither."
   [s]
   (or (parse-long s)
-      (get number-words (str/lower-case s))))
+      (get number-words (text/lower-case s))))
 
 (def gap-disqualifiers
   "Words that, between the number and the noun, mean the number is not a count
@@ -150,7 +151,7 @@
 (defn- counts-libraries?
   "False when the words between number and noun disqualify the match."
   [gap]
-  (->> (str/split (str/lower-case (str/trim gap)) #"\s+")
+  (->> (str/split (text/lower-case (str/trim gap)) #"\s+")
        (remove str/blank?)
        (not-any? gap-disqualifiers)))
 

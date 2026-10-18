@@ -2,7 +2,8 @@
   "Which integrity constraint a database refused a write on, read from what the
    driver reports: SQLState, vendor code and message. H2, PostgreSQL, SQLite
    and MySQL."
-  (:require [clojure.string :as str]
+  (:require [wagoe.core.utils.text :as text]
+            [clojure.string :as str]
             [wagoe.observability.core.sql-redaction :as redaction]))
 
 (defn- kind
@@ -71,7 +72,7 @@
   (some-> (re-find statement-table-pattern (str sql))
           second
           (str/replace #"[\"`]" "")
-          str/lower-case))
+          text/lower-case))
 
 (defn- still-referenced?
   "Whether a foreign key refused removing or re-keying a row another row
@@ -87,7 +88,7 @@
                (#{23503 1451} error-code)                     true
                (re-find #"update or delete on table" message) true
                (re-find #"insert or update on table" message) false
-               :else (and table target (not= (str/lower-case table) target))))))
+               :else (and table target (not= (text/lower-case table) target))))))
 
 (defn with-columns
   "`v` naming the key's `columns`: `:field` for one, `:fields` for several

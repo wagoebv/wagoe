@@ -1,6 +1,7 @@
 (ns wagoe.payments.shell.module-wiring
   "Integrant wiring for the :wagoe/payment-provider component."
-  (:require [wagoe.payments.shell.adapters.mock :as mock]
+  (:require [wagoe.core.utils.text :as text]
+            [wagoe.payments.shell.adapters.mock :as mock]
             [wagoe.payments.shell.adapters.mollie :as mollie]
             [wagoe.payments.shell.adapters.stripe :as stripe]
             [clojure.string :as str]
@@ -28,7 +29,7 @@
   [provider required config]
   (when-let [missing (seq (filter (fn [[k _env]] (blank? (get config k))) required))]
     (throw (ex-info (format "%s payment provider configured but %s nil/blank — set %s (see resources/conf/<env>/config.edn)"
-                            (str/capitalize (name provider))
+                            (text/capitalize (name provider))
                             (str/join ", " (map (comp str first) missing))
                             (str/join ", " (map second missing)))
                     {:type         :configuration-error

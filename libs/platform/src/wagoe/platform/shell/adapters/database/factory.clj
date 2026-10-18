@@ -17,7 +17,8 @@
      
      (def ctx (dbf/db-context {:adapter :sqlite :database-path \"./app.db\"}))
      (db/execute-query! ctx {:select [:*] :from [:users]})"
-  (:require [wagoe.platform.shell.adapters.database.common.core :as core]
+  (:require [wagoe.core.utils.text :as text]
+            [wagoe.platform.shell.adapters.database.common.core :as core]
             [wagoe.platform.ports.database :as protocols]
             [clojure.string :as str]
             [clojure.tools.logging :as log])
@@ -104,7 +105,7 @@
   "The engine a JDBC product name names: :postgresql, :mysql (MariaDB too),
    :sqlite or :h2. nil for anything else (ADR-039)."
   [product]
-  (let [p (str/lower-case (str product))]
+  (let [p (text/lower-case (str product))]
     (cond
       (str/includes? p "postgres") :postgresql
       (or (str/includes? p "mysql")

@@ -10,7 +10,8 @@
 ;;   bb guide error WGE-xxx      # Look up an error code
 
 (ns wagoe.tools.help
-  (:require [wagoe.tools.check :as check]
+  (:require [wagoe.tools.text :as text]
+            [wagoe.tools.check :as check]
             [wagoe.tools.db :as db]
             [wagoe.tools.report :as report]
             [wagoe.tools.ansi :refer [bold green red yellow dim cyan]]
@@ -487,7 +488,7 @@
         (println (dim "Usage: bb guide error WGE-xxx")))
 
       :else
-      (let [upper-code (str/replace (str/upper-case code) #"^BND-" "WGE-") ; pre-1.0.1 spelling
+      (let [upper-code (str/replace (text/upper-case code) #"^BND-" "WGE-") ; pre-1.0.1 spelling
             entry      (get catalog upper-code)]
         (println)
         (if-not entry
@@ -511,7 +512,7 @@
 ;; =============================================================================
 
 (defn- help-topic [topic]
-  (let [t (str/lower-case topic)]
+  (let [t (text/lower-case topic)]
     (if-let [f (get topic-fns t)]
       (do (println) (f))
       (do

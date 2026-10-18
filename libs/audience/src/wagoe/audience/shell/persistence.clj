@@ -13,7 +13,8 @@
    JSON columns use cheshire for serialisation.  On PostgreSQL the
    columns are JSONB; on H2 (tests) they are stored as TEXT — both
    are handled by `->json` below."
-  (:require [wagoe.audience.ports :as ports]
+  (:require [wagoe.core.utils.text :as text]
+            [wagoe.audience.ports :as ports]
             [cheshire.core :as json]
             [next.jdbc :as jdbc]
             [next.jdbc.result-set :as rs]
@@ -74,7 +75,7 @@
   "The adapter behind `datasource`, from its product name."
   [datasource]
   (with-open [conn (jdbc/get-connection datasource)]
-    (let [product (str/lower-case (str (.getDatabaseProductName (.getMetaData conn))))]
+    (let [product (text/lower-case (str (.getDatabaseProductName (.getMetaData conn))))]
       (cond
         (str/includes? product "h2")         :h2
         (str/includes? product "postgresql") :postgresql

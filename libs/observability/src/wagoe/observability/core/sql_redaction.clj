@@ -3,7 +3,8 @@
    and reported (BOU-626, BOU-628, BOU-629). Pure, on the driver's SQLState,
    vendor code and message: every library reporting through observability gets
    it, whatever threw (BOU-633)."
-  (:require [clojure.string :as str]
+  (:require [wagoe.core.utils.text :as text]
+            [clojure.string :as str]
             [clojure.walk :as walk])
   (:import [clojure.lang Reflector]
            [java.sql SQLException]))
@@ -18,7 +19,7 @@
                 (str/replace #"[`\"]" "")
                 (str/split #"\.")
                 last
-                str/lower-case)]
+                text/lower-case)]
     (when (and (not (str/includes? s ",")) (re-matches #"[a-z][a-z0-9_]*" col))
       (keyword (str/replace col "_" "-")))))
 

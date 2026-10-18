@@ -25,6 +25,7 @@ The four namespaces below carry almost all the traffic: `utils.type-conversion`,
 | Namespace | Key fns |
 |-----------|---------|
 | `wagoe.core.utils.case-conversion` | `snake-case->kebab-case-map`, `kebab-case->snake-case-map`, `camel-case->kebab-case-map`, `kebab-case->camel-case-map` (all nil-safe map transforms); string variants `*-string`; keyword variant `kebab-case->snake-case-keyword`; `deep-transform-keys` for nested structures |
+| `wagoe.core.utils.text` | `lower-case` / `upper-case` / `capitalize` with `Locale/ROOT`. Use them, not `clojure.string`'s, which follow the JVM locale (on tr-TR `I` lowers to `ı`); clj-kondo flags those in src |
 | `wagoe.core.utils.type-conversion` | `uuid->string` / `string->uuid`, `instant->string` / `string->instant` (handles `Instant`, `OffsetDateTime`, `java.sql.Timestamp`, ISO strings), `keyword->string` / `string->keyword`, `boolean->int` / `int->boolean`, `string->boolean` / `string->int` / `string->enum`; CLI parsers `parse-uuid-string`, `parse-int` (positive-only), `parse-bool`. `snake-case->kebab-case` / `kebab-case->snake-case` delegate to `case-conversion` |
 
 All conversions are **nil-safe** and return `nil` (or the input unchanged, for

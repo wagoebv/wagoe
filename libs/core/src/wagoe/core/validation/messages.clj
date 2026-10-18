@@ -16,7 +16,8 @@
    - i18n-ready: All templates support parameter interpolation
    - Pure functions: No side effects, deterministic output
    - Sanitized: PII and sensitive data are filtered"
-  (:require [clojure.string :as str]
+  (:require [wagoe.core.utils.text :as text]
+            [clojure.string :as str]
             [wagoe.core.validation.codes :as codes]))
 
 ;; =============================================================================
@@ -39,8 +40,8 @@
    Algorithm adapted from Wikipedia/standard implementations."
   [s1 s2]
   (when (and s1 s2)
-    (let [s1 (str/lower-case (str s1))
-          s2 (str/lower-case (str s2))
+    (let [s1 (text/lower-case (str s1))
+          s2 (text/lower-case (str s2))
           len1 (count s1)
           len2 (count s2)]
       (if (or (zero? len1) (zero? len2))
@@ -211,7 +212,7 @@
   [field]
   (let [field-str (name field)
         words (str/split field-str #"-")
-        capitalized (map str/capitalize words)]
+        capitalized (map text/capitalize words)]
     ;; Handle acronyms
     (->> capitalized
          (map #(cond
@@ -269,10 +270,10 @@
   [value allowed-values {:keys [threshold max-distance]
                          :or {threshold 0.6 max-distance 2}}]
   (when (and value (seq allowed-values))
-    (let [value-str (str/lower-case (str value))
+    (let [value-str (text/lower-case (str value))
           scored (->> allowed-values
                       (map (fn [allowed]
-                             (let [allowed-str (str/lower-case (str allowed))
+                             (let [allowed-str (text/lower-case (str allowed))
                                    score (similarity-score value-str allowed-str)
                                    distance (damerau-levenshtein-distance value-str allowed-str)]
                                {:value allowed

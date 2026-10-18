@@ -2,6 +2,7 @@
 
  :deps {wagoe/config            {:local/root "../config"}
          org.clojure/clojure          {:mvn/version "1.12.6"}
+         wagoe/core {:local/root "../core"}
         ;; wagoe.ai.shell.cli-entry requires clojure.tools.cli. It was never
         ;; declared, so the published POM did not carry it and anything
         ;; resolving wagoe-ai on its own failed to load the CLI entrypoint

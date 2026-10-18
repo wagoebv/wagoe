@@ -1,6 +1,6 @@
 (ns wagoe.core.utils.type-conversion
   "Generic type and case conversion utilities."
-  (:require [clojure.string :as str]
+  (:require [wagoe.core.utils.text :as text]
             [wagoe.core.utils.case-conversion :as case-conv])
   (:import [java.util UUID]
            [java.time Instant OffsetDateTime]))
@@ -107,7 +107,7 @@
   [value]
   (cond
     (boolean? value) value
-    (string? value) (case (.toLowerCase value)
+    (string? value) (case (text/lower-case value)
                       "true" true
                       "false" false
                       "1" true
@@ -189,7 +189,7 @@
    Returns:
      Boolean value if valid format, nil if invalid"
   [s]
-  (case (str/lower-case s)
+  (case (text/lower-case s)
     ("true" "1" "yes" "y") true
     ("false" "0" "no" "n") false
     nil))

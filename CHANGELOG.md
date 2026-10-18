@@ -150,6 +150,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **On a Turkish JVM `userId` became `user-ıd`** (BOU-732): case conversion no longer uses the JVM locale.
+  Ran on tr-TR? Re-lower stored emails. Use `wagoe.core.utils.text`; clj-kondo flags `clojure.string`'s case fns.
 - **An admin write a CHECK constraint refused answered 500** (BOU-734). It is a form error now, and elsewhere a
   `:conflict` with `:constraint :check` (409) rather than a `:database-error`. No action needed.
 - **Register and create-user form errors were English only** (BOU-554): password-policy and field errors now come from the

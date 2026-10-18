@@ -4,7 +4,8 @@
    This namespace contains comprehensive validation functions that implement
    business rules beyond basic schema validation. All functions are pure
    and follow FC/IS architectural principles."
-  (:require [wagoe.user.core.password-policy :as password-policy]
+  (:require [wagoe.core.utils.text :as text]
+            [wagoe.user.core.password-policy :as password-policy]
             [wagoe.user.schema :as schema]
             [clojure.string :as str]
             [malli.core :as m]
@@ -231,7 +232,7 @@
          (or (not require-lowercase?) (re-find #"[a-z]" password))
          (or (not require-numbers?) (re-find #"\d" password))
          (or (not require-special-chars?) (re-find #"[!@#$%^&*(),.?\":{}|<>]" password))
-         (not-any? #(str/includes? (str/lower-case password) (str/lower-case %)) forbidden-patterns))))
+         (not-any? #(str/includes? (text/lower-case password) (text/lower-case %)) forbidden-patterns))))
 
 (defn validate-password-constraint
   "Pure function: Generate detailed error for invalid password."
@@ -259,7 +260,7 @@
                      (and require-special-chars? (not (re-find #"[!@#$%^&*(),.?\":{}|<>]" password)))
                      (conj "at least one special character (!@#$%^&*(),.?\":{}|<>)")
 
-                     (some #(str/includes? (str/lower-case password) (str/lower-case %)) forbidden-patterns)
+                     (some #(str/includes? (text/lower-case password) (text/lower-case %)) forbidden-patterns)
                      (conj "not contain common weak patterns"))]
     {:field :password
      :code :password-policy-violation

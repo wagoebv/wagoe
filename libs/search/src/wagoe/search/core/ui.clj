@@ -10,11 +10,11 @@
      search-results-fragment — HTMX results area
      indices-page         — list all registered indices (full page)
      index-detail-page    — index config + live search test form (full page)"
-  (:require [wagoe.shared.ui.core.home :as home]
+  (:require [wagoe.core.utils.text :as text]
+            [wagoe.shared.ui.core.home :as home]
             [wagoe.shared.ui.core.icons :as icons]
             [wagoe.shared.ui.core.layout :as layout]
-            [wagoe.shared.ui.core.components :as ui]
-            [clojure.string :as str]))
+            [wagoe.shared.ui.core.components :as ui]))
 
 ;; =============================================================================
 ;; Badges
@@ -36,7 +36,7 @@
                   (:a :A) :success
                   (:b :B) :info
                   :neutral)]
-    (ui/badge [:t :search/badge-weight {:weight (str/upper-case (name weight))}]
+    (ui/badge [:t :search/badge-weight {:weight (text/upper-case (name weight))}]
               {:variant variant
                :class "status-badge"})))
 

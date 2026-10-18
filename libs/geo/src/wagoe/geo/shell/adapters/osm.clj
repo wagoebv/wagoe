@@ -7,7 +7,8 @@
    Usage:
      (def adapter (create-nominatim-adapter {:user-agent \"MyApp/1.0 (contact@example.com)\"}))
      (geocode adapter {:postcode \"1012 JS\" :city \"Amsterdam\"})"
-  (:require [wagoe.geo.ports :as ports]
+  (:require [wagoe.core.utils.text :as text]
+            [wagoe.geo.ports :as ports]
             [wagoe.geo.shell.adapters.support :as support]
             [clj-http.client :as http]
             [clojure.string :as str]
@@ -121,7 +122,7 @@
     :or   {base-url         default-base-url
            min-interval-ms  default-min-interval-ms}}]
   ;; The public server's policy: 1 req/s and a User-Agent naming the app. A self-hosted one sets its own.
-  (let [public?  (= "nominatim.openstreetmap.org" (some-> (URI. base-url) .getHost str/lower-case))
+  (let [public?  (= "nominatim.openstreetmap.org" (some-> (URI. base-url) .getHost text/lower-case))
         interval (if public? (max min-interval-ms default-min-interval-ms) min-interval-ms)]
     (when (not= interval min-interval-ms)
       (log/warn "Geo: OpenStreetMap allows 1 request per second; ignoring the faster rate limit."

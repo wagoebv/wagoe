@@ -1,6 +1,6 @@
 (ns wagoe.admin.core.db-errors
   "Reading database constraint errors the admin can explain to a user."
-  (:require [clojure.string :as str]))
+  (:require [wagoe.core.utils.text :as text]))
 
 (def ^:private not-null-patterns
   [#"NOT NULL constraint failed: (?:[^.\s()]+\.)?([^\s()]+)" ; SQLite
@@ -15,7 +15,7 @@
   [message]
   (when message
     (some (fn [pattern]
-            (some-> (re-find pattern message) second str/lower-case))
+            (some-> (re-find pattern message) second text/lower-case))
           not-null-patterns)))
 
 (def ^:private foreign-key-patterns
@@ -32,5 +32,5 @@
   (when message
     (some (fn [pattern]
             (when-let [[_ column] (re-find pattern message)]
-              {:column (not-empty (str/lower-case column))}))
+              {:column (not-empty (text/lower-case column))}))
           foreign-key-patterns)))
