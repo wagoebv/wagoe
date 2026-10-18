@@ -12,12 +12,6 @@
             [wagoe.platform.core.http.pages :as pages]
             [wagoe.ui-style :as ui-style]))
 
-(def ^:private default-css
-  (ui-style/bundle :pilot))
-
-(def ^:private default-js
-  (ui-style/js-bundle :pilot))
-
 (def pilot-css
   (ui-style/bundle :pilot))
 
@@ -98,12 +92,16 @@
   [title content & [opts]]
   (let [{:keys [user flash css js skip-header body-attrs brand brand-href
                 meta-description lang theme-color extra-head csrf-token]
-         :or   {css         default-css
-                js          default-js
+         :or   {js          pilot-js
                 skip-header false
-                ;; wagoe-default gives bare elements the styling pico used to.
-                body-attrs  {:class "wagoe-default"}
+                body-attrs  {}
                 lang        "en"}} opts
+        ;; On the default stack, wagoe-default gives bare elements the styling
+        ;; pico used to; a caller's own body class is kept beside it.
+        body-attrs (cond-> body-attrs
+                     (nil? css) (assoc :class (str "wagoe-default"
+                                                   (some->> (:class body-attrs) (str " ")))))
+        css        (or css pilot-css)
         ;; Falls back to the token bound for the current request, so handlers need
         ;; not thread it explicitly. An explicit :csrf-token opt still overrides.
         csrf-token (or csrf-token (csrf/current-token))]
@@ -191,7 +189,7 @@
     [:meta {:charset "UTF-8"}]
     [:meta {:name "viewport" :content "width=device-width, initial-scale=1.0"}]
     [:title (str status " - " title)]
-    (for [css-file default-css]
+    (for [css-file pilot-css]
       [:link {:rel "stylesheet" :href css-file}])]
    [:body.wagoe-default
     [:div.error-page

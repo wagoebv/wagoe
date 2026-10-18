@@ -35,8 +35,8 @@
    :pilot       pilot-css
    :admin-pilot admin-pilot-css})
 
-(def base-js
-  "Base JavaScript stack.
+(def pilot-js
+  "The default JavaScript stack.
    components.js must load before alpine.min.js to register shared Alpine components.
 
    forms.js is here rather than in the admin bundle because it makes htmx swap
@@ -51,9 +51,9 @@
    "/js/htmx-ext-sse.min.js"
    "/js/forms.js"])
 
-(def pilot-js
-  "Pilot JavaScript stack, the default."
-  base-js)
+(def base-js
+  "Same as `pilot-js`; the `:base` key's JavaScript."
+  pilot-js)
 
 (def admin-pilot-js
   "Admin pilot JavaScript stack.
@@ -66,7 +66,7 @@
    "/js/htmx.min.js"
    "/js/htmx-ext-sse.min.js"
    "/js/forms.js"
-   "/js/keyboard.js"]) ;; forms.js is also in base-js; the two bundles are alternatives, not layers
+   "/js/keyboard.js"]) ;; forms.js is also in pilot-js; the two bundles are alternatives, not layers
 
 (def js-bundles
   "Registry of known JavaScript bundles."

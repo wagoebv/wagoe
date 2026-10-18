@@ -1730,61 +1730,45 @@ input[type="number"] {
 /* Element styles for pages on the default layout (body.wagoe-default), which
    used to get them from pico. Layered base, so any class wins over them. */
 @layer base {
-  :where(.wagoe-default) h1,
-  :where(.wagoe-default) h2,
-  :where(.wagoe-default) h3,
-  :where(.wagoe-default) h4 {
-    @apply font-semibold leading-tight text-base-content;
-  }
-  :where(.wagoe-default) h1 { @apply mb-4 font-bold; font-size: 2rem; }
-  :where(.wagoe-default) h2 { @apply mt-6 mb-3; font-size: 1.5rem; }
-  :where(.wagoe-default) h3 { @apply mt-5 mb-2; font-size: 1.25rem; }
-  :where(.wagoe-default) h4 { @apply mt-4 mb-2; font-size: 1.125rem; }
-  :where(.wagoe-default) p,
-  :where(.wagoe-default) ul,
-  :where(.wagoe-default) ol,
-  :where(.wagoe-default) pre,
-  :where(.wagoe-default) blockquote,
-  :where(.wagoe-default) table,
-  :where(.wagoe-default) form { @apply mb-4; }
-  :where(.wagoe-default) ul { @apply list-disc pl-6; }
-  :where(.wagoe-default) ol { @apply list-decimal pl-6; }
-  /* Plain declarations: daisy's components applied here would land in a
-     sub-layer, which the preflight reset beats. */
-  :where(.wagoe-default) main a:not([class]) {
-    color: var(--color-primary);
-    text-decoration: underline;
-  }
-  :where(.wagoe-default) code,
-  :where(.wagoe-default) pre { @apply rounded bg-base-300 font-mono text-sm; }
-  :where(.wagoe-default) code { @apply px-1; }
-  :where(.wagoe-default) pre { @apply overflow-x-auto p-3; }
-  :where(.wagoe-default) blockquote { @apply border-l-4 border-base-300 pl-4 italic; }
-  :where(.wagoe-default) hr { @apply my-6 border-base-300; }
+  :where(.wagoe-default) {
+    h1, h2, h3, h4 { @apply font-semibold leading-tight text-base-content; }
+    h1 { @apply mb-4 font-bold; font-size: 2rem; }
+    h2 { @apply mt-6 mb-3; font-size: 1.5rem; }
+    h3 { @apply mt-5 mb-2; font-size: 1.25rem; }
+    h4 { @apply mt-4 mb-2; font-size: 1.125rem; }
+    p, ul, ol, pre, blockquote, table, form { @apply mb-4; }
+    ul { @apply list-disc pl-6; }
+    ol { @apply list-decimal pl-6; }
+    /* Plain declarations: daisy's components applied here would land in a
+       sub-layer, which the preflight reset beats. */
+    main a:not([class]) {
+      color: var(--color-primary);
+      text-decoration: underline;
+    }
+    code, pre { @apply rounded bg-base-300 font-mono text-sm; }
+    code { @apply px-1; }
+    pre { @apply overflow-x-auto p-3; }
+    blockquote { @apply border-l-4 border-base-300 pl-4 italic; }
+    hr { @apply my-6 border-base-300; }
 
-  :where(.wagoe-default) table { @apply w-full rounded-box bg-base-100 text-left; }
-  :where(.wagoe-default) th,
-  :where(.wagoe-default) td { @apply border-b border-base-300 px-4 py-3; }
-  :where(.wagoe-default) th { @apply font-semibold; }
+    table { @apply w-full rounded-box bg-base-100 text-left; }
+    th, td { @apply border-b border-base-300 px-4 py-3; }
+    th { @apply font-semibold; }
 
-  :where(.wagoe-default) button:not([class]),
-  :where(.wagoe-default) input[type="submit"] {
-    @apply rounded-field px-5 py-2 font-semibold;
-    background-color: var(--color-primary);
-    color: var(--color-primary-content);
-    cursor: pointer;
-  }
-  :where(.wagoe-default) button:not([class]):hover,
-  :where(.wagoe-default) input[type="submit"]:hover {
-    background-color: color-mix(in oklab, var(--color-primary), #000 10%);
+    /* app.css shapes bare buttons; this adds pico's primary colour. */
+    button:not([class]), input[type="submit"] {
+      background-color: var(--color-primary);
+      color: var(--color-primary-content);
+    }
+    input[type="submit"] { @apply cursor-pointer rounded-field px-5 py-2 font-semibold; }
+    button:not([class]):hover, input[type="submit"]:hover {
+      background-color: color-mix(in oklab, var(--color-primary), #000 10%);
+    }
   }
 }
 
-/* The default layout reads as a document, not an admin grid. */
-.wagoe-default .main-content {
-  @apply mx-auto max-w-4xl;
-}
-
-.wagoe-default .error-page {
-  @apply mx-auto my-12 max-w-2xl;
+/* A document width; admin's full-bleed main-content does not suit these pages. */
+.wagoe-default {
+  .main-content { @apply mx-auto max-w-4xl; }
+  .error-page { @apply mx-auto my-12 max-w-2xl; }
 }

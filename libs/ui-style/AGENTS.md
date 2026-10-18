@@ -33,7 +33,7 @@ Bundle vars — each a vector of `/`-rooted asset paths, in load order:
 | `base-css` | `:base` | deprecated: pico → wagoe-tokens → tokens-openprops → app |
 | `pilot-css` | `:pilot` | wagoe-tokens → app → daisy-admin |
 | `admin-pilot-css` | `:admin-pilot` | fonts → wagoe-tokens → admin → app → daisy-admin → wagoe-admin |
-| `base-js` / `pilot-js` | `:base` / `:pilot` | theme → components → alpine → htmx → htmx-ext-sse → forms (`pilot-js` aliases `base-js`) |
+| `base-js` / `pilot-js` | `:base` / `:pilot` | theme → components → alpine → htmx → htmx-ext-sse → forms (`base-js` aliases `pilot-js`) |
 | `admin-pilot-js` | `:admin-pilot` | theme → components → admin-ux → alpine → htmx → htmx-ext-sse → forms → keyboard |
 
 Lookup functions:

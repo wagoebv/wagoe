@@ -128,7 +128,12 @@
             :let [html (str page)]]
       (is (str/includes? html "/css/daisy-admin.css"))
       (is (not (str/includes? html "pico")))
-      (is (str/includes? html "wagoe-default") "bare elements get their styling")))
+      (is (str/includes? html "wagoe-default") "bare elements get their styling"))
+    (is (some #{[:body {:class "wagoe-default app" :id "b"}]}
+              (map #(subvec % 0 2) (filter vector? (layout/page-layout "T" [:p] {:body-attrs {:class "app" :id "b"}}))))
+        "a caller's body class does not drop it")
+    (is (not (str/includes? (str (layout/page-layout "T" [:p] {:css ["/css/x.css"]})) "wagoe-default"))
+        "a page that picks its own stack styles its own elements"))
 
   (testing "Page layout includes navigation"
     (let [result (layout/page-layout "Test" [:div "Content"])
