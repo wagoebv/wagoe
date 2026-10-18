@@ -7,16 +7,15 @@
 ;; File selection
 ;; =============================================================================
 
-(defn name-matches?
-  "True when file-name matches m: a string (exact name), a regex (whole name)
+(defn- name-matcher
+  "Predicate on a file name for m: a string (exact name), a regex (whole name)
    or a collection of names. A nil m matches everything."
-  [m file-name]
+  [m]
   (cond
-    (nil? m)                                true
-    (string? m)                             (= m file-name)
-    (instance? java.util.regex.Pattern m)   (boolean (re-matches m file-name))
-    (coll? m)                               (contains? (set m) file-name)
-    :else                                   false))
+    (nil? m)                              (constantly true)
+    (string? m)                           #{m}
+    (instance? java.util.regex.Pattern m) #(re-matches m %)
+    :else                                 (set m)))
 
 (defn select-files
   "Files whose :name matches :match and is not in :skip, sorted by name.
@@ -25,9 +24,10 @@
     files - seq of RemoteFile maps
     opts  - {:match string|regex|coll, :skip coll of names already processed}"
   [files {:keys [match skip]}]
-  (let [skip (set skip)]
+  (let [match? (name-matcher match)
+        skip   (set skip)]
     (->> files
-         (filter #(name-matches? match (:name %)))
+         (filter #(match? (:name %)))
          (remove #(contains? skip (:name %)))
          (sort-by :name)
          vec)))

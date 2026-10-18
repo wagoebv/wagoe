@@ -80,7 +80,7 @@ server certificate is checked against the JVM's trust store, or `:trust-store`.
 ;; => {:success? true :files [{:name "contacts-1.csv" :path "/outbox/contacts-1.csv" :size 812 ...}]}
 
 (ports/fetch-file! ftps "/outbox/contacts-1.csv")
-;; => {:success? true :content <bytes> :size 812 :path "/outbox/contacts-1.csv"}
+;; => {:success? true :content <bytes>}
 ----
 
 Transient failures (DNS, refused connection, timeouts, 4xx replies) are retried

@@ -147,16 +147,9 @@
    [:timeout-ms {:optional true} [:int {:min 1}]]
    [:max-attempts {:optional true} [:int {:min 1 :max 10}]]
    [:backoff-ms {:optional true} [:int {:min 0}]]
-   [:trust-store {:optional true} [:string {:min 1}]]
-   [:trust-store-password {:optional true} :string]
+   [:trust-store {:optional true} [:maybe [:string {:min 1}]]]
+   [:trust-store-password {:optional true} [:maybe :string]]
    [:trust-store-type {:optional true} [:string {:min 1}]]])
-
-(def FileListOptions
-  "Which files list-files! returns."
-  [:map
-   [:match {:optional true} [:or :string [:fn #(instance? java.util.regex.Pattern %)]
-                             [:sequential :string] [:set :string]]]
-   [:skip {:optional true} [:or [:sequential :string] [:set :string]]]])
 
 (def RemoteFile
   "A file in a remote directory."

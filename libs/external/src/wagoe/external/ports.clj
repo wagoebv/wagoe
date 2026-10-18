@@ -127,7 +127,7 @@
     "List the regular files in dir, sorted by name.
 
     Args:
-      opts - FileListOptions map (optional):
+      opts - map (optional):
              :match - exact name, regex (whole name) or collection of names
              :skip  - names to leave out, e.g. files already processed
 
@@ -143,7 +143,5 @@
     Returns:
       Map with:
         :success? - boolean
-        :path     - string
         :content  - bytes
-        :size     - integer
         :error    - map, as for list-files! (if failed)"))

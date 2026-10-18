@@ -12,6 +12,7 @@
   (:import [java.io File StringWriter]
            [java.net ServerSocket]
            [java.nio.file Files]
+           [java.security KeyStore]
            [java.nio.file.attribute FileAttribute]
            [org.apache.ftpserver FtpServer FtpServerFactory]
            [org.apache.ftpserver.ftplet DefaultFtplet FtpRequest FtpletResult]
@@ -43,15 +44,18 @@
    store holding only that certificate."
   [^File dir]
   (let [ks   (io/file dir "server.p12")
-        cert (io/file dir "server.cer")
         ts   (io/file dir "trust.p12")]
     (keytool! "-genkeypair" "-alias" "ftps" "-keyalg" "RSA" "-keysize" "2048"
               "-dname" "CN=localhost" "-ext" "SAN=dns:localhost" "-validity" "2"
               "-storetype" "PKCS12" "-keystore" (str ks) "-storepass" store-password)
-    (keytool! "-exportcert" "-alias" "ftps" "-keystore" (str ks) "-storepass" store-password
-              "-file" (str cert))
-    (keytool! "-importcert" "-noprompt" "-alias" "ftps" "-file" (str cert)
-              "-storetype" "PKCS12" "-keystore" (str ts) "-storepass" store-password)
+    (let [pass   (.toCharArray ^String store-password)
+          server (with-open [in (io/input-stream ks)]
+                   (doto (KeyStore/getInstance "PKCS12") (.load in pass)))
+          trust  (doto (KeyStore/getInstance "PKCS12")
+                   (.load nil nil)
+                   (.setCertificateEntry "ftps" (.getCertificate server "ftps")))]
+      (with-open [out (io/output-stream ts)]
+        (.store trust out pass)))
     {:keystore ks :trust-store ts}))
 
 (defn- recording-ftplet []
@@ -132,9 +136,8 @@
 
 (deftest ^:integration fetch-file-test
   (testing "bytes arrive unchanged: binary mode"
-    (let [{:keys [success? content size]} (ports/fetch-file! (source) "/outbox/events.bin")]
+    (let [{:keys [success? content]} (ports/fetch-file! (source) "/outbox/events.bin")]
       (is success?)
-      (is (= 256 size))
       (is (= (seq binary) (seq content)))))
 
   (testing "text"
@@ -197,6 +200,10 @@
     (binding [*err* err *warn-on-reflection* true]
       (load "/wagoe/external/shell/adapters/ftps"))
     (is (not (str/includes? (str err) "Reflection warning")) (str err))))
+
+(deftest ^:unit invalid-config-is-refused-test
+  (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Invalid FTPS configuration"
+                        (ftps/create-ftps-source {:host "localhost" :username "x"}))))
 
 (deftest ^:unit printing-hides-the-password-test
   (is (not (str/includes? (pr-str (source)) password))))

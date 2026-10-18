@@ -13,7 +13,8 @@
   (:require [clojure.java.io :as io]
             [clojure.tools.logging :as log]
             [wagoe.external.core.ftps :as ftps-core]
-            [wagoe.external.ports :as ports])
+            [wagoe.external.ports :as ports]
+            [wagoe.external.schema :as schema])
   (:import [java.io ByteArrayOutputStream]
            [java.security KeyStore]
            [java.security.cert CertificateException]
@@ -51,7 +52,6 @@
     (try
       (.connect client ^String host (int port))
       (check-reply! client "Connection")
-      (.setSoTimeout client (int timeout-ms))
       (when-not (.login client ^String username ^String password)
         (reply-failure! client "Login"))
       (.execPBSZ client 0)
@@ -143,8 +143,7 @@
   (fetch-file! [this path]
     (with-ftps this :fetch
       (fn [client]
-        (let [content (retrieve client path)]
-          {:path path :content content :size (alength ^bytes content)})))))
+        {:content (retrieve client path)}))))
 
 ;; Keep the password out of logs and REPL output.
 (defmethod print-method FtpsFileSource [^FtpsFileSource s ^java.io.Writer w]
@@ -182,7 +181,9 @@
   [{:keys [host port username password timeout-ms max-attempts backoff-ms]
     :or   {port 21 timeout-ms 30000 max-attempts 3 backoff-ms 1000}
     :as   config}]
-  {:pre [(string? host) (string? username) (string? password)]}
+  (when-not (schema/valid-ftps-config? config)
+    (throw (ex-info "Invalid FTPS configuration"
+                    {:type :validation-error :host host :username username})))
   (log/info "Creating FTPS file source" {:host host :port port})
   (->FtpsFileSource host port username password timeout-ms max-attempts backoff-ms
                     (trust-manager-for config)))
