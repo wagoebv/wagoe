@@ -849,11 +849,12 @@
                                                                         (:id parent-ref)
                                                                         (assoc matching-rel :limit (inc sibling-cap)))
                                 more?      (> (count siblings) sibling-cap)
-                                ids        (mapv #(str (get % primary-key)) (take sibling-cap siblings))
+                                ;; The extra row is read, so the last in the window links on to it.
+                                ids        (mapv #(str (get % primary-key)) siblings)
                                 idx        (.indexOf ^java.util.List ids record-id)
                                 nav-url    #(str "/web/admin/" (name entity-name) "/" %
                                                  "?return_to=" (ui-base/url-encode return-to))]
-                            (when (>= idx 0)
+                            (when (< -1 idx sibling-cap)
                               (cond-> {:position (inc idx) :total (if more? (str sibling-cap "+") (count ids))}
                                 (> idx 0)                (assoc :prev-url (nav-url (nth ids (dec idx))))
                                 (< idx (dec (count ids))) (assoc :next-url (nav-url (nth ids (inc idx))))))))))]

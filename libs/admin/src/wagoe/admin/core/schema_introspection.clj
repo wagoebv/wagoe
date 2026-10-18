@@ -632,7 +632,8 @@
   (let [generated (into #{} (keep (fn [[k f]] (when (:generated-always f) k))) (:fields config))]
     (cond-> config
       (seq generated) (-> (update :readonly-fields #(into (set %) generated))
-                          (update :editable-fields #(some->> % (remove generated) vec))))))
+                          (update :editable-fields #(some->> % (remove generated) vec))
+                          (update :fields #(reduce (fn [fs k] (assoc-in fs [k :readonly] true)) % generated))))))
 
 (defn build-entity-config
   "Build complete entity configuration by merging auto-detected with manual.

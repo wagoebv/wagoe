@@ -72,5 +72,7 @@
   (with-redefs [support/sibling-cap 2]
     (testing "within the window: the count says there are more"
       (is (= "1 / 2+" (count-text (page 1)))))
+    (testing "the last in the window links on past it"
+      (is (str/includes? (page 2) (str "/web/admin/sn-items/" (item-id 3)))))
     (testing "past it: no sibling navigation"
       (is (nil? (count-text (page 3)))))))
