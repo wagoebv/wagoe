@@ -22,7 +22,7 @@
            [java.util Date Properties]
            [javax.mail FetchProfile FetchProfile$Item Flags Flags$Flag Folder Header
             Message Message$RecipientType Multipart Part Session Store UIDFolder$FetchProfileItem]
-           [javax.mail.internet MimeMessage MimeUtility]
+           [javax.mail.internet MimeMessage MimePart MimeUtility]
            [javax.mail.search AndTerm ComparisonTerm FlagTerm ReceivedDateTerm SearchTerm]))
 
 (set! *warn-on-reflection* true)
@@ -99,7 +99,9 @@
             (try
               (let [info {:content-type (.getContentType part)
                           :disposition  (.getDisposition part)
-                          :filename     (decoded-filename part)}]
+                          :filename     (decoded-filename part)
+                          ;; From BODYSTRUCTURE; getHeader would cost a round trip per part.
+                          :content-id   (when (instance? MimePart part) (.getContentID ^MimePart part))}]
                 (if (imap-core/attachment-part? info)
                   (update acc :attachments conj (imap-core/build-attachment info (read-bytes part)))
                   (update acc :body-parts conj (assoc info :content (str (.getContent part))))))
@@ -142,7 +144,7 @@
                                                     (str (.getSubject src))
                                                     body-parts (received-at msg) (headers-map src))
                    :seen?       (.isSet msg Flags$Flag/SEEN)
-                   :attachments attachments)
+                   :attachments (imap-core/mark-embedded body-parts attachments))
       message-id (assoc :message-id message-id)
       raw        (assoc :raw raw))))
 

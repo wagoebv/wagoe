@@ -100,7 +100,36 @@
                                         (byte-array 3))
                  :content)))
   (is (= "application/octet-stream"
-         (:content-type (imap/build-attachment {:content-type nil} (byte-array 0))))))
+         (:content-type (imap/build-attachment {:content-type nil} (byte-array 0)))))
+
+  (testing "disposition is lower-cased and the content-id loses its angle brackets"
+    (is (= {:disposition "inline" :content-id "logo@example.com"}
+           (select-keys (imap/build-attachment {:content-type "image/png" :disposition "INLINE"
+                                                :content-id " <logo@example.com> "}
+                                               (byte-array 1))
+                        [:disposition :content-id]))))
+
+  (testing "a comment after the content-id is dropped"
+    (is (= "logo@example.com"
+           (:content-id (imap/build-attachment {:content-type "image/png"
+                                                :content-id "<logo@example.com> (logo)"}
+                                               (byte-array 1))))))
+
+  (testing "no header, no key"
+    (is (= #{:content-type :size :content}
+           (set (keys (imap/build-attachment {:content-type "image/png" :disposition nil :content-id ""}
+                                             (byte-array 1))))))))
+
+(deftest ^:unit mark-embedded-test
+  (let [body [{:content-type "text/html" :content "<p>Hi</p><img src=\"CID:Logo@example.com\">"}
+              {:content-type "text/plain" :content "cid:invoice@x"}
+              {:content-type "text/html; charset=UTF-8" :content "<img src='cid:chart2%40x'>"}]
+        ids  ["logo@example.com" "chart2@x" "chart@x" "invoice@x" nil]]
+    (testing "every HTML part is read, and cid: URLs are percent-decoded"
+      (is (= [true true false false false]
+             (mapv :embedded? (imap/mark-embedded body (mapv #(if % {:content-id %} {}) ids))))))
+    (testing "no HTML body, nothing embedded"
+      (is (= [false] (mapv :embedded? (imap/mark-embedded [] [{:content-id "logo@example.com"}])))))))
 
 (deftest ^:unit extract-body-text-first-wins-test
   (is (= {:text "first" :html "<p>first</p>"}
