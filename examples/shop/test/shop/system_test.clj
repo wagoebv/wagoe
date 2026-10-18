@@ -1,7 +1,6 @@
 (ns shop.system-test
   "Boots the whole application on the test profile and talks to it over Ring.
-   wagoe.test also signs in, runs jobs and drains events: see its README.
-   The user module needs JWT_SECRET: `set -a; source .env; set +a` first."
+   wagoe.test also signs in, runs jobs and drains events: see its README."
   (:require [clojure.test :refer [deftest is]]
             [shop.system-config :as app]
             [wagoe.test :as t]))

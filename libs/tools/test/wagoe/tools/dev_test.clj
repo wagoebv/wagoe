@@ -92,3 +92,17 @@
     (is (= "[smoke] FAILED: clojure -M:test --help (exit 1)" (first report)))
     (is (some #(str/includes? % "Could not transfer artifact") report)))
   (is (nil? (dev/check-failure-report ["clojure" "-M:test" "--help"] {:exit 0 :err ""}))))
+
+(deftest ^:unit dotenv-reads-what-source-would-export
+  (let [f (java.io.File/createTempFile "dotenv" ".env")]
+    (try
+      (spit f (str "# comment\n"
+                   "export WAGOE_DOTENV_TEST=abc\n"
+                   "WAGOE_DOTENV_PORT=3000\n"
+                   "WAGOE_DOTENV_QUOTED=\"a b\"\n"
+                   "export PATH=/nowhere\n"))
+      (let [env (dev/dotenv (str f))]
+        (is (= {"WAGOE_DOTENV_TEST" "abc" "WAGOE_DOTENV_PORT" "3000" "WAGOE_DOTENV_QUOTED" "a b"} env)
+            "a variable already set, PATH here, is left alone"))
+      (is (= {} (dev/dotenv "/no/such/.env")))
+      (finally (.delete f)))))

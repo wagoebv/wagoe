@@ -252,11 +252,15 @@
       (testing "wagoe-test is on the :test alias, and a test uses it"
         (let [deps (edn/read-string (slurp (io/file tmp "deps.edn")))
               test (slurp (io/file tmp "test/test_proj/system_test.clj"))]
-          (is (string? (get-in deps [:aliases :test :extra-deps 'com.wagoe/wagoe-test :mvn/version])))
+          (is (re-matches #"\d+\.\d+\.\d+.*"
+                          (str (get-in deps [:aliases :test :extra-deps 'com.wagoe/wagoe-test :mvn/version])))
+              "a rendered version, not the {{wagoe-test-version}} placeholder")
           (is (nil? (get-in deps [:deps 'com.wagoe/wagoe-test]))
               "a test kit has no place in the uberjar")
           (is (str/includes? test "[wagoe.test :as t]"))
-          (is (str/includes? test "[test-proj.system-config :as app]"))))
+          (is (str/includes? test "[test-proj.system-config :as app]"))
+          (is (str/includes? (slurp (io/file tmp "bb.edn")) "{:extra-env (dev/dotenv)} \"-M:test\"")
+              "the test boots the user module, which needs .env's JWT_SECRET")))
 
       (testing "clj-kondo reads with-test-system as a let before any import"
         (let [kondo (edn/read-string (slurp (io/file tmp ".clj-kondo/config.edn")))]
