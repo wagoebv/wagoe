@@ -15,7 +15,12 @@
 
       (or (#{"23503" "23506"} sql-state) (#{1451 1452} error-code)
           (re-find #"SQLITE_CONSTRAINT_FOREIGNKEY" message))
-      :foreign-key)))
+      :foreign-key
+
+      ;; 23514 PostgreSQL, 23513 H2, 3819 MySQL.
+      (or (#{"23513" "23514"} sql-state) (= 3819 error-code)
+          (re-find #"SQLITE_CONSTRAINT_CHECK" message))
+      :check)))
 
 (defn- engine
   "Which driver reported this: its adapter's `:engine`, or else read from its
@@ -94,15 +99,50 @@
       (= 1 (count fields))                    (assoc v :field (first fields))
       :else                                   (assoc v :fields fields))))
 
+(def ^:private sql-word
+  #"(?i)and|or|not|in|is|null|between|like|glob|regexp|escape|case|when|then|else|end|true|false|collate|cast|as")
+
+(defn- check-column
+  "The one column a refused CHECK shows: in SQLite's expression, or in a name
+   of PostgreSQL's `<table>_<col>_check` or the enum `chk_<table>_<col>`
+   shape. Nil when it shows none or several: H2 and MySQL name an inline
+   CHECK `CONSTRAINT_C6`, `t_chk_1`."
+  [{:keys [message table target] :as reported}]
+  (let [subject (or (second (re-find #"(?s)^\[SQLITE_CONSTRAINT_CHECK\].*\(CHECK constraint failed: (.+)\)\s*$" (str message)))
+                    (redaction/constraint-name reported))
+        table   (or table target)]
+    (cond
+      (nil? subject) nil
+
+      (re-matches #"[\p{L}_][\p{L}\p{N}_$]*" subject)
+      (when table
+        (let [t (java.util.regex.Pattern/quote table)]
+          (some #(second (re-matches (re-pattern (str "(?i)" %)) subject))
+                [(str t "_(.+)_check") (str "chk_" t "_(.+)")])))
+
+      :else
+      (let [ids (->> (str/replace subject #"'(?:[^']|'')*'" "")
+                     (re-seq #"(?<![\p{L}\p{N}_$])([\"`]?)([\p{L}_][\p{L}\p{N}_$]*)\1(\s*\()?")
+                     ;; A function's name is followed by its arguments. A quoted
+                     ;; keyword is a column: "end" > "start" shows two.
+                     (keep (fn [[_ q id call]]
+                             (when-not (or call (and (empty? q) (re-matches sql-word id))) id)))
+                     (map #(.toLowerCase ^String % java.util.Locale/ROOT))
+                     distinct)]
+        (when (= 1 (count ids))
+          (first ids))))))
+
 (defn violation
-  "`{:kind :unique|:foreign-key :field kw}` for a unique or foreign-key
-   violation, `:field` when the driver names one column, `:fields` when it
-   names several, and `:referenced? true` when the refused row is one another
-   still references; nil for any other failure."
+  "`{:kind :unique|:foreign-key|:check :field kw}` for a unique, foreign-key
+   or CHECK violation, `:field` when the driver names one column, `:fields`
+   when it names several, and `:referenced? true` when the refused row is one
+   another still references; nil for any other failure."
   [{:keys [authored?] :as reported}]
   ;; A RAISE claiming a key's state is not one: its author wrote it (BOU-635).
   (when-let [k (when-not authored? (kind reported))]
-    (cond-> (with-columns {:kind k} (named-columns reported))
+    (cond-> (with-columns {:kind k} (if (= :check k)
+                                      (some-> (check-column reported) vector)
+                                      (named-columns reported)))
       (and (= :foreign-key k) (still-referenced? reported)) (assoc :referenced? true))))
 
 (defn already-exists?

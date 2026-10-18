@@ -360,6 +360,24 @@
                 :errors {field ["Another record already has this value"]}}
                e))))
 
+(defn- check-violation
+  "`e` as a :validation-error on the field whose CHECK constraint the database
+   enforced, when the platform names one of the entity's; nil otherwise, so a
+   CHECK on no one field stays a :conflict (BOU-734)."
+  [entity-config e]
+  (let [{:keys [type constraint field]} (ex-data e)]
+    (when (and (= :conflict type) (= :check constraint) (contains? (:fields entity-config) field))
+      (ex-info (str "Not an allowed value: " (name field))
+               {:type :validation-error :field field :errors {field ["Not an allowed value"]}}
+               e))))
+
+(defn- refused-write
+  "`e`, a failed write, as the error the admin shows on the form when the
+   database refused it on a constraint; `e` itself otherwise."
+  [entity-config e]
+  (or (not-null-violation e) (foreign-key-violation e) (unique-violation e)
+      (check-violation entity-config e) e))
+
 ;; =============================================================================
 ;; Children and deletes (BOU-563)
 ;; =============================================================================
@@ -625,13 +643,13 @@
   (apply dissoc data (conj (:readonly-fields entity-config #{}) (:primary-key entity-config :id))))
 
 (defn- written-update!
-  "Update through `writer`, returning the record read back. A duplicate is
-   shown on its field, as the SQL path shows it (BOU-673)."
+  "Update through `writer`, returning the record read back. A duplicate or a
+   CHECK is shown on its field, as the SQL path shows it (BOU-673)."
   [svc writer entity-config entity-name id data]
   (try
     (ports/update-record! writer id (writable-data entity-config data))
     (catch clojure.lang.ExceptionInfo e
-      (throw (or (unique-violation e) e))))
+      (throw (or (unique-violation e) (check-violation entity-config e) e))))
   (ports/get-entity svc entity-name id))
 
 (defn- written-delete!
@@ -702,7 +720,7 @@
     (try
       (db/execute-one! conn {:insert-into table-name :values [db-data]})
       (catch Exception e
-        (throw (or (not-null-violation e) (foreign-key-violation e) (unique-violation e) e))))
+        (throw (refused-write entity-config e))))
     (typed-record entity-config
                   (db/execute-one! conn {:select [:*] :from [table-name] :where [:= primary-key id-str]}))))
 
@@ -1096,7 +1114,7 @@
                                                    :set    db-data
                                                    :where  [:= primary-key id-str]}))
                      (catch Exception e
-                       (throw (or (not-null-violation e) (foreign-key-violation e) (unique-violation e) e))))
+                       (throw (refused-write entity-config e))))
 
                   ; Fetch the updated record using join-aware query
                  {:keys [from-clause select-clause join-clause field-aliases]} (resolve-query-config entity-config)
@@ -1172,7 +1190,7 @@
                _ (try
                    (db/execute-update! db-ctx update-query)
                    (catch Exception e
-                     (throw (or (not-null-violation e) (foreign-key-violation e) (unique-violation e) e))))
+                     (throw (refused-write entity-config e))))
 
                ; Fetch updated record using join-aware query
                {:keys [from-clause select-clause join-clause field-aliases]} (resolve-query-config entity-config)

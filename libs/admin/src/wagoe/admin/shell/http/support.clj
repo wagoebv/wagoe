@@ -418,6 +418,7 @@
     (cond
       message-key            ((t-fn request) message-key)
       (= :unique constraint) ((t-fn request) :admin/refused-duplicate-values)
+      (= :check constraint)  ((t-fn request) :admin/refused-check)
       :else                  (ex-message e))))
 
 (defn conflict-errors
