@@ -13,7 +13,7 @@ queue, filtered per tenant, and logged per attempt.
 | `wagoe.webhooks.core.delivery` | Topic globs, tenant filter, payload, URL shape, attempt outcome |
 | `wagoe.webhooks.shell.service` | `IWebhooks`: create subscriptions, dispatch events to jobs, deliver |
 | `wagoe.webhooks.shell.ssrf` | Refuses private addresses, honours `:allowed-hosts` |
-| `wagoe.webhooks.shell.http-transport` | java.net.http, timeouts, no redirects |
+| `wagoe.webhooks.shell.http-transport` | Apache HttpClient, timeouts, no redirects, connects to the checked addresses |
 | `wagoe.webhooks.shell.crypto` | `enc:v1:` AES-GCM for secrets at rest |
 | `wagoe.webhooks.shell.persistence` | Both tables on the application database |
 | `wagoe.webhooks.shell.module-wiring` | Integrant keys; `ig-config` |
@@ -41,8 +41,10 @@ nothing is sent for a rolled-back transaction.
   Changing the key makes existing secrets unreadable.
 - `ig-config` refuses to build without `:wagoe/jobs`, and with `:topics` but
   no `:wagoe/events`.
-- The SSRF check resolves DNS itself; the HTTP client resolves again, so DNS
-  rebinding between the two is not covered.
+- Each attempt resolves the host once: the SSRF check judges the answer and the
+  request connects to those addresses, keeping the URL's host for the Host
+  header, TLS SNI and the certificate check. A rebinding DNS answer gets no
+  second lookup.
 
 ## Tests
 
