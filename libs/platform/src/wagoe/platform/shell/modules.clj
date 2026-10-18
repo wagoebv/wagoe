@@ -165,6 +165,7 @@
   {:wagoe/api-versioning "wagoe.platform.shell.http.versioning"
    :wagoe/pagination     "wagoe.user.shell.module-wiring, for the audit repository"
    :wagoe/session-pruner "wagoe.user.shell.module-wiring"
+   :wagoe/privacy        "wagoe.platform.shell.system.config, for retention"
    :wagoe/rpc            "the application's rpc-config"
    :wagoe/services       "the application's service-catalogue"
    :wagoe/config-keys    "this check, for an application's own settings blocks"})
@@ -228,7 +229,8 @@
        (mapv #(symbol (str % "." module ".shell.module-wiring")))))
 
 (def ^:private no-graph
-  {:components {} :http {} :auth {} :search {} :middleware [] :routes [] :job-handlers []})
+  {:components {} :http {} :auth {} :search {} :data-export {} :retention {}
+   :middleware [] :routes [] :job-handlers []})
 
 (defn- merge-slots
   "`part` over `acc`, refusing a key both set. Each is one slot on `target`,
@@ -257,6 +259,16 @@
   [acc k search]
   (merge-slots ":wagoe/search" acc k search))
 
+(defn merge-data-export
+  "A module's `:data-export` exporters over `acc`, refusing an id both use."
+  [acc k exporters]
+  (merge-slots ":wagoe/data-export" acc k exporters))
+
+(defn merge-retention
+  "A module's `:retention` policies over `acc`, refusing an id both use."
+  [acc k policies]
+  (merge-slots ":wagoe/retention" acc k policies))
+
 (defn- add-graph
   "Fold module `k`'s graph into `acc`. One step for framework and discovered
    modules alike: a discovered module kept only `:components` and lost its
@@ -265,13 +277,17 @@
    `:extra-middleware` is the one `:http` key every module may set: it is
    collected into `:middleware`, in fold order, rather than taking a slot.
    `:auth` holds sign-in hooks, one module each, for the user module, and
-   `:search` index definitions by id, for the search module."
-  [acc k {:keys [components http auth search routes job-handlers]}]
+   `:search` index definitions by id, for the search module. `:data-export`
+   and `:retention` hold refs to a module's `wagoe.platform.ports.privacy`
+   implementations, by id."
+  [acc k {:keys [components http auth search data-export retention routes job-handlers]}]
   (-> acc
       (update :components #(merge-slots "the system config" % k components))
       (update :http merge-http k (dissoc http :extra-middleware))
       (update :auth merge-auth k auth)
       (update :search merge-search k search)
+      (update :data-export merge-data-export k data-export)
+      (update :retention merge-retention k retention)
       (cond-> (contains? http :extra-middleware)
         (update :middleware conj (:extra-middleware http)))
       (update :routes into routes)
@@ -561,8 +577,8 @@
 (defn framework-module-config
   "Integrant entries for the framework modules `active` switches on.
 
-   Returns `{:components {…} :http {…} :auth {…} :search {…} :middleware [..]
-   :routes [..] :job-handlers [..]}`. `:components` merges into the system config,
+   Returns `{:components {…} :http {…} :auth {…} :search {…} :data-export {…}
+   :retention {…} :middleware [..] :routes [..] :job-handlers [..]}`. `:components` merges into the system config,
    `:http` into `:wagoe/http-handler`, `:auth` into `:wagoe/auth-hooks` and
    `:search` into `:wagoe/search`. `:middleware` collects each module's
    `:extra-middleware` — tenant's, for one — in module-key order.
