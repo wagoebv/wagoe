@@ -1,8 +1,8 @@
 = external
-:description: External service adapters: Twilio, SMTP, and IMAP.
+:description: External service adapters: Twilio, SMTP, IMAP, and FTPS.
 
 External third-party service adapters following the FC/IS pattern.
-Three active adapters: SMTP, IMAP, and Twilio.
+Four adapters: SMTP, IMAP, Twilio, and an FTPS file source.
 
 NOTE: Stripe payments have moved to xref:payments.adoc[payments] library.
 
@@ -19,11 +19,12 @@ wagoe.external.core.twilio         — Pure Twilio helpers (build SMS/WhatsApp p
 wagoe.external.shell.adapters.smtp — SmtpProviderAdapter (javax.mail)
 wagoe.external.shell.adapters.imap — ImapMailboxAdapter (javax.mail, UIDFolder)
 wagoe.external.shell.adapters.twilio  — TwilioAdapter (clj-http, Basic auth)
+wagoe.external.shell.adapters.ftps — FtpsFileSource (Commons Net, explicit TLS)
 ----
 
 == Enabling adapters
 
-All three adapters ship as `:inactive` in `config.edn`. Move to `:active` to enable:
+All four adapters ship as `:inactive` in `config.edn`. Move to `:active` to enable:
 
 [source,clojure]
 ----
@@ -47,6 +48,11 @@ All three adapters ship as `:inactive` in `config.edn`. Move to `:active` to ena
  :username #env IMAP_USERNAME
  :password #env IMAP_PASSWORD
  :ssl?     true}
+
+:wagoe.external/ftps
+{:host     #env FTPS_HOST
+ :username #env FTPS_USERNAME
+ :password #env FTPS_PASSWORD}
 ----
 
 == Twilio SMS / WhatsApp
@@ -62,9 +68,29 @@ All three adapters ship as `:inactive` in `config.edn`. Move to `:active` to ena
 (ports/send-whatsapp twilio {:to "+31612345678" :body "Your order has shipped!"})
 ----
 
+== FTPS file imports
+
+`IFileSource` lists a directory and downloads files. The connection uses explicit
+TLS with an encrypted data channel, passive mode and binary transfers, and the
+server certificate is checked against the JVM's trust store, or `:trust-store`.
+
+[source,clojure]
+----
+(ports/list-files! ftps "/outbox" {:match #"contacts-.*\.csv" :skip already-imported})
+;; => {:success? true :files [{:name "contacts-1.csv" :path "/outbox/contacts-1.csv" :size 812 ...}]}
+
+(ports/fetch-file! ftps "/outbox/contacts-1.csv")
+;; => {:success? true :content <bytes>}
+----
+
+Transient failures (DNS, refused connection, timeouts, 4xx replies) are retried
+with backoff, `:max-attempts` times in all. A 5xx reply such as a rejected login
+fails at once. A failure returns `{:success? false :error {:type :external-error ...}}`,
+with `:host`, `:attempts` and `:cause`.
+
 == Testing
 
 [source,bash]
 ----
-clojure -M:test :external
+clojure -M:test:test/mail:test/ftp :external
 ----

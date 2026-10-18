@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **FTPS file source in `external`** (BOU-730): `IFileSource` lists and downloads files over explicit TLS, retrying
+  transient failures. Enable `:wagoe.external/ftps`.
 - **Mollie recurring payments and checkout expiry; `payments` is now stable** (BOU-453): mandates via `:setup-future-usage`,
   `create-off-session-payment` and `expire-checkout-session` work on Mollie. One contract sweep now covers Mock, Stripe and Mollie.
 - **`wagoe new` ships `wagoe-test` and one integration test through it** (BOU-677): `test/<app>/system_test.clj`.

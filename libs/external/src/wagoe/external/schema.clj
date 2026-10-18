@@ -134,12 +134,40 @@
                              [:type keyword?]]]])
 
 ;; =============================================================================
+;; FTPS Schemas
+;; =============================================================================
+
+(def FtpsConfig
+  "FTPS (explicit TLS) file source configuration. :trust-store is a keystore
+   file holding the server's certificate or CA, when the JVM default does not."
+  [:map
+   [:host [:string {:min 1}]]
+   [:port {:optional true} [:int {:min 1 :max 65535}]]
+   [:username [:string {:min 1}]]
+   [:password [:string {:min 1}]]
+   [:timeout-ms {:optional true} [:int {:min 1 :max Integer/MAX_VALUE}]]
+   [:max-attempts {:optional true} [:int {:min 1 :max 10}]]
+   [:backoff-ms {:optional true} [:int {:min 0}]]
+   [:trust-store {:optional true} [:maybe [:string {:min 1}]]]
+   [:trust-store-password {:optional true} [:maybe :string]]
+   [:trust-store-type {:optional true} [:string {:min 1}]]])
+
+(def RemoteFile
+  "A file in a remote directory."
+  [:map
+   [:name [:string {:min 1}]]
+   [:path [:string {:min 1}]]
+   [:size [:int {:min 0}]]
+   [:modified-at {:optional true} inst?]])
+
+;; =============================================================================
 ;; Validation Functions
 ;; =============================================================================
 
 (def ^:private smtp-config-validator (m/validator SmtpConfig))
 (def ^:private imap-config-validator (m/validator ImapConfig))
 (def ^:private twilio-config-validator (m/validator TwilioConfig))
+(def ^:private ftps-config-validator (m/validator FtpsConfig))
 
 (defn valid-smtp-config?
   "Validate SMTP configuration against schema."
@@ -155,3 +183,8 @@
   "Validate Twilio configuration against schema."
   [config]
   (twilio-config-validator config))
+
+(defn valid-ftps-config?
+  "Validate FTPS configuration against schema."
+  [config]
+  (ftps-config-validator config))

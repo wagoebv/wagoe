@@ -218,7 +218,7 @@
     :wagoe/i18n :wagoe/i18n-http-middleware
     ;; Sending adapters, like the mail sender above: a service may need to
     ;; send an SMS or read a mailbox whichever module it is running.
-    :wagoe.external/smtp :wagoe.external/imap :wagoe.external/twilio
+    :wagoe.external/smtp :wagoe.external/imap :wagoe.external/twilio :wagoe.external/ftps
     ;; Asset bundles, read by anything that renders HTML.
     :wagoe/ui-style
     ;; Dev-only, and dev runs one process.

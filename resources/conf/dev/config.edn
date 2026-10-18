@@ -319,6 +319,12 @@
    :password #env IMAP_PASSWORD
    :ssl?     true}
 
+  :wagoe.external/ftps
+  {:host     #or [#env FTPS_HOST "localhost"]
+   :port     #or [#long #or [#env FTPS_PORT 21] 21]
+   :username #or [#env FTPS_USERNAME "import"]
+   :password #env FTPS_PASSWORD}
+
   ;; Stripe payments now handled by :wagoe/payment-provider (libs/payments).
   ;; Configure with {:provider :stripe :api-key ... :webhook-secret ...} in :active.
 

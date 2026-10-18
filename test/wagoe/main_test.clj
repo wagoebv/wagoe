@@ -127,7 +127,8 @@
   (let [loaded  (config/load-config {:profile :test})
         opt-in  {:wagoe.external/smtp   {:host "localhost" :port 25}
                  :wagoe.external/imap   {:host "localhost" :port 143}
-                 :wagoe.external/twilio {:account-sid "x" :auth-token "y"}}
+                 :wagoe.external/twilio {:account-sid "x" :auth-token "y"}
+                 :wagoe.external/ftps   {:host "localhost" :username "x" :password "y"}}
         with-all (update loaded :active merge opt-in)
         cfg        (sys-config/ig-config with-all)
         registered (set (keys (methods ig/init-key)))
