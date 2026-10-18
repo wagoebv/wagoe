@@ -7,7 +7,7 @@
   (:import [java.time DayOfWeek Duration Instant LocalDateTime LocalTime Month ZoneId ZoneOffset]
            [java.time.zone ZoneOffsetTransitionRule ZoneOffsetTransitionRule$TimeDefinition ZoneRules]
            [java.io StringReader]
-           [net.fortuna.ical4j.data CalendarBuilder CalendarParserFactory]
+           [net.fortuna.ical4j.data CalendarBuilder CalendarParser CalendarParserFactory]
            [net.fortuna.ical4j.model ZoneRulesProviderImpl]
            [net.fortuna.ical4j.model.component Observance VTimeZone]
            [net.fortuna.ical4j.util CompatibilityHints]))
@@ -332,13 +332,17 @@
   "An ical4j Calendar from `ical`, with no zone registry: the default one takes
    a JVM-wide zone ID per VTIMEZONE, from a pool of 1500 freed only by GC."
   [^String ical]
-  (.build (CalendarBuilder. (.get (CalendarParserFactory/getInstance)) nil) (StringReader. ical)))
+  (.build (CalendarBuilder. ^CalendarParser (.get (CalendarParserFactory/getInstance)) nil)
+          (StringReader. ical)))
 
 (defn- zone-ids-taken
-  "How many of ical4j's pooled zone IDs calling `f` leaves allocated."
+  "How many of ical4j's pooled zone IDs calling `f` leaves allocated. Released
+   IDs return only when an allocation runs the pool's cleanup, so run it first:
+   a release during `f` would otherwise offset what `f` took."
   [f]
-  (let [available #(.availableZoneIds (.getZoneIdPool ZoneRulesProviderImpl/INSTANCE))
-        before    (available)]
+  (let [pool      (.getZoneIdPool ZoneRulesProviderImpl/INSTANCE)
+        available #(.availableZoneIds pool)
+        before    (do (.cleanup pool) (available))]
     (f)
     (- before (available))))
 
@@ -474,9 +478,11 @@
         zones  (remove #(or (str/starts-with? % "ical4j")
                             (= ZoneOffset/UTC (.normalized (ZoneId/of %))))
                        (sort (ZoneId/getAvailableZoneIds)))
+        ;; vec: every zone is exported even after a mismatch, so the pool check
+        ;; below does not count first loads
         bad    (fn [event samples]
-                 (for [z zones :let [b (offset-mismatches z event samples)] :when (seq b)]
-                   [z (first b)]))]
+                 (vec (for [z zones :let [b (offset-mismatches z event samples)] :when (seq b)]
+                        [z (first b)])))]
     ;; This first export of each zone loads ical4j's own copy, taking a pool ID.
     (testing "a recurring event: offsets agree from a year before it, years on"
       (is (empty? (bad weekly (every (Instant/parse "2025-03-02T08:00:00Z") 1200)))))
