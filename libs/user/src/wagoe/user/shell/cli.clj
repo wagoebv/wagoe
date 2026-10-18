@@ -260,18 +260,27 @@
 ;; Password Input
 ;; =============================================================================
 
+(defn- terminal-console
+  "System/console, when a person is at it. Newer JDKs return a console with
+   stdin piped; isTerminal is asked reflectively because the baseline JDK lacks it."
+  []
+  (when-let [c (System/console)]
+    (when (try (clojure.lang.Reflector/invokeInstanceMethod c "isTerminal" (object-array 0))
+               (catch Exception _ true))
+      c)))
+
 (defn read-hidden-password
-  "Read a password without echoing input.
-   When called from bb create-admin the password is piped via stdin, so
-   System/console returns null and read-line reads the piped value.
-   When invoked standalone with a real TTY, System/console provides hidden input."
-  [label]
-  (if-let [console (System/console)]
-    (String. (.readPassword console (str label ": ") (into-array Object [])))
-    (do
-      (print (str label ": "))
-      (flush)
-      (str/trim (or (read-line) "")))))
+  "Read a password without echoing input. Piped input — bb create-admin — is
+   read without a prompt: nobody is there to see it. Both are trimmed, and EOF
+   reads as blank."
+  ([label]
+   (read-hidden-password (terminal-console) label))
+  ([console label]
+   (str/trim (or (if console
+                   (some-> (.readPassword ^java.io.Console console (str label ": ") (object-array 0))
+                           String.)
+                   (read-line))
+                 ""))))
 
 ;; =============================================================================
 ;; Command Execution
