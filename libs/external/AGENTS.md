@@ -5,7 +5,7 @@
 ## Purpose
 
 External third-party communication adapters following the FC/IS pattern.
-Covers three integration channels: outbound email (SMTP), inbound email (IMAP), and SMS/WhatsApp (Twilio).
+Covers outbound email (SMTP), inbound email (IMAP), SMS/WhatsApp (Twilio), and file imports from an FTPS server.
 
 For payment processing (Mollie, Stripe), see [`libs/payments/AGENTS.md`](../payments/AGENTS.md).
 
@@ -23,6 +23,8 @@ wagoe.external.core.twilio      — Pure Twilio helpers (build-sms-params, build
 wagoe.external.shell.adapters.smtp    — SmtpProviderAdapter (javax.mail)
 wagoe.external.shell.adapters.imap    — ImapMailboxAdapter (javax.mail, UIDFolder)
 wagoe.external.shell.adapters.twilio  — TwilioAdapter (clj-http, Basic auth)
+wagoe.external.core.ftps        — Pure FTPS helpers (select-files, retryable?, backoff-ms, ftps-error)
+wagoe.external.shell.adapters.ftps    — FtpsFileSource implementing IFileSource (Commons Net)
 wagoe.external.shell.module-wiring    — Integrant init/halt for :wagoe.external/* keys
 ```
 
@@ -46,7 +48,7 @@ libs/external/src/wagoe/external/
 
 ## Integrant Keys
 
-All three keys are opt-in — add to `:active` in `config.edn` to enable:
+All four keys are opt-in — add to `:active` in `config.edn` to enable:
 
 ```clojure
 :wagoe.external/smtp
@@ -68,6 +70,17 @@ All three keys are opt-in — add to `:active` in `config.edn` to enable:
 {:account-sid  #env TWILIO_ACCOUNT_SID
  :auth-token   #env TWILIO_AUTH_TOKEN
  :from-number  #env TWILIO_FROM_NUMBER}
+
+:wagoe.external/ftps
+{:host         #env FTPS_HOST       ; the certificate must name it
+ :port         21
+ :username     #env FTPS_USERNAME
+ :password     #env FTPS_PASSWORD
+ :timeout-ms   30000                ; connect, control and data reads
+ :max-attempts 3                    ; transient failures only
+ :backoff-ms   1000                 ; doubled per retry
+ ;; Only when the JVM's cacerts does not cover the server:
+ :trust-store  "certs/ftps-trust.p12" :trust-store-password #env FTPS_TRUST_PASSWORD}
 ```
 
 ## Dependencies
@@ -75,6 +88,7 @@ All three keys are opt-in — add to `:active` in `config.edn` to enable:
 - `clj-http/clj-http 3.13.1` — Twilio REST calls
 - `cheshire/cheshire 6.2.0` — JSON parsing
 - `com.sun.mail/javax.mail 1.6.2` — SMTP and IMAP
+- `commons-net/commons-net 3.13.0` — FTPS
 - `metosin/malli 0.20.1` — schema validation
 
 ## Key Pitfalls
@@ -93,6 +107,21 @@ All three keys are opt-in — add to `:active` in `config.edn` to enable:
 javax.mail hands back package-private classes, and the mocked tests never caught a call that failed on a real
 server. The adapter ns sets `*warn-on-reflection*` and a test fails on any warning. `imap_greenmail_test.clj`
 needs the `:test/mail` alias: `clojure -M:test:test/mail :external`.
+
+### FTPS: trust and retries
+Commons Net's `FTPSClient` trusts any unexpired certificate by default. The adapter replaces that with the JVM's
+cacerts (or `:trust-store`) and checks the hostname, so a self-signed server needs `:trust-store`, not a
+trust-all switch. Retries cover I/O failures and 4xx replies; a 5xx (bad login, missing file) or an untrusted
+certificate fails on the first attempt. Commons Net does not resume the TLS session on the data channel, so a
+server that requires it (vsftpd `require_ssl_reuse=YES`) refuses every transfer.
+
+```clojure
+(ports/list-files! source "/outbox" {:match #"contacts-.*\.csv" :skip processed-names})
+(ports/fetch-file! source "/outbox/contacts-1.csv") ;=> {:success? true :content <bytes> ...}
+```
+
+Remembering which files were processed is the caller's job: pass their names as `:skip`.
+`ftps_server_test.clj` runs against MINA FtpServer and needs `:test/ftp`.
 
 ### Twilio WhatsApp Sandbox
 In dev, Twilio sandbox requires the sandbox number (`whatsapp:+14155238886`) as the From number. The adapter is config-agnostic — set `:from-number` accordingly.
@@ -134,7 +163,7 @@ docker run -d -p 1025:1025 -p 8025:8025 mailhog/mailhog
 
 ```bash
 # All external tests
-clojure -M:test :external
+clojure -M:test:test/mail:test/ftp :external
 
 # Unit tests only (pure functions, no I/O)
 clojure -M:test :external --focus-meta :unit

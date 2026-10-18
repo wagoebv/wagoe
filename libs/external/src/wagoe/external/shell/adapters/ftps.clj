@@ -1,0 +1,188 @@
+(ns wagoe.external.shell.adapters.ftps
+  "FTPS file source implementing IFileSource, on Apache Commons Net.
+
+   Explicit TLS (AUTH TLS, then PBSZ 0 and PROT P so the data channel is
+   encrypted too), passive mode, binary transfers. One connection per call. A
+   transient failure is retried with backoff; a 5xx reply is not.
+
+   Usage:
+     (def source (create-ftps-source {:host \"ftp.example.org\"
+                                      :username \"import\"
+                                      :password \"secret\"}))
+     (ports/list-files! source \"/outbox\" {:match #\".*\\.csv\"})"
+  (:require [clojure.java.io :as io]
+            [clojure.tools.logging :as log]
+            [wagoe.external.core.ftps :as ftps-core]
+            [wagoe.external.ports :as ports])
+  (:import [java.io ByteArrayOutputStream]
+           [java.security KeyStore]
+           [java.security.cert CertificateException]
+           [java.time Duration]
+           [java.util Calendar]
+           [javax.net.ssl TrustManager]
+           [org.apache.commons.net.ftp FTP FTPFile FTPReply FTPSClient]
+           [org.apache.commons.net.util TrustManagerUtils]))
+
+(set! *warn-on-reflection* true)
+
+;; =============================================================================
+;; Connection
+;; =============================================================================
+
+(defn- reply-failure!
+  "Throw the server's last reply as a typed failure."
+  [^FTPSClient client step]
+  (throw (ex-info (str step " refused: " (.trim (str (.getReplyString client))))
+                  {:type :external-error :reply-code (.getReplyCode client)})))
+
+(defn- check-reply! [^FTPSClient client step]
+  (when-not (FTPReply/isPositiveCompletion (.getReplyCode client))
+    (reply-failure! client step)))
+
+(defn- connect!
+  ^FTPSClient [{:keys [host port username password timeout-ms ^TrustManager trust-manager]}]
+  (let [client (FTPSClient. "TLS" false)]
+    (doto client
+      (.setTrustManager trust-manager)
+      (.setEndpointCheckingEnabled true)
+      (.setConnectTimeout (int timeout-ms))
+      (.setDefaultTimeout (int timeout-ms))
+      (.setDataTimeout (Duration/ofMillis timeout-ms)))
+    (try
+      (.connect client ^String host (int port))
+      (check-reply! client "Connection")
+      (.setSoTimeout client (int timeout-ms))
+      (when-not (.login client ^String username ^String password)
+        (reply-failure! client "Login"))
+      (.execPBSZ client 0)
+      (.execPROT client "P")
+      (check-reply! client "PROT P")
+      (.enterLocalPassiveMode client)
+      (when-not (.setFileType client FTP/BINARY_FILE_TYPE)
+        (reply-failure! client "Binary mode"))
+      client
+      (catch Exception e
+        (try (.disconnect client) (catch Exception _))
+        (throw e)))))
+
+(defn- close-client! [^FTPSClient client]
+  (try (.logout client) (catch Exception _))
+  (try (.disconnect client) (catch Exception _)))
+
+;; =============================================================================
+;; Retries
+;; =============================================================================
+
+(defn- certificate-failure? [^Throwable e]
+  (boolean (some #(instance? CertificateException %)
+                 (take-while some? (iterate #(.getCause ^Throwable %) e)))))
+
+(defn- failure [^Throwable e]
+  {:reply-code   (:reply-code (ex-data e))
+   :certificate? (certificate-failure? e)
+   :cause        (if (ex-data e) (ex-message e) (str e))})
+
+(defn- with-ftps
+  "Run (f client) on a fresh connection, retrying transient failures. Returns
+   (assoc (f client) :success? true), or {:success? false :error ...}."
+  [{:keys [host max-attempts backoff-ms] :as adapter} operation f]
+  (loop [attempt 1]
+    (let [outcome (try
+                    {:value (let [client (connect! adapter)]
+                              (try (f client) (finally (close-client! client))))}
+                    (catch Exception e
+                      {:failure (failure e)}))]
+      (if-let [{:keys [cause] :as fail} (:failure outcome)]
+        (if (and (ftps-core/retryable? fail) (< attempt max-attempts))
+          (let [delay (ftps-core/backoff-ms backoff-ms attempt)]
+            (log/warn "FTPS attempt failed, retrying"
+                      {:host host :operation operation :attempt attempt :delay-ms delay :cause cause})
+            (Thread/sleep (long delay))
+            (recur (inc attempt)))
+          (let [error (ftps-core/ftps-error (assoc fail :host host :operation operation :attempts attempt))]
+            (log/error "FTPS operation failed" (dissoc error :type))
+            {:success? false :error error}))
+        (assoc (:value outcome) :success? true)))))
+
+;; =============================================================================
+;; Operations
+;; =============================================================================
+
+(defn- ftp-file->remote-file [dir ^FTPFile f]
+  (let [^Calendar ts (.getTimestamp f)]
+    (cond-> {:name (.getName f)
+             :path (ftps-core/remote-path dir (.getName f))
+             :size (max 0 (.getSize f))}
+      ts (assoc :modified-at (.toInstant ts)))))
+
+(defn- list-dir [^FTPSClient client dir]
+  (let [entries (.listFiles client ^String dir)]
+    (check-reply! client (str "LIST " dir))
+    (into [] (comp (filter #(.isFile ^FTPFile %))
+                   (map #(ftp-file->remote-file dir %)))
+          entries)))
+
+(defn- retrieve [^FTPSClient client ^String path]
+  (let [out (ByteArrayOutputStream.)]
+    (when-not (.retrieveFile client path out)
+      (reply-failure! client (str "RETR " path)))
+    (.toByteArray out)))
+
+;; =============================================================================
+;; Adapter Record
+;; =============================================================================
+
+(defrecord FtpsFileSource [host port username password timeout-ms max-attempts backoff-ms trust-manager]
+  ports/IFileSource
+  (list-files! [this dir]
+    (ports/list-files! this dir {}))
+  (list-files! [this dir opts]
+    (with-ftps this :list
+      (fn [client] {:files (ftps-core/select-files (list-dir client dir) opts)})))
+
+  (fetch-file! [this path]
+    (with-ftps this :fetch
+      (fn [client]
+        (let [content (retrieve client path)]
+          {:path path :content content :size (alength ^bytes content)})))))
+
+;; Keep the password out of logs and REPL output.
+(defmethod print-method FtpsFileSource [^FtpsFileSource s ^java.io.Writer w]
+  (.write w (str "#FtpsFileSource" (pr-str (select-keys s [:host :port :username])))))
+
+;; =============================================================================
+;; Constructor
+;; =============================================================================
+
+(defn- trust-manager-for
+  "Chain-validating trust manager over the given keystore, or the JVM's cacerts
+   when there is none. FTPSClient's own default only checks expiry dates."
+  ^TrustManager [{:keys [trust-store trust-store-password trust-store-type]}]
+  (TrustManagerUtils/getDefaultTrustManager
+   (when trust-store
+     (with-open [in (io/input-stream trust-store)]
+       (doto (KeyStore/getInstance ^String (or trust-store-type "PKCS12"))
+         (.load in (some-> ^String trust-store-password .toCharArray)))))))
+
+(defn create-ftps-source
+  "Create an FTPS file source.
+
+  Config keys:
+    :host                 - server hostname (required); the certificate must name it
+    :port                 - control port (default 21)
+    :username, :password  - login (required)
+    :timeout-ms           - connect, control and data read timeout (default 30000)
+    :max-attempts         - tries per operation (default 3)
+    :backoff-ms           - first retry delay, doubled per retry (default 1000)
+    :trust-store          - keystore file to trust instead of the JVM default
+    :trust-store-password, :trust-store-type (default PKCS12)
+
+  Returns:
+    FtpsFileSource implementing IFileSource"
+  [{:keys [host port username password timeout-ms max-attempts backoff-ms]
+    :or   {port 21 timeout-ms 30000 max-attempts 3 backoff-ms 1000}
+    :as   config}]
+  {:pre [(string? host) (string? username) (string? password)]}
+  (log/info "Creating FTPS file source" {:host host :port port})
+  (->FtpsFileSource host port username password timeout-ms max-attempts backoff-ms
+                    (trust-manager-for config)))

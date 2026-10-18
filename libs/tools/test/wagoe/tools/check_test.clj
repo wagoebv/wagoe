@@ -488,6 +488,9 @@
     (testing "greenmail"
       (is (str/includes? (get in-ci "external" "") ":test/mail")))
 
+    (testing "mina ftpserver"
+      (is (str/includes? (get in-ci "external" "") ":test/ftp")))
+
     (testing "and the app suite asks for all of them"
       ;; The root test/ tree boots the whole system, embedded PostgreSQL
       ;; included, so it needs every heavy dep (BOU-422, BOU-615).
