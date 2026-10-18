@@ -165,7 +165,7 @@
 (deftest ^:unit metrics-interceptors-test
   (testing "metrics-start records attempt and timing"
     (let [metrics (mock-metrics)
-          ctx {:op :test/operation :system {:metrics metrics}}
+          ctx {:op :test/operation :system {:metrics-emitter metrics}}
           result-ctx ((:enter interceptors/metrics-start) ctx)]
 
       (is (number? (get-in result-ctx [:timing :start])))
@@ -176,7 +176,7 @@
     (let [metrics (mock-metrics)
           start-time (System/nanoTime)
           ctx {:op :test/operation
-               :system {:metrics metrics}
+               :system {:metrics-emitter metrics}
                :timing {:start start-time}
                :result {:status :success}}
           result-ctx ((:leave interceptors/metrics-complete) ctx)]
@@ -188,16 +188,28 @@
   (testing "metrics-complete records errors"
     (let [metrics (mock-metrics)
           ctx {:op :test/operation
-               :system {:metrics metrics}
+               :system {:metrics-emitter metrics}
                :timing {:start (System/nanoTime)}
                :result {:status :error}}
           result-ctx ((:leave interceptors/metrics-complete) ctx)]
       (is (= ctx result-ctx))
       (is (= 1 (counter-total metrics "operation.error")))))
 
+  (testing "metrics-complete reads the outcome from a :response when there is no :result"
+    (let [outcome (fn [ctx]
+                    (let [metrics (mock-metrics)]
+                      ((:leave interceptors/metrics-complete)
+                       (merge {:op :test/operation :system {:metrics-emitter metrics}} ctx))
+                      [(counter-total metrics "operation.success")
+                       (counter-total metrics "operation.error")]))]
+      (is (= [1 0] (outcome {:response {:status 200}})))
+      (is (= [1 0] (outcome {:response {:status 0}})) "CLI exit 0")
+      (is (= [0 1] (outcome {:response {:status 404}})))
+      (is (= [0 1] (outcome {:response {:status 400} :exception (ex-info "x" {})})))))
+
   (testing "metrics-error records failures"
     (let [metrics (mock-metrics)
-          ctx {:op :test/operation :system {:metrics metrics}}
+          ctx {:op :test/operation :system {:metrics-emitter metrics}}
           result-ctx ((:error interceptors/metrics-error) ctx)]
       (is (= ctx result-ctx))
       (is (= 1 (counter-total metrics "operation.failure"))))))
@@ -386,7 +398,7 @@
     (let [logger (mock-logger)
           metrics (mock-metrics)
           error-reporter (mock-error-reporter)
-          system {:logger logger :metrics metrics :error-reporter error-reporter}
+          system {:logger logger :metrics-emitter metrics :error-reporter error-reporter}
 
           core-interceptor {:name :core
                             :enter (fn [ctx]

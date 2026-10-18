@@ -131,10 +131,14 @@
 ;; =============================================================================
 
 (defmethod ig/init-key :wagoe/user-service
-  [_ {:keys [user-repository session-repository audit-repository validation-config auth-service]}]
+  [_ {:keys [user-repository session-repository audit-repository validation-config auth-service
+             metrics-emitter]}]
   (log/info "Initializing user service")
-  (let [service (user-service/create-user-service
-                 user-repository session-repository audit-repository validation-config auth-service)]
+  ;; The emitter rides on the service because the user handlers build their
+  ;; interceptor :system from it; without it op metrics never fire.
+  (let [service (-> (user-service/create-user-service
+                     user-repository session-repository audit-repository validation-config auth-service)
+                    (assoc :metrics-emitter metrics-emitter))]
     (log/info "User service initialized")
     service))
 
@@ -316,7 +320,7 @@
                                :validation-config  validation-config
                                :auth-service       (ig/ref :wagoe/auth-service)
                                :logger             (ig/ref :wagoe/logging)
-                               :metrics            (ig/ref :wagoe/metrics)
+                               :metrics-emitter    (ig/ref :wagoe/metrics)
                                :error-reporter     (ig/ref :wagoe/error-reporting)}
     :wagoe/user-routes        {:user-service (ig/ref :wagoe/user-service)
                                :mfa-service  (ig/ref :wagoe/mfa-service)

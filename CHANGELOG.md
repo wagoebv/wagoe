@@ -140,6 +140,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Operation metrics never fired, and failed operations were not counted** (BOU-727): the interceptors read
+  `:metrics-emitter` now (custom `:system` maps: rename `:metrics`), and `metrics.core` helpers register on first use.
 - **Mollie webhooks for an open payment returned 500**, so Mollie retried them (BOU-453). They now return
   `:event-type nil`, and checkout metadata can no longer overwrite the correlation id.
 - **`metrics.ports/increment` and `observe` recorded nothing** (BOU-454): they now register the metric on first use, so

@@ -15,7 +15,7 @@
   "Schema for the system dependency injection map."
   [:map {:title "System Dependencies"}
    [:logger {:optional true} :any]
-   [:metrics {:optional true} :any]
+   [:metrics-emitter {:optional true} :any]
    [:error-reporter {:optional true} :any]
    [:config {:optional true} :any]
    ;; Domain-specific repositories and services
@@ -163,7 +163,7 @@
 (defn get-metrics
   "Extracts metrics collector from system dependencies."
   [context]
-  (get-system-dependency context :metrics))
+  (get-system-dependency context :metrics-emitter))
 
 (defn get-error-reporter
   "Extracts error reporter from system dependencies."
@@ -388,6 +388,6 @@
   "Removes sensitive data from context for safe logging."
   [context]
   (-> context
-      (update :system select-keys [:logger :metrics :error-reporter])
+      (update :system select-keys [:logger :metrics-emitter :error-reporter])
       (update :request #(when % (select-keys % [:headers :params :query])))
       (dissoc :exception))) ; Don't log exception objects directly

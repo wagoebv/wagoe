@@ -72,7 +72,7 @@ From `wagoe.platform.shell.interceptors`:
 |-------------|---------|
 | `context-interceptor` | Adds correlation-id, now timestamp, ensures `:op` present |
 | `logging-start` / `logging-complete` / `logging-error` | Operation logging with timing |
-| `metrics-start` / `metrics-complete` / `metrics-error` | Attempts, success, latency metrics |
+| `op-metrics` | Attempt, success/error, failure and latency per op, on `:metrics-emitter`. Built from `metrics-start` / `-complete` / `-error` |
 | `error-capture` | Captures exceptions in error reporting system |
 | `error-normalize` | Maps error types to HTTP status codes |
 | `error-response-converter` | Converts failed contexts into HTTP error responses |

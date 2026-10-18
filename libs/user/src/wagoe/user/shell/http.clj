@@ -40,6 +40,7 @@
             [wagoe.user.shell.http-interceptors]
             [wagoe.user.shell.landing :as landing]
             [wagoe.user.shell.interceptors :as user-interceptors]
+            [wagoe.user.shell.service :as user-svc]
             [wagoe.user.shell.middleware :as user-middleware]
             [wagoe.user.shell.web-handlers :as web-handlers]
             [wagoe.user.shell.group-handlers :as group-handlers]
@@ -66,20 +67,12 @@
 ;; Observability Service Extraction Helpers
 ;; =============================================================================
 
-(defn extract-observability-services
-  "Extracts observability services from user-service for interceptor context.
-   
-   Note: Since service layer cleanup removed direct observability dependencies,
-   the interceptor context will obtain these services from the system wiring."
-  [user-service]
-  {:user-service user-service})
-
 (defn create-interceptor-context
   "Creates interceptor context with real observability services and error mappings."
   [operation-type user-service request]
   (-> (interceptor-context/create-http-context
        operation-type
-       (extract-observability-services user-service)
+       (user-svc/interceptor-system user-service)
        request)
       (assoc :error-mappings user-error-mappings)))
 
