@@ -1267,14 +1267,17 @@
      :admin-list-related-entities
      {:parent-id parent-id :entity (name (:entity relationship))}
      (fn [{:keys [_params]}]
-       (let [{:keys [child-cfg select-clause qualify query]} (related-query schema-provider parent-id relationship)]
+       (let [{:keys [child-cfg select-clause qualify id-column query]} (related-query schema-provider parent-id relationship)]
          (mapv #(typed-record child-cfg %)
                (db/execute-query! db-ctx
                                   (cond-> (assoc query
                                                  :select   select-clause
                                                  ;; The child list's own order, so a limited
-                                                 ;; panel is that list's first page.
-                                                 :order-by [[(qualify (:default-sort child-cfg :id)) :asc]])
+                                                 ;; panel is that list's first page. The id
+                                                 ;; breaks ties, so a limit cuts the same rows
+                                                 ;; on every read.
+                                                 :order-by [[(qualify (:default-sort child-cfg :id)) :asc]
+                                                            [id-column :asc]])
                                     (:limit relationship) (assoc :limit (:limit relationship)))))))
      db-ctx)))
 

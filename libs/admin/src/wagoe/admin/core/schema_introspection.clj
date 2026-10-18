@@ -438,13 +438,15 @@
         field-type (infer-field-type sql-type field-name)  ; Pass field-name for heuristics
         widget (infer-widget-for-field field-name field-type sql-type)
         is-primary-key? (:primary-key column-meta false)
-        is-not-null? (:not-null column-meta false)]
+        is-not-null? (:not-null column-meta false)
+        generated-always? (boolean (:generated-always column-meta))]
     {:name field-name
      :label (humanize-field-name field-name)
      :type field-type
      :widget widget
      :required (and is-not-null? (not is-primary-key?))
-     :readonly (should-be-readonly? field-name is-primary-key?)
+     :readonly (or (should-be-readonly? field-name is-primary-key?) generated-always?)
+     :generated-always generated-always?
      :hidden (or (should-be-hidden? field-name)
                  (str/includes? (text/lower-case (str sql-type)) "tsvector"))
      :searchable (should-be-searchable? field-type field-name)
@@ -622,6 +624,17 @@
          (remove hidden)
          vec)))
 
+(defn- generated-always-readonly
+  "`config` with every column the database refuses a value for (computed, or
+   an identity GENERATED ALWAYS) read-only, whatever the manual config says:
+   the admin writes every editable field, and such a column fails the write."
+  [config]
+  (let [generated (into #{} (keep (fn [[k f]] (when (:generated-always f) k))) (:fields config))]
+    (cond-> config
+      (seq generated) (-> (update :readonly-fields #(into (set %) generated))
+                          (update :editable-fields #(some->> % (remove generated) vec))
+                          (update :fields #(reduce (fn [fs k] (assoc-in fs [k :readonly] true)) % generated))))))
+
 (defn build-entity-config
   "Build complete entity configuration by merging auto-detected with manual.
 
@@ -664,9 +677,10 @@
       ;; :readonly-fields still rendered as a writable input and the form wrote
       ;; a column the config called read-only (BOU-498). An explicit manual
       ;; :editable-fields still wins.
-      (cond-> merged
-        (not (contains? manual-config :editable-fields))
-        (assoc :editable-fields (derive-editable-fields auto-config merged))))
+      (generated-always-readonly
+       (cond-> merged
+         (not (contains? manual-config :editable-fields))
+         (assoc :editable-fields (derive-editable-fields auto-config merged)))))
     auto-config))
 
 ;; =============================================================================
@@ -709,11 +723,22 @@
    and not filled by the database (identity, computed), fails every create
    (BOU-494). `columns-meta` is the raw column metadata of the entity's table.
    Returns a vector of {:field :column :message}; entities with their own
-   create flow, or with create disabled, are skipped."
+   create flow, or with create disabled, are skipped. A :split-table-update
+   without a :create-redirect-url, which the insert would write half of, is
+   one {:kind :split-table :message}."
   [entity-name entity-config columns-meta]
-  (if (or (:create-redirect-url entity-config) (:split-table-update entity-config)
-          (false? (get-in entity-config [:permissions :create])))
+  (cond
+    (or (:create-redirect-url entity-config)
+        (false? (get-in entity-config [:permissions :create])))
     []
+
+    (:split-table-update entity-config)
+    [{:kind    :split-table
+      :message (str "Entity '" (name entity-name) "' uses :split-table-update but has no"
+                    " :create-redirect-url, and the admin create writes only the first table."
+                    " Add :create-redirect-url to its config in :wagoe/admin :entities.")}]
+
+    :else
     (let [written (into create-filled-fields
                         (remove (set (:readonly-fields entity-config)))
                         (concat (:editable-fields entity-config) (:hide-fields entity-config)))]

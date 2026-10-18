@@ -102,17 +102,6 @@
           _ (when-not disabled
               (shell-permissions/assert-can-create-entity! user entity-name entity-config))]
 
-      ;; Split-table entities MUST have :create-redirect-url because the generic
-      ;; admin create flow only writes to one table, leaving orphaned rows.
-      ;; Fail early with a clear error instead of letting the service layer throw.
-      (when (and (not disabled)
-                 (:split-table-update entity-config)
-                 (not (:create-redirect-url entity-config)))
-        (throw (ex-info (str "Entity '" (name entity-name) "' uses split-table-update but has no "
-                             ":create-redirect-url configured. Add :create-redirect-url to the "
-                             "entity config in :wagoe/admin :entities.")
-                        {:type :invalid-config
-                         :entity-name entity-name})))
       (or
        disabled
        (support/create-config-error-response request config schema-provider user entity-name entity-config)

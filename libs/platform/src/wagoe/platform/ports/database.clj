@@ -194,6 +194,8 @@
        - :primary-key - boolean
        - :generated - boolean: the database fills it (identity,
          auto-increment, rowid, or a computed column)
+       - :generated-always - boolean: it also refuses a value an INSERT or
+         UPDATE supplies (a computed column, an identity GENERATED ALWAYS)
        - :max-length - a character column's declared length, or nil (always
          nil on SQLite, which enforces none)
 
