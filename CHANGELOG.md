@@ -120,6 +120,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Changed
 
+- **Pages on the default layout load daisyUI, not pico** (BOU-457): `page-layout` and `error-layout` use the `:pilot`
+  stack; bare elements are styled under `body.wagoe-default`. Pass `:css (ui-style/bundle :base)` to keep pico until 2.0.
 - **`wagoe-platform` no longer brings in `environ` or `com.lambdaisland/dotenv`** (BOU-457): nothing required them.
   Declare them yourself if your app uses them.
 - **An IMAP fetch without `:limit` takes 100 messages** (BOU-731), and `core.imap/filter-unread` and `filter-by-date`
@@ -147,6 +149,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Deprecated
 
+- **pico, open-props, `tokens-openprops.css` and the `:base` CSS bundle** (BOU-457): daisyUI/Tailwind on `wagoe-tokens.css`
+  is the one CSS system. `:base` still works when selected; it goes in 2.0.
 - **`/swagger.json` and `:swagger` route docs** (BOU-462): the path serves the 3.1 document and `:swagger` is
   translated to `:openapi` with a boot warning, both until 2.0. Use `/openapi.json` and `:openapi`.
 - **`wagoe.search.shell.registry` and its `defsearch`** (BOU-705): one registry for every system in the JVM. Hand

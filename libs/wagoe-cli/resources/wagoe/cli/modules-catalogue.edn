@@ -330,7 +330,7 @@
    :docs-url            "https://github.com/wagoebv/wagoe/blob/main/libs/admin/AGENTS.md"}
 
   {:name                "ui-style"
-   :description         "Shared CSS/JS style bundles — :base, :pilot, :admin-pilot"
+   :description         "daisyUI/Tailwind CSS and JS bundles — :pilot (default), :admin-pilot"
    :clojars             com.wagoe/wagoe-ui-style
    :version             "1.0.1"
    :category            :optional

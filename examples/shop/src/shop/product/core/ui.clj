@@ -47,5 +47,5 @@
       (form/form {:method "post" :action "/web/products"}
                  (for [field fields]
                    (product-field field values errors))
-                 [:button {:type "submit"} "Create"])]
+                 [:button.button.primary {:type "submit"} "Create"])]
      opts)))

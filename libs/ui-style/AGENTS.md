@@ -10,7 +10,7 @@
 
 `ui-style` is the single source of truth for **which** stylesheet and script
 files a page loads and **in what order**. Layout namespaces pick a bundle key
-(`:base` / `:pilot` / `:admin-pilot`); feature namespaces never hardcode CSS/JS
+(`:pilot`, the default, or `:admin-pilot`; `:base` is deprecated); feature namespaces never hardcode CSS/JS
 lists. The library also ships the actual asset files (CSS, JS, fonts, icons)
 under `resources/public/`, which the platform serves from the classpath.
 
@@ -30,7 +30,7 @@ Bundle vars — each a vector of `/`-rooted asset paths, in load order:
 
 | Var | Bundle | Contents (load order) |
 |-----|--------|-----------------------|
-| `base-css` | `:base` | pico → wagoe-tokens → tokens-openprops → app |
+| `base-css` | `:base` | deprecated: pico → wagoe-tokens → tokens-openprops → app |
 | `pilot-css` | `:pilot` | wagoe-tokens → app → daisy-admin |
 | `admin-pilot-css` | `:admin-pilot` | fonts → wagoe-tokens → admin → app → daisy-admin → wagoe-admin |
 | `base-js` / `pilot-js` | `:base` / `:pilot` | theme → components → alpine → htmx → htmx-ext-sse → forms (`pilot-js` aliases `base-js`) |
@@ -44,24 +44,27 @@ Lookup functions:
 (ui-style/bundle :pilot)          ;; => ["/css/wagoe-tokens.css" "/css/app.css" "/css/daisy-admin.css"]
 (ui-style/js-bundle :admin-pilot) ;; => ["/js/theme.js" "/js/components.js" ...]
 
-;; Unknown keys fall back to the :base stack (never nil):
-(ui-style/bundle :nope)           ;; => base-css
-(ui-style/js-bundle :nope)        ;; => base-js
+;; Unknown keys fall back to the :pilot stack (never nil):
+(ui-style/bundle :nope)           ;; => pilot-css
+(ui-style/js-bundle :nope)        ;; => pilot-js
 ```
 
 Recommended bundle per page type:
 
-- `:base` — public / auth / basic pages
-- `:pilot` — user / profile / audit "pilot" pages
+- `:pilot` — the default; what `page-layout` loads
 - `:admin-pilot` — admin CRUD pages
+- `:base` — deprecated (pico + open-props), removed in 2.0
+
+daisyUI/Tailwind on `wagoe-tokens.css` is the one CSS system. Pages on the
+default layout carry `body.wagoe-default`, which gives bare headings, lists,
+tables and buttons the styling pico used to (`resources/tailwind/admin-pilot.css`).
 
 ## Assets shipped (`resources/public/`)
 
-- **CSS** (`css/`): `pico.min.css` (vendored), `wagoe-tokens.css` +
-  `tokens-openprops.css` (design tokens), `app.css`, `admin.css`,
+- **CSS** (`css/`): `wagoe-tokens.css` (design tokens), `app.css`, `admin.css`,
   `daisy-admin.css` (Tailwind/daisyUI compiled output), `wagoe-admin.css`
   (wagoe.org tokens and the admin display-role styles, ADR-040), `fonts.css`, and
-  `vendor/open-props/*`.
+  the deprecated `pico.min.css`, `tokens-openprops.css` and `vendor/open-props/*`.
 - **JS** (`js/`): `theme.js`, `components.js`, `admin-ux.js`, `forms.js`,
   `keyboard.js`, `init.js`, plus vendored `alpine.min.js`, `htmx.min.js` and
   `htmx-ext-sse.min.js` (htmx's `sse` extension, 2.2.4; must load after htmx).
@@ -85,7 +88,7 @@ shared layout entry points instead.
   `ui-style/bundle` / `ui-style/js-bundle`, then injects them into the page
   `<head>`. Its `pilot-page-layout` / `admin-pilot-page-layout` helpers are what
   modules call.
-- `wagoe.devtools.shell.dashboard.layout` uses `(ui-style/js-bundle :base)`.
+- `wagoe.devtools.shell.dashboard.layout` uses `(ui-style/js-bundle :pilot)`.
 
 Example (feature namespace — no CSS list of its own):
 
@@ -112,14 +115,14 @@ and `:paths ["src" "resources"]` so the assets travel with the jar.
    admin bundle) must load *before* `alpine.min.js` — they register Alpine
    components/stores on the `alpine:init` event. Preserve the vector order when
    editing.
-3. **Theme changes go in token files.** Adjust `wagoe-tokens.css` /
-   `tokens-openprops.css`, not one-off colors in component CSS.
+3. **Theme changes go in token files.** Adjust `wagoe-tokens.css`, not
+   one-off colors in component CSS.
 4. **`daisy-admin.css` is generated.** Edit `resources/tailwind/admin-pilot.css`
    and recompile (`npm run build:css:admin` from the monorepo root); do not
    hand-edit the compiled output.
-5. **Bundle lookups never return nil** — unknown keys fall back to `:base`. Don't
+5. **Bundle lookups never return nil** — unknown keys fall back to `:pilot`. Don't
    add nil-guards around `bundle` / `js-bundle`; a wrong key silently yields the
-   base stack, so verify the key if styling looks off.
+   default stack, so verify the key if styling looks off.
 6. **New asset file → add it to a bundle vector**, otherwise it ships in the jar
    but is never referenced by any page.
 
@@ -130,5 +133,5 @@ clojure -M:test :ui-style
 ```
 
 Tests live in `test/wagoe/ui_style_test.clj` (tagged `^:unit`) and cover
-bundle-key selection and the base-fallback for unknown keys. When you add or
+bundle-key selection and the pilot fallback for unknown keys. When you add or
 reorder a bundle, update the corresponding assertion.

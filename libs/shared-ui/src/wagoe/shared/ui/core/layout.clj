@@ -13,10 +13,10 @@
             [wagoe.ui-style :as ui-style]))
 
 (def ^:private default-css
-  (ui-style/bundle :base))
+  (ui-style/bundle :pilot))
 
 (def ^:private default-js
-  (ui-style/js-bundle :base))
+  (ui-style/js-bundle :pilot))
 
 (def pilot-css
   (ui-style/bundle :pilot))
@@ -101,7 +101,8 @@
          :or   {css         default-css
                 js          default-js
                 skip-header false
-                body-attrs  {}
+                ;; wagoe-default gives bare elements the styling pico used to.
+                body-attrs  {:class "wagoe-default"}
                 lang        "en"}} opts
         ;; Falls back to the token bound for the current request, so handlers need
         ;; not thread it explicitly. An explicit :csrf-token opt still overrides.
@@ -192,7 +193,7 @@
     [:title (str status " - " title)]
     (for [css-file default-css]
       [:link {:rel "stylesheet" :href css-file}])]
-   [:body
+   [:body.wagoe-default
     [:div.error-page
      [:h1 title]
      [:p.error-message message]

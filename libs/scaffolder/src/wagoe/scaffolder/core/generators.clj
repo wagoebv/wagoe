@@ -576,7 +576,7 @@ DROP TABLE IF EXISTS %s;
          "      (form/form {:method \"post\" :action \"/web/" entity-plural "\"}\n"
          "                 (for [field fields]\n"
          "                   (" entity-lower "-field field values errors))\n"
-         "                 [:button {:type \"submit\"} \"Create\"])]\n"
+         "                 [:button.button.primary {:type \"submit\"} \"Create\"])]\n"
          "     opts)))\n")))
 
 ;; =============================================================================

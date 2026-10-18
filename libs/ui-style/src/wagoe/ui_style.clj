@@ -5,14 +5,15 @@
    rendering contract without hardcoding per-page lists.")
 
 (def base-css
-  "Legacy-compatible base stack."
+  "DEPRECATED: pico and open-props; use `pilot-css`, the default. Kept for apps
+   that select `:base` explicitly; removed in 2.0."
   ["/css/pico.min.css"
    "/css/wagoe-tokens.css"
    "/css/tokens-openprops.css"
    "/css/app.css"])
 
 (def pilot-css
-  "General daisy pilot stack."
+  "The default stack: daisyUI/Tailwind on wagoe-tokens."
   ["/css/wagoe-tokens.css"
    "/css/app.css"
    "/css/daisy-admin.css"])
@@ -51,7 +52,7 @@
    "/js/forms.js"])
 
 (def pilot-js
-  "Pilot JavaScript stack."
+  "Pilot JavaScript stack, the default."
   base-js)
 
 (def admin-pilot-js
@@ -75,12 +76,12 @@
 
 (defn bundle
   "Return stylesheet list for `k` bundle key.
-   Falls back to `:base`."
+   Falls back to `:pilot`."
   [k]
-  (get css-bundles k base-css))
+  (get css-bundles k pilot-css))
 
 (defn js-bundle
   "Return JavaScript list for `k` bundle key.
-   Falls back to `:base`."
+   Falls back to `:pilot`."
   [k]
-  (get js-bundles k base-js))
+  (get js-bundles k pilot-js))

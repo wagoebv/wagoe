@@ -123,6 +123,13 @@
         (is (str/includes? page-html "/css/custom.css"))
         (is (str/includes? page-html "/js/custom.js")))))
 
+  (testing "the default stack is daisy, without pico"
+    (doseq [page [(layout/page-layout "T" [:p]) (layout/error-layout 404 "Not Found" "Gone")]
+            :let [html (str page)]]
+      (is (str/includes? html "/css/daisy-admin.css"))
+      (is (not (str/includes? html "pico")))
+      (is (str/includes? html "wagoe-default") "bare elements get their styling")))
+
   (testing "Page layout includes navigation"
     (let [result (layout/page-layout "Test" [:div "Content"])
           page-html (str result)]
