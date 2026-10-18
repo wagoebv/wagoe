@@ -85,8 +85,9 @@
    `:landing` is unset."
   [config]
   (if-let [path (front-page config)]
-    [["/" {:no-doc true
-           :public true
+    [["/" {:no-doc             true
+           :public             true
+           :skip-interceptors? true
            :get    {:handler (constantly (response/redirect path))
                     :summary "Redirect to the application's landing page"}}]]
     []))

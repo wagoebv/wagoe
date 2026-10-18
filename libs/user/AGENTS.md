@@ -349,7 +349,7 @@ Four `:wagoe/user` keys, all checked at boot; a bad value fails it.
 ```
 
 `:login-redirect` applies to password login, MFA completion, OIDC sign-in and
-`/web` for a signed-in user. A safe `return-to` still wins. The function's
+`/web` for a signed-in user, unless `:landing` is set. A safe `return-to` still wins. The function's
 login context has `:ip-address` (the client IP), `:user-agent` and the Ring
 `:request`. An app module can contribute it as `:auth {:login-redirect (ig/ref …)}`
 instead, a function or an `ports/ILoginRedirect`, like `:mfa-required?` above. With
@@ -357,7 +357,7 @@ instead, a function or an `ports/ILoginRedirect`, like `:mfa-required?` above. W
 serve it or point the redirect elsewhere. `:home` is bound per request
 (`wagoe.shared.ui.core.home/*path*`), so the shared, admin, search and workflow
 layouts read it without a config argument; `/web`, its fallback, sends a
-signed-in user on to their landing path.
+signed-in user on to their landing path, or to `:landing` when that is set.
 
 `:landing` must be served by a route marked `:public true`, or a signed-out
 visitor is sent to log in. The user module contributes `/` as a `:static`

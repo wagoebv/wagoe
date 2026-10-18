@@ -461,11 +461,11 @@
    [false [:boolean {:error/message "should be false, or {:handler my.app/page}"}]]])
 
 (def Landing
-  "Where `/` and `/web` send everyone. Not one of those two: it would redirect
-   to itself."
+  "Where `/` and `/web` send everyone. Not one of those two, query or fragment
+   aside: it would redirect to itself."
   [:and LocalPath
    [:fn {:error/message "must not be / or /web, which redirect to it"}
-    #(not (contains? #{"/" "/web" "/web/"} %))]])
+    #(not (contains? #{"/" "/web" "/web/"} (re-find #"^[^?#]*" %)))]])
 
 (def UserLandingSettings
   [:map

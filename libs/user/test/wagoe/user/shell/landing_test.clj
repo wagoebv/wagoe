@@ -98,7 +98,9 @@
                     {:home "https://evil.example"}
                     {:landing "https://evil.example"}
                     {:landing "/"}
-                    {:landing "/web"}]]
+                    {:landing "/web"}
+                    {:landing "/?ref=home"}
+                    {:landing "/web#top"}]]
     (is (= :configuration-error
            (:type (ex-data (try (landing/prepare (config settings)) nil
                                 (catch Exception e e)))))
