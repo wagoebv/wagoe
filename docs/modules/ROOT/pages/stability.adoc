@@ -395,10 +395,6 @@ the xref:roadmap.adoc#_after_1_0_0[roadmap].
 | `/swagger.json` and `:swagger` route docs (Swagger 2.0)
 | `/openapi.json` and `:openapi` (OpenAPI 3.1). The old path serves the 3.1
   document; `:swagger` is translated and warns at boot.
-
-| `com.sun.mail/javax.mail`, still declared by `wagoe-external` but unused
-| Jakarta Mail 2 (`jakarta.mail.*`, Angus Mail), which the SMTP and IMAP
-  adapters use.
 |===
 
 == HTTP API versioning is a separate thing

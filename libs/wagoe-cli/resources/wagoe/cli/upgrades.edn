@@ -45,9 +45,4 @@
  {:ticket "BOU-462"
   :since  "1.0.2"
   :note   "/swagger.json and :swagger route docs (Swagger 2.0). The API docs are OpenAPI 3.1 at /openapi.json."
-  :manual "Move :swagger to :openapi, with a parameter's :type under :schema and a response's :schema under :content \"application/json\". Point clients at /openapi.json. A rewrite cannot reach parameter vectors built at runtime."}
-
- {:ticket "BOU-457"
-  :since  "1.0.2"
-  :note   "com.sun.mail/javax.mail. Wagoe's mail adapters use Jakarta Mail 2 (jakarta.mail.*, Angus Mail)."
-  :manual "Change javax.mail imports to jakarta.mail, and com.sun.mail.* to org.eclipse.angus.mail.*, or declare com.sun.mail/javax.mail in your own deps.edn. Java imports are outside what a rewrite reads."}]
+  :manual "Move :swagger to :openapi, with a parameter's :type under :schema and a response's :schema under :content \"application/json\". Point clients at /openapi.json. A rewrite cannot reach parameter vectors built at runtime."}]

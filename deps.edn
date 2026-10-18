@@ -146,8 +146,6 @@
            ;; Email - Jakarta Mail (Angus) for SMTP and IMAP
            jakarta.mail/jakarta.mail-api              {:mvn/version "2.1.5"}
            org.eclipse.angus/angus-mail               {:mvn/version "2.0.5"}
-           ;; Deprecated: unused by Wagoe, kept for apps that import javax.mail; removed in 2.0.
-           com.sun.mail/javax.mail                    {:mvn/version "1.6.2"}
            ;; FTPS client for the external file source
            commons-net/commons-net                    {:mvn/version "3.13.0"}
 

@@ -120,8 +120,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Changed
 
-- **Mail moves to Jakarta Mail 2 (Angus Mail)** (BOU-457): the SMTP and IMAP adapters use `jakarta.mail.*`.
-  An app using javax.mail classes itself must move to jakarta.mail before 2.0.
+- **Mail moves to Jakarta Mail 2 (Angus Mail)** (BOU-457): `wagoe-external` no longer brings in `com.sun.mail/javax.mail`.
+  An app using javax.mail classes itself must move to jakarta.mail.
 - **`wagoe-platform` no longer brings in `environ` or `com.lambdaisland/dotenv`** (BOU-457): nothing required them.
   Declare them yourself if your app uses them.
 - **An IMAP fetch without `:limit` takes 100 messages** (BOU-731), and `core.imap/filter-unread` and `filter-by-date`
@@ -149,8 +149,6 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Deprecated
 
-- **`com.sun.mail/javax.mail`** (BOU-457): `wagoe-external` still declares it but no longer uses it; it goes in 2.0.
-  Import `jakarta.mail.*`, or declare `javax.mail` yourself.
 - **`/swagger.json` and `:swagger` route docs** (BOU-462): the path serves the 3.1 document and `:swagger` is
   translated to `:openapi` with a boot warning, both until 2.0. Use `/openapi.json` and `:openapi`.
 - **`wagoe.search.shell.registry` and its `defsearch`** (BOU-705): one registry for every system in the JVM. Hand

@@ -10,9 +10,6 @@
          cheshire/cheshire         {:mvn/version "6.2.0"}
          jakarta.mail/jakarta.mail-api {:mvn/version "2.1.5"}
          org.eclipse.angus/angus-mail  {:mvn/version "2.0.5"}
-         ;; Deprecated: nothing here uses it any more. Kept for apps that import
-         ;; javax.mail themselves; removed in 2.0.
-         com.sun.mail/javax.mail   {:mvn/version "1.6.2"}
          commons-net/commons-net   {:mvn/version "3.13.0"}}
 
  :aliases
