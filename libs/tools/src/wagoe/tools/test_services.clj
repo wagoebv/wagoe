@@ -108,6 +108,23 @@
 (defn- compose [& args]
   (apply process/shell {:continue true} "docker" "compose" "-f" compose-file args))
 
+(defn- compose-running
+  "Names of the services the shared compose project has running."
+  []
+  (->> (process/shell {:continue true :out :string :err :string}
+                      "docker" "compose" "-f" compose-file "ps" "--services" "--status" "running")
+       :out
+       str/split-lines
+       (remove str/blank?)
+       set))
+
+(defn services-to-start
+  "The services `up` hands to compose: the unreachable ones, plus the ones compose
+   already runs, so `--wait` still holds a container that is up but not yet
+   healthy. A port held by anything else is left alone."
+  [running reachable?]
+  (filter #(or (contains? running (name (:id %))) (not (reachable? %))) services))
+
 (defn- status []
   (println)
   (println (bold "Test services"))
@@ -124,7 +141,10 @@
   (case (first args)
     nil     (System/exit (status))
     "status" (System/exit (status))
-    "up"    (let [{:keys [exit]} (compose "up" "-d" "--wait")]
+    "up"    (let [targets (seq (services-to-start (compose-running) reachable?))
+                  exit    (if targets
+                            (:exit (apply compose "up" "-d" "--wait" (map (comp name :id) targets)))
+                            0)]
               (when (zero? exit) (status))
               (System/exit exit))
     "down"  (System/exit (:exit (compose "down")))
