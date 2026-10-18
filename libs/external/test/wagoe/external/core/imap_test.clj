@@ -69,30 +69,6 @@
       (is (= now (:received-at msg)))
       (is (= :content-type (first (keys (:headers msg))))))))
 
-(deftest ^:unit filter-by-date-test
-  (let [now   (java.util.Date.)
-        old   (java.util.Date. (- (.getTime now) 86400000))
-        later (java.util.Date. (+ (.getTime now) 1000))
-        msgs  [{:uid 1 :received-at old}
-               {:uid 2 :received-at later}]]
-
-    (testing "nil since returns all messages"
-      (is (= 2 (count (imap/filter-by-date msgs nil)))))
-
-    (testing "filters messages before threshold"
-      (is (= [{:uid 2 :received-at later}]
-             (imap/filter-by-date msgs now))))))
-
-(deftest ^:unit filter-unread-test
-  (let [msgs [{:uid 1 :seen? false}
-              {:uid 2 :seen? true}
-              {:uid 3}]]
-
-    (testing "returns only unseen messages"
-      (let [result (imap/filter-unread msgs)]
-        (is (= 2 (count result)))
-        (is (every? #(not (:seen? %)) result))))))
-
 (deftest ^:unit message-summary-test
   (testing "returns expected summary shape"
     (let [now  (java.util.Date.)

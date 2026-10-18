@@ -52,7 +52,7 @@
     Args:
       opts - ImapFetchOptions map (optional):
              :folder       - folder name (default INBOX)
-             :limit        - max messages to fetch
+             :limit        - max messages to fetch (default 100)
              :unread-only? - fetch only unread messages
              :since        - only messages received at or after this inst
              :include-raw? - add :raw, the RFC 822 bytes, to each message
@@ -60,24 +60,30 @@
     Returns:
       Map with:
         :success?  - boolean
-        :messages  - vector of InboundMessage maps, with :attachments
+        :messages  - vector of InboundMessage maps, with :attachments and
+                     :folder; pass the message as opts to mark-read! or
+                     delete-message!, since a UID only means something
+                     within its folder
         :count     - integer
         :error     - map {:message :type} (if failed)")
 
   (fetch-unread! [this] [this limit]
     "Fetch unread messages. Returns same shape as fetch-messages!.")
 
-  (mark-read! [this uid]
-    "Mark a message as read by UID.
+  (mark-read! [this uid] [this uid opts]
+    "Mark a message as read by UID, in (:folder opts) or the configured folder.
 
     Returns:
-      Map with :success? and optional :error")
+      Map with :success? and optional :error (:not-found when no such UID)")
 
-  (delete-message! [this uid]
-    "Delete a message by UID.
+  (delete-message! [this uid] [this uid opts]
+    "Delete a message by UID, in (:folder opts) or the configured folder. Only
+    that message is expunged, which needs the server's UIDPLUS; without it the
+    message is flagged \\Deleted, which fetches skip, and :expunged? is false.
 
     Returns:
-      Map with :success? and optional :error")
+      Map with :success?, :expunged? and optional :error (:not-found when no
+      such UID)")
 
   (close! [this]
     "Close IMAP connection. Returns true."))

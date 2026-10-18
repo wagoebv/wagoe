@@ -80,6 +80,7 @@
    text/plain and text/html parts; :raw is the RFC 822 source, on request."
   [:map
    [:uid :int]
+   [:folder {:optional true} [:string {:min 1}]]
    [:message-id {:optional true} :string]
    [:from :string]
    [:to [:vector :string]]
