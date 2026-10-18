@@ -43,6 +43,8 @@
   (is (= "invoices.number"
          (redaction/constraint-name {:message "Duplicate entry 'x constraint \"users_email\"' for key 'users.email' for key 'invoices.number'"}))
       "MySQL unique: the key after the value, not one the value names")
+  (is (= "cc_chk_1" (redaction/constraint-name {:message "Check constraint 'cc_chk_1' is violated."}))
+      "MySQL check")
   (is (nil? (redaction/constraint-name {:message "[SQLITE_CONSTRAINT_UNIQUE] A UNIQUE constraint failed (UNIQUE constraint failed: invoices.number)"}))
       "SQLite names none"))
 

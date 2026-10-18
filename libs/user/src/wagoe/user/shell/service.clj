@@ -265,30 +265,38 @@
                   {:user-data user-data
                    :email (:email user-data)}
                   (fn [{:keys [params]}]
-                    (let [user-data (:user-data params)]
+                    (let [user-data (:user-data params)
+                          ;; Each rule with its own :code, which step 1 reports as one
+                          ;; English sentence; a form shows them one by one. This runs
+                          ;; before the schema check, so a non-string email is left out
+                          ;; rather than thrown on as a 500.
+                          password-validation (when (:password user-data)
+                                                (auth-core/meets-password-policy? (:password user-data)
+                                                                                  (:password-policy validation-config)
+                                                                                  {:email (when (string? (:email user-data))
+                                                                                            (:email user-data))}))]
                       ;; 1. Validate request using pure core function with validation config
                       (let [validation-result (user-core/validate-user-creation-request user-data validation-config)]
                         (when-not (:valid? validation-result)
                           (throw (ex-info "Invalid user data"
                                           {:type :validation-error
-                                           :errors (:errors validation-result)
+                                           :errors (mapv #(cond-> %
+                                                            (= :password-policy-violation (:code %))
+                                                            (assoc :violations (:violations password-validation)))
+                                                         (:errors validation-result))
                                            :original-data user-data
                                            :interface-type :cli}))))
 
                       ;; 2. Validate password policy using pure authentication core
-                      (when (:password user-data)
-                        (let [password-validation (auth-core/meets-password-policy? (:password user-data)
-                                                                                    (:password-policy validation-config)
-                                                                                    {:email (:email user-data)})]
-                          (when-not (:valid? password-validation)
-                            ;; A :validation-error, as step 1 throws for the same rules, so
-                            ;; the HTTP boundary answers 400 and forms render it. Its own
-                            ;; type mapped to nothing and answered 500 (BOU-552).
-                            (throw (ex-info "Password does not meet requirements"
-                                            {:type :validation-error
-                                             :errors (mapv #(assoc % :field :password)
-                                                           (:violations password-validation))
-                                             :violations (:violations password-validation)})))))
+                      (when (false? (:valid? password-validation))
+                        ;; A :validation-error, as step 1 throws for the same rules, so
+                        ;; the HTTP boundary answers 400 and forms render it. Its own
+                        ;; type mapped to nothing and answered 500 (BOU-552).
+                        (throw (ex-info "Password does not meet requirements"
+                                        {:type :validation-error
+                                         :errors (mapv #(assoc % :field :password)
+                                                       (:violations password-validation))
+                                         :violations (:violations password-validation)})))
 
                       ;; 3. Check business rules using pure core function
                       (let [existing-user (.find-user-by-email user-repository (:email user-data))

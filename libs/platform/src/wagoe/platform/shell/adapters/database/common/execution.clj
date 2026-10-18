@@ -156,7 +156,7 @@
   (boolean (re-find #"(?i)^\s*delete\b" (str sql))))
 
 (defn- conflict
-  "A refused unique or foreign key as a :conflict, which HTTP answers 409
+  "A refused unique key, foreign key or CHECK as a :conflict, which HTTP answers 409
    (BOU-590). Its data reaches the client, so it names at most its fields: the
    driver's text holds the SQL and the values sent."
   [{:keys [kind field referenced?] :as v} sql e]
@@ -170,7 +170,10 @@
                               "Another record already has these values")
                :foreign-key (if referenced?
                               "The record is still referenced by another record"
-                              "A referenced record does not exist"))
+                              "A referenced record does not exist")
+               :check       (if field
+                              (str "Not an allowed value for " (name field))
+                              "A value is not allowed"))
              (cond-> {:type :conflict :constraint kind}
                (not referenced?) (merge (select-keys v [:field :fields])))
              e)))

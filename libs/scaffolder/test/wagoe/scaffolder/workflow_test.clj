@@ -299,7 +299,8 @@
             move #(call :post (str "/invoices/" id "/transition") {:transition %})]
         (sql! ctx "ALTER TABLE invoices ADD CONSTRAINT no_delivered CHECK (status <> 'delivered')")
         (testing "the column write fails, so the request does"
-          (is (<= 500 (:status (move "delivered")))))
+          ;; A CHECK refusal is a :conflict, not a 500.
+          (is (= 409 (:status (move "delivered")))))
         (testing "the workflow moved and the column did not: that is not hidden"
           (is (= :delivered (:current-state (workflow/find-instance-by-entity store :invoice uuid))))
           (is (= "entered" (column ctx uuid))))

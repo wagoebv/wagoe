@@ -12,6 +12,8 @@
             [wagoe.user.shell.service :as service]
             [wagoe.user.shell.in-memory-repository-test :as mem]
             [wagoe.email.ports :as email-ports]
+            [wagoe.i18n.shell.middleware :as i18n-middleware]
+            [wagoe.i18n.shell.catalogue :as catalogue]
             [clojure.test :refer [deftest testing is]]
             [clojure.tools.logging.test :as log-test]
             [clojure.string :as str])
@@ -27,6 +29,12 @@
   [response text]
   (and (string? (:body response))
        (str/includes? (:body response) text)))
+
+(def ^:private dutch
+  "Request keys that render a page through the real Dutch catalogue."
+  {:i18n/t (i18n-middleware/resolve-t-fn
+            {:i18n/catalogue      (catalogue/load-catalogue "wagoe/i18n/translations")
+             :i18n/default-locale :nl})})
 
 (defn- has-header?
   "Check if response has a header with specific value."
@@ -568,15 +576,15 @@
                              :message "A user with this email already exists"}))
           config {:active {:wagoe/settings {:user-limits {:max-users 1000}}}}
           handler (web-handlers/create-user-htmx-handler service nil config)
-          request {:form-params {"name" "Test User"
-                                 "email" "taken@example.com"
-                                 "password" "password123"
-                                 "role" "user"}}
+          request (assoc dutch :form-params {"name" "Test User"
+                                             "email" "taken@example.com"
+                                             "password" "password123"
+                                             "role" "user"})
           response (handler request)]
 
       (is (= 400 (:status response)))
       (is (html-contains? response "create-user-form"))
-      (is (html-contains? response "A user with this email already exists"))))
+      (is (html-contains? response "Er bestaat al een gebruiker met dit e-mailadres"))))
 
   (testing "a password the policy rejects comes back as a form, not a 500"
     (let [service (create-service-rejecting-registration
@@ -587,15 +595,15 @@
                                        :message "Must contain at least one number"}]}))
           config {:active {:wagoe/settings {:user-limits {:max-users 1000}}}}
           handler (web-handlers/create-user-htmx-handler service nil config)
-          request {:form-params {"name" "Test User"
-                                 "email" "new@example.com"
-                                 "password" "abcdefgh"
-                                 "role" "user"}}
+          request (assoc dutch :form-params {"name" "Test User"
+                                             "email" "new@example.com"
+                                             "password" "abcdefgh"
+                                             "role" "user"})
           response (handler request)]
 
       (is (= 400 (:status response)))
       (is (html-contains? response "create-user-form"))
-      (is (html-contains? response "Must contain at least one number"))
+      (is (html-contains? response "Moet een cijfer bevatten"))
       ;; The box comes back empty, so the rules carry no verdict — the message
       ;; above is what says why it was refused.
       (is (html-contains? response "requirement-pending"))
@@ -922,18 +930,24 @@
   ;; Each used to leave as a 500 error page (BOU-552).
   (let [submit (fn [email password]
                  ((web-handlers/register-submit-handler (policy-service) {})
-                  {:form-params {"name" "Alice" "email" email "password" password}}))]
+                  (assoc dutch :form-params {"name" "Alice" "email" email "password" password})))]
     (testing "a password containing the email's local part"
       (let [response (submit "alice@x.org" "alice-Secret-123")]
         (is (= 400 (:status response)))
         (is (html-contains? response "register-form"))
-        (is (html-contains? response "Password cannot contain your email address"))))
+        (is (html-contains? response "Mag je e-mailadres niet bevatten"))))
 
-    (testing "a password shorter than the configured minimum"
+    (testing "a password shorter than the configured minimum shows that rule"
       (let [response (submit "bob@x.org" "Shortpass1")]
         (is (= 400 (:status response)))
         (is (html-contains? response "register-form"))
-        (is (html-contains? response "at least 12 characters"))))))
+        (is (html-contains? response "Minstens 12 tekens"))))
+
+    (testing "fields the request schema refuses"
+      (let [response (submit "not-an-email" "")]
+        (is (= 400 (:status response)))
+        (is (html-contains? response "Heeft niet de verwachte vorm"))
+        (is (html-contains? response "Verplicht"))))))
 
 (deftest ^:contract register-submit-refuses-a-taken-email-with-the-form
   (let [svc (policy-service)

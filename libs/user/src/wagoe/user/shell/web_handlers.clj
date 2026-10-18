@@ -17,7 +17,7 @@
             [wagoe.i18n.shell.render :as i18n]
             [wagoe.shared.ui.core.components :as ui]
             [wagoe.shared.ui.core.layout :as layout]
-            [wagoe.shared.ui.core.validation :as validation]
+            [wagoe.shared.ui.core.form :as form]
             [wagoe.platform.core.http.client-ip :as client-ip]
             [wagoe.platform.shell.web.table :as web-table]
             [wagoe.user.core.oidc :as oidc-core]
@@ -36,6 +36,8 @@
             [clojure.edn :as edn]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
+            [malli.core :as m]
+            [malli.util :as mu]
             [ring.util.response :as response])
   (:import (java.time Instant)
            (java.util UUID)))
@@ -102,6 +104,27 @@
      :require-numbers       (:require-numbers? policy)
      :require-special-chars (:require-special-chars? policy)}))
 
+(def ^:private form-schema
+  "`schema` without its `:error/message`s. Those are English and the API
+   answers with them; a form shows the i18n markers `form/errors` derives from
+   the constraints instead."
+  (memoize
+   (fn [schema]
+     (m/walk schema (m/schema-walker
+                     #(if (:error/message (m/properties %))
+                        (mu/update-properties % dissoc :error/message)
+                        %))))))
+
+(defn- request-errors
+  "{field [marker]} for `data` that failed `schema`. A blank or absent field
+   is checked as missing, so it reads Required rather than \"at least 1
+   characters\". A blank optional field keeps its own error."
+  [schema data]
+  (let [schema  (form-schema schema)
+        present (into {} (remove (fn [[_ v]] (or (nil? v) (and (string? v) (str/blank? v))))) data)]
+    (merge (form/errors schema data)
+           (form/errors schema present))))
+
 (defn- validate-request-data
   "Validate request data against schema with transformation.
    
@@ -116,9 +139,7 @@
         valid? (cv/valid? schema transformed)]
     (if valid?
       [true nil transformed]
-      (let [explain (cv/explain schema transformed)
-            field-errors (validation/explain->field-errors explain)]
-        [false field-errors transformed]))))
+      [false (request-errors schema transformed) transformed])))
 
 (defn- current-time
   "Return the shell-controlled current time for rendering relative timestamps."
@@ -713,14 +734,39 @@
          (keyword? (last field))) (last field)
     :else                        :form))
 
+(defn- error-message
+  "The i18n marker for a service error or password-policy violation, by its
+   :code. An unknown code keeps its own :message."
+  [{:keys [code params message]}]
+  (case code
+    (:missing-required-field :blank :role-required) [:t :validation/required]
+    :too-short                     [:t :validation/too-short params]
+    :too-long                      [:t :validation/too-long params]
+    :schema-validation-failed      [:t :validation/invalid]
+    :invalid-role                  [:t :validation/not-an-option]
+    (:role-not-allowed :role-creation-restricted) [:t :user/error-role-not-allowed]
+    :missing-uppercase             [:t :user/error-password-uppercase]
+    :missing-lowercase             [:t :user/error-password-lowercase]
+    :missing-number                [:t :user/error-password-number]
+    :missing-special-char          [:t :user/error-password-special-char]
+    :common-password               [:t :user/error-password-common]
+    :contains-email                [:t :user/error-password-contains-email]
+    :password-policy-violation     [:t :user/error-password-policy]
+    :invalid-characters            [:t :user/error-name-invalid-characters]
+    :invalid-domain                [:t :user/error-email-domain]
+    :admin-email-domain-restricted [:t :user/error-email-admin-domain]
+    :viewer-must-be-active         [:t :user/error-viewer-must-be-active]
+    message))
+
 (defn- service-errors->field-errors
   "Group a service :validation-error's `:errors` — a vector of
    {:field :code :message} — into the field -> messages map the form takes.
    Anything without a usable field lands under :form, which the form renders as
-   an unattached block."
+   an unattached block. A password-policy refusal shows each rule it broke."
   [errors]
-  (reduce (fn [acc {:keys [field message]}]
-            (update acc (error-field-key field) (fnil conj []) message))
+  (reduce (fn [acc {:keys [field violations] :as error}]
+            (update acc (error-field-key field) (fnil into [])
+                    (map error-message) (or (seq violations) [error])))
           {}
           errors))
 
@@ -1002,7 +1048,7 @@
             (let [data (ex-data e)]
               (case (:type data)
                 :user-exists
-                (rerender {:email [(or (:message data) (user-facing-message e))]} nil)
+                (rerender {:email [[:t :user/error-email-taken]]} nil)
 
                 ;; Password policy refusals included. nil, not the violations:
                 ;; the password box comes back empty, so the tick list has to
@@ -1628,7 +1674,8 @@
                   :password-policy-violation
                   (html-response request
                                  (profile-ui/password-section-fragment true
-                                                                       {:new-password ["Password does not meet requirements"]})
+                                                                       {:new-password (or (seq (map error-message (:violations data)))
+                                                                                          [[:t :user/error-password-policy]])})
                                  400
                                  htmx-no-cache-headers)
                   :user-not-found

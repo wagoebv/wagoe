@@ -158,11 +158,13 @@
       (< (count name) min-len)
       {:field :name
        :code :too-short
+       :params {:min min-len}
        :message (str "Name must be at least " min-len " characters long")}
 
       (> (count name) max-len)
       {:field :name
        :code :too-long
+       :params {:max max-len}
        :message (str "Name cannot exceed " max-len " characters")}
 
       (str/blank? (str/trim name))

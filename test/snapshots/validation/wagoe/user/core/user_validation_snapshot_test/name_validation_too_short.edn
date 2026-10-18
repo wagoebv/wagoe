@@ -11,5 +11,6 @@
     :message "should be at least 1 character"}
    {:code :too-short,
     :field :name,
-    :message "Name must be at least 1 characters long"}),
+    :message "Name must be at least 1 characters long",
+    :params {:min 1}}),
   :valid? false}}

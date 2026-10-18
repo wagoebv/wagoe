@@ -47,6 +47,7 @@
   [#"for key '([\w$.]+)'$"                  ; MySQL unique
    #"constraint \"([\w$.]+)\""              ; PostgreSQL
    #"CONSTRAINT `([\w$.]+)`"                ; MySQL foreign key
+   #"^Check constraint '([\w$.]+)' is violated" ; MySQL check
    #"violation: \"(?:\w+\.)?(\w+)[: ]"])    ; H2
 
 (defn constraint-name
