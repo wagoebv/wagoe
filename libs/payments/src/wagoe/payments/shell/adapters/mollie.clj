@@ -15,79 +15,133 @@
    "Accept"         "application/json"
    "User-Agent"     "wagoe-payments/1.0"})
 
-(defn- fetch-payment [api-key payment-id]
-  (let [url      (str mollie-api-base "/payments/" payment-id)
-        response (http/get url {:headers          (mollie-headers api-key)
-                                :as               :string
-                                :throw-exceptions false})]
-    (when (= 200 (:status response))
-      (json/parse-string (:body response) true))))
+(defn- parse-body [response]
+  (try (json/parse-string (:body response) true)
+       (catch Exception _ nil)))
+
+(defn- request!
+  "Call the Mollie API. Returns {:status int :body parsed-map-or-nil}."
+  ([api-key method path] (request! api-key method path nil nil))
+  ([api-key method path payload] (request! api-key method path payload nil))
+  ([api-key method path payload extra-headers]
+   (let [send!    (case method :get http/get :post http/post :delete http/delete)
+         response (send! (str mollie-api-base path)
+                         (cond-> {:headers          (merge (mollie-headers api-key) extra-headers)
+                                  :as               :string
+                                  :throw-exceptions false}
+                           payload (assoc :body (json/generate-string payload))))]
+     {:status (:status response)
+      :body   (parse-body response)})))
+
+(defn- ok-body!
+  "The body of a 2xx response; anything else throws, naming the port method.
+   An unparseable 2xx body throws too, rather than returning nil ids."
+  [message method {:keys [status body]}]
+  (if (and (#{200 201} status) (map? body))
+    body
+    (throw (ex-info message {:type     :internal-error
+                             :provider :mollie
+                             :method   method
+                             :status   status
+                             :body     body}))))
+
+(defn- fetch-payment
+  "GET the payment: {:status int :body map}. A rejected key throws: it never
+   heals, and reading it as :pending would hide it (as Stripe does)."
+  [api-key payment-id]
+  (let [{:keys [status] :as response} (request! api-key :get (str "/payments/" payment-id))]
+    (when (#{401 403} status)
+      (throw (ex-info "Mollie authentication failed"
+                      {:type       :internal-error
+                       :provider   :mollie
+                       :status     status
+                       :payment-id payment-id})))
+    (when-not (= 200 status)
+      (log/warnf "Mollie fetch-payment: %s returned %s" payment-id status))
+    response))
+
+(defn- create-customer!
+  "A first payment needs a customer to hang the mandate on."
+  [api-key customer-email]
+  (:id (ok-body! "Mollie customer creation failed" :create-checkout-session
+                 (request! api-key :post "/customers"
+                           (cond-> {} customer-email (assoc :email customer-email))))))
+
+(defn- default-webhook-url [webhook-base-url]
+  (str webhook-base-url "/api/v1/payments/webhook"))
+
+(defn- webhook-result
+  "nil :event-type for a status with no payment.* outcome (open, pending) or
+   an unknown payment — acknowledged, not thrown, as the port requires."
+  [payment-id payment]
+  (let [status     (:status payment)
+        event-type (provider/mollie-status->event-type status)]
+    (log/infof "Mollie webhook: payment-id=%s status=%s → event=%s"
+               payment-id status event-type)
+    ;; :provider-payment-id is the genuine Mollie payment id (tr_…) — the same
+    ;; value returned as :provider-checkout-id at creation. :correlation-id is
+    ;; the internal UUID recovered from metadata, round-tripping CheckoutResult.
+    {:event-type          event-type
+     :provider-payment-id payment-id
+     :correlation-id      (get-in payment [:metadata :checkout-id])
+     :payload             (or payment {})}))
 
 (defrecord MolliePaymentProvider [api-key webhook-base-url]
   ports/IPaymentProvider
 
   (provider-name [_] :mollie)
 
-  (create-checkout-session [_ {:keys [amount-cents currency description redirect-url webhook-url metadata
-                                      setup-future-usage]}]
-    ;; Mandate-aware checkout (sequenceType=first + customer creation) is not
-    ;; implemented yet — fail loudly rather than silently ignoring the option,
-    ;; which would leave the caller believing a mandate was stored.
-    (when setup-future-usage
-      (throw (ex-info "Mollie create-checkout-session does not support :setup-future-usage yet"
-                      {:type               :not-implemented
-                       :provider           :mollie
-                       :method             :create-checkout-session
-                       :setup-future-usage setup-future-usage})))
-    (let [checkout-id  (str (UUID/randomUUID))
-          webhook      (or webhook-url (str webhook-base-url "/api/v1/payments/webhook"))
-          payload      {:amount      {:currency (or currency "EUR")
-                                      :value    (provider/cents->euro amount-cents)}
-                        :description description
-                        :redirectUrl redirect-url
-                        :webhookUrl  webhook
-                        :metadata    (merge {:checkout-id checkout-id} metadata)}
-          response     (http/post (str mollie-api-base "/payments")
-                                  {:headers          (mollie-headers api-key)
-                                   :body             (json/generate-string payload)
-                                   :as               :string
-                                   :throw-exceptions false})
-          body         (json/parse-string (:body response) true)]
-      (log/infof "Mollie create-checkout: status=%d id=%s" (:status response) (:id body))
-      (when-not (#{200 201} (:status response))
-        (throw (ex-info "Mollie checkout creation failed"
-                        {:type   :internal-error
-                         :status (:status response)
-                         :body   body})))
+  (create-checkout-session [_ {:keys [webhook-url setup-future-usage customer-email
+                                      provider-customer-id] :as opts}]
+    ;; Any :setup-future-usage makes this the first payment of a mandate; Mollie
+    ;; has no on-session/off-session distinction, a mandate serves both.
+    (let [checkout-id (str (UUID/randomUUID))
+          customer-id (when setup-future-usage
+                        (or provider-customer-id (create-customer! api-key customer-email)))
+          payload     (provider/mollie-checkout-payload
+                       opts
+                       {:checkout-id checkout-id
+                        :webhook-url (or webhook-url (default-webhook-url webhook-base-url))
+                        :customer-id customer-id})
+          body        (ok-body! "Mollie checkout creation failed" :create-checkout-session
+                                (request! api-key :post "/payments" payload))]
+      (log/infof "Mollie create-checkout: id=%s" (:id body))
       {:checkout-url         (get-in body [:_links :checkout :href])
        :provider-checkout-id (:id body)
        ;; Internal correlation id, also stored in Mollie payment metadata
        ;; (metadata.checkout-id) so the webhook can recover it.
        :correlation-id       checkout-id}))
 
-  (create-off-session-payment [_ _opts]
-    ;; Mollie recurring payments (sequenceType=recurring) are not implemented yet.
-    (throw (ex-info "Mollie create-off-session-payment is not implemented yet"
-                    {:type     :not-implemented
-                     :provider :mollie
-                     :method   :create-off-session-payment})))
+  (create-off-session-payment [_ {:keys [idempotency-key] :as opts}]
+    ;; A 422 (no valid mandate) creates no payment, so there is no id to
+    ;; report as :failed — it throws, like Stripe's declined-without-intent case.
+    (let [payload (provider/mollie-recurring-payload opts (default-webhook-url webhook-base-url))
+          headers (when idempotency-key {"Idempotency-Key" idempotency-key})
+          body    (ok-body! "Mollie off-session payment failed" :create-off-session-payment
+                            (request! api-key :post "/payments" payload headers))]
+      (log/infof "Mollie off-session payment: id=%s status=%s" (:id body) (:status body))
+      {:provider-payment-id (:id body)
+       :status              (provider/mollie-recurring-status (:status body))}))
 
   (expire-checkout-session [_ provider-checkout-id]
-    ;; Mollie payments expire automatically; explicit expiry is not implemented yet.
-    (throw (ex-info "Mollie expire-checkout-session is not implemented yet"
-                    {:type                 :not-implemented
-                     :provider             :mollie
-                     :method               :expire-checkout-session
-                     :provider-checkout-id provider-checkout-id})))
+    ;; Mollie has no expiry call; cancelling the open payment is what stops
+    ;; the checkout. Its webhook then reports :payment.cancelled.
+    (ok-body! "Mollie expire-checkout-session failed" :expire-checkout-session
+              (request! api-key :delete (str "/payments/" provider-checkout-id)))
+    (log/infof "Mollie expire-checkout: id=%s" provider-checkout-id)
+    {:provider-checkout-id provider-checkout-id
+     :status               :expired})
 
   (get-payment-status [_ provider-checkout-id]
-    (let [payment (fetch-payment api-key provider-checkout-id)]
-      (if payment
-        {:status              (provider/mollie-status->payment-status (:status payment))
-         :provider-payment-id (:id payment)}
-        ;; :provider-payment-id deliberately absent (not nil) so callers
-        ;; merging the result cannot clobber a stored payment id.
-        {:status :pending})))
+    (if-let [payment (let [{:keys [status body]} (fetch-payment api-key provider-checkout-id)]
+                       (when (= 200 status) body))]
+      (cond-> {:status              (provider/mollie-status->payment-status (:status payment))
+               :provider-payment-id (:id payment)}
+        (:customerId payment) (assoc :provider-customer-id (:customerId payment))
+        (:mandateId payment)  (assoc :provider-payment-method-id (:mandateId payment)))
+      ;; :provider-payment-id deliberately absent (not nil) so callers
+      ;; merging the result cannot clobber a stored payment id.
+      {:status :pending}))
 
   (verify-webhook-signature [_ _raw-body _headers]
     ;; Mollie does not use HMAC signing. Verification happens by fetching
@@ -98,21 +152,21 @@
     ;; Mollie sends a form-POST with only the payment id as `id`
     (let [payment-id (if (string? raw-body)
                        (second (re-find #"id=([^&]+)" raw-body))
-                       (or (:id raw-body) (str raw-body)))
-          payment    (when payment-id (fetch-payment api-key payment-id))
-          status     (:status payment)
-          event-type (provider/mollie-status->event-type status)]
-      (log/infof "Mollie webhook: payment-id=%s status=%s → event=%s"
-                 payment-id status event-type)
-      (when-not event-type
-        (throw (ex-info "Unhandled Mollie payment status"
-                        {:type   :internal-error
-                         :status status})))
-      ;; :provider-payment-id is the genuine Mollie payment id (tr_…) — the same
-      ;; value returned as :provider-checkout-id at creation. :correlation-id is
-      ;; the internal UUID recovered from metadata, round-tripping CheckoutResult.
-      {:event-type            event-type
-       :provider-payment-id   payment-id
-       :correlation-id        (get-in payment [:metadata :checkoutId]
-                                      (get-in payment [:metadata :checkout-id]))
-       :payload               (or payment {})})))
+                       ;; Ring's :form-params are string-keyed.
+                       (or (:id raw-body) (get raw-body "id")))
+          _          (when-not payment-id
+                       (throw (ex-info "Mollie webhook carries no payment id"
+                                       {:type :validation-error :provider :mollie})))
+          {:keys [status body]} (fetch-payment api-key payment-id)]
+      (case (int (or status 0))
+        200 (webhook-result payment-id body)
+        ;; Not this account's payment (a forged POST, or the other API key's):
+        ;; acknowledged, as Mollie advises, so it is not retried for days.
+        404 (webhook-result payment-id nil)
+        ;; Anything else throws so the endpoint answers 5xx and Mollie retries;
+        ;; acknowledging it would lose the payment's outcome for good.
+        (throw (ex-info "Mollie webhook: payment could not be fetched"
+                        {:type       :internal-error
+                         :provider   :mollie
+                         :status     status
+                         :payment-id payment-id}))))))

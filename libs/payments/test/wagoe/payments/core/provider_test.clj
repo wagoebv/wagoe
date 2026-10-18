@@ -125,6 +125,27 @@
 ;; stripe-event->event-type (convenience wrapper)
 ;; =============================================================================
 
+(deftest ^:unit mollie-recurring-status-test
+  (is (= :paid (provider/mollie-recurring-status "paid")))
+  (is (= :pending (provider/mollie-recurring-status "pending")))
+  (is (= :pending (provider/mollie-recurring-status "open")))
+  (testing "a charge that ended without money is :failed"
+    (doseq [s ["failed" "canceled" "expired"]]
+      (is (= :failed (provider/mollie-recurring-status s))))))
+
+(deftest ^:unit mollie-checkout-payload-test
+  (let [req {:amount-cents 1250 :currency "eur" :description "Order" :redirect-url "https://r"
+             :metadata {:checkout-id "user-value" :order "42"}}]
+    (testing "the internal checkout id wins over user metadata"
+      (is (= {:checkout-id "corr" :order "42"}
+             (:metadata (provider/mollie-checkout-payload req {:checkout-id "corr"})))))
+    (testing "a customer makes it the first payment of a mandate"
+      (is (= {:customerId "cst_1" :sequenceType "first"}
+             (select-keys (provider/mollie-checkout-payload req {:checkout-id "c" :customer-id "cst_1"})
+                          [:customerId :sequenceType]))))
+    (testing "no customer, no mandate"
+      (is (not (contains? (provider/mollie-checkout-payload req {:checkout-id "c"}) :sequenceType))))))
+
 (deftest ^:unit stripe-event->event-type-test
   (testing "delegates to normalize-event-type :stripe"
     (is (= :payment.paid       (provider/stripe-event->event-type "payment_intent.succeeded")))

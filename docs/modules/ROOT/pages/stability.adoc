@@ -267,11 +267,6 @@ version bump for a fix we could see coming.
 |===
 | Library | Why
 
-| `payments`
-| The Mollie adapter throws "not implemented yet" for `create-off-session-payment`
-  and `expire-checkout-session`, so the PSP adapters are not interchangeable —
-  which is the whole point of the port
-
 | `config`
 | 263 lines of source against 37 of test, on the boot path of every application
 
