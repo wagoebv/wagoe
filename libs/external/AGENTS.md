@@ -108,7 +108,7 @@ failures), once per call after its retries. While open, calls return
 
 - `clj-http/clj-http 3.13.1` — Twilio REST calls
 - `cheshire/cheshire 6.2.0` — JSON parsing
-- `org.eclipse.angus/angus-mail 2.0.5` (Jakarta Mail 2) — SMTP and IMAP
+- `jakarta.mail/jakarta.mail-api 2.1.5` + `org.eclipse.angus/angus-mail 2.0.5` (Jakarta Mail 2) — SMTP and IMAP
 - `commons-net/commons-net 3.13.0` — FTPS
 - `metosin/malli 0.20.1` — schema validation
 
