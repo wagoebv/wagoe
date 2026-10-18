@@ -16,8 +16,8 @@ wagoe.external.ports               — Protocols: ISmtpProvider, IImapMailbox,
 wagoe.external.core.smtp           — Pure SMTP helpers
 wagoe.external.core.imap           — Pure IMAP helpers
 wagoe.external.core.twilio         — Pure Twilio helpers (build SMS/WhatsApp params)
-wagoe.external.shell.adapters.smtp — SmtpProviderAdapter (javax.mail)
-wagoe.external.shell.adapters.imap — ImapMailboxAdapter (javax.mail, UIDFolder)
+wagoe.external.shell.adapters.smtp — SmtpProviderAdapter (Jakarta Mail)
+wagoe.external.shell.adapters.imap — ImapMailboxAdapter (Jakarta Mail, UIDFolder)
 wagoe.external.shell.adapters.twilio  — TwilioAdapter (clj-http, Basic auth)
 wagoe.external.shell.adapters.ftps — FtpsFileSource (Commons Net, explicit TLS)
 ----

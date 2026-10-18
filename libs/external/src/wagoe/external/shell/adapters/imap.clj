@@ -1,7 +1,7 @@
 (ns wagoe.external.shell.adapters.imap
   "IMAP mailbox adapter implementing IImapMailbox.
 
-   Uses javax.mail for IMAP access. Connections are opened per-call and closed
+   Uses Jakarta Mail for IMAP access. Connections are opened per-call and closed
    in a finally block. Selection (unread, since, limit) runs as an IMAP SEARCH on
    envelopes; content is read only for the selected messages.
 
@@ -17,13 +17,13 @@
             [wagoe.external.ports :as ports]
             [wagoe.external.shell.resilience :as resilience]
             [clojure.tools.logging :as log])
-  (:import [com.sun.mail.imap IMAPFolder IMAPFolder$FetchProfileItem IMAPStore]
+  (:import [org.eclipse.angus.mail.imap IMAPFolder IMAPFolder$FetchProfileItem IMAPStore]
            [java.io ByteArrayInputStream ByteArrayOutputStream InputStream]
            [java.util Date Properties]
-           [javax.mail FetchProfile FetchProfile$Item Flags Flags$Flag Folder Header
+           [jakarta.mail FetchProfile FetchProfile$Item Flags Flags$Flag Folder Header
             Message Message$RecipientType Multipart Part Session Store UIDFolder$FetchProfileItem]
-           [javax.mail.internet MimeMessage MimePart MimeUtility]
-           [javax.mail.search AndTerm ComparisonTerm FlagTerm ReceivedDateTerm SearchTerm]))
+           [jakarta.mail.internet MimeMessage MimePart MimeUtility]
+           [jakarta.mail.search AndTerm ComparisonTerm FlagTerm ReceivedDateTerm SearchTerm]))
 
 (set! *warn-on-reflection* true)
 
@@ -128,7 +128,7 @@
   (or (.getReceivedDate msg) (.getSentDate msg) (Date.)))
 
 (defn- message->inbound
-  "Convert a javax.mail.Message to an InboundMessage map. With include-raw? the
+  "Convert a jakarta.mail.Message to an InboundMessage map. With include-raw? the
    message is downloaded once and parsed locally, rather than part by part."
   [^Message msg uid include-raw?]
   (let [raw          (when include-raw? (raw-bytes msg))

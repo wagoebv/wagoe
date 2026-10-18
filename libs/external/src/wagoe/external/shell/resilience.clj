@@ -39,7 +39,7 @@
 
 (defn- no-answer
   "`:rpc/unavailable` if `e` or a cause says the call never connected,
-   `:rpc/timeout` if it connected and got no answer, else nil. javax.mail
+   `:rpc/timeout` if it connected and got no answer, else nil. Jakarta Mail
    wraps the socket exception, so the causes are searched."
   [^Throwable e]
   (some #(#{:rpc/unavailable :rpc/timeout} (rpc/classify-exception %))

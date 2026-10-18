@@ -28,12 +28,12 @@ builds the sender from config.
 
 `libs/email` is the **application/domain** layer; `libs/external` is the raw
 **transport** layer. `email` depends on `external` (see `deps.edn`); there is no
-direct `javax.mail` dependency here — it arrives transitively.
+direct Jakarta Mail dependency here — it arrives transitively.
 
 ```
 libs/email (domain)                         libs/external (transport)
   Email {id, created-at, metadata, ...}  →   OutboundEmail {to, from, subject, ...}
-  EmailSenderProtocol                    →   ISmtpProvider  (javax.mail, TLS/SSL, HTML, MIME)
+  EmailSenderProtocol                    →   ISmtpProvider  (Jakarta Mail, TLS/SSL, HTML, MIME)
   shell/adapters/smtp SmtpEmailSender    →   shell/adapters/smtp SmtpProviderAdapter
 ```
 

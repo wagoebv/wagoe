@@ -1,7 +1,7 @@
 (ns wagoe.external.shell.adapters.smtp
   "SMTP transport adapter implementing ISmtpProvider.
 
-   Uses javax.mail for SMTP communication. This adapter is positioned as a
+   Uses Jakarta Mail for SMTP communication. This adapter is positioned as a
    transport-level provider — independent of the email lib's higher-level
    abstraction (templating, job queuing, etc.).
 
@@ -21,11 +21,11 @@
             [wagoe.external.shell.resilience :as resilience]
             [clojure.tools.logging :as log])
   (:import [java.util Base64]
-           [javax.activation DataHandler]
-           [javax.mail Session Transport MessagingException Authenticator PasswordAuthentication]
-           [javax.mail Message$RecipientType]
-           [javax.mail.internet InternetAddress MimeMessage MimeBodyPart MimeMultipart]
-           [javax.mail.util ByteArrayDataSource]))
+           [jakarta.activation DataHandler]
+           [jakarta.mail Session Transport MessagingException Authenticator PasswordAuthentication]
+           [jakarta.mail Message$RecipientType]
+           [jakarta.mail.internet InternetAddress MimeMessage MimeBodyPart MimeMultipart]
+           [jakarta.mail.util ByteArrayDataSource]))
 
 ;; =============================================================================
 ;; Session Building
@@ -91,7 +91,7 @@
    that id as the Message-ID header — saveChanges/Transport-send call
    updateMessageID and would otherwise overwrite it with a random one. The id is
    wrapped in angle brackets (RFC 5322) unless already bracketed. Absent a
-   :message-id, javax.mail's default generator applies."
+   :message-id, Jakarta Mail's default generator applies."
   ^MimeMessage [session message-id]
   (if message-id
     (let [s   (str message-id)

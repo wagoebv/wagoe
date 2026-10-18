@@ -38,7 +38,7 @@
    [:bcc {:optional true} [:vector [:string {:min 3}]]]
    [:attachments {:optional true} [:vector Attachment]]
    ;; Caller-supplied deterministic Message-ID (e.g. issuance dedup); when absent
-   ;; javax.mail generates one.
+   ;; Jakarta Mail generates one.
    [:message-id {:optional true} [:string {:min 1}]]])
 
 (def EmailSendResult

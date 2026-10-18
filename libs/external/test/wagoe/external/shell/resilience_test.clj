@@ -5,7 +5,7 @@
             [wagoe.external.shell.resilience :as resilience]
             [clojure.test :refer [deftest is testing]])
   (:import (java.net ConnectException ServerSocket SocketTimeoutException)
-           (javax.mail MessagingException)))
+           (jakarta.mail MessagingException)))
 
 (defn- closed-port []
   (with-open [s (ServerSocket. 0)] (.getLocalPort s)))
@@ -24,7 +24,7 @@
         (is (= 3 calls))
         (is (identical? ex thrown))))
 
-    (testing "javax.mail wraps the socket exception; the cause still counts"
+    (testing "Jakarta Mail wraps the socket exception; the cause still counts"
       (is (= 3 (second (counting-call settings (MessagingException. "connect failed"
                                                                     (ConnectException.)))))))
 

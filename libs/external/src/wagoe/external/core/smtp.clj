@@ -25,11 +25,11 @@
     :else        []))
 
 ;; =============================================================================
-;; javax.mail Properties
+;; Jakarta Mail Properties
 ;; =============================================================================
 
 (defn build-mime-properties
-  "Build java.util.Properties for a javax.mail Session.
+  "Build java.util.Properties for a Jakarta Mail Session.
    Pure function — returns a Properties object with no I/O.
 
   Args:
