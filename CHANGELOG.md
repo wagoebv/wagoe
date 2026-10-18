@@ -155,7 +155,7 @@ for what is public API, what is internal, and how deprecations are announced.
 ### Fixed
 
 - **Generated projects printed JDK restricted-method warnings on every SQLite task** (BOU-593). New projects pass
-  `--enable-native-access=ALL-UNNAMED`; add it to `:jvm-opts` of your `deps.edn` aliases and to your Dockerfile.
+  `--enable-native-access=ALL-UNNAMED`; add it to your aliases' `:jvm-opts`, and `:manifest {"Enable-Native-Access" "ALL-UNNAMED"}` to `b/uber`.
 - **On a Turkish JVM `userId` became `user-ıd`** (BOU-732): case conversion no longer uses the JVM locale.
   Ran on tr-TR? Re-lower stored emails. Use `wagoe.core.utils.text`; clj-kondo flags `clojure.string`'s case fns.
 - **An admin write a CHECK constraint refused answered 500** (BOU-734). It is a form error now, and elsewhere a

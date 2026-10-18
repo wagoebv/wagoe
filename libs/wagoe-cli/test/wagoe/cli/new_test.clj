@@ -257,7 +257,8 @@
             (is (some #{"--enable-native-access=ALL-UNNAMED"}
                       (get-in deps [:aliases alias :jvm-opts]))
                 (str alias)))
-          (is (str/includes? (slurp (io/file tmp "Dockerfile")) "\"--enable-native-access=ALL-UNNAMED\""))))
+          (is (str/includes? (slurp (io/file tmp "build.clj")) "{\"Enable-Native-Access\" \"ALL-UNNAMED\"}")
+              "the uberjar, for `java -jar`")))
 
       (testing "wagoe-test is on the :test alias, and a test uses it"
         (let [deps (edn/read-string (slurp (io/file tmp "deps.edn")))
