@@ -1131,7 +1131,7 @@ rename a released id: databases that recorded it would run it again. Per-module 
 |---|---|
 | `wagoe.tools.scaffold` | `bb scaffold` |
 | `wagoe.tools.ai` | `bb ai` |
-| `wagoe.tools.doctor` | `bb doctor` — config validation (8 rule-based checks; `--edn` for `wagoe doctor`) |
+| `wagoe.tools.doctor` | `bb doctor` — config validation (`bb doctor --help` lists the checks; `--edn` for `wagoe doctor`) |
 | `wagoe.tools.report` | the result shape the three diagnostics share, and its two renderers |
 | `wagoe.tools.setup` | `bb setup` — config setup wizard (interactive / flags / AI) |
 | `wagoe.tools.integrate` | `bb scaffold integrate` — guide module integration (Integrant config + wiring) |
