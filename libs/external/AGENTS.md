@@ -23,8 +23,10 @@ wagoe.external.core.twilio      — Pure Twilio helpers (build-sms-params, build
 wagoe.external.shell.adapters.smtp    — SmtpProviderAdapter (javax.mail)
 wagoe.external.shell.adapters.imap    — ImapMailboxAdapter (javax.mail, UIDFolder)
 wagoe.external.shell.adapters.twilio  — TwilioAdapter (clj-http, Basic auth)
-wagoe.external.core.ftps        — Pure FTPS helpers (select-files, retryable?, backoff-ms, ftps-error)
+wagoe.external.core.ftps        — Pure FTPS helpers (select-files, retryable?, ftps-error)
 wagoe.external.shell.adapters.ftps    — FtpsFileSource implementing IFileSource (Commons Net)
+wagoe.external.shell.resilience      — Retry + circuit breaker for SMTP/IMAP/Twilio
+                                         (wagoe.platform.resilience, shared with the RPC client)
 wagoe.external.shell.module-wiring    — Integrant init/halt for :wagoe.external/* keys
 ```
 
@@ -82,6 +84,25 @@ All four keys are opt-in — add to `:active` in `config.edn` to enable:
  ;; Only when the JVM's cacerts does not cover the server:
  :trust-store  "certs/ftps-trust.p12" :trust-store-password #env FTPS_TRUST_PASSWORD}
 ```
+
+## Retry and circuit breaker
+
+The adapters use the RPC client's resilience layer (`wagoe.platform.resilience`).
+Both are opt-in. SMTP, IMAP and Twilio retry only a call that never connected —
+one that did may have sent the message. They set no connect timeout, so retries
+are off by default:
+
+```clojure
+{:retries         2       ; extra attempts (default 0)
+ :retry-delay-ms  100     ; ×1, ×2, … between attempts
+ :cache           #ig/ref :wagoe/cache                    ; enables the breaker
+ :circuit-breaker {:failure-threshold 5 :open-ms 30000}}
+```
+
+FTPS keeps `:max-attempts` / `:backoff-ms` and takes the same `:cache` and
+`:circuit-breaker`. The breaker counts calls that got no answer (FTPS: transient
+failures), once per call after its retries. While open, calls return
+`{:success? false :error {:type :circuit-open ...}}` without connecting.
 
 ## Dependencies
 
