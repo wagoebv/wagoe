@@ -180,14 +180,14 @@
    
    Pipeline stages:
    1. Context setup (universal)
-   2. Logging start (universal)  
-   3. Input validation (user-specific)
-   4. Data transformation (user-specific)
-   5. Business logic invocation (user-specific)
-   6. Response formatting (user-specific)
-   7. Effects dispatch (universal)
-   8. Logging completion (universal)
-   9. Metrics completion (universal)
+   2. Logging start (universal)
+   3. Op metrics (universal; its :leave sees the outcome of everything after it)
+   4. Input validation (user-specific)
+   5. Data transformation (user-specific)
+   6. Business logic invocation (user-specific)
+   7. Response formatting (user-specific)
+   8. Effects dispatch (universal)
+   9. Logging completion (universal)
    10. Response shaping (universal)
    
    Args:

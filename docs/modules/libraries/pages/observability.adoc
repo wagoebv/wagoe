@@ -67,8 +67,9 @@ never registered is dropped by every provider.
 (metrics/inc-counter! m orders 1 {:channel "web"})
 ----
 
-`metrics/increment` and `metrics/observe` register a counter or histogram on
-first use, so they need no registration step:
+`metrics/increment`, `increment-by`, `gauge`, `observe` and `timed` register the
+metric on first use, so they need no registration step. The
+`wagoe.observability.metrics.core` helpers are built on them:
 
 [source,clojure]
 ----
@@ -77,6 +78,8 @@ first use, so they need no registration step:
 ----
 
 Keep label values bounded: a label per user id or URL makes a series per value.
+No provider caps the series of a metric. A cap would drop data without saying
+so; the framework's own labels (method, status, operation) are bounded.
 
 == Error reporting with Sentry
 

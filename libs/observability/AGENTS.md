@@ -40,9 +40,13 @@ context.
 
 Every adapter drops an emission to an unregistered handle. Register once
 (`register-counter!` etc.) and emit to the handle, or use
-`metrics.ports/increment` / `observe`, which register a counter / histogram on
-first use. The `metrics.core` helpers (`increment-counter`, `observe-histogram`,
-…) do not register. Keep label values bounded — never a user id or raw URI.
+`metrics.ports/increment`, `increment-by`, `gauge`, `observe` or `timed`, which
+register on first use, as do the `metrics.core` helpers built on them. Keep label
+values bounded — never a user id or raw URI. No adapter caps series per metric:
+a cap would drop real data silently, and the framework's own labels are bounded.
+
+Pipeline interceptors read the emitter from `:metrics-emitter` on the `:system`
+map, the key every system provides.
 
 ### Sentry
 

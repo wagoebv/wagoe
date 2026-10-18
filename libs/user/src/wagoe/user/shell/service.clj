@@ -880,3 +880,10 @@
      (def service (create-user-service user-repo session-repo audit-repo validation-cfg auth-svc))"
   [user-repository session-repository audit-repository validation-config auth-service]
   (->UserService user-repository session-repository audit-repository validation-config auth-service))
+
+(defn interceptor-system
+  "The interceptor :system for a user operation. Wiring puts the metrics
+   emitter on the service; the platform op-metrics interceptor reads it."
+  [user-service]
+  {:user-service    user-service
+   :metrics-emitter (:metrics-emitter user-service)})
