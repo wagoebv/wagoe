@@ -199,10 +199,12 @@
                      ;; Length requirements
                      (< (count password) min-length)
                      (conj {:code :too-short
+                            :params {:min min-length}
                             :message (str "Must be at least " min-length " characters")})
 
                      (> (count password) max-length)
                      (conj {:code :too-long
+                            :params {:max max-length}
                             :message (str "Must be no more than " max-length " characters")})
 
                      ;; Character requirements

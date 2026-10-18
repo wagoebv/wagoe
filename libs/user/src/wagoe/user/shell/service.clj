@@ -108,6 +108,14 @@
            :audit-repository audit-repository
            :auth-service auth-service)))
 
+(defn- password-violations
+  "Each password-policy rule `user-data`'s password breaks, with a :code a form
+   can translate. The creation check reports them as one English sentence."
+  [user-data validation-config]
+  (:violations (auth-core/meets-password-policy? (:password user-data)
+                                                 (:password-policy validation-config)
+                                                 {:email (:email user-data)})))
+
 (defn- foreign-key-refusal?
   "Whether `e`, or anything that caused it, is a refused foreign key: the
    platform's :constraint (BOU-590), or a driver error read by the platform's
@@ -271,7 +279,10 @@
                         (when-not (:valid? validation-result)
                           (throw (ex-info "Invalid user data"
                                           {:type :validation-error
-                                           :errors (:errors validation-result)
+                                           :errors (mapv #(cond-> %
+                                                            (= :password-policy-violation (:code %))
+                                                            (assoc :violations (password-violations user-data validation-config)))
+                                                         (:errors validation-result))
                                            :original-data user-data
                                            :interface-type :cli}))))
 
