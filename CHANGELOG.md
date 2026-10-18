@@ -146,6 +146,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **Register and create-user form errors were English only** (BOU-554): password-policy and field errors now come from the
   i18n catalogue, one line per broken password rule. No action needed.
+- **Rate limiting on in prod without an active cache was found only at boot** (BOU-456): `bb doctor --env prod` now
+  reports it, and the boot error names the edit. Run it before deploying.
 - **Search without PostgreSQL full-text missed "ID" on a Turkish JVM** (BOU-608): the LIKE fallback and highlighting
   no longer lower text with the JVM's locale. No action needed.
 - **IMAP `mark-read!` and `delete-message!` ignored the fetch folder, and delete expunged every `\Deleted` message**
