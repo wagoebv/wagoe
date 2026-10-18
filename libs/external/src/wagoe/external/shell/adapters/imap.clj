@@ -137,16 +137,14 @@
                (log/warn e "Could not read IMAP message content" {:uid uid})
                {:body-parts [] :attachments []}))
         message-id (when (instance? MimeMessage src) (.getMessageID ^MimeMessage src))]
-    (as-> (imap-core/build-inbound-message uid (str (first (.getFrom src)))
-                                           (mapv str (.getRecipients src Message$RecipientType/TO))
-                                           (str (.getSubject src))
-                                           body-parts (received-at msg) (headers-map src)) inbound
-      (assoc inbound
-             :seen?       (.isSet msg Flags$Flag/SEEN)
-             :attachments (imap-core/mark-embedded (:html-body inbound) attachments))
-      (cond-> inbound
-        message-id (assoc :message-id message-id)
-        raw        (assoc :raw raw)))))
+    (cond-> (assoc (imap-core/build-inbound-message uid (str (first (.getFrom src)))
+                                                    (mapv str (.getRecipients src Message$RecipientType/TO))
+                                                    (str (.getSubject src))
+                                                    body-parts (received-at msg) (headers-map src))
+                   :seen?       (.isSet msg Flags$Flag/SEEN)
+                   :attachments (imap-core/mark-embedded body-parts attachments))
+      message-id (assoc :message-id message-id)
+      raw        (assoc :raw raw))))
 
 ;; =============================================================================
 ;; Server-side Selection

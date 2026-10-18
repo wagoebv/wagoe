@@ -54,7 +54,9 @@
    :disposition and :content-id are left out when the part has no such header."
   [{:keys [content-type filename disposition content-id]} ^bytes content]
   (let [disposition (some-> disposition str/trim str/lower-case not-empty)
-        content-id  (some-> content-id str/trim (str/replace #"^<|>$" "") str/trim not-empty)]
+        content-id  (some-> content-id str/trim
+                            (as-> s (or (second (re-find #"<([^<>]*)>" s)) s))
+                            str/trim not-empty)]
     (cond-> {:content-type (or (base-content-type content-type) "application/octet-stream")
              :size         (alength content)
              :content      content}
@@ -62,13 +64,25 @@
       disposition (assoc :disposition disposition)
       content-id  (assoc :content-id content-id))))
 
+(defn- percent-decode
+  "cid: URLs are URL-encoded (RFC 2392): \"a%40b\" names Content-ID <a@b>."
+  [s]
+  (str/replace s #"%([0-9A-Fa-f]{2})" #(str (char (Integer/parseInt (second %) 16)))))
+
 (defn mark-embedded
-  "Set :embedded? on each attachment: true when html-body shows it by cid:, as
-   with a signature logo, rather than the sender attaching it. Disposition alone
-   does not tell: some clients send real attachments inline."
-  [html-body attachments]
-  (let [cids (into #{} (map (comp str/lower-case second))
-                   (re-seq #"(?i)cid:([^\s\"'<>)]+)" (str html-body)))]
+  "Set :embedded? on each attachment: true when an HTML body part shows it by
+   cid:, as with a signature logo, rather than the sender attaching it.
+   Disposition alone does not tell: some clients send real attachments inline.
+   Every text/html part is read, since Apple Mail splits the body around images."
+  [body-parts attachments]
+  (let [html (->> body-parts
+                  (filter #(= "text/html" (base-content-type (:content-type %))))
+                  (map (comp str :content))
+                  (str/join "\n"))
+        cids (into #{} (comp (map second)
+                             (mapcat (juxt identity percent-decode))
+                             (map str/lower-case))
+                   (re-seq #"(?i)cid:([^\s\"'<>)]+)" html))]
     (mapv #(assoc % :embedded? (contains? cids (some-> (:content-id %) str/lower-case)))
           attachments)))
 

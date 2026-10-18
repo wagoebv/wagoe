@@ -68,8 +68,8 @@
 (def InboundAttachment
   "A file from an inbound message: a part with Content-Disposition attachment,
    a filename, or a type other than text/plain and text/html. :content is the
-   decoded bytes. Inline parts, such as an image the HTML body shows by cid:,
-   are included, with :embedded? true. :disposition is the lower-cased
+   decoded bytes. Inline parts are included; :embedded? is true for one the
+   HTML body shows by cid:, such as a signature logo. :disposition is the lower-cased
    Content-Disposition and :content-id has no angle brackets."
   [:map
    [:filename {:optional true} [:string {:min 1}]]
