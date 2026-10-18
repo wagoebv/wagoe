@@ -293,7 +293,9 @@
                                                             :exclusions [com.sun.mail/jakarta.mail junit/junit]}}}
 
            ;; In-process FTPS server (Apache MINA) for the external suite.
-           :test/ftp  {:extra-deps {org.apache.ftpserver/ftpserver-core {:mvn/version "1.2.1"}}}
+           :test/ftp  {:extra-deps {org.apache.ftpserver/ftpserver-core {:mvn/version "1.2.1"}
+                                    ;; ftpserver 1.2.1 pulls mina-core 2.2.4 (CVE-2026-41635 and others)
+                                    org.apache.mina/mina-core {:mvn/version "2.2.10"}}}
 
            ;; Everything the root suite needs, for running it in one command.
            ;;
@@ -316,7 +318,8 @@
                                     org.clj-commons/clj-http-lite {:mvn/version "1.0.13"}
                                     com.icegreen/greenmail {:mvn/version "1.6.15"
                                                             :exclusions [com.sun.mail/jakarta.mail junit/junit]}
-                                    org.apache.ftpserver/ftpserver-core {:mvn/version "1.2.1"}}}
+                                    org.apache.ftpserver/ftpserver-core {:mvn/version "1.2.1"}
+                                    org.apache.mina/mina-core {:mvn/version "2.2.10"}}}
            :outdated  {:extra-deps {olical/depot {:mvn/version "2.4.1"}}
                        :main-opts  ["-m" "depot.outdated.main"]}
            :build     {:main-opts  ["-m" "build"]

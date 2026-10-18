@@ -15,7 +15,8 @@
               :extra-deps  {lambdaisland/kaocha    {:mvn/version "1.91.1392"}
                             com.icegreen/greenmail {:mvn/version "1.6.15"
                                                     :exclusions [com.sun.mail/jakarta.mail junit/junit]}
-                            org.apache.ftpserver/ftpserver-core {:mvn/version "1.2.1"}}
+                            org.apache.ftpserver/ftpserver-core {:mvn/version "1.2.1"}
+                            org.apache.mina/mina-core {:mvn/version "2.2.10"}}
               :main-opts   ["-m" "kaocha.runner"]}
 
   :clj-kondo {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2026.08.04"}}
