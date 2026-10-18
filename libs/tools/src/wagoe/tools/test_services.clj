@@ -126,8 +126,8 @@
     "status" (System/exit (status))
     ;; Only what is not reachable: a service already up, whether another
     ;; checkout started it or something other than compose did, holds the port.
-    "up"    (let [absent (missing)
-                  exit   (if (seq absent)
+    "up"    (let [absent (seq (missing))
+                  exit   (if absent
                            (:exit (apply compose "up" "-d" "--wait" (map (comp name :id) absent)))
                            0)]
               (when (zero? exit) (status))

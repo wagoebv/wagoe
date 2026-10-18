@@ -73,7 +73,7 @@
     ;; Compose names the project after the directory, so a worktree started a
     ;; second set of containers and failed on the fixed names and ports.
     (let [text (compose-text)]
-      (is (some? (re-find #"(?m)^name:\s*\S+" text))
+      (is (re-find #"(?m)^name:\s*\S+" text)
           (str ts/compose-file " needs a top-level `name:`"))
       (is (not (str/includes? text "container_name:"))
           (str ts/compose-file " pins a container_name")))))
