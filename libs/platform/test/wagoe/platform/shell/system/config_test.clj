@@ -8,7 +8,9 @@
    components, the HTTP handler's inputs, and scaffolded-module discovery."
   (:require [clojure.test :refer [deftest is testing]]
             [integrant.core :as ig]
-            [wagoe.platform.shell.system.config :as sut]))
+            [wagoe.platform.ports.privacy :as privacy]
+            [wagoe.platform.shell.system.config :as sut]
+            [wagoe.platform.shell.system.wiring]))
 
 (defn- config
   "A loaded config with a database and whatever else the caller adds."
@@ -166,3 +168,53 @@
                                {:request-method :get :uri "/health" :headers {}})
                               [:headers "X-Guard"])))
           (finally (ig/halt! system)))))))
+
+(deftest ^:unit data-export-is-always-there-and-retention-only-when-configured
+  (let [c (sut/system-config (config))]
+    (is (= {:contributed {}} (:wagoe/data-export c)))
+    (is (not (contains? c :wagoe/retention))))
+
+  (testing "a module's exporter reaches the export"
+    (let [c      (sut/system-config (config :wagoe/archive {:enabled? true}) {:base-ns "acme"})
+          system (ig/init c [:wagoe/data-export])]
+      (try
+        (is (= {:archive {:archived-for 7}}
+               (:sections (privacy/export-subject (:wagoe/data-export system) {:type :user :id 7}))))
+        (finally (ig/halt! system)))))
+
+  (testing "a configured policy runs as a recurring job"
+    (let [c (sut/system-config (config :wagoe/jobs {}
+                                       :wagoe/archive {:enabled? true}
+                                       :wagoe/privacy {:retention {:archive/old {:retain "P2Y"}}
+                                                       :retention-schedule {:zone "Europe/Amsterdam"}})
+                               {:base-ns "acme"})]
+      (is (= {:policies    {:archive/old {:retain "P2Y"}}
+              :contributed {:archive/old (ig/ref :wagoe/archive-retention)}}
+             (:wagoe/retention c)))
+      (is (some #{(ig/ref :wagoe/retention)} (get-in c [:wagoe/job-registry :handler-maps])))
+      (is (= {:cron "0 1 * * *"}
+             (get-in (sut/system-config (config :wagoe/jobs {:recurring {:wagoe/retention {:cron "0 1 * * *"}}}
+                                                :wagoe/archive {:enabled? true}
+                                                :wagoe/privacy {:retention {:archive/old {:retain "P2Y"}}})
+                                        {:base-ns "acme"})
+                     [:wagoe/job-scheduler :recurring :wagoe/retention]))
+          "a schedule under :wagoe/jobs wins")
+      (is (= {:cron "0 3 * * *" :zone "Europe/Amsterdam"}
+             (get-in c [:wagoe/job-scheduler :recurring :wagoe/retention])))))
+
+  (doseq [[why settings] {"a policy no module provides" {:retention {:archive/olf {:retain "P2Y"}}}
+                          "a period that is not one"    {:retention {:archive/old {:retain "2 years"}}}
+                          "a misspelled key"            {:retension {:archive/old {:retain "P2Y"}}}
+                          "a retention that is no map"  {:retention "P2Y"}}]
+    (testing (str why " fails the boot")
+      (is (= :configuration-error
+             (:type (ex-data (is (thrown? clojure.lang.ExceptionInfo
+                                          (sut/system-config (config :wagoe/jobs {} :wagoe/archive {:enabled? true}
+                                                                     :wagoe/privacy settings)
+                                                             {:base-ns "acme"})))))))))
+
+  (testing "and retention is refused without the jobs module to run it"
+    (is (= :configuration-error
+           (:type (ex-data (is (thrown? clojure.lang.ExceptionInfo
+                                        (sut/system-config
+                                         (config :wagoe/privacy {:retention {:user/audit-log {:retain "P2Y"}}}))))))))))

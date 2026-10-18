@@ -17,6 +17,7 @@
   (:require [wagoe.config :as config]
             [wagoe.platform.shell.database.migrations :as migrations]
             [wagoe.platform.shell.modules :as modules]
+            [wagoe.platform.shell.privacy :as privacy]
             [clojure.set :as set]
             [clojure.tools.logging :as log]
             [integrant.core :as ig]))
@@ -100,6 +101,44 @@
                          ", but " target ", which uses them, is not enabled.")
                     {:type :configuration-error :keys (vec (keys contributed))}))))
 
+(defn- with-retention
+  "Retention, when `:wagoe/privacy :retention` names a policy: the policies
+   modules contributed, a job handler and its recurring schedule. Off
+   otherwise; and refused without the jobs module, which would run it.
+
+   Policies are checked here, against every enabled module, rather than at
+   init: a service launch drops the modules it does not run, and their
+   policies with them."
+  [ig-config privacy-settings contributed]
+  (let [configured (:retention privacy-settings)
+        ;; A misspelled :retention would otherwise switch retention off, silently.
+        unknown    (seq (remove #{:retention :retention-schedule} (keys privacy-settings)))]
+    (cond
+      unknown
+      (throw (ex-info (str ":wagoe/privacy does not know " (vec unknown) "; it takes :retention and :retention-schedule.")
+                      {:type :configuration-error :keys (vec unknown)}))
+
+      (and (some? configured) (not (map? configured)))
+      (throw (ex-info ":wagoe/privacy :retention takes {policy-id {:retain \"P2Y\"}}."
+                      {:type :configuration-error :retention configured}))
+
+      (empty? configured)
+      ig-config
+
+      (not (contains? ig-config :wagoe/job-registry))
+      (throw (ex-info ":wagoe/privacy :retention runs as a recurring job, but :wagoe/jobs is not enabled."
+                      {:type :configuration-error :policies (vec (keys configured))}))
+
+      :else
+      (do
+        (privacy/retention-plan! configured contributed)
+        (-> ig-config
+            (assoc :wagoe/retention {:policies configured :contributed contributed})
+            (update-in [:wagoe/job-registry :handler-maps] (fnil conj []) (ig/ref :wagoe/retention))
+            ;; A schedule set under :wagoe/jobs :recurring wins.
+            (update-in [:wagoe/job-scheduler :recurring privacy/retention-job-type]
+                       #(or % (merge privacy/default-retention-schedule (:retention-schedule privacy-settings)))))))))
+
 (defn system-config
   "The Integrant configuration for `config`.
 
@@ -119,7 +158,7 @@
          ;; feature the config asks for and does not get, and it used to say
          ;; nothing at all (BOU-477).
          _          (modules/assert-every-key-claimed! active known)
-         {:keys [components http auth search middleware routes job-handlers]}
+         {:keys [components http auth search data-export retention middleware routes job-handlers]}
          (modules/framework-module-config
           active
           {:config            config
@@ -134,13 +173,17 @@
           discovered-http     :http
           discovered-auth     :auth
           discovered-search   :search
+          discovered-export   :data-export
+          discovered-retain   :retention
           discovered-mw       :middleware
           discovered-routes   :routes
           discovered-handlers :job-handlers}
          (modules/discover-module-config
           active known base-ns modules/require-wiring! requiring-resolve)
          auth   (modules/merge-auth auth :discovered discovered-auth)
-         search (modules/merge-search search :discovered discovered-search)]
+         search (modules/merge-search search :discovered discovered-search)
+         data-export (modules/merge-data-export data-export :discovered discovered-export)
+         retention   (modules/merge-retention retention :discovered discovered-retain)]
      (warn-code-enabled-migrations! active extra-modules)
      ;; Said once, so nobody looks for it on :9999 in prod (BOU-588).
      (when-let [profile (:wagoe/profile config)]
@@ -157,6 +200,7 @@
                                            (concat routes discovered-routes
                                                    (modules/discovered-route-refs active known discovered)))
                                      (into middleware discovered-mw))
+                    {:wagoe/data-export {:contributed data-export}}
                     components
                     discovered)
        ;; Handlers reach the registry only when the jobs module is on. Assoc'ing
@@ -176,4 +220,7 @@
        (with-contributed :wagoe/auth-hooks :auth auth)
 
        (seq search)
-       (with-contributed :wagoe/search :search search)))))
+       (with-contributed :wagoe/search :search search)
+
+       :always
+       (with-retention (:wagoe/privacy active) retention)))))

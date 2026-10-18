@@ -238,6 +238,8 @@
     ;; is what `service events` claims (BOU-448).
     :wagoe/events-outbox
     :wagoe/http-handler :wagoe/http-server :wagoe/dashboard
+    ;; Collect what the running modules contribute, whichever they are.
+    :wagoe/data-export :wagoe/retention
     ;; Emitted only when running as a service, and by definition part of it.
     :wagoe/rpc-server})
 
