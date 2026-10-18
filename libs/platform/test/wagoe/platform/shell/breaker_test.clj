@@ -1,4 +1,4 @@
-(ns wagoe.platform.shell.rpc.breaker-test
+(ns wagoe.platform.shell.breaker-test
   "The breaker against a real socket, counting what the far side receives.
 
    A breaker that returns the right error while the requests keep arriving has
@@ -6,7 +6,7 @@
   (:require [wagoe.cache.ports :as cache]
             [wagoe.cache.shell.adapters.in-memory :as cache-mem]
             [wagoe.platform.core.rpc :as rpc]
-            [wagoe.platform.shell.rpc.breaker :as breaker]
+            [wagoe.platform.shell.breaker :as breaker]
             [wagoe.platform.shell.rpc.client :as client]
             [wagoe.payments.ports :as pay-ports]
             [clojure.test :refer [deftest is testing]]
@@ -31,7 +31,7 @@
   "The cache key the breaker uses — the normalised service identity, not the
    raw base-url the test happens to have written."
   [url suffix]
-  (str "wagoe:rpc:breaker:" (rpc/service-url url "") suffix))
+  (str "wagoe:breaker:rpc:" (rpc/service-url url "") suffix))
 
 (defn- opts [cache extra]
   (merge {:retries 0 :timeout-ms 300 :service-key service-key :cache cache} extra))
@@ -217,13 +217,13 @@
   ;; and writes back the same successor.
   (let [cache   (cache-mem/create-in-memory-cache {})
         cfg     {:failure-threshold 1000 :open-ms 60000}   ; never opens; count only
-        ;; Calling the breaker directly, so normalise as the client would.
+        ;; Calling the breaker directly, so name the circuit as the client would.
         url     (rpc/service-url "http://concurrent.invalid" "")
         threads 50
         latch   (java.util.concurrent.CountDownLatch. 1)
         writers (doall (for [_ (range threads)]
                          (future (.await latch)
-                                 (breaker/record-failure! cache cfg url 1000))))]
+                                 (breaker/record-failure! cache cfg (str "rpc:" url) 1000))))]
     (.countDown latch)
     (doseq [f writers] (deref f 10000 nil))
 

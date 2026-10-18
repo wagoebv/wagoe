@@ -18,6 +18,7 @@
                             :body \"World\"})"
   (:require [wagoe.external.core.smtp :as smtp-core]
             [wagoe.external.ports :as ports]
+            [wagoe.external.shell.resilience :as resilience]
             [clojure.tools.logging :as log])
   (:import [java.util Base64]
            [javax.activation DataHandler]
@@ -149,7 +150,7 @@
     (try
       (let [session (create-session this)
             msg     (build-mime-message session email (:from this))]
-        (Transport/send msg)
+        (resilience/call! (:resilience this) #(Transport/send msg))
         (let [message-id (try (.getMessageID msg) (catch Exception _ nil))]
           (log/info "Email sent successfully" {:message-id message-id})
           {:success? true :message-id message-id}))
@@ -162,7 +163,7 @@
         (log/error e "Unexpected error during SMTP send")
         {:success? false
          :error    {:message (.getMessage e)
-                    :type    :unexpected-error}})))
+                    :type    (resilience/error-type e :unexpected-error)}})))
 
   (send-email-async! [this email]
     (future (ports/send-email! this email)))
@@ -172,9 +173,10 @@
     (try
       (let [session   (create-session this)
             transport (.getTransport session "smtp")]
-        (if (and (:username this) (:password this))
-          (.connect transport (:host this) (:username this) (:password this))
-          (.connect transport))
+        (resilience/call! (:resilience this)
+                          #(if (and (:username this) (:password this))
+                             (.connect transport (:host this) (:username this) (:password this))
+                             (.connect transport)))
         (.close transport)
         (log/info "SMTP connection test successful" {:host (:host this)})
         {:success? true})
@@ -187,7 +189,7 @@
         (log/warn e "SMTP connection test unexpected error")
         {:success? false
          :error    {:message (.getMessage e)
-                    :type    :unexpected-error}}))))
+                    :type    (resilience/error-type e :unexpected-error)}}))))
 
 ;; =============================================================================
 ;; Constructor
@@ -204,11 +206,15 @@
     :tls?     - Enable STARTTLS (default false)
     :ssl?     - Enable SSL (default false)
     :from     - Default From address (required)
+    :retries, :retry-delay-ms, :cache, :circuit-breaker
+              - see wagoe.external.shell.resilience/settings
 
   Returns:
     SmtpProviderAdapter implementing ISmtpProvider"
   [{:keys [host port username password tls? ssl? from]
-    :or   {tls? false ssl? false}}]
+    :or   {tls? false ssl? false}
+    :as   config}]
   {:pre [(string? host) (some? port) (string? from)]}
   (log/info "Creating SMTP provider adapter" {:host host :port port :tls? tls? :ssl? ssl?})
-  (->SmtpProviderAdapter host port username password tls? ssl? from))
+  (assoc (->SmtpProviderAdapter host port username password tls? ssl? from)
+         :resilience (resilience/settings config (str "smtp:" host ":" port) nil)))

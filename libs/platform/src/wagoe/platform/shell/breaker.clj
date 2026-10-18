@@ -1,4 +1,4 @@
-(ns wagoe.platform.shell.rpc.breaker
+(ns wagoe.platform.shell.breaker
   "Circuit-breaker state, kept where every replica can see it.
 
    A breaker in one JVM's atom protects that JVM. With N replicas a failing
@@ -10,16 +10,19 @@
    The cache adapter decides how far that goes: Redis shares it across
    replicas, the in-memory one does not. That is the same trade the rate
    limiter makes, and it is a property of the adapter rather than of this
-   namespace."
+   namespace.
+
+   `circuit` names what is being protected: the RPC client passes `rpc:` plus
+   the service URL, the external adapters their kind and host."
   (:require [wagoe.cache.ports :as cache]
             [wagoe.platform.core.circuit-breaker :as cb]
             [clojure.tools.logging :as log]))
 
-(def ^:private key-prefix "wagoe:rpc:breaker:")
+(def ^:private key-prefix "wagoe:breaker:")
 
-(defn- failures-key [base-url] (str key-prefix base-url ":failures"))
-(defn- opened-key   [base-url] (str key-prefix base-url ":opened-at"))
-(defn- probe-key    [base-url] (str key-prefix base-url ":probe"))
+(defn- failures-key [circuit] (str key-prefix circuit ":failures"))
+(defn- opened-key   [circuit] (str key-prefix circuit ":opened-at"))
+(defn- probe-key    [circuit] (str key-prefix circuit ":probe"))
 
 (defn- open-ms [config] (:open-ms config (:open-ms cb/default-config)))
 
@@ -65,10 +68,10 @@
     (into {} (map (juxt identity #(cache/get-value cache-component %))) ks)))
 
 (defn- read-state
-  [cache-component base-url]
+  [cache-component circuit]
   (try
-    (let [failures-k (failures-key base-url)
-          opened-k   (opened-key base-url)
+    (let [failures-k (failures-key circuit)
+          opened-k   (opened-key circuit)
           values     (read-many cache-component [failures-k opened-k])]
       {:failures     (or (get values failures-k) 0)
        :opened-at-ms (:at (get values opened-k))})
@@ -77,20 +80,20 @@
       ;; the safe direction: the worst case is the behaviour of no breaker at
       ;; all, which is what every caller had before this existed.
       (log/warn e "circuit breaker could not read its state; allowing the call"
-                {:base-url base-url})
+                {:circuit circuit})
       nil)))
 
 (defn allow?
-  "Whether to attempt a call to `base-url`.
+  "Whether to attempt a call to `circuit`.
 
    Half-open lets exactly one caller through. The probe is a lease taken with
    `set-if-absent!` — atomic in Redis — so N replicas reaching the end of the
    window together produce one trial request rather than N. Without it the
    recovery is its own thundering herd."
-  [cache-component config base-url now-ms]
+  [cache-component config circuit now-ms]
   (if-not cache-component
     true
-    (let [breaker (read-state cache-component base-url)]
+    (let [breaker (read-state cache-component circuit)]
       (if (nil? breaker)
         true
         (case (cb/state breaker config now-ms)
@@ -98,7 +101,7 @@
           :open      false
           :half-open (try
                        (boolean
-                        (when (cache/set-if-absent! cache-component (probe-key base-url)
+                        (when (cache/set-if-absent! cache-component (probe-key circuit)
                                                     {:at now-ms}
                                                     (lease-seconds config))
                          ;; Keep the breaker's memory alive for as long as this
@@ -107,12 +110,12 @@
                          ;; smaller request budget than the prober; if it
                          ;; expires mid-probe the breaker reads as closed and
                          ;; every caller is let through behind the probe.
-                          (cache/expire! cache-component (opened-key base-url)
+                          (cache/expire! cache-component (opened-key circuit)
                                          (marker-seconds config))
                           true))
                        (catch Exception e
                          (log/warn e "circuit breaker could not take the probe lease"
-                                   {:base-url base-url})
+                                   {:circuit circuit})
                          true)))))))
 
 (defn record-failure!
@@ -126,51 +129,50 @@
 
    `set-if-absent!` on the open marker keeps the moment the *first* crosser
    opened it, rather than every subsequent failure pushing the window forward."
-  [cache-component config base-url now-ms]
+  [cache-component config circuit now-ms]
   (when cache-component
     (try
-      (let [was       (cb/state (or (read-state cache-component base-url) {}) config now-ms)
-            failures  (cache/increment! cache-component (failures-key base-url))
+      (let [was       (cb/state (or (read-state cache-component circuit) {}) config now-ms)
+            failures  (cache/increment! cache-component (failures-key circuit))
             threshold (:failure-threshold config (:failure-threshold cb/default-config))]
         ;; Only on the first of a run: gives the run a lifetime, so failures
         ;; minutes apart do not accumulate as though they were consecutive.
         (when (= 1 failures)
-          (cache/expire! cache-component (failures-key base-url) (counter-seconds config)))
+          (cache/expire! cache-component (failures-key circuit) (counter-seconds config)))
         (if (= was :half-open)
           ;; The probe failed. Reopen from now — `set-if-absent!` would find the
           ;; old marker and leave it, so the window would run out from the
           ;; *original* outage and traffic would resume against a service that
           ;; has just demonstrated it is still down.
-          (do (cache/set-value! cache-component (opened-key base-url)
+          (do (cache/set-value! cache-component (opened-key circuit)
                                 {:at now-ms} (marker-seconds config))
               ;; Release the lease so the next window can be probed.
-              (cache/delete-key! cache-component (probe-key base-url))
-              (log/warn "circuit re-opened after a failed probe" {:base-url base-url}))
+              (cache/delete-key! cache-component (probe-key circuit))
+              (log/warn "circuit re-opened after a failed probe" {:circuit circuit}))
 
           (when (and (>= failures threshold)
-                     (cache/set-if-absent! cache-component (opened-key base-url)
+                     (cache/set-if-absent! cache-component (opened-key circuit)
                                            {:at now-ms} (marker-seconds config)))
-            (log/warn "circuit opened" {:base-url base-url :failures failures}))))
+            (log/warn "circuit opened" {:circuit circuit :failures failures}))))
       (catch Exception e
-        (log/warn e "circuit breaker could not record a failure" {:base-url base-url})))))
+        (log/warn e "circuit breaker could not record a failure" {:circuit circuit})))))
 
 (defn record-success!
   "Close the breaker: the service answered."
-  [cache-component base-url]
+  [cache-component circuit]
   (when cache-component
     (try
       ;; Every successful call clears these, so it is worth one DEL rather
       ;; than three.
-      (let [ks [(failures-key base-url) (opened-key base-url) (probe-key base-url)]]
+      (let [ks [(failures-key circuit) (opened-key circuit) (probe-key circuit)]]
         (if (satisfies? cache/IBatchCache cache-component)
           (cache/delete-many! cache-component ks)
           (run! #(cache/delete-key! cache-component %) ks)))
       (catch Exception e
-        (log/warn e "circuit breaker could not record a success" {:base-url base-url})))))
+        (log/warn e "circuit breaker could not record a success" {:circuit circuit})))))
 
-(defn open-error
-  "The error for a call the breaker declined to make."
-  [cache-component config base-url operation now-ms]
-  (cb/error operation base-url
-            (some-> (read-state cache-component base-url)
-                    (cb/retry-after-ms config now-ms))))
+(defn retry-after-ms
+  "How long until `circuit` will next allow a probe, or nil if unknown."
+  [cache-component config circuit now-ms]
+  (some-> (read-state cache-component circuit)
+          (cb/retry-after-ms config now-ms)))
