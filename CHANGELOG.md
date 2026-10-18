@@ -154,6 +154,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **`bb create-admin` printed a third `Password:` prompt** (BOU-594): the user CLI no longer prompts for a piped
+  password. No action needed.
 - **On a Turkish JVM `userId` became `user-ıd`** (BOU-732): case conversion no longer uses the JVM locale.
   Ran on tr-TR? Re-lower stored emails. Use `wagoe.core.utils.text`; clj-kondo flags `clojure.string`'s case fns.
 - **An admin write a CHECK constraint refused answered 500** (BOU-734). It is a form error now, and elsewhere a

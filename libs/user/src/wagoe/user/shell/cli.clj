@@ -260,18 +260,28 @@
 ;; Password Input
 ;; =============================================================================
 
+(defn- terminal-console
+  "The console, when input comes from a terminal. On some JDKs System/console
+   can be non-nil with stdin piped, so ask Console.isTerminal where it exists."
+  []
+  (when-let [console (System/console)]
+    (if-let [terminal? (try (.getMethod java.io.Console "isTerminal" (make-array Class 0))
+                            (catch NoSuchMethodException _ nil))]
+      (when (.invoke ^java.lang.reflect.Method terminal? console (object-array 0)) console)
+      console)))
+
+(defn- read-password
+  "Hidden prompt on a terminal. Piped input — bb create-admin — is read
+   without a prompt: nobody is there to see it."
+  [console label]
+  (if console
+    (String. (.readPassword ^java.io.Console console (str label ": ") (object-array 0)))
+    (str/trim (or (read-line) ""))))
+
 (defn read-hidden-password
-  "Read a password without echoing input.
-   When called from bb create-admin the password is piped via stdin, so
-   System/console returns null and read-line reads the piped value.
-   When invoked standalone with a real TTY, System/console provides hidden input."
+  "Read a password without echoing input."
   [label]
-  (if-let [console (System/console)]
-    (String. (.readPassword console (str label ": ") (into-array Object [])))
-    (do
-      (print (str label ": "))
-      (flush)
-      (str/trim (or (read-line) "")))))
+  (read-password (terminal-console) label))
 
 ;; =============================================================================
 ;; Command Execution
