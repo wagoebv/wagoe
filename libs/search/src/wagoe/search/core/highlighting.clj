@@ -8,6 +8,13 @@
    Architecture: Functional Core (Pure)"
   (:require [clojure.string :as str]))
 
+(defn- lower
+  "`s` lowercased char by char: the same on every JVM, unlike str/lower-case
+   (a Turkish locale turns \"ID\" into \"ıd\", BOU-608), and the same length, so
+   a match position indexes the original text (\"İ\" lowers to two chars)."
+  ^String [^String s]
+  (String. (char-array (map #(Character/toLowerCase (char %)) s))))
+
 ;; ============================================================================
 ;; Highlighting
 ;; ============================================================================
@@ -145,10 +152,10 @@
   ([text search-terms]
    (find-first-match-position text search-terms false))
   ([text search-terms case-sensitive?]
-   (let [text-to-search (if case-sensitive? text (str/lower-case text))
+   (let [text-to-search (if case-sensitive? text (lower text))
          terms-to-search (if case-sensitive?
                            search-terms
-                           (map str/lower-case search-terms))]
+                           (map lower search-terms))]
      (first
       (sort-by :match-pos
                (keep (fn [term]
@@ -280,8 +287,8 @@
    (if (or (str/blank? text) (empty? search-terms))
      [(subs text 0 (min snippet-length (count text)))]
      (let [;; Find all match positions
-           text-lower (str/lower-case text)
-           terms-lower (map str/lower-case search-terms)
+           text-lower (lower text)
+           terms-lower (map lower search-terms)
            all-positions (mapcat (fn [term]
                                    (loop [pos 0 positions []]
                                      (let [match-pos (.indexOf text-lower term pos)]
@@ -387,12 +394,12 @@
   ([text search-terms]
    (count-matches text search-terms false))
   ([text search-terms case-sensitive?]
-   (let [text-to-search (if case-sensitive? text (str/lower-case text))]
+   (let [text-to-search (if case-sensitive? text (lower text))]
      (into {}
            (map (fn [term]
                   (let [term-to-search (if case-sensitive?
                                          term
-                                         (str/lower-case term))
+                                         (lower term))
                         matches (re-seq (re-pattern (java.util.regex.Pattern/quote term-to-search))
                                         text-to-search)]
                     [term (count matches)]))

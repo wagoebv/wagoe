@@ -11,7 +11,8 @@
    - suggest-documents (pg_trgm on PostgreSQL, LIKE without it)
    - count-documents"
   (:require [clojure.test :refer [deftest testing is use-fixtures]]
-            [wagoe.search.test.support :refer [create-search-documents-table! make-doc]]
+            [wagoe.search.test.support :refer [find-ID-under-a-turkish-locale
+                                                create-search-documents-table! make-doc]]
             [wagoe.search.ports :as ports]
             [wagoe.search.shell.persistence :as persistence]
             [wagoe.search.shell.trigram :as trigram]
@@ -306,3 +307,8 @@
         (is (= [a-b] (map :entity-id (ports/search-documents @test-store :product-search :product
                                                              "a_b" {:limit 5 :offset 0}))))
         (is (= 1 (ports/count-results @test-store :product "a_b" {:index-id :product-search})))))))
+
+(deftest ^:integration fallback-search-under-a-turkish-locale-test
+  (let [[id found] (find-ID-under-a-turkish-locale
+                    @test-store (assoc @test-store :trigram-state (atom :unusable)))]
+    (is (= {:search [id] :count 1 :suggest [id]} found))))

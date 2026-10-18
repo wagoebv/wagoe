@@ -144,6 +144,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Search without PostgreSQL full-text missed "ID" on a Turkish JVM** (BOU-608): the LIKE fallback and highlighting
+  no longer lower text with the JVM's locale. No action needed.
 - **IMAP `mark-read!` and `delete-message!` ignored the fetch folder, and delete expunged every `\Deleted` message**
   (BOU-731). Pass the fetched message as opts: `(mark-read! mb (:uid msg) msg)`.
 - **`bb test:services up` failed in a git worktree** on a container-name conflict (BOU-538). Every checkout now

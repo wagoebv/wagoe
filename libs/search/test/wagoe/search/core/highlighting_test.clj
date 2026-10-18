@@ -6,7 +6,8 @@
   {:kaocha.testable/meta {:unit true :search true}}
   (:require [clojure.test :refer [deftest testing is]]
             [clojure.string :as str]
-            [wagoe.search.core.highlighting :as hl]))
+            [wagoe.search.core.highlighting :as hl]
+            [wagoe.search.test.support :refer [call-with-locale]]))
 
 ;; ============================================================================
 ;; Highlighting
@@ -417,3 +418,17 @@
        ;; Verify snippet extraction and highlighting
       (is (str/includes? highlighted-snippet "<mark>engineer</mark>"))
       (is (<= (count bio-snippet) 36)))))  ; 30 + ellipsis + adjustment
+
+(deftest ^:unit matching-ignores-the-jvm-locale
+  ;; A Turkish locale lowers "ID" to "ıd", which "id" never matched (BOU-608).
+  (call-with-locale "tr-TR"
+    #(do (is (= {:match-pos 5 :matched-term "id"} (hl/find-first-match-position "Your ID card" ["id"])))
+         (is (= {"id" 1} (hl/count-matches "Your ID card" ["id"]))))))
+
+(deftest ^:unit snippets-index-the-original-text
+  ;; "İ" lowers to two chars in most locales, which moved every later match
+  ;; past its place in the text (BOU-608).
+  (let [text (str (apply str (repeat 100 "İ")) " key")]
+    (is (= {:match-pos 101 :matched-term "key"} (hl/find-first-match-position text ["key"])))
+    (is (= "...İİİİİİİİİ key" (hl/extract-snippet text ["key"] 20)))
+    (is (= ["...İİİİİİİİİ key"] (hl/extract-multiple-snippets text ["key"] 3 20)))))
