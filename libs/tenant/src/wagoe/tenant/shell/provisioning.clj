@@ -160,8 +160,10 @@
    H2 with tenant rows but no per-tenant schemas; anywhere else a tenant could
    be created but never provisioned or selected (BOU-576)."
   [ctx allow-h2?]
-  (let [e (engine ctx)]
-    (when-not (or (schemas? ctx) (and allow-h2? (= :h2 e)))
+  ;; schemas? first: on a nil adapter it throws typed, engine does not.
+  (let [schemas (schemas? ctx)
+        e       (engine ctx)]
+    (when-not (or schemas (and allow-h2? (= :h2 e)))
       (throw (ex-info (str "Tenancy needs PostgreSQL, which gives each tenant its own schema; this"
                            " database's adapter (" (get engine-names e (name e))
                            ") does not claim :schemas. Use :wagoe/postgresql, or remove"

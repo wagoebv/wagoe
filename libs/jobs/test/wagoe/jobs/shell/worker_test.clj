@@ -129,6 +129,16 @@
             (finally
               (ports/stop-worker! worker-instance (:id (:state worker-instance))))))))))
 
+(deftest ^:unit virtual-threads-run-the-worker-loop-on-a-virtual-thread
+  (doseq [vt? [true false]]
+    (testing (str ":virtual-threads? " vt?)
+      (let [w (worker/create-worker {:queue-name :default :virtual-threads? vt?}
+                                    (:queue *system*) (:store *system*) *registry*)]
+        (try
+          (is (= vt? (.isVirtual ^Thread (:thread w))))
+          (is (.isDaemon ^Thread (:thread w)))
+          (finally (ports/stop-worker! w (:id (:state w)))))))))
+
 (deftest ^:unit worker-handles-job-failure-test
   (with-silent-logging
     (testing "Worker handles job failures and retries"

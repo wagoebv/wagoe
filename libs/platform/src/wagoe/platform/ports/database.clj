@@ -286,13 +286,17 @@
     :full-text :on-conflict :row-locks :alter-foreign-key})
 
 (defn capable?
-  "Whether `adapter` claims `capability`. A nil adapter claims nothing; an
-   unknown capability throws, so a typo cannot quietly turn a feature off."
+  "Whether `adapter` claims `capability`. An unknown capability or a nil
+   adapter throws, so neither a typo nor a missing adapter quietly turns a
+   feature off."
   [adapter capability]
   (when-not (capability-keywords capability)
     (throw (ex-info (str "Unknown database capability " capability)
                     {:type :internal-error :capability capability})))
-  (contains? (some-> adapter capabilities) capability))
+  (when (nil? adapter)
+    (throw (ex-info (str "No database adapter to ask for " capability)
+                    {:type :configuration-error :capability capability})))
+  (contains? (capabilities adapter) capability))
 
 (def default-string-length
   "How long `column-type` makes a :string given no length."

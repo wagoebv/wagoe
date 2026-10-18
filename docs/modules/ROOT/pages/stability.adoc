@@ -400,6 +400,10 @@ the xref:roadmap.adoc#_after_1_0_0[roadmap].
   vendored open-props files
 | The `:pilot` bundle, daisyUI/Tailwind on `wagoe-tokens.css`, which the
   default layout loads. `:base` still works when a page selects it.
+| Kebab-case keys in the `user` and `session` maps of the login response
+  (`session-token`, `expires-at`, ...)
+| Their camelCase twins (`sessionToken`, `expiresAt`), sent beside them with
+  the same value.
 |===
 
 == HTTP API versioning is a separate thing

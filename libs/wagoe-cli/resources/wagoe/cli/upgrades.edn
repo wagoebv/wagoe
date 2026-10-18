@@ -50,4 +50,9 @@
  {:ticket "BOU-457"
   :since  "1.0.2"
   :note   "The :base CSS bundle (pico.min.css, tokens-openprops.css, open-props). daisyUI/Tailwind on wagoe-tokens.css is the one CSS system."
-  :manual "Drop :css (ui-style/bundle :base) and restyle pages that relied on pico's element styling with daisy classes. A rewrite cannot see what a page looks like."}]
+  :manual "Drop :css (ui-style/bundle :base) and restyle pages that relied on pico's element styling with daisy classes. A rewrite cannot see what a page looks like."}
+
+ {:ticket "BOU-737"
+  :since  "1.0.2"
+  :note   "Kebab-case keys in the user and session maps of the POST /auth/login and POST /sessions response."
+  :manual "Read the camelCase twin instead: session.sessionToken, not session.session-token. The readers are API clients, outside the project."}]

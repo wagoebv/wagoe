@@ -194,6 +194,11 @@
           (is (= "tenant_cleanup" (:schema-name (ex-data ex))))
           (is (= ["DROP SCHEMA IF EXISTS tenant_cleanup CASCADE"] @executed-ddl)))))))
 
+(deftest ^:unit refuse-unsupported-database-without-an-adapter-is-a-configuration-error
+  (is (= :configuration-error
+         (:type (ex-data (try (sut/refuse-unsupported-database! {:datasource ::ds} true)
+                              (catch clojure.lang.ExceptionInfo e e)))))))
+
 (deftest ^:unit get-public-tables-filters-shared-tables-test
   (testing "only tenant-scoped tables are copied into tenant schemas"
     (with-redefs [db/execute-query! (fn [_ _]

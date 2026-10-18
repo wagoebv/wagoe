@@ -300,8 +300,8 @@
      config: Configuration map from load-config
    
    Returns:
-     Map with :port, :host, :join?, :port-range, and :drain-timeout-ms keys,
-     plus :max-request-body when the config sets it
+     Map with :port, :host, :join?, :port-range, :drain-timeout-ms and
+     :virtual-threads? keys, plus :max-request-body when the config sets it
 
    :drain-timeout-ms controls graceful shutdown: on stop the server stops
    accepting new connections, lets in-flight requests finish (bounded by this
@@ -313,7 +313,8 @@
              :join? (or (:join? http-cfg) false)
              :port-range (:port-range http-cfg)
              ;; default only when the key is absent — an explicit nil disables draining
-             :drain-timeout-ms (get http-cfg :drain-timeout-ms 30000)}
+             :drain-timeout-ms (get http-cfg :drain-timeout-ms 30000)
+             :virtual-threads? (boolean (:virtual-threads? http-cfg))}
       ;; Absent leaves the server's default; nil lifts the limit (BOU-644).
       (contains? http-cfg :max-request-body)
       (assoc :max-request-body (:max-request-body http-cfg)))))

@@ -179,6 +179,33 @@
 ;; Integration Tests - Tenant-Aware Job Processing
 ;; =============================================================================
 
+(defn- run-without-adapter
+  "Process a job carrying `metadata` against a db-ctx with no adapter; returns
+   [result ctx-the-handler-saw]."
+  [metadata]
+  (let [ran-with (atom nil)
+        result (tenant-jobs/process-tenant-job!
+                {:id (java.util.UUID/randomUUID)
+                 :job-type :send-email
+                 :args {}
+                 :metadata metadata}
+                (fn [_ ctx] (reset! ran-with ctx) {:success? true})
+                {:datasource ::ds}
+                (create-mock-tenant-service)
+                (create-mock-tenant-schema-provider))]
+    [result @ran-with]))
+
+(deftest ^:unit tenant-job-without-an-adapter-fails
+  (let [[result ran-with] (run-without-adapter {:tenant-id "tenant-1"})]
+    (is (false? (:success? result)))
+    (is (= :configuration-error (get-in result [:error :type])))
+    (is (nil? ran-with) "the handler never runs in public")))
+
+(deftest ^:unit job-without-a-tenant-runs-without-an-adapter
+  (let [[result ran-with] (run-without-adapter {})]
+    (is (true? (:success? result)))
+    (is (= {:datasource ::ds} ran-with))))
+
 (deftest ^:integration process-tenant-job-test
   (testing "Processing job with tenant context (non-PostgreSQL fallback)"
     (let [tenant-service (create-mock-tenant-service)

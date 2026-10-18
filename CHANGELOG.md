@@ -31,6 +31,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **`capable?` on the database port** (BOU-609): `(capable? adapter :schemas)`.
+  An unknown capability or a nil adapter throws; a tenant job with no adapter now fails instead of running in public.
+- **Opt-in virtual threads for requests and job workers** (BOU-471): `:virtual-threads? true` on `:wagoe/http`,
+  `:wagoe/rpc` or `:wagoe/jobs :workers`. Off by default; on JDK 21, check for pinning first.
 - **`capable?` on the database port** (BOU-609): `(capable? adapter :schemas)`; a nil adapter claims nothing.
   An unknown capability throws instead of reading as false.
 - **Tenant export and dead-letter retention** (BOU-735): platform admins download `GET /api/v1/tenants/:id/export`.
@@ -151,6 +155,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **pico, open-props, `tokens-openprops.css` and the `:base` CSS bundle (`base-css`)** (BOU-457): daisyUI/Tailwind on `wagoe-tokens.css`
   is the one CSS system. `:base` still works when selected; it goes in 2.0.
+- **Kebab-case keys in the login response's `user` and `session`** (BOU-737): each now has a camelCase twin with the same
+  value, and goes in 2.0. Read `session.sessionToken`, `session.expiresAt` and so on.
 - **`/swagger.json` and `:swagger` route docs** (BOU-462): the path serves the 3.1 document and `:swagger` is
   translated to `:openapi` with a boot warning, both until 2.0. Use `/openapi.json` and `:openapi`.
 - **`wagoe.search.shell.registry` and its `defsearch`** (BOU-705): one registry for every system in the JVM. Hand
@@ -162,6 +168,7 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **The login response's `user` carried the hashes of spent MFA backup codes** (BOU-737). Upgrade if you use MFA.
 - **Generated projects printed JDK restricted-method warnings on every SQLite task** (BOU-593). New projects pass
   `--enable-native-access=ALL-UNNAMED`; add it to your aliases' `:jvm-opts`, and `:manifest {"Enable-Native-Access" "ALL-UNNAMED"}` to `b/uber`.
 - **Admin writes to a computed or `GENERATED ALWAYS` identity column failed** (BOU-546): those columns are read-only now.
