@@ -54,7 +54,7 @@
   "InboundAttachment map for an attachment part and its decoded bytes.
    :disposition and :content-id are left out when the part has no such header."
   [{:keys [content-type filename disposition content-id]} ^bytes content]
-  (let [disposition (some-> disposition str/trim str/lower-case not-empty)
+  (let [disposition (some-> disposition str/trim text/lower-case not-empty)
         content-id  (some-> content-id str/trim
                             (as-> s (or (second (re-find #"<([^<>]*)>" s)) s))
                             str/trim not-empty)]
@@ -82,9 +82,9 @@
                   (str/join "\n"))
         cids (into #{} (comp (map second)
                              (mapcat (juxt identity percent-decode))
-                             (map str/lower-case))
+                             (map text/lower-case))
                    (re-seq #"(?i)cid:([^\s\"'<>)]+)" html))]
-    (mapv #(assoc % :embedded? (contains? cids (some-> (:content-id %) str/lower-case)))
+    (mapv #(assoc % :embedded? (contains? cids (some-> (:content-id %) text/lower-case)))
           attachments)))
 
 ;; =============================================================================
