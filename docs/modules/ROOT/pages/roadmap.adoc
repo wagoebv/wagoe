@@ -148,7 +148,6 @@ promise; `2.0` is where the things that cannot are collected.
 
 * A database-adapter port with a conformance suite across all four adapters
 * A PSP conformance sweep, finishing the Mollie adapter
-* `wagoe-external` sharing the retry and circuit breaker of the RPC client
 * Finishing the metrics and error-reporting stubs, or removing them and
   correcting the documentation
 

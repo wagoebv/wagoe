@@ -7,6 +7,7 @@
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing use-fixtures]]
             [malli.core :as m]
+            [wagoe.cache.shell.adapters.in-memory :as cache-mem]
             [wagoe.external.ports :as ports]
             [wagoe.external.schema :as schema]
             [wagoe.external.shell.adapters.ftps :as ftps])
@@ -209,6 +210,18 @@
         (is (false? success?))
         (is (= 2 (:attempts error)))
         (is (< (/ (- (System/nanoTime) started) 1e6) 5000))))))
+
+(deftest ^:integration an-unreachable-server-trips-the-breaker-test
+  (let [port (with-open [s (ServerSocket. 0)] (.getLocalPort s))
+        src  (source :port port :max-attempts 1
+                     :cache (cache-mem/create-in-memory-cache {})
+                     :circuit-breaker {:failure-threshold 1 :open-ms 60000})]
+    (is (= :external-error (get-in (ports/list-files! src "/outbox") [:error :type])))
+    (testing "the next call is declined without connecting"
+      (let [{:keys [success? error]} (ports/list-files! src "/outbox")]
+        (is (false? success?))
+        (is (= :circuit-open (:type error)))
+        (is (pos? (:retry-after-ms error)))))))
 
 (deftest ^:unit adapter-has-no-reflection-test
   (let [err (StringWriter.)]
