@@ -126,7 +126,7 @@ for what is public API, what is internal, and how deprecations are announced.
 ### Deprecated
 
 - **`/swagger.json` and `:swagger` route docs** (BOU-462): the path serves the 3.1 document and `:swagger` is
-  translated to `:openapi`, both for one more minor. Point clients at `/openapi.json`.
+  translated to `:openapi` with a boot warning, both until 2.0. Use `/openapi.json` and `:openapi`.
 - **`wagoe.search.shell.registry` and its `defsearch`** (BOU-705): one registry for every system in the JVM. Hand
   definitions to `:wagoe/search`; the registry is still read, warns once, and goes in 2.0.
 - **`DBAdapter/like` with a hand-built pattern** (BOU-684): `%` and `_` from user input match

@@ -499,10 +499,37 @@
     :exclusiveMaximum :minLength :maxLength :pattern :minItems :maxItems
     :uniqueItems :multipleOf})
 
-(defn- swagger-parameter->openapi [p]
-  (let [schema (select-keys p swagger-schema-keys)]
+(def ^:private swagger-array-styles
+  "A 2.0 query array's `:collectionFormat` as 3.x `:style`/`:explode`. 2.0
+   defaults to csv, 3.x to exploded, so the default has to be spelled out."
+  {"csv"   {:style "form" :explode false}
+   "ssv"   {:style "spaceDelimited" :explode false}
+   "pipes" {:style "pipeDelimited" :explode false}
+   "multi" {:style "form" :explode true}})
+
+(defn- swagger-schema
+  "The schema keys of a 2.0 parameter or header. 2.0's boolean
+   exclusiveMinimum/Maximum are the bound itself in 3.1."
+  [p]
+  (let [exclusive (fn [s k bound]
+                    (cond
+                      (and (true? (get s k)) (contains? s bound))
+                      (-> s (assoc k (get s bound)) (dissoc bound))
+                      (boolean? (get s k)) (dissoc s k)
+                      :else s))]
+    (-> (select-keys p swagger-schema-keys)
+        (exclusive :exclusiveMinimum :minimum)
+        (exclusive :exclusiveMaximum :maximum))))
+
+(defn- swagger-parameter->openapi
+  "A 2.0 parameter, or response header, as 3.x."
+  [p]
+  (let [schema (swagger-schema p)
+        style  (when (and (= "query" (:in p)) (= "array" (:type p)))
+                 (swagger-array-styles (:collectionFormat p "csv")))]
     (cond-> (apply dissoc p :collectionFormat swagger-schema-keys)
-      (seq schema) (assoc :schema schema))))
+      (seq schema) (assoc :schema schema)
+      style        (merge style))))
 
 (defn- swagger->openapi
   "Swagger 2.0 route docs as OpenAPI 3.x: parameters and responses. Body and
@@ -514,23 +541,21 @@
       (assoc :parameters (mapv swagger-parameter->openapi kept))
       responses
       (assoc :responses (update-vals responses
-                                     (fn [{:keys [schema] :as response}]
+                                     (fn [{:keys [schema headers] :as response}]
                                        (cond-> (dissoc response :schema)
-                                         schema (assoc :content {"application/json" {:schema schema}}))))))))
+                                         schema  (assoc :content {"application/json" {:schema schema}})
+                                         headers (assoc :headers (update-vals headers swagger-parameter->openapi)))))))))
 
 (defn- translate-swagger
-  "Route data with `:swagger` docs moved to `:openapi`, on the route and on each
-   of its methods, so routes written for the 2.0 docs keep their parameter
-   inputs. An `:openapi` the route already has wins."
+  "Route data with `:swagger` docs moved to `:openapi`, so routes written for
+   the 2.0 docs keep their parameter inputs. An `:openapi` the route already
+   has wins. Method data needs no walk here: reitit.ring runs `:expand` on
+   each method too."
   [data]
-  (let [move (fn [d]
-               (if-let [swagger (and (map? d) (:swagger d))]
-                 (-> (dissoc d :swagger)
-                     (assoc :openapi (merge (swagger->openapi swagger) (:openapi d))))
-                 d))]
-    (reduce (fn [d method] (cond-> d (contains? d method) (update method move)))
-            (move data)
-            ring/http-methods)))
+  (if-let [swagger (and (map? data) (:swagger data))]
+    (-> (dissoc data :swagger)
+        (assoc :openapi (merge (swagger->openapi swagger) (:openapi data))))
+    data))
 
 (defn- create-router-options
   "Create Reitit router options from config.
@@ -556,7 +581,6 @@
      ;; allowed — Reitit matches the literal first — while two routes neither
      ;; precedence nor anything else decides between fail the boot.
      :conflicts (get config :conflicts report-ambiguous-routes)
-     :expand (fn [arg opts] (translate-swagger (r/expand arg opts)))
      ;; Innermost, after the route's own middleware: interceptors see a fully
      ;; prepared request (session, body, coercions) (BOU-331).
      ::middleware/transform #(conj % (route-interceptors (:system config)))
@@ -587,7 +611,7 @@
 (defn- create-openapi-routes
   "The OpenAPI 3.1 document at /openapi.json and Swagger UI at /api-docs/.
 
-   /swagger.json serves the same document for one more minor release, so a
+   /swagger.json serves the same document until 2.0, so a
    client pointed at it keeps working.
 
    `docs-data` is the document's top level (`:info`, `:tags`), from
@@ -834,11 +858,17 @@
                      (into (create-openapi-routes docs-data) route-specs)
                      route-specs)
 
-          ;; Create router options
-        router-opts (create-router-options config)
-
-          ;; Create Reitit router
+        legacy-docs (volatile! false)
+        router-opts (assoc (create-router-options config)
+                           :expand (fn [arg opts]
+                                     (let [data (r/expand arg opts)]
+                                       (when (and (map? data) (:swagger data))
+                                         (vreset! legacy-docs true))
+                                       (translate-swagger data))))
         router (ring/router all-routes router-opts)
+        _ (when @legacy-docs
+            (log/warn "Routes document with :swagger (Swagger 2.0), which is deprecated and translated"
+                      "for now; write :openapi instead. See UPGRADING.md."))
 
           ;; Create default handler for unmatched routes
         default-handler (create-default-handler)

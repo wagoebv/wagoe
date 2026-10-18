@@ -820,7 +820,7 @@ java.time.temporal.ChronoUnit/DAYS
 
 - **Symptom:** Routes with path or query parameters show no input fields in the API docs (/api-docs/).
 - **Cause:** The OpenAPI 3.1 document (/openapi.json) only lists parameters a route declares: a Malli :parameters schema, or a raw :openapi spec. A handler that reads :path-params or :query-params itself declares neither.
-- **Fix:** Add an :openapi key with OpenAPI 3.x parameter specs (type under :schema) to every handler/route that has path or query parameters. A 2.0-style :swagger key is still translated, for one minor release.
+- **Fix:** Add an :openapi key with OpenAPI 3.x parameter specs (type under :schema) to every handler/route that has path or query parameters. A 2.0-style :swagger key is still translated, with a warning at boot, until 2.0.
 
 ```clojure
 ;; Path parameter — on the method

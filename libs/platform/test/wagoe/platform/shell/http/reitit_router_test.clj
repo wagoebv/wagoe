@@ -566,9 +566,13 @@
                   ["/legacy/:slug" {:swagger {:parameters [{:name "slug" :in "path" :required true
                                                             :type "string"}]}
                                     :get {:handler ok
-                                          :swagger {:parameters [{:name "q" :in "query" :type "integer"}]
+                                          :swagger {:parameters [{:name "q" :in "query" :type "integer"
+                                                                  :minimum 0 :exclusiveMinimum true}
+                                                                 {:name "ids" :in "query" :type "array"
+                                                                  :items {:type "integer"}}]
                                                     :responses {200 {:description "found"
-                                                                     :schema {:type "object"}}}}}}]]
+                                                                     :schema {:type "object"}
+                                                                     :headers {:X-Total {:type "integer"}}}}}}}]]
                  {:system {}})
         doc     (fn [uri] (response-body-as-map (handler {:request-method :get :uri uri})))
         params  (fn [d path] (set (get-in d [:paths path :get :parameters])))
@@ -584,11 +588,16 @@
              (params d (keyword "/raw/{id}")))))
     (testing "a 2.0 :swagger spec is translated, so the docs UI keeps its inputs"
       (is (= #{{:name "slug" :in "path" :required true :schema {:type "string"}}
-               {:name "q" :in "query" :schema {:type "integer"}}}
+               {:name "q" :in "query" :schema {:type "integer" :exclusiveMinimum 0}}
+               ;; 2.0 defaults to csv, 3.x to ?ids=1&ids=2.
+               {:name "ids" :in "query" :style "form" :explode false
+                :schema {:type "array" :items {:type "integer"}}}}
              (params d (keyword "/legacy/{slug}"))))
-      (is (= {:description "found" :content {:application/json {:schema {:type "object"}}}}
+      (is (= {:description "found"
+              :content {:application/json {:schema {:type "object"}}}
+              :headers {:X-Total {:schema {:type "integer"}}}}
              (get-in d [:paths (keyword "/legacy/{slug}") :get :responses :200]))))
-    (testing "/swagger.json serves the same document, for one more minor"
+    (testing "/swagger.json serves the same document, until 2.0"
       (is (= d (doc "/swagger.json"))))
     (testing "the docs UI reads the 3.1 document"
       (let [config (handler {:request-method :get :uri "/api-docs/config.json"})]
