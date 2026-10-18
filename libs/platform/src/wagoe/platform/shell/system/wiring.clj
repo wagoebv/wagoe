@@ -448,8 +448,10 @@
                                    ":wagoe/cache (Redis) is active. Without a shared cache the "
                                    "limiter falls back to a per-process counter — across replicas the "
                                    "effective global limit is limit x N, so it is NOT a real limit. "
-                                   "Activate :wagoe/cache (Redis), or disable rate limiting "
-                                   "(HTTP_RATE_LIMIT_ENABLED=false).")
+                                   "Fix: move :wagoe/cache from :inactive to :active in "
+                                   "resources/conf/prod/config.edn and set REDIS_HOST, or set "
+                                   "HTTP_RATE_LIMIT_ENABLED=false. `wagoe doctor --env prod` "
+                                   "catches this before a deploy.")
                               {:type :configuration-error
                                :rate-limit/enabled? true :cache/present? false :profile :prod}))
               (log/warn (str "Rate limiting is enabled but no cache is configured — "

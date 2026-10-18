@@ -6,7 +6,7 @@
    and every caller pays that timeout. Declining to call is the only thing that
    stops both.
 
-   FC/IS: pure. The state lives elsewhere — see `…shell.rpc.breaker`, which
+   FC/IS: pure. The state lives elsewhere — see `…shell.breaker`, which
    keeps it in the cache so replicas share one breaker rather than each
    discovering the outage separately."
   (:require [clojure.set :as set]))

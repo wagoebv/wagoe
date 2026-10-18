@@ -33,6 +33,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **Data export and retention** (BOU-473): users download their data from `/web/profile/export` or `GET /api/v1/me/export`.
   `:wagoe/privacy {:retention {:user/audit-log {:retain "P2Y"}}}`, with `:wagoe/jobs` on, purges old audit entries nightly.
+- **`external` adapters share the RPC client's retry and circuit breaker** (BOU-459): opt in with `:retries`
+  (SMTP, IMAP, Twilio retry a call that never connected) and `:cache` for the breaker.
 - **FTPS file source in `external`** (BOU-730): `IFileSource` lists and downloads files over explicit TLS, retrying
   transient failures. Enable `:wagoe.external/ftps`.
 - **Mollie recurring payments and checkout expiry; `payments` is now stable** (BOU-453): mandates via `:setup-future-usage`,
@@ -146,6 +148,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Rate limiting on in prod without an active cache was found only at boot** (BOU-456): `bb doctor --env prod` now
+  reports it, and the boot error names the edit. Run it before deploying.
 - **Search without PostgreSQL full-text missed "ID" on a Turkish JVM** (BOU-608): the LIKE fallback and highlighting
   no longer lower text with the JVM's locale. No action needed.
 - **IMAP `mark-read!` and `delete-message!` ignored the fetch folder, and delete expunged every `\Deleted` message**

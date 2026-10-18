@@ -13,7 +13,7 @@ consumed through the `:local/root` dep in `bb.edn` at `libs/tools`.
 
 [source,bash]
 ----
-bb doctor                    # Validate config (6 rule-based checks)
+bb doctor                    # Validate config (`bb doctor --help` lists the checks)
 bb doctor --env all --ci     # Check all envs, exit non-zero on error
 bb setup                     # Interactive config setup wizard
 bb setup --database postgresql --payment stripe  # Non-interactive
