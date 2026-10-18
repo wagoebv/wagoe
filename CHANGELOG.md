@@ -142,6 +142,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **Search without PostgreSQL full-text missed "ID" on a Turkish JVM** (BOU-608): the LIKE fallback and highlighting
   no longer lower text with the JVM's locale. No action needed.
+- **`bb test:services up` failed in a git worktree** on a container-name conflict (BOU-538). Every checkout now
+  shares one `wagoe-test` compose project. Remove the old ones once: `docker rm -f wagoe-test-redis wagoe-test-mysql`.
 - **IMAP fetch failed on every real mailbox, and dropped attachments** (BOU-729): messages now carry `:attachments`,
   a text attachment is no longer the body, and unread/since/limit select on the server. No action needed.
 - **Operation metrics never fired, and failed operations were not counted** (BOU-727): the interceptors read
