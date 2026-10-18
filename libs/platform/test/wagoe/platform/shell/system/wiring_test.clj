@@ -189,7 +189,7 @@
   (testing "rate limiting enabled in :prod with no cache throws at startup (no false protection)"
     (is (thrown-with-msg?
          clojure.lang.ExceptionInfo
-         #"Rate limiting is enabled in the :prod profile but no"
+         #"(?s)Rate limiting is enabled in the :prod profile but no.*move :wagoe/cache from :inactive to :active"
          (ig/init-key :wagoe/http-handler
                       {:router ::router
                        :logger ::logger

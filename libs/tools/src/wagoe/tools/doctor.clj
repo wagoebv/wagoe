@@ -362,6 +362,46 @@
         :level :pass
         :msg   ":test/reset-endpoint-enabled? not enabled"}])))
 
+(defn check-rate-limit-cache
+  "Rate limiting on with no :wagoe/cache active. The :prod boot refuses this and
+   other profiles fall back to a per-process counter, as
+   wagoe.platform.shell.system.wiring/security-config decides. `active` is the
+   :active map with #env resolved: prod switches the limiter on by env var."
+  [active env-name]
+  (let [prod?  (= "prod" env-name)
+        cache? (contains? active :wagoe/cache)]
+    [(assoc
+      (cond
+        ;; Resolved from this shell's env, which need not be the deployment's.
+        (not (get-in active [:wagoe/http :rate-limit :enabled?]))
+        {:level :pass
+         :msg   (str "Rate limiting is off with this shell's environment"
+                     (when (and prod? (not cache?))
+                       "; turning it on also needs :wagoe/cache active"))}
+
+        ;; dev and test are single-node; the boot's fallback warning is enough.
+        (#{"dev" "test"} env-name)
+        {:level :pass :msg "Rate limiting is on (single-node profile)"}
+
+        ;; Boot accepts it, but an in-process cache is the same per-replica count.
+        (#{:memory :in-memory} (get-in active [:wagoe/cache :provider]))
+        {:level :warn
+         :msg   "Rate limiting is on with a :memory cache — each process counts on its own, so N replicas allow limit x N"
+         :fix   "Set :wagoe/cache :provider :redis for a limit shared across replicas"}
+
+        cache?
+        {:level :pass :msg "Rate limiting is on, with :wagoe/cache active"}
+
+        :else
+        {:level (if prod? :error :warn)
+         :msg   (str "Rate limiting is on but :wagoe/cache is not active — "
+                     (if prod?
+                       "the app will refuse to boot"
+                       "each process counts on its own, so N replicas allow limit x N"))
+         :fix   (str "Move :wagoe/cache from :inactive to :active in resources/conf/"
+                     env-name "/config.edn and set REDIS_HOST, or set HTTP_RATE_LIMIT_ENABLED=false")})
+      :id :rate-limit-cache)]))
+
 (def ^:private relocated-namespaces
   "Namespaces that moved during the Phase-2 refactors (framework upgrade aid).
    Requiring the old name fails at compile; doctor points at the new home."
@@ -425,22 +465,26 @@
 
 (defn- parse-config-minimal
   "Parse config.edn with a minimal reader that replaces Aero tags with placeholders.
-   Returns the parsed EDN map."
-  [config-text]
+   Given `env-map`, #env, #or and #boolean resolve against it the way Aero
+   would instead. Returns the parsed EDN map."
+  [config-text & [env-map]]
   (let [;; Custom readers that handle Aero tags by returning placeholder values
-        readers {'env      (fn [v] (str "ENV:" v))
-                 'or       (fn [v] (if (vector? v) (last v) v))
-                 'long     (fn [v] (if (number? v) v 0))
-                 'double   (fn [v] (if (number? v) v 0.0))
-                 'boolean  (fn [v] (boolean v))
-                 'merge    (fn [v] (if (vector? v) (apply merge v) v))
-                 'include  (fn [_v] {})
-                 'str      (fn [v] (str v))
-                 'join     (fn [v] (if (vector? v) (str/join v) (str v)))
-                 'keyword  (fn [v] (keyword v))
-                 'ref      (fn [v] v)
-                 'ig/ref   (fn [v] v)
-                 'profile  (fn [v] v)}]
+        readers (cond-> {'env      (fn [v] (str "ENV:" v))
+                         'or       (fn [v] (if (vector? v) (last v) v))
+                         'long     (fn [v] (if (number? v) v 0))
+                         'double   (fn [v] (if (number? v) v 0.0))
+                         'boolean  (fn [v] (boolean v))
+                         'merge    (fn [v] (if (vector? v) (apply merge v) v))
+                         'include  (fn [_v] {})
+                         'str      (fn [v] (str v))
+                         'join     (fn [v] (if (vector? v) (str/join v) (str v)))
+                         'keyword  (fn [v] (keyword v))
+                         'ref      (fn [v] v)
+                         'ig/ref   (fn [v] v)
+                         'profile  (fn [v] v)}
+                  env-map (merge {'env     (fn [v] (get env-map (str v)))
+                                  'or      (fn [v] (if (vector? v) (some identity v) v))
+                                  'boolean (fn [v] (Boolean/parseBoolean (str v)))}))]
     (try
       ;; :default is why this table cannot rot. It listed twelve tags and not
       ;; #boolean, which acc/prod both use — so `bb doctor --env prod` reported
@@ -573,6 +617,8 @@
         :fix   (str "Create " (config-path env) ", or pass --env <profile> for one that exists.")}]
       (let [parsed       (parse-config-minimal config-text)
             active       (or (:active parsed) {})
+            ;; #env resolved, for the checks that depend on the deployed value.
+            resolved     (or (:active (parse-config-minimal config-text env-map)) {})
             active-text  (extract-active-section config-text)
             src-text     (load-app-source-text)]
         (concat
@@ -588,6 +634,7 @@
                                (or (list-admin-files "test") [])))
          (check-prod-placeholders config-text env)
          (check-reset-endpoint-flag (or parsed {}) env)
+         (check-rate-limit-cache resolved env)
          (check-upgrade-wiring src-text))))))
 
 ;; =============================================================================
@@ -630,6 +677,7 @@
   (println "  admin-parity        Admin entity files exist in both dev and test")
   (println "  prod-placeholders   No placeholder values in prod config")
   (println "  reset-endpoint-flag :test/reset-endpoint-enabled? only true in test/dev")
+  (println "  rate-limit-cache    Rate limiting on only with :wagoe/cache active (prod refuses to boot)")
   (println "  upgrade-wiring      No stale pre-Phase-2 framework wiring (BOU-198/200)"))
 
 ;; =============================================================================
