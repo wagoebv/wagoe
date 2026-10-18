@@ -310,7 +310,7 @@
    Returns:
      Ring handler function"
   [user-service config]
-  (if-let [path (landing/landing-path config)]
+  (if-let [path (landing/front-page config)]
     (constantly (response/redirect path))
     (fn [request]
       (let [session-token (user-middleware/extract-session-token request)

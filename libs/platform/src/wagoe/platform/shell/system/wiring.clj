@@ -473,9 +473,10 @@
   "`platform-routes` minus the `/` redirect when a module's `:static` routes
    claim `/`, so an application can own its landing page."
   [platform-routes module-static]
-  (if (some #(= "/" (first %)) module-static)
-    (remove #(= "/" (first %)) platform-routes)
-    platform-routes))
+  (let [root? #(= "/" (first %))]
+    (if (some root? module-static)
+      (remove root? platform-routes)
+      platform-routes)))
 
 (defn- platform-routes
   "The endpoints every Wagoe application serves, whoever it is.

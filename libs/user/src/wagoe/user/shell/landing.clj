@@ -4,6 +4,7 @@
    page renders."
   (:require [clojure.tools.logging :as log]
             [malli.error :as me]
+            [ring.util.response :as response]
             [wagoe.core.utils.redirect :as redirect]
             [wagoe.config :as wagoe-config]
             [wagoe.core.validation :as cv]
@@ -73,7 +74,7 @@
               (landing/role-path nil user))))
       (landing/role-path r user))))
 
-(defn landing-path
+(defn front-page
   "Where `/` and `/web` send everyone, or nil to keep the defaults."
   [config]
   (:landing (settings config)))
@@ -83,10 +84,10 @@
    `:static` contribution; the platform drops its own `/` for it. Empty when
    `:landing` is unset."
   [config]
-  (if-let [path (landing-path config)]
+  (if-let [path (front-page config)]
     [["/" {:no-doc true
            :public true
-           :get    {:handler (constantly {:status 302 :headers {"Location" path} :body ""})
+           :get    {:handler (constantly (response/redirect path))
                     :summary "Redirect to the application's landing page"}}]]
     []))
 
