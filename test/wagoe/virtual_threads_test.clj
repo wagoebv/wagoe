@@ -1,8 +1,8 @@
 (ns wagoe.virtual-threads-test
   "On virtual threads a request and a job still run in their tenant's schema,
-   and their log lines still carry the tenant id in the MDC. Both reach the
-   schema through the dynamic binding of the transaction connection, and the
-   MDC is a ThreadLocal, so these are what a thread change could break."
+   which they reach through the dynamic binding of the transaction connection.
+   Their log lines carry the tenant id in the MDC, which the logger writes on
+   the logging thread for each call."
   (:require [clojure.test :refer [deftest is testing use-fixtures]]
             [integrant.core :as ig]
             [next.jdbc :as jdbc]

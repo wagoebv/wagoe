@@ -68,7 +68,8 @@ Off by default. Turn them on per listener and for job workers:
 ----
 
 A request that blocks on the database or an HTTP call then holds no platform
-thread. Jetty caps concurrent requests at 200, its `VirtualThreadPool` default.
+thread. Jetty caps concurrent tasks at 200, its `VirtualThreadPool` default;
+the connector's acceptor and selectors hold a few of those.
 
 * *Context still applies.* Tenant schema, MDC and the tracing and error
   contexts are set and read on the thread that serves the request or runs the
