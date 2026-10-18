@@ -6,7 +6,8 @@
             [wagoe.webhooks :as webhooks]
             [wagoe.webhooks.ports :as ports]
             [wagoe.webhooks.shell.persistence :as persistence]
-            [wagoe.webhooks.support :as support]))
+            [wagoe.webhooks.support :as support])
+  (:import (java.net InetAddress)))
 
 (defn- with-service
   "Call `f` with a service, its job system and its store."
@@ -103,6 +104,24 @@
               (is (empty? @seen) "no request is made")
               (is (= [:refused] (mapv :status (ports/list-attempts store {:subscription-id (:id subscription)}))))
               (is (empty? (jobs/failed-jobs (:store js) 10)) "and it is not retried")))))))))
+
+(deftest ^:integration delivery-connects-to-the-address-its-check-approved
+  (let [[resolve calls] (support/rebinding-resolver)
+        requests (atom [])
+        recorder (reify ports/IWebhookTransport
+                   (send-request! [_ req]
+                     (swap! requests conj req)
+                     {:status 200 :body "" :latency-ms 0}))]
+    (with-service
+      (fn [{:keys [ctx js]}]
+        (let [svc (support/service ctx js {} {:transport recorder :resolve resolve})]
+          (subscribe! svc "http://rebind.test/hook")
+          (ports/dispatch! svc :orders/placed (event nil))
+          (support/run-jobs! svc js support/no-backoff)
+          (is (= 2 @calls) "one lookup at create, one before the attempt")
+          (is (= [["203.0.113.2"]]
+                 (map #(map (fn [^InetAddress a] (.getHostAddress a)) (:addresses %)) @requests))
+              "the request goes to the second answer, with no third lookup"))))))
 
 (deftest ^:integration https-is-required-when-configured
   (with-service {:require-https? true}
