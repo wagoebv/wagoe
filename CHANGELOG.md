@@ -161,6 +161,8 @@ for what is public API, what is internal, and how deprecations are announced.
 ### Fixed
 
 - **The login response's `user` carried the hashes of spent MFA backup codes** (BOU-737). Upgrade if you use MFA.
+- **Admin writes to a computed or `GENERATED ALWAYS` identity column failed** (BOU-546): those columns are read-only now.
+  A split-table entity without `:create-redirect-url` shows the config error page, not a raw 500. No action needed.
 - **`bb create-admin` printed a third `Password:` prompt** (BOU-594): the user CLI no longer prompts for a piped
   password. No action needed.
 - **On a Turkish JVM `userId` became `user-ıd`** (BOU-732): case conversion no longer uses the JVM locale.
