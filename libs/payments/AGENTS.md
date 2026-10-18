@@ -145,9 +145,9 @@ Which id appears where:
 - Status mapping: `"paid"` → `:payment.paid`, `"failed"` → `:payment.failed`, `"canceled"/"cancelled"` → `:payment.cancelled`, `"expired"` → `:payment.expired`
 - Requires `:api-key` and `:webhook-base-url`
 - **Mandates**: `create-checkout-session` with `:setup-future-usage` sends `sequenceType=first` with a `customerId` — `:provider-customer-id`, or a customer created from `:customer-email`. Once paid, `get-payment-status` returns `:provider-customer-id` (`cst_…`) and `:provider-payment-method-id` (the mandate, `mdt_…`)
-- **Off-session**: `POST /v2/payments` with `sequenceType=recurring`, `customerId` and optional `mandateId`; `:idempotency-key` goes in the `Idempotency-Key` header. Usually `:pending` (SEPA settles later, via the webhook). A 422 (no valid mandate) throws `{:type :internal-error}`
+- **Off-session**: `POST /v2/payments` with `sequenceType=recurring`, `customerId` and optional `mandateId`; `:idempotency-key` goes in the `Idempotency-Key` header, which Mollie remembers for about an hour (Stripe: 24 hours) — a later retry charges again. Usually `:pending` (SEPA settles later, via the webhook). A 422 (no valid mandate) throws `{:type :internal-error}`
 - **Expire**: `DELETE /v2/payments/<id>` cancels the open payment; a payment Mollie will not cancel throws
-- **Webhook**: a status with no `payment.*` outcome (`open`, `pending`) returns `:event-type nil`; a payment that cannot be fetched throws, so Mollie retries
+- **Webhook**: a status with no `payment.*` outcome (`open`, `pending`) returns `:event-type nil`; an id Mollie does not know (404) is acknowledged the same way; any other failed fetch throws, so Mollie retries; a body without an id throws `:validation-error`
 - **Status poll**: 401/403 throws; other failures read as `{:status :pending}`, as on Stripe
 
 ### Stripe (`:stripe`)

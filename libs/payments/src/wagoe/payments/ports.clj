@@ -30,7 +30,8 @@
   ;; :idempotency-key is optional — the stable business identity of the charge
   ;; (e.g. "incasso-<subscription>-<period>"). A retry with the same key returns
   ;; the original charge instead of double-charging (Stripe: Idempotency-Key
-  ;; header, as on Mollie; Mock: in-memory cache).
+  ;; header, kept 24h; Mollie: the same header, kept about an hour; Mock:
+  ;; in-memory cache).
   ;; Returns {:provider-payment-id "..." :status :pending|:paid|:failed}
 
   (get-payment-status [this provider-checkout-id])

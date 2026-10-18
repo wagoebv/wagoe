@@ -117,5 +117,15 @@
     (with-redefs [http/get (fn [& _] (json-response 503 {}))]
       (is (= :internal-error (:type (ex-data-of #(ports/process-webhook provider "id=tr_1" {})))))))
 
-  (testing "a body without an id throws"
-    (is (= :internal-error (:type (ex-data-of #(ports/process-webhook provider "foo=bar" {})))))))
+  (testing "a body without an id is a validation error"
+    (is (= :validation-error (:type (ex-data-of #(ports/process-webhook provider "foo=bar" {}))))))
+
+  (testing "an id Mollie does not know is acknowledged, not retried"
+    (with-redefs [http/get (fn [& _] (json-response 404 {:title "Not Found"}))]
+      (let [r (ports/process-webhook provider "id=tr_forged" {})]
+        (is (nil? (:event-type r)))
+        (is (= "tr_forged" (:provider-payment-id r))))))
+
+  (testing "Ring's string-keyed :form-params work as the body"
+    (with-redefs [http/get (fn [& _] (json-response 200 {:id "tr_1" :status "paid"}))]
+      (is (= :payment.paid (:event-type (ports/process-webhook provider {"id" "tr_1"} {})))))))

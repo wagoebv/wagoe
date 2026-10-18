@@ -34,9 +34,10 @@
       :body   (parse-body response)})))
 
 (defn- ok-body!
-  "The body of a 2xx response; anything else throws, naming the port method."
+  "The body of a 2xx response; anything else throws, naming the port method.
+   An unparseable 2xx body throws too, rather than returning nil ids."
   [message method {:keys [status body]}]
-  (if (#{200 201} status)
+  (if (and (#{200 201} status) (map? body))
     body
     (throw (ex-info message {:type     :internal-error
                              :provider :mollie
@@ -45,18 +46,19 @@
                              :body     body}))))
 
 (defn- fetch-payment
-  "The payment, or nil when Mollie cannot say. A rejected key throws instead:
-   it never heals, and reading it as :pending would hide it (as Stripe does)."
+  "GET the payment: {:status int :body map}. A rejected key throws: it never
+   heals, and reading it as :pending would hide it (as Stripe does)."
   [api-key payment-id]
-  (let [{:keys [status body]} (request! api-key :get (str "/payments/" payment-id))]
-    (cond
-      (= 200 status)        body
-      (#{401 403} status)   (throw (ex-info "Mollie authentication failed"
-                                            {:type       :internal-error
-                                             :provider   :mollie
-                                             :status     status
-                                             :payment-id payment-id}))
-      :else                 nil)))
+  (let [{:keys [status] :as response} (request! api-key :get (str "/payments/" payment-id))]
+    (when (#{401 403} status)
+      (throw (ex-info "Mollie authentication failed"
+                      {:type       :internal-error
+                       :provider   :mollie
+                       :status     status
+                       :payment-id payment-id})))
+    (when-not (= 200 status)
+      (log/warnf "Mollie fetch-payment: %s returned %s" payment-id status))
+    response))
 
 (defn- create-customer!
   "A first payment needs a customer to hang the mandate on."
@@ -67,6 +69,22 @@
 
 (defn- default-webhook-url [webhook-base-url]
   (str webhook-base-url "/api/v1/payments/webhook"))
+
+(defn- webhook-result
+  "nil :event-type for a status with no payment.* outcome (open, pending) or
+   an unknown payment — acknowledged, not thrown, as the port requires."
+  [payment-id payment]
+  (let [status     (:status payment)
+        event-type (provider/mollie-status->event-type status)]
+    (log/infof "Mollie webhook: payment-id=%s status=%s → event=%s"
+               payment-id status event-type)
+    ;; :provider-payment-id is the genuine Mollie payment id (tr_…) — the same
+    ;; value returned as :provider-checkout-id at creation. :correlation-id is
+    ;; the internal UUID recovered from metadata, round-tripping CheckoutResult.
+    {:event-type          event-type
+     :provider-payment-id payment-id
+     :correlation-id      (get-in payment [:metadata :checkout-id])
+     :payload             (or payment {})}))
 
 (defrecord MolliePaymentProvider [api-key webhook-base-url]
   ports/IPaymentProvider
@@ -115,7 +133,8 @@
      :status               :expired})
 
   (get-payment-status [_ provider-checkout-id]
-    (if-let [payment (fetch-payment api-key provider-checkout-id)]
+    (if-let [payment (let [{:keys [status body]} (fetch-payment api-key provider-checkout-id)]
+                       (when (= 200 status) body))]
       (cond-> {:status              (provider/mollie-status->payment-status (:status payment))
                :provider-payment-id (:id payment)}
         (:customerId payment) (assoc :provider-customer-id (:customerId payment))
@@ -133,24 +152,21 @@
     ;; Mollie sends a form-POST with only the payment id as `id`
     (let [payment-id (if (string? raw-body)
                        (second (re-find #"id=([^&]+)" raw-body))
-                       (:id raw-body))
-          ;; A failed fetch throws so the endpoint answers 5xx and Mollie retries;
-          ;; acknowledging it would lose the payment's outcome for good.
-          payment    (or (when payment-id (fetch-payment api-key payment-id))
-                         (throw (ex-info "Mollie webhook: payment could not be fetched"
-                                         {:type       :internal-error
-                                          :provider   :mollie
-                                          :payment-id payment-id})))
-          status     (:status payment)
-          ;; nil for a status with no payment.* outcome (open, pending) —
-          ;; acknowledged, not thrown, as the port requires.
-          event-type (provider/mollie-status->event-type status)]
-      (log/infof "Mollie webhook: payment-id=%s status=%s → event=%s"
-                 payment-id status event-type)
-      ;; :provider-payment-id is the genuine Mollie payment id (tr_…) — the same
-      ;; value returned as :provider-checkout-id at creation. :correlation-id is
-      ;; the internal UUID recovered from metadata, round-tripping CheckoutResult.
-      {:event-type          event-type
-       :provider-payment-id payment-id
-       :correlation-id      (get-in payment [:metadata :checkout-id])
-       :payload             payment})))
+                       ;; Ring's :form-params are string-keyed.
+                       (or (:id raw-body) (get raw-body "id")))
+          _          (when-not payment-id
+                       (throw (ex-info "Mollie webhook carries no payment id"
+                                       {:type :validation-error :provider :mollie})))
+          {:keys [status body]} (fetch-payment api-key payment-id)]
+      (case (int (or status 0))
+        200 (webhook-result payment-id body)
+        ;; Not this account's payment (a forged POST, or the other API key's):
+        ;; acknowledged, as Mollie advises, so it is not retried for days.
+        404 (webhook-result payment-id nil)
+        ;; Anything else throws so the endpoint answers 5xx and Mollie retries;
+        ;; acknowledging it would lose the payment's outcome for good.
+        (throw (ex-info "Mollie webhook: payment could not be fetched"
+                        {:type       :internal-error
+                         :provider   :mollie
+                         :status     status
+                         :payment-id payment-id}))))))
