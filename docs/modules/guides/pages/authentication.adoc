@@ -229,7 +229,8 @@ After signing in, an administrator lands on `/web/admin/users` and everyone else
 :wagoe/user
 {:login-redirect {:user "/web/overzicht" :default "/web/overzicht"}  ; by role
  :dashboard      false                                                ; or {:handler my.app.web/dashboard}
- :home           "/web/overzicht"}                                    ; where the layouts link home
+ :home           "/web/overzicht"                                     ; where the layouts link home
+ :landing        "/web/welkom"}                                       ; where / and /web send everyone
 ----
 
 `:login-redirect` is a map of role to path (`:default` covers roles it does not name,
@@ -245,8 +246,17 @@ that Ring handler there instead, behind the same sign-in check.
 
 `:home` is where the logo, "back" and dashboard links in the built-in layouts point. It
 defaults to `/web/dashboard`, or to `/web` with `:dashboard false`, which sends a
-signed-in user on to their landing page. All three keys are checked at boot: a path off
-this site, an unknown role or a symbol that does not resolve stops it.
+signed-in user on to their landing page.
+
+`:landing` gives the application its own front page. `/` and `/web` then redirect there
+for everyone, signed in or not, instead of to the login page and the built-in welcome
+page. Mark the route that serves it `:public true`, or a visitor who is not signed in
+is sent to log in. `:login-redirect` still decides where someone goes after signing in.
+Without the user module, a module that contributes a `:static` route at `/` replaces
+the platform's redirect.
+
+All four keys are checked at boot: a path off this site, an unknown role or a symbol
+that does not resolve stops it.
 
 == Groups and permissions
 

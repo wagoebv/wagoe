@@ -460,11 +460,19 @@
    [true [:map {:closed true} [:handler [:or qualified-symbol? fn?]]]]
    [false [:boolean {:error/message "should be false, or {:handler my.app/page}"}]]])
 
+(def Landing
+  "Where `/` and `/web` send everyone. Not one of those two: it would redirect
+   to itself."
+  [:and LocalPath
+   [:fn {:error/message "must not be / or /web, which redirect to it"}
+    #(not (contains? #{"/" "/web" "/web/"} %))]])
+
 (def UserLandingSettings
   [:map
    [:login-redirect {:optional true} LoginRedirect]
    [:dashboard {:optional true} Dashboard]
-   [:home {:optional true} LocalPath]])
+   [:home {:optional true} LocalPath]
+   [:landing {:optional true} Landing]])
 
 (def ^:private user-validator (m/validator User))
 (def ^:private user-explainer (m/explainer User))

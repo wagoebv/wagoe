@@ -1,6 +1,7 @@
 (ns wagoe.user.shell.landing
-  "The `:login-redirect`, `:dashboard` and `:home` settings of `:wagoe/user`:
-   checked and resolved at boot, read when a user signs in or a page renders."
+  "The `:login-redirect`, `:dashboard`, `:home` and `:landing` settings of
+   `:wagoe/user`: checked and resolved at boot, read when a user signs in or a
+   page renders."
   (:require [clojure.tools.logging :as log]
             [malli.error :as me]
             [wagoe.core.utils.redirect :as redirect]
@@ -29,7 +30,7 @@
     v))
 
 (defn prepare
-  "`config` with `:login-redirect`, `:dashboard` and `:home` checked and the
+  "`config` with the landing settings checked and the
    symbols resolved. Throws :configuration-error on a bad value, so boot fails. The
    module wiring calls it once; handlers expect its output."
   [config]
@@ -71,6 +72,23 @@
                           {:path path}))
               (landing/role-path nil user))))
       (landing/role-path r user))))
+
+(defn landing-path
+  "Where `/` and `/web` send everyone, or nil to keep the defaults."
+  [config]
+  (:landing (settings config)))
+
+(defn root-routes
+  "The `/` route that sends everyone to `:landing`, for the module's
+   `:static` contribution; the platform drops its own `/` for it. Empty when
+   `:landing` is unset."
+  [config]
+  (if-let [path (landing-path config)]
+    [["/" {:no-doc true
+           :public true
+           :get    {:handler (constantly {:status 302 :headers {"Location" path} :body ""})
+                    :summary "Redirect to the application's landing page"}}]]
+    []))
 
 (defn dashboard-handler
   "The handler to mount at /web/dashboard: nil for `:dashboard false`, the
