@@ -3,7 +3,7 @@
             [wagoe.webhooks.shell.crypto :as crypto]
             [wagoe.webhooks.shell.ssrf :as ssrf]
             [wagoe.webhooks.support :as support])
-  (:import (java.net InetAddress)))
+  (:import (java.net InetAddress UnknownHostException)))
 
 (defn- problem [url settings]
   (:problem (ssrf/check-host url settings ssrf/system-resolve)))
@@ -39,7 +39,10 @@
       (is (= 1 @calls)))))
 
 (deftest ^:unit an-unknown-host-is-not-refused-for-good
-  (is (= :unresolvable (:type (problem "https://no-such-host.invalid/x" {})))))
+  (is (= :unresolvable
+         (get-in (ssrf/check-host "https://no-such-host.invalid/x" {}
+                                  (fn [host] (throw (UnknownHostException. host))))
+                 [:problem :type]))))
 
 (deftest ^:unit secrets-round-trip-encrypted
   (let [k  (crypto/derive-key "k-at-least-32-characters-long-xxxx")

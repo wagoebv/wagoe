@@ -9,7 +9,7 @@
   (:require [wagoe.webhooks.ports :as ports])
   (:import (java.net InetAddress)
            (java.nio.charset StandardCharsets)
-           (java.util.concurrent Executors ScheduledExecutorService ScheduledFuture ThreadFactory TimeUnit)
+           (java.util.concurrent ScheduledFuture ScheduledThreadPoolExecutor ThreadFactory TimeUnit)
            (javax.net.ssl SSLContext)
            (org.apache.http HttpResponse)
            (org.apache.http.client.config RequestConfig)
@@ -43,12 +43,17 @@
       (.disableAutomaticRetries)
       (.disableCookieManagement)
       (.disableContentCompression)
+      ;; The request sets its own; the default reads a resource on every build.
+      (.disableDefaultUserAgent)
       (.build)))
 
 (defonce ^:private deadlines
-  (Executors/newSingleThreadScheduledExecutor
-   (reify ThreadFactory
-     (newThread [_ r] (doto (Thread. ^Runnable r "webhooks-deadline") (.setDaemon true))))))
+  ;; Remove on cancel: a cancelled deadline otherwise stays queued until it
+  ;; expires, holding its request, body and connection buffers.
+  (doto (ScheduledThreadPoolExecutor.
+         1 (reify ThreadFactory
+             (newThread [_ r] (doto (Thread. ^Runnable r "webhooks-deadline") (.setDaemon true)))))
+    (.setRemoveOnCancelPolicy true)))
 
 (defn- read-prefix
   "Up to `n` bytes of the response body as a string. The stream is left open:
@@ -65,22 +70,19 @@
   ports/IWebhookTransport
   (send-request! [_ {:keys [url headers body addresses]}]
     (let [start (System/nanoTime)
-          post  (HttpPost. ^String url)
+          post  (doto (HttpPost. ^String url)
+                  (.setEntity (ByteArrayEntity. (.getBytes ^String body StandardCharsets/UTF_8))))
+          _     (doseq [[k v] headers] (.setHeader post ^String k ^String v))
           ;; One deadline for headers and body: a receiver that trickles
           ;; either would otherwise hold the worker.
-          abort (.schedule ^ScheduledExecutorService deadlines ^Runnable #(.abort post)
+          abort (.schedule ^ScheduledThreadPoolExecutor deadlines ^Runnable #(.abort post)
                            (long timeout-ms) TimeUnit/MILLISECONDS)]
-      (doseq [[k v] headers] (.setHeader post ^String k ^String v))
-      (.setEntity post (ByteArrayEntity. (.getBytes ^String body StandardCharsets/UTF_8)))
       (try
         (with-open [c (client sockets request-config addresses)]
           (let [resp (.execute c post)]
             {:status     (.getStatusCode (.getStatusLine resp))
              :body       (read-prefix resp max-response-bytes)
              :latency-ms (elapsed-ms start)}))
-        (catch InterruptedException e
-          (.interrupt (Thread/currentThread))
-          (throw e))
         (catch Exception e
           {:error      {:type    :webhooks/no-response
                         :message (str (.getSimpleName (class e)) ": " (.getMessage e))}
@@ -99,6 +101,10 @@
                                             (SSLConnectionSocketFactory. ssl-context)
                                             (SSLConnectionSocketFactory/getSocketFactory)))
                        (.build))
-                   (-> (RequestConfig/custom) (.setConnectTimeout (int connect-timeout-ms)) (.build))
+                   (-> (RequestConfig/custom)
+                       (.setConnectTimeout (int connect-timeout-ms))
+                       ;; Backstop should the deadline thread be held up.
+                       (.setSocketTimeout (int timeout-ms))
+                       (.build))
                    timeout-ms
                    max-response-bytes))
