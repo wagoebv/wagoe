@@ -347,15 +347,27 @@ BOU-581 unique index, only in dev, test and acc; elsewhere it warns and changes 
 
 ## Tenancy
 
-Each tenant schema has its own workflow tables: the manifest names
-`wagoe/workflow/migrations-tenant/` under `:tenant-paths`, and the tenant module
-runs it when it provisions a tenant and in every tenant schema at boot
-(`wagoe.workflow.shell.tables`). The store runs each call on the request's
-tenant-bound transaction (`db/connectable-for` its datasource), so a
-tenant reads and writes only its own instances. Isolation therefore needs
-PostgreSQL; on the H2 test profile all tenants share one table. Instances a
-tenant started before this live in `public`. Side-effect jobs carry no tenant,
-so a handler that reads the instance must run in its tenant's schema.
+Each tenant schema has its own workflow tables. The manifest names the public
+series, `wagoe/workflow/migrations/`, under `:tenant-paths` too, and the tenant
+module runs it when it provisions a tenant and in every tenant schema at boot.
+So a new workflow migration reaches tenants with no twin; it may only touch
+workflow's own tables (a tenant run has no `public` on its search_path).
+
+The store runs each call on the request's tenant-bound transaction
+(`db/connectable-for` its datasource), so a tenant reads and writes only its
+own instances. It fails closed (`tables/refuse-shared-tables!`): a tenant
+schema without the tables, and work `db/*tenant-id*` assigns to a tenant
+outside a tenant transaction (all of it on H2 under `:allow-h2?`), throw
+`:configuration-error`.
+
+The tenant middleware and the jobs tenant runner bind `db/*tenant-id*`. Hooks
+run with it bound; side-effect jobs carry it as `:metadata {:tenant-id ...}`,
+and a nil-tx `transition!` hands hooks and jobs the transaction the store
+joined. Auto-transitions (`process-auto-transitions!`) still read `public` only.
+
+In a tenant, reads need `access/tenant-admin?` or a `:workflow/read` grant
+scoped `{:tenant-id <id>}`; the global `:admin` role of another tenant's user
+does not count. Instances a tenant started before BOU-748 live in `public`.
 
 ## Gotchas
 

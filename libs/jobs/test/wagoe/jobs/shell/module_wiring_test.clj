@@ -58,3 +58,8 @@
                    (ig/init-key :wagoe/job-scheduler
                                 {:runtime   runtime
                                  :recurring {:nightly-report {:cron "0 2 * *"}}}))))))
+
+(deftest ^:unit with-tenancy-the-workers-get-a-tenant-runner
+  (let [workers #(get-in (wiring/ig-config {} {:enabled %}) [:components :wagoe/job-workers :tenant-runner])]
+    (is (= (ig/ref :wagoe/job-tenant-runner) (workers #{:wagoe/jobs :wagoe/tenant})))
+    (is (nil? (workers #{:wagoe/jobs})))))

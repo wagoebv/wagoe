@@ -127,7 +127,8 @@
 
 (defn- dispatch-side-effects!
   "Enqueue jobs for each declared side-effect key after a successful transition.
-   On the caller's transaction `conn` when the queue can join it.
+   On the caller's transaction `conn` when the queue can join it. In a tenant's
+   work, each job carries the tenant.
 
    Args:
      job-queue      - IJobQueue or nil
@@ -153,12 +154,15 @@
                          (ns-resolve jobs-ports 'enqueue-job!))]
         (doseq [effect-key side-effect-keys]
           (try
-            (let [job (create-fn {:job-type effect-key
-                                  :args     {:instance-id  (str (:id instance))
-                                             :workflow-id  (name (:workflow-id instance))
-                                             :from-state   (name (:from-state audit-entry))
-                                             :to-state     (name (:to-state audit-entry))
-                                             :context      (or context {})}}
+            (let [job (create-fn (cond-> {:job-type effect-key
+                                          :args     {:instance-id  (str (:id instance))
+                                                     :workflow-id  (name (:workflow-id instance))
+                                                     :from-state   (name (:from-state audit-entry))
+                                                     :to-state     (name (:to-state audit-entry))
+                                                     :context      (or context {})}}
+                                   ;; So the worker runs it in the tenant's schema,
+                                   ;; where the instance is.
+                                   db/*tenant-id* (assoc :metadata {:tenant-id (str db/*tenant-id*)}))
                                  (UUID/randomUUID)
                                  (Instant/now))]
               (enqueue-fn job-queue :default job))
@@ -325,7 +329,12 @@
     (ports/transition! this nil request))
 
   (transition! [this tx request]
-    (transition-on this (store-for store tx) (db/tx-connection tx) request))
+    ;; Without a tx, the transaction the store joins on this thread, a tenant
+    ;; request's: hooks and jobs ride on the one the store writes on.
+    (transition-on this (store-for store tx)
+                   (or (db/tx-connection tx)
+                       (some-> (:datasource store) db/connectable-for db/tx-connection))
+                   request))
 
   (current-state [_ instance-id]
     (:current-state (ports/find-instance store instance-id)))
