@@ -102,6 +102,21 @@ document.addEventListener('alpine:init', function () {
     };
   });
 
+  // NavGroup: a module's sidebar group. Open/closed is remembered per module;
+  // until it is, the group holding the current page is the open one.
+  window.Alpine.data('navGroup', function (id, active) {
+    var key = 'wagoe-admin-nav-' + id;
+    var stored = load(key);
+    return {
+      open: typeof stored === 'boolean' ? stored : active,
+
+      toggle: function () {
+        this.open = !this.open;
+        save(key, this.open);
+      }
+    };
+  });
+
   // BulkSelection: manages a selectedIds array for table checkbox bulk actions.
   window.Alpine.data('bulkSelection', function () {
     return {

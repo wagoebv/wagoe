@@ -2,7 +2,7 @@
   "Unit tests for admin UI pure functions.
 
    Tests cover:
-   - Layout components (admin-sidebar, admin-shell, admin-layout, admin-home)
+   - Layout components (nav, admin-shell, admin-layout, admin-home)
    - Entity list components (search, table, pagination)
    - Field rendering (render-field-value with different types)
    - Form widgets (render-field-widget with all widget types)
@@ -14,7 +14,9 @@
    All tests are pure function tests - data in, Hiccup out.
    No browser or HTTP simulation required."
   (:require [wagoe.admin.core.ui :as ui]
+            [wagoe.platform.core.http.nav :as nav]
             [wagoe.shared.ui.core.home :as home]
+            [wagoe.shared.ui.core.shell :as shell]
             [clojure.test :refer [deftest is testing]]
             [clojure.string :as str])
   (:import [java.time Instant]
@@ -487,32 +489,22 @@
                 (:href (second %))))))
 
 (deftest ^:unit sidebar-dashboard-link-uses-the-configured-home
-  (is (= "/web/dashboard" (dashboard-href (ui/admin-sidebar [] {} nil))))
+  (is (= "/web/dashboard" (dashboard-href (shell/sidebar nil))))
   (binding [home/*path* "/app"]
-    (is (= "/app" (dashboard-href (ui/admin-sidebar [] {} nil))))))
+    (is (= "/app" (dashboard-href (shell/sidebar nil))))))
 
-(deftest ^:unit admin-sidebar-test
-  (testing "Admin sidebar with entity navigation"
-    (let [entities [:users :orders :products]
-          sidebar (ui/admin-sidebar entities sample-entity-configs :users)]
-
-      (is (vector? sidebar))
-      (is (= :aside.admin-sidebar (first sidebar)))
-
-      ;; Should have sidebar header with toggle controls
-      (is (str/includes? (str sidebar) "sidebar-toggle"))
-
-      ;; Should have navigation for each entity
-      (is (str/includes? (str sidebar) "Users"))
-      (is (str/includes? (str sidebar) "Orders"))
-      (is (str/includes? (str sidebar) "Products"))
-
-      ;; Should have links to entity pages
-      (is (str/includes? (str sidebar) "/web/admin/users"))
-      (is (str/includes? (str sidebar) "/web/admin/orders"))
-
-      ;; Current entity should have active class
-      (is (str/includes? (str sidebar) "active")))))
+(deftest ^:unit the-admin-contributes-an-item-per-entity
+  (let [configs (assoc sample-entity-configs
+                       :orders {:label "Orders" :icon :shopping-cart :module "billing"}
+                       :secrets {:sidebar-hidden true}
+                       :line-items {})]
+    (is (= [{:entity :users :module nil :href "/web/admin/users" :label "Users"
+             :icon :users :access :admin}
+            {:entity :orders :module :billing :href "/web/admin/orders" :label "Orders"
+             :icon :shopping-cart :access :admin}
+            {:entity :line-items :module nil :href "/web/admin/line-items" :label "Line items"
+             :icon :database :access :admin}]
+           (get-in (ui/nav [:users :orders :secrets :line-items] configs) [:admin :items])))))
 
 (deftest ^:unit admin-shell-test
   (testing "Admin shell layout with sidebar and topbar"
@@ -595,6 +587,22 @@
       ;; Entity cards should link to entity pages
       (is (str/includes? (str home) "/web/admin/users"))
       (is (str/includes? (str home) "/web/admin/orders")))))
+
+(deftest ^:unit the-dashboard-has-a-card-per-described-nav-page
+  (let [groups [{:id :user :label "Users"
+                 :items [{:href "/web/admin/groups" :label "Groups" :icon :shield :access :admin
+                          :description "Manage groups"}
+                         {:href "/web/audit" :label "Audit" :access :platform-admin
+                          :description "Who did what"}
+                         {:href "/web/admin/users" :label "Users" :entity :users :access :admin}]}]
+        cards  (fn [user]
+                 (binding [nav/*nav* {:groups groups :uri "/web/admin/"}]
+                   (->> (ui/admin-home [] {} {} user)
+                        (tree-seq coll? seq)
+                        (keep #(when (and (vector? %) (= :a (first %))) (:href (second %)))))))]
+    (is (= ["/web/admin/groups" "/web/audit"] (cards {:role :admin})))
+    (is (= ["/web/admin/groups"] (cards {:role :admin :tenant-id 1})) "the audit trail is the platform admin's")
+    (is (empty? (cards {:role :user})))))
 
 ;; =============================================================================
 ;; Entity List Component Tests
@@ -1308,7 +1316,7 @@
         (is (str/includes? page-str "search-icon"))))
 
     (testing "Sidebar buttons have aria-label"
-      (let [sidebar (ui/admin-sidebar [:users :orders] sample-entity-configs :users)
+      (let [sidebar (shell/sidebar [])
             sidebar-str (str sidebar)]
         ;; Toggle and pin buttons should have aria-label (i18n keys)
         (is (str/includes? sidebar-str "aria-label"))
@@ -1326,7 +1334,7 @@
 (deftest ^:unit accessibility-semantic-html-test
   (testing "Pages use semantic HTML elements"
     (testing "Sidebar uses nav element"
-      (let [sidebar (ui/admin-sidebar [:users] sample-entity-configs :users)]
+      (let [sidebar (shell/sidebar [])]
         ;; Should have nav element
         (is (some #(and (vector? %) (= :nav.admin-sidebar-nav (first %)))
                   (tree-seq vector? seq sidebar)))))

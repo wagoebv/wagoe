@@ -44,8 +44,8 @@
 (def datetime-input-offset base/datetime-input-offset)
 (def get-field-errors base/get-field-errors)
 
-;; --- layout: shell, sidebar, home, error pages, url util ---
-(def admin-sidebar layout/admin-sidebar)
+;; --- layout: shell, nav, home, error pages, url util ---
+(def nav layout/nav)
 (def admin-shell layout/admin-shell)
 (def admin-layout layout/admin-layout)
 (def admin-home layout/admin-home)

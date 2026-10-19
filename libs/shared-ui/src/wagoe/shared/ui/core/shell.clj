@@ -2,9 +2,12 @@
   "The admin shell: collapsible sidebar, topbar and user menu around a page.
 
    Here rather than in admin so that modules admin depends on (user) can
-   render in it. The sidebar takes its navigation as data, a vector of groups:
+   render in it. The sidebar shows the navigation modules contribute
+   (`wagoe.platform.core.http.nav`), or a page's own `:nav`, a vector of groups:
 
-     [{:label [:t :admin/sidebar-entities-title]   ; heading, optional
+     [{:id    :user                  ; a collapsible module group; without
+       :label \"Users\" :icon :users  ; an id, a plain list under :label
+       :open? true
        :items [{:href \"/web/admin/users\" :label \"Users\"
                 :icon :users :active? true}]}]"
   (:require [wagoe.core.utils.text :as text]
@@ -13,6 +16,7 @@
             [wagoe.shared.ui.core.icons :as icons]
             [wagoe.shared.ui.core.layout :as layout]
             [wagoe.platform.core.csrf :as csrf]
+            [wagoe.platform.core.http.nav :as nav]
             [wagoe.platform.core.http.pages :as pages]
             [clojure.string :as str]))
 
@@ -21,14 +25,39 @@
    (icons/icon icon {:size 20})
    [:span.nav-text label]])
 
-(defn- nav-group [{:keys [label items]}]
-  (list
-   (when label [:h3 label])
-   [:ul.entity-list
-    (for [item items]
-      [:li {:class (when (:active? item) "active")}
-       ;; Always an icon: a collapsed sidebar hides the label
-       (nav-link {:href (:href item)} (:icon item :file) (:label item))])]))
+(defn- nav-items [items & [title]]
+  [:ul.entity-list
+   ;; A collapsed sidebar shows a module's items in a flyout, under its name
+   (when title [:li.nav-flyout-title title])
+   (for [item items]
+     [:li {:class (when (:active? item) "active")}
+      ;; Always an icon: a collapsed sidebar hides the label
+      (nav-link {:href (:href item)} (:icon item :file) (:label item))])])
+
+(defn- nav-group [{:keys [id label icon items open?]}]
+  (if id
+    ;; navGroup (admin-ux.js) remembers open/closed per module; until it has
+    ;; run, the group of the current page is the open one.
+    [:div {:class  (cond-> "nav-module" open? (str " has-active"))
+           :x-data (str "navGroup('" (name id) "', " (boolean open?) ")")}
+     [:button.nav-module-toggle {:type                 "button"
+                                 :aria-expanded        (str (boolean open?))
+                                 :x-bind:aria-expanded "open"
+                                 (keyword "@click")    "toggle()"}
+      (icons/icon (or icon :folder) {:size 20})
+      [:span.nav-text label]
+      (icons/icon :chevron-down {:size 14 :class "nav-chevron"})]
+     (nav-items items label)]
+    (list
+     (when label [:h3 label])
+     (nav-items items))))
+
+(defn user-nav
+  "The groups of the request's navigation that `user` may open; nil outside a
+   request."
+  [user]
+  (when-let [{:keys [groups uri]} nav/*nav*]
+    (nav/for-user groups uri user pages/mounted?)))
 
 (defn sidebar
   "The sidebar for `nav` (see the ns docstring). `opts` supports :logo-url for
@@ -79,15 +108,15 @@
        :else                    "?"))))
 
 (defn admin-shell
-  "`content` in the shell. `opts`: :nav (see the ns docstring), :user,
-   :page-title and :logo-url."
+  "`content` in the shell. `opts`: :user, :page-title, :logo-url, and :nav to
+   replace the request's navigation (see the ns docstring)."
   [content opts]
   (let [{:keys [user nav page-title]} opts]
     ;; A wrapper div rather than a fragment, for Alpine's initialisation. The
     ;; sidebar store is initialised in admin-ux.js (external script, CSP-safe).
     [:div.hiccup-fragment-wrapper
      [:div.admin-shell (alpine/sidebar-shell-attrs)
-      (sidebar nav opts)
+      (sidebar (or nav (user-nav user)) opts)
       [:div.admin-overlay (alpine/sidebar-overlay-attrs)]
       [:div.admin-main
        [:header.admin-topbar

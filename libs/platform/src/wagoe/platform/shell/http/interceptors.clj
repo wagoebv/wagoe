@@ -50,6 +50,7 @@
             [wagoe.platform.core.csrf :as csrf]
             [wagoe.platform.core.http.client-ip :as client-ip]
             [wagoe.platform.core.http.errors :as errors]
+            [wagoe.platform.core.http.nav :as nav]
             [wagoe.platform.core.http.pages :as pages]
             [wagoe.platform.core.http.problem-details :as problem-details]
             [wagoe.platform.shell.http.pages :as shell-pages]
@@ -737,6 +738,16 @@
   (with-meta
     (fn [request]
       (handler (assoc request :client-ip (client-ip/client-ip request trusted-cidrs))))
+    (meta handler)))
+
+(defn wrap-nav
+  "Binds `nav/*nav*` to `groups` and the request's path, so any page can render
+   the sidebar. Keeps the handler's metadata."
+  [handler groups]
+  (with-meta
+    (fn [request]
+      (binding [nav/*nav* {:groups groups :uri (:uri request)}]
+        (handler request)))
     (meta handler)))
 
 ;; ==============================================================================

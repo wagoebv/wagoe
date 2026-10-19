@@ -144,6 +144,14 @@
   font-weight: 500;
 }
 .admin-sidebar button { color: #9FB2AB; }
+.admin-sidebar .nav-module-toggle { color: var(--wg-chrome-text); border-radius: 4px; }
+.admin-sidebar .nav-module-toggle:hover { background: var(--wg-chrome-hover); color: #F2F6F4; }
+.admin-sidebar .nav-module.has-active > .nav-module-toggle { color: var(--wg-teal); }
+.admin-shell[data-sidebar-state="collapsed"] .admin-sidebar .nav-module > .entity-list {
+  background: var(--wg-ink);
+  border-color: var(--wg-chrome-hover);
+}
+.admin-sidebar .nav-flyout-title { color: var(--wg-chrome-muted); }
 
 .admin-topbar {
   background: var(--color-base-100) !important;

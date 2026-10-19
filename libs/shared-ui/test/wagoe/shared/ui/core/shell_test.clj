@@ -1,5 +1,6 @@
 (ns wagoe.shared.ui.core.shell-test
-  (:require [wagoe.shared.ui.core.shell :as shell]
+  (:require [wagoe.platform.core.http.nav :as nav]
+            [wagoe.shared.ui.core.shell :as shell]
             [clojure.test :refer [deftest testing is]]))
 
 (defn- nodes [tree]
@@ -33,3 +34,37 @@
     (is (= [[:h1 {:class "admin-topbar-title"} "Users"]] (tagged page :h1)))
     (is (= "AL" (last (first (tagged page :summary)))))
     (is (some #{[:p "Body"]} (nodes page)))))
+
+(def ^:private groups
+  [{:id :user :label "Users" :icon :users
+    :items [{:href "/web/admin/users" :label "Users" :access :admin}
+            {:href "/web/audit" :label "Audit" :access :platform-admin}]}
+   {:id :other :label "Other" :icon :folder
+    :items [{:href "/web/admin/notes" :label "Notes" :access :admin}]}])
+
+(deftest ^:unit a-module-group-is-a-collapsible-button-with-its-items
+  (binding [nav/*nav* {:groups groups :uri "/web/admin/users/7"}]
+    (let [sidebar      (shell/sidebar (shell/user-nav {:role :admin :tenant-id 1}))
+          [user other] (tagged sidebar :div)
+          toggle       #(first (tagged % :button.nav-module-toggle))]
+      (testing "the current page's group starts open and marked; the others closed"
+        (is (= "nav-module has-active" (:class (second user))))
+        (is (= "navGroup('user', true)" (:x-data (second user))))
+        (is (= "true" (:aria-expanded (second (toggle user)))))
+        (is (= "false" (:aria-expanded (second (toggle other)))))
+        (is (= "open" (:x-bind:aria-expanded (second (toggle other))))))
+      (testing "the group is named on its button and atop its flyout"
+        (is (some #{[:span.nav-text "Users"]} (nodes (toggle user))))
+        (is (= [[:li.nav-flyout-title "Other"]] (tagged other :li.nav-flyout-title))))
+      (testing "only what the user may open, the current page active"
+        (is (= [["/web/admin/users" "active"] ["/web/admin/notes" nil]]
+               (->> (tagged sidebar :li)
+                    (map #(vector (:href (second (nth % 2))) (:class (second %)))))))))))
+
+(deftest ^:unit the-shell-renders-the-request-navigation-unless-given-one
+  (binding [nav/*nav* {:groups groups :uri "/"}]
+    (is (seq (tagged (shell/admin-shell [:p] {:user {:role :admin}}) :button.nav-module-toggle)))
+    (is (empty? (tagged (shell/admin-shell [:p] {:user {:role :admin} :nav nav})
+                        :button.nav-module-toggle))))
+  (testing "outside a request there is none"
+    (is (nil? (shell/user-nav {:role :admin})))))

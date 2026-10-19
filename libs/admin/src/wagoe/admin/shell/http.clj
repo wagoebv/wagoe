@@ -20,6 +20,8 @@
    [wagoe.admin.shell.http.handlers.detail :as detail]
    [wagoe.admin.shell.http.handlers.inline :as inline]
    [wagoe.admin.shell.http.handlers.list :as list-handlers]
+   [wagoe.admin.core.ui.layout :as layout]
+   [wagoe.admin.ports :as ports]
    [wagoe.user.shell.middleware :as user-middleware]))
 
 ;; Facade re-export: consumers (e.g. http_test) resolve
@@ -123,6 +125,9 @@
   {:api []  ; Week 2+: JSON API endpoints
    :web (web-routes admin-service schema-provider config user-service)
    :static []  ; Week 2+: Admin-specific static assets
+
+   ;; Its entities, for the sidebar every page renders. Listed once, at boot.
+   :nav (layout/nav (ports/list-available-entities schema-provider) (:entities config))
 
    ;; Where these mount. Platform held this for six modules and a seventh could
    ;; not contribute routes without editing it (BOU-330).

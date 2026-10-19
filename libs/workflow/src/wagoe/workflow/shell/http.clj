@@ -25,7 +25,6 @@
   (:require [clojure.string :as str]
             [wagoe.admin.core.permissions :as admin-permissions]
             [wagoe.admin.core.ui.layout :as admin-layout]
-            [wagoe.admin.ports :as admin-ports]
             [wagoe.core.utils.text :as text]
             [wagoe.shared.ui.core.form :as form]
             [wagoe.i18n.shell.middleware :as i18n-middleware]
@@ -335,22 +334,12 @@
           (keyword (str/replace lower #"\s+" "-"))))))
 
 (defn- page-opts
-  "What a page needs besides its data: the user, the flash, and the admin
-   shell's sidebar. `admin` is {:schema-provider :logo-url}, or nil when the
-   admin module is off. The sidebar lists the admin's entities only to a user
-   the admin admits, as its own pages do."
+  "What a page needs besides its data: the user, the flash, and the admin's
+   :logo-url. `admin` is {:logo-url}, or nil when the admin module is off."
   [request admin]
-  (let [schema-provider (:schema-provider admin)
-        entities        (when (and schema-provider
-                                   (admin-permissions/can-access-admin? (:user request)))
-                          (admin-ports/list-available-entities schema-provider))]
-    {:user     (:user request)
-     :flash    (:flash request)
-     :nav      (admin-layout/entity-nav
-                entities
-                (into {} (map (juxt identity #(admin-ports/get-entity-config schema-provider %))) entities)
-                nil)
-     :logo-url (:logo-url admin)}))
+  {:user     (:user request)
+   :flash    (:flash request)
+   :logo-url (:logo-url admin)})
 
 (defn- parse-list-opts
   "Extract list-instances filter options from query-params."
@@ -455,7 +444,7 @@
      store        - IWorkflowStore
      registry     - IWorkflowRegistry
      user-service - IUserService (for authentication middleware)
-     admin        - {:schema-provider :logo-url} for the admin sidebar, or nil"
+     admin        - {:logo-url} for the admin shell, or nil"
   [store registry user-service admin]
   (let [middleware [(user-middleware/flexible-authentication-middleware user-service) admin-only]]
     [["/workflows"

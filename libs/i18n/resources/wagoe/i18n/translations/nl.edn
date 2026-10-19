@@ -411,7 +411,12 @@
  ;; =============================================================================
  :admin/sidebar-toggle-button      "Zijbalk in-/uitschakelen"
  :admin/sidebar-pin-button         "Zijbalk vastzetten"
- :admin/sidebar-entities-title     "Entiteiten"
+ :admin/nav-title                  "Beheer"
+ :admin/nav-other                  "Overig"
+ :user/nav-title                   "Gebruikers"
+ :tenant/nav-title                 "Tenants"
+ :workflow/nav-title               "Workflows"
+ :search/nav-title                 "Zoeken"
  :admin/sidebar-dashboard          "Dashboard"
  :admin/sidebar-main-site          "Hoofdsite"
  :admin/menu-open-button           "Menu openen"

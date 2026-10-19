@@ -45,6 +45,7 @@
             [wagoe.platform.shell.http.reitit-router :as reitit-router]
             [wagoe.platform.shell.http.interceptors :as http-interceptors]
             [wagoe.platform.core.http.client-ip :as client-ip]
+            [wagoe.platform.core.http.nav :as nav]
             [wagoe.platform.shell.http.versioning :as http-versioning]
             [wagoe.platform.shell.utils.port-manager :as port-manager]
             [wagoe.platform.shell.rpc.server :as rpc-server]
@@ -642,6 +643,11 @@
                             (log/debug "Request capture middleware not available, skipping")
                             versioned-handler))
                         versioned-handler)
+        ;; Every module's :nav, so a page needs no module to render the sidebar.
+        final-handler (http-interceptors/wrap-nav
+                       final-handler
+                       (nav/collect (keep :nav module-routes)
+                                    (get-in config [:active :wagoe/settings :nav-order])))
         ;; Outermost, so everything downstream reads the same client address.
         final-handler (http-interceptors/wrap-client-ip final-handler trusted-proxies)]
 
