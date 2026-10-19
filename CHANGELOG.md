@@ -185,6 +185,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **`bb ai sql` invented table and column names** (BOU-513): it now sees the tables your migrations create, and
   refuses an answer naming anything else. Nothing to do.
+- **`wagoe add` checked only the first config key of a module** (BOU-742), so observability or platform could be
+  left half-configured or written twice. It now adds each missing key; re-run `wagoe add` to fill gaps.
 - **Error reporting failed on exceptions without a message** (BOU-463), so a `NullPointerException` never reached
   Sentry. Upgrade if you report errors.
 - **A circular audience composition overflowed the stack** (BOU-463); it now answers 422, as does an unknown ref.

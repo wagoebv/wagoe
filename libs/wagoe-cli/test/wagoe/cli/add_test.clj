@@ -201,8 +201,8 @@
     (try
       (io/make-parents f)
       (spit f (templates/render (templates/read-template "dev-config.edn.tmpl") {:project-name "shop"}))
-      (is (= :added (add/patch-config! tmp path (str "  :wagoe/metrics\n  {:provider :no-op}\n\n"
-                                                     "  :wagoe/error-reporting\n  {:provider :no-op}\n"))))
+      (is (= :added (:result (add/patch-config! tmp path (str "  :wagoe/metrics\n  {:provider :no-op}\n\n"
+                                                              "  :wagoe/error-reporting\n  {:provider :no-op}\n")))))
       (let [once (slurp f)]
         (is (= #{3} (set (map (comp count second) (re-seq #"(?m)^([ {]*):wagoe/" once))))
             "every key, the template's own included, at column 3")
@@ -216,7 +216,7 @@
                                      "\n"
                                      " :inactive"))
             once)
-        (is (= :present (add/patch-config! tmp path "  :wagoe/metrics\n  {:provider :no-op}\n")))
+        (is (= :present (:result (add/patch-config! tmp path "  :wagoe/metrics\n  {:provider :no-op}\n"))))
         (is (= once (slurp f)) "a second run changes no byte"))
       (finally
         (doseq [x (reverse (file-seq (io/file tmp)))] (.delete x))))))
@@ -245,10 +245,10 @@
                 "{:note \":active {\"\n :active\n {:wagoe/a 1}\n\n :inactive\n {}}\n"]]
     (with-config text
       (fn [dir path f]
-        (is (= :added (add/patch-config! dir path "  :wagoe/jobs\n  {:workers 1}\n")) text)
+        (is (= :added (:result (add/patch-config! dir path "  :wagoe/jobs\n  {:workers 1}\n"))) text)
         (let [once (slurp f)]
           (is (contains? (active-keys-of once) :wagoe/jobs) once)
-          (is (= :present (add/patch-config! dir path "  :wagoe/jobs\n  {:workers 1}\n")))
+          (is (= :present (:result (add/patch-config! dir path "  :wagoe/jobs\n  {:workers 1}\n"))))
           (is (= once (slurp f)) "a second run changes no byte"))))))
 
 (deftest ^:integration a-write-that-misses-active-is-refused
@@ -259,8 +259,16 @@
                        (let [append config-edn/append-entry]
                          (fn [text _ snippet] (append text ":inactive" snippet)))}
         (fn []
-          (is (= :not-written (add/patch-config! dir path "  :wagoe/jobs\n  {:workers 1}\n")))
+          (is (= :not-written (:result (add/patch-config! dir path "  :wagoe/jobs\n  {:workers 1}\n"))))
           (is (not (str/includes? (slurp f) ":wagoe/jobs"))))))))
+
+(deftest ^:integration a-snippet-that-does-not-read-is-refused
+  ;; Its keys cannot be named, so it was reported present and nothing written.
+  (with-config "{:active\n {:wagoe/a 1}\n\n :inactive\n {}}\n"
+    (fn [dir path f]
+      (let [before (slurp f)]
+        (is (= :not-written (:result (add/patch-config! dir path "  :wagoe/jobs\n  {:workers"))))
+        (is (= before (slurp f)))))))
 
 (deftest ^:integration a-snippet-opening-with-a-comment-is-written
   ;; reports' snippet names `(ig/ref :wagoe/reports).` in its comment, which was
@@ -268,16 +276,43 @@
   (with-config "{:active\n {:wagoe/a 1}\n\n :inactive\n {}}\n"
     (fn [dir path f]
       (let [snippet (:config-snippet (cat/find-module "reports"))]
-        (is (= :added (add/patch-config! dir path snippet)))
+        (is (= :added (:result (add/patch-config! dir path snippet))))
         (is (contains? (active-keys-of (slurp f)) :wagoe/reports))
-        (is (= :present (add/patch-config! dir path snippet)))))))
+        (is (= :present (:result (add/patch-config! dir path snippet))))))))
+
+(deftest ^:integration every-key-of-a-snippet-is-checked
+  ;; Only the first key was: a later key missing was never written, and one
+  ;; already there was written again when the first was absent.
+  (doseq [[module [k1 k2]] {"observability" [:wagoe/metrics :wagoe/error-reporting]
+                            "platform"      [:wagoe/http :wagoe/router]}
+          :let [snippet (:config-snippet (cat/find-module module))]
+          [have want-result want-added] [[[]       :added   [k1 k2]]
+                                         [[k1]     :added   [k2]]
+                                         [[k2]     :added   [k1]]
+                                         [[k1 k2]  :present []]]]
+    (with-config (str "{:active\n {:wagoe/a 1"
+                      (apply str (map #(str "\n\n  " % "\n  {:mine true}") have))
+                      "}\n\n :inactive\n {}}\n")
+      (fn [dir path f]
+        (let [r   (add/patch-config! dir path snippet)
+              out (slurp f)
+              act (:active (clojure.edn/read-string {:default (fn [_ v] v)} out))]
+          (is (= [want-result want-added have] ((juxt :result :added :present) r)) (pr-str module have))
+          (is (= #{:wagoe/a k1 k2} (set (keys act))) out)
+          (doseq [k have]
+            (is (= {:mine true} (get act k)) "a key already there is left alone"))
+          (doseq [k [k1 k2]]
+            (is (= 1 (count (re-seq (re-pattern (str (java.util.regex.Pattern/quote (str k)) "\\s")) out)))
+                (str module " " k " written once")))
+          (is (= :present (:result (add/patch-config! dir path snippet))))
+          (is (= out (slurp f)) "a second run changes no byte"))))))
 
 (deftest ^:integration a-crlf-config-stays-crlf
   (with-config (str/replace (templates/render (templates/read-template "dev-config.edn.tmpl")
                                               {:project-name "shop"})
                             "\n" "\r\n")
     (fn [dir path f]
-      (is (= :added (add/patch-config! dir path "  :wagoe/metrics\n  {:provider :no-op}\n\n  :wagoe/x\n  {}\n")))
+      (is (= :added (:result (add/patch-config! dir path "  :wagoe/metrics\n  {:provider :no-op}\n\n  :wagoe/x\n  {}\n"))))
       (let [out (slurp f)]
         (is (contains? (active-keys-of out) :wagoe/metrics))
         (is (not (re-find #"[^\r]\n" out)) "no bare LF")))))
@@ -389,7 +424,7 @@
         (add/patch-config! tmp (str "resources/conf/" env "/config.edn") (:config-snippet module)))
       (is (not (add/installed? tmp module true)))
       (is (= [["dev" :present] ["prod" :added] ["test" :present]]
-             (add/patch-configs! tmp module)))
+             (map (fn [[env r]] [env (:result r)]) (add/patch-configs! tmp module))))
       (is (contains? (active-of tmp "prod") :wagoe/jobs))
       (is (add/installed? tmp module true))
       (finally
@@ -427,7 +462,7 @@
             "an exported line counts as present"))
       (testing "and nothing when no profile runs it on Redis"
         (spit env-ex "X=1\n")
-        (add/patch-env-example! tmp module [["dev" :present] ["test" :present]])
+        (add/patch-env-example! tmp module [["dev" {:result :present}] ["test" {:result :present}]])
         (is (= "X=1\n" (slurp env-ex))))
       (finally
         (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))
@@ -474,7 +509,7 @@
             "{:active {}\n :inactive {:wagoe/jobs {:provider :db}}}\n")
       (is (not (add/installed? tmp module true)))
       (is (= [["dev" :present] ["prod" :added] ["test" :present]]
-             (add/patch-configs! tmp module)))
+             (map (fn [[env r]] [env (:result r)]) (add/patch-configs! tmp module))))
       (is (contains? (active-of tmp "prod") :wagoe/jobs))
       (is (add/installed? tmp module true))
       (finally
@@ -523,4 +558,16 @@
         (is (str/includes? (slurp (io/file tmp "resources/conf/dev/config.edn")) ":wagoe/tenant")))
       (finally
         (System/setProperty "user.dir" prev)
+        (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))
+
+(deftest ^:integration a-module-missing-one-of-its-keys-is-not-installed
+  (let [tmp    (with-profiles! "half")
+        module (cat/find-module "observability")]
+    (try
+      (add/patch-configs! tmp module)
+      (is (add/installed? tmp module true))
+      (spit (io/file tmp "resources/conf/prod/config.edn")
+            "{:active {:wagoe/metrics {:provider :no-op}}}\n")
+      (is (not (add/installed? tmp module true)))
+      (finally
         (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))
