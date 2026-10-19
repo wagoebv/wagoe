@@ -38,6 +38,12 @@
     (is (str/includes? hidden "hx-post=\"/validate\""))
     (is (str/includes? hidden "name=\"p\""))))
 
+(deftest ^:unit the-value-can-be-submitted-under-another-name
+  ;; A filter submits filters[f][value], which is no usable id.
+  (let [page (html (combobox/combobox :filter-p {:url "/opts" :name "filters[p][value]"}))]
+    (is (str/includes? (input-tag page "type=\"hidden\"") "name=\"filters[p][value]\""))
+    (is (str/includes? (input-tag page "role=\"combobox\"") "id=\"filter-p\""))))
+
 (deftest ^:unit a-readonly-combobox-asks-nothing
   (let [text (input-tag (html (combobox/combobox :p {:url "/opts" :readonly true})) "role=\"combobox\"")]
     (is (str/includes? text "readonly"))

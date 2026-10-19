@@ -754,6 +754,8 @@
                            {:post {:handler (group-handlers/delete-group group-service)}})
                     (route "/:id/members"
                            {:post {:handler (group-handlers/add-member user-service group-service)}})
+                    (route "/:id/members/options"
+                           {:get {:handler (group-handlers/member-options user-service group-service)}})
                     (route "/:id/members/:user-id/remove"
                            {:post {:handler (group-handlers/remove-member group-service)}})
                     (route "/:id/grants"
