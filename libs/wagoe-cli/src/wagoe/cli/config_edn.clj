@@ -1,6 +1,3 @@
-#!/usr/bin/env bb
-;; libs/tools/src/wagoe/tools/config_edn.clj
-;;
 ;; Editing resources/conf/<env>/config.edn as text.
 ;;
 ;; It cannot be read as EDN. Aero tags — #env, #profile, #or — are reader macros
@@ -10,10 +7,10 @@
 ;;
 ;; So: brace-balanced insertion. `bb quickstart` already did this, hardcoded for
 ;; :wagoe/tasks; `bb scaffold integrate` needs the same thing for an arbitrary
-;; module (BOU-310), and two copies of a text editor for the same file is how
-;; they drift.
+;; module (BOU-310), and `wagoe add` too. It lives here, not in wagoe-tools,
+;; because tools depends on this library and not the other way round (BOU-584).
 
-(ns wagoe.tools.config-edn
+(ns wagoe.cli.config-edn
   (:require [clojure.java.io :as io]
             [clojure.string :as str]))
 

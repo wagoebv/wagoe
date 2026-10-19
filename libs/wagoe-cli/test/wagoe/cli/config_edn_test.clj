@@ -1,4 +1,4 @@
-(ns wagoe.tools.config-edn-test
+(ns wagoe.cli.config-edn-test
   "Editing config.edn as text.
 
    It cannot be read as EDN: Aero tags (`#env`, `#profile`, `#or`) are reader
@@ -8,7 +8,8 @@
    that drifts (BOU-310)."
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
-            [wagoe.tools.config-edn :as sut]))
+            [wagoe.cli.config-edn :as sut]
+            [wagoe.cli.templates :as templates]))
 
 (def ^:private sample
   ";; A config\n{:profile #profile {:default :dev}\n\n :active\n {:wagoe/settings\n  {:name \"app\"}\n\n  :wagoe/h2\n  {:db \"mem:app\"}}\n\n :inactive\n {:wagoe/cache\n  {:provider :redis}}}\n")
@@ -189,10 +190,7 @@
 (defn- new-project-config
   "The dev config `wagoe new` writes. Its :active entries sit at column 3."
   []
-  (let [cwd  (System/getProperty "user.dir")
-        root (first (filter #(.isDirectory (java.io.File. (str % "/libs"))) [cwd (str cwd "/../..")]))]
-    (str/replace (slurp (str root "/libs/wagoe-cli/resources/wagoe/cli/templates/dev-config.edn.tmpl"))
-                 "{{project-name}}" "shop")))
+  (templates/render (templates/read-template "dev-config.edn.tmpl") {:project-name "shop"}))
 
 (deftest ^:unit an-appended-entry-follows-the-files-indentation
   ;; Snippets are written at column 2; a `wagoe new` config has its entries at

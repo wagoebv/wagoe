@@ -5,6 +5,7 @@
             [clojure.string :as str]
             [wagoe.cli.add :as add]
             [wagoe.cli.catalogue :as cat]
+            [wagoe.cli.config-edn :as config-edn]
             [wagoe.cli.new :as new]
             [wagoe.cli.templates :as templates]))
 
@@ -254,7 +255,9 @@
   (with-config "{:active\n {:wagoe/a 1}\n\n :inactive\n {:wagoe/b 2}}\n"
     (fn [dir path f]
       ;; Point the insertion at :inactive: the result must be checked, not trusted.
-      (with-redefs-fn {#'add/active-section #(#'add/section-of % ":inactive")}
+      (with-redefs-fn {#'config-edn/append-entry
+                       (let [append config-edn/append-entry]
+                         (fn [text _ snippet] (append text ":inactive" snippet)))}
         (fn []
           (is (= :not-written (add/patch-config! dir path "  :wagoe/jobs\n  {:workers 1}\n")))
           (is (not (str/includes? (slurp f) ":wagoe/jobs"))))))))

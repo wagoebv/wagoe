@@ -25,7 +25,7 @@
 (ns wagoe.tools.integrate
   (:require [wagoe.tools.text :as text]
             [wagoe.tools.ansi :refer [bold green red cyan dim]]
-            [wagoe.tools.config-edn :as config-edn]
+            [wagoe.cli.config-edn :as config-edn]
             [wagoe.tools.project :as project]
             [clojure.java.io :as io]
             [clojure.string :as str]))

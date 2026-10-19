@@ -3,6 +3,7 @@
             [clojure.java.io :as io]
             [clojure.string :as str]
             [wagoe.cli.catalogue :as cat]
+            [wagoe.cli.config-edn :as config-edn]
             [wagoe.cli.templates :as templates]))
 
 ;; ─── Project detection ────────────────────────────────────────────────────────
@@ -185,127 +186,6 @@
     (contains? ks (keyword config-key))
     (str/includes? text (str ":" config-key))))
 
-;; config.edn is edited as text: Aero's tags and the comments would not survive
-;; a read-write round trip. This is enough of a reader to find the root map's
-;; entries; `wagoe.tools.config-edn` is the same thing for bb, which this
-;; standalone library cannot depend on.
-
-(declare form-end)
-
-(defn- skip
-  "Index past whitespace, commas, comments and `#_` forms from `i`."
-  [^String text i]
-  (let [n (count text)]
-    (loop [i i]
-      (cond
-        (>= i n) i
-        (let [c (.charAt text i)] (or (Character/isWhitespace c) (= \, c))) (recur (inc i))
-        (= \; (.charAt text i)) (recur (or (str/index-of text "\n" i) n))
-        (str/starts-with? (subs text i) "#_") (recur (or (form-end text (skip text (+ i 2))) n))
-        :else i))))
-
-(defn- token-end [^String text i]
-  (let [n (count text)]
-    (loop [j i]
-      (if (and (< j n)
-               (let [c (.charAt text j)]
-                 (not (or (Character/isWhitespace c) (#{\, \; \" \( \) \[ \] \{ \}} c)))))
-        (recur (inc j))
-        j))))
-
-(defn- form-end
-  "Index just past the form starting at `i`, or nil when it does not read."
-  [^String text i]
-  (let [n (count text)]
-    (when (and i (< i n))
-      (let [c (.charAt text i)]
-        (case c
-          \" (loop [j (inc i)]
-               (cond (>= j n)                  nil
-                     (= \\ (.charAt text j))   (recur (+ j 2))
-                     (= \" (.charAt text j))   (inc j)
-                     :else                     (recur (inc j))))
-          (\( \[ \{) (loop [j (skip text (inc i))]
-                       (cond (>= j n)                         nil
-                             (#{\) \] \}} (.charAt text j))  (inc j)
-                             :else (some->> (form-end text j) (skip text) recur)))
-          (\) \] \}) nil
-          \# (let [d (when (< (inc i) n) (.charAt text (inc i)))]
-               (case d
-                 (\{ \") (form-end text (inc i))
-                 \#      (token-end text i)
-                 ;; A tag, then the form it tags.
-                 (form-end text (skip text (token-end text (inc i))))))
-          \^ (some->> (form-end text (skip text (inc i))) (skip text) (form-end text))
-          (\' \@ \` \~) (form-end text (inc i))
-          \\ (token-end text (+ i 2))
-          (let [e (token-end text i)] (when (> e i) e)))))))
-
-(defn- entries
-  "{:key :start :end} for each entry of the map whose `{` is at `open`, and
-   the index of its `}`, as [entries close]; nil when it does not read."
-  [^String text open]
-  (loop [k (skip text (inc open)), out []]
-    (cond
-      (>= k (count text))       nil
-      (= \} (.charAt text k))   [out k]
-      :else (let [kend (form-end text k)
-                  vend (some->> kend (skip text) (form-end text))]
-              (when vend
-                (recur (skip text vend)
-                       (conj out {:key (subs text k kend) :start k
-                                  :value (skip text kend) :end vend})))))))
-
-(defn- section-of
-  "[open close entries] of the map under the root map's key `kw`, matched
-   exactly, or nil."
-  [text kw]
-  (let [root (skip text 0)]
-    (when (and (< root (count text)) (= \{ (.charAt ^String text root)))
-      (some (fn [{:keys [key value]}]
-              (when (and (= kw key) (= \{ (.charAt ^String text value)))
-                (when-let [[es close] (entries text value)]
-                  [value close es])))
-            (first (entries text root))))))
-
-(defn- active-section [text]
-  (section-of text ":active"))
-
-(defn- line-ending [text]
-  (if (str/includes? text "\r\n") "\r\n" "\n"))
-
-(defn- column [text i]
-  (- i (inc (or (str/last-index-of text "\n" (dec i)) -1))))
-
-(defn- place
-  "`snippet`, written at column 2, at column `col`, lines ending in `nl`."
-  [snippet col nl]
-  (let [[first-line & more] (str/split-lines (str/trim snippet))
-        pad (apply str (repeat (max 0 (- col 2)) \space))
-        cut (max 0 (- 2 col))]
-    (str/join nl (cons (str (apply str (repeat col \space)) first-line)
-                       (for [l more]
-                         (cond (str/blank? l) ""
-                               (pos? cut)     (str/replace-first l (re-pattern (str "^ {0," cut "}")) "")
-                               :else          (str pad l)))))))
-
-(defn- with-entry
-  "`text` with `snippet` after the last entry of the :active map — past a
-   comment ending that entry's line — at its column, or nil when there is no
-   :active map."
-  [text snippet]
-  (when-let [[open _ es] (active-section text)]
-    (let [nl   (line-ending text)
-          prev (last es)
-          at   (if prev
-                 (+ (:end prev) (count (re-find #"^[ \t,]*;[^\r\n]*" (subs text (:end prev)))))
-                 (inc open))
-          col  (if prev (column text (:start prev)) (inc (column text open)))]
-      (str (subs text 0 at)
-           (if prev (str nl nl) nl)
-           (place snippet col nl)
-           (subs text at)))))
-
 (defn patch-config!
   "Inject snippet into the :active map of a config file unless its key is there.
    It goes after the last entry, at that entry's column, with the closing brace
@@ -318,17 +198,18 @@
         config-key (config-key-of snippet)]
     (if (in-active? content config-key)
       :present
-      (if-let [out (with-entry content snippet)]
-        ;; Checked by reading, not trusted: a key written into the wrong map
-        ;; boots nothing, and the next run writes it again.
-        (if (if-let [ks (active-keys out)]
-              (contains? ks (keyword config-key))
-              ;; Not EDN (a regex, say): the text's own reading, unless the
-              ;; original read and the insertion broke that.
-              (and (nil? (active-keys content))
-                   (some #(= (str ":" config-key) (:key %)) (nth (active-section out) 2))))
-          (do (spit f out) :added)
-          :not-written)
+      (if (config-edn/section content ":active")
+        (let [out (config-edn/append-entry content ":active" snippet)]
+          ;; Checked by reading, not trusted: a key written into the wrong map
+          ;; boots nothing, and the next run writes it again.
+          (if (if-let [ks (active-keys out)]
+                (contains? ks (keyword config-key))
+                ;; Not EDN (a regex, say): the text's own reading, unless the
+                ;; original read and the insertion broke that.
+                (and (nil? (active-keys content))
+                     (some #(= (str ":" config-key) (:key %)) (config-edn/entries out ":active"))))
+            (do (spit f out) :added)
+            :not-written))
         :no-active))))
 
 (defn- snippet-for
