@@ -22,8 +22,8 @@
             [wagoe.audience.core.ui :as ui]
             [wagoe.audience.ports :as ports]
             [wagoe.audience.schema :as schema]
+            [wagoe.core.utils.case-conversion :as cc]
             [cheshire.core :as json]
-            [clojure.set :as set]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
             [hiccup2.core :as h]
@@ -51,9 +51,8 @@
 (defn- body->definition
   "The kebab-case definition for a coerced camelCase body."
   [body]
-  (cond-> (set/rename-keys body {:cacheConfig :cache-config})
-    (:cacheConfig body) (update :cache-config set/rename-keys {:ttlMinutes      :ttl-minutes
-                                                               :refreshSchedule :refresh-schedule})))
+  (cond-> (cc/camel-case->kebab-case-map body)
+    (:cacheConfig body) (update :cache-config cc/camel-case->kebab-case-map)))
 
 (defn- parse-audience-id
   "Parse a path-param string into a keyword, or nil if it fails validation.
@@ -225,18 +224,26 @@
   (m/decoder schema/DynamicAudienceDefinition
              (mt/transformer mt/strip-extra-keys-transformer mt/json-transformer)))
 
+(def ^:private valid-definition? (m/validator schema/DynamicAudienceDefinition))
+
 (defn- form->definition
   "The definition a builder form posts, or nil when it is not one."
   [{:strs [id label description filters-data compose-data]}]
   (let [parse      #(when-not (str/blank? %) (json/parse-string % true))
         definition (try
-                     (decode-form-definition
-                      (cond-> {:id id :label label :filters (or (parse filters-data) [])}
-                        (not (str/blank? description)) (assoc :description description)
-                        (not (str/blank? compose-data)) (assoc :compose (parse compose-data))))
+                     (let [compose (parse compose-data)]
+                       (decode-form-definition
+                        (cond-> {:id id :label label :filters (or (parse filters-data) [])}
+                          (not (str/blank? description)) (assoc :description description)
+                          compose                        (assoc :compose compose))))
                      (catch Exception _ nil))]
-    (when (m/validate schema/DynamicAudienceDefinition definition)
+    (when (valid-definition? definition)
       definition)))
+
+(defn- submitted
+  "What the form sent, to show again when it is not a definition."
+  [params]
+  {:label (get params "label") :description (get params "description")})
 
 (defn- form-response
   "Back to the list when `response` saved; otherwise the builder again, showing
@@ -259,7 +266,7 @@
                        (invalid-new-id-response (:id definition))
                        (save-response #(ports/create-audience store %) definition filter-fields 201))
                    request
-                   (or definition {:label (get params "label") :description (get params "description")})
+                   (or definition (submitted params))
                    false)))
 
 (defn update-audience-form-handler
@@ -274,7 +281,7 @@
                        (save-response #(ports/update-audience store (keep-rest %)) definition filter-fields 200)
                        (bad-request-response "Invalid audience definition"))
                      request
-                     (or definition {:id id :label (get params "label") :description (get params "description")})
+                     (or definition (assoc (submitted params) :id id))
                      true))
     (bad-request-response "Invalid audience id")))
 

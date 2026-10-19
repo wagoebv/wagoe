@@ -21,7 +21,8 @@
             [honey.sql :as sql]
             [clojure.string :as str]
             [clojure.tools.logging :as log])
-  (:import [java.util UUID]))
+  (:import [java.sql SQLException]
+           [java.util UUID]))
 
 ;; =============================================================================
 ;; JSON helpers
@@ -274,13 +275,31 @@
 
 (defn- delete-row!
   "Delete the segment row for `audience-id` (a string); the number deleted."
-  [tx audience-id]
+  [connectable audience-id]
   (::jdbc/update-count
-   (jdbc/execute-one! tx (sql/format {:delete-from :audience_segments
-                                      :where       [:= :audience_id audience-id]}))))
+   (jdbc/execute-one! connectable (sql/format {:delete-from :audience_segments
+                                               :where       [:= :audience_id audience-id]}))))
 
-(defn- insert-row! [tx row]
-  (jdbc/execute-one! tx (sql/format {:insert-into :audience_segments :values [row]})))
+(defn- insert-row! [connectable row]
+  (jdbc/execute-one! connectable (sql/format {:insert-into :audience_segments :values [row]})))
+
+(defn- replace-row!
+  "Replace the stored row `row` names, if there is one; the number replaced.
+   Delete-then-insert rather than UPDATE, so the cascade drops its cached
+   memberships, as `save-audience` does."
+  [datasource row]
+  (jdbc/with-transaction [tx datasource]
+    (let [deleted (delete-row! tx (:audience_id row))]
+      (when (pos? deleted) (insert-row! tx row))
+      deleted)))
+
+(defn- unique-violation?
+  "SQLState 23505 (PostgreSQL, H2), MySQL's 1062, or SQLite's result code,
+   which it reports only in the message."
+  [^SQLException e]
+  (or (= "23505" (.getSQLState e))
+      (= 1062 (.getErrorCode e))
+      (boolean (re-find #"SQLITE_CONSTRAINT_UNIQUE|UNIQUE constraint failed" (str (ex-message e))))))
 
 (defrecord AudienceStore [datasource dialect]
   ports/IAudienceRepository
@@ -296,24 +315,20 @@
 
   (create-audience [_ definition]
     (log/debug "Creating audience" {:audience-id (:id definition)})
-    (let [row (definition->db dialect definition)]
-      ;; A concurrent create of the same id fails on the UNIQUE audience_id.
-      (jdbc/with-transaction [tx datasource]
-        (when (jdbc/execute-one! tx (sql/format {:select [:id] :from [:audience_segments]
-                                                 :where  [:= :audience_id (:audience_id row)]}))
+    (try
+      (insert-row! datasource (definition->db dialect definition))
+      (catch SQLException e
+        (if (unique-violation? e)
           (throw (ex-info "Audience already exists"
-                          {:type :audience-exists :audience-id (:id definition)})))
-        (insert-row! tx row)))
+                          {:type :audience-exists :audience-id (:id definition)}))
+          (throw e))))
     definition)
 
   (update-audience [_ definition]
     (log/debug "Updating audience" {:audience-id (:id definition)})
-    (let [row (definition->db dialect definition)]
-      (jdbc/with-transaction [tx datasource]
-        (when (zero? (delete-row! tx (:audience_id row)))
-          (throw (ex-info "Audience not found"
-                          {:type :audience-not-found :audience-id (:id definition)})))
-        (insert-row! tx row)))
+    (when (zero? (replace-row! datasource (definition->db dialect definition)))
+      (throw (ex-info "Audience not found"
+                      {:type :audience-not-found :audience-id (:id definition)})))
     definition)
 
   (find-audience [_ audience-id]
@@ -342,11 +357,7 @@
 
   (delete-audience [_ audience-id]
     (log/debug "Deleting audience" {:audience-id audience-id})
-    (jdbc/execute-one!
-     datasource
-     (sql/format {:delete-from :audience_segments
-                  :where       [:= :audience_id (kw->str audience-id)]})
-     {:builder-fn rs/as-unqualified-lower-maps})
+    (delete-row! datasource (kw->str audience-id))
     nil))
 
 ;; =============================================================================
