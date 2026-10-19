@@ -110,6 +110,12 @@
     (let [force-refresh? (:force-refresh? opts false)
           definition     (load-definition audience-id repository)]
 
+      ;; Before the cache: a result cached before the allowlist existed would
+      ;; otherwise keep answering for a definition that is now refused.
+      (when definition
+        (unwrap! (composition/explain-filters-beside-compose definition))
+        (unwrap! (filter/explain-filter-fields (:filters definition) filter-fields)))
+
       ;; Cache check (skip when force-refresh? is true)
       (if-let [cached (when-not force-refresh?
                         (check-cache cache audience-id))]
@@ -127,9 +133,6 @@
                 ;; Validate filters up front (pure core check); raise a typed
                 ;; error before compiling if any filter is unknown/unsupported.
                 _ (unwrap! (filter/explain-filters (:filters definition)))
-                _ (unwrap! (composition/explain-filters-beside-compose definition))
-                ;; Also for rows stored before the allowlist existed.
-                _ (unwrap! (filter/explain-filter-fields (:filters definition) filter-fields))
                 {:keys [sql-clauses predicates unsupported]}
                 (compiler/compile-segment definition {:now eval-date})
                 ;; A filter the compiler could express neither way. Refusing

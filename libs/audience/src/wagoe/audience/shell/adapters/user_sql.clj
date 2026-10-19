@@ -129,17 +129,16 @@
   (load-users [_ user-ids]
     (if (empty? user-ids)
       []
-      (->> (jdbc/execute! datasource
-                          (sql/format {:select [:*]
-                                       :from   [table]
-                                       :where  [:in :id (mapv ->uuid user-ids)]})
-                          opts)
-           ;; Credentials stay out of the rows a predicate sees, whatever its
-           ;; filter names as its field.
-           (mapv (fn [row]
-                   (into {:id (->uuid (:id row))}
-                         (remove (comp filter/secret-field? key))
-                         (dissoc (kebab-row row) :id))))))))
+      (let [rows   (mapv kebab-row
+                         (jdbc/execute! datasource
+                                        (sql/format {:select [:*]
+                                                     :from   [table]
+                                                     :where  [:in :id (mapv ->uuid user-ids)]})
+                                        opts))
+            ;; Credentials stay out of the rows a predicate sees, whatever its
+            ;; filter names as its field. Every row has the same columns.
+            secret (filterv filter/secret-field? (keys (first rows)))]
+        (mapv #(update (apply dissoc % secret) :id ->uuid) rows)))))
 
 (defn create-sql-user-data-source
   "An IUserDataSource reading `table` (default `:users`) from `datasource`.

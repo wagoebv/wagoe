@@ -240,5 +240,6 @@
       (is (nil? (f/explain-filter-fields (by :export :feature-usage) allowed))))
     (testing "secret-field? catches the user tables' credentials"
       (is (every? f/secret-field? [:password-hash :mfa-secret :mfa-backup-codes :session-token
-                                   :failed-login-count :lockout-until :api-key]))
+                                   :failed-login-count :lockout-until :api-key
+                                   :apikey :backupcodes :passWord]))
       (is (not-any? f/secret-field? f/default-filter-fields)))))

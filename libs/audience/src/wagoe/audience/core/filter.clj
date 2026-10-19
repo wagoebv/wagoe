@@ -325,10 +325,11 @@
   (into default-filter-fields (map normalize-field) configured))
 
 (defn secret-field?
-  "Whether `field` looks like a credential, which no configuration may allow."
+  "Whether `field` looks like a credential, which no configuration may allow.
+   Matched without separators, so `:apikey` and `:passWord` are caught too."
   [field]
-  (boolean (re-find #"password|passwd|hash|secret|token|salt|mfa|otp|backup-code|api-key|lockout|failed-login"
-                    (name (normalize-field field)))))
+  (boolean (re-find #"password|passwd|hash|secret|token|salt|mfa|otp|backupcode|apikey|lockout|failedlogin"
+                    (str/replace (name (normalize-field field)) "-" ""))))
 
 (defn- filter-field
   "The column a filter reads, or nil. A :feature-usage field names a feature

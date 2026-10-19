@@ -165,9 +165,11 @@
   "POST /api/audiences — create a new audience definition. `filter-fields` are
    the fields a filter may name, `filter/default-filter-fields` when nil."
   [_resolver store request & [filter-fields]]
-  (let [definition (get-in request [:parameters :body])]
-    ;; The id is used in every /audiences/:id path, so it must be one they accept.
-    (if-not (parse-audience-id (some-> (:id definition) symbol str))
+  (let [definition (get-in request [:parameters :body])
+        id         (some-> (:id definition) symbol str)]
+    ;; The id is used in every /audiences/:id path, so it must be one they
+    ;; accept. /audiences/preview matches the literal route, not :id.
+    (if (or (= "preview" id) (not (parse-audience-id id)))
       (bad-request-response "Invalid audience id")
       (or
        (invalid-definition-response definition filter-fields)

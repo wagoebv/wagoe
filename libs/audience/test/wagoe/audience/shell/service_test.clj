@@ -355,3 +355,16 @@
         (testing "and so does composing it"
           (registry/register-audience! {:id :outer :label "O" :filters [] :compose {:or [{:ref :both}]}})
           (is (= :validation-error (type-of #(ports/resolve-audience svc :outer)))))))))
+
+(deftest ^:unit ^:security a-cached-result-does-not-outlive-the-allowlist
+  ;; Evaluated and cached before the allowlist existed; a cache hit skipped
+  ;; the field check.
+  (let [c    (mock-cache)
+        repo (mock-repository)
+        svc  (make-service [] c repo)]
+    (ports/save-audience repo {:id :old :label "Old"
+                               :filters [{:type :demographics :field :password-hash
+                                          :op :contains :value "$2a$"}]})
+    (ports/put-cached c :old {:user-ids #{(uuid)} :count 1} 60)
+    (is (thrown-with-msg? clojure.lang.ExceptionInfo #"not allowed"
+                          (ports/resolve-audience svc :old)))))

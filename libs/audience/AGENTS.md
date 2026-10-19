@@ -32,6 +32,7 @@ The library saves boilerplate around:
    :filters [{:type :role   :field :plan   :op :eq          :value "free"}
              {:type :last-active            :op :within-days :value 30}]
    :cache   {:ttl-minutes 60}})
+;; :plan is not a default filter field: add it with :wagoe/audience {:filter-fields #{:plan}}
 
 ;; Registry operations
 (audience/get-audience :active-free-users)   ;; => {:id :active-free-users ...}
@@ -160,7 +161,7 @@ Results are persisted to `audience_memberships` with a timestamp in `audience_se
 (defaudience weekly-digest-targets
   {:id    :weekly-digest-targets
    :label "Weekly digest recipients"
-   :filters [{:type :demographics :field :email-opt-in :op :eq :value true}]
+   :filters [{:type :demographics :field :notifications-email :op :eq :value true}]
    :cache {:ttl-minutes 1440}})   ;; 24 hours
 ```
 

@@ -168,7 +168,7 @@
              (ports/find-audience s :gold))))
 
     (testing "an id no /audiences/:id path accepts is refused"
-      (doseq [id ["Gold Plan" "" "a/b"]]
+      (doseq [id ["Gold Plan" "" "a/b" "preview"]]
         (is (= 400 (:status (call :post "/audiences" {:id id :label "X" :filters []}))) id))
       (is (= [:gold] (mapv :id (ports/list-audiences s)))))
 
@@ -222,6 +222,9 @@
         (let [r (call :post "/audiences" {:id "x" :label "X" :filters [(assoc secret :field field)]})]
           (is (= 422 (:status r)) field)
           (is (= "validation-error" (get-in r [:body :error :type])) field)))
+      (is (empty? (ports/list-audiences s))))
+    (testing "so does update"
+      (is (= 422 (:status (call :put "/audiences/x" {:label "X" :filters [secret]}))))
       (is (empty? (ports/list-audiences s))))
     (testing "and a column nobody allowed"
       (is (= 422 (:status (call :post "/audiences" {:id "x" :label "X"
