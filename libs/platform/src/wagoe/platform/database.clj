@@ -187,18 +187,22 @@
    (let [where   (into [:and] (map (fn [k] [:= k (get row k)])) key-columns)
          set-map (if update-columns (select-keys row update-columns) (apply dissoc row key-columns))
          tx      (current-transaction)
-         attempt #(if (pos? (execute-update! ctx {:update table :set set-map :where where}))
-                    :updated
-                    (do (in-savepoint tx (fn [] (execute-update! ctx {:insert-into table :values [row]})))
-                        :inserted))]
+         ;; Only the insert's conflict is the race: an update refused by
+         ;; another unique key would be refused again, and on PostgreSQL
+         ;; outside a savepoint it has aborted the caller's transaction.
+         insert! #(try (in-savepoint tx (fn [] (execute-update! ctx {:insert-into table :values [row]})))
+                       :inserted
+                       (catch clojure.lang.ExceptionInfo e
+                         (if (unique-conflict? e) e (throw e))))]
      (loop [n 1]
-       (let [result (try (attempt)
+       (let [result (try (if (pos? (execute-update! ctx {:update table :set set-map :where where}))
+                           :updated
+                           (insert!))
                          (catch clojure.lang.ExceptionInfo e
-                           (if (and (< n upsert-attempts)
-                                    (or (unique-conflict? e) (and (nil? tx) (rolled-back? e))))
-                             ::again
-                             (throw e))))]
-         (if (= ::again result) (recur (inc n)) result))))))
+                           (if (and (nil? tx) (rolled-back? e)) e (throw e))))]
+         (cond (keyword? result)      result
+               (< n upsert-attempts) (recur (inc n))
+               :else                 (throw result)))))))
 
 ;; =============================================================================
 ;; Schema

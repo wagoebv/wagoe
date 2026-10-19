@@ -11,11 +11,15 @@
 (defn add-open-subject!
   "`open_subject`, the subject of a :pending or :running job and null
    otherwise. Unique, so two requests racing to open a job for one subject
-   cannot both succeed."
+   cannot both succeed. Binary on MySQL, so ids differing in case do not
+   collide. With the requester index the hourly limit counts by."
   [ctx]
   (db/add-column-if-not-exists! ctx :storage_export_jobs :open_subject "VARCHAR(272)")
+  (db/ensure-binary-collation! ctx :storage_export_jobs :open_subject "VARCHAR(272)" false)
   (db/create-index-if-not-exists! ctx "uq_storage_export_jobs_open_subject" :storage_export_jobs [:open_subject]
-                                  {:unique? true}))
+                                  {:unique? true})
+  (db/create-index-if-not-exists! ctx "idx_storage_export_jobs_requested_by" :storage_export_jobs
+                                  [:requested_by :created_at]))
 
 (defn up
   "Migratus entry point of the open-subject migration."
@@ -26,6 +30,7 @@
   "Migratus entry point."
   [config]
   (let [ctx (db/context-of (db/migration-connectable config))]
+    (db/drop-index-if-exists! ctx "idx_storage_export_jobs_requested_by" :storage_export_jobs)
     (db/drop-index-if-exists! ctx "uq_storage_export_jobs_open_subject" :storage_export_jobs)
     (db/drop-column-if-exists! ctx :storage_export_jobs :open_subject)))
 
@@ -63,8 +68,11 @@
 (defrecord JdbcExportJobStore [ctx]
   ports/IExportJobStore
   (create-export-job! [_ job]
+    ;; A savepoint: in a tenant request's transaction a refused insert would
+    ;; abort it on PostgreSQL, and the caller reads the winner's job next.
     (try
-      (db/execute-update! ctx {:insert-into :storage_export_jobs :values [(job->row job)]})
+      (db/in-savepoint (db/current-transaction)
+                       #(db/execute-update! ctx {:insert-into :storage_export_jobs :values [(job->row job)]}))
       job
       (catch clojure.lang.ExceptionInfo e
         (when-not (db/unique-conflict? e) (throw e)))))
