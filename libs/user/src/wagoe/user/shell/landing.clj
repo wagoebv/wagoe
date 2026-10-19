@@ -1,6 +1,6 @@
 (ns wagoe.user.shell.landing
-  "The `:login-redirect`, `:dashboard`, `:home` and `:landing` settings of
-   `:wagoe/user`: checked and resolved at boot, read when a user signs in or a
+  "The `:login-redirect`, `:dashboard`, `:home`, `:landing` and `:registration`
+   settings of `:wagoe/user`: checked and resolved at boot, read when a user signs in or a
    page renders."
   (:require [clojure.tools.logging :as log]
             [malli.error :as me]
@@ -91,6 +91,12 @@
            :get    {:handler (constantly (response/redirect path))
                     :summary "Redirect to the application's landing page"}}]]
     []))
+
+(defn registration?
+  "Whether anyone may create their own account at /web/register. On unless
+   `:registration false`."
+  [config]
+  (not (false? (:registration (settings config)))))
 
 (defn dashboard-handler
   "The handler to mount at /web/dashboard: nil for `:dashboard false`, the
