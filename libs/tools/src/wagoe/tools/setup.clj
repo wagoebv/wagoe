@@ -15,7 +15,7 @@
             [cheshire.core :as json]
             [clojure.edn :as edn]
             [clojure.java.io :as io]
-            [wagoe.tools.config-edn :as config-edn]
+            [wagoe.cli.config-edn :as config-edn]
             [clojure.string :as str]
             [babashka.process :refer [shell]]
             [wagoe.cli.add :as cli-add]))
