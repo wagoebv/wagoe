@@ -215,7 +215,7 @@ for what is public API, what is internal, and how deprecations are announced.
 - **A crash mid-export left `.spool-*.tmp` files in the local storage root** (BOU-759). Spools now go to
   `<root>/.spool/`, cleared at boot; delete old `.spool-*.tmp` files by hand.
 - **Export jobs: racing requests opened duplicates, archives were built in memory** (BOU-752). One open job per
-  subject, five requests an hour per user (`:export-requests-per-hour`). Run `migrate up`.
+  subject and requester, five requests an hour per user (`:export-requests-per-hour`). Run `migrate up`.
 - **Push tokens differing only in case were one device on MySQL** (BOU-752); racing uploads could deadlock there.
   Run `migrate up`.
 - **Storage `file-exists?` answered false when it could not check** (BOU-749), so retention could forget a file

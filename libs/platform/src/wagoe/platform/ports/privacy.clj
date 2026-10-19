@@ -48,5 +48,5 @@
     "Queue an export of `subject` for the signed-in user `requested-by`, or
     return the one they have open for it. A 202 Ring response, `Location` the
     job's status endpoint, where they download the archive once it is done.
-    Throws :rate-limit-exceeded over their hourly limit, and :conflict while
-    someone else's export of `subject` is open."))
+    Throws :rate-limit-exceeded over their hourly limit, and :conflict when
+    their racing request for `subject` won and its job is already gone."))
