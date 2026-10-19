@@ -188,6 +188,7 @@
       (loc/click (page/locator pg "#bulk-delete-btn"))
       (page/wait-for-selector pg "#bulk-delete-confirm[open]" {:timeout 5000.0})
       (loc/click (page/locator pg "#bulk-delete-confirm button[value='confirm']"))
-      (page/wait-for-function pg "!document.querySelector(\"table.data-table tbody input[name='ids[]']\")"
+      ;; Skeleton rows stand in while the request runs
+      (page/wait-for-function pg "!document.querySelector(\"table.data-table tbody input[name='ids[]'], tr.skeleton-row\")"
                               {:timeout 10000.0 :polling 50.0})
       (is (zero? (admin/table-row-count pg))))))
