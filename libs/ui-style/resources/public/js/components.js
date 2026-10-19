@@ -45,9 +45,15 @@ document.addEventListener('alpine:init', function () {
   // Confirm: the request waits for the dialog's answer instead of window.confirm
   document.addEventListener('htmx:confirm', function (event) {
     var id = event.detail.elt.getAttribute('data-confirm-modal');
-    var dialog = id && document.getElementById(id);
-    if (!dialog) return;
+    if (!id) return;
     event.preventDefault();
+    var dialog = document.getElementById(id);
+    // No dialog to ask, or it is already asking: send nothing
+    if (!dialog) {
+      console.error('No confirm dialog #' + id + '; request not sent');
+      return;
+    }
+    if (dialog.open) return;
     dialog.returnValue = '';
     dialog.addEventListener('close', function () {
       if (dialog.returnValue === 'confirm') event.detail.issueRequest(true);

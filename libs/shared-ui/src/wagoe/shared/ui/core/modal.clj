@@ -1,7 +1,8 @@
 (ns wagoe.shared.ui.core.modal
   "Modal on native <dialog>. The browser closes it on Esc, the backdrop and
    the close button, makes the page behind it inert and returns focus on
-   close; components.js (ui-style) only opens it.")
+   close; components.js (ui-style) only opens it."
+  (:require [clojure.string :as str]))
 
 (defn open-attrs
   "Attributes for a button that opens the modal `id`."
@@ -28,12 +29,12 @@
      :closable?   the corner close button (default true)
      :close-label its accessible name (default [:t :common/button-close])
      :class       extra classes on the modal box
-     :attrs       extra attributes on the <dialog>"
+     :attrs       extra attributes on the <dialog>; a :class adds to \"modal\""
   [{:keys [id title open? closable? close-label class attrs]
     :or   {closable? true close-label [:t :common/button-close]}}
    & body]
   (let [title-id (str id "-title")]
-    [:dialog (cond-> (merge {:id id :class "modal"} attrs)
+    [:dialog (cond-> (assoc attrs :id id :class (str/trim (str "modal " (:class attrs))))
                title (assoc :aria-labelledby title-id)
                open? (assoc :data-modal-show true))
      (into [:div {:class (cond-> "modal-box" class (str " " class))}

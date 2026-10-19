@@ -1417,6 +1417,18 @@ button.full-width {
   }
 }
 
+/* daisyUI is layered, so unlayered rules like the bare button one above
+   outrank it: the modal's corner close button and action row stay daisy's */
+dialog.modal .btn-circle {
+  position: revert-layer;
+  padding: revert-layer;
+  min-height: revert-layer;
+}
+
+dialog.modal .modal-action {
+  margin: revert-layer;
+}
+
 /* =============================================================================
    Pages
    ============================================================================= */

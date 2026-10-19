@@ -32,6 +32,7 @@
   (testing ":class goes on the box, :attrs on the dialog"
     (let [m (modal/modal {:id "x" :class "max-w-3xl" :attrs {:data-test "y"}})]
       (is (= "y" (:data-test (second m))))
+      (is (= "modal wide" (:class (second (modal/modal {:id "x" :attrs {:class "wide"}})))))
       (is (= "modal-box max-w-3xl" (:class (second (first (nodes m :div)))))))))
 
 (deftest ^:unit confirm-modal-test
