@@ -1,2 +1,4 @@
+;; A tenant schema runs the same series public does, so a new workflow
+;; migration reaches tenants with no twin. They may touch only workflow's tables.
 {:paths        ["wagoe/workflow/migrations/"]
- :tenant-paths ["wagoe/workflow/migrations-tenant/"]}
+ :tenant-paths ["wagoe/workflow/migrations/"]}

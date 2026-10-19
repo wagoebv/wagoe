@@ -22,8 +22,8 @@
 
    An index whose definition lists `:tenant-id` among its `:filters` is
    tenant-scoped. A search of one reads the request's resolved tenant, and only
-   when the caller is an active member of it; a `tenant_id` the caller sends is
-   dropped. With no tenant resolved, only a global admin may search it, with
+   for a caller in it (`access/in-tenant-scope?`); a `tenant_id` the caller
+   sends is dropped. With no tenant resolved, only a global admin may search it, with
    whatever filters they send. Anyone else gets 403."
   (:require [wagoe.i18n.shell.middleware :as i18n-middleware]
             [wagoe.platform.core.http.access :as access]
@@ -102,9 +102,8 @@
         scoped?   (some tenant-filter? (:filters definition))]
     (cond
       (not scoped?)                                own
-      (and tenant-id (or (:tenant-membership request)
-                         (access/admin? request))) (assoc own :tenant-id tenant-id)
-      (and (nil? tenant-id) (access/admin? request)) (or caller-filters {})
+      (and tenant-id (access/in-tenant-scope? request)) (assoc own :tenant-id tenant-id)
+      (and (nil? tenant-id) (access/platform-admin? (:user request))) (or caller-filters {})
       :else                                        ::refused)))
 
 (defn- refused [request]

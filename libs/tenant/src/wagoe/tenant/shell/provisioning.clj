@@ -524,7 +524,8 @@
   (db/with-transaction* ctx
     (fn [tx]
       (db/execute-ddl! tx (str "SET LOCAL search_path TO " schema-name ", public"))
-      (binding [jdbc-tx/*nested-tx* :ignore]
+      (binding [jdbc-tx/*nested-tx* :ignore
+                db/*tenant-schema*  schema-name]
         (f tx)))))
 
 (defn with-tenant-schema

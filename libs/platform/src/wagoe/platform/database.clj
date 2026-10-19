@@ -120,6 +120,18 @@
                (not (.getAutoCommit ^java.sql.Connection conn)))
       conn)))
 
+(def ^:dynamic *tenant-id*
+  "The tenant whose schema this thread's work runs in, or nil. The tenant
+   module binds it around a tenant request and a tenant job, so code deeper in
+   the call can refuse to fall back to public and can pass the tenant on."
+  nil)
+
+(def ^:dynamic *tenant-schema*
+  "The schema the transaction open on this thread is bound to, or nil. The
+   tenant module binds it with the transaction, so a store can check its
+   tables are there without asking the database for its search_path."
+  nil)
+
 (defn connectable-for
   "What code holding `datasource` runs a statement on: `datasource` when it is
    an open transaction already, else the platform transaction open on this
@@ -354,7 +366,8 @@
   migrations/discover-migration-dirs)
 
 (def discover-tenant-migration-dirs
-  "The libraries' migration directories that run inside every tenant schema."
+  "The libraries' migration directories that run inside every tenant schema;
+   given the enabled libraries, only theirs."
   migrations/discover-tenant-migration-dirs)
 
 (def refuse-duplicate-migration-ids!

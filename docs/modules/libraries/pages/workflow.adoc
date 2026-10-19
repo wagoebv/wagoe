@@ -130,7 +130,9 @@ A transition needs no grant: its `:required-permissions` decide.
 
 In a multi-tenant application every route answers 403 to a caller outside the request's tenant: not a member of it, not one of its users and not a platform admin.
 Without a tenant, only a user of no tenant is served.
-The admin pages under `/web/admin/workflows` admit an admin on the same terms, so a tenant admin sees their own tenant's instances.
+Inside a tenant, the admin that reads is the tenant's: a platform admin, an admin by membership, or an admin user of that tenant; another tenant's admin is not one.
+A grant counts there only when its scope names the tenant, `{:tenant-id "<id>"}`.
+The admin pages under `/web/admin/workflows` admit the tenant's admins on the same terms, so a tenant admin sees their own tenant's instances.
 
 Bodies are kebab-case JSON, as in a scaffolded module's API. Start an instance with:
 
@@ -263,14 +265,19 @@ Scaffolded entities do: a create and its workflow instance are written in one tr
 == Tenancy
 
 With the tenant module on, each tenant schema has its own `workflow_instances` and `workflow_audit`.
-The tenant module creates them when it provisions a tenant, and in every existing tenant schema at boot.
+The tenant module runs workflow's migrations in each tenant schema, the same series `public` runs, when it provisions a tenant and in every existing tenant schema at boot.
 A tenant request runs in a transaction bound to its schema, and the store reads and writes through that transaction, so a tenant reaches only its own instances.
 Outside a tenant, and in a single-tenant application, the tables in `public` are used as before.
+
+Tenant work never falls back to `public`.
+A tenant schema without the tables, and tenant work outside a tenant transaction (on H2 under `:allow-h2?`, all of it), fail with a `:configuration-error`.
+Hooks run with the tenant bound, and side-effect jobs carry it in `:metadata {:tenant-id ...}`; with the tenant module on, job workers run such a job in the tenant's schema, and fail it without one.
 
 Instances a tenant started before workflow was tenant-scoped are in `public`.
 Move each tenant's rows into its schema, or they stay visible only outside any tenant.
 
 A library ships tables of its own for tenant schemas by naming their migrations under `:tenant-paths` in its `wagoe/migration-paths/<lib>.edn` manifest.
+Those run only when the library's module is switched on in `:active`.
 
 == Joining an entity to its instance
 
