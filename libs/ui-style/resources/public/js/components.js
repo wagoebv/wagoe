@@ -35,7 +35,7 @@ document.addEventListener('alpine:init', function () {
  * Toasts the server cannot render: one carried across an HX-Redirect in the
  * X-Toast header (kept in sessionStorage until the next page loads), and one
  * an error response names in HX-Trigger {"showToast": {type, message}},
- * whose body htmx does not swap. The markup is shared-ui's toast/toast.
+ * whose body htmx does not swap. Each fills in a template the region holds.
  */
 (function () {
   // A swap of the whole body runs this script again: wire it once
@@ -43,23 +43,12 @@ document.addEventListener('alpine:init', function () {
   window.wagoeToastsWired = true;
 
   function showToast(data) {
-    var region = document.getElementById('toasts');
-    if (!region || !data) return;
-    var type = data.type || 'info';
-    var toast = document.createElement('div');
-    toast.className = 'alert alert-' + type + ' shadow-lg';
-    toast.setAttribute('x-data', 'toast(' + (type === 'error' ? 0 : 5000) + ')');
-    if (type === 'error') toast.setAttribute('role', 'alert');
-    var message = document.createElement('span');
-    message.textContent = data.message || '';
-    var close = document.createElement('button');
-    close.type = 'button';
-    close.className = 'btn btn-ghost btn-xs btn-circle';
-    close.setAttribute('aria-label', 'Dismiss');
-    close.setAttribute('x-on:click', 'dismiss()');
-    close.textContent = '\u2715';
-    toast.append(message, close);
-    region.appendChild(toast);
+    var template = data && document.querySelector(
+      '#toasts template[data-toast-type="' + (data.type || 'info') + '"]');
+    if (!template) return;
+    var toast = template.content.firstElementChild.cloneNode(true);
+    toast.querySelector('span').textContent = data.message || '';
+    template.parentNode.appendChild(toast);
   }
 
   // htmx:afterRequest does NOT fire before HX-Redirect (htmx sets

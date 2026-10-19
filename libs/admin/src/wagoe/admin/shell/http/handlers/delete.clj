@@ -99,13 +99,15 @@
         label (if (= 1 success-count)
                 (introspection/singular-label entity-config entity-name)
                 (introspection/plural-label entity-config entity-name))
-        toast (if (zero? failed-count)
-                {:type :success :message [:t :admin/flash-bulk-deleted {:count success-count :label label}]}
-                {:type :warning :message [:t :admin/flash-bulk-deleted-partial {:count success-count :failed failed-count}]})]
+        all? (zero? failed-count)]
     (support/htmx-fragment-response request
                                     (admin-ui/entity-table entity-name records entity-config table-query total-count permissions {}
                                                            (support/display-options config request))
-                                    [(toast/oob-toast toast)])))
+                                    [(toast/oob-toast
+                                      {:type    (if all? :success :warning)
+                                       :message (if all?
+                                                  [:t :admin/flash-bulk-deleted {:count success-count :label label}]
+                                                  [:t :admin/flash-bulk-deleted-partial {:count success-count :failed failed-count}])})])))
 
 (defn bulk-delete-handler
   "Handler for bulk deleting multiple entities.

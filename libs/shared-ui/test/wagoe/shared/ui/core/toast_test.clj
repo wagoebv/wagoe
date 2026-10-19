@@ -15,8 +15,8 @@
     (is (str/includes? out "aria-label=\"Dismiss\""))
     (is (str/includes? out "@click=\"dismiss()\""))
     (is (not (str/includes? out "role="))))
-  (testing "info by default, and a duration of its own"
-    (is (str/includes? (html (toast/toast {:message "x" :duration 900})) "alert-info shadow-lg\" x-data=\"toast(900)\"")))
+  (testing "info by default"
+    (is (str/includes? (html (toast/toast {:message "x"})) "alert-info shadow-lg\" x-data=\"toast(5000)\"")))
   (testing "an error interrupts and stays until closed"
     (let [out (html (toast/toast {:type "error" :message "No"}))]
       (is (str/includes? out "alert-error"))
@@ -38,7 +38,10 @@
     (is (str/includes? out "id=\"toasts\""))
     (is (str/includes? out "aria-live=\"polite\""))
     (is (str/includes? out "class=\"toast toast-top toast-end"))
-    (is (str/includes? out "<span>hi</span>"))))
+    (is (str/includes? out "<span>hi</span>"))
+    (testing "and an empty toast of each type, for the client to fill in"
+      (is (str/includes? out "<template data-toast-type=\"error\"><div class=\"alert alert-error shadow-lg\""))
+      (is (= 4 (count (re-seq #"<template" out)))))))
 
 (deftest ^:unit every-page-layout-has-the-region-and-shows-a-flash-in-it
   (let [region #(some (fn [n] (when (and (vector? n) (= "toasts" (:id (second n)))) n))
@@ -48,8 +51,8 @@
            (region (layout/page-layout "t" [:p "x"] {:flash {:success "Done"}}))))))
 
 (deftest ^:unit with-toast-appends-an-out-of-band-toast
-  (let [resp (toast/with-toast {:status 200 :body "<tr>row</tr>"} {:type :warning :message "Careful"})]
+  (let [resp (toast/with-toast {:status 200 :body "<tr>row</tr>"} {:type :warning :message "Careful"} html)]
     (is (= 200 (:status resp)))
     (is (str/starts-with? (:body resp) "<tr>row</tr><div hx-swap-oob=\"beforeend:#toasts\"><div class=\"alert alert-warning")))
-  (testing "an empty body, and a render of the caller's"
+  (testing "an empty body"
     (is (= "<div>t</div>" (:body (toast/with-toast {} {:message "m"} (constantly "<div>t</div>")))))))
