@@ -112,7 +112,7 @@
                      :component :wagoe/tenant-service}
               :keys [:wagoe/tenant-db-schema :wagoe/tenant-repository
                      :wagoe/tenant-service :wagoe/tenant-routes
-                     :wagoe/tenant-http-middleware
+                     :wagoe/tenant-http-middleware :wagoe/each-tenant
                      :wagoe/membership-repository :wagoe/membership-service
                      :wagoe/membership-routes
                      :wagoe/invite-repository :wagoe/invite-service

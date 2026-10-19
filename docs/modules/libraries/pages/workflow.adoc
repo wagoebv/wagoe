@@ -272,6 +272,8 @@ Outside a tenant, and in a single-tenant application, the tables in `public` are
 Tenant work never falls back to `public`.
 A tenant schema without the tables, and tenant work outside a tenant transaction (on H2 under `:allow-h2?`, all of it), fail with a `:configuration-error`.
 Hooks run with the tenant bound, and side-effect jobs carry it in `:metadata {:tenant-id ...}`; with the tenant module on, job workers run such a job in the tenant's schema, and fail it without one.
+A job for a queue outside the database is enqueued once the transaction commits, so a worker never sees a transition that may yet roll back.
+`process-auto-transitions!` runs in `public` and in every active tenant's schema; its result counts tenants whose run failed under `:failed-tenants`.
 
 Instances a tenant started before workflow was tenant-scoped are in `public`.
 Move each tenant's rows into its schema, or they stay visible only outside any tenant.

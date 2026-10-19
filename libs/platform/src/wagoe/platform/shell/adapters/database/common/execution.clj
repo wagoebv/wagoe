@@ -500,6 +500,28 @@
 ;; Transaction Management
 ;; =============================================================================
 
+(def ^:dynamic ^:private *after-commit*
+  "What the outermost `with-transaction*` on this thread calls once it commits."
+  nil)
+
+(defn after-commit!
+  "Call `f` once the transaction `with-transaction*` holds open on this thread
+   commits, and never if it rolls back; with none open, now. For work another
+   system sees, such as a job on a queue outside the database."
+  [f]
+  (if-let [hooks *after-commit*]
+    (do (swap! hooks conj f) nil)
+    (f)))
+
+(defn- run-after-commit!
+  "Call each of `hooks`. The transaction has committed, so a failing one is
+   logged, not thrown."
+  [hooks]
+  (doseq [f hooks]
+    (try (f)
+         (catch Exception e
+           (log/error e "After-commit hook failed")))))
+
 (defn with-transaction*
   "Execute function within database transaction context.
 
@@ -520,24 +542,32 @@
     ;; Add breadcrumb for transaction start
     (add-database-breadcrumb "transaction" :start operation-details)
 
-    (jdbc/with-transaction [tx-conn (current-datasource ctx)]
-      (binding [*transaction-datasource* tx-conn
-                *outside-datasource*     (or *outside-datasource* (current-datasource ctx))]
-        (try
-          (let [tx-ctx (assoc ctx :datasource tx-conn)
-                result (f tx-ctx)
-                success-details (merge operation-details {:status "committed"})]
+    ;; A nested call joins the outer transaction, so only the outermost runs
+    ;; the after-commit hooks.
+    (let [outermost? (nil? *after-commit*)
+          hooks      (or *after-commit* (atom []))
+          result
+          (binding [*after-commit* hooks]
+            (jdbc/with-transaction [tx-conn (current-datasource ctx)]
+              (binding [*transaction-datasource* tx-conn
+                        *outside-datasource*     (or *outside-datasource* (current-datasource ctx))]
+                (try
+                  (let [tx-ctx (assoc ctx :datasource tx-conn)
+                        result (f tx-ctx)
+                        success-details (merge operation-details {:status "committed"})]
 
-            ;; Add breadcrumb for successful transaction
-            (add-database-breadcrumb "transaction" :success success-details)
+                    ;; Add breadcrumb for successful transaction
+                    (add-database-breadcrumb "transaction" :success success-details)
 
-            (log/debug "Transaction completed successfully"
-                       {:adapter (protocols/dialect (:adapter ctx))})
-            result)
+                    (log/debug "Transaction completed successfully"
+                               {:adapter (protocols/dialect (:adapter ctx))})
+                    result)
 
-          (catch Exception e
-            ;; A refused key is the caller's to answer, not a fault (BOU-712).
-            (log/logp (problem/exception-log-level e {}) "Transaction failed, rolling back"
-                      {:adapter (protocols/dialect (:adapter ctx))
-                       :error (redaction/loggable-message e)})
-            (throw e)))))))
+                  (catch Exception e
+                    ;; A refused key is the caller's to answer, not a fault (BOU-712).
+                    (log/logp (problem/exception-log-level e {}) "Transaction failed, rolling back"
+                              {:adapter (protocols/dialect (:adapter ctx))
+                               :error (redaction/loggable-message e)})
+                    (throw e))))))]
+      (when outermost? (run-after-commit! @hooks))
+      result)))

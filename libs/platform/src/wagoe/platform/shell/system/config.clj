@@ -210,10 +210,11 @@
        (contains? components :wagoe/job-registry)
        (assoc-in [:wagoe/job-registry :handler-maps] (into (vec job-handlers) discovered-handlers))
 
-       ;; A boot migration applies the migrations of the modules :active
-       ;; switches on, the set `migrate up` reads, so the two agree (BOU-579).
-       (:migrate-on-start? (config/db-spec config))
-       (assoc-in [:wagoe/db-context :migrate-libraries]
+       ;; The modules :active switches on: what a boot migration applies, the
+       ;; set `migrate up` reads (BOU-579), and, carried on the context, what
+       ;; a tenant schema migrates.
+       :always
+       (assoc-in [:wagoe/db-context :enabled-libraries]
                  (modules/enabled-libraries active))
 
        (seq auth)

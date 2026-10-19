@@ -10,9 +10,9 @@
             [wagoe.tenant.shell.tenant-middleware :as tenant-mw]
             [wagoe.tenant.shell.provisioning :as provisioning]
             [wagoe.tenant.shell.service :as tenant-service]
+            [wagoe.tenant.shell.tenant-iteration :as tenant-iteration]
             [wagoe.tenant.shell.tenant-migrations :as tenant-migrations]
             [wagoe.tenant.shell.user-foreign-keys :as user-foreign-keys]
-            [wagoe.platform.shell.modules :as modules]
             [clojure.tools.logging :as log]
             [integrant.core :as ig]))
 
@@ -48,20 +48,15 @@
     (catch Exception e
       (log/error e "Adding tenant→auth_users keys failed on startup"))))
 
-(defn- with-enabled-libraries
-  "`ctx` with the libraries whose modules are on, so a tenant schema migrates
-   only theirs (`tenant-migrations/migrate-tenant!`)."
-  [ctx enabled-libraries]
-  (cond-> ctx enabled-libraries (assoc :enabled-libraries enabled-libraries)))
-
+;; A tenant schema migrates the modules the context's `:enabled-libraries`
+;; names, which the system config sets on `:wagoe/db-context`.
 (defmethod ig/init-key :wagoe/tenant-db-schema
-  [_ {:keys [allow-h2? enabled-libraries] :as config}]
+  [_ {:keys [ctx allow-h2?]}]
   (log/info "Initializing tenant module database schema")
-  (let [ctx (with-enabled-libraries (:ctx config) enabled-libraries)]
-    (provisioning/refuse-unsupported-database! ctx allow-h2?)
-    (tenant-persistence/initialize-tenant-schema! ctx)
-    (add-user-foreign-keys! ctx)
-    (fan-out-tenant-migrations! ctx))
+  (provisioning/refuse-unsupported-database! ctx allow-h2?)
+  (tenant-persistence/initialize-tenant-schema! ctx)
+  (add-user-foreign-keys! ctx)
+  (fan-out-tenant-migrations! ctx)
   (log/info "Tenant module database schema initialized")
   {:status :initialized})
 
@@ -74,10 +69,9 @@
 ;; =============================================================================
 
 (defmethod ig/init-key :wagoe/tenant-repository
-  [_ {:keys [ctx enabled-libraries logger error-reporter]}]
+  [_ {:keys [ctx logger error-reporter]}]
   (log/info "Initializing tenant repository")
-  (let [repo (tenant-persistence/create-tenant-repository
-              (with-enabled-libraries ctx enabled-libraries) logger error-reporter)]
+  (let [repo (tenant-persistence/create-tenant-repository ctx logger error-reporter)]
     (log/info "Tenant repository initialized")
     repo))
 
@@ -106,13 +100,11 @@
 ;; =============================================================================
 
 (defmethod ig/init-key :wagoe/tenant-routes
-  [_ {:keys [tenant-service db-context enabled-libraries config]}]
+  [_ {:keys [tenant-service db-context config]}]
   (log/info "Initializing tenant module routes")
   (require 'wagoe.tenant.shell.http)
   (let [tenant-routes-fn (ns-resolve 'wagoe.tenant.shell.http 'tenant-routes)
-        routes (tenant-routes-fn tenant-service
-                                 (with-enabled-libraries db-context enabled-libraries)
-                                 (or config {}))]
+        routes (tenant-routes-fn tenant-service db-context (or config {}))]
     (log/info "Tenant module routes initialized successfully"
               {:route-keys (keys routes)
                :api-count (count (:api routes))})
@@ -228,6 +220,19 @@
   (log/info "Membership module routes halted (no cleanup needed)"))
 
 ;; =============================================================================
+;; Running work in every tenant
+;; =============================================================================
+
+(defmethod ig/init-key :wagoe/each-tenant
+  [_ {:keys [tenant-service db-context]}]
+  ;; (fn [f]): calls (f tenant) in each active tenant's schema; for a module
+  ;; with background work over tenant tables, such as workflow's auto-transitions.
+  (let [provider (provisioning/create-tenant-schema-provider)]
+    (fn [f] (tenant-iteration/for-each-tenant tenant-service provider db-context f))))
+
+(defmethod ig/halt-key! :wagoe/each-tenant [_ _] nil)
+
+;; =============================================================================
 ;; Tenant HTTP middleware
 ;; =============================================================================
 
@@ -260,21 +265,17 @@
 
 (defn ig-config
   "This module's Integrant entries, for `wagoe.platform.shell.system.config`."
-  [settings {:keys [config validation-config enabled]}]
+  [settings {:keys [config validation-config]}]
   (let [obs     {:logger         (ig/ref :wagoe/logging)
-                 :error-reporter (ig/ref :wagoe/error-reporting)}
-        ;; What a tenant schema migrates: the modules :active switches on.
-        enabled-libraries (modules/enabled-libraries (:active config) (or enabled #{}))]
+                 :error-reporter (ig/ref :wagoe/error-reporting)}]
     {:components
      {:wagoe/tenant-db-schema      (cond-> {:ctx (ig/ref :wagoe/db-context)
-                                            :enabled-libraries enabled-libraries
                                             ;; Only for order: auth_users must exist before
                                             ;; the keys to it; empty when user is not run.
                                             :user-db-schema (ig/refset :wagoe/user-db-schema)}
                                      ;; Only a test profile on H2 sets it.
                                      (:allow-h2? settings) (assoc :allow-h2? true))
-      :wagoe/tenant-repository     (merge obs {:ctx               (ig/ref :wagoe/db-context)
-                                               :enabled-libraries enabled-libraries})
+      :wagoe/tenant-repository     (merge obs {:ctx (ig/ref :wagoe/db-context)})
       :wagoe/membership-repository (merge obs {:ctx (ig/ref :wagoe/db-context)})
       :wagoe/invite-repository     (merge obs {:ctx (ig/ref :wagoe/db-context)})
       :wagoe/tenant-service        (merge obs {:tenant-repository (ig/ref :wagoe/tenant-repository)
@@ -285,10 +286,11 @@
       :wagoe/invite-service        (merge obs {:repository            (ig/ref :wagoe/invite-repository)
                                                :membership-repository (ig/ref :wagoe/membership-repository)
                                                :metrics-emitter       (ig/ref :wagoe/metrics)})
-      :wagoe/tenant-routes         {:tenant-service    (ig/ref :wagoe/tenant-service)
-                                    :db-context        (ig/ref :wagoe/db-context)
-                                    :enabled-libraries enabled-libraries
-                                    :config            config}
+      :wagoe/tenant-routes         {:tenant-service (ig/ref :wagoe/tenant-service)
+                                    :db-context     (ig/ref :wagoe/db-context)
+                                    :config         config}
+      :wagoe/each-tenant           {:tenant-service (ig/ref :wagoe/tenant-service)
+                                    :db-context     (ig/ref :wagoe/db-context)}
       :wagoe/membership-routes     {:service (ig/ref :wagoe/membership-service)
                                     :config  config}
       :wagoe/tenant-data-exporter  {:tenant-repository     (ig/ref :wagoe/tenant-repository)

@@ -103,6 +103,11 @@
   "Call `f` with a transaction context, committing or rolling back around it."
   execution/with-transaction*)
 
+(def after-commit!
+  "Call `f` once the transaction `with-transaction` holds open on this thread
+   commits, never if it rolls back; with none open, now."
+  execution/after-commit!)
+
 (defn current-transaction
   "The connection of the transaction `with-transaction` holds open on this
    thread, or nil. For a port that takes a caller's transaction explicitly."

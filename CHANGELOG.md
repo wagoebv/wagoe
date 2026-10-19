@@ -208,6 +208,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Workflow auto-transitions skipped tenant instances; side-effect jobs could run before the transition committed**
+  (BOU-757). Both fixed; `db/after-commit!` defers work to a commit. Nothing to do.
+- **Tenant schemas migrated modules enabled only in code** (BOU-757): they now migrate what `:active` names, as public
+  does. Put such a module's key in `:active`.
 - **Export jobs: racing requests opened duplicates, archives were built in memory** (BOU-752). One open job per
   subject, five requests an hour per user (`:export-requests-per-hour`). Run `migrate up`.
 - **Push tokens differing only in case were one device on MySQL** (BOU-752); racing uploads could deadlock there.
