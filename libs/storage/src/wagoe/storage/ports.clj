@@ -88,6 +88,31 @@
     "At most `limit` uploads stored before `cutoff`, an Instant."))
 
 ;; ============================================================================
+;; Export Job Store Port
+;; ============================================================================
+
+(defprotocol IExportJobStore
+  "Data exports produced by a background job. A job is {:id :subject
+  :requested-by :status :file-key :error :created-at :finished-at :expires-at},
+  `:subject` {:type :user|:tenant :id}, `:status` :pending, :running, :done or
+  :failed."
+
+  (save-export-job! [this job]
+    "Store `job`, replacing the one with its id. Returns it.")
+
+  (find-export-job [this id]
+    "The job with `id`, or nil.")
+
+  (open-export-job [this subject]
+    "A :pending or :running job for `subject`, or nil.")
+
+  (export-jobs-created-before [this cutoff limit]
+    "At most `limit` jobs created before `cutoff`, an Instant, oldest first.")
+
+  (remove-export-job! [this id]
+    "Forget the job with `id`."))
+
+;; ============================================================================
 ;; Image Processing Port
 ;; ============================================================================
 

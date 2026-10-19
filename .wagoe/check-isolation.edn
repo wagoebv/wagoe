@@ -46,6 +46,13 @@
   {:lib "reports"   :namespace "wagoe.jobs.core.job"
    :why "TO FIX. Same as workflow's below: create-job builds the job map, and
          a hand-copied one drifts (BOU-418). Clears when jobs puts it on its port."}
+  {:lib "storage"   :namespace "wagoe.jobs.ports"
+   :why "BY DESIGN. Optional companion: export jobs are wired only when the jobs
+         module is on. Declaring wagoe/jobs would put a job queue under every app
+         that stores a file. Documented at the call site in export_jobs.clj."}
+  {:lib "storage"   :namespace "wagoe.jobs.core.job"
+   :why "TO FIX. Same as reports': create-job builds the job map (BOU-418).
+         Clears when jobs puts it on its port."}
   {:lib "reports"   :namespace "wagoe.storage.ports"
    :why "BY DESIGN. Optional companion for generate-async :storage-key (BOU-674);
          declaring wagoe/storage would pull the S3 and GCS SDKs into every app

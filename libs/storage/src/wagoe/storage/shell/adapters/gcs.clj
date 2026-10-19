@@ -66,7 +66,7 @@
             object-key  (generate-gcs-key filename object-path)
 
             ;; Determine visibility
-            is-public   (or (= visibility :public) public-read?)
+            is-public   (case visibility :public true :private false public-read?)
 
             ;; Build blob info
             blob-id     (BlobId/of bucket object-key)

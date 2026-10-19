@@ -13,7 +13,9 @@
 
    The module also records every upload in `storage_uploads`
    (:wagoe.storage/upload-index), and contributes a subject's uploads to data
-   export and the `:storage/uploads` retention policy.
+   export and the `:storage/uploads` retention policy. With the jobs module it
+   also serves a user's export as a background job (`export-jobs`), and
+   contributes the `:storage/export-archives` retention policy.
 
    The `:local` provider accepts the catalogue's `:root` as an alias for the
    local adapter's `:base-path`."
@@ -24,6 +26,9 @@
             [wagoe.storage.shell.adapters.image-processor :as image-processor]
             [wagoe.storage.shell.service :as service]
             [wagoe.storage.shell.data-export :as data-export]
+            [wagoe.storage.shell.export-job-http :as export-job-http]
+            [wagoe.storage.shell.export-job-store :as export-job-store]
+            [wagoe.storage.shell.export-jobs :as export-jobs]
             [wagoe.storage.shell.http-handlers :as http-handlers]
             [wagoe.storage.shell.upload-index :as upload-index]
             [clojure.tools.logging :as log]))
@@ -76,6 +81,7 @@
 
 (defmethod ig/init-key :wagoe.storage/db-schema [_ {:keys [ctx]}]
   (upload-index/create-tables! ctx)
+  (export-job-store/create-tables! ctx)
   {:status :initialized})
 
 (defmethod ig/init-key :wagoe.storage/upload-index [_ {:keys [ctx]}]
@@ -86,6 +92,28 @@
 
 (defmethod ig/init-key :wagoe.storage/upload-retention [_ {:keys [upload-index storage]}]
   (data-export/->UploadRetention upload-index (:storage storage)))
+
+;; =============================================================================
+;; Data export as a background job (with the jobs module)
+;; =============================================================================
+
+(defmethod ig/init-key :wagoe.storage/export-jobs
+  [_ {:keys [ctx storage data-export job-queue queue]}]
+  {:store        (export-job-store/create-export-job-store ctx)
+   :file-storage (:storage storage)
+   :provider     (:provider storage)
+   :data-export  data-export
+   :job-queue    job-queue
+   :queue        queue})
+
+(defmethod ig/init-key :wagoe.storage/export-job-handlers [_ {:keys [export-jobs]}]
+  {export-jobs/job-type (partial export-jobs/run-export-job export-jobs)})
+
+(defmethod ig/init-key :wagoe.storage/export-job-routes [_ {:keys [export-jobs]}]
+  {:api (export-job-http/routes export-jobs) :web [] :static []})
+
+(defmethod ig/init-key :wagoe.storage/export-archive-retention [_ {:keys [export-jobs]}]
+  (export-jobs/->ExportArchiveRetention (:store export-jobs) (:file-storage export-jobs)))
 
 ;; =============================================================================
 ;; Storage Routes Component
@@ -133,7 +161,7 @@
    must resolve to this module's download route — the only thing that verifies
    the signature. Aimed at a CDN instead, the link works and is never checked
    (BOU-421)."
-  [settings _ctx]
+  [settings {:keys [enabled]}]
   (let [settings (or settings {:provider :local})
         ;; Explicitly true, not merely truthy. Config values reach this through
         ;; `#env`, which yields strings — so `:expose-http? #env …` set to
@@ -154,4 +182,19 @@
              :data-export {:storage (ig/ref :wagoe.storage/data-exporter)}
              :retention   {:storage/uploads (ig/ref :wagoe.storage/upload-retention)}}
       expose?
-      (assoc :routes [(ig/ref :wagoe/storage-routes)]))))
+      (update :routes (fnil conj []) (ig/ref :wagoe/storage-routes))
+
+      (contains? enabled :wagoe/jobs)
+      (-> (update :components merge
+                  {:wagoe.storage/export-jobs              {:ctx         (ig/ref :wagoe/db-context)
+                                                            :schema      (ig/ref :wagoe.storage/db-schema)
+                                                            :storage     (ig/ref :wagoe/storage)
+                                                            :data-export (ig/ref :wagoe/data-export)
+                                                            :job-queue   (ig/ref :wagoe/job-queue)
+                                                            :queue       (:export-queue settings :default)}
+                   :wagoe.storage/export-job-handlers      {:export-jobs (ig/ref :wagoe.storage/export-jobs)}
+                   :wagoe.storage/export-job-routes        {:export-jobs (ig/ref :wagoe.storage/export-jobs)}
+                   :wagoe.storage/export-archive-retention {:export-jobs (ig/ref :wagoe.storage/export-jobs)}})
+          (update :routes (fnil conj []) (ig/ref :wagoe.storage/export-job-routes))
+          (assoc :job-handlers [(ig/ref :wagoe.storage/export-job-handlers)])
+          (assoc-in [:retention :storage/export-archives] (ig/ref :wagoe.storage/export-archive-retention))))))

@@ -111,7 +111,7 @@
             object-key (generate-s3-key filename object-path)
 
             ;; Determine ACL based on visibility
-            is-public (or (= visibility :public) public-read?)
+            is-public (case visibility :public true :private false public-read?)
             acl (if is-public
                   ObjectCannedACL/PUBLIC_READ
                   ObjectCannedACL/PRIVATE)

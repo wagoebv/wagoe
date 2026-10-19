@@ -249,7 +249,9 @@ Each route answers JSON. With `?format=zip` or `Accept: application/zip` it
 answers a zip of `data-export.json` and the files exporters hold, such as the
 storage module's uploads, each under its exporter id (`storage/<key>`). An
 exporter with files also implements `IFileExporter`. A file that is gone is
-listed under `missingFiles` in the JSON.
+listed under `missingFiles` in the JSON. For a subject too large to zip during
+a request, the storage module builds a user's export as a background job and
+serves it from file storage (see the storage library).
 
 Retention is off until you name a policy. It then runs as the recurring job
 `:wagoe/retention`, so `:wagoe/jobs` must be on:

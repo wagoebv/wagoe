@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **A user's data export as a background job** (BOU-749): with the jobs module, `POST /api/v1/me/export-jobs`
+  builds the zip in file storage and the user downloads it for a day. Run `migrate up`.
 - **Tenant exports are audited** (BOU-749): each download of `GET /api/v1/tenants/:id/export` is recorded in a new
   `tenant_audit_log` table. Run `migrate up`.
 - **Storage records every upload's owner, and exports and expires uploads** (BOU-738): a `storage_uploads` table
