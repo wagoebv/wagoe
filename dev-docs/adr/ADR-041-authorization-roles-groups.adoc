@@ -68,6 +68,13 @@ There is one built-in group, *Everyone*: every signed-in user is a member
 without being added, including users who sign up later. It is how an app says
 what any user may do.
 
+Membership may also come from outside. An app that signs users in through an
+identity provider (Entra, LDAP; ADR-014) registers a membership hook,
+`(fn [user] #{"Redactie" …})`, mapping the provider's groups to Wagoe group
+names. Those memberships count as if added by hand, are read-only in the UI
+with their source shown, and are not stored, so they cannot drift from the
+provider. A provider group with no Wagoe group of that name gives nothing.
+
 Groups stay global; groups per tenant are a follow-up. The tenant membership
 role is unchanged.
 
@@ -89,8 +96,17 @@ schema under `:wagoe/user :groups`:
  :category-id {:label "Category" :entity :categories}}
 ----
 
-An entity maps a field to a key (`orders.domain_id` → `:domain-id`). An
-assignment without a scope holds everywhere; two assignments of the same role
+A key may declare `:expand`, a function from values to those values and
+everything beneath them: `{:department-id {:expand with-descendants}}`. An
+assignment on a directorate then holds for its departments, including ones
+added later. Expansion runs after a user-sourced value is resolved.
+
+An entity maps a field to a key (`orders.domain_id` → `:domain-id`). When the
+scope lies on a related record instead (an order's domain is its customer's),
+the entity declares a function from the allowed values to a HoneySQL condition,
+`{:domain-id (fn [ids] [:in :customer_id {:select [:id] :from [:customers]
+:where [:in :domain_id ids]}])}`. The admin uses it wherever it would use the
+field. An assignment without a scope holds everywhere; two assignments of the same role
 with different scopes add up.
 
 A scope value is either fixed (`{:domain-id 42}`) or taken from the user
@@ -162,7 +178,8 @@ not rendered. `:require-role` is removed from the admin config.
 
 * *Roles:* code roles (locked) and managed roles; a managed role is a checklist
   of the registry, grouped by module.
-* *Group:* members through a user lookup; assignments as role + scope, per
+* *Group:* members through a user lookup, with provider memberships listed
+  read-only; assignments as role + scope, per
   scope key a lookup (BOU-762) or a user source such as "the member's
   department". Everyone shows its roles, not its members.
 * *User:* a Rights tab with their groups and effective permissions, each with
@@ -206,14 +223,19 @@ under `:enforce`, nobody can do less than under `:off`, and nobody gains admin.
 * Scope enforcement in the admin adds a `WHERE` to every list and a check to
   every write; an entity with no mapped scope field is unaffected.
 * Out of scope: groups per tenant, role hierarchies, field-level permissions,
-  direct grants to a single user (use a group).
+  direct grants to a single user (use a group), per-record rules such as "not
+  your own expense claim" (`:authorization :self`), and assignments with an
+  end date or delegation during absence.
 
 == Testing
 
 * Pure core: permission derivation per marker, method and route data; roles to
   effective rights; scope to `WHERE`; a scoped right refused on a route without
   `:scope`; a user-sourced scope resolving per member, and to no rights when
-  the resolver returns nothing.
+  the resolver returns nothing; `:expand` covering descendants added after the
+  assignment; a relation scope filtering the same rows as the equivalent
+  join; provider groups counting as membership and unknown ones giving
+  nothing.
 * The interceptor in each mode; boot failing on an unknown permission; a
   signed-in web user refused gets 403, not the login form.
 * Migration on H2, PostgreSQL and MySQL: every user can reach under `:enforce`
