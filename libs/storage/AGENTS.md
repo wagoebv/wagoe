@@ -14,8 +14,11 @@ S3 / S3-compatible, and Google Cloud Storage adapters behind a single
 
 | Namespace | Purpose |
 |-----------|---------|
-| `wagoe.storage.ports` | Protocols: `IFileStorage`, `IImageProcessor` |
+| `wagoe.storage.ports` | Protocols: `IFileStorage`, `IUploadIndex`, `IImageProcessor` |
 | `wagoe.storage.core.validation` | Pure: size/type/extension validation, filename sanitization, MIME lookup |
+| `wagoe.storage.core.uploads` | Pure: the upload index record and the data-export section |
+| `wagoe.storage.shell.upload-index` | `JdbcUploadIndex` on `storage_uploads`, and its boot-time table creation |
+| `wagoe.storage.shell.data-export` | `UploadDataExporter` (`IDataExporter` + `IFileExporter`) and `UploadRetention` (`:storage/uploads`) |
 | `wagoe.storage.schema` | Malli schemas: `FileData`, `FileMetadata`, `StorageResult`, `ImageInfo`, `*StorageConfig` |
 | `wagoe.storage.shell.service` | `IStorageService` protocol + `StorageService` record — validation + storage + optional image processing |
 | `wagoe.storage.shell.adapters.local` | `LocalFileStorage` — filesystem, content-addressed keys with directory sharding |
@@ -49,6 +52,17 @@ S3 / S3-compatible, and Google Cloud Storage adapters behind a single
   `:expose-http? true`) is the only thing that calls `verify-signed-url`. So
   with a secret configured, point `:url-base` at that route. Aimed at a CDN or
   a static server, the link resolves and the signature is never verified.
+
+### `IUploadIndex` — who stored which file
+
+`IFileStorage` cannot list files, so the service records every upload in
+`storage_uploads`: `{:key :user-id :tenant-id :size :content-type :stored-at}`.
+Pass the owner as `:owner {:user-id :tenant-id}` in the upload metadata; the
+upload routes take it from the request. When recording fails the file is
+deleted and the upload fails. `remove-file` forgets the record. Data export
+(`:storage` section, files in a zip export) and the `:storage/uploads`
+retention policy read the index. A store straight through `IFileStorage` is
+not recorded.
 
 ### `IImageProcessor` — optional image ops
 

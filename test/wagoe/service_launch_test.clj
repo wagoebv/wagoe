@@ -231,6 +231,8 @@
     :wagoe/jobs :wagoe/jobs-runtime :wagoe/job-queue :wagoe/job-store
     :wagoe/job-stats :wagoe/job-registry :wagoe/idempotency-store
     :wagoe/storage
+    ;; Every store is recorded, whichever service stores it.
+    :wagoe.storage/db-schema :wagoe.storage/upload-index
     ;; The event bus is infrastructure: every service that runs needs one,
     ;; whichever module it is running.
     :wagoe/events

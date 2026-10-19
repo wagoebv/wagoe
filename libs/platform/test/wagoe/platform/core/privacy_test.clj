@@ -39,3 +39,17 @@
   (is (nil? (sut/subject-error {:type :tenant :id "acme"})))
   (is (= :validation-error (get-in (sut/subject-error {:type :group :id 1}) [:error :type])))
   (is (= :validation-error (get-in (sut/subject-error {:type :user}) [:error :type]))))
+
+(deftest ^:unit a-zip-is-asked-for-by-query-or-accept
+  (is (sut/zip-requested? {:query-params {"format" "zip"}}))
+  (is (sut/zip-requested? {:params {:format "zip"}}))
+  (is (sut/zip-requested? {:headers {"accept" "application/zip, */*"}}))
+  (is (not (sut/zip-requested? {:query-params {"format" "json"}})))
+  (is (not (sut/zip-requested? {}))))
+
+(deftest ^:unit an-archive-entry-stays-inside-its-section
+  (is (= "storage/ab/x.pdf" (sut/archive-entry :storage "ab/x.pdf")))
+  (is (= "billing/user/a.txt" (sut/archive-entry :billing/user "a.txt")))
+  (is (= "storage/etc/passwd" (sut/archive-entry :storage "/../../etc/passwd")))
+  (is (= "storage/a/b" (sut/archive-entry :storage "a\\..\\b")))
+  (is (nil? (sut/archive-entry :storage "../.."))))

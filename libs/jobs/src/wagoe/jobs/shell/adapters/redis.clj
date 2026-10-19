@@ -19,6 +19,9 @@
             [clojure.tools.logging :as log])
   (:import [redis.clients.jedis Jedis JedisPool JedisPoolConfig]
            [redis.clients.jedis.params ScanParams SetParams]
+           [java.nio.charset StandardCharsets]
+           [java.security MessageDigest]
+           [java.util HexFormat]
            [java.time Instant]))
 
 ;; =============================================================================
@@ -491,23 +494,60 @@
 
               retry-job)))))))
 
+;; ARGV is the job key prefix, then pairs of an id and the SHA-1 of the job as
+;; it was read ("" for a job already gone). A job whose value changed since
+;; then, as retry-job! changes it, is kept. The list is rewritten once rather
+;; than LREM'd per id, which scans it each time.
+(def ^:private purge-dead-letters-script
+  "local wanted = {}
+   for i = 2, #ARGV, 2 do wanted[ARGV[i]] = ARGV[i + 1] end
+   local keep, purged, gone = {}, 0, {}
+   for _, id in ipairs(redis.call('LRANGE', KEYS[1], 0, -1)) do
+     local expected = wanted[id]
+     local purge = gone[id]
+     if expected ~= nil and not purge then
+       local raw = redis.call('GET', ARGV[1] .. id)
+       if raw then purge = redis.sha1hex(raw) == expected else purge = expected == '' end
+       if purge then
+         if raw then redis.call('DEL', ARGV[1] .. id) end
+         purged = purged + 1
+         gone[id] = true
+       end
+     end
+     if not purge then keep[#keep + 1] = id end
+   end
+   if purged > 0 then
+     redis.call('DEL', KEYS[1])
+     for i = 1, #keep, 1000 do
+       redis.call('RPUSH', KEYS[1], unpack(keep, i, math.min(i + 999, #keep)))
+     end
+   end
+   return purged")
+
+(defn- sha1-hex [^String s]
+  (.formatHex (HexFormat/of) (.digest (MessageDigest/getInstance "SHA-1") (.getBytes s StandardCharsets/UTF_8))))
+
 (extend-type RedisJobStore
   ports/IDeadLetterRetention
   (purge-dead-letters-before! [{:keys [pool]} cutoff]
     (with-redis pool
       (fn [^Jedis redis]
-        (reduce (fn [n id]
-                  (let [k   (job-key (java.util.UUID/fromString id))
-                        job (some-> (.get redis k) codec/decode-job)
-                        at  (:completed-at job)]
-                    ;; A job whose key expired leaves its id behind; it goes too.
-                    (if (or (nil? job) (and at (.isBefore ^Instant at cutoff)))
-                      (do (.del redis ^String k)
-                          (.lrem redis (dead-letter-key) 0 id)
-                          (inc n))
-                      n)))
-                0
-                (.lrange redis (dead-letter-key) 0 -1))))))
+        (let [ids        (distinct (.lrange redis (dead-letter-key) 0 -1))
+              ;; A page of jobs at a time: only the candidates' ids and hashes are kept.
+              candidates (into []
+                               (mapcat (fn [page]
+                                         (let [raws (.mget redis ^"[Ljava.lang.String;" (into-array String (map job-key page)))]
+                                           (for [[id raw] (map vector page raws)
+                                                 :let [at (some-> raw codec/decode-job :completed-at)]
+                                                 ;; A job whose key expired leaves its id behind; it goes too.
+                                                 :when (or (nil? raw) (and at (.isBefore ^Instant at cutoff)))]
+                                             [id (if raw (sha1-hex raw) "")]))))
+                               (partition-all 1000 ids))]
+          (if (empty? candidates)
+            0
+            (long (.eval redis ^String purge-dead-letters-script
+                         ^java.util.List [(dead-letter-key)]
+                         ^java.util.List (into [(job-key "")] cat candidates)))))))))
 
 ;; =============================================================================
 ;; Job Statistics Implementation

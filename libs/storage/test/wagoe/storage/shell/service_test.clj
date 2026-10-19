@@ -206,3 +206,43 @@
                                      {:filename "photo"} {})]
         (is (:success result))
         (is (= "image/jpeg" (-> result :original :content-type)))))))
+
+(defn- recording-index
+  "An IUploadIndex over an atom, or one whose record-upload! throws."
+  [records & {:keys [fail?]}]
+  (reify ports/IUploadIndex
+    (record-upload! [_ u]
+      (when fail? (throw (ex-info "index down" {:type :internal-error})))
+      (swap! records assoc (:key u) u))
+    (remove-upload! [_ k] (some? (first (swap-vals! records dissoc k))))
+    (find-uploads [_ _ _] (vec (vals @records)))
+    (uploads-stored-before [_ _ _] [])))
+
+(deftest ^:integration every-upload-is-recorded-with-its-owner
+  (let [records (atom {})
+        storage (local/create-local-storage {:base-path test-dir})
+        service (sut/create-storage-service {:storage storage
+                                             :image-processor (img/create-image-processor {})
+                                             :upload-index (recording-index records)})
+        user-id (random-uuid)
+        result  (sut/upload-image service (.getBytes "not really a png")
+                                  {:filename "a.png" :owner {:user-id user-id :tenant-id "t1"}}
+                                  {})
+        k       (-> result :original :key)]
+    (is (:success result))
+    (is (= {:key k :user-id (str user-id) :tenant-id "t1" :size 16 :content-type "image/png"}
+           (dissoc (get @records k) :stored-at)))
+    (is (inst? (:stored-at (get @records k))))
+    (is (true? (sut/remove-file service k)))
+    (is (empty? @records))))
+
+(deftest ^:integration an-upload-the-index-cannot-record-fails-and-leaves-no-file
+  (let [storage (local/create-local-storage {:base-path test-dir})
+        service (sut/create-storage-service {:storage storage
+                                             :upload-index (recording-index (atom {}) :fail? true)})
+        result  (sut/upload-file service {:bytes (.getBytes "x") :content-type "text/plain"}
+                                 {:filename "x.txt"} {})]
+    (is (false? (:success result)))
+    (is (= [:storage-error] (map :code (:errors result))))
+    (is (empty? (filter #(.isFile ^java.io.File %) (file-seq (io/file test-dir))))
+        "the stored file was left behind")))

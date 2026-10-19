@@ -92,6 +92,27 @@ Includes file validation, image processing, and signed URL generation.
                 :access-key #env AWS_ACCESS_KEY_ID :secret-key #env AWS_SECRET_ACCESS_KEY}
 ----
 
+== Upload index
+
+Every upload through the storage service is recorded in the `storage_uploads`
+table (`IUploadIndex`): key, owner user and tenant, size, content type and when
+it was stored. The upload routes take the owner from the request; other callers
+pass `:owner {:user-id … :tenant-id …}` in the metadata. An upload the index
+cannot record fails, and its file is deleted. Files stored before the index
+existed, or straight through `IFileStorage`, are not in it.
+
+The index feeds two privacy contributions:
+
+* a `:storage` section in a user's or tenant's data export, listing their
+  uploads; a zip export includes the files.
+* the `:storage/uploads` retention policy, which deletes uploads stored before
+  its period, file and record:
+
+[source,clojure]
+----
+:wagoe/privacy {:retention {:storage/uploads {:retain "P1Y"}}}
+----
+
 == Testing
 
 [source,bash]

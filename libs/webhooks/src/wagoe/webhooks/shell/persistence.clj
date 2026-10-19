@@ -1,13 +1,9 @@
 (ns wagoe.webhooks.shell.persistence
   "`ISubscriptionStore` and `IDeliveryLog` on the application database, and the
    boot step that creates their tables."
-  (:require [clojure.java.io :as io]
-            [clojure.string :as str]
-            [clojure.tools.logging :as log]
+  (:require [clojure.tools.logging :as log]
             [wagoe.core.utils.type-conversion :as tc]
-            [wagoe.platform.core.database.migration-sql :as migration-sql]
             [wagoe.platform.database :as db]
-            [wagoe.platform.ports.database :as db-ports]
             [wagoe.webhooks.ports :as ports])
   (:import (java.sql Timestamp)
            (java.time Instant)))
@@ -18,22 +14,12 @@
 
 (def migration-resource "wagoe/webhooks/migrations/20261020100001-webhooks-tables.up.sql")
 
-(defn- migration-statements []
-  (->> (str/split (slurp (io/resource migration-resource)) #"--;;")
-       ;; Without comment lines, as migratus runs it: the MySQL rewrite reads a
-       ;; statement from its first word.
-       (map #(str/trim (str/replace % #"(?m)^\s*--.*$" "")))
-       (remove str/blank?)))
-
 (defn create-tables!
   "Create the webhook tables when absent, for installations that boot without
    running `migrate up`."
   [ctx]
-  (let [mysql?   (= :mysql (db-ports/engine (:adapter ctx)))
-        execute! (if mysql? db/execute-ddl-if-absent! db/execute-ddl!)]
-    (doseq [statement (cond-> (migration-statements) mysql? migration-sql/for-mysql)]
-      (execute! ctx statement))
-    (log/info "Webhook tables ready")))
+  (db/execute-migration-ddl! ctx migration-resource)
+  (log/info "Webhook tables ready"))
 
 ;; =============================================================================
 ;; Conversion

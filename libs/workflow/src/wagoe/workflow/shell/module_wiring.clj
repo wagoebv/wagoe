@@ -27,9 +27,7 @@
      Returns {:api [...] :web [...] :static []} for composition
      by the HTTP handler."
   (:require [integrant.core :as ig]
-            [wagoe.platform.core.database.migration-sql :as migration-sql]
             [wagoe.platform.database :as db]
-            [wagoe.platform.ports.database :as db-ports]
             [wagoe.workflow.shell.registry :as registry]
             [wagoe.workflow.shell.persistence :as persistence]
             [wagoe.workflow.shell.service :as service]
@@ -37,26 +35,9 @@
             [wagoe.workflow.shell.entity-uuid :as entity-uuid]
             [wagoe.workflow.shell.http :as workflow-http]
             [wagoe.workflow.shell.admin-adapter :as admin-adapter]
-            [clojure.java.io :as io]
-            [clojure.string :as str]
             [clojure.tools.logging :as log]))
 
-(def ^:private migration-dir "wagoe/workflow/migrations/")
-
-(defn- migration-resource [file-name]
-  (or (io/resource (str migration-dir file-name))
-      (throw (ex-info "Workflow migration missing from the classpath"
-                      {:type :internal-error :file file-name}))))
-
-(defn- migration-statements
-  "The statements of the migration that creates workflow's tables."
-  []
-  (->> (str/split (slurp (migration-resource "20260926100000-workflow-tables.up.sql"))
-                  #"--;;")
-       ;; Without its comment lines, as migratus runs it: the MySQL rewrite
-       ;; reads a statement from its first word (BOU-650).
-       (map #(str/trim (str/replace % #"(?m)^\s*--.*$" "")))
-       (remove str/blank?)))
+(def ^:private migration-resource "wagoe/workflow/migrations/20260926100000-workflow-tables.up.sql")
 
 (def ^:private altering-profiles
   "Where the boot may change an existing table: the profiles `db:reset` may
@@ -80,13 +61,7 @@
    through a migration. There the boot warns about what is missing and goes on."
   [ctx profile]
   (log/info "Initializing workflow schema")
-  ;; The migration is PostgreSQL-shaped; `migrate up` rewrites it for MySQL,
-  ;; and so must the boot. The rewrite drops IF NOT EXISTS from CREATE INDEX,
-  ;; so an index left by the last boot counts as done (BOU-650).
-  (let [mysql?   (= :mysql (db-ports/engine (:adapter ctx)))
-        execute! (if mysql? db/execute-ddl-if-absent! db/execute-ddl!)]
-    (doseq [statement (cond-> (migration-statements) mysql? migration-sql/for-mysql)]
-      (execute! ctx statement)))
+  (db/execute-migration-ddl! ctx migration-resource)
   (let [ds (:datasource ctx)]
     (doseq [{:keys [what present? ensure!]} boot-changes]
       (cond
