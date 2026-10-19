@@ -214,6 +214,7 @@
        "  bb ai gen-tests <file>              Generate test namespace, stdout (experimental)\n"
        "  bb ai gen-tests <file> --write      Write to the conventional test path (experimental)\n"
        "  bb ai gen-tests <file> -o <output>  Write tests to a named file (experimental)\n"
+       "  bb ai gen-tests <file> --run        Also run the generated tests first (runs model code)\n"
        "  bb ai sql <description>             Generate HoneySQL from description (experimental)\n"
        "  bb ai docs --module <path>          Generate all docs (agents, openapi, readme)\n"
        "  bb ai docs --module <path> --type agents|openapi|readme\n"
