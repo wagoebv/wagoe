@@ -8,6 +8,9 @@
             [migratus.core :as migratus]
             [next.jdbc :as jdbc]
             [support.embedded-pg :as epg]
+            [wagoe.jobs.core.job] ; the service resolves create-job from it at run time
+            [wagoe.jobs.ports :as jobs-ports]
+            [wagoe.platform.database :as db]
             [wagoe.platform.shell.database.migrations :as mig]
             [wagoe.tenant.shell.provisioning :as provisioning]
             [wagoe.tenant.shell.tenant-migrations :as tmig]
@@ -17,11 +20,16 @@
             [wagoe.workflow.shell.registry :as registry]
             [wagoe.workflow.shell.service :as service]))
 
+(def ^:private hook-calls
+  "What each :on-any-transition hook saw: the bound tenant, and the instance
+   as the store reads it."
+  (atom []))
+
 (def ^:private order-def
   {:id            :tenant-order-workflow
    :initial-state :pending
    :states        #{:pending :paid}
-   :transitions   [{:from :pending :to :paid}]})
+   :transitions   [{:from :pending :to :paid :side-effects [:notify-paid]}]})
 
 (def ^:private db-ctx (atom nil))
 
@@ -96,3 +104,81 @@
         (let [public (start!)]
           (is (= [(:id public)] (map :id (ports/list-instances store {}))))
           (is (nil? (in-tenant a #(ports/find-instance store (:id public))))))))))
+
+(defn- migrate-public! [ctx]
+  (migratus/migrate (mig/migratus-config (:datasource ctx)
+                                         (filterv #(str/includes? % "workflow")
+                                                  (mig/discover-migration-dirs)))))
+
+(defn- refusal
+  "The ex-data of what `f` throws, or nil."
+  [f]
+  (try (f) nil (catch clojure.lang.ExceptionInfo e (ex-data e))))
+
+(deftest ^:integration a-tenant-schema-runs-the-public-series
+  (let [schema (str "tenant_wfs" (System/nanoTime))]
+    (migrate-public! @db-ctx)
+    (tenant-schema! schema)
+    (is (= #{20260926100000 20260926100100 20260927200000 20260928100000}
+           (->> (jdbc/execute! (:datasource @db-ctx)
+                               [(str "SELECT id FROM " schema ".schema_migrations")])
+                (map :schema_migrations/id)
+                (filter #(<= 20260926100000 % 20260928100000))
+                set))
+        "workflow's public migrations, so a new one reaches tenants with no twin")))
+
+(deftest ^:integration tenant-work-never-falls-back-to-public
+  (let [ctx   @db-ctx
+        bare  (str "tenant_wfbare" (System/nanoTime))
+        store (persistence/create-workflow-store (:datasource ctx))]
+    (migrate-public! ctx)
+    (jdbc/execute! (:datasource ctx) [(str "CREATE SCHEMA " bare)])
+
+    (testing "a tenant schema without the tables is refused, not read through to public"
+      (let [data (refusal #(in-tenant bare (fn [] (ports/list-instances store {}))))]
+        (is (= :configuration-error (:type data)))
+        (is (= bare (:schema data)))))
+
+    (testing "tenant work outside a tenant schema is refused"
+      (is (= :configuration-error
+             (:type (refusal #(binding [db/*tenant-id* (random-uuid)]
+                                (ports/list-instances store {}))))))
+      (is (= :configuration-error
+             (:type (refusal #(binding [db/*tenant-id* (random-uuid)]
+                                (db/with-transaction* ctx (fn [_] (ports/list-instances store {})))))))
+          "on a transaction in public"))))
+
+(deftest ^:integration hooks-and-jobs-run-in-the-tenant
+  (let [ctx      @db-ctx
+        schema   (str "tenant_wfj" (System/nanoTime))
+        tenant   (random-uuid)
+        store    (persistence/create-workflow-store (:datasource ctx))
+        enqueued (atom [])
+        queue    #_{:clj-kondo/ignore [:missing-protocol-method]}
+                 (reify
+                   jobs-ports/IJobQueue
+                   (enqueue-job! [_ _ job] (swap! enqueued conj [:plain job]) (:id job))
+                   jobs-ports/ITransactionalJobQueue
+                   (enqueue-in-tx! [_ _ _ job] (swap! enqueued conj [:in-tx job]) (:id job)))
+        svc      (service/create-workflow-service store (registry/create-workflow-registry) queue)]
+    (reset! hook-calls [])
+    (registry/register-workflow!
+     (assoc order-def :hooks {:on-any-transition
+                              [(fn [inst _ _]
+                                 (swap! hook-calls conj [db/*tenant-id*
+                                                         (:current-state (ports/find-instance store (:id inst)))]))]}))
+    (migrate-public! ctx)
+    (tenant-schema! schema)
+    (binding [db/*tenant-id* tenant]
+      (in-tenant schema
+                 #(let [inst (ports/start-workflow! svc {:workflow-id :tenant-order-workflow
+                                                        :entity-type :order
+                                                        :entity-id   (random-uuid)})]
+                    (is (:success? (ports/transition! svc {:instance-id (:id inst)
+                                                           :transition  :paid
+                                                           :actor-roles [:admin]}))))))
+    (testing "a hook runs with the tenant bound, and reads the instance in its schema"
+      (is (= [[tenant :paid]] @hook-calls)))
+    (testing "the job joins the request's transaction and carries the tenant"
+      (is (= [[:in-tx {:tenant-id (str tenant)}]]
+             (map (fn [[how job]] [how (:metadata job)]) @enqueued))))))

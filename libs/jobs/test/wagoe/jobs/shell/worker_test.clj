@@ -360,6 +360,28 @@
           (finally
             (ports/stop-worker! worker-instance (:id (:state worker-instance)))))))))
 
+(deftest ^:unit a-tenants-job-runs-through-the-tenant-runner
+  (let [tenant (str (UUID/randomUUID))
+        seen   (atom [])
+        job    (assoc (create-test-job {:args {:value "x"}}) :metadata {:tenant-id tenant})
+        ;; No thread: process-job! needs only the registry and the config.
+        run    #(ports/process-job! (worker/map->Worker {:registry *registry* :config %}) job)]
+    (ports/register-handler! *registry* :test-job (fn [args] (swap! seen conj args) {:success? true}))
+    (testing "without a runner it fails rather than run against public"
+      (let [result (run {})]
+        (is (false? (:success? result)))
+        (is (= :configuration-error (get-in result [:error :type])))
+        (is (empty? @seen))))
+    (testing "with one, the handler runs inside it, for that tenant"
+      (let [runs   (atom [])
+            result (run {:tenant-runner (fn [tid f] (swap! runs conj tid) (f))})]
+        (is (true? (:success? result)))
+        (is (= [tenant] @runs))
+        (is (= [{:value "x"}] @seen))))
+    (testing "a runner that refuses fails the job"
+      (let [result (run {:tenant-runner (fn [_ _] (throw (ex-info "gone" {:type :tenant-not-found})))})]
+        (is (false? (:success? result)))))))
+
 (deftest ^:unit worker-processes-scheduled-jobs-test
   (testing "Worker processes scheduled jobs when due"
     (let [queue (:queue *system*)

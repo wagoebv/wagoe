@@ -344,16 +344,6 @@
                      " to a separate classpath resource.")))
     migration-dirs))
 
-(defn discover-tenant-migration-dirs
-  "The `:tenant-paths` the library manifests name: migrations the tenant
-   module runs inside every tenant schema, for a library whose tables belong
-   to each tenant."
-  []
-  (->> (manifest-urls)
-       (mapcat #(parse-migration-manifest % :tenant-paths))
-       distinct
-       vec))
-
 (defn- files-in
   "Paths of the files under `dir`, relative to it, found where migratus finds
    it. Paths only: migratus's reader slurps every file and leaves the jar open."
@@ -420,12 +410,30 @@
           (str/replace #"\.edn$" "")))))
 
 (defn- library-manifests
-  "[library paths] for each manifest that names its library."
-  []
+  "[library paths] for each manifest that names its library, the paths under
+   `k` (see `parse-migration-manifest`)."
+  [k]
   (for [url  (manifest-urls)
         :let [lib (manifest-library url)]
         :when lib]
-    [lib (parse-migration-manifest url)]))
+    [lib (parse-migration-manifest url k)]))
+
+(defn- without-switched-off
+  "`dirs` less those under manifest key `k` that only framework modules
+   `enabled-libs` does not name ship. nil keeps every directory."
+  [dirs enabled-libs k]
+  (if (nil? enabled-libs)
+    dirs
+    (let [framework (set (vals modules/framework-modules))
+          by-lib    (library-manifests k)
+          off?      (fn [[lib _]] (and (framework lib) (not (enabled-libs lib))))
+          skip      (set/difference (set (mapcat second (filter off? by-lib)))
+                                    (set (mapcat second (remove off? by-lib))))]
+      (doseq [[lib paths] (filter off? by-lib)
+              :when (seq paths)]
+        (log/info (str "Not migrating " lib ": its module is not switched on in :active")
+                  {:paths k}))
+      (vec (remove skip dirs)))))
 
 (defn ships-migrations?
   "Whether library `lib` publishes a migration manifest on the classpath."
@@ -446,16 +454,20 @@
   [enabled-libs]
   (let [dirs (discover-migration-dirs)]
     (refuse-duplicate-migration-ids! dirs)
-    (if (nil? enabled-libs)
-      dirs
-      (let [framework (set (vals modules/framework-modules))
-            by-lib    (library-manifests)
-            off?      (fn [[lib _]] (and (framework lib) (not (enabled-libs lib))))
-            skip      (set/difference (set (mapcat second (filter off? by-lib)))
-                                      (set (mapcat second (remove off? by-lib))))]
-        (doseq [[lib _] (filter off? by-lib)]
-          (log/info (str "Not migrating " lib ": its module is not switched on in :active")))
-        (vec (remove skip dirs))))))
+    (without-switched-off dirs enabled-libs :paths)))
+
+(defn discover-tenant-migration-dirs
+  "The `:tenant-paths` the library manifests name: migrations the tenant
+   module runs inside every tenant schema, for a library whose tables belong
+   to each tenant. Given `enabled-libs`, as `migration-dirs` does, only the
+   directories of modules that are switched on."
+  ([] (discover-tenant-migration-dirs nil))
+  ([enabled-libs]
+   (-> (->> (manifest-urls)
+            (mapcat #(parse-migration-manifest % :tenant-paths))
+            distinct
+            vec)
+       (without-switched-off enabled-libs :tenant-paths))))
 
 (defn- configured-libraries
   "The libraries the active profile's config switches on, for the CLI, which

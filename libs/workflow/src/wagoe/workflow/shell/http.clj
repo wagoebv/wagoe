@@ -19,8 +19,9 @@
    admin pages send to the login form. Instances live in the tenant's schema,
    read through the request's tenant-bound transaction, so every route also
    refuses a caller outside the request's tenant with 403. The API's reads,
-   and starting an instance, need the :admin role or a :workflow/read grant;
-   the admin pages need an admin."
+   and starting an instance, need an admin or a :workflow/read grant; the
+   admin pages need an admin. In a tenant, both are the tenant's: its admins
+   (`access/tenant-admin?`) and grants scoped {:tenant-id <its id>}."
   (:require [clojure.string :as str]
             [wagoe.admin.core.permissions :as admin-permissions]
             [wagoe.admin.core.ui.layout :as admin-layout]
@@ -105,25 +106,18 @@
   "The grant that lets a non-admin read instances and their audit through the API."
   :workflow/read)
 
-(defn in-tenant-scope?
-  "Whether the caller may use the schema this request runs in. With a tenant
-   resolved: a member of it, a user of it, or a platform admin. Without one,
-   the public schema: only a user of no tenant."
-  [request]
-  (let [user      (:user request)
-        tenant-id (get-in request [:tenant :id])]
-    (if tenant-id
-      (boolean (or (:tenant-membership request)
-                   (= (str tenant-id) (some-> (:tenant-id user) str))
-                   (access/platform-admin? user)))
-      (nil? (:tenant-id user)))))
-
 (defn- may-read?
-  "An admin, or a user whose groups grant `read-permission`."
+  "An admin where the request runs, or a user whose groups grant
+   `read-permission`: in a tenant, a grant scoped to it ({:tenant-id id})."
   [group-service request]
-  (or (access/admin? request)
+  (or (access/tenant-admin? request)
       (and group-service
-           (group/holds? (user-ports/user-grants group-service (:user request)) read-permission))))
+           (let [grants    (user-ports/user-grants group-service (:user request))
+                 tenant-id (get-in request [:tenant :id])]
+             (if tenant-id
+               (group/authorized? grants read-permission
+                                  #(= (str tenant-id) (some-> (:tenant-id %) str)))
+               (group/holds? grants read-permission))))))
 
 (defn- forbidden [message request]
   (access/forbidden-response message request (access/correlation-id request (str (random-uuid)))))
@@ -132,7 +126,7 @@
   "`handler` for a caller in the request's tenant; 403 for anyone else."
   [handler]
   (fn [request]
-    (if (in-tenant-scope? request)
+    (if (access/in-tenant-scope? request)
       (handler request)
       (forbidden "Not a member of this tenant" request))))
 
@@ -433,14 +427,15 @@
 ;; =============================================================================
 
 (defn- admin-only
-  "Admit an admin the admin module admits, in the request's tenant. The pages
-   list the instances of the schema the request runs in: its tenant's, or
-   without a tenant the public one."
+  "Admit an admin the admin module admits who is an admin of the request's
+   tenant. The pages list the instances of the schema the request runs in: its
+   tenant's, or without a tenant the public one."
   [handler]
   (fn [request]
     (let [user (:user request)]
       (if (and (admin-permissions/can-access-admin? user)
-               (in-tenant-scope? request))
+               (access/in-tenant-scope? request)
+               (access/tenant-admin? request))
         (handler request)
         (html-response request (admin-layout/admin-forbidden-page nil user) 403)))))
 

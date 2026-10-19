@@ -16,7 +16,7 @@
 
 (def ^:private all-dirs
   "Every migration directory, the ones run in tenant schemas too."
-  (delay (concat (mig/discover-migration-dirs) (mig/discover-tenant-migration-dirs))))
+  (delay (distinct (concat (mig/discover-migration-dirs) (mig/discover-tenant-migration-dirs)))))
 
 (def ^:private library-ids
   "Every framework migration id, one per migration."

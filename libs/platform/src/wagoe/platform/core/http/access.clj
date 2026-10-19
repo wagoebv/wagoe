@@ -59,3 +59,32 @@
   [user]
   (and (= :admin (some-> (:role user) keyword))
        (nil? (:tenant-id user))))
+
+(defn- same-id? [a b]
+  (and (some? a) (= (str a) (str b))))
+
+(defn in-tenant-scope?
+  "Whether the caller may use the schema the request runs in. With a tenant
+   resolved: a member of it, a user of it, or a platform admin. Without one,
+   the public schema: only a user of no tenant."
+  [request]
+  (let [user      (:user request)
+        tenant-id (get-in request [:tenant :id])]
+    (if tenant-id
+      (boolean (or (:tenant-membership request)
+                   (same-id? (:tenant-id user) tenant-id)
+                   (platform-admin? user)))
+      (nil? (:tenant-id user)))))
+
+(defn tenant-admin?
+  "Whether the caller is an admin where the request runs. In a tenant: a
+   platform admin, an admin by membership of it, or an admin user of it; an
+   admin of another tenant is not one here. Without a tenant, `admin?`."
+  [request]
+  (let [user      (:user request)
+        tenant-id (get-in request [:tenant :id])]
+    (if tenant-id
+      (or (platform-admin? user)
+          (= :admin (some-> request :tenant-membership :role keyword))
+          (and (admin? request) (same-id? (:tenant-id user) tenant-id)))
+      (admin? request))))
