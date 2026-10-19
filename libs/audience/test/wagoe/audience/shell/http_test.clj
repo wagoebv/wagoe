@@ -351,7 +351,9 @@
                                                     "filters-data" (json/generate-string
                                                                     [{:type "demographics" :field "password-hash"
                                                                       :op "eq" :value "x"}])}))))
-      (is (= 400 (:status (post :post "/audiences" {"id" "bad" "label" "Bad" "filters-data" "{not json"}))))
+      (let [r (post :post "/audiences" {"id" "bad" "label" "Bad" "filters-data" "{not json"})]
+        (is (= 400 (:status r)))
+        (is (str/includes? (:body r) "value=\"bad\"") "the id typed is shown again"))
       (is (nil? (ports/find-audience s :pw))))
     (testing "the edit form posts to the update route, keeping what it has no field for"
       (ports/save-audience s (assoc (ports/find-audience s :gold) :cache-config {:ttl-minutes 5}))

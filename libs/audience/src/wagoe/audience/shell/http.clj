@@ -35,13 +35,15 @@
 ;; Helpers
 ;; =============================================================================
 
+(defn- camel-entry [[k props child]]
+  [(keyword (cc/kebab-case->camel-case-string (name k))) props child])
+
 (def ^:private create-body
-  "A definition as JSON carries it: camelCase keys."
+  "A definition as JSON carries it: camelCase keys. `cacheConfig` is derived
+   from `schema/CacheConfig`, so a key added there is not stripped here."
   (-> schema/DynamicAudienceDefinition
       (mu/dissoc :cache-config)
-      (mu/assoc :cacheConfig [:map
-                              [:ttlMinutes {:optional true} :int]
-                              [:refreshSchedule {:optional true} :string]])
+      (mu/assoc :cacheConfig (mu/transform-entries schema/CacheConfig (partial mapv camel-entry)))
       (mu/optional-keys [:cacheConfig])))
 
 (def ^:private update-body
@@ -243,7 +245,7 @@
 (defn- submitted
   "What the form sent, to show again when it is not a definition."
   [params]
-  {:label (get params "label") :description (get params "description")})
+  {:id (get params "id") :label (get params "label") :description (get params "description")})
 
 (defn- form-response
   "Back to the list when `response` saved; otherwise the builder again, showing

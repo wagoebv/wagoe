@@ -218,7 +218,7 @@ The builder page renders two placeholder `div`s for Replicant widgets:
 - `#audience-filter-panel` — filter panel widget mount point
 - `#audience-composition-builder` — composition builder widget mount point
 
-Hidden inputs `#audience-filters-data` and `#audience-compose-data` carry the filters and composition as JSON to the form POST, pre-filled when editing. An update from the form keeps the segment's cache config and tags. The preview section `#audience-preview` is updated via HTMX swap from `POST /api/v1/audiences/preview`.
+Hidden inputs `#audience-filters-data` and `#audience-compose-data` carry the filters and composition as JSON to the form POST, pre-filled when editing. An update from the form keeps the segment's cache config and tags. The preview section `#audience-preview` is a placeholder: `POST /api/v1/audiences/preview` previews a saved audience only, so nothing previews unsaved filters yet.
 
 ---
 
