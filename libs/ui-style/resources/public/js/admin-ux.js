@@ -14,17 +14,39 @@
 //    Must be outside the IIFE so it runs immediately.
 // =========================================================================
 document.addEventListener('alpine:init', function () {
-  var persist = function (value, key) {
-    if (window.Alpine && window.Alpine.$persist) {
-      return window.Alpine.$persist(value).as(key);
+  // Plain localStorage rather than Alpine's Persist plugin: alpine.min.js is
+  // the core build, and two keys do not justify vendoring a second plugin.
+  // Storage can throw (disabled, private mode); then state lives per page.
+  var load = function (key) {
+    try {
+      return JSON.parse(window.localStorage.getItem(key));
+    } catch (e) {
+      return null;
     }
-    return value;
   };
+  var save = function (key, value) {
+    try {
+      window.localStorage.setItem(key, JSON.stringify(value));
+    } catch (e) { /* not persisted */ }
+  };
+  var STATE_KEY = 'wagoe-admin-sidebar-state';
+  var PINNED_KEY = 'wagoe-admin-sidebar-pinned';
+  var pinned = load(PINNED_KEY) === true;
 
   window.Alpine.store('sidebar', {
-    state: persist('expanded', 'wagoe-admin-sidebar-state'),
-    pinned: persist(false, 'wagoe-admin-sidebar-pinned'),
+    // Only a pinned sidebar keeps its state. Unpinned, state follows the
+    // mouse, so restoring it would animate a collapse on every page load.
+    state: pinned && load(STATE_KEY) === 'collapsed' ? 'collapsed' : 'expanded',
+    pinned: pinned,
     mobileOpen: false,
+
+    init: function () {
+      var self = this;
+      window.Alpine.effect(function () { save(PINNED_KEY, self.pinned); });
+      window.Alpine.effect(function () {
+        if (self.pinned) save(STATE_KEY, self.state);
+      });
+    },
 
     toggle: function () {
       this.state = this.state === 'expanded' ? 'collapsed' : 'expanded';

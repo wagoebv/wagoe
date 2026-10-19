@@ -192,6 +192,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Deprecated
 
+- **`shared-ui` `alpine/sidebar-store-init`** (BOU-761): a second copy of the sidebar store that needs the unbundled
+  Persist plugin; goes in 2.0. Load the `:admin-pilot` bundle, which registers the store.
 - **Kebab-case keys in the login response's `user` and `session`** (BOU-737): each now has a camelCase twin with the same
   value, and goes in 2.0. Read `session.sessionToken`, `session.expiresAt` and so on.
 - **`/swagger.json` and `:swagger` route docs** (BOU-462): the path serves the 3.1 document and `:swagger` is
@@ -212,6 +214,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **The admin sidebar forgot its pin and collapsed on every page** (BOU-761): the pin, and a pinned sidebar's
+  collapsed state, now survive navigation and reload. Nothing to do.
 - **Admin showed a column with a digit in its name as empty** (BOU-760), e.g. `e2e_customer_id` in lists and forms.
   Other query results are keyed as before; `db/as-kebab-maps` is the opt-in builder that keys it `:e2e-customer-id`.
 - **Admin foreign-key cells showed no label when the parent's name differs from the key** (BOU-760). The parent a
