@@ -1,6 +1,6 @@
 (ns wagoe.tools.setup-test
   (:require [clojure.test :refer [deftest is testing]]
-            [wagoe.tools.config-edn :as config-edn]
+            [wagoe.cli.config-edn :as config-edn]
             [wagoe.tools.integrate :as integrate]
             [wagoe.tools.setup :as setup]
             [babashka.fs :as fs]

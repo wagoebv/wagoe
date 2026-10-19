@@ -1,6 +1,3 @@
-#!/usr/bin/env bb
-;; libs/tools/src/wagoe/tools/config_edn.clj
-;;
 ;; Editing resources/conf/<env>/config.edn as text.
 ;;
 ;; It cannot be read as EDN. Aero tags — #env, #profile, #or — are reader macros
@@ -10,10 +7,10 @@
 ;;
 ;; So: brace-balanced insertion. `bb quickstart` already did this, hardcoded for
 ;; :wagoe/tasks; `bb scaffold integrate` needs the same thing for an arbitrary
-;; module (BOU-310), and two copies of a text editor for the same file is how
-;; they drift.
+;; module (BOU-310), and `wagoe add` too. It lives here, not in wagoe-tools,
+;; because tools depends on this library and not the other way round (BOU-584).
 
-(ns wagoe.tools.config-edn
+(ns wagoe.cli.config-edn
   (:require [clojure.java.io :as io]
             [clojure.string :as str]))
 
@@ -275,13 +272,17 @@
      in one file.
    - `:wagoe/h2` appears only under `:inactive`, and `:wagoe/cache` only in a
      comment. Reporting those as present is the configured-and-switched-off
-     outcome this namespace exists to avoid."
+     outcome this namespace exists to avoid.
+
+   A value naming the key, `#ig/ref :wagoe/jobs`, is not the key. Only a map
+   whose entries cannot be read falls back to searching its text."
   [text key-str]
   (if-let [[open end] (active-section text)]
-    (let [active (subs (code-only text) open end)]
+    (if-let [es (entries text ":active")]
+      (if (some #(= key-str (:key %)) es) :already-present :absent)
       (if (re-find (re-pattern (str (java.util.regex.Pattern/quote key-str)
                                     "(?![A-Za-z0-9*+!?<>=_-])"))
-                   active)
+                   (subs (code-only text) open end))
         :already-present
         :absent))
     :absent))
