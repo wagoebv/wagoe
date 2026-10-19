@@ -4,6 +4,7 @@
    Three protocols cover the full lifecycle:
 
    IWorkflowStore    — persistence of instances and audit log
+   ITransactionalWorkflowStore — optional: a store on the caller's transaction
    IWorkflowEngine   — high-level transition orchestration
    IWorkflowRegistry — in-process registry of workflow definitions")
 
@@ -92,14 +93,32 @@
        true when the instance existed"))
 
 ;; =============================================================================
+;; ITransactionalWorkflowStore  — optional capability
+;; =============================================================================
+
+(defprotocol ITransactionalWorkflowStore
+  "Optional capability: a store that can join a caller's transaction. The
+   engine's `tx` arities need it."
+
+  (store-in-tx [this tx]
+    "This store, reading and writing on `tx`: an open transaction on the same
+     datasource. Throws :validation-error for anything else, a datasource
+     included, since that would autocommit."))
+
+;; =============================================================================
 ;; IWorkflowEngine  — orchestration
 ;; =============================================================================
 
 (defprotocol IWorkflowEngine
   "Protocol for executing workflow transitions."
 
-  (start-workflow! [this input]
+  (start-workflow! [this input] [this tx input]
     "Create a new workflow instance in its initial state.
+
+     With `tx`, an open transaction on the store's datasource (a next.jdbc
+     connection or a platform transaction context), the instance is written on
+     it and commits or rolls back with the caller's own writes. A nil `tx` is
+     the same as none.
 
      Args:
        input - WorkflowInstanceInput map:
@@ -111,8 +130,12 @@
      Returns:
        Created WorkflowInstance")
 
-  (transition! [this request]
+  (transition! [this request] [this tx request]
     "Execute a workflow transition.
+
+     With `tx`, as for `start-workflow!`: the new state and its audit entry are
+     written on it. Hooks run before the caller commits, and side-effect jobs
+     join `tx` only when the job queue is transactional.
 
      Args:
        request - TransitionRequest map:
@@ -151,8 +174,10 @@
        Vector of AuditEntry maps, oldest first")
 
   (available-transitions [this instance-id actor-roles context]
+                         [this tx instance-id actor-roles context]
     "Return all transitions reachable from the current state, annotated with
-     :enabled? and, when blocked, a :reason keyword.
+     :enabled? and, when blocked, a :reason keyword. With `tx`, as for
+     `start-workflow!`, the instance is read on it.
 
      Runs full permission + guard checks for each reachable transition so UIs
      can render buttons as enabled or disabled accordingly.
