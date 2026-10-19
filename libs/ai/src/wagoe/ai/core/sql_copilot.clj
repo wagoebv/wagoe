@@ -74,7 +74,7 @@
   #{"SELECT" "FROM" "JOIN" "WHERE" "ON" "USING" "GROUP" "ORDER" "HAVING" "LIMIT"
     "OFFSET" "UPDATE" "INTO" "SET" "VALUES" "WITH" "RETURNING" "UNION"})
 
-(def ^:private table-clauses #{"FROM" "JOIN" "UPDATE" "INTO"})
+(def ^:private table-clauses #{"FROM" "JOIN" "UPDATE" "INTO" "USING"})
 
 (defn- ident-parts
   "[\"t\" \"col\"] for the token \"t\".\"col\", nil for a token that is not a
@@ -87,35 +87,40 @@
 (defn- classify
   "Every quoted identifier in `sql-str` as {:kind :table|:alias|:cte|:column
    :parts [..]}, read from where it stands: after FROM or JOIN a table, after
-   AS an alias, before AS ( a CTE."
+   AS an alias, before AS ( a CTE. A parenthesis opens a scope of its own, so
+   an INSERT's column list or the list after a subquery is not read as tables."
   [sql-str]
   (let [tokens (vec (re-seq token-re sql-str))
         up     #(some-> (get tokens %) text/upper-case)]
-    (loop [i 0 clause nil out []]
+    (loop [i 0 clause nil outer () out []]
       (if (>= i (count tokens))
         out
         (let [tok   (tokens i)
               word  (up i)
               parts (ident-parts tok)]
           (cond
-            (clause-words word) (recur (inc i) word out)
+            (= "(" tok) (recur (inc i) nil (conj outer clause) out)
 
-            (nil? parts) (recur (inc i) clause out)
+            (= ")" tok) (recur (inc i) (peek outer) (if (seq outer) (pop outer) outer) out)
+
+            (clause-words word) (recur (inc i) word outer out)
+
+            (nil? parts) (recur (inc i) clause outer out)
 
             (= "AS" (up (dec i)))
-            (recur (inc i) clause
+            (recur (inc i) clause outer
                    (conj out {:kind  :alias :parts parts
                               :of    (when (table-clauses clause)
                                        (some-> (get tokens (- i 2)) ident-parts peek))}))
 
             (and (= "AS" (up (inc i))) (= "(" (get tokens (+ i 2))))
-            (recur (inc i) clause (conj out {:kind :cte :parts parts}))
+            (recur (inc i) clause outer (conj out {:kind :cte :parts parts}))
 
             (and (table-clauses clause) (= 1 (count parts))
                  (or (table-clauses (up (dec i))) (= "," (get tokens (dec i)))))
-            (recur (inc i) clause (conj out {:kind :table :parts parts}))
+            (recur (inc i) clause outer (conj out {:kind :table :parts parts}))
 
-            :else (recur (inc i) clause (conj out {:kind :column :parts parts}))))))))
+            :else (recur (inc i) clause outer (conj out {:kind :column :parts parts}))))))))
 
 (defn unknown-identifiers
   "The tables and columns `sql-str` names that `tables`, {table {column type}},
@@ -150,6 +155,9 @@
 
               (not (known? t))
               (when-not (used t) (str "table " t " does not exist"))
+
+              (not (used t))
+              (str "table " t " is not in the query's FROM or JOIN")
 
               (not (has-col? (tables t) c))
               (str "column " t "." c " does not exist"))))

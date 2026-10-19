@@ -13,6 +13,7 @@
             [wagoe.ai.core.sql-copilot :as sql-copilot]
             [wagoe.ai.ports :as ports]
             [wagoe.ai.shell.test-check :as test-check]
+            [cheshire.core :as json]
             [clojure.edn :as edn]
             [clojure.java.io :as io]
             [clojure.string :as str]
@@ -365,12 +366,13 @@
                                   hsql    (str (or (:honeysql data) (:honeySQL data) ""))
                                   checked (sql-copilot/check-answer hsql tables)]
                               (assoc checked
+                                     :answer      (json/generate-string data)
                                      :honeysql    hsql
                                      :explanation (str (or (:explanation data) "")))))))
              first-try (attempt messages)
              result    (if (:errors first-try)
                          (attempt (prompts/sql-fix-messages
-                                   messages (:honeysql first-try)
+                                   messages (:answer first-try)
                                    (:errors first-try)))
                          first-try)]
          (cond

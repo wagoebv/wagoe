@@ -41,7 +41,12 @@
       (is (ok (pr-str {:with [[:recent {:select [:id] :from [:invoices]}]]
                        :select [:r/id] :from [[:recent :r]]})))
       (is (ok (pr-str {:select [:*] :from [:users]
-                       :where  [:in :id {:select [:invoice-id] :from [:invoice-line-items]}]}))))))
+                       :where  [:in :id {:select [:invoice-id] :from [:invoice-line-items]}]}))))
+    (testing "an INSERT's column list, and a list after a subquery, are columns"
+      (is (ok (pr-str {:insert-into :invoices :columns [:id :number :status]
+                       :values [["a" "1" "entered"]]})))
+      (is (ok (pr-str {:select [[[:coalesce {:select [:number] :from [:invoices]} :email]]]
+                       :from   [:users]}))))))
 
 (deftest ^:unit check-answer-refuses-invented-names
   (testing "BOU-513: the answer from the ticket, every name singularised"
@@ -64,6 +69,10 @@
            (:errors (sut/check-answer (pr-str {:select [:total] :from [:invoices]}) tables))))
     (is (= ["column invoices.line_total does not exist"]
            (:errors (sut/check-answer (pr-str {:select [:i/line-total] :from [[:invoices :i]]}) tables)))))
+
+  (testing "a column of a real table the query does not select from"
+    (is (= ["table users is not in the query's FROM or JOIN"]
+           (:errors (sut/check-answer (pr-str {:select [:users/email] :from [:invoices]}) tables)))))
 
   (testing "a table known by name only: the table is checked, its columns are not"
     (let [t (assoc tables "jobs" nil)]
