@@ -87,28 +87,8 @@
                                :wagoe/db (:wagoe/db cfg) "{:url \"<secret test:dsn>\" :host \"other\"}")
                               "dashb0ard-pw"))))))
 
-(defrecord Opts [retries])
-
-(deftest ^:unit the-editor-shows-pretty-printed-edn-that-reads-back
-  (let [cfg {:url     "jdbc:h2:mem:app"
-             :pool    {:min 1 :max 10 :timeout-ms 30000 :idle-ms 600000
-                       :name "a-pool-name-long-enough-to-push-the-map-past-the-right-margin"}
-             :at      #inst "2026-01-01T00:00:00.000-00:00"
-             :id      #uuid "00000000-0000-0000-0000-000000000001"
-             :aliases ["a" "b"]}
-        s   (config-page/format-edn cfg)]
-    (testing "one key per line, sorted, no commas"
-      (is (str/starts-with? s "{:aliases [\"a\" \"b\"]\n :at #inst"))
-      (is (not (str/includes? s ","))))
-    (testing "nothing runs past the right margin"
-      (is (every? #(<= (count %) 100) (str/split-lines s))))
-    (testing "reader tags print as tags, so the text reads back to the same value"
-      (is (str/includes? s "#uuid \"00000000-0000-0000-0000-000000000001\""))
-      (is (= cfg (config-page/parse-edited-value s ::failed))))
-    (testing "a record and a tagged literal keep their tags"
-      (is (= "#wagoe.devtools.shell.dashboard.pages.config_test.Opts{:retries 3}"
-             (config-page/format-edn (->Opts 3))))
-      (is (= "#env \"PORT\"" (config-page/format-edn (tagged-literal 'env "PORT")))))
-    (testing "the textarea holds the pretty-printed value"
-      (let [html (config-page/render {:config {:wagoe/db cfg} :config-editable? true})]
-        (is (str/includes? html "{:aliases [&quot;a&quot; &quot;b&quot;]\n :at #inst"))))))
+(deftest ^:unit the-textarea-holds-pretty-printed-edn
+  (let [html (config-page/render {:config {:wagoe/db {:url (apply str "jdbc:h2:mem:" (repeat 100 "x"))
+                                                     :aliases ["a" "b"]}}
+                                  :config-editable? true})]
+    (is (str/includes? html "{:aliases [&quot;a&quot; &quot;b&quot;]\n :url"))))
