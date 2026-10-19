@@ -708,6 +708,12 @@
 (def ^:private column config-edn/column)
 (def ^:private reindent config-edn/reindent)
 
+(defn- shift
+  "`snippet`, its first line at column `from`, with the rest moved to `to`.
+   reindent assumes a snippet written at column 2."
+  [snippet from to nl]
+  (reindent snippet (+ 2 (- to from)) nl))
+
 (defn- entry [text kw k]
   (some #(when (= k (:key %)) %) (config-edn/entries text kw)))
 
@@ -719,16 +725,13 @@
    its line end. Without the last entry, the closing brace moves up to the one
    before it, as `add-entry` writes it, when only whitespace is in between."
   [text kw e]
-  (let [es    (config-edn/entries text kw)
-        prev  (last (take-while #(not= (:start e) (:start %)) es))
-        close (second (config-edn/section text kw))
-        rest  (subs text (:end e))
-        skip  (cond (str/starts-with? rest "\r\n") 2 (str/starts-with? rest "\n") 1 :else 0)]
+  (let [prev  (last (take-while #(< (:start %) (:start e)) (config-edn/entries text kw)))
+        close (second (config-edn/section text kw))]
     (if (and prev
              (str/blank? (subs text (:end prev) (:from e)))
              (str/blank? (subs text (:end e) close)))
       (str (subs text 0 (:end prev)) (subs text close))
-      (str (subs text 0 (:from e)) (subs rest skip)))))
+      (str (subs text 0 (:from e)) (str/replace-first (subs text (:end e)) #"^\r?\n" "")))))
 
 (defn- add-entry [text snippet]
   (config-edn/append-entry text ":active" snippet))
@@ -748,10 +751,8 @@
 (defn- reactivate
   "`text` with :inactive entry `e` moved back to :active, comments and all."
   [text e nl]
-  (let [piece (subs text (:from e) (:end e))]
-    ;; reindent moves a snippet from column 2 to `col`; 4 - c brings one at
-    ;; column c to 2, the column add-entry expects.
-    (add-entry (cut text ":inactive" e) (reindent piece (- 4 (column text (:start e))) nl))))
+  (add-entry (cut text ":inactive" e)
+             (shift (subs text (:from e) (:end e)) (column text (:start e)) 2 nl)))
 
 (defn- provider-of
   "The provider an existing entry configures: its :provider, or `present` for
@@ -794,9 +795,8 @@
              ;; From the value on, so a comment after the key stays.
              (-> acc
                  (assoc :text (str (subs text 0 (:value cur))
-                                   (reindent (subs generated (:value g) (:end g))
-                                             (+ 2 (- (column text (:value cur)) (column generated (:value g))))
-                                             nl)
+                                   (shift (subs generated (:value g) (:end g))
+                                          (column generated (:value g)) (column text (:value cur)) nl)
                                    (subs text (:end cur))))
                  (update :changes conj (str "replace " k " (edits inside it are lost)"))
                  (update :touched conj k)))
@@ -811,20 +811,22 @@
                     (nil? (config-edn/section text ":inactive")))
              (reduced {::error (str "its :inactive is not a literal map, so "
                                     (str/join ", " active) " has nowhere to move")})
-             (let [text (reduce #(deactivate %1 (entry %1 ":active" %2) nl) text active)
-                   old  (entry text ":inactive" k)]
-               (-> acc
-                   (update :changes into (for [o active]
-                                           (str "move " o " to :inactive"
-                                                (when (entry (:text acc) ":inactive" o) ", replacing the one there"))))
-                   (update :moved into active)
-                   (cond->
-                    ;; Switching back: the entry it was moved aside as, not a
-                    ;; fresh template.
-                    old       (-> (assoc :text (reactivate text old nl))
-                                  (update :changes conj (str "move " k " from :inactive back to :active"))
-                                  (update :reactivated conj k))
-                    (not old) (-> (assoc :text text) add)))))
+             (let [moved (reduce #(deactivate %1 (entry %1 ":active" %2) nl) text active)
+                   old   (entry moved ":inactive" k)
+                   acc   (-> acc
+                             (assoc :text moved)
+                             (update :changes into (for [o active]
+                                                     (str "move " o " to :inactive"
+                                                          (when (entry text ":inactive" o) ", replacing the one there"))))
+                             (update :moved into active))]
+               ;; Switching back: the entry it was moved aside as, not a fresh
+               ;; template.
+               (if old
+                 (-> acc
+                     (update :text reactivate old nl)
+                     (update :changes conj (str "move " k " from :inactive back to :active"))
+                     (update :reactivated conj k))
+                 (add acc))))
 
            :else acc)))
      {:text existing :changes [] :moved #{} :touched #{} :reactivated #{}}
@@ -883,10 +885,8 @@
                 :else
                 (assoc acc :text
                        (add-entry text
-                                  ;; reindent moves a snippet from column 2 to
-                                  ;; `col`; 4 - c brings one at column c to 2.
-                                  (reindent (subs dev-text (:start e) (:end e))
-                                            (- 4 (column dev-text (:start e))) "\n"))))))
+                                  (shift (subs dev-text (:start e) (:end e))
+                                         (column dev-text (:start e)) 2 "\n"))))))
           {:text prod-text :left-out []}
           (or (config-edn/entries dev-text ":active") [])))
 
