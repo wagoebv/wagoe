@@ -11,8 +11,11 @@
   (or (get-in request [:user :id])
       (throw (ex-info "User not authenticated" {:type :unauthorized}))))
 
-(defn- download-path [id]
-  (str "/api/v1/me/export-jobs/" id "/download"))
+(defn- job-path [id]
+  (str "/api/v1/me/export-jobs/" id))
+
+(defn- view [job]
+  (core/status-view job (str (job-path (:id job)) "/download") (Instant/now)))
 
 (defn- own-job
   "The path's job, when the signed-in user asked for it. Anyone else's is
@@ -28,13 +31,12 @@
     (let [id  (user-id request)
           job (export-jobs/request-export! ctx {:type :user :id id} id)]
       {:status  202
-       :headers {"Location" (str "/api/v1/me/export-jobs/" (:id job))}
-       :body    (core/status-view job (download-path (:id job)) (Instant/now))})))
+       :headers {"Location" (job-path (:id job))}
+       :body    (view job)})))
 
 (defn status-handler [ctx]
   (fn [request]
-    (let [job (own-job ctx request)]
-      {:status 200 :body (core/status-view job (download-path (:id job)) (Instant/now))})))
+    {:status 200 :body (view (own-job ctx request))}))
 
 (defn download-handler [ctx]
   (fn [request]

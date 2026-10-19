@@ -5,5 +5,4 @@
   "A platform admin downloading `tenant-id`'s data export. `context` is
    {:actor-id :actor-email :ip-address :user-agent}."
   [id tenant-id context now]
-  (merge {:id id :tenant-id tenant-id :action :data-export :created-at now}
-         (select-keys context [:actor-id :actor-email :ip-address :user-agent])))
+  (merge context {:id id :tenant-id tenant-id :action :data-export :created-at now}))

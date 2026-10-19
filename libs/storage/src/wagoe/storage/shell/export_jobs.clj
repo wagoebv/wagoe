@@ -8,7 +8,8 @@
   (:require [clojure.tools.logging :as log]
             [wagoe.platform.ports.privacy :as privacy]
             [wagoe.storage.core.export-jobs :as core]
-            [wagoe.storage.ports :as ports])
+            [wagoe.storage.ports :as ports]
+            [wagoe.storage.shell.data-export :as data-export])
   (:import [java.io ByteArrayOutputStream]
            [java.time Instant]))
 
@@ -94,31 +95,12 @@
          :body    (java.io.ByteArrayInputStream. ^bytes (:bytes file))}
         (throw (ex-info "The export archive is gone" {:type :not-found :export-id id}))))))
 
-(defn- purge-job!
-  "Delete `job`'s archive, then the job. An archive storage cannot delete
-   keeps its job, so the next run tries again."
-  [store file-storage {:keys [id file-key]}]
-  (when (and file-key
-             (not (ports/delete-file file-storage file-key))
-             (ports/file-exists? file-storage file-key))
-    (throw (ex-info (str "Could not delete export archive " file-key) {:type :internal-error :key file-key})))
-  (ports/remove-export-job! store id))
-
-(def ^:private page-size 500)
-
 (defrecord ExportArchiveRetention [store file-storage]
   privacy/IRetentionPolicy
   (purge-before! [_ cutoff]
-    (loop [n 0 failed #{}]
-      (let [page    (ports/export-jobs-created-before store cutoff page-size)
-            batch   (remove (comp failed :id) page)
-            stuck   (into #{} (keep #(try (purge-job! store file-storage %) nil
-                                          (catch Exception _ (:id %))))
-                          batch)
-            deleted (- (count batch) (count stuck))
-            failed  (into failed stuck)]
-        (cond
-          (and (pos? deleted) (= page-size (count page))) (recur (+ n deleted) failed)
-          (seq failed) (throw (ex-info (str "Could not delete " (count failed) " export archives; " (+ n deleted) " deleted")
-                                       {:type :internal-error :ids (vec (sort failed)) :deleted (+ n deleted)}))
-          :else        (+ n deleted))))))
+    (data-export/purge-in-pages! #(ports/export-jobs-created-before store cutoff %)
+                                 :id
+                                 (fn [{:keys [id file-key]}]
+                                   (when file-key (data-export/delete-or-confirm-gone! file-storage file-key))
+                                   (ports/remove-export-job! store id))
+                                 "export archives")))

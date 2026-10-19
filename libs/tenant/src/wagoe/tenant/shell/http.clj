@@ -307,10 +307,11 @@
 ;; =============================================================================
 
 (defn- audit-context [request]
-  {:actor-id    (get-in request [:user :id])
-   :actor-email (get-in request [:user :email])
-   :ip-address  (client-ip/request-ip request)
-   :user-agent  (get-in request [:headers "user-agent"])})
+  (let [actor (or (:user request) (get-in request [:session :user]))]
+    {:actor-id    (:id actor)
+     :actor-email (:email actor)
+     :ip-address  (client-ip/request-ip request)
+     :user-agent  (get-in request [:headers "user-agent"])}))
 
 (defn export-tenant-handler
   "A tenant's data export: what every module holds about it. Recorded in the

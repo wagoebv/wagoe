@@ -34,32 +34,41 @@
                      (when (ports/file-exists? storage key)
                        (throw (ex-info (str "Could not read upload " key) {:type :internal-error :key key}))))})))
 
-(defn- delete-upload!
-  "Delete the file at `key`, then its record. A file storage cannot delete
+(defn delete-or-confirm-gone!
+  "Delete the file at `key`, or throw when it is still there: the caller
    keeps its record, so the next run tries again."
-  [upload-index storage key]
+  [storage key]
   (when-not (or (ports/delete-file storage key)
                 (not (ports/file-exists? storage key)))
-    (throw (ex-info (str "Could not delete upload " key) {:type :internal-error :key key})))
-  (ports/remove-upload! upload-index key))
+    (throw (ex-info (str "Could not delete " key) {:type :internal-error :key key}))))
 
-;; One file that will not delete must not hold back the rest: the oldest come
-;; first, so it would fail every run before anything newer was reached.
+(defn purge-in-pages!
+  "Purge what `(fetch-page limit)` returns, a page at a time, with
+   `(purge-one! item)`, until a page is short. Returns the number purged;
+   throws, after purging the rest, naming the `(id-of item)`s that failed.
+
+   One item that will not purge must not hold back the rest: the oldest come
+   first, so it would fail every run before anything newer was reached."
+  [fetch-page id-of purge-one! noun]
+  (loop [n 0 failed #{}]
+    (let [page    (fetch-page page-size)
+          batch   (remove (comp failed id-of) page)
+          stuck   (into #{} (keep #(try (purge-one! %) nil (catch Exception _ (id-of %)))) batch)
+          deleted (- (count batch) (count stuck))
+          n       (+ n deleted)
+          failed  (into failed stuck)]
+      (cond
+        (and (= page-size (count page)) (pos? deleted)) (recur n failed)
+        (seq failed) (throw (ex-info (str "Could not delete " (count failed) " " noun "; " n " deleted")
+                                     {:type :internal-error :keys (vec (sort failed)) :deleted n}))
+        :else        n))))
+
 (defrecord UploadRetention [upload-index storage]
   privacy/IRetentionPolicy
   (purge-before! [_ cutoff]
-    (loop [n 0 failed #{}]
-      (let [batch   (ports/uploads-stored-before upload-index cutoff page-size)
-            stuck   (into #{} (keep (fn [{:keys [key]}]
-                                      (try (delete-upload! upload-index storage key) nil
-                                           (catch Exception _ key))))
-                          (remove (comp failed :key) batch))
-            failed  (into failed stuck)
-            deleted (count (remove (comp failed :key) batch))
-            n       (+ n deleted)]
-        (if (and (= (count batch) page-size) (pos? deleted))
-          (recur n failed)
-          (if (seq failed)
-            (throw (ex-info (str "Could not delete " (count failed) " uploads; " n " deleted")
-                            {:type :internal-error :keys (vec (sort failed)) :deleted n}))
-            n))))))
+    (purge-in-pages! #(ports/uploads-stored-before upload-index cutoff %)
+                     :key
+                     (fn [{:keys [key]}]
+                       (delete-or-confirm-gone! storage key)
+                       (ports/remove-upload! upload-index key))
+                     "uploads")))
