@@ -6,14 +6,16 @@
      :wagoe.external/imap   — IMAP mailbox reader
      :wagoe.external/twilio — Twilio SMS / WhatsApp
      :wagoe.external/ftps   — FTPS file source
+     :wagoe.external/soap   — SOAP 1.1 client
 
-   All four keys are opt-in: add them to :active in config.edn to enable.
+   All five keys are opt-in: add them to :active in config.edn to enable.
    They are shipped in :inactive by default."
   (:require [wagoe.external.ports :as ports]
             [wagoe.external.shell.adapters.smtp :as smtp-adapter]
             [wagoe.external.shell.adapters.imap :as imap-adapter]
             [wagoe.external.shell.adapters.twilio :as twilio-adapter]
             [wagoe.external.shell.adapters.ftps :as ftps-adapter]
+            [wagoe.external.shell.adapters.soap :as soap-adapter]
             [clojure.tools.logging :as log]
             [integrant.core :as ig]))
 
@@ -78,3 +80,15 @@
 (defmethod ig/halt-key! :wagoe.external/ftps
   [_ _adapter]
   (log/info "FTPS file source halted (no cleanup required)"))
+
+;; =============================================================================
+;; SOAP
+;; =============================================================================
+
+(defmethod ig/init-key :wagoe.external/soap
+  [_ config]
+  (soap-adapter/create-soap-client config))
+
+(defmethod ig/halt-key! :wagoe.external/soap
+  [_ _adapter]
+  (log/info "SOAP client halted (no cleanup required)"))
