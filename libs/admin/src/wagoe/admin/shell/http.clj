@@ -73,6 +73,11 @@
        :get {:handler (crud/field-options-handler admin-service schema-provider config)
              :summary "HTMX options of a foreign key's combobox"}}]
 
+     ["/:entity/lookup"
+      {:middleware [auth-middleware]
+       :get {:handler (crud/lookup-handler admin-service schema-provider config)
+             :summary "HTMX options of a combobox choosing one of the entity's rows"}}]
+
      ["/:entity/filters"
       {:middleware [auth-middleware]
        :get {:handler (list-handlers/filter-drawer-handler admin-service schema-provider config)

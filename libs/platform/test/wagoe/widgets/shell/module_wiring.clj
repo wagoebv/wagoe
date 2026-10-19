@@ -21,6 +21,10 @@
 
 (defmethod ig/halt-key! :wagoe/widgets-routes [_ _] nil)
 
+;; What it declares for the permission registry, read by discovery.
+(def authorization
+  {:roles {:widgets/viewer {:permissions #{:widgets/read}}}})
+
 (defmethod ig/init-key :wagoe/widgets [_ config] config)
 (defmethod ig/halt-key! :wagoe/widgets [_ _] nil)
 

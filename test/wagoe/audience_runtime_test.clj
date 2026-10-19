@@ -62,8 +62,8 @@
       (testing "and its routes are mounted, not merely defined"
         (is (seq (:api (:wagoe/audience-routes system))))
         (is (some #{(ig/ref :wagoe/audience-routes)}
-                  (get-in (sys-config/ig-config (audience-config))
-                          [:wagoe/http-handler :module-routes]))
+                  (map :contribution (get-in (sys-config/ig-config (audience-config))
+                                             [:wagoe/http-handler :module-routes])))
             "the routes component exists but the handler never receives it")))))
 
 (deftest ^:integration an-audience-segments-the-real-users-table

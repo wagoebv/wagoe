@@ -231,7 +231,7 @@
 
 (def ^:private no-graph
   {:components {} :http {} :auth {} :search {} :data-export {} :retention {}
-   :middleware [] :routes [] :job-handlers []})
+   :authorization {} :middleware [] :routes [] :job-handlers []})
 
 (defn- merge-slots
   "`part` over `acc`, refusing a key both set. Each is one slot on `target`,
@@ -270,6 +270,12 @@
   [acc k policies]
   (merge-slots ":wagoe/retention" acc k policies))
 
+(defn module-routes-ref
+  "`routes`, a ref to a routes contribution, with the module that contributes
+   it, so every route it holds can be tagged `:wagoe/module`."
+  [k routes]
+  {:wagoe/module k :contribution routes})
+
 (defn- add-graph
   "Fold module `k`'s graph into `acc`. One step for framework and discovered
    modules alike: a discovered module kept only `:components` and lost its
@@ -280,19 +286,27 @@
    `:auth` holds sign-in hooks, one module each, for the user module, and
    `:search` index definitions by id, for the search module. `:data-export`
    and `:retention` hold refs to a module's `wagoe.platform.ports.privacy`
-   implementations, by id."
-  [acc k {:keys [components http auth search data-export retention routes job-handlers]}]
-  (-> acc
-      (update :components #(merge-slots "the system config" % k components))
-      (update :http merge-http k (dissoc http :extra-middleware))
-      (update :auth merge-auth k auth)
-      (update :search merge-search k search)
-      (update :data-export merge-data-export k data-export)
-      (update :retention merge-retention k retention)
-      (cond-> (contains? http :extra-middleware)
-        (update :middleware conj (:extra-middleware http)))
-      (update :routes into routes)
-      (update :job-handlers into job-handlers)))
+   implementations, by id. `:authorization` is what the module declares for
+   the permission registry; every module gets an entry, as every module has
+   `<module>/read` and `<module>/write`.
+
+   `module` names the module in the registry and on its routes: the library,
+   `:wagoe/payments` for `:wagoe/payment-provider`, so keys one library owns
+   are one module."
+  ([acc k graph] (add-graph acc k k graph))
+  ([acc k module {:keys [components http auth search data-export retention authorization routes job-handlers]}]
+   (-> acc
+       (update :components #(merge-slots "the system config" % k components))
+       (update :http merge-http k (dissoc http :extra-middleware))
+       (update :auth merge-auth k auth)
+       (update :search merge-search k search)
+       (update :data-export merge-data-export k data-export)
+       (update :retention merge-retention k retention)
+       (update-in [:authorization module] #(merge-with merge % authorization))
+       (cond-> (contains? http :extra-middleware)
+         (update :middleware conj (:extra-middleware http)))
+       (update :routes into (map #(module-routes-ref module %)) routes)
+       (update :job-handlers into job-handlers))))
 
 (defn- scaffold-components
   "The four keys a scaffolded module `k` gets: what `module_wiring.clj`
@@ -351,7 +365,12 @@
            ;; also refs a `:wagoe/<name>-routes` component by convention.
             own-graph (when loadable?
                         (when-let [build (resolve-var (symbol (str wiring) "ig-config"))]
-                          (build settings {:config {:active active}})))]
+                          (build settings {:config {:active active}})))
+            ;; What the module declares for the permission registry: a var,
+            ;; so the `ig-config` `bb scaffold entity` installs leaves it be.
+            declared  (when loadable?
+                        (let [v (resolve-var (symbol (str wiring) "authorization"))]
+                          (when (var? v) @v)))]
         (cond
           (false? (:enabled? settings))
           acc
@@ -372,7 +391,9 @@
                           "Discovered module with its own graph"
                           "Discovered scaffolded module")
                         {:module module})
-              (add-graph acc k (over-scaffold k settings own-graph))))))
+              (add-graph acc k (cond-> (over-scaffold k settings own-graph)
+                                 (and declared (nil? (:authorization own-graph)))
+                                 (assoc :authorization declared)))))))
     no-graph
     (scaffolded-module-keys active known-keys))))
 
@@ -396,7 +417,8 @@
                       e)))))
 
 (defn discovered-route-refs
-  "Integrant refs to the routes of every discovered module that has any.
+  "Integrant refs to the routes of every discovered module that has any, each
+   with its module key (`module-routes-ref`).
 
    The HTTP handler cannot name a generated module, so it takes the routes as a
    collection — this is what the application puts in `:module-routes`.
@@ -411,9 +433,10 @@
   ([active known-keys] (discovered-route-refs active known-keys nil))
   ([active known-keys built]
    (into []
-         (comp (map #(keyword "wagoe" (str (name %) "-routes")))
-               (filter #(or (nil? built) (contains? built %)))
-               (map ig/ref))
+         (keep (fn [k]
+                 (let [routes (keyword "wagoe" (str (name k) "-routes"))]
+                   (when (or (nil? built) (contains? built routes))
+                     (module-routes-ref k (ig/ref routes))))))
          (scaffolded-module-keys active known-keys))))
 
 ;; =============================================================================
@@ -611,7 +634,7 @@
          (assert-redis-host! k (get active k) (:wagoe/profile (:config ctx)))
          (cond
            (load-wiring! wiring)
-           (add-graph acc k (module-graph resolve-var k lib (get active k) ctx))
+           (add-graph acc k (keyword "wagoe" lib) (module-graph resolve-var k lib (get active k) ctx))
 
            (contains? optional-modules k)
            (do (log/info (str "Skipping " k ": " wiring " is not on this classpath.")

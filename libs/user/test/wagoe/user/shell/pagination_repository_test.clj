@@ -147,3 +147,11 @@
   (let [emails #(set (map :email (:users (ports/find-users @test-repository {:filter-email-contains %}))))]
     (is (= #{"a_b@example.com"} (emails "A_B")) "_ is literal (BOU-684)")
     (is (empty? (emails "%")) "% is literal")))
+
+(deftest ^:contract name-or-email-contains-matches-either
+  (create-test-user! {:email "ada@example.com" :name "Ada Lovelace"})
+  (create-test-user! {:email "grace@example.com" :name "Grace Hopper"})
+  (let [emails #(set (map :email (:users (ports/find-users @test-repository {:filter-name-or-email-contains %}))))]
+    (is (= #{"ada@example.com"} (emails "lovelace")) "by name")
+    (is (= #{"grace@example.com"} (emails "GRACE@")) "by email")
+    (is (empty? (emails "nobody")))))
