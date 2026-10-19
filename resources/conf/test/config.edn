@@ -82,7 +82,8 @@
    :base-path        "/web/admin"
    :require-role     :admin
    :entity-discovery {:mode      :allowlist
-                      :allowlist #{:users :tenants :e2e-orders :e2e-order-lines}}
+                      :allowlist #{:users :tenants :e2e-orders :e2e-order-lines
+                                   :e2e-customers :e2e-tickets}}
    :entities         #merge [#include "admin/users.edn"
                              #include "admin/tenants.edn"
                              ;; e2e fixture: an order is created with at least one
@@ -98,7 +99,17 @@
                                                                :editable    true
                                                                :on-delete   :cascade
                                                                :min         1}]}
-                              :e2e-order-lines {:label "Order line"}}]
+                              :e2e-order-lines {:label "Order line"}
+                              ;; More customers than :max-page-size: a ticket's
+                              ;; customer is a combobox.
+                              :e2e-customers   {:label       "E2E Customers"
+                                                :title-field :name
+                                                :has-many    [{:entity      :e2e-tickets
+                                                               :table       :e2e_tickets
+                                                               :foreign-key :customer-id
+                                                               :label       "Tickets"
+                                                               :fields      [:subject]}]}
+                              :e2e-tickets     {:label "Ticket"}}]
    :pagination       {:default-page-size 20
                       :max-page-size     200}}
 

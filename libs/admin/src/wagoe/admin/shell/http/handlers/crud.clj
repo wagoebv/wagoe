@@ -8,6 +8,7 @@
    [wagoe.admin.core.permissions :as permissions]
    [wagoe.admin.shell.permissions :as shell-permissions]
    [wagoe.admin.shell.http.support :as support]
+   [wagoe.shared.ui.core.combobox :as combobox]
    [clojure.tools.logging :as log]
    [ring.util.response :as ring-response]))
 
@@ -440,3 +441,24 @@
       (support/html-response request
                              (admin-ui/render-field-widget field value (get-in cfg [:fields field]) errors
                                                            (support/display-options config request))))))
+
+(defn field-options-handler
+  "GET /:entity/options/:field?q= — the options of a foreign key's combobox:
+   the parent rows whose label contains the typed text. The user has to be
+   able to view the entity and the parent whose labels this lists."
+  [admin-service schema-provider _config]
+  (fn [request]
+    (let [user        (support/require-admin-user! request)
+          entity-name (support/get-entity-name request)
+          _           (when-not (ports/validate-entity-exists schema-provider entity-name)
+                        (throw (ex-info "Unknown entity" {:type :not-found :entity-name entity-name})))
+          _           (shell-permissions/assert-can-view-entity!
+                       user entity-name (ports/get-entity-config schema-provider entity-name))
+          field       (keyword (get-in request [:path-params :field]))
+          found       (support/search-foreign-key-options admin-service schema-provider entity-name field
+                                                          (combobox/query request))
+          _           (when-not found
+                        (throw (ex-info "No such foreign key" {:type :not-found :entity-name entity-name :field field})))]
+      (shell-permissions/assert-can-view-entity! user (:parent found) (:parent-cfg found))
+      (support/html-response request
+                             (combobox/options field (:options found) [:t :admin/combobox-no-matches])))))

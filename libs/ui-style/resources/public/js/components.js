@@ -137,3 +137,124 @@ document.addEventListener('alpine:init', function () {
     } catch (e) {}
   });
 })();
+
+/**
+ * Combobox (typeahead), rendered by wagoe.shared.ui.core.combobox.
+ *
+ * The server renders the options into the listbox; this sends the typed text
+ * as the query, moves through the options with the arrow keys, picks one into
+ * the hidden value input on Enter or click, and closes on Escape.
+ */
+document.addEventListener('alpine:init', function () {
+  window.Alpine.data('combobox', function () {
+    return {
+      open: false,
+      active: -1,
+      init: function () {
+        var self = this;
+        this.chosen = { value: this.$refs.value.value, label: this.$refs.input.value };
+        // The text input has no name, so htmx would send nothing. Only its
+        // request: the hidden input posts the field's live validation.
+        this.$el.addEventListener('htmx:configRequest', function (e) {
+          if (e.detail.elt !== self.$refs.input) return;
+          e.detail.parameters[self.$el.dataset.queryParam] = self.$refs.input.value;
+        });
+        this.$el.addEventListener('htmx:afterSwap', function () {
+          self.active = -1;
+          self.open = document.activeElement === self.$refs.input;
+          self.highlight();
+        });
+      },
+      items: function () {
+        return Array.prototype.slice.call(
+          this.$refs.listbox.querySelectorAll('[role="option"][data-value]'));
+      },
+      // Typed text no longer names the chosen row.
+      typed: function () {
+        this.$refs.value.value = '';
+      },
+      keydown: function (e) {
+        var items = this.items();
+        switch (e.key) {
+          case 'ArrowDown':
+          case 'ArrowUp':
+            e.preventDefault();
+            if (!items.length) {
+              this.$refs.input.dispatchEvent(new CustomEvent('combobox:open'));
+              return;
+            }
+            this.open = true;
+            // From none, ArrowUp lands on the last option.
+            var step = e.key === 'ArrowDown' ? 1 : -1;
+            var from = this.active < 0 && step < 0 ? 0 : this.active;
+            this.active = (from + step + items.length) % items.length;
+            this.highlight();
+            break;
+          case 'Enter':
+            if (this.open && this.active >= 0) {
+              e.preventDefault();
+              this.pick(items[this.active]);
+            } else {
+              this.settle();
+            }
+            break;
+          case 'Escape':
+            if (this.open) {
+              e.preventDefault();
+              e.stopPropagation();
+              this.close();
+            }
+            break;
+          case 'Tab':
+            this.close();
+            break;
+        }
+      },
+      highlight: function () {
+        var active = this.active;
+        var items = this.items();
+        items.forEach(function (el, i) {
+          el.setAttribute('aria-selected', i === active ? 'true' : 'false');
+        });
+        if (items[active]) {
+          var el = items[active];
+          var list = this.$refs.listbox;
+          this.$refs.input.setAttribute('aria-activedescendant', el.id);
+          // Scroll the list only: scrollIntoView would scroll every ancestor.
+          if (el.offsetTop < list.scrollTop) {
+            list.scrollTop = el.offsetTop;
+          } else if (el.offsetTop + el.offsetHeight > list.scrollTop + list.clientHeight) {
+            list.scrollTop = el.offsetTop + el.offsetHeight - list.clientHeight;
+          }
+        } else {
+          this.$refs.input.removeAttribute('aria-activedescendant');
+        }
+      },
+      choose: function (e) {
+        var el = e.target.closest('[role="option"][data-value]');
+        if (el) this.pick(el);
+      },
+      pick: function (el) {
+        this.chosen = { value: el.dataset.value, label: el.dataset.label };
+        this.$refs.value.value = el.dataset.value;
+        this.$refs.input.value = el.dataset.label;
+        this.close();
+        this.$refs.value.dispatchEvent(new Event('change', { bubbles: true }));
+      },
+      // Left without a pick: back to the chosen row, so the text shown is what
+      // the form submits. Emptied text clears the value.
+      settle: function () {
+        if (!this.$refs.value.value && this.$refs.input.value.trim()) {
+          this.$refs.value.value = this.chosen.value;
+          this.$refs.input.value = this.chosen.label;
+        }
+      },
+      close: function () {
+        this.open = false;
+        this.active = -1;
+        this.highlight();
+        this.settle();
+      }
+    };
+  });
+});
