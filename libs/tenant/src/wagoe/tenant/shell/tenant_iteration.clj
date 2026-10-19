@@ -12,6 +12,22 @@
             [wagoe.tenant.ports :as ports]
             [clojure.tools.logging :as log]))
 
+(defn- each-schema
+  "`(f item)` for each of `items`, in a transaction on `(schema-of item)`.
+   Failures are logged and counted; the rest still run."
+  [schema-provider db-ctx items schema-of f]
+  (reduce
+   (fn [acc item]
+     (let [schema (schema-of item)]
+       (try
+         (let [r (ports/with-tenant-schema schema-provider db-ctx schema (fn [_tx] (f item)))]
+           (-> acc (update :processed inc) (update :results conj r)))
+         (catch Exception e
+           (log/error e "Tenant-schema step failed" {:schema schema})
+           (update acc :failed inc)))))
+   {:processed 0 :failed 0 :results []}
+   items))
+
 (defn for-each-tenant-schema
   "For each provisioned tenant schema, run `(f schema-name)` inside that
    schema's search_path via the schema provider's `with-tenant-schema`.
@@ -28,20 +44,8 @@
    Returns:
      {:processed n :failed n :results [<f results for succeeded tenants>]}"
   [schema-provider db-ctx f]
-  (let [schemas (ports/list-tenant-schemas schema-provider db-ctx)]
-    (reduce
-     (fn [acc schema]
-       (try
-         (let [r (ports/with-tenant-schema schema-provider db-ctx schema
-                   (fn [_tx] (f schema)))]
-           (-> acc
-               (update :processed inc)
-               (update :results conj r)))
-         (catch Exception e
-           (log/error e "Tenant-schema job step failed" {:schema schema})
-           (update acc :failed inc))))
-     {:processed 0 :failed 0 :results []}
-     schemas)))
+  (each-schema schema-provider db-ctx (ports/list-tenant-schemas schema-provider db-ctx)
+               identity f))
 
 (def ^:private tenant-page-size 100)
 
@@ -65,14 +69,5 @@
 
    Returns {:processed n :failed n :results [<f's result per tenant that ran>]}."
   [tenant-service schema-provider db-ctx f]
-  (reduce
-   (fn [acc {:keys [id schema-name] :as tenant}]
-     (try
-       (let [r (ports/with-tenant-schema schema-provider db-ctx schema-name
-                 (fn [_tx] (binding [db/*tenant-id* id] (f tenant))))]
-         (-> acc (update :processed inc) (update :results conj r)))
-       (catch Exception e
-         (log/error e "Tenant step failed" {:tenant-id id :schema schema-name})
-         (update acc :failed inc))))
-   {:processed 0 :failed 0 :results []}
-   (active-tenants tenant-service)))
+  (each-schema schema-provider db-ctx (active-tenants tenant-service) :schema-name
+               (fn [tenant] (binding [db/*tenant-id* (:id tenant)] (f tenant)))))

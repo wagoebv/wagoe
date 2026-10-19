@@ -500,8 +500,9 @@
 ;; Transaction Management
 ;; =============================================================================
 
-(def ^:dynamic ^:private *after-commit*
-  "What the outermost `with-transaction*` on this thread calls once it commits."
+(def ^:dynamic ^:private *tx-state*
+  "The outermost `with-transaction*` on this thread's {:hooks [..] :memo {..}}:
+   what it calls once it commits, and what was remembered while it was open."
   nil)
 
 (defn after-commit!
@@ -509,8 +510,20 @@
    commits, and never if it rolls back; with none open, now. For work another
    system sees, such as a job on a queue outside the database."
   [f]
-  (if-let [hooks *after-commit*]
-    (do (swap! hooks conj f) nil)
+  (if-let [state *tx-state*]
+    (do (swap! state update :hooks conj f) nil)
+    (f)))
+
+(defn remembered-in-transaction
+  "`(f)`, called once per `k` for the transaction open on this thread; with
+   none open, each time. For a catalog answer the transaction's locks keep
+   true until it ends."
+  [k f]
+  (if-let [state *tx-state*]
+    (let [memo (:memo @state)]
+      (if (contains? memo k)
+        (get memo k)
+        (let [v (f)] (swap! state assoc-in [:memo k] v) v)))
     (f)))
 
 (defn- run-after-commit!
@@ -544,10 +557,10 @@
 
     ;; A nested call joins the outer transaction, so only the outermost runs
     ;; the after-commit hooks.
-    (let [outermost? (nil? *after-commit*)
-          hooks      (or *after-commit* (atom []))
+    (let [outermost? (nil? *tx-state*)
+          state      (or *tx-state* (atom {:hooks [] :memo {}}))
           result
-          (binding [*after-commit* hooks]
+          (binding [*tx-state* state]
             (jdbc/with-transaction [tx-conn (current-datasource ctx)]
               (binding [*transaction-datasource* tx-conn
                         *outside-datasource*     (or *outside-datasource* (current-datasource ctx))]
@@ -569,5 +582,5 @@
                               {:adapter (protocols/dialect (:adapter ctx))
                                :error (redaction/loggable-message e)})
                     (throw e))))))]
-      (when outermost? (run-after-commit! @hooks))
+      (when outermost? (run-after-commit! (:hooks @state)))
       result)))

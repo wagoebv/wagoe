@@ -49,3 +49,16 @@
           (reset! seen [])
           (db/after-commit! #(swap! seen conj :now))
           (is (= [:now] @seen)))))))
+
+(deftest ^:integration a-transaction-remembers-an-answer-until-it-ends
+  (with-table
+    (fn [ctx]
+      (let [calls (atom 0)
+            ask   #(db/remembered-in-transaction ::k (fn [] (swap! calls inc)))]
+        (db/with-transaction [tx ctx]
+          (is (= 1 (ask)))
+          (db/with-transaction [_inner tx]
+            (is (= 1 (ask)) "a nested transaction shares it")))
+        (db/with-transaction [_tx ctx]
+          (is (= 2 (ask)) "the next transaction asks again"))
+        (is (= 3 (ask)) "and outside one, every time")))))

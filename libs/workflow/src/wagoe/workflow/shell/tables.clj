@@ -23,13 +23,15 @@
     :ensure!  entity-uuid/ensure-entity-uuid!}])
 
 (defn- tables-in?
-  "Whether `schema` holds workflow_instances, on `conn`. Asked each time: a
-   remembered yes outlives a schema dropped and provisioned again, on this
-   node or another, and a missing table then resolves to public's."
+  "Whether `schema` holds workflow_instances, on `conn`. Asked once per
+   transaction, not per process: a process-wide yes outlived a schema dropped
+   and provisioned again, and a missing table then resolves to public's."
   [conn schema]
-  (:present (jdbc/execute-one! conn ["SELECT to_regclass(?) IS NOT NULL AS present"
-                                     (str schema ".workflow_instances")]
-                               {:builder-fn rs/as-unqualified-lower-maps})))
+  (db/remembered-in-transaction
+   [::tables schema]
+   #(:present (jdbc/execute-one! conn ["SELECT to_regclass(?) IS NOT NULL AS present"
+                                       (str schema ".workflow_instances")]
+                                 {:builder-fn rs/as-unqualified-lower-maps}))))
 
 (defn- refusal [message data]
   (ex-info message (merge {:type :configuration-error :message message} data)))

@@ -149,32 +149,32 @@
       ;; The jobs library is an optional runtime companion.
       (let [jobs-ports (the-ns 'wagoe.jobs.ports)
             create-fn  (ns-resolve (the-ns 'wagoe.jobs.core.job) 'create-job)
-            in-tx?     (and conn ((ns-resolve jobs-ports 'transactional-queue?) job-queue))
-            enqueue-fn (if in-tx?
+            logged     (fn [job enqueue]
+                         (try (enqueue)
+                              (catch Exception e
+                                (log/warn e "Failed to enqueue side-effect job"
+                                          {:effect (:job-type job) :instance-id (:id instance)}))))
+            enqueue!   (if (and conn ((ns-resolve jobs-ports 'transactional-queue?) job-queue))
                          (let [f (ns-resolve jobs-ports 'enqueue-in-tx!)]
                            ;; A savepoint, as for hooks: the failure is swallowed.
-                           (fn [q queue job] (db/in-savepoint conn #(f q conn queue job))))
-                         (ns-resolve jobs-ports 'enqueue-job!))]
+                           (fn [job] (logged job #(db/in-savepoint conn (fn [] (f job-queue conn :default job))))))
+                         (let [f (ns-resolve jobs-ports 'enqueue-job!)]
+                           ;; A queue outside the transaction gets the job once it
+                           ;; commits, so a worker never runs it against a write
+                           ;; that may yet roll back.
+                           (fn [job] (db/after-commit! #(logged job (fn [] (f job-queue :default job)))))))]
         (doseq [effect-key side-effect-keys]
-          (let [job      (create-fn (cond-> {:job-type effect-key
-                                             :args     {:instance-id  (str (:id instance))
-                                                        :workflow-id  (name (:workflow-id instance))
-                                                        :from-state   (name (:from-state audit-entry))
-                                                        :to-state     (name (:to-state audit-entry))
-                                                        :context      (or context {})}}
-                                      ;; So the worker runs it in the tenant's schema,
-                                      ;; where the instance is.
-                                      db/*tenant-id* (assoc :metadata {:tenant-id (str db/*tenant-id*)}))
-                                    (UUID/randomUUID)
-                                    (Instant/now))
-                enqueue! #(try
-                            (enqueue-fn job-queue :default job)
-                            (catch Exception e
-                              (log/warn e "Failed to enqueue side-effect job"
-                                        {:effect effect-key :instance-id (:id instance)})))]
-            ;; A queue outside the transaction gets the job once it commits, so
-            ;; a worker never runs it against a write that may yet roll back.
-            (if in-tx? (enqueue!) (db/after-commit! enqueue!)))))
+          (enqueue! (create-fn (cond-> {:job-type effect-key
+                                        :args     {:instance-id  (str (:id instance))
+                                                   :workflow-id  (name (:workflow-id instance))
+                                                   :from-state   (name (:from-state audit-entry))
+                                                   :to-state     (name (:to-state audit-entry))
+                                                   :context      (or context {})}}
+                                 ;; So the worker runs it in the tenant's schema,
+                                 ;; where the instance is.
+                                 db/*tenant-id* (assoc :metadata {:tenant-id (str db/*tenant-id*)}))
+                               (UUID/randomUUID)
+                               (Instant/now)))))
       (catch Exception e
         (log/warn e "Failed to enqueue side-effect jobs"
                   {:effects side-effect-keys :instance-id (:id instance)})))))

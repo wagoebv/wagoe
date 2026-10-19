@@ -108,6 +108,11 @@
    commits, never if it rolls back; with none open, now."
   execution/after-commit!)
 
+(def remembered-in-transaction
+  "`(f)`, called once per `k` for the transaction open on this thread; with
+   none open, each time."
+  execution/remembered-in-transaction)
+
 (defn current-transaction
   "The connection of the transaction `with-transaction` holds open on this
    thread, or nil. For a port that takes a caller's transaction explicitly."
