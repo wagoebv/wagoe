@@ -1,7 +1,8 @@
 (ns wagoe.devtools.core.config-editor
   "Pure functions for config diffing, dependency analysis, and formatting.
    FC/IS: no I/O, no logging."
-  (:require [clojure.set :as set]
+  (:require [clojure.pprint :as pp]
+            [clojure.set :as set]
             [clojure.string :as str]
             [integrant.core :as ig]))
 
@@ -97,3 +98,40 @@
                           (str pad (pr-str k) "\n" (format-config-tree v (inc indent)))
                           (str pad (pr-str k) " " (pr-str v)))))
        (str pad (pr-str cfg))))))
+
+(defn- pprint-map
+  "clojure.pprint's map printer without the commas, keyword keys sorted."
+  [m]
+  (let [entries (cond->> (seq m) (every? keyword? (keys m)) (sort-by key))]
+    (pp/pprint-logical-block :prefix "{" :suffix "}"
+      (loop [[[k v :as entry] & more] entries]
+        (when entry
+          (pp/pprint-logical-block
+           (pp/write-out k)
+           (print " ")
+           (pp/pprint-newline :linear)
+           (pp/write-out v))
+          (when more
+            (print " ")
+            (pp/pprint-newline :linear)
+            (recur more)))))))
+
+(defn- edn-dispatch
+  "simple-dispatch prints a record as a plain map; keep its tag, as pr-str does."
+  [x]
+  (if (map? x)
+    (do (when (record? x) (print (str "#" (.getName (class x)))))
+        (pprint-map x))
+    (pp/simple-dispatch x)))
+
+(defn format-edn
+  "`x` pretty-printed for the editor. Anything that is not a collection
+   (#inst, #uuid, a tagged literal) prints as pr-str prints it."
+  [x]
+  (binding [pp/*print-right-margin* 100
+            pp/*print-pprint-dispatch* edn-dispatch
+            *print-length* nil
+            *print-level* nil
+            *print-readably* true
+            *print-dup* false]
+    (str/trimr (with-out-str (pp/pprint x)))))
