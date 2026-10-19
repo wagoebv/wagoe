@@ -10,6 +10,7 @@
     (dialect [_] dialect)
     (now-ms-sql [_] nil)
     (key-columns [_ _ _ _] nil)
+    (unique-keys [_ _ _] nil)
     (jdbc-driver [_] jdbc-driver)
     (jdbc-url [_ _] nil)
     (pool-defaults [_] {})
@@ -27,15 +28,15 @@
 (deftest ^:unit create-adapter-and-context-delegate-to-core
   (let [adapter (adapter-stub :sqlite "org.sqlite.JDBC")
         datasource ::datasource]
-      (with-redefs [wagoe.platform.ports.database/validate-db-config (fn [cfg]
-                                                                                           (is (= :sqlite (:adapter cfg))))
-                    wagoe.platform.shell.adapters.database.factory/load-adapter-constructor (fn [_] (fn [] adapter))
-                    db-core/create-connection-pool (fn [arg cfg]
-                                                     (is (= adapter arg))
-                                                     (is (= {:adapter :sqlite
-                                                             :database-path "app.db"}
-                                                            cfg))
-                                                     datasource)]
+    (with-redefs [wagoe.platform.ports.database/validate-db-config (fn [cfg]
+                                                                     (is (= :sqlite (:adapter cfg))))
+                  wagoe.platform.shell.adapters.database.factory/load-adapter-constructor (fn [_] (fn [] adapter))
+                  db-core/create-connection-pool (fn [arg cfg]
+                                                   (is (= adapter arg))
+                                                   (is (= {:adapter :sqlite
+                                                           :database-path "app.db"}
+                                                          cfg))
+                                                   datasource)]
       (is (= adapter (sut/create-adapter {:adapter :sqlite :database-path "app.db"})))
       (is (= datasource (sut/create-datasource {:adapter :sqlite :database-path "app.db"})))
       (is (= {:adapter adapter
@@ -50,7 +51,7 @@
           valid  {:adapter (adapter-stub :h2 "org.h2.Driver") :datasource ::pool}]
       (with-redefs [db-core/db-context? (fn [ctx] (= valid ctx))
                     db-core/close-connection-pool! (fn [datasource]
-                                                      (swap! closed conj datasource))]
+                                                     (swap! closed conj datasource))]
         (sut/close-db-context! ::invalid)
         (sut/close-db-context! valid)
         (is (= [::pool] @closed)))))
@@ -61,7 +62,7 @@
                :datasource ::temp-ds}]
       (with-redefs [wagoe.platform.shell.adapters.database.factory/db-context (fn [_] ctx)
                     wagoe.platform.shell.adapters.database.factory/close-db-context! (fn [arg]
-                                                                                          (swap! closed conj arg))]
+                                                                                       (swap! closed conj arg))]
         (is (= :ok
                (sut/with-db {:adapter :h2 :database-path "mem:test"}
                  (fn [arg]
@@ -71,13 +72,13 @@
 
 (deftest ^:unit validation-and-managed-context-helpers-cover-common-branches
   (testing "validate-connection reports success and failure"
-      (with-redefs [wagoe.platform.shell.adapters.database.factory/with-db
-                    (fn [_ f]
-                      (f {:adapter ::ctx :datasource ::ds}))
-                    db-core/database-info
-                    (fn [_]
-                      {:adapter :sqlite
-                       :pool-info {:active 1}})]
+    (with-redefs [wagoe.platform.shell.adapters.database.factory/with-db
+                  (fn [_ f]
+                    (f {:adapter ::ctx :datasource ::ds}))
+                  db-core/database-info
+                  (fn [_]
+                    {:adapter :sqlite
+                     :pool-info {:active 1}})]
       (is (= {:status :success
               :adapter :sqlite
               :connection-pool {:active 1}
@@ -95,11 +96,11 @@
     (let [created (atom [])
           closed (atom [])]
       (with-redefs [wagoe.platform.shell.adapters.database.factory/db-context (fn [cfg]
-                                                                                   (swap! created conj cfg)
-                                                                                   {:adapter (:adapter cfg)
-                                                                                    :datasource (:adapter cfg)})
+                                                                                (swap! created conj cfg)
+                                                                                {:adapter (:adapter cfg)
+                                                                                 :datasource (:adapter cfg)})
                     wagoe.platform.shell.adapters.database.factory/close-db-context! (fn [ctx]
-                                                                                          (swap! closed conj (:datasource ctx)))]
+                                                                                       (swap! closed conj (:datasource ctx)))]
         (let [contexts (sut/create-managed-contexts {:main {:adapter :sqlite}
                                                      :cache {:adapter :h2}})]
           (is (= [{:adapter :sqlite} {:adapter :h2}] @created))

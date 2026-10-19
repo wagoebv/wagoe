@@ -337,6 +337,36 @@
                  (catch Exception _ nil))
             (close!)))))))
 
+(deftest ^:integration unique-keys-answer-on-every-engine
+  ;; The admin takes a table whose two foreign keys are unique together for a
+  ;; join table, so every engine has to name its keys.
+  (doseq [[label open] (live-backends)]
+    (testing label
+      (let [[{:keys [adapter datasource]} close!] (open)]
+        (try
+          (doseq [t ["uk_composite" "uk_probe"]]
+            (jdbc/execute! datasource [(str "DROP TABLE IF EXISTS " t)]))
+          (jdbc/execute! datasource [(str "CREATE TABLE uk_probe (id VARCHAR(64) PRIMARY KEY,"
+                                          " a_id VARCHAR(64) NOT NULL, b_id VARCHAR(64) NOT NULL,"
+                                          " code VARCHAR(20) UNIQUE, note VARCHAR(20))")])
+          (jdbc/execute! datasource ["CREATE UNIQUE INDEX uk_probe_ab ON uk_probe (a_id, b_id)"])
+          (jdbc/execute! datasource ["CREATE INDEX uk_probe_note ON uk_probe (note)"])
+          (jdbc/execute! datasource [(str "CREATE TABLE uk_composite (a_id VARCHAR(64) NOT NULL,"
+                                          " b_id VARCHAR(64) NOT NULL, PRIMARY KEY (b_id, a_id))")])
+          (testing "the primary key, a unique index and a unique constraint; not a plain index"
+            (is (= #{["id"] ["a_id" "b_id"] ["code"]}
+                   (set (protocols/unique-keys adapter datasource :uk_probe)))))
+          (testing "a composite primary key, in key order"
+            (is (= [["b_id" "a_id"]] (protocols/unique-keys adapter datasource :uk_composite))))
+          (testing "in a transaction too"
+            (jdbc/with-transaction [tx datasource]
+              (is (= [["b_id" "a_id"]] (protocols/unique-keys adapter tx :uk_composite)))))
+          (finally
+            (doseq [t ["uk_composite" "uk_probe"]]
+              (try (jdbc/execute! datasource [(str "DROP TABLE IF EXISTS " t)])
+                   (catch Exception _ nil)))
+            (close!)))))))
+
 (deftest ^:integration column-names-come-back-lower-case-on-every-engine
   (testing "the port promises one shape, so a caller can compare without guessing"
     (doseq [[label open] (live-backends)]

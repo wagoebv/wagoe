@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **Admin many-to-many through a join table** (BOU-778): detected, edited with checkboxes or a multiple combobox, shown
+  as chips, filterable. Allowlist the join table; `:join-table` overrides detection.
 - **Admin and tenant data exports as background jobs** (BOU-759): `POST /api/v1/users/:id/export-jobs` and
   `/tenants/:id/export-jobs`, audited when asked for. Needs the storage and jobs modules.
 - **`shared-ui` data table with sortable headers, filter inputs and infinite scroll** (BOU-756): `data-table`,

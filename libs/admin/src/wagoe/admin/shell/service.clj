@@ -180,21 +180,6 @@
         (first non-nil-clauses)
         (vec (cons :and non-nil-clauses))))))
 
-(defn- list-where
-  "The WHERE a list applies for `options`: its search, its filters and, for a
-   soft-deleting entity, live rows only. The overview's facet and summary
-   queries use it too, so they count exactly the rows the list shows."
-  [adapter entity-config field-aliases options]
-  (let [search-fields (mapv #(get field-aliases % %) (:search-fields entity-config))
-        filters       (when-let [filters (:filters options)]
-                        (into {} (map (fn [[field spec]] [(get field-aliases field field) spec]))
-                              filters))]
-    (combine-where-clauses
-     [(build-search-where adapter (:search options) search-fields)
-      (build-filter-where adapter filters)
-      (when (:soft-delete entity-config false)
-        [:= (get field-aliases :deleted-at :deleted_at) nil])])))
-
 ;; =============================================================================
 ;; Query Config Resolution
 ;; =============================================================================
@@ -266,6 +251,77 @@
      :join-clause       (:join overrides)
      :field-aliases     (:field-aliases overrides {})
      :soft-delete-table (or (:soft-delete-table overrides) table-name)}))
+
+;; =============================================================================
+;; Many-to-many (BOU-778)
+;; =============================================================================
+
+(defn- link-rel
+  "The many-to-many relation of `entity-config` named `k`, or nil."
+  [entity-config k]
+  (some #(when (= k (:key %)) %) (:many-to-many entity-config)))
+
+(defn- qualified-column
+  "field → its column in a query read through `qc`, qualified with its table
+   or alias, so it cannot mean a join table's column of the same name."
+  [{:keys [from-clause field-aliases select-clause]}]
+  (let [from  (first from-clause)
+        owner (name (if (vector? from) (second from) from))]
+    (fn [field]
+      (let [col (or (get field-aliases field)
+                    (some #(when (and (keyword? %)
+                                      (str/ends-with? (name %) (str "." (case-conversion/kebab-case->snake-case-string (name field)))))
+                             %)
+                          select-clause)
+                    (case-conversion/kebab-case->snake-case-keyword field))]
+        (if (str/includes? (name col) ".") col (keyword (str owner "." (name col))))))))
+
+(defn- link-column
+  "Column `field` of the join table, aliased `lnk` in link queries."
+  [field]
+  (keyword (str "lnk." (case-conversion/kebab-case->snake-case-string (name field)))))
+
+(defn- link-exists
+  "Rows of `entity-config` that relation `rel` links to `id`."
+  [entity-config rel id]
+  (let [own ((qualified-column (resolve-query-config entity-config)) (:primary-key entity-config :id))]
+    [:exists {:select [1]
+              :from   [[(:table rel) :lnk]]
+              :where  [:and [:= (link-column (:foreign-key rel)) own]
+                       [:= (link-column (:other-key rel)) (str id)]]}]))
+
+(defn- link-filters
+  "`filters` as [plain-filters link-conditions]: a filter on a many-to-many
+   key, \"has X\" (:has) or \"has no X\" (:has-not), becomes an EXISTS on its
+   join table."
+  [entity-config filters]
+  (reduce-kv (fn [[plain conds] field spec]
+               (if-let [rel (link-rel entity-config field)]
+                 (let [{:keys [op value]} (if (map? spec) spec {:op :has :value spec})]
+                   [plain (cond-> conds
+                            (not (str/blank? (str value)))
+                            (conj (let [exists (link-exists entity-config rel value)]
+                                    (if (= :has-not (keyword op)) [:not exists] exists))))])
+                 [(assoc plain field spec) conds]))
+             [{} []]
+             (or filters {})))
+
+(defn- list-where
+  "The WHERE a list applies for `options`: its search, its filters and, for a
+   soft-deleting entity, live rows only. The overview's facet and summary
+   queries use it too, so they count exactly the rows the list shows."
+  [adapter entity-config field-aliases options]
+  (let [search-fields (mapv #(get field-aliases % %) (:search-fields entity-config))
+        [plain links] (link-filters entity-config (:filters options))
+        filters       (into {} (map (fn [[field spec]] [(get field-aliases field field) spec]))
+                            plain)]
+    (combine-where-clauses
+     (concat
+      [(build-search-where adapter (:search options) search-fields)
+       (build-filter-where adapter filters)
+       (when (:soft-delete entity-config false)
+         [:= (get field-aliases :deleted-at :deleted_at) nil])]
+      links))))
 
 ;; =============================================================================
 ;; Split-Table Update Helpers
@@ -567,6 +623,11 @@
               ;; Read in the transaction, just before the row goes: exactly
               ;; the row that is deleted, which a read before it cannot promise.
               prior    (when priors? (first (live-records tx schema-provider entity-name [id-str])))]
+          ;; Its links go with a hard delete, as cascaded children do (BOU-778)
+          (when-not soft?
+            (doseq [{:keys [table foreign-key]} (:many-to-many cfg)]
+              (db/execute-update! tx {:delete-from table
+                                      :where [:= (case-conversion/kebab-case->snake-case-keyword foreign-key) id-str]})))
           (if (delete-row! tx cfg id-str soft? now)
             (conj (vec children) {:entity entity-name :id id-str :prior prior})
             children))))))
@@ -751,13 +812,8 @@
                                       e))))})))
 
 ;; =============================================================================
-;; List Overview (ADR-040)
+;; Linked records (BOU-778)
 ;; =============================================================================
-
-;; What a list page shows besides its rows, in queries bounded by the config:
-;; one per relation column, one per has-many column, one for the facet and one
-;; per summary. Each part is optional — a failing query costs the page that
-;; part, logged, never the page.
 
 (defn- with-from
   "`q` reading from the entity the way its own list does."
@@ -765,6 +821,115 @@
   (cond-> (assoc q :from from-clause)
     join-clause (assoc :join join-clause)
     where       (assoc :where where)))
+
+(defn- linked-records*
+  "{owner-id-string {:items [{:id :title}] :total n}}: what `rel` links each
+   of `owner-ids` to, live rows only, by title. With `per-owner`, the first
+   few of each, in one query (ROW_NUMBER, on all four engines)."
+  [db-ctx schema-provider rel owner-ids per-owner]
+  (when (seq owner-ids)
+    (let [tcfg  (ports/get-entity-config schema-provider (:entity rel))
+          tpk   (:primary-key tcfg :id)
+          qc    (resolve-query-config tcfg)
+          col   (qualified-column qc)
+          title (col (:title-field tcfg tpk))
+          owner (link-column (:foreign-key rel))
+          where (cond-> [:and [:in owner (mapv str owner-ids)]]
+                  (:soft-delete tcfg false) (conj [:= (col :deleted-at) nil]))
+          base  (fn [select]
+                  (-> {:select select}
+                      (with-from qc where)
+                      (update :join #(into (vec %) [[(:table rel) :lnk] [:= (link-column (:other-key rel)) (col tpk)]]))))
+          rows  (db/execute-query!
+                 db-ctx
+                 (if per-owner
+                   {:select   [:owner :id :title]
+                    :from     [[(base [[owner :owner] [(col tpk) :id] [title :title]
+                                       [[:over [[:row_number] {:partition-by [owner]
+                                                               :order-by     [[title :asc] [(col tpk) :asc]]}]]
+                                        :rn]])
+                                :ranked]]
+                    :where    [:<= :rn per-owner]
+                    :order-by [[:title :asc] [:id :asc]]}
+                   (assoc (base [[owner :owner] [(col tpk) :id] [title :title]])
+                          :order-by [[title :asc] [(col tpk) :asc]])))
+          totals (if per-owner
+                   (into {} (map (juxt (comp str :owner) :n))
+                         (db/execute-query! db-ctx (assoc (base [[owner :owner] [:%count.* :n]]) :group-by [owner])))
+                   (frequencies (map (comp str :owner) rows)))]
+      (reduce (fn [acc {:keys [owner id title]}]
+                (let [k (str owner)]
+                  (-> acc
+                      (update-in [k :items] (fnil conj []) {:id    (str id)
+                                                            :title (if (str/blank? (some-> title str)) (str id) (str title))})
+                      (assoc-in [k :total] (get totals k 0)))))
+              {}
+              rows))))
+
+(defn- assert-links!
+  "Refuse `links` naming a relation `entity-config` does not have, or a
+   record the relation cannot link: unknown, or deleted. Checked before the
+   write, so a refusal is not logged as a failed database operation."
+  [db-ctx schema-provider entity-config links]
+  (doseq [[k ids] links
+          :let  [rel (link-rel entity-config k)]]
+    (when-not rel
+      (throw (ex-info (str "No many-to-many " (name k))
+                      {:type :validation-error :errors {k [[:t :admin/links-unknown]]}})))
+    (let [wanted (set ids)
+          found  (set (map #(str (get % (:primary-key (ports/get-entity-config schema-provider (:entity rel)) :id)))
+                           (when (seq wanted)
+                             (live-records db-ctx schema-provider (:entity rel) (vec wanted)))))]
+      (when-not (= wanted found)
+        (throw (ex-info (str "Unknown " (name (:entity rel)) ": " (str/join ", " (remove found wanted)))
+                        {:type :validation-error :errors {k [[:t :admin/links-unknown]]}}))))))
+
+(defn- sync-links!
+  "Make the links of record `id` in each relation of `links` exactly those
+   ids, on `tx`: the missing join rows added, the others removed."
+  [tx schema-provider entity-config id links]
+  (let [id-str (str id)
+        now    (Instant/now)]
+    (doseq [[k ids] links
+            :let  [{:keys [table foreign-key other-key through]} (link-rel entity-config k)
+                   jcfg    (ports/get-entity-config schema-provider through)
+                   jpk     (:primary-key jcfg :id)
+                   fk-col  (case-conversion/kebab-case->snake-case-keyword foreign-key)
+                   oth-col (case-conversion/kebab-case->snake-case-keyword other-key)
+                   current (set (map (comp str :other)
+                                     (db/execute-query! tx {:select [[oth-col :other]] :from [table]
+                                                            :where  [:= fk-col id-str]})))
+                   wanted  (set ids)
+                   gone    (vec (remove wanted current))
+                   added   (remove current wanted)]]
+      (when (seq gone)
+        (db/execute-update! tx {:delete-from table :where [:and [:= fk-col id-str] [:in oth-col gone]]}))
+      (doseq [other added]
+        (db/execute-one! tx {:insert-into table
+                             :values [(case-conversion/kebab-case->snake-case-map
+                                       (cond-> {foreign-key id-str other-key other}
+                                         ;; A surrogate key the database does not number
+                                         (and (not (#{foreign-key other-key} jpk))
+                                              (#{:uuid :string} (get-in jcfg [:fields jpk :type])))
+                                         (assoc jpk (str (UUID/randomUUID)))
+                                         (contains? (:fields jcfg) :created-at) (assoc :created-at now)
+                                         (contains? (:fields jcfg) :updated-at) (assoc :updated-at now)))]})))))
+
+(defn- links-of
+  "`data` as [data links]: the record's own fields, and its `:admin/links`
+   with blank ids dropped."
+  [data]
+  [(dissoc data :admin/links)
+   (update-vals (:admin/links data) #(into [] (comp (map str) (remove str/blank?) (distinct)) %))])
+
+;; =============================================================================
+;; List Overview (ADR-040)
+;; =============================================================================
+
+;; What a list page shows besides its rows, in queries bounded by the config:
+;; one per relation column, one per has-many column, one for the facet and one
+;; per summary. Each part is optional — a failing query costs the page that
+;; part, logged, never the page.
 
 (defn- id-strings
   "The distinct non-nil values of `k` in `records`, as strings: how the
@@ -879,6 +1044,10 @@
         :field field
         :role  (if count? :number (get-in entity-config [:display-roles field] :number))}))))
 
+(def ^:private links-per-cell
+  "How many linked records a list cell names before \"+N\"."
+  3)
+
 (defn- list-overview*
   [db-ctx schema-provider entity-name options records]
   (let [entity-config (ports/get-entity-config schema-provider entity-name)
@@ -901,6 +1070,10 @@
                           #(relation-titles db-ctx schema-provider entity-config records %))
      :counts  (per-column :counts (of-role :count)
                           #(has-many-counts db-ctx schema-provider entity-config records %))
+     :links   (per-column :links (of-role :links)
+                          #(linked-records* db-ctx schema-provider (link-rel entity-config %)
+                                            (id-strings records (:primary-key entity-config :id))
+                                            links-per-cell))
      :facets  (when (and facet (not record?))
                 {facet (overview-part entity-name [:facet facet]
                                       #(facet-counts db-ctx entity-config qc options))})
@@ -910,6 +1083,14 @@
   ports/IListOverview
   (list-overview [_ entity-name options records]
     (list-overview* db-ctx schema-provider entity-name options records))
+
+  ports/ILinks
+  (linked-records [_ entity-name rel-key ids {:keys [per-owner]}]
+    (let [rel (link-rel (ports/get-entity-config schema-provider entity-name) rel-key)]
+      (when-not rel
+        (throw (ex-info (str "No many-to-many " (name rel-key) " on " (name entity-name))
+                        {:type :not-found :entity-name entity-name :relation rel-key})))
+      (or (linked-records* db-ctx schema-provider rel ids per-owner) {})))
 
   ports/IAdminService
 
@@ -1010,15 +1191,27 @@
                          :entity-name entity-name
                          :split-config split-cfg
                          :create-redirect-url (:create-redirect-url entity-config)}))))
-    (persist-interceptors/execute-persistence-operation
-     :admin-create-entity
-     {:entity (name entity-name)}
-     (fn [{:keys [_params]}]
-       (insert-record! db-ctx (ports/get-entity-config schema-provider entity-name) data))
-     db-ctx))
+    (let [entity-config (ports/get-entity-config schema-provider entity-name)
+          [data links]  (links-of data)]
+      (assert-links! db-ctx schema-provider entity-config links)
+      (persist-interceptors/execute-persistence-operation
+       :admin-create-entity
+       {:entity (name entity-name)}
+       (fn [{:keys [_params]}]
+         (if (seq links)
+           (db/with-transaction* db-ctx
+             (fn [tx]
+               (let [record (insert-record! tx entity-config data)]
+                 (sync-links! tx schema-provider entity-config
+                              (get record (:primary-key entity-config :id)) links)
+                 record)))
+           (insert-record! db-ctx entity-config data)))
+       db-ctx)))
 
   (create-entity-with-children [_ entity-name data children]
     (let [entity-config (ports/get-entity-config schema-provider entity-name)
+          [data links]  (links-of data)
+          _             (assert-links! db-ctx schema-provider entity-config links)
           by-entity     (assert-children-acceptable! entity-name
                                                      (nested-relationships schema-provider entity-config)
                                                      children)]
@@ -1029,6 +1222,7 @@
          (db/with-transaction* db-ctx
            (fn [tx]
              (let [parent (insert-record! tx entity-config data)]
+               (sync-links! tx schema-provider entity-config (get parent (:primary-key entity-config :id)) links)
                {:record   parent
                 :children (insert-children! tx by-entity
                                             (get parent (:primary-key entity-config :id))
@@ -1036,9 +1230,15 @@
        db-ctx)))
 
   (update-entity [this entity-name id data]
-    (let [entity-config (ports/get-entity-config schema-provider entity-name)]
+    (let [entity-config (ports/get-entity-config schema-provider entity-name)
+          [data links]  (links-of data)
+          _             (assert-links! db-ctx schema-provider entity-config links)]
       (if-let [writer (entity-writer writers entity-config)]
-        (written-update! this writer entity-config entity-name id data)
+        ;; The writer owns its transaction; the links follow it
+        (let [record (written-update! this writer entity-config entity-name id data)]
+          (when (seq links)
+            (db/with-transaction* db-ctx #(sync-links! % schema-provider entity-config id links)))
+          record)
         (persist-interceptors/execute-persistence-operation
          :admin-update-entity
          {:entity (name entity-name) :id id}
@@ -1086,11 +1286,19 @@
                              (when (seq secondary-db)
                                (db/execute-update! tx {:update secondary-table
                                                        :set    secondary-db
-                                                       :where  [:= primary-key id-str]})))))
+                                                       :where  [:= primary-key id-str]}))
+                             (sync-links! tx schema-provider entity-config id-str links))))
                        ;; non-split path
-                       (db/execute-update! db-ctx {:update table-name
-                                                   :set    db-data
-                                                   :where  [:= primary-key id-str]}))
+                       (let [update! #(when (seq db-data)
+                                        (db/execute-update! % {:update table-name
+                                                               :set    db-data
+                                                               :where  [:= primary-key id-str]}))]
+                         (if (seq links)
+                           (db/with-transaction* db-ctx
+                             (fn [tx]
+                               (update! tx)
+                               (sync-links! tx schema-provider entity-config id-str links)))
+                           (update! db-ctx))))
                      (catch Exception e
                        (throw (refused-write entity-config e))))
 
@@ -1367,6 +1575,10 @@
   (list-overview [_ entity-name options records]
     (when (satisfies? ports/IListOverview inner)
       (ports/list-overview inner entity-name options records)))
+
+  ports/ILinks
+  (linked-records [_ entity-name rel-key ids opts]
+    (ports/linked-records inner entity-name rel-key ids opts))
 
   ports/IAdminService
   (list-entities [_ entity-name options] (ports/list-entities inner entity-name options))

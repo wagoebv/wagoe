@@ -118,7 +118,7 @@
    config built without it."
   [entity-config fields]
   (let [belongs-to (display/belongs-to-fields entity-config)
-        has-many   (display/has-many-columns entity-config)]
+        has-many   (merge (display/has-many-columns entity-config) (display/link-columns entity-config))]
     (mapv (fn [field]
             (let [config (get-in entity-config [:fields field])
                   role   (or (get-in entity-config [:display-roles field])
@@ -138,6 +138,17 @@
 ;; Public API
 ;; -----------------------------------------------------------------------------
 
+(defn link-chips
+  "Linked records as chips, each a link to its record, then \"+N\" for the
+   ones `total` counts beyond them."
+  [entity items total]
+  (list
+   [:span {:class "link-chips"}
+    (for [{:keys [id title]} items]
+      [:span {:class "link-chip"} [:a {:href (entity-url entity id) :title title} title]])]
+   (when (< (count items) (or total 0))
+     [:span {:class "link-chip-more"} (str "+" (- total (count items)))])))
+
 (defn cell
   "The content of `field`'s list cell for `record`.
 
@@ -146,7 +157,7 @@
      :field-config  its config (may be nil for a has-many column)
      :entity-config the entity's config
      :display       zone, locale, patterns and the `:overview` ({:titles :counts
-                    :now}) from the shell (ADR-040)
+                    :links :now}) from the shell (ADR-040)
      :href          the record's detail URL, when the user may open it
      :relation      the column's belongs-to or has-many
 
@@ -165,6 +176,10 @@
                                              id)}
            (str n)]
           [:span {:class "c-zero"} (str n)]))
+
+      :links
+      (let [{:keys [items total]} (get-in overview [:links field (id-key (get record (:primary-key entity-config :id)))])]
+        (when (seq items) (link-chips (:entity relation) items total)))
 
       (when (some? value)
         (case role

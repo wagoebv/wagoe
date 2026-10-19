@@ -1,9 +1,11 @@
 (ns wagoe.shared.ui.core.combobox
   "Combobox (typeahead): a text input that asks the server for options as the
    user types, and a hidden input holding the chosen value. For a choice among
-   more rows than a select can carry. The keyboard and picking behaviour is the
-   `combobox` Alpine component in ui-style's components.js."
-  (:require [clojure.string :as str]))
+   more rows than a select can carry. With `:multiple`, each value chosen is a
+   chip holding its own hidden input. The keyboard and picking behaviour is
+   the `combobox` Alpine component in ui-style's components.js."
+  (:require [clojure.string :as str]
+            [wagoe.shared.ui.core.icons :as icons]))
 
 (def query-param
   "The query parameter the typed text is sent as."
@@ -13,37 +15,61 @@
 
 (defn- option-id [field-key i] (str (name field-key) "-option-" i))
 
+(defn- chip
+  "A chosen value of a multiple combobox: its label, a remove button, and the
+   hidden input that submits it."
+  [field-key value label readonly remove-label]
+  [:span {:class "link-chip" :data-value (str value)}
+   [:span {:class "link-chip-label"} (str label)]
+   (when-not readonly
+     [:button {:type "button" :class "link-chip-remove" :aria-label remove-label
+               (keyword "@click") "remove($event)"}
+      (icons/icon :x {:size 12})])
+   [:input {:type "hidden" :name (name field-key) :value (str value)}]])
+
 (defn combobox
   "A combobox submitted as `field-key`.
 
    opts:
-     :url         where the options come from; answered with `options`
-     :value       the chosen value, submitted
-     :label       what the chosen value is shown as
+     :url          where the options come from; answered with `options`
+     :value        the chosen value, submitted
+     :label        what the chosen value is shown as
+     :multiple     choose several: `:chosen` [[value label] ...] are chips,
+                   and each option picked adds one; the form submits
+                   `field-key` once per chip
+     :remove-label the accessible name of a chip's remove button
      :placeholder, :required, :readonly
-     :attrs       extra attributes for the text input
-     :value-attrs extra attributes for the hidden input, which fires `change`
-                  when an option is picked"
-  [field-key {:keys [url value label placeholder required readonly attrs value-attrs]}]
+     :attrs        extra attributes for the text input
+     :value-attrs  extra attributes for the hidden input, which fires `change`
+                   when an option is picked"
+  [field-key {:keys [url value label multiple chosen remove-label placeholder required readonly attrs value-attrs]}]
   (let [id (name field-key)
         lb (listbox-id field-key)]
-    [:div {:class "combobox" :x-data "combobox" :data-query-param query-param
+    [:div {:class (if multiple "combobox combobox-multiple" "combobox")
+           :x-data "combobox" :data-query-param query-param
+           :data-multiple (when multiple "true")
            (keyword "@click.outside") "close()"}
-     [:input (merge {:type "hidden" :name id :id (str id "-value") :value (str (or value "")) :x-ref "value"}
-                    value-attrs)]
+     (if multiple
+       (list
+        [:div {:class "link-chips" :x-ref "chips"}
+         (for [[v l] chosen] (chip field-key v l readonly remove-label))]
+        ;; What a picked option becomes: filled in and appended by the component
+        [:template {:x-ref "chip"} (chip field-key "" "" readonly remove-label)])
+       [:input (merge {:type "hidden" :name id :id (str id "-value") :value (str (or value "")) :x-ref "value"}
+                      value-attrs)])
      ;; No name: the typed text is the query, not the value, so the form does
      ;; not submit it. The component sends it as `query-param`.
      [:input (merge {:type             "text"
                      :id               id
                      :class            "form-control ui-input"
-                     :value            (str (or label ""))
+                     :value            (if multiple "" (str (or label "")))
                      :role             "combobox"
                      :aria-autocomplete "list"
                      :aria-expanded    "false"
                      :aria-controls    lb
                      :autocomplete     "off"
                      :placeholder      placeholder
-                     :required         (boolean required)
+                     :required         (boolean (and required (not multiple)))
                      :readonly         (boolean readonly)
                      :x-ref            "input"
                      :x-bind:aria-expanded "open"}

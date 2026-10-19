@@ -33,6 +33,16 @@
     (satisfies? ports/IListOverview admin-service)
     (assoc :overview (ports/list-overview admin-service entity-name options records))))
 
+(defn- with-link-options
+  "`entity-config` with, on each many-to-many relation, the records its
+   filter offers (BOU-778)."
+  [admin-service schema-provider config entity-config]
+  (let [configs (into {} (map (fn [{e :entity}] [e (ports/get-entity-config schema-provider e)]))
+                      (:many-to-many entity-config))
+        options (support/link-filter-options admin-service config configs entity-config)]
+    (update entity-config :many-to-many
+            (fn [rels] (mapv #(assoc % :options (get options (:key %))) rels)))))
+
 ;; =============================================================================
 ;; Admin Home Handler
 ;; =============================================================================
@@ -67,6 +77,10 @@
                      :entity-name entity-name})))
   (let [entity-config (ports/get-entity-config schema-provider entity-name)
         options (list-options request)
+        ;; A link filter's chip names the record, not its id
+        entity-config (cond->> entity-config
+                        (some #(contains? (:filters options) (:key %)) (:many-to-many entity-config))
+                        (with-link-options admin-service schema-provider config))
         result (ports/list-entities admin-service entity-name options)
         records (support/with-workflow-states config entity-config (:records result))]
     {:entity-config entity-config
@@ -145,13 +159,14 @@
   "GET /:entity/filters — the filter drawer for the filters in the query
    string, blank ones kept: re-rendered when an operator changes, it keeps
    the operator chosen for a field that has no value yet."
-  [_admin-service schema-provider _config]
+  [admin-service schema-provider config]
   (fn [request]
     (let [_user         (support/require-admin-user! request)
           entity-name   (support/get-entity-name request)
           _             (when-not (ports/validate-entity-exists schema-provider entity-name)
                           (throw (ex-info "Unknown entity" {:type :not-found :entity-name entity-name})))
-          entity-config (ports/get-entity-config schema-provider entity-name)
+          entity-config (with-link-options admin-service schema-provider config
+                          (ports/get-entity-config schema-provider entity-name))
           options       (support/parse-query-params (:query-params request))]
       (support/html-response request
                              (admin-ui/filter-drawer entity-name entity-config (:filters options))))))
