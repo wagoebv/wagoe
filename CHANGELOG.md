@@ -187,6 +187,10 @@ for what is public API, what is internal, and how deprecations are announced.
   both `:filters` and `:compose` is now refused rather than its filters dropped; give it `:filters []`.
 - **An audience filter could name any users column, password hashes included** (BOU-745). Filters now take only
   allowlisted fields; list your own columns in `:wagoe/audience {:filter-fields #{...}}`.
+- **Workflow admin pages use the admin sidebar shell** (BOU-743); every audit row read as the current state, and the
+  state filter is now a select of the registered states. Nothing to do.
+- **`wagoe add` checked only the first config key of a module** (BOU-742), so observability or platform could be
+  left half-configured or written twice. It now adds each missing key; re-run `wagoe add` to fill gaps.
 - **Error reporting failed on exceptions without a message** (BOU-463), so a `NullPointerException` never reached
   Sentry. Upgrade if you report errors.
 - **A circular audience composition overflowed the stack** (BOU-463); it now answers 422, as does an unknown ref.
