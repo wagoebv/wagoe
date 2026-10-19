@@ -107,8 +107,8 @@
   :failed."
 
   (create-export-job! [this job]
-    "Store `job`, a new :pending one, and return it; nil when its subject has
-    a :pending or :running job already.")
+    "Store `job`, a new :pending one, and return it; nil when its requester
+    has a :pending or :running job for its subject already.")
 
   (save-export-job! [this job]
     "Store `job`, replacing the one with its id. Returns it.")
@@ -119,8 +119,8 @@
   (find-export-job [this id]
     "The job with `id`, or nil.")
 
-  (open-export-job [this subject]
-    "A :pending or :running job for `subject`, or nil.")
+  (open-export-job [this subject requested-by]
+    "`requested-by`'s :pending or :running job for `subject`, or nil.")
 
   (export-jobs-created-before [this cutoff open-before limit]
     "At most `limit` jobs created before `cutoff`, an Instant, oldest first.

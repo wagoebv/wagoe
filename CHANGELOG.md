@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **Admin and tenant data exports as background jobs** (BOU-759): `POST /api/v1/users/:id/export-jobs` and
+  `/tenants/:id/export-jobs`, audited when asked for. Needs the storage and jobs modules.
 - **`shared-ui` data table with sortable headers, filter inputs and infinite scroll** (BOU-756): `data-table`,
   `filter-input`, `parse-table-params`. Admin lists now push their own URL; nothing to do.
 - **Combobox in `shared-ui`** (BOU-754): `wagoe.shared.ui.core.combobox`, a server-searched typeahead. The admin uses it
@@ -155,6 +157,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Changed
 
+- **`:export-requests-per-hour 0` means no limit** (BOU-759); it refused every request. Anything but a whole number
+  now fails boot.
 - **The devtools config editor shows pretty-printed EDN** (BOU-21): one key per line, keys sorted.
   Nothing to do; edits are read back as before.
 - **Pages on the default layout load daisyUI, not pico** (BOU-457): `page-layout` and `error-layout` use the `:pilot`
@@ -208,8 +212,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **A crash mid-export left `.spool-*.tmp` files in the local storage root** (BOU-759). Spools now go to
+  `<root>/.spool/`, cleared at boot; delete old `.spool-*.tmp` files by hand.
 - **Export jobs: racing requests opened duplicates, archives were built in memory** (BOU-752). One open job per
-  subject, five requests an hour per user (`:export-requests-per-hour`). Run `migrate up`.
+  subject and requester, five requests an hour per user (`:export-requests-per-hour`). Run `migrate up`.
 - **Push tokens differing only in case were one device on MySQL** (BOU-752); racing uploads could deadlock there.
   Run `migrate up`.
 - **Storage `file-exists?` answered false when it could not check** (BOU-749), so retention could forget a file

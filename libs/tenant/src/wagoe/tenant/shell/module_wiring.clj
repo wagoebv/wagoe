@@ -135,9 +135,9 @@
   (audit-persistence/create-tenant-audit-repository ctx))
 
 (defmethod ig/init-key :wagoe/tenant-export-routes
-  [_ {:keys [data-export audit-repository]}]
+  [_ config]
   (require 'wagoe.tenant.shell.http)
-  ((ns-resolve 'wagoe.tenant.shell.http 'export-routes) data-export audit-repository))
+  ((ns-resolve 'wagoe.tenant.shell.http 'export-routes) (update config :export-jobs first)))
 
 ;; =============================================================================
 ;; Membership Repository
@@ -297,8 +297,11 @@
       ;; :wagoe/data-export is platform's, over every module's :data-export.
       :wagoe/tenant-audit-repository {:ctx (ig/ref :wagoe/db-context)
                                       :schema (ig/ref :wagoe/tenant-db-schema)}
-      :wagoe/tenant-export-routes  {:data-export      (ig/ref :wagoe/data-export)
-                                    :audit-repository (ig/ref :wagoe/tenant-audit-repository)}
+      :wagoe/tenant-export-routes  {:data-export       (ig/ref :wagoe/data-export)
+                                    :audit-repository  (ig/ref :wagoe/tenant-audit-repository)
+                                    :tenant-repository (ig/ref :wagoe/tenant-repository)
+                                    ;; Storage's, with the jobs module; empty without.
+                                    :export-jobs       (ig/refset :wagoe/export-jobs)}
       ;; Builds the tenant HTTP middleware seq (tenant resolution + membership).
       ;; The http-handler takes it as :extra-middleware rather than constructing
       ;; it, so it does not need to know this module exists.

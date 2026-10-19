@@ -90,7 +90,8 @@
    (fn [repos]
      (let [{:keys [tenant]} (seed! repos)
            data-export (platform-privacy/create-data-export {:tenant (exporter repos)})
-           app   (ring/ring-handler (ring/router ["/api/v1" (:api (http/export-routes data-export (:audit repos)))]))
+           app   (ring/ring-handler (ring/router ["/api/v1" (:api (http/export-routes {:data-export      data-export
+                                                                                       :audit-repository (:audit repos)}))]))
            fetch (fn [user id] (app {:request-method :get :uri (str "/api/v1/tenants/" id "/export")
                                      :user user :headers {"user-agent" "curl"}}))
            admin {:id (random-uuid) :email "root@example.com" :role :admin}]
@@ -116,8 +117,38 @@
            broken (reify ports/ITenantAuditRepository
                     (record-tenant-audit! [_ _] (throw (ex-info "down" {:type :database-error})))
                     (find-tenant-audit [_ _ _] []))
-           routes (:api (http/export-routes (platform-privacy/create-data-export {:tenant (exporter repos)}) broken))
+           routes (:api (http/export-routes {:data-export      (platform-privacy/create-data-export {:tenant (exporter repos)})
+                                             :audit-repository broken}))
            app    (ring/ring-handler (ring/router ["/api/v1" routes]))]
        (is (thrown? clojure.lang.ExceptionInfo
                     (app {:request-method :get :uri (str "/api/v1/tenants/" (:id tenant) "/export")
                           :user {:id (random-uuid) :role :admin} :headers {}})))))))
+
+(deftest ^:integration ^:security a-platform-admin-asks-for-a-tenant-export-as-a-job
+  (each-backend
+   (fn [repos]
+     (let [{:keys [tenant]} (seed! repos)
+           asked (atom [])
+           jobs  (reify privacy/IExportJobs
+                   (request-export-job! [_ subject requested-by]
+                     (swap! asked conj [subject requested-by])
+                     {:status 202 :headers {"Location" "/api/v1/me/export-jobs/j1"} :body {:id "j1"}}))
+           app   (ring/ring-handler (ring/router ["/api/v1" (:api (http/export-routes {:audit-repository  (:audit repos)
+                                                                                       :tenant-repository (:tenants repos)
+                                                                                       :export-jobs       jobs}))]))
+           ask   (fn [user id] (app {:request-method :post :uri (str "/api/v1/tenants/" id "/export-jobs")
+                                     :user user :headers {"user-agent" "curl"}}))
+           admin {:id (random-uuid) :email "root@example.com" :role :admin}
+           audit #(map (juxt :action :actor-id) (ports/find-tenant-audit (:audit repos) (:id tenant) {}))]
+       (is (= 202 (:status (ask admin (:id tenant)))))
+       (is (= [[{:type :tenant :id (:id tenant)} (:id admin)]] @asked))
+       (testing "recorded in the tenant audit log when asked for"
+         (is (= [[:data-export (:id admin)]] (audit))))
+       (testing "a platform admin's only"
+         (is (= 403 (:status (ask (assoc admin :tenant-id (:id tenant)) (:id tenant)))))
+         (is (= 403 (:status (ask {:id (random-uuid) :role :user} (:id tenant))))))
+       (testing "an unknown tenant is not found, and nothing is queued or recorded"
+         (is (= 404 (:status (ask admin (random-uuid)))))
+         (is (= 400 (:status (ask admin "acme"))))
+         (is (= 1 (count @asked)))
+         (is (= 1 (count (audit)))))))))
