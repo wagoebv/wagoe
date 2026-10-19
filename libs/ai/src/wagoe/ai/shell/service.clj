@@ -10,8 +10,11 @@
             [wagoe.ai.core.context :as ctx]
             [wagoe.ai.core.parsing :as parsing]
             [wagoe.ai.core.prompts :as prompts]
+            [wagoe.ai.core.sql-copilot :as sql-copilot]
             [wagoe.ai.ports :as ports]
             [wagoe.ai.shell.test-check :as test-check]
+            [cheshire.core :as json]
+            [clojure.edn :as edn]
             [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.tools.logging :as log]))
@@ -243,38 +246,135 @@
                   :test-path (ctx/derive-test-path source-path))))))))
 
 ;; =============================================================================
+;; Migrations
+;; =============================================================================
+
+(defn- up-migration? [name] (str/ends-with? name ".up.sql"))
+
+(defn- project-migrations
+  "[file-name sql] for the project's own up migrations."
+  [project-root]
+  (->> ["migrations" "resources/migrations"]
+       (map #(io/file project-root %))
+       (filter #(.isDirectory ^java.io.File %))
+       (mapcat file-seq)
+       (filter #(and (.isFile ^java.io.File %) (up-migration? (.getName ^java.io.File %))))
+       (map (fn [^java.io.File f] [(.getName f) (slurp f)]))))
+
+(defn- resource-files
+  "[file-name content] for the files directly inside classpath directory `dir`,
+   in every directory and jar that has one."
+  [dir pred]
+  (let [cl (.getContextClassLoader (Thread/currentThread))]
+    (doall
+     (for [^java.net.URL url (enumeration-seq (.getResources cl dir))
+           entry (case (.getProtocol url)
+                   "file" (for [^java.io.File f (.listFiles (io/file (.toURI url)))
+                                :when (and (.isFile f) (pred (.getName f)))]
+                            [(.getName f) (slurp f)])
+                   "jar"  (let [conn   (doto ^java.net.JarURLConnection (.openConnection url)
+                                         (.setUseCaches false))
+                                prefix (.getEntryName conn)]
+                            (with-open [jar (.getJarFile conn)]
+                              (doall
+                               (for [^java.util.jar.JarEntry e (enumeration-seq (.entries jar))
+                                     :let [n (subs (.getName e) (min (count prefix) (count (.getName e))))]
+                                     :when (and (str/starts-with? (.getName e) prefix)
+                                                (not (str/includes? n "/")) (pred n))]
+                                 [n (slurp (.getInputStream jar e))]))))
+                   [])]
+       entry))))
+
+(defn- library-migrations
+  "[file-name sql] for the up migrations framework libraries ship, found
+   through their `wagoe/migration-paths/<lib>.edn` manifests as the migration
+   runner finds them."
+  []
+  (for [[_ manifest] (resource-files "wagoe/migration-paths/" #(str/ends-with? % ".edn"))
+        :let  [m (edn/read-string manifest)]
+        path  (if (map? m) (:paths m) m)
+        entry (resource-files (cond-> path (not (str/ends-with? path "/")) (str "/"))
+                              up-migration?)]
+    entry))
+
+(defn- migration-sqls
+  "The project's up migrations, in the order they run."
+  [project-root]
+  (->> (project-migrations project-root) (sort-by first) (map second)))
+
+;; =============================================================================
 ;; Feature 4: SQL Copilot
 ;; =============================================================================
+
+(defn- boot-tables
+  "The tables libraries create in code, at boot or from a Clojure migration,
+   as their `wagoe/boot-tables/<lib>.edn` manifests name them."
+  []
+  (mapcat (fn [[_ manifest]] (:tables (edn/read-string manifest)))
+          (resource-files "wagoe/boot-tables/" #(str/ends-with? % ".edn"))))
+
+(defn- schema-tables
+  "{table {column sql-type}} after every SQL migration the project and its
+   libraries ship. A table created in code has no SQL to read, so its columns
+   are nil."
+  [project-root]
+  (merge (zipmap (boot-tables) (repeat nil))
+         (->> (concat (library-migrations) (project-migrations project-root))
+              (sort-by first)
+              (map second)
+              admin-entity/migration-columns)))
 
 (defn sql-from-description
   "Generate a HoneySQL query from a natural language description.
 
+   The model is shown the tables the migrations create, and an answer naming
+   a table or column they do not is sent back once with what is wrong. The
+   query is never run.
+
    Args:
      service      - AIService map
      description  - NL description string
-     project-root - project root path string (for schema discovery)
+     project-root - project root path string (for its migrations)
      opts         - optional completion opts
 
    Returns:
-     {:honeysql str :explanation str :raw-sql str}
-     or {:error str} on failure."
+     {:honeysql str :explanation str :raw-sql str}, :raw-sql formatted by
+     HoneySQL from the checked query, or {:error str} on failure."
   ([service description project-root]
    (sql-from-description service description project-root {}))
   ([service description project-root opts]
    (log/info "ai sql-from-description" {:description description})
-   (let [schema-files (into {}
-                            (filter (fn [[path _]]
-                                      (str/ends-with? path "schema.clj"))
-                                    (list-clj-files project-root)))
-         schema-ctx   (ctx/extract-schema-context schema-files)
-         messages     (prompts/sql-copilot-messages description schema-ctx)
-         result       (resolve-provider-json service messages "SQLResponse" opts)]
-     (if (:error result)
-       result
-       (let [data (:data result)]
-         {:honeysql    (or (:honeysql data) (get data :honeySQL) "")
-          :explanation (or (:explanation data) "")
-          :raw-sql     (or (:raw-sql data) (get data :rawSql) "")})))))
+   (let [tables (schema-tables project-root)]
+     (if (empty? tables)
+       {:error (str "No tables found in " project-root "/migrations, resources/migrations "
+                    "or the libraries' migrations — cannot generate SQL without a schema.")}
+       (let [messages (prompts/sql-copilot-messages description (sql-copilot/render-schema tables description))
+             attempt  (fn [msgs]
+                        (let [result (resolve-provider-json service msgs "SQLResponse" opts)]
+                          (if (:error result)
+                            result
+                            (let [data    (:data result)
+                                  hsql    (str (or (:honeysql data) (:honeySQL data) ""))
+                                  checked (sql-copilot/check-answer hsql tables)]
+                              (assoc checked
+                                     :honeysql    hsql
+                                     :explanation (str (or (:explanation data) "")))))))
+             first-try (attempt messages)
+             result    (if (:errors first-try)
+                         (attempt (prompts/sql-fix-messages
+                                   messages (json/generate-string (select-keys first-try [:honeysql :explanation]))
+                                   (:errors first-try)))
+                         first-try)]
+         (cond
+           (:error result) result
+           (:errors result)
+           {:error    (str "The generated query does not match the schema:\n  "
+                           (str/join "\n  " (:errors result)))
+            :honeysql (:honeysql result)}
+           :else
+           {:honeysql    (:honeysql result)
+            :explanation (:explanation result)
+            :raw-sql     (:sql result)}))))))
 
 ;; =============================================================================
 ;; Feature 5: Documentation Wizard
@@ -319,17 +419,6 @@
            (filter #(str/ends-with? (.getName %) ".edn"))
            (mapv slurp))
       [])))
-
-(defn- migration-sqls
-  "The project's up migrations, in the order they run."
-  [project-root]
-  (->> ["migrations" "resources/migrations"]
-       (map #(io/file project-root %))
-       (filter #(.isDirectory %))
-       (mapcat file-seq)
-       (filter #(and (.isFile %) (str/ends-with? (.getName %) ".up.sql")))
-       (sort-by #(.getName %))
-       (map slurp)))
 
 (def admin-entity-max-tokens
   "Output budget for a generated config. A parent with its children runs to a

@@ -31,6 +31,7 @@
 | `wagoe.ai.ports` | shared | `IAIProvider` protocol: `complete`, `complete-json`, `provider-name` |
 | `wagoe.ai.core.prompts` | core | Pure prompt builders for all 7 features |
 | `wagoe.ai.core.context` | core | Pure context extractors (module names, stack traces, function signatures, schema) |
+| `wagoe.ai.core.sql-copilot` | core | Schema text for the SQL prompt; checks a HoneySQL answer's tables and columns against it |
 | `wagoe.ai.core.parsing` | core | Pure response parsers (JSON, module spec, SQL response, test code) |
 | `wagoe.ai.shell.providers.ollama` | shell | Ollama HTTP adapter (`OllamaProvider`) |
 | `wagoe.ai.shell.providers.anthropic` | shell | Anthropic API adapter (`AnthropicProvider`) |
@@ -204,6 +205,9 @@ It reads all `.edn` files from `resources/conf/dev/admin/` and includes them in 
 
 ### 11. `setup-parse` returns JSON-like data, not EDN keywords
 The setup parser returns a map with string keys (e.g., `{"database" "postgresql"}`) because it uses `complete-json`. The Babashka setup wizard handles keyword conversion.
+
+### 12. `sql-from-description` only knows the tables the migrations show it
+The prompt carries every table and column (with its type) from the `*.up.sql` files under `migrations/`, `resources/migrations/` and the libraries' migration directories (their `wagoe/migration-paths/*.edn` manifests), capped at `sql-copilot/max-schema-chars`, tables the description names first. Tables a library creates in code (`wagoe/boot-tables/*.edn`) are listed by name only. The answer is formatted with HoneySQL and every identifier checked against that schema (`wagoe.ai.core.sql-copilot/check-answer`); a miss is sent back once, then returned as `{:error ...}`. With no tables at all it refuses without calling the model. The SQL is never run; `:raw-sql` is HoneySQL's rendering of the checked query.
 
 ---
 

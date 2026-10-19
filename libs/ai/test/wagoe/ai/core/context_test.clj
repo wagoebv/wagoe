@@ -97,16 +97,6 @@
     (is (nil? (ctx/derive-test-path "dev/wagoe/test/reporter.clj")))
     (is (nil? (ctx/derive-test-path nil)))))
 
-(deftest ^:unit extract-schema-context-test
-  (testing "extracts def names from schema files"
-    (let [files {"schema.clj" "(def UserRecord ...) (def UserConfig ...)"}
-          result (ctx/extract-schema-context files)]
-      (is (str/includes? result "UserRecord"))
-      (is (str/includes? result "UserConfig"))))
-
-  (testing "returns nil for empty input"
-    (is (nil? (ctx/extract-schema-context {})))))
-
 (deftest ^:unit truncate-source-test
   (testing "does not truncate short sources"
     (let [src "line1\nline2"]

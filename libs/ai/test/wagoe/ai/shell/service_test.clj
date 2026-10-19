@@ -263,12 +263,107 @@
 ;; sql-from-description tests
 ;; =============================================================================
 
-(deftest ^:integration sql-from-description-test
-  (testing "returns parsed SQL result on success"
-    (let [service (ok-service "{:select [:*] :from [:users]}")
-          result  (svc/sql-from-description service "find all users" ".")]
-      ;; The result may come back as parsed map or error, depending on parse
-      (is (map? result)))))
+(defn- json-service
+  "A service whose provider gives the JSON `answers` in turn, recording each
+   call's messages."
+  [answers]
+  (let [calls (atom [])]
+    [{:provider (mock-provider
+                 (fn [_ _] nil)
+                 (fn [msgs _ _]
+                   (let [n (count (swap! calls conj msgs))]
+                     {:data (nth answers (min (dec n) (dec (count answers))))
+                      :tokens 1 :provider :mock :model "mock"})))}
+     calls]))
+
+(defn- with-project
+  "Call `f` with the root of a throwaway project whose migrations hold `sql`,
+   and no library tables."
+  [sql f]
+  (let [root (.toFile (java.nio.file.Files/createTempDirectory
+                       "sql" (make-array java.nio.file.attribute.FileAttribute 0)))]
+    (try
+      (when sql
+        (io/make-parents (io/file root "migrations" "x"))
+        (spit (io/file root "migrations" "20260101000001-invoices.up.sql") sql))
+      (with-redefs [svc/library-migrations (constantly []) svc/boot-tables (constantly [])]
+        (f (.getPath root)))
+      (finally (run! io/delete-file (reverse (file-seq root)))))))
+
+(def ^:private ledger-sql
+  "CREATE TABLE invoices (id UUID PRIMARY KEY, status VARCHAR(20) NOT NULL);
+   CREATE TABLE invoice_line_items (id UUID, invoice_id UUID, line_total DECIMAL(10,2));")
+
+(def ^:private invented
+  {:honeysql    (pr-str {:select [:*] :from [:invoice] :where [:= :invoice/status "entered"]})
+   :explanation "guessed"})
+
+(def ^:private correct
+  {:honeysql    (pr-str {:select [:*] :from [:invoices] :where [:= :invoices/status "entered"]})
+   :explanation "entered invoices"})
+
+(deftest ^:integration sql-from-description-shows-the-schema
+  (let [[svc calls] (json-service [correct])
+        result      (with-project ledger-sql #(svc/sql-from-description svc "entered invoices" %))
+        prompt      (:content (second (first @calls)))]
+    (is (str/includes? prompt "invoices: id UUID, status VARCHAR(20)"))
+    (is (str/includes? prompt "invoice_line_items: id UUID, invoice_id UUID, line_total DECIMAL(10,2)"))
+    (is (= {:honeysql    (:honeysql correct)
+            :explanation "entered invoices"
+            :raw-sql     "SELECT * FROM invoices WHERE invoices.status = 'entered'"}
+           result))))
+
+(deftest ^:integration sql-from-description-refuses-invented-tables
+  (testing "BOU-513: an invented table is sent back once, then refused"
+    (let [[svc calls] (json-service [invented])
+          result      (with-project ledger-sql #(svc/sql-from-description svc "entered invoices" %))]
+      (is (= 2 (count @calls)))
+      (is (str/includes? (:content (last (second @calls))) "table invoice does not exist"))
+      (is (str/includes? (:error result) "table invoice does not exist"))
+      (is (nil? (:raw-sql result)))))
+
+  (testing "a corrected second answer is returned"
+    (let [[svc calls] (json-service [invented correct])
+          result      (with-project ledger-sql #(svc/sql-from-description svc "entered invoices" %))]
+      (is (= 2 (count @calls)))
+      (is (= (:honeysql correct) (:honeysql result))))))
+
+(deftest ^:integration sql-from-description-needs-a-schema
+  (let [[svc calls] (json-service [correct])
+        result      (with-project nil #(svc/sql-from-description svc "entered invoices" %))]
+    (is (str/includes? (:error result) "cannot generate SQL without a schema"))
+    (is (empty? @calls) "the model is not asked to guess")))
+
+(deftest ^:integration tables-created-in-code-are-known-by-name
+  ;; users comes from a Clojure migration: there is no SQL to read columns from.
+  (let [[svc calls] (json-service [{:honeysql (pr-str {:select [:users/email] :from [:users]})}])
+        result      (with-redefs [svc/boot-tables (constantly ["users"])]
+                      (svc/sql-from-description svc "user emails" "/nonexistent"))]
+    (is (contains? (set (#'svc/boot-tables)) "users") "read from the user library's manifest")
+    (is (str/includes? (:content (second (first @calls))) "users: (columns not listed)"))
+    (is (= "SELECT users.email FROM users" (:raw-sql result)))))
+
+(deftest ^:integration library-migrations-are-read-from-jars
+  (let [jar (java.io.File/createTempFile "lib" ".jar")
+        put (fn [^java.util.jar.JarOutputStream out ^String entry ^String content]
+              (.putNextEntry out (java.util.jar.JarEntry. entry))
+              (when content (.write out (.getBytes content "UTF-8")))
+              (.closeEntry out))
+        th  (Thread/currentThread)
+        old (.getContextClassLoader th)]
+    (try
+      (with-open [out (java.util.jar.JarOutputStream. (io/output-stream jar))]
+        (doseq [d ["wagoe/" "wagoe/migration-paths/" "wagoe/demo/" "wagoe/demo/migrations/"]]
+          (put out d nil))
+        (put out "wagoe/migration-paths/demo.edn" "{:paths [\"wagoe/demo/migrations/\"]}")
+        (put out "wagoe/demo/migrations/20260101000001-demo.up.sql" "CREATE TABLE demos (id UUID);")
+        (put out "wagoe/demo/migrations/20260101000001-demo.down.sql" "DROP TABLE demos;"))
+      (.setContextClassLoader th (java.net.URLClassLoader. (into-array [(.toURL (.toURI jar))]) nil))
+      (is (= [["20260101000001-demo.up.sql" "CREATE TABLE demos (id UUID);"]]
+             (#'svc/library-migrations)))
+      (finally
+        (.setContextClassLoader th old)
+        (.delete jar)))))
 
 ;; =============================================================================
 ;; generate-docs tests

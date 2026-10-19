@@ -10,6 +10,7 @@
         ;; sibling library drags tools.cli in transitively.
         org.clojure/tools.cli        {:mvn/version "1.4.256"}
         metosin/malli {:mvn/version "0.20.1"}
+        com.github.seancorfield/honeysql {:mvn/version "2.7.1437"}
         clj-http/clj-http {:mvn/version "3.13.1"}
         ;; cheshire brings jackson-core below 2.22.3: CVE-2026-89407, CVE-2026-89425 (BOU-618).
         com.fasterxml.jackson.core/jackson-core {:mvn/version "2.22.3"}
