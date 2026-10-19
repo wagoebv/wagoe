@@ -36,6 +36,11 @@
       (is (lands-in-active?
            "{:active\n {:a \"say \\\" here\"}\n\n :inactive\n {:x 1}}\n")))))
 
+(deftest ^:unit snippet-entries-keep-their-comments
+  (is (= [{:key ":wagoe/a" :text "  ;; names (ig/ref :wagoe/x)\n  :wagoe/a\n  {:x #env X}"}
+          {:key ":wagoe/b" :text "  :wagoe/b\n  {}"}]
+         (sut/snippet-entries "  ;; names (ig/ref :wagoe/x)\n  :wagoe/a\n  {:x #env X}\n\n  :wagoe/b\n  {}\n"))))
+
 (deftest ^:unit a-key-is-not-a-substring-of-another-key
   ;; Against the shipped dev config, `:wagoe/payment` matched
   ;; `:wagoe/payment-provider` — and route/router, setting/settings,
