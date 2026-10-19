@@ -114,7 +114,10 @@
                  ["preview"      (h/make-post "/api/v1/audiences/preview" {})]
                  ["create"       (h/make-post "/api/v1/audiences" {})]
                  ["delete"       (h/make-delete "/api/v1/audiences/secret-cohort")]
-                 ["web list"     (h/make-get "/web/audiences")]]]
+                 ["update"       (h/make-put "/api/v1/audiences/secret-cohort" {})]
+                 ["web list"     (h/make-get "/web/audiences")]
+                 ["web create"   (h/make-post "/web/audiences" {})]
+                 ["web update"   (h/make-post "/web/audiences/builder/secret-cohort" {})]]]
           (testing (str "anonymous " label)
             (let [{:keys [status headers]} (handler request)]
               ;; A browser page redirects to the login form; an API answers

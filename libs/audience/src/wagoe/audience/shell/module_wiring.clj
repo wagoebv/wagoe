@@ -122,7 +122,8 @@
                                            (select-keys audience-service [:filter-fields]))
    :web (audience-http/audience-web-routes (:resolver audience-service)
                                            (:store audience-service)
-                                           middleware)})
+                                           middleware
+                                           (select-keys audience-service [:filter-fields]))})
 
 (defmethod ig/halt-key! :wagoe/audience-routes
   [_ _routes]
