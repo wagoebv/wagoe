@@ -31,11 +31,12 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **`:wagoe/user :login-layout` lets an app lay out the sign-in pages** (BOU-740): login, MFA and registration.
+  A `(fn [title body opts])` returning the page; Wagoe keeps the form, CSRF and errors.
 - **SMTP and IMAP take `:ssl-trust` and `:check-server-identity?`** (BOU-741): for a server whose certificate is
   self-signed or names another host, which Angus Mail now refuses. Both weaken TLS; see the external docs.
 - **Self-registration can be switched off** (BOU-739): `:wagoe/user {:registration false}` drops `/web/register`
   and the login page's "Create Account" link. On by default; set it in apps where only admins add users.
-
 - **`capable?` on the database port** (BOU-609): `(capable? adapter :schemas)`.
   An unknown capability or a nil adapter throws; a tenant job with no adapter now fails instead of running in public.
 - **Opt-in virtual threads for requests and job workers** (BOU-471): `:virtual-threads? true` on `:wagoe/http`,

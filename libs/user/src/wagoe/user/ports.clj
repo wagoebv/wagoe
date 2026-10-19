@@ -385,3 +385,9 @@
   (login-path [this user login-context]))
   ;; login-context: :ip-address, :user-agent and the Ring :request.
   ;; Returns a path on this site, or nil for the default.
+
+(defprotocol ILoginLayout
+  (login-page [this title body opts]))
+  ;; The whole page around Wagoe's sign-in forms: login, MFA, registration.
+  ;; opts: :page (:login, :mfa, :oidc-mfa, :oidc-continue, :register), :request,
+  ;; :user, :flash, :return-to, :logo-url. Returns Hiccup for the full page.
