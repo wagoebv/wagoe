@@ -325,7 +325,7 @@ The wizard accepts `--env dev|test|acc|prod` to pick the Aero config profile and
 
 ## Landing Page and Dashboard
 
-Four `:wagoe/user` keys, all checked at boot; a bad value fails it.
+Five `:wagoe/user` keys, all checked at boot; a bad value fails it.
 
 ```clojure
 :wagoe/user
@@ -345,7 +345,12 @@ Four `:wagoe/user` keys, all checked at boot; a bad value fails it.
 
  ;; Where / and /web redirect everyone, signed in or not. Unset: / goes to
  ;; login (or /web/users), /web shows the welcome page or the user's landing.
- :landing "/web/welkom"}
+ :landing "/web/welkom"
+
+ ;; false: /web/register is not mounted and the login page drops its
+ ;; "Create Account" link; accounts come from an admin, an import, or an OIDC
+ ;; provider with :auto-create? true. Default true.
+ :registration false}
 ```
 
 `:login-redirect` applies to password login, MFA completion, OIDC sign-in and
