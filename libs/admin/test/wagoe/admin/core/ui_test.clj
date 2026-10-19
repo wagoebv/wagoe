@@ -1139,25 +1139,28 @@
       (is (str/includes? (str page) ":admin/page-create-title")))))
 
 ;; =============================================================================
-;; Dialog Component Tests
+;; Delete Confirmation
 ;; =============================================================================
 
-(deftest ^:unit confirm-delete-dialog-test
-  (testing "Confirmation dialog for delete operations"
-    (let [dialog (ui/confirm-delete-dialog :users "123")]
-      (is (vector? dialog))
-      (is (= :div.modal#confirm-delete-modal (first dialog)))
+(defn- confirm-wiring
+  "The id the element issuing `request-attr` waits on, and whether the page
+   renders a confirm dialog of that id."
+  [page request-attr]
+  (let [attrs (filter map? (tree-seq coll? seq page))
+        id    (some #(when (contains? % request-attr) (:data-confirm-modal %)) attrs)]
+    [id (boolean (some #(and (= id (:id %)) (= "alertdialog" (:role %))) attrs))]))
 
-      ;; Should have warning message (i18n keys)
-      (is (str/includes? (str dialog) ":admin/modal-confirm-delete-title"))
-      (is (str/includes? (str dialog) ":admin/modal-confirm-delete-message"))
+(deftest ^:unit delete-confirmation-test
+  (testing "the edit page's delete waits on its confirm dialog"
+    (let [page (ui/entity-detail-page :users sample-entity-config sample-record
+                                      nil sample-permissions nil)]
+      (is (= ["delete-record-confirm" true] (confirm-wiring page :hx-delete)))
+      (is (not (str/includes? (str page) "hx-confirm")))))
 
-      ;; Should have HTMX delete button
-      (is (str/includes? (str dialog) "hx-delete"))
-      (is (str/includes? (str dialog) "/web/admin/users/123"))
-
-      ;; Should have cancel button (i18n key)
-      (is (str/includes? (str dialog) ":common/button-cancel")))))
+  (testing "bulk delete: htmx asks the form, so the form waits"
+    (let [page (ui/entity-list-page :users [sample-record] sample-entity-config
+                                    {:page 1 :page-size 20} 1 sample-permissions {})]
+      (is (= ["bulk-delete-confirm" true] (confirm-wiring page :hx-post))))))
 
 ;; =============================================================================
 ;; Error Page Tests

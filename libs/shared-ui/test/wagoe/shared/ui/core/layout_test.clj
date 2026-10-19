@@ -229,31 +229,6 @@
 ;; Component Layout Tests
 ;; =============================================================================
 
-(deftest ^:unit modal-test
-  (testing "Basic modal generation"
-    (let [id "test-modal"
-          title "Confirm Action"
-          content [:p "Are you sure you want to proceed?"]
-          result (layout/modal id title content)]
-      (is (vector? result))
-      ; Should contain modal structure
-      (let [modal-html (str result)]
-        (is (str/includes? modal-html id))
-        (is (str/includes? modal-html title)))))
-
-  (testing "Modal with custom options"
-    (let [id "custom-modal"
-          title "Custom Modal"
-          content [:div "Custom content"]
-          opts {:class "large-modal" :closable false}
-          result (layout/modal id title content opts)]
-      (is (vector? result))
-      ; Should apply custom options
-      (let [attrs (second result)]
-        (when (map? attrs)
-          (is (or (str/includes? (:class attrs "") "large-modal")
-                  (string? (:id attrs)))))))))
-
 (deftest ^:unit sidebar-test
   (testing "Basic sidebar generation"
     (let [content [:ul [:li "Menu Item 1"] [:li "Menu Item 2"]]
@@ -325,16 +300,14 @@
     (let [title "Complex Page"
           content [:main
                    (layout/breadcrumbs [["Home" "/"] ["Current" nil]])
-                   (layout/card [:div "Main content"])
-                   (layout/modal "confirm" "Confirm" [:p "Sure?"])]
+                   (layout/card [:div "Main content"])]
           result (layout/page-layout title content)]
       (is (vector? result))
       ; Should generate complete, nested page structure
       (let [page-html (str result)]
         (is (str/includes? page-html title))
         (is (str/includes? page-html "Home"))
-        (is (str/includes? page-html "Main content"))
-        (is (str/includes? page-html "Confirm")))))
+        (is (str/includes? page-html "Main content")))))
 
   (testing "Error page rendering integration"
     ; Use the correct render-error-page signature (message, optional status)

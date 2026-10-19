@@ -44,12 +44,11 @@
 (def datetime-input-offset base/datetime-input-offset)
 (def get-field-errors base/get-field-errors)
 
-;; --- layout: shell, sidebar, home, error pages, confirmation dialog, url util ---
+;; --- layout: shell, sidebar, home, error pages, url util ---
 (def admin-sidebar layout/admin-sidebar)
 (def admin-shell layout/admin-shell)
 (def admin-layout layout/admin-layout)
 (def admin-home layout/admin-home)
-(def confirm-delete-dialog layout/confirm-delete-dialog)
 (def admin-forbidden-page layout/admin-forbidden-page)
 (def admin-not-found-page layout/admin-not-found-page)
 (def create-config-error layout/create-config-error)
