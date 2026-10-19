@@ -232,8 +232,11 @@ The entity gets its own `core/<entity>.clj`, `shell/<entity>_service.clj`,
 `shell/<entity>_persistence.clj`, `shell/<entity>_http.clj`, create migration
 and tests. Its defs are appended to `schema.clj` and `ports.clj`, whose
 existing text is left as it is, and it is wired in `module_wiring.clj`: after a
-restart its CRUD API answers at `/api/v1/invoice-line-items`. There is no web
-page for it. `--no-http` leaves out `shell/<entity>_http.clj` and its routes.
+restart its CRUD API answers at `/api/v1/invoice-line-items`. In a module with
+web pages it gets the first entity's too, from `core/<entity>_ui.clj` and
+`shell/<entity>_web_handlers.clj`: a list at `/web/invoice-line-items` and a
+create form whose invoice is picked from a select of invoices. `--no-http`
+leaves out its API routes.
 
 Wiring the first extra entity adds an `ig-config` and an `entity-wiring`
 multimethod to `module_wiring.clj`, and replaces its routes init-key with one

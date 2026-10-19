@@ -312,20 +312,24 @@
         :else        (str v)))
 
 (defn- control
-  "The control for `field-key`: a select for an enum, a checkbox for a
-   boolean, an input otherwise."
-  [schema field-key value attrs]
+  "The control for `field-key`: a select for `options` or an enum, a checkbox
+   for a boolean, an input otherwise."
+  [schema field-key value attrs options]
   (let [[_ _ s] (entry schema field-key)
         enum    (some #(when (= :enum (m/type %)) %) (leaves s))
+        choices (or options
+                    (when enum
+                      (for [option (m/children enum)]
+                        [option (label-text (display-value option))])))
         id      (name field-key)]
     (cond
-      enum
+      choices
       [:select (merge {:id id :name id :class "form-control ui-input"}
                       (select-keys attrs [:required]))
        [:option {:value ""} ""]
-       (for [option (m/children enum)
+       (for [[option label] choices
              :let [v (display-value option)]]
-         [:option {:value v :selected (= v (display-value value))} (label-text v)])]
+         [:option {:value v :selected (= v (display-value value))} label])]
 
       (= "checkbox" (:type attrs))
       (ui/checkbox field-key (contains? #{true "true"} value))
@@ -341,12 +345,14 @@
    output for the submitted value.
 
    opts: :label, :value, :errors (messages), :validate-url, :attrs (merged
-   over the derived attributes)."
-  [schema field-key {:keys [label value errors validate-url attrs]}]
+   over the derived attributes), :options ([value label] pairs, for a select
+   of values the schema cannot list, such as the rows a reference may name)."
+  [schema field-key {:keys [label value errors validate-url attrs options]}]
   (let [schema    (m/schema schema)
         error-id  (ui/field-error-id field-key)
         input     (cond-> (control schema field-key value
-                                   (merge (input-attrs schema field-key) attrs))
+                                   (merge (input-attrs schema field-key) attrs)
+                                   options)
                     validate-url (with-live-validation field-key validate-url)
                     (seq errors) (ui/describe-input field-key error-id))]
     [:div {:id (wrapper-id field-key)

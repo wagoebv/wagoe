@@ -499,23 +499,31 @@ DROP TABLE IF EXISTS %s;
 ;; UI File Generator
 ;; =============================================================================
 
-(defn generate-ui-file
-  "Generate core/ui.clj file content.
-   
-   Args:
-     ctx - Template context map
-     
-   Returns:
-     String content for ui.clj file
-     
+(defn- web-names
+  "What an entity's web pages are named by: the kebab entity, the URL plural,
+   the key of the field that refers to its parent (or nil), and its ui and
+   handler namespace suffixes. The first entity's are core.ui and
+   shell.web-handlers; a further one's carry its name (BOU-542)."
+  [entity]
+  (let [e (or (:entity-kebab entity) (template/pascal->kebab (:entity-name entity)))
+        primary? (:primary? entity true)]
+    {:e        e
+     :plural   (or (:entity-plural entity) (template/pluralize e))
+     :parent   (some->> (:belongs-to entity) (format ":%s-id"))
+     :ui       (if primary? "core.ui" (str "core." e "-ui"))
+     :handlers (if primary? "shell.web-handlers" (str "shell." e "-web-handlers"))}))
+
+(defn entity-ui-file
+  "core/ui.clj for the first entity, core/<entity>_ui.clj for a further one:
+   its list page and create form. One that belongs to another entity picks
+   that entity from a select and shows it by name in the list.
+
    Pure: true"
-  [ctx]
+  [ctx entity]
   (let [base-ns (:base-ns ctx "wagoe")
         module-name (:module-name ctx)
-        entity (first (:entities ctx))
         entity-name (:entity-name entity)
-        entity-lower (template/pascal->kebab entity-name)
-        entity-plural (template/pluralize entity-lower)
+        {:keys [e plural parent ui]} (web-names entity)
         field-names (map :field-name-kebab (:fields entity))
         ;; Plain strings, not [:t ...] markers: the page renders through
         ;; hiccup2, and wagoe-i18n is a library a project may drop (BOU-484).
@@ -523,46 +531,56 @@ DROP TABLE IF EXISTS %s;
                      (map #(str "[:th \"" (text/capitalize (str/replace % "-" " ")) "\"]"))
                      (str/join " "))
         cells (->> field-names
-                   (map #(str "[:td (str (:" % " item))]"))
+                   (map #(if (= parent (str ":" %))
+                           (str "[:td (let [v (" parent " item)] (get parents v (str v)))]")
+                           (str "[:td (str (:" % " item))]")))
                    (str/join "\n        "))
-        title (str "New " (str/replace entity-lower "-" " "))]
-    (str "(ns " base-ns "." module-name ".core.ui\n"
-         "  \"Pure UI generation for " module-name " module - Hiccup templates.\"\n"
+        title (str "New " (str/replace e "-" " "))
+        ;; The parent's rows, as [id label], go where the form needs them.
+        parents-arg (when parent " parents")]
+    (str "(ns " base-ns "." module-name "." ui "\n"
+         "  \"Pure UI generation for " (if (:primary? entity true) (str module-name " module") entity-name) " - Hiccup templates.\"\n"
          "  (:require [" base-ns "." module-name ".schema :as schema]\n"
          "            [wagoe.shared.ui.core.form :as form]\n"
          "            [wagoe.shared.ui.core.layout :as layout]))\n"
          "\n"
-         "(defn " entity-lower "-list-page\n"
-         "  \"Generate " entity-lower " listing page.\"\n"
-         "  [" entity-plural " _opts]\n"
+         "(defn " e "-list-page\n"
+         "  \"Generate " e " listing page.\"\n"
+         (if parent
+           (str "  [" plural " {:keys [parents]}]\n"
+                "  (let [parents (into {} parents)]\n")
+           (str "  [" plural " _opts]\n"))
          "  [:div.page\n"
-         "   [:h1 \"" (text/capitalize entity-plural) "\"]\n"
-         "   [:p [:a {:href \"/web/" entity-plural "/new\"} \"" title "\"]]\n"
+         "   [:h1 \"" (text/capitalize (str/replace plural "-" " ")) "\"]\n"
+         "   [:p [:a {:href \"/web/" plural "/new\"} \"" title "\"]]\n"
          "   [:table.items\n"
          "    [:thead [:tr " headers "]]\n"
          "    [:tbody\n"
-         "     (for [item " entity-plural "]\n"
+         "     (for [item " plural "]\n"
          "       [:tr\n"
-         "        " cells "])]]])\n"
+         "        " cells "])]]]" (when parent ")") ")\n"
          "\n"
          ;; The form is the create schema's: its fields, and the HTML
          ;; validation attributes and errors each one's schema implies, so a
          ;; field added to the schema is on the form.
-         "(defn " entity-lower "-field\n"
-         "  \"One field of the " entity-lower " form, with its errors. A change to the field\n"
+         "(defn " e "-field\n"
+         "  \"One field of the " e " form, with its errors. A change to the field\n"
          "   posts the form to /validate, which answers with this again.\"\n"
-         "  [field values errors]\n"
+         "  [field values errors" parents-arg "]\n"
          "  (form/field schema/Create" entity-name "Request field\n"
          "              {:value        (form/value values field)\n"
          "               ;; English: the page is not rendered through wagoe-i18n. With it,\n"
          "               ;; pass the messages as they are and render with its renderer.\n"
          "               :errors       (mapv form/plain (get errors field))\n"
-         "               :validate-url \"/web/" entity-plural "/validate\"}))\n"
+         (when parent
+           (str "               ;; nil without the parent's rows: an input for its id then.\n"
+                "               :options      (when (= " parent " field) parents)\n"))
+         "               :validate-url \"/web/" plural "/validate\"}))\n"
          "\n"
-         "(defn " entity-lower "-new-page\n"
+         "(defn " e "-new-page\n"
          "  \"The create form: `values` as submitted, `errors` by field. A plain form\n"
          "   post, so it works without JavaScript.\"\n"
-         "  [values errors opts]\n"
+         "  [values errors" parents-arg " opts]\n"
          "  (let [fields (form/field-keys schema/Create" entity-name "Request)]\n"
          "    (layout/page-layout\n"
          "     \"" title "\"\n"
@@ -573,11 +591,18 @@ DROP TABLE IF EXISTS %s;
          "        [:div.validation-errors\n"
          "         (for [[k msgs] other, msg msgs]\n"
          "           [:p (form/label-text k) \": \" (form/plain msg)])])\n"
-         "      (form/form {:method \"post\" :action \"/web/" entity-plural "\"}\n"
+         "      (form/form {:method \"post\" :action \"/web/" plural "\"}\n"
          "                 (for [field fields]\n"
-         "                   (" entity-lower "-field field values errors))\n"
+         "                   (" e "-field field values errors" parents-arg "))\n"
          "                 [:button.button.primary {:type \"submit\"} \"Create\"])]\n"
          "     opts)))\n")))
+
+(defn generate-ui-file
+  "Generate core/ui.clj: the module's first entity's pages.
+
+   Pure: true"
+  [ctx]
+  (entity-ui-file ctx (first (:entities ctx))))
 
 ;; =============================================================================
 ;; Service File Generator
@@ -1009,26 +1034,27 @@ DROP TABLE IF EXISTS %s;
 ;; Web Handlers File Generator
 ;; =============================================================================
 
-(defn generate-web-handlers-file
-  "Generate shell/web_handlers.clj file content.
-   
-   Args:
-     ctx - Template context map
-     
-   Returns:
-     String content for web_handlers.clj file
-     
+(defn entity-web-handlers-file
+  "shell/web_handlers.clj for the first entity, shell/<entity>_web_handlers.clj
+   for a further one. One that belongs to another entity reads that entity's
+   rows from config's :parent-service, which the module's routes pass.
+
+   `parent-label`: the parent's field that names a row in the select, or nil
+   for its id.
+
    Pure: true"
-  [ctx]
+  [ctx entity]
   (let [base-ns (:base-ns ctx "wagoe")
         module-name (:module-name ctx)
-        entity (first (:entities ctx))
         entity-name (:entity-name entity)
-        entity-lower (template/pascal->kebab entity-name)
-        entity-plural (template/pluralize entity-lower)]
-    (str "(ns " base-ns "." module-name ".shell.web-handlers\n"
-         "  \"Web UI handlers for " module-name " module.\"\n"
-         "  (:require [" base-ns "." module-name ".core.ui :as ui]\n"
+        {:keys [e plural parent ui handlers]} (web-names entity)
+        parent-name (:belongs-to entity)
+        label (or (some->> (:parent-label entity) name (str ":")) ":id")
+        config (if parent "config" "_config")
+        parents-arg (when parent " (parents config)")]
+    (str "(ns " base-ns "." module-name "." handlers "\n"
+         "  \"Web UI handlers for " (if (:primary? entity true) (str module-name " module") entity-name) ".\"\n"
+         "  (:require [" base-ns "." module-name "." ui " :as ui]\n"
          "            [" base-ns "." module-name ".ports :as ports]\n"
          "            [" base-ns "." module-name ".schema :as schema]\n"
          "            [wagoe.shared.ui.core.components :as components]\n"
@@ -1049,36 +1075,52 @@ DROP TABLE IF EXISTS %s;
          "   :headers {\"Content-Type\" \"text/html; charset=utf-8\"}\n"
          "   :body    (components/render-html page)})\n"
          "\n"
-         "(defn " entity-lower "-list-handler [service _config]\n"
+         (when parent
+           (str "(defn- parents\n"
+                "  \"[id label] for each " parent-name " the form may choose, or nil without the\n"
+                "   " parent-name " service. The first 500: a select of more is no use to anyone.\"\n"
+                "  [config]\n"
+                "  (when-let [svc (:parent-service config)]\n"
+                "    (mapv (juxt :id #(str (or (" label " %) (:id %))))\n"
+                "          (ports/list-" parent-name "s svc {:limit 500}))))\n"
+                "\n"))
+         "(defn " e "-list-handler [service " config "]\n"
          "  (fn [_request]\n"
-         "    (let [items (ports/list-" entity-plural " service {})]\n"
-         "      (html 200 (ui/" entity-lower "-list-page items {})))))\n"
+         "    (let [items (ports/list-" e "s service {})]\n"
+         "      (html 200 (ui/" e "-list-page items " (if parent "{:parents (parents config)}" "{}") ")))))\n"
          "\n"
-         "(defn " entity-lower "-new-handler [_service _config]\n"
+         "(defn " e "-new-handler [_service " config "]\n"
          "  (fn [request]\n"
-         "    (html 200 (ui/" entity-lower "-new-page {} {} {:user (:user request)}))))\n"
+         "    (html 200 (ui/" e "-new-page {} {}" parents-arg " {:user (:user request)}))))\n"
          "\n"
-         "(defn " entity-lower "-create-handler\n"
+         "(defn " e "-create-handler\n"
          "  \"The form, posted. A rejected form comes back with its errors and a 422.\"\n"
-         "  [service _config]\n"
+         "  [service " config "]\n"
          "  (fn [request]\n"
          "    (let [params (:form-params request)\n"
          "          {:keys [data errors]} (form/validate schema/Create" entity-name "Request params)]\n"
          "      (if errors\n"
-         "        (html 422 (ui/" entity-lower "-new-page params errors {:user (:user request)}))\n"
-         "        (do (ports/create-" entity-lower " service data)\n"
-         "            {:status 303 :headers {\"Location\" \"/web/" entity-plural "\"}})))))\n"
+         "        (html 422 (ui/" e "-new-page params errors" parents-arg " {:user (:user request)}))\n"
+         "        (do (ports/create-" e " service data)\n"
+         "            {:status 303 :headers {\"Location\" \"/web/" plural "\"}})))))\n"
          "\n"
-         "(defn " entity-lower "-validate-handler\n"
+         "(defn " e "-validate-handler\n"
          "  \"The field named `__field`, checked as the whole form would be, for htmx\n"
          "   to swap over the one on the page. Nothing is written.\"\n"
-         "  [_service _config]\n"
+         "  [_service " config "]\n"
          "  (fn [request]\n"
          "    (let [params (:form-params request)]\n"
          "      (if-let [field (form/field-key schema/Create" entity-name "Request (get params \"__field\"))]\n"
          "        (let [{:keys [errors]} (form/validate schema/Create" entity-name "Request params)]\n"
-         "          (html 200 (ui/" entity-lower "-field field params errors)))\n"
+         "          (html 200 (ui/" e "-field field params errors" parents-arg ")))\n"
          "        {:status 400 :headers {\"Content-Type\" \"text/plain\"} :body \"No such field\"}))))\n")))
+
+(defn generate-web-handlers-file
+  "Generate shell/web_handlers.clj: the module's first entity's web handlers.
+
+   Pure: true"
+  [ctx]
+  (entity-web-handlers-file ctx (first (:entities ctx))))
 
 ;; =============================================================================
 ;; Test File Generators
@@ -1721,19 +1763,57 @@ DROP TABLE IF EXISTS %s;
                 "                               :else              {:status 422 :body {:error (:error result)}})))))}}]"))
          "])\n")))
 
+(defn- web-routes-section
+  "An entity's `web-routes`: list, create, form and per-field validation,
+   calling the handlers in the namespace aliased `handlers`."
+  [entity public? handlers]
+  (let [{:keys [e plural parent]} (web-names entity)
+        guard (if public? ":public true" ":interceptors signed-in-page")
+        route (fn [method handler]
+                (str method " {" guard "\n"
+                     (apply str (repeat (+ 7 (count method)) " "))
+                     ":handler (" handlers "/" e "-" handler "-handler service config)}"))]
+    (str (if public?
+           ";; Public: this page answers anyone, signed in or not (--public-api).\n"
+           (str ";; Signed-in users only; anyone else is sent to /web/login.\n"
+                "(def ^:private signed-in-page ['wagoe.user.shell.http-interceptors/require-web-authenticated])\n"))
+         "\n"
+         "(defn web-routes\n"
+         "  \"Mounted under /web — do not repeat the prefix here."
+         (when parent
+           (str "\n   config's :parent-service, which the module's routes pass, fills the\n"
+                "   form's " (:belongs-to entity) " select."))
+         "\"\n"
+         "  [service config]\n"
+         "  [[\"/" plural "\"\n"
+         "    {" (route ":get" "list") "\n"
+         "     " (route ":post" "create") "}]\n"
+         "   [\"/" plural "/new\"\n"
+         "    {" (route ":get" "new") "}]\n"
+         "   [\"/" plural "/validate\"\n"
+         "    {" (route ":post" "validate") "}]])\n")))
+
 (defn generate-entity-http-file
-  "shell/<entity>_http.clj for a further entity: its CRUD API routes.
+  "shell/<entity>_http.clj for a further entity: its CRUD API routes, and its
+   web routes when the module has web pages (BOU-542).
 
    Pure: true"
   [ctx entity]
   (let [base-ns (:base-ns ctx "wagoe")
-        module-name (:module-name ctx)]
+        module-name (:module-name ctx)
+        {:keys [http web]} (:interfaces ctx {:http true :web true})
+        public? (get-in ctx [:interfaces :public-api] false)
+        {:keys [handlers]} (web-names entity)
+        handlers-alias (str (:entity-kebab entity) "-web-handlers")]
     (str (ns-form (str base-ns "." module-name ".shell." (:entity-kebab entity) "-http")
-                  (str "HTTP API for " (:entity-name entity) ", mounted by the "
+                  (str "HTTP " (if http "API" "pages") " for " (:entity-name entity) ", mounted by the "
                        module-name " module's routes.")
-                  (api-requires base-ns module-name))
+                  (concat (when http (api-requires base-ns module-name))
+                          (when web [(str "[" base-ns "." module-name "." handlers " :as " handlers-alias "]")])))
          "\n"
-         (api-section entity (get-in ctx [:interfaces :public-api] false)))))
+         (when http (api-section entity public?))
+         (when (and http web) "\n")
+         (when web (web-routes-section entity public? handlers-alias)))))
 
 (defn generate-http-file
   "Generate shell/http.clj: the first entity's API and web routes, and the
@@ -1744,8 +1824,6 @@ DROP TABLE IF EXISTS %s;
   (let [base-ns (:base-ns ctx "wagoe")
         module-name (:module-name ctx)
         entity (first (:entities ctx))
-        entity-lower (template/pascal->kebab (:entity-name entity))
-        entity-plural (template/pluralize entity-lower)
         ;; `:interfaces` decides what this file defines and what the
         ;; contribution carries. A module generated with --no-web has no web
         ;; UI files on disk, so it must not mount web routes either (BOU-479).
@@ -1760,28 +1838,7 @@ DROP TABLE IF EXISTS %s;
                           (when web [(str "[" base-ns "." module-name ".shell.web-handlers :as web-handlers]")])))
          "\n"
          (when http (str (api-section entity public?) "\n"))
-         (when web
-           (str (if public?
-                  ";; Public: this page answers anyone, signed in or not (--public-api).\n"
-                  (str ";; Signed-in users only; anyone else is sent to /web/login.\n"
-                       "(def ^:private signed-in-page ['wagoe.user.shell.http-interceptors/require-web-authenticated])\n"))
-                "\n"
-                "(defn web-routes\n"
-                "  \"Mounted under /web — do not repeat the prefix here.\"\n"
-                "  [service config]\n"
-                (let [guard   (if public? ":public true" ":interceptors signed-in-page")
-                      route   (fn [method handler]
-                                (str method " {" guard "\n"
-                                     (apply str (repeat (+ 7 (count method)) " "))
-                                     ":handler (web-handlers/" entity-lower "-" handler "-handler service config)}"))]
-                  (str "  [[\"/" entity-plural "\"\n"
-                       "    {" (route ":get" "list") "\n"
-                       "     " (route ":post" "create") "}]\n"
-                       "   [\"/" entity-plural "/new\"\n"
-                       "    {" (route ":get" "new") "}]\n"
-                       "   [\"/" entity-plural "/validate\"\n"
-                       "    {" (route ":post" "validate") "}]])\n"))
-                "\n"))
+         (when web (str (web-routes-section entity public? "web-handlers") "\n"))
          "(defn " module-name "-routes\n"
          "  \"This module's contribution to the application's route table.\n"
          "\n"
@@ -1802,10 +1859,15 @@ DROP TABLE IF EXISTS %s;
   [ctx]
   (get-in ctx [:interfaces :http] true))
 
+(defn- web?
+  [ctx]
+  (get-in ctx [:interfaces :web] true))
+
 (defn entity-files
   "The files a further entity adds, as [{:path :content}]: core, service,
-   persistence and http namespaces of its own, its migration pair and its tests.
-   No http namespace when the module has no HTTP interface.
+   persistence and http namespaces of its own, its migration pair and its tests,
+   and its web pages when the module has them. No http namespace when the
+   module has neither an HTTP interface nor web pages.
 
    Pure: true"
   [ctx entity migration-number]
@@ -1826,8 +1888,12 @@ DROP TABLE IF EXISTS %s;
       {:path (tst (str "shell." e "-repository-test")) :content (generate-persistence-test-file ctx entity)}
       {:path (tst (:service-test-ns entity)) :content (generate-service-test-file ctx entity)}]
 
-      (http? ctx)
+      (or (http? ctx) (web? ctx))
       (conj {:path (src (str "shell." e "-http")) :content (generate-entity-http-file ctx entity)})
+
+      (web? ctx)
+      (conj {:path (src (str "core." e "-ui")) :content (entity-ui-file ctx entity)}
+            {:path (src (str "shell." e "-web-handlers")) :content (entity-web-handlers-file ctx entity)})
 
       (:workflow entity)
       (conj {:path (src (str "shell." e "-workflow")) :content (generate-workflow-file ctx entity)}
@@ -2011,20 +2077,60 @@ DROP TABLE IF EXISTS %s;
      (form-head loc)))
 
 (defn- wiring-routes-form
-  "The routes init-key that adds the further entities' API routes."
-  [module-name]
-  (str "(defmethod ig/init-key :wagoe/" module-name "-routes\n"
-       "  [_ {:keys [service config entities]}]\n"
-       "  (log/info \"Initializing " module-name " routes\")\n"
-       "  ;; A contribution — {:api [...] :web [...] :static [...]} — not a route\n"
-       "  ;; table. :wagoe/http-handler prefixes and versions each part before\n"
-       "  ;; mounting it. The API routes of every entity `bb scaffold entity` added\n"
-       "  ;; (see entity-wiring below) join the first entity's.\n"
-       "  (reduce (fn [contribution {entity-service :service routes :routes}]\n"
-       "            (cond-> contribution\n"
-       "              routes (update :api into (routes entity-service))))\n"
-       "          (http/" module-name "-routes service (or config {}))\n"
-       "          (vals entities)))"))
+  "The routes init-key that adds the further entities' routes and pages. With
+   `legacy?`, the one written before further entities had pages (BOU-542),
+   which add-entity-to-wiring replaces."
+  ([module-name] (wiring-routes-form module-name false))
+  ([module-name legacy?]
+   (str "(defmethod ig/init-key :wagoe/" module-name "-routes\n"
+        "  [_ {:keys [service config entities]}]\n"
+        "  (log/info \"Initializing " module-name " routes\")\n"
+        "  ;; A contribution — {:api [...] :web [...] :static [...]} — not a route\n"
+        "  ;; table. :wagoe/http-handler prefixes and versions each part before\n"
+        (if legacy?
+          (str "  ;; mounting it. The API routes of every entity `bb scaffold entity` added\n"
+               "  ;; (see entity-wiring below) join the first entity's.\n"
+               "  (reduce (fn [contribution {entity-service :service routes :routes}]\n"
+               "            (cond-> contribution\n"
+               "              routes (update :api into (routes entity-service))))\n"
+               "          (http/" module-name "-routes service (or config {}))\n"
+               "          (vals entities)))")
+          (str "  ;; mounting it. The routes and pages of every entity `bb scaffold entity`\n"
+               "  ;; added (see entity-wiring below) join the first entity's. A page that\n"
+               "  ;; picks the entity it belongs to gets that entity's service to list them.\n"
+               "  (let [config (or config {})]\n"
+               "    (reduce (fn [contribution {entity-service :service :keys [routes web-routes parent]}]\n"
+               "              (cond-> contribution\n"
+               "                routes     (update :api into (routes entity-service))\n"
+               "                web-routes (update :web into (web-routes entity-service\n"
+               "                                                         (cond-> config\n"
+               "                                                           parent (assoc :parent-service (get-in entities [parent :service] service)))))))\n"
+               "            (http/" module-name "-routes service config)\n"
+               "            (vals entities))))")))))
+
+(defn- entities-init-form
+  "The init-key that builds each further entity's service. With `legacy?`, the
+   one written before further entities had pages (BOU-542)."
+  ([module-name] (entities-init-form module-name false))
+  ([module-name legacy?]
+   (str "(defmethod ig/init-key :wagoe/" module-name "-entities\n"
+        "  [_ {:keys [ctx workflow events]}]\n"
+        "  (into {}\n"
+        "        (for [entity (keys (methods entity-wiring))\n"
+        "              :let [{:keys [repository service routes " (when-not legacy? "web-routes parent ") "child-of] install :workflow} (entity-wiring entity)\n"
+        "                    repo (repository ctx)\n"
+        "                    svc  (if install (service repo (install workflow repo events)) (service repo))]]\n"
+        "          ;; :child is what the first entity's create needs to make this one,\n"
+        "          ;; and its GET to read them back.\n"
+        "          [entity (cond-> {:service svc :routes routes" (when-not legacy? " :web-routes web-routes :parent parent") "}\n"
+        "                    child-of (assoc :child [(:key child-of)\n"
+        "                                            (cond-> {:foreign-key (:foreign-key child-of)\n"
+        "                                                     :create      #((:create child-of) svc %)}\n"
+        "                                              (:find child-of)\n"
+        "                                              (assoc :find #((:find child-of) svc %))\n"
+        "                                              (:start child-of)\n"
+        "                                              (assoc :start  #((:start child-of) (:workflow svc) %)\n"
+        "                                                     :remove #((:remove child-of) (:workflow svc) %)))]))])))")))
 
 (defn service-takes-children?
   "Whether the service.clj `source` creates its entity with the entities that
@@ -2054,33 +2160,17 @@ DROP TABLE IF EXISTS %s;
     (str (banner "Further entities (bb scaffold entity)")
          ";; One entity-wiring method per entity. ig-config builds each one's\n"
          ";; repository and service under " (k "-entities") ", and the routes\n"
-         ";; init-key above mounts their API routes with the module's.\n"
+         ";; init-key above mounts their routes and pages with the module's.\n"
          "\n"
          "(defmulti entity-wiring\n"
-         "  \"{:repository f :service f :routes f :workflow f :child-of m} for one further entity.\n"
+         "  \"{:repository f :service f :routes f :web-routes f :parent k :workflow f :child-of m}\n"
+         "   for one further entity. :parent names the entity its pages pick, when it has one.\n"
          "   :workflow, for an entity with one, installs it: (f workflow repository events).\n"
          "   :child-of, for one that belongs to the first entity, says how its create makes it\n"
          "   and its GET reads it.\"\n"
          "  identity)\n"
          "\n"
-         "(defmethod ig/init-key " (k "-entities") "\n"
-         "  [_ {:keys [ctx workflow events]}]\n"
-         "  (into {}\n"
-         "        (for [entity (keys (methods entity-wiring))\n"
-         "              :let [{:keys [repository service routes child-of] install :workflow} (entity-wiring entity)\n"
-         "                    repo (repository ctx)\n"
-         "                    svc  (if install (service repo (install workflow repo events)) (service repo))]]\n"
-         "          ;; :child is what the first entity's create needs to make this one,\n"
-         "          ;; and its GET to read them back.\n"
-         "          [entity (cond-> {:service svc :routes routes}\n"
-         "                    child-of (assoc :child [(:key child-of)\n"
-         "                                            (cond-> {:foreign-key (:foreign-key child-of)\n"
-         "                                                     :create      #((:create child-of) svc %)}\n"
-         "                                              (:find child-of)\n"
-         "                                              (assoc :find #((:find child-of) svc %))\n"
-         "                                              (:start child-of)\n"
-         "                                              (assoc :start  #((:start child-of) (:workflow svc) %)\n"
-         "                                                     :remove #((:remove child-of) (:workflow svc) %)))]))])))\n"
+         (entities-init-form module-name) "\n"
          "\n"
          "(defmethod ig/halt-key! " (k "-entities") "\n"
          "  [_ entities]\n"
@@ -2143,6 +2233,10 @@ DROP TABLE IF EXISTS %s;
          "   :service    " e "-service/create-service"
          (when (http? ctx)
            (str "\n   :routes     " e "-http/api-routes"))
+         (when (web? ctx)
+           (str "\n   :web-routes " e "-http/web-routes"
+                (when (:belongs-to entity)
+                  (str "\n   :parent     :" (:belongs-to entity)))))
          (when (:workflow entity)
            (str "\n   :workflow   " e "-workflow/install!"))
          (when (:child-of entity)
@@ -2163,7 +2257,7 @@ DROP TABLE IF EXISTS %s;
   (let [prefix (str (:base-ns ctx "wagoe") "." (:module-name ctx) ".")
         e      (:entity-kebab entity)]
     (cond-> (vec (for [part (cond-> ["persistence" "service"]
-                              (http? ctx)        (conj "http")
+                              (or (http? ctx) (web? ctx)) (conj "http")
                               (:workflow entity) (conj "workflow"))]
                    [(symbol (str e "-" part))
                     (symbol (str prefix (if (#{"http" "workflow"} part)
@@ -2266,12 +2360,43 @@ DROP TABLE IF EXISTS %s;
       (:content (install-seam base ctx))
       base)))
 
+(defn- entities-init-form?
+  [module-name loc]
+  (= ['defmethod 'ig/init-key (keyword "wagoe" (str module-name "-entities"))]
+     (form-head loc)))
+
+(defn- same-form?
+  "Whether `loc` is `form`, whitespace aside. Text, not sexprs: a #() reads
+   to different gensyms each time."
+  [loc form]
+  (= (str/replace (z/string loc) #"\s+" " ") (str/replace form #"\s+" " ")))
+
+(defn- mount-pages
+  "`source`, a wiring with the seam, made to mount further entities' pages:
+   the routes and entities init-keys written before those had any (BOU-542)
+   are replaced. {:content s}, with :warning naming a key edited by hand,
+   which is left as it is."
+  [source module-name]
+  (reduce (fn [{:keys [content] :as acc} [pred form-of]]
+            (let [loc (some #(when (pred module-name %) %) (top-level-forms content))]
+              (cond
+                (and loc (same-form? loc (form-of module-name))) acc
+                (and loc (same-form? loc (form-of module-name true)))
+                (assoc acc :content (z/root-string (z/replace loc (z/node (z/of-string (form-of module-name))))))
+                :else
+                (update acc :warning #(or % (str "its " (if (= pred routes-init-form?) "routes" "entities")
+                                                 " init-key is not one bb scaffold wrote"))))))
+          {:content source}
+          [[routes-init-form? wiring-routes-form] [entities-init-form? entities-init-form]]))
+
 (defn add-entity-to-wiring
   "`source` — a module_wiring.clj — with `entity` wired in.
 
    Returns {:content s} or {:error reason}. The first further entity also
    installs the seam described above, and refuses when the routes init-key is
-   not the one `generate` wrote: replacing it would drop the edit.
+   not the one `generate` wrote: replacing it would drop the edit. An entity
+   with pages brings an older seam up to date, and adds a :warning when it
+   cannot, because then nothing mounts them.
 
    Pure: true"
   [source ctx entity]
@@ -2279,7 +2404,10 @@ DROP TABLE IF EXISTS %s;
     (let [module-name (:module-name ctx)
           seam?       (contains? (defined-symbols source) 'entity-wiring)
           k           (keyword (:entity-kebab entity))
-          installed   (if seam? {:content source} (install-seam source ctx))]
+          installed   (cond
+                        (not seam?) (install-seam source ctx)
+                        (web? ctx)  (mount-pages source module-name)
+                        :else       {:content source})]
       (cond
         (:error installed) installed
 
@@ -2299,7 +2427,10 @@ DROP TABLE IF EXISTS %s;
         (let [with-requires (add-requires (:content installed) (entity-requires ctx entity))]
           (if (:error with-requires)
             with-requires
-            {:content (append-section (:content with-requires) (entity-wiring-section ctx entity))}))))
+            (cond-> {:content (append-section (:content with-requires) (entity-wiring-section ctx entity))}
+              (:warning installed)
+              (assoc :warning (str (:warning installed) ", so " (:entity-name entity)
+                                   "'s pages are not mounted. Add its :web-routes to it by hand.")))))))
     (catch Exception e
       {:error (str "it could not be read: " (.getMessage e))})))
 

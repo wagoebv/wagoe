@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **`bb scaffold entity` gives the entity web pages** (BOU-542): a list and a create form, as the first entity has,
+  with a select for its `--belongs-to` parent. Nothing to do; a module generated with `--no-web` gets none.
 - **`:wagoe/user :login-layout` lets an app lay out the sign-in pages** (BOU-740): login, MFA and registration.
   A `(fn [title body opts])` returning the page; Wagoe keeps the form, CSRF and errors.
 - **SMTP and IMAP take `:ssl-trust` and `:check-server-identity?`** (BOU-741): for a server whose certificate is
