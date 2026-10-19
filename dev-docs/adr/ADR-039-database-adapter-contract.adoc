@@ -101,7 +101,7 @@ sites move to it.
 
 `test/wagoe/database_adapter_contract_test.clj` runs every case on H2, SQLite,
 embedded PostgreSQL and MySQL. It lives in the root `test/` tree because the
-`:unit` CI job is the one with a MySQL service. MySQL fails the suite when it is
+`:app` CI job is the one with a MySQL service. MySQL fails the suite when it is
 not reachable, like the other sweeps, and is registered in
 `wagoe.tools.test-services`. `database-adapter-surface-test` keeps checking that
 each port method answers; this checks the behaviour behind the answers. Cases:
@@ -145,7 +145,7 @@ MySQL starts with entries for the BOU-574 inventory (instants, UUIDs, booleans).
   capability set says what it may decline.
 * `dialect` returning nil for PostgreSQL stays, for HoneySQL, but callers stop
   relying on it.
-* The suite needs MySQL wherever it runs; the `:unit` CI job has it already.
+* The suite needs MySQL wherever it runs; the `:app` CI job has it already.
 
 == Not decided here
 

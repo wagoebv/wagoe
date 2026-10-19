@@ -1,5 +1,5 @@
 (ns wagoe.tools.coverage
-  "`bb coverage`: Cloverage through kaocha's :unit suite, measuring the code
+  "`bb coverage`: Cloverage through every kaocha suite, measuring the code
    tests.edn names, so no second list of paths can fall behind it (BOU-620)."
   (:require [babashka.fs :as fs]
             [babashka.process :as process]
@@ -8,20 +8,19 @@
 
 (defn src-paths
   "What to measure: tests.edn's :kaocha/source-paths, plus the src next to each
-   :unit test path that has one (libs/config is on neither list)."
+   suite's test path that has one."
   [tests-edn dir?]
-  (let [unit (first (filter #(= :unit (:id %)) (:tests tests-edn)))]
-    (distinct
-     (concat (:kaocha/source-paths tests-edn)
-             (keep #(let [src (str/replace % #"/test$" "/src")]
-                      (when (and (not= src %) (dir? src)) src))
-                   (:test-paths unit))))))
+  (distinct
+   (concat (:kaocha/source-paths tests-edn)
+           (keep #(let [src (str/replace % #"/test$" "/src")]
+                    (when (and (not= src %) (dir? src)) src))
+                 (mapcat :test-paths (:tests tests-edn))))))
 
 (defn command
   "The clojure invocation for `src` paths. :test/all brings what every suite
    needs, on any platform, so no alias list is kept here."
   [src]
-  (concat ["clojure" "-M:test:test/all:coverage" ":unit" "--plugin" "cloverage" "--no-cov-html" "--cov-text"]
+  (concat ["clojure" "-M:test:test/all:coverage" "--plugin" "cloverage" "--no-cov-html" "--cov-text"]
           (mapcat (fn [p] ["--cov-src-ns-path" p]) src)))
 
 (defn -main [& _]
