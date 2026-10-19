@@ -280,6 +280,23 @@
     (update ctx :entities
             (fn [es] (mapv #(cond-> % (= first-kebab (:belongs-to %)) (assoc :child-of true)) es)))))
 
+(defn- parent-label
+  "The field that names one of the parent's rows in a child's page: its first
+   display field, as the admin shows it (BOU-542)."
+  [field-names]
+  (first (generators/admin-display-fields field-names)))
+
+(defn- with-parent-labels
+  "`ctx` with each entity that belongs to another of its entities given that
+   entity's :parent-label."
+  [ctx]
+  (let [by-name (into {} (map (juxt :entity-kebab identity)) (:entities ctx))]
+    (update ctx :entities
+            (fn [es] (mapv #(if-let [p (by-name (:belongs-to %))]
+                              (assoc % :parent-label (parent-label (map (comp keyword :field-name-kebab) (:fields p))))
+                              %)
+                           es)))))
+
 (defn- minimum-problem
   "Why a minimum cannot be kept, or nil: only the first entity's create takes
    children, so a child of any other has no create that could."
@@ -329,7 +346,7 @@
                         {:type :validation-error})))
 
       ;; Build template context
-      (let [ctx (children-of-first (template/build-module-context request))
+      (let [ctx (-> (template/build-module-context request) children-of-first with-parent-labels)
             module-name (:module-name ctx)
             ;; Directory name, not namespace segment — see template/ns->path.
             module-path (:module-path ctx)
@@ -861,6 +878,10 @@
             entity      (template/build-entity-context (:entity request) module-name {:primary? false})
             ctx         (assoc ctx :entities [entity])
             module-root (format "src/%s/%s/" (:base-ns-path ctx) (:module-path ctx))
+            ;; Pages only for a module that has them: one generated with
+            ;; --no-web mounts none (BOU-542).
+            ctx         (update-in ctx [:interfaces :web]
+                                   #(and % (.isFile (resolve-path output-dir (str module-root "shell/web_handlers.clj")))))
             ;; The first entity is the one whose service is shell/service.clj;
             ;; a further one has a service of its own. Only the first entity's
             ;; create takes children (BOU-578).
@@ -927,6 +948,10 @@
                                      (str/join ", " (map str clashes))
                                      " — is " (:entity-name entity) " already in it?")
                                 {:type :validation-error})))
+            parent-shown (when parent
+                           (generators/admin-display-fields (generators/schema-field-names schema-src parent)))
+            entity      (cond-> entity
+                          parent (assoc :parent-label (first parent-shown)))
             admin?      (admin-on? output-dir)
             parent-plural (some-> parent template/pascal->kebab template/pluralize)
             admin-out   (when admin?
@@ -934,8 +959,7 @@
                            output-dir
                            [[entity {:parent (when parent
                                                {:name   parent
-                                                :fields (generators/admin-display-fields
-                                                         (generators/schema-field-names schema-src parent))})}]]))
+                                                :fields parent-shown})}]]))
             new-files   (into (generators/entity-files ctx entity (get-next-migration-number output-dir))
                               (:new admin-out))
             admin-edits (when admin? (admin-config-edits output-dir [(:entity-plural entity)]))
@@ -993,7 +1017,8 @@
                             (into (write-edits! (concat (:edits admin-edits) (filter :file parent-edits))
                                                 dry-run))
                             (into (seed-edits output-dir [entity] dry-run)))
-            warnings    (cond-> (vec (concat (:warnings admin-edits) (keep :warning parent-edits)))
+            warnings    (cond-> (vec (concat (:warnings admin-edits) (keep :warning parent-edits)
+                                             (some-> (:warning wiring) vector)))
                           (and parent-first? (not nested?))
                           (conj (str parent "'s create does not take " (:entity-plural entity)
                                      ": its service.clj predates that. Create them through /api/v1/"
@@ -1009,6 +1034,8 @@
          :next-steps  (into (filterv some?
                                      ["Run the migration: clojure -M:migrate up"
                                       (when http? (str "Restart the system; the API is at " uri " and " uri "/:id"))
+                                      (when (and (get-in ctx [:interfaces :web]) (not (:warning wiring)))
+                                        (str "Its pages are at /web/" (:entity-plural entity)))
                                       (str "Run the tests: clojure -M:test --focus " service-ns "-test")])
                             (workflow-steps output-dir [entity]))
          :warnings    (not-empty (cond-> (vec warnings)

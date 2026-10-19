@@ -120,6 +120,17 @@
     (let [html (str (h/html (form/field schema :status {:value :sent})))]
       (is (str/includes? html "<select"))
       (is (str/includes? html "<option selected=\"selected\" value=\"sent\">Sent</option>"))))
+  (testing "options make a select of values the schema cannot list"
+    (let [s    [:map [:invoice-id :uuid]]
+          id   #uuid "00000000-0000-0000-0000-000000000001"
+          html (str (h/html (form/field s :invoice-id {:value (str id)
+                                                       :options [[id "INV-1"] [#uuid "00000000-0000-0000-0000-000000000002" "INV-2"]]})))]
+      (is (str/includes? html "<select class=\"form-control ui-input\" id=\"invoice-id\" name=\"invoice-id\" required=\"required\">"))
+      (is (str/includes? html (str "<option selected=\"selected\" value=\"" id "\">INV-1</option>")))
+      (is (str/includes? html ">INV-2</option>")))
+    (testing "and an empty one is a select with nothing to choose"
+      (is (str/includes? (str (h/html (form/field [:map [:invoice-id :uuid]] :invoice-id {:options []})))
+                         "<select"))))
   (testing "a boolean is a checkbox with its unchecked fallback"
     (let [html (str (h/html (form/field schema :paid {:value "true" :validate-url "/v"})))]
       (is (str/includes? html "type=\"hidden\" value=\"false\""))

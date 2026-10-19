@@ -13,6 +13,7 @@
             [muuntaja.core :as muuntaja]
             [next.jdbc :as jdbc]
             [reitit.core :as r]
+            [reitit.ring :as ring]
             [wagoe.platform.shell.adapters.database.factory :as db-factory]
             [wagoe.platform.shell.database.migrations :as migrations]
             [wagoe.platform.shell.http.reitit-router :as reitit-router]
@@ -161,6 +162,9 @@
                  "src/bou497a/billing/shell/invoice_line_item_service.clj"
                  "src/bou497a/billing/shell/invoice_line_item_persistence.clj"
                  "src/bou497a/billing/shell/invoice_line_item_http.clj"
+                 ;; Its pages, as the first entity has (BOU-542).
+                 "src/bou497a/billing/core/invoice_line_item_ui.clj"
+                 "src/bou497a/billing/shell/invoice_line_item_web_handlers.clj"
                  "test/bou497a/billing/core/invoice_line_item_test.clj"
                  "test/bou497a/billing/shell/invoice_line_item_repository_test.clj"
                  "test/bou497a/billing/shell/invoice_line_item_service_test.clj"}
@@ -575,6 +579,14 @@
         (is (= "entered" (get-in resp [:body :status])))
         (is (= :entered (:status ((at "ports" 'get-invoice) svc (parse-uuid (get-in resp [:body :id]))))))))))
 
+(defn- no-api?
+  "Whether no further entity's http namespace under `dir` defines API routes.
+   Without HTTP it still carries the entity's pages (BOU-542)."
+  [dir]
+  (not-any? (fn [[path content]]
+              (and (str/ends-with? path "_http.clj") (str/includes? content "(defn api-routes")))
+            (files-under dir)))
+
 (deftest ^:integration a-module-without-http-gets-no-entity-api
   (let [dir (temp-dir)
         r   (ports/generate-module svc {:module-name "billing" :base-ns "bou497nh"
@@ -583,14 +595,14 @@
                                                       line-item]
                                         :output-dir  (.getPath dir)})]
     (is (:success r) (pr-str (:errors r)))
-    (is (not-any? #(str/ends-with? % "_http.clj") (keys (files-under dir))))
+    (is (no-api? dir))
     (testing "and adding one later with :http false writes none either"
       (let [dir2 (invoice-module! (temp-dir) "bou497nh2")
             r2   (ports/add-entity svc {:module-name "billing" :base-ns "bou497nh2"
                                         :entity line-item :interfaces {:http false}
                                         :output-dir (.getPath dir2)})]
         (is (:success r2) (pr-str (:errors r2)))
-        (is (not-any? #(str/ends-with? % "_http.clj") (keys (files-under dir2))))
+        (is (no-api? dir2))
         (let [system (boot-module dir2 "bou497nh2")]
           (is (contains? (:wagoe/billing-entities system) :invoice-line-item))
           (is (not (contains? (api-paths system) "/invoice-line-items"))))))
@@ -605,7 +617,7 @@
                                       "--belongs-to" "invoice" "--field" "quantity:int"
                                       "--no-http" "--base-ns" "bou497nh3"
                                       "--output-dir" (.getPath dir3)]))))
-        (is (not-any? #(str/ends-with? % "_http.clj") (keys (files-under dir3))))))))
+        (is (no-api? dir3))))))
 
 ;; =============================================================================
 ;; The first entity's API reaches its service (BOU-539)
@@ -1044,3 +1056,96 @@
               (let [resp ((web-caller web) "/web/invoices")]
                 (is (= 200 (:status resp)))
                 (is (str/includes? (:body resp) "INV-77"))))))))))
+
+;; =============================================================================
+;; An added entity's pages (BOU-542)
+;; =============================================================================
+
+(deftest ^:integration an-added-entity-gets-the-first-entitys-pages
+  (let [dir (invoice-module! (temp-dir) "bou542a")]
+    (is (:success (add-line-item! dir "bou542a")))
+    (load-and-test! dir)
+    (let [db     (h2-migrated dir "bou542a")
+          system (ig/init (walk/postwalk-replace {(ig/ref :wagoe/db-context) db} (module-graph "bou542a" {})))
+          web    (:web (:wagoe/billing-routes system))
+          serve  (ring/ring-handler (ring/router (into ["/web"] web)))
+          inv    ((ns-resolve 'bou542a.billing.ports 'create-invoice) (:wagoe/billing-service system) {:number "A-1"})
+          post   #(serve {:request-method :post :uri "/web/invoice-line-items" :form-params %})]
+      (testing "mounted under the module's :web, next to the invoice's"
+        (is (every? (set (map first web))
+                    ["/invoices" "/invoice-line-items" "/invoice-line-items/new" "/invoice-line-items/validate"])
+            (pr-str (map first web))))
+      (testing "the form picks the invoice by its number"
+        (let [{:keys [status body]} (serve {:request-method :get :uri "/web/invoice-line-items/new"})]
+          (is (= 200 status))
+          (is (re-find #"<select[^>]*name=\"invoice-id\"" body))
+          (is (str/includes? body (str "<option value=\"" (:id inv) "\">A-1</option>")))
+          (is (str/includes? body "hx-post=\"/web/invoice-line-items/validate\""))))
+      (testing "a rejected form comes back with its errors and the select"
+        (let [{:keys [status body]} (post {"invoice-id" (str (:id inv)) "description" "" "quantity" "x"})]
+          (is (= 422 status))
+          (is (str/includes? body "<span class=\"error\">Must be a number</span>"))
+          (is (str/includes? body (str "<option selected=\"selected\" value=\"" (:id inv) "\">A-1</option>")))))
+      (testing "an accepted one creates, and the list shows it under its invoice"
+        (is (= 303 (:status (post {"invoice-id" (str (:id inv)) "description" "Kettle" "quantity" "2"}))))
+        (let [body (:body (serve {:request-method :get :uri "/web/invoice-line-items"}))]
+          (is (str/includes? body "<a href=\"/web/invoice-line-items/new\">"))
+          (is (str/includes? body "<td>A-1</td>"))
+          (is (str/includes? body "<td>Kettle</td>"))
+          (is (not (str/includes? body (str (:id inv))))))))))
+
+(deftest ^:integration a-module-without-pages-gets-none-for-an-added-entity
+  (let [dir (temp-dir)
+        r   (ports/generate-module svc {:module-name "billing" :base-ns "bou542n"
+                                        :interfaces  {:web false}
+                                        :entities    [{:name "Invoice" :fields [{:name :number :type :string}]}]
+                                        :output-dir  (.getPath dir)})]
+    (is (:success r) (pr-str (:errors r)))
+    (is (:success (add-line-item! dir "bou542n")))
+    (is (not-any? #(re-find #"_ui\.clj$|web_handlers\.clj$" %) (keys (files-under dir))))
+    (let [system (boot-module dir "bou542n")]
+      (is (empty? (:web (:wagoe/billing-routes system))))
+      (is (contains? (api-paths system) "/invoice-line-items")))))
+
+(deftest ^:unit a-wiring-from-before-pages-mounts-them
+  ;; A seam the first further entity installed before BOU-542 mounts no pages.
+  ;; The next entity replaces its two keys, unless they were edited by hand.
+  (let [ctx    {:module-name "billing" :base-ns "bou542l" :interfaces {:http true :web true}}
+        legacy (-> (generators/generate-module-wiring-file
+                    (assoc ctx :entities [{:entity-name "Invoice" :entity-kebab "invoice" :primary? true}]))
+                   (generators/add-entity-to-wiring ctx {:entity-name "Payment" :entity-kebab "payment"
+                                                         :entity-plural "payments"})
+                   :content
+                   (str/replace (#'generators/wiring-routes-form "billing") (#'generators/wiring-routes-form "billing" true))
+                   (str/replace (#'generators/entities-init-form "billing") (#'generators/entities-init-form "billing" true)))
+        item   {:entity-name "InvoiceLineItem" :entity-kebab "invoice-line-item"
+                :entity-plural "invoice-line-items" :belongs-to "invoice"}]
+    (is (str/includes? legacy "(vals entities)))"))
+    (let [{:keys [content warning]} (generators/add-entity-to-wiring legacy ctx item)]
+      (is (nil? warning))
+      (is (str/includes? content (#'generators/wiring-routes-form "billing")))
+      (is (str/includes? content (#'generators/entities-init-form "billing")))
+      (is (str/includes? content ":web-routes invoice-line-item-http/web-routes\n   :parent     :invoice")))
+    (testing "a key edited by hand is kept, and the pages are said not to be mounted"
+      (let [edited (str/replace legacy "(or config {})" "(assoc config :mine true)")
+            {:keys [content warning]} (generators/add-entity-to-wiring edited ctx item)]
+        (is (str/includes? content "(assoc config :mine true)"))
+        (is (str/includes? warning "pages are not mounted") warning)))))
+
+(deftest ^:integration generate-module-gives-every-entity-pages
+  (let [dir (temp-dir)
+        r   (ports/generate-module svc {:module-name "billing" :base-ns "bou542g"
+                                        :entities    [{:name "Invoice" :fields [{:name :number :type :string}]}
+                                                      line-item
+                                                      {:name "Note" :fields [{:name :body :type :string}]}]
+                                        :output-dir  (.getPath dir)})
+        files (files-under dir)]
+    (is (:success r) (pr-str (:errors r)))
+    (testing "a child names its parent by the parent's first field"
+      (is (str/includes? (get files "src/bou542g/billing/shell/invoice_line_item_web_handlers.clj")
+                         "(mapv (juxt :id #(str (or (:number %) (:id %))))")))
+    (testing "and an entity that belongs to none has no select"
+      (is (not (str/includes? (get files "src/bou542g/billing/core/note_ui.clj") "parents"))))
+    (let [system (boot-module dir "bou542g")]
+      (is (every? (set (map first (:web (:wagoe/billing-routes system))))
+                  ["/invoices" "/invoice-line-items" "/notes"])))))

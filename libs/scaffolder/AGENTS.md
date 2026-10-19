@@ -115,8 +115,14 @@ bb scaffold entity \
   one `:wagoe/<module>-routes` init-key so it mounts every entity's routes;
   that replacement is refused if the init-key was hand-edited. Later entities
   append one `entity-wiring` method. That `ig-config` returns only what it adds;
-  discovery builds the four module keys under it. No web page. `--no-http` (or `:http false`
-  in `:interfaces`) leaves out the http namespace and its routes;
+  discovery builds the four module keys under it. In a module with web pages
+  (`shell/web_handlers.clj` exists) it gets the first entity's list and create
+  form under `/web/<entities>`, from `core/<entity>_ui.clj` and
+  `shell/<entity>_web_handlers.clj`; a `--belongs-to` entity picks its parent
+  from a select, which the routes init-key feeds with the parent's service. A
+  wiring from before that is brought up to date, unless hand-edited, when the
+  command warns that the pages are not mounted. `--no-http` (or `:http false`
+  in `:interfaces`) leaves out the API routes;
   `--public-api` (`:public-api true`) serves them without a signed-in user.
 
 `generate-module` (API, MCP `scaffold-module`) takes several `:entities`; the
