@@ -120,6 +120,17 @@
                (not (.getAutoCommit ^java.sql.Connection conn)))
       conn)))
 
+(defn connectable-for
+  "What code holding `datasource` runs a statement on: `datasource` when it is
+   an open transaction already, else the platform transaction open on this
+   thread on it, else `datasource`. A tenant request's transaction is bound to
+   the tenant's schema, so a store that queries through this reads the
+   tenant's tables."
+  [datasource]
+  (if (tx-connection datasource)
+    datasource
+    (or (execution/transaction-on datasource) datasource)))
+
 (defn in-savepoint
   "Call `f`, and on failure roll back only what it did on `conn`: PostgreSQL
    refuses every later statement of a transaction after a failed one. A nil
@@ -282,6 +293,14 @@
 (def discover-migration-dirs
   "Every migration directory: the project's first, then each library's."
   migrations/discover-migration-dirs)
+
+(def discover-tenant-migration-dirs
+  "The libraries' migration directories that run inside every tenant schema."
+  migrations/discover-tenant-migration-dirs)
+
+(def refuse-duplicate-migration-ids!
+  "Throw when two migrations in the directories share an id, naming both."
+  migrations/refuse-duplicate-migration-ids!)
 
 (def create-destination
   "The directory migratus actually reads `project-migration-dir` from, as a path."

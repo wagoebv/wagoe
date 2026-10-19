@@ -162,8 +162,9 @@ you would rather not commit the imports, keep the rule local:
 `start-workflow!` and `transition!` take an optional `tx` before their input:
 an open transaction on the store's datasource, either a next.jdbc connection
 or a platform `with-transaction` context. The instance and its audit entry
-then commit or roll back with the caller's own writes. A nil `tx` writes on
-the store's own connection, as the two-argument form does.
+then commit or roll back with the caller's own writes. A nil `tx`, like the
+two-argument form, writes on the platform transaction open on this thread on
+the store's datasource, else on the store's own connection.
 
 ```clojure
 (jdbc/with-transaction [tx ds]
@@ -313,6 +314,16 @@ Routes are defined in `shell/http.clj` as Reitit route data (no `/api` prefix) a
 | `GET` | `/api/v1/workflow/instances/:id/audit` | Full audit log |
 | `POST` | `/api/v1/workflow/instances/:id/transition` | Execute a transition |
 
+Who may call them:
+
+- The three `GET`s and the start need the `:admin` role or a `:workflow/read` grant
+  (`wagoe.user.core.group/holds?` over `user-grants`), else 403. An application
+  that declares its group permissions must declare `:workflow/read`.
+- Every route, and the admin pages under `/web/admin/workflows`, answers 403 to a
+  caller outside the request's tenant: with a tenant resolved, not a member,
+  not one of its users (`:tenant-id`) and not a platform admin; without one, a
+  user who has a `:tenant-id`. The admin pages also need `can-access-admin?`.
+
 Bodies are kebab-case JSON, as in a scaffolded API: start takes `workflow-id`, `entity-type`
 and `entity-id`; a transition answers `{"instance" … "audit-entry" …}`, the instance carrying
 the `available-transitions` of its new state for the caller as GET does, or 422
@@ -333,6 +344,18 @@ one, with an index (BOU-589): join a UUID-keyed table on
 `w.entity_uuid = i.id`, never on `entity_id`, which needs a cast on PostgreSQL.
 `migrate up` adds it, rewriting the table once on PostgreSQL. The boot adds it, and the
 BOU-581 unique index, only in dev, test and acc; elsewhere it warns and changes nothing.
+
+## Tenancy
+
+Each tenant schema has its own workflow tables: the manifest names
+`wagoe/workflow/migrations-tenant/` under `:tenant-paths`, and the tenant module
+runs it when it provisions a tenant and in every tenant schema at boot
+(`wagoe.workflow.shell.tables`). The store runs each call on the request's
+tenant-bound transaction (`db/connectable-for` its datasource), so a
+tenant reads and writes only its own instances. Isolation therefore needs
+PostgreSQL; on the H2 test profile all tenants share one table. Instances a
+tenant started before this live in `public`. Side-effect jobs carry no tenant,
+so a handler that reads the instance must run in its tenant's schema.
 
 ## Gotchas
 

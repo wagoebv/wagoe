@@ -1,1 +1,2 @@
-{:paths ["wagoe/workflow/migrations/"]}
+{:paths        ["wagoe/workflow/migrations/"]
+ :tenant-paths ["wagoe/workflow/migrations-tenant/"]}

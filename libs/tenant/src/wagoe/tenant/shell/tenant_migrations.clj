@@ -24,11 +24,20 @@
    separate from the public `migrations/` set, which runs once against public."
   "migrations-tenant")
 
+(defn tenant-migration-dirs
+  "What a tenant schema runs: the application's `migrations-tenant/`, then the
+   tenant directories the libraries on the classpath ship. They share one
+   ledger per schema, so two migrations with one id are refused."
+  []
+  (doto (into [default-tenant-migration-dir] (db/discover-tenant-migration-dirs))
+    db/refuse-duplicate-migration-ids!))
+
 (defn migrate-tenant!
   "Run all pending tenant-scoped migrations inside one tenant schema of the
    database `ctx` (the boot `:wagoe/db-context`) is connected to.
-   `migration-dir` is a classpath-relative tenant migration directory. Throws on
-   a malformed schema name.
+   `migration-dir` is a classpath-relative tenant migration directory, or a
+   vector of them; by default `tenant-migration-dirs`. Throws on a malformed
+   schema name.
 
    Runs on a connection outside the pool, so its session settings close with it
    instead of reaching the application's next query. No statement timeout:
@@ -38,7 +47,7 @@
    the second skips migrations it never ran. So migrations run here may only
    reference tables in the tenant schema."
   ([ctx schema-name]
-   (migrate-tenant! ctx schema-name default-tenant-migration-dir))
+   (migrate-tenant! ctx schema-name (tenant-migration-dirs)))
   ([ctx schema-name migration-dir]
    (when-not (tenant-core/valid-schema-name? schema-name)
      (throw (ex-info "Unsafe tenant schema name"
@@ -63,7 +72,7 @@
    returns {:schemas-migrated [...] :errors {schema-name message}}. Callers get
    the schema list from `provisioning/list-tenant-schemas` (kept out of this ns
    to avoid a dependency cycle with provisioning)."
-  ([ctx schemas] (migrate-all-tenants! ctx schemas default-tenant-migration-dir))
+  ([ctx schemas] (migrate-all-tenants! ctx schemas (tenant-migration-dirs)))
   ([ctx schemas migration-dir]
    (log/info "Fanning out migrations to tenant schemas" {:count (count schemas)})
    (reduce

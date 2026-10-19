@@ -1,0 +1,5 @@
+;; Workflow's tables in each tenant schema, so a tenant's instances are its own.
+;; The tenant module runs this in every tenant schema.
+{:ns      wagoe.workflow.shell.tables
+ :up-fn   "up"
+ :down-fn "down"}
