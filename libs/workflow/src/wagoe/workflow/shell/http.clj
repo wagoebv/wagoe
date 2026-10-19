@@ -15,9 +15,11 @@
      GET  /workflows        — list all workflow instances
      GET  /workflows/:id    — instance detail with state viz + audit trail
 
-   Every route requires authentication and answers 401 without it."
+   Every route requires authentication and answers 401 without it. The admin
+   pages also require the admin module's access rule, and answer 403 without it."
   (:require [clojure.string :as str]
             [wagoe.admin.core.permissions :as admin-permissions]
+            [wagoe.admin.core.ui.layout :as admin-layout]
             [wagoe.admin.ports :as admin-ports]
             [wagoe.core.utils.text :as text]
             [wagoe.shared.ui.core.form :as form]
@@ -369,6 +371,16 @@
 ;; Web route definitions
 ;; =============================================================================
 
+(defn- admin-only
+  "Admit only the users the admin module admits; the pages list every
+   instance and its audit trail."
+  [handler]
+  (fn [request]
+    (let [user (:user request)]
+      (if (admin-permissions/can-access-admin? user)
+        (handler request)
+        (html-response request (admin-layout/admin-forbidden-page nil user) 403)))))
+
 (defn workflow-web-routes
   "Web routes for the workflow admin UI, as Reitit data.
 
@@ -387,10 +399,10 @@
   [store registry user-service admin]
   (let [auth-mw (user-middleware/flexible-authentication-middleware user-service)]
     [["/workflows"
-      {:middleware [auth-mw]
+      {:middleware [auth-mw admin-only]
        :get {:handler (fn [req] (handle-list-instances-web store registry admin req))
              :summary "Workflow instances list"}}]
      ["/workflows/:id"
-      {:middleware [auth-mw]
+      {:middleware [auth-mw admin-only]
        :get {:handler (fn [req] (handle-get-instance-web store registry admin req))
              :summary "Workflow instance detail"}}]]))

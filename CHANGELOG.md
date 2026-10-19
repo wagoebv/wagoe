@@ -183,6 +183,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Any signed-in user could open the workflow admin pages** (BOU-747); they now answer 403 to anyone the admin
+  would refuse. Upgrade if you run workflow; give its admins the `:admin` role.
 - **Workflow admin pages use the admin sidebar shell** (BOU-743); every audit row read as the current state, and the
   state filter is now a select of the registered states. Nothing to do.
 - **Error reporting failed on exceptions without a message** (BOU-463), so a `NullPointerException` never reached
