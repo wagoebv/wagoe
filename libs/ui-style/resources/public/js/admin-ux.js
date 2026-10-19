@@ -17,7 +17,7 @@ document.addEventListener('alpine:init', function () {
   // Plain localStorage rather than Alpine's Persist plugin: alpine.min.js is
   // the core build, and two keys do not justify vendoring a second plugin.
   // Storage can throw (disabled, private mode); then state lives per page.
-  var stored = function (key, fallback) {
+  var load = function (key, fallback) {
     try {
       var raw = window.localStorage.getItem(key);
       return raw === null ? fallback : JSON.parse(raw);
@@ -25,23 +25,22 @@ document.addEventListener('alpine:init', function () {
       return fallback;
     }
   };
-  var store = function (key, value) {
+  var save = function (key, value) {
     try {
       window.localStorage.setItem(key, JSON.stringify(value));
     } catch (e) { /* not persisted */ }
   };
 
   window.Alpine.store('sidebar', {
-    state: stored('wagoe-admin-sidebar-state', 'expanded'),
-    pinned: stored('wagoe-admin-sidebar-pinned', false),
+    state: load('wagoe-admin-sidebar-state', 'expanded'),
+    pinned: load('wagoe-admin-sidebar-pinned', false),
     mobileOpen: false,
 
     init: function () {
       var self = this;
-      window.Alpine.effect(function () {
-        store('wagoe-admin-sidebar-state', self.state);
-        store('wagoe-admin-sidebar-pinned', self.pinned);
-      });
+      // One effect per key: hovering changes state alone.
+      window.Alpine.effect(function () { save('wagoe-admin-sidebar-state', self.state); });
+      window.Alpine.effect(function () { save('wagoe-admin-sidebar-pinned', self.pinned); });
     },
 
     toggle: function () {

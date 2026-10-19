@@ -41,7 +41,6 @@
 
     (loc/click (page/locator pg pin))
     (page/navigate pg (admin/admin-url "/tenants"))
-    (page/wait-for-load-state pg)
     (await-state! pg "expanded")
 
     (testing "the next page starts pinned and expanded"
@@ -56,6 +55,5 @@
       (leave-sidebar! pg)
       (await-state! pg "collapsed")
       (page/reload pg)
-      (page/wait-for-load-state pg)
       (await-state! pg "collapsed")
       (is (= {:pinned "false" :state "collapsed"} (sidebar pg))))))
