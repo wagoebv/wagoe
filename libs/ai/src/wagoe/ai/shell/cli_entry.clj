@@ -440,6 +440,7 @@
                                                         (map test-check/source-file
                                                              (test-check/required-namespaces text))))}))
             service (make-service-from-config)
+            _       (println (dim "The answer is linted and its tests run before anything is written."))
             result  (svc/generate-tests service source-path {:check check})]
         (when (:error result)
           (println (red (describe-failure result service)))

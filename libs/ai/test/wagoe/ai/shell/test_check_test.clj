@@ -1,6 +1,7 @@
 (ns wagoe.ai.shell.test-check-test
   "BOU-572: gen-tests wrote a namespace that did not load and did not lint."
-  (:require [wagoe.ai.shell.test-check :as sut]
+  (:require [wagoe.ai.shell.cli-entry :as cli]
+            [wagoe.ai.shell.test-check :as sut]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]))
 
@@ -12,6 +13,12 @@
     (is (= '([this messages opts]) (:arglists (first (filter #(= 'complete (:name %)) (:methods provider))))))
     (testing "protocol methods are not listed again as vars"
       (is (not-any? #(= 'complete (:name %)) vars))))
+  (testing "a schema var carries its form, and is not listed again as a var"
+    (let [{:keys [schemas vars]} (sut/namespace-api 'wagoe.ai.schema)]
+      (is (= [:map [:role [:enum :system :user :assistant]] [:content :string]]
+             (:form (first (filter #(= 'Message (:name %)) schemas)))))
+      (is (not-any? #(= 'Message (:name %)) vars))
+      (is (some #(= 'valid-message? (:name %)) vars) "functions stay vars")))
   (testing "a namespace that does not exist is reported, not thrown"
     (is (string? (:error (sut/namespace-api 'wagoe.no-such-namespace))))))
 
@@ -59,13 +66,48 @@
       (is (some #(str/includes? % "Requires wagoe.ai.invented-store, which is not on the classpath") errors)
           (pr-str errors)))))
 
-(deftest ^:integration checking-runs-nothing-the-model-wrote
+(deftest ^:integration the-answer-runs-only-in-a-child-without-the-environment
   ;; BOU-572 review: the check used to `load-string` the answer, so a
-  ;; top-level form ran with the developer's environment before anyone read it.
-  (let [marker (java.io.File/createTempFile "bou572" ".txt")
-        path   (.getPath marker)
-        hostile (str good-ns "\n(def pwned (spit " (pr-str path) " \"ran\"))\n")]
-    (.delete marker)
-    (sut/check-errors hostile lint-ctx)
-    (is (not (.exists marker)))
-    (is (nil? (find-ns 'wagoe.ai.generated-good-test)))))
+  ;; top-level form ran in this process, API key and all. BOU-511 runs it, but
+  ;; in a child JVM with an empty environment.
+  (let [marker  (java.io.File/createTempFile "bou572" ".txt")
+        hostile (str good-ns "\n(def path (spit " (pr-str (.getPath marker)) " (pr-str (System/getenv \"PATH\"))))\n")]
+    (try
+      (sut/check-errors hostile lint-ctx)
+      (is (some? (System/getenv "PATH")) "precondition")
+      (is (= "nil" (slurp marker)))
+      (is (nil? (find-ns 'wagoe.ai.generated-good-test)))
+      (finally (.delete marker)))))
+
+;; BOU-511 -------------------------------------------------------------------
+
+(defn- generated [fixture assertion]
+  (str "(ns wagoe.ai.generated-run-test
+  (:require [clojure.test :refer [deftest is]]
+            [wagoe.ai.schema :as schema]))
+
+(def ^{:schema schema/Message} message " fixture ")
+
+(deftest ^:unit a-test
+  " assertion ")
+"))
+
+(deftest ^:integration a-passing-namespace-runs-clean
+  (is (nil? (sut/run-errors (generated "{:role :user :content \"hi\"}" "(is (= :user (:role message)))")))))
+
+(deftest ^:integration fixture-data-that-breaks-its-schema-is-refused
+  (let [errors (sut/run-errors (generated "{:role :user :content 42}" "(is (= :user (:role message)))"))]
+    (is (some #(and (str/includes? % "Fixture message does not match its :schema")
+                    (str/includes? % ":content"))
+              errors)
+        (pr-str errors))))
+
+(deftest ^:integration a-failing-generated-test-is-not-written
+  (let [errors (sut/check-errors (generated "{:role :user :content \"hi\"}" "(is (= :admin (:role message)))")
+                                 (assoc lint-ctx :filename "libs/ai/test/wagoe/ai/generated_run_test.clj"))]
+    (is (some #(str/includes? % "Running it: 1 failures, 0 errors") errors) (pr-str errors))
+    (is (= :refuse (cli/gen-tests-outcome {:text "" :check-errors errors} "test/x_test.clj" false)))))
+
+(deftest ^:integration a-namespace-that-does-not-load-is-reported
+  (is (some #(str/starts-with? % "It does not load")
+            (sut/run-errors "(ns wagoe.ai.generated-broken-test)\n(deftest a (is (= 1 (nope))))"))))

@@ -237,11 +237,13 @@
    when it only saw the source (BOU-572).
 
    `apis` is [{:ns :protocols [{:name :methods [{:name :arglists}]}]
-               :vars [{:name :arglists}] :error}]."
+               :schemas [{:name :form}] :vars [{:name :arglists}] :error}].
+   Schemas are shown whole: with only their names the model guessed the
+   entity's keys (BOU-511)."
   [aliases apis]
   (str/join
    "\n\n"
-   (for [{:keys [ns protocols vars error]} apis
+   (for [{:keys [ns protocols schemas vars error]} apis
          :let [a      (get aliases ns)
                prefix (str (or a ns) "/")]]
      (if error
@@ -254,5 +256,7 @@
            (str "  protocol " prefix name "\n"
                 (str/join "\n" (for [m methods]
                                  (str "    (" (:name m) " " (arglists-str (:arglists m)) ")")))))
+         (for [{:keys [name form]} schemas]
+           (str "  schema " prefix name "\n    " (pr-str form)))
          (for [{:keys [name arglists]} vars]
            (str "  (" prefix name (when (seq arglists) (str " " (arglists-str arglists))) ")"))))))))

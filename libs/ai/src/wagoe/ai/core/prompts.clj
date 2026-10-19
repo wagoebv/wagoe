@@ -201,6 +201,11 @@ Rules:
 - A reify implements every method of each protocol it names, with the listed arities;
   a method the test does not need returns nil. A partial reify fails lint
 - The namespace must compile and pass clj-kondo with no warnings: no unused requires or bindings
+- Build test data from the Malli schemas listed with the source: every required key, with
+  its type. Define each valid entity as a top-level def tagged with its schema, e.g.
+  (def ^{:schema schema/LineItem} line-item {...}); it is validated against that schema.
+  Derive invalid inputs from it with assoc or dissoc
+- The tests are run before the file is written; every one must pass
 - Namespace: replace src/ with test/ and add -test suffix to ns name
 - Follow existing test patterns: (deftest function-name-test (testing \"description\" (is (= expected (f args)))))
 

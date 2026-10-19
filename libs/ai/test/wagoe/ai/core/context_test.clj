@@ -154,4 +154,10 @@
       (is (str/includes? text "protocol wagoe.events.ports/IEventBus")))
     (testing "a namespace that would not load is named as such"
       (is (str/includes? text "wagoe.gone"))
-      (is (str/includes? text "Could not locate")))))
+      (is (str/includes? text "Could not locate"))))
+  (testing "a schema is shown whole, not only by name"
+    (let [text (ctx/render-namespace-apis
+                '{wagoe.demo.schema schema}
+                '[{:ns wagoe.demo.schema
+                   :schemas [{:name LineItem :form [:map [:id :uuid] [:created-at inst?]]}]}])]
+      (is (str/includes? text "schema schema/LineItem\n    [:map [:id :uuid] [:created-at inst?]]")))))

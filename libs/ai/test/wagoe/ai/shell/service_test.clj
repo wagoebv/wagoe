@@ -224,6 +224,15 @@
       (with-source ports-source #(svc/generate-tests svc %))
       (is (= 1 (count @calls))))))
 
+(deftest ^:integration generate-tests-shows-the-schemas-it-requires
+  ;; BOU-511: with only the var name the model invented the entity's keys.
+  (let [[svc calls] (scripted-service ["(ns t-test)\n(deftest a-test (is (= 1 1)))"])]
+    (with-source "(ns wagoe.demo.core.msg (:require [wagoe.ai.schema :as schema]))\n(defn role [m] (:role m))"
+      #(svc/generate-tests svc %))
+    (let [prompt (:content (second (first @calls)))]
+      (is (str/includes? prompt "schema schema/Message\n    [:map [:role [:enum :system :user :assistant]] [:content :string]]")
+          prompt))))
+
 ;; =============================================================================
 ;; sql-from-description tests
 ;; =============================================================================

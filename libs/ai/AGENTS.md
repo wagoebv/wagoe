@@ -15,6 +15,8 @@
 
 **Experimental (1.0):** 2, 3 and 4 can give confidently wrong answers (BOU-511/512/513); review their output. `bb ai explain` prints the error's own WGE code and `Fix:` text before the model's summary.
 
+**gen-tests checks before writing:** the prompt carries the API and Malli schemas of each required namespace; the answer is linted, then run in a child JVM (empty environment) where `^{:schema s}` fixtures are validated and every test must pass (`wagoe.ai.shell.test-check`). Still failing after one retry: refused unless `--force`.
+
 **Provider strategy:** offline-first via Ollama (no data leaves the machine by default), with cloud opt-in via `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OPENAI_BASE_URL` (any OpenAI-compatible endpoint) or `REPLICATE_API_TOKEN` (hosted, no local GPU). Setting one takes precedence over `config.edn`, so opting in needs no config edit; the dev default stays local.
 
 **FC/IS rule:** `core/` is pure. All HTTP calls, file I/O, and env-var reads live in `shell/`.
