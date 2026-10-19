@@ -994,6 +994,52 @@
                            :has-many []   ; filled by with-inverse-relationships
                            :has-one []})))  ; Week 3+: One-to-one relationships
 
+(defn- declared-parent-index
+  "{child {foreign-key-field parent}} from every `:has-many` in
+   `entity-configs`. A key two parents declare (a polymorphic owner) names
+   neither: picking one would label rows with the wrong parent."
+  [entity-configs]
+  (let [parents (reduce (fn [acc [parent cfg]]
+                          (reduce (fn [acc {:keys [entity foreign-key]}]
+                                    (if (and entity foreign-key)
+                                      (update-in acc [entity (keyword (case-conversion/snake-case->kebab-case-string
+                                                                       (name foreign-key)))]
+                                                 (fnil conj #{}) parent)
+                                      acc))
+                                  acc (:has-many cfg)))
+                        {} entity-configs)]
+    (update-vals parents
+                 #(into {} (keep (fn [[fk ps]] (when (= 1 (count ps)) [fk (first ps)]))) %))))
+
+(defn declared-parents
+  "{foreign-key-field parent} for each `:has-many` in `entity-configs` naming
+   `entity-name`."
+  [entity-name entity-configs]
+  (get (declared-parent-index entity-configs) entity-name {}))
+
+(defn with-declared-parents
+  "`entity-configs` with each belongs-to pointed at the parent whose explicit
+   `:has-many` names that entity under that key, added when detection missed
+   the key. Detection guesses the parent from the key's name, so `customer-id`
+   guessed `:customers` when the parent is `:shop-customers`, and `owner`
+   guessed nothing."
+  [entity-configs]
+  (let [index (declared-parent-index entity-configs)]
+    (into {}
+          (map (fn [[entity cfg]]
+                 (let [declared (get index entity {})
+                       bts      (mapv #(if-let [parent (get declared (:field %))] (assoc % :entity parent) %)
+                                      (get-in cfg [:relationships :belongs-to]))
+                       detected (set (map :field bts))]
+                   [entity (assoc-in cfg [:relationships :belongs-to]
+                                     (into bts
+                                           (for [[field parent] declared
+                                                 :when (and (not (detected field))
+                                                            (contains? (:fields cfg) field))]
+                                             {:type :belongs-to :field field :entity parent
+                                              :foreign-key field :display-field :name})))])))
+          entity-configs)))
+
 (defn inverse-has-many
   "The has-many entries on `entity-name` implied by other entities'
    belongs-to, in the shape an explicit `:has-many` config takes. Read-only:
