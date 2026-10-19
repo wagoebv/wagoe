@@ -10,13 +10,21 @@
   "The one definition of the tables, which the boot runs as well."
   "wagoe/workflow/migrations/20260926100000-workflow-tables.up.sql")
 
+(def boot-changes
+  "What later migrations add to workflow_instances, which the boot and a tenant
+   schema add too, and how to tell each is there."
+  [{:what     "the unique index on (workflow_id, entity_type, entity_id) (BOU-581)"
+    :present? unique-instances/present?
+    :ensure!  unique-instances/ensure-unique!}
+   {:what     "the entity_uuid column (BOU-589)"
+    :present? entity-uuid/present?
+    :ensure!  entity-uuid/ensure-entity-uuid!}])
+
 (defn ensure-tables!
-  "Create the tables in the connection's schema, with the unique index and
-   entity_uuid the later public migrations add."
+  "Create the tables in the connection's schema, with `boot-changes`."
   [connectable]
   (db/execute-migration-ddl! (db/context-of connectable) migration-resource)
-  (unique-instances/ensure-unique! connectable)
-  (entity-uuid/ensure-entity-uuid! connectable))
+  (run! #((:ensure! %) connectable) boot-changes))
 
 (defn up
   "Migratus entry point."

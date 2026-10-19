@@ -79,6 +79,7 @@
   "Compile the workflow API routes through the platform router and put the
    authentication middleware outermost, where `:auth-middleware` puts it."
   [f]
+  (reset! readers #{})
   (registry/clear-registry!)
   (registry/register-workflow! invoice-def)
   (let [store    (service-test/create-memory-store)

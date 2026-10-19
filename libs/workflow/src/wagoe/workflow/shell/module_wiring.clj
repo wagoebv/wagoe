@@ -33,8 +33,6 @@
             [wagoe.workflow.shell.persistence :as persistence]
             [wagoe.workflow.shell.service :as service]
             [wagoe.workflow.shell.tables :as tables]
-            [wagoe.workflow.shell.unique-instances :as unique-instances]
-            [wagoe.workflow.shell.entity-uuid :as entity-uuid]
             [wagoe.workflow.shell.http :as workflow-http]
             [wagoe.workflow.shell.admin-adapter :as admin-adapter]
             [clojure.tools.logging :as log]))
@@ -43,16 +41,6 @@
   "Where the boot may change an existing table: the profiles `db:reset` may
    reset. Anywhere else it changes only through `migrate up`."
   #{:dev :test :acc})
-
-(def ^:private boot-changes
-  "What the boot adds to workflow_instances when the profile allows, and how
-   it tells the change is there."
-  [{:what     "the unique index on (workflow_id, entity_type, entity_id) (BOU-581)"
-    :present? unique-instances/present?
-    :ensure!  unique-instances/ensure-unique!}
-   {:what     "the entity_uuid column (BOU-589)"
-    :present? entity-uuid/present?
-    :ensure!  entity-uuid/ensure-entity-uuid!}])
 
 (defn- initialize-workflow-schema!
   "Create workflow's tables at boot, for installations that never ran
@@ -63,7 +51,7 @@
   (log/info "Initializing workflow schema")
   (db/execute-migration-ddl! ctx tables/migration-resource)
   (let [ds (:datasource ctx)]
-    (doseq [{:keys [what present? ensure!]} boot-changes]
+    (doseq [{:keys [what present? ensure!]} tables/boot-changes]
       (cond
         (contains? altering-profiles profile) (ensure! ds)
         (present? ds)                         nil

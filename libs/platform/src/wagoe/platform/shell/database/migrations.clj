@@ -101,20 +101,26 @@
          (seq)
          (#(or % (do (warn-no-manifests!) []))))))
 
-(defn- parse-migration-manifest [manifest-url]
-  (let [manifest-data (-> manifest-url slurp edn/read-string)
-        paths (cond
-                (vector? manifest-data) manifest-data
-                (map? manifest-data) (:paths manifest-data)
-                :else nil)]
-    (when-not (sequential? paths)
-      (throw (ex-info "Invalid migration manifest"
-                      {:type :configuration-error
-                       :url (str manifest-url)
-                       :expected "vector or map with :paths vector"})))
-    (->> paths
-         (filter string?)
-         (remove empty?))))
+(defn- parse-migration-manifest
+  "The directories the manifest at `manifest-url` names under `k`: `:paths`,
+   run against public, or `:tenant-paths`, run in each tenant schema. A vector
+   manifest is all `:paths`; `:tenant-paths` is optional."
+  ([manifest-url] (parse-migration-manifest manifest-url :paths))
+  ([manifest-url k]
+   (let [manifest-data (-> manifest-url slurp edn/read-string)
+         tenant?       (= :tenant-paths k)
+         paths         (cond
+                         (vector? manifest-data) (if tenant? [] manifest-data)
+                         (map? manifest-data)    (get manifest-data k (when tenant? []))
+                         :else nil)]
+     (when-not (sequential? paths)
+       (throw (ex-info "Invalid migration manifest"
+                       {:type :configuration-error
+                        :url (str manifest-url)
+                        :expected "vector or map with :paths vector"})))
+     (->> paths
+          (filter string?)
+          (remove empty?)))))
 
 (defn- nested-sql-subdirs
   "Returns display paths for any subdirectory of dir-path that contains .sql files.
@@ -342,9 +348,7 @@
    to each tenant."
   []
   (->> (manifest-urls)
-       (mapcat #(let [m (-> % slurp edn/read-string)]
-                  (when (map? m) (:tenant-paths m))))
-       (filter string?)
+       (mapcat #(parse-migration-manifest % :tenant-paths))
        distinct
        vec))
 

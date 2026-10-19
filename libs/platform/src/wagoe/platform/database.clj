@@ -109,10 +109,6 @@
   []
   execution/*transaction-datasource*)
 
-(def current-transaction-on
-  "`current-transaction`, when it was opened on `datasource`; else nil."
-  execution/transaction-on)
-
 (defn tx-connection
   "The connection behind `tx` when it is an open transaction: a next.jdbc
    connection, or a platform transaction context. nil for anything else, a
@@ -123,6 +119,17 @@
     (when (and (instance? java.sql.Connection conn)
                (not (.getAutoCommit ^java.sql.Connection conn)))
       conn)))
+
+(defn connectable-for
+  "What code holding `datasource` runs a statement on: `datasource` when it is
+   an open transaction already, else the platform transaction open on this
+   thread on it, else `datasource`. A tenant request's transaction is bound to
+   the tenant's schema, so a store that queries through this reads the
+   tenant's tables."
+  [datasource]
+  (if (tx-connection datasource)
+    datasource
+    (or (execution/transaction-on datasource) datasource)))
 
 (defn in-savepoint
   "Call `f`, and on failure roll back only what it did on `conn`: PostgreSQL

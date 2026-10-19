@@ -120,13 +120,13 @@
 
 (defn- may-read?
   "An admin, or a user whose groups grant `read-permission`."
-  [group-service user]
-  (or (= :admin (some-> (:role user) keyword))
-      (boolean (and group-service
-                    (group/holds? (user-ports/user-grants group-service user) read-permission)))))
+  [group-service request]
+  (or (access/admin? request)
+      (and group-service
+           (group/holds? (user-ports/user-grants group-service (:user request)) read-permission))))
 
 (defn- forbidden [message]
-  {:status 403 :body (errors/body :forbidden message)})
+  (errors/response 403 :forbidden message))
 
 (defn- scoped
   "`handler` for a caller in the request's tenant; 403 for anyone else."
@@ -140,7 +140,7 @@
   "`scoped` `handler` for a caller who may read instances; 403 for anyone else."
   [group-service handler]
   (scoped (fn [request]
-            (if (may-read? group-service (:user request))
+            (if (may-read? group-service request)
               (handler request)
               (forbidden (str "Reading workflow instances needs the "
                               (group/permission-str read-permission) " permission"))))))

@@ -134,16 +134,6 @@
       (= 1062 (.getErrorCode e))
       (boolean (re-find #"SQLITE_CONSTRAINT_UNIQUE|UNIQUE constraint failed" (str (ex-message e))))))
 
-(defn- conn-of
-  "What a store call runs on: its own transaction when the store joined one,
-   else the platform transaction open on this thread on the same datasource,
-   else the datasource. A tenant request runs in one bound to the tenant's
-   schema, so its instances are that tenant's alone."
-  [datasource]
-  (if (db/tx-connection datasource)
-    datasource
-    (or (db/current-transaction-on datasource) datasource)))
-
 (defrecord WorkflowStore [datasource]
   ports/ITransactionalWorkflowStore
 
@@ -159,7 +149,7 @@
   (save-instance! [_ instance]
     (log/debug "Saving workflow instance" {:id (:id instance)})
     (let [row    (instance->db instance)
-          conn   (conn-of datasource)
+          conn   (db/connectable-for datasource)
           insert #(jdbc/execute-one! conn
                                      (sql/format {:insert-into :workflow_instances
                                                   :values      [row]})
@@ -182,7 +172,7 @@
 
   (find-instance [_ instance-id]
     (log/debug "Finding workflow instance" {:id instance-id})
-    (let [row (jdbc/execute-one! (conn-of datasource)
+    (let [row (jdbc/execute-one! (db/connectable-for datasource)
                                  (sql/format {:select [:*]
                                               :from   [:workflow_instances]
                                               :where  [:= :id (uuid->str instance-id)]})
@@ -192,7 +182,7 @@
   (find-instance-by-entity [_ entity-type entity-id]
     (log/debug "Finding workflow instance by entity"
                {:entity-type entity-type :entity-id entity-id})
-    (let [row (jdbc/execute-one! (conn-of datasource)
+    (let [row (jdbc/execute-one! (db/connectable-for datasource)
                                  (sql/format {:select   [:*]
                                               :from     [:workflow_instances]
                                               :where    [:and
@@ -206,25 +196,24 @@
   (update-instance-state! [_ instance-id new-state]
     (log/debug "Updating workflow instance state"
                {:id instance-id :new-state new-state})
-    (let [now (instant->db (Instant/now))]
-      (jdbc/execute-one! (conn-of datasource)
+    (let [conn (db/connectable-for datasource)]
+      (jdbc/execute-one! conn
                          (sql/format {:update :workflow_instances
                                       :set    {:current_state (kw->str new-state)
-                                               :updated_at    now}
+                                               :updated_at    (instant->db (Instant/now))}
                                       :where  [:= :id (uuid->str instance-id)]})
-                         {:builder-fn rs/as-unqualified-lower-maps}))
-    ;; Re-fetch and return updated instance
-    (let [row (jdbc/execute-one! (conn-of datasource)
-                                 (sql/format {:select [:*]
-                                              :from   [:workflow_instances]
-                                              :where  [:= :id (uuid->str instance-id)]})
-                                 {:builder-fn rs/as-unqualified-lower-maps})]
-      (db->instance row)))
+                         {:builder-fn rs/as-unqualified-lower-maps})
+      ;; Re-fetch and return updated instance
+      (db->instance (jdbc/execute-one! conn
+                                       (sql/format {:select [:*]
+                                                    :from   [:workflow_instances]
+                                                    :where  [:= :id (uuid->str instance-id)]})
+                                       {:builder-fn rs/as-unqualified-lower-maps}))))
 
   (save-audit-entry! [_ entry]
     (log/debug "Saving audit entry" {:id (:id entry)})
     (let [row (entry->db entry)]
-      (jdbc/execute-one! (conn-of datasource)
+      (jdbc/execute-one! (db/connectable-for datasource)
                          (sql/format {:insert-into :workflow_audit
                                       :values      [row]})
                          {:return-keys true
@@ -233,7 +222,7 @@
 
   (find-audit-log [_ instance-id]
     (log/debug "Fetching audit log" {:instance-id instance-id})
-    (let [rows (jdbc/execute! (conn-of datasource)
+    (let [rows (jdbc/execute! (db/connectable-for datasource)
                               (sql/format {:select   [:*]
                                            :from     [:workflow_audit]
                                            :where    [:= :instance_id (uuid->str instance-id)]
@@ -259,7 +248,7 @@
                   (assoc :where (if (= 1 (count conditions))
                                   (first conditions)
                                   (into [:and] conditions))))
-          rows (jdbc/execute! (conn-of datasource)
+          rows (jdbc/execute! (db/connectable-for datasource)
                               (sql/format query)
                               {:builder-fn rs/as-unqualified-lower-maps})]
       (mapv db->instance rows)))
@@ -274,7 +263,7 @@
                                                            :where       [:= :id (uuid->str instance-id)]}))
                         :next.jdbc/update-count
                         pos?))
-          conn    (conn-of datasource)]
+          conn    (db/connectable-for datasource)]
       ;; On a caller's transaction, that one decides.
       (if (db/tx-connection conn)
         (delete! conn)

@@ -351,7 +351,7 @@ Each tenant schema has its own workflow tables: the manifest names
 `wagoe/workflow/migrations-tenant/` under `:tenant-paths`, and the tenant module
 runs it when it provisions a tenant and in every tenant schema at boot
 (`wagoe.workflow.shell.tables`). The store runs each call on the request's
-tenant-bound transaction (`db/current-transaction-on` its datasource), so a
+tenant-bound transaction (`db/connectable-for` its datasource), so a
 tenant reads and writes only its own instances. Isolation therefore needs
 PostgreSQL; on the H2 test profile all tenants share one table. Instances a
 tenant started before this live in `public`.
