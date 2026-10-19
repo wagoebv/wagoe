@@ -48,23 +48,18 @@
 
 (defn- insert-table!
   "Inserts one table's rows inside the caller's transaction, each value encoded
-   as `adapter`'s engine takes it. Returns the count."
-  [tx adapter {:keys [table rows]}]
-  (jdbc/execute! tx (execution/encode-params adapter (sql/format {:insert-into (keyword table)
-                                                                  :values      rows})))
-  (count rows))
-
-(defn- timestamps-as-instants
-  "`rows` with an ISO string in a timestamp column as the Instant it names,
-   which the adapter encodes: MySQL refuses the string (BOU-657)."
-  [rows timestamp-columns]
-  (mapv (fn [row]
-          (reduce-kv (fn [m k v]
-                       (if (and (string? v) (timestamp-columns (name k)))
-                         (assoc m k (or (type-conversion/string->instant v) v))
-                         m))
-                     row row))
-        rows))
+   as `adapter`'s engine takes it. An ISO string in one of `timestamp-columns`
+   goes as the Instant it names: MySQL refuses the string (BOU-657). Returns
+   the count."
+  [tx adapter timestamp-columns {:keys [table rows]}]
+  (let [rows (mapv (fn [row]
+                     (into row (for [[k v] row
+                                     :when (and (string? v) (timestamp-columns (name k)))]
+                                 [k (or (type-conversion/string->instant v) v)])))
+                   rows)]
+    (jdbc/execute! tx (execution/encode-params adapter (sql/format {:insert-into (keyword table)
+                                                                    :values      rows})))
+    (count rows)))
 
 (defn hook-summary
   "The lines the seeder prints for what hook `k` returned: a string or strings
@@ -167,13 +162,12 @@
                                                      :new-id #(str (UUID/randomUUID))})]
           (if-let [err (:error resolved)]
             {:error err}
-            (let [plan    (mapv (fn [{:keys [table] :as entry}]
-                                  (update entry :rows timestamps-as-instants
-                                          (get-in tables [table :timestamp-columns] #{})))
-                                (core-seed/seed-plan (:ok resolved)))
+            (let [plan    (core-seed/seed-plan (:ok resolved))
                   detail  (mapv (fn [{:keys [table] :as entry}]
                                   {:table table
-                                   :rows  (insert-table! tx adapter entry)})
+                                   :rows  (insert-table! tx adapter
+                                                         (get-in tables [table :timestamp-columns] #{})
+                                                         entry)})
                                 plan)]
               {:ok {:tables   (count detail)
                     :rows     (reduce + (map :rows detail))

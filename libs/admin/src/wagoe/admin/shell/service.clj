@@ -1056,7 +1056,6 @@
                  prepared-data (cond-> sanitized-data
                                  (contains? entity-fields :updated-at) (assoc :updated-at now))
 
-                  ; UUIDs to strings for the database
                  db-ready-data (prepare-values-for-db prepared-data)
 
                   ; Convert kebab-case keys to snake_case for database
@@ -1146,7 +1145,6 @@
                  now (Instant/now)
                update-data {field value :updated-at now}
 
-               ; UUIDs to strings for the database
                db-ready-data (prepare-values-for-db update-data)
 
                ; Convert to snake_case for database
