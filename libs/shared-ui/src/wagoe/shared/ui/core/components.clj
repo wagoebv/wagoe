@@ -357,6 +357,12 @@
                    true (conj text))]
     (into [:span {:class classes}] children)))
 
+(defn tone-badge
+  "A badge in `tone` (:neutral :info :success :warning :danger), styled as the
+   admin's enum cells are (`c-badge tone-*` in wagoe-admin.css)."
+  [text tone]
+  (badge text {:variant tone :class (str "c-badge tone-" (name tone))}))
+
 ;; =============================================================================
 ;; Message Components
 ;; =============================================================================

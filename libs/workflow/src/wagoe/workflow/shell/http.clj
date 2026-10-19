@@ -16,7 +16,12 @@
      GET  /workflows/:id    — instance detail with state viz + audit trail
 
    Every route requires authentication and answers 401 without it."
-  (:require [wagoe.i18n.shell.middleware :as i18n-middleware]
+  (:require [clojure.string :as str]
+            [wagoe.admin.core.permissions :as admin-permissions]
+            [wagoe.admin.ports :as admin-ports]
+            [wagoe.core.utils.text :as text]
+            [wagoe.shared.ui.core.form :as form]
+            [wagoe.i18n.shell.middleware :as i18n-middleware]
             [wagoe.i18n.shell.render :as i18n]
             [wagoe.platform.core.http.errors :as errors]
             [wagoe.workflow.ports :as ports]
@@ -261,18 +266,55 @@
     :headers {"Content-Type" "text/html; charset=utf-8"}
     :body    (i18n/render hiccup (resolve-t request))}))
 
+(defn- state-param
+  "The state a filter value names, or nil for a blank one: a registered state
+   by its id or by its badge label (\"On hold\" for `:on-hold`), else the
+   value read as an id. Matching registered ids exactly keeps `:inReview`."
+  [s states]
+  (when-let [v (some-> s str/trim not-empty)]
+    (let [lower (text/lower-case v)]
+      (or (some #(when (= v (name %)) %) states)
+          (some #(when (= lower (text/lower-case (form/label-text %))) %) states)
+          (keyword (str/replace lower #"\s+" "-"))))))
+
+(defn- page-opts
+  "What a page needs besides its data: the user, the flash, and the admin
+   shell's sidebar. `admin` is {:schema-provider :logo-url}, or nil when the
+   admin module is off. The sidebar lists the admin's entities only to a user
+   the admin admits, as its own pages do."
+  [request admin]
+  (let [schema-provider (:schema-provider admin)
+        entities        (when (and schema-provider
+                                   (admin-permissions/can-access-admin? (:user request)))
+                          (admin-ports/list-available-entities schema-provider))]
+    {:user           (:user request)
+     :flash          (:flash request)
+     :entities       entities
+     :entity-configs (into {} (map (juxt identity #(admin-ports/get-entity-config schema-provider %))) entities)
+     :logo-url       (:logo-url admin)}))
+
 (defn- parse-list-opts
   "Extract list-instances filter options from query-params."
-  [query-params]
-  (cond-> {:limit 50 :offset 0}
-    (not-empty (get query-params "workflow-id"))
-    (assoc :workflow-id (keyword (get query-params "workflow-id")))
+  [query-params states]
+  (let [state (state-param (get query-params "state") states)]
+    (cond-> {:limit 50 :offset 0}
+      (not-empty (get query-params "workflow-id"))
+      (assoc :workflow-id (keyword (get query-params "workflow-id")))
 
-    (not-empty (get query-params "entity-type"))
-    (assoc :entity-type (keyword (get query-params "entity-type")))
+      (not-empty (get query-params "entity-type"))
+      (assoc :entity-type (keyword (get query-params "entity-type")))
 
-    (not-empty (get query-params "state"))
-    (assoc :current-state (keyword (get query-params "state")))))
+      state
+      (assoc :current-state state))))
+
+(defn- known-states
+  "Every state of the registered workflows, for the state filter's options."
+  [registry]
+  (->> (ports/list-workflows registry)
+       (keep #(ports/get-workflow registry %))
+       (mapcat :states)
+       distinct
+       (sort-by name)))
 
 ;; =============================================================================
 ;; Admin web UI handlers
@@ -280,14 +322,17 @@
 
 (defn handle-list-instances-web
   "GET /workflows — render the workflow instances list page."
-  [store request]
+  [store registry admin request]
   (try
     (let [qp        (or (:query-params request) {})
-          opts      (parse-list-opts qp)
-          instances (ports/list-instances store opts)
-          page-opts {:user  (:user request)
-                     :flash (:flash request)}]
-      (html-response request (workflow-ui/instances-page instances qp page-opts)))
+          states    (known-states registry)
+          opts      (parse-list-opts qp states)
+          instances (ports/list-instances store opts)]
+      ;; The form shows the state the list is filtered by, not what was typed
+      (html-response request (workflow-ui/instances-page
+                              instances
+                              (cond-> qp (:current-state opts) (assoc "state" (name (:current-state opts))))
+                              (assoc (page-opts request admin) :states states))))
     (catch Exception e
       (log/error e "Error in handle-list-instances-web")
       (html-response request
@@ -302,17 +347,16 @@
 (defn handle-get-instance-web
   "GET /workflows/:id — render the workflow instance detail page. An id that
    is not a UUID names no instance: 404, like an unknown one."
-  [store registry request]
+  [store registry admin request]
   (let [id-str (get-in request [:path-params :id])]
     (if-let [id (parse-uuid (str id-str))]
       (try
         (if-let [instance (ports/find-instance store id)]
           (let [definition  (ports/get-workflow registry (:workflow-id instance))
-                audit-log   (ports/find-audit-log store id)
-                page-opts   {:user  (:user request)
-                             :flash (:flash request)}]
+                audit-log   (ports/find-audit-log store id)]
             (html-response request
-                           (workflow-ui/instance-detail-page instance definition audit-log page-opts)))
+                           (workflow-ui/instance-detail-page instance definition audit-log
+                                                             (page-opts request admin))))
           (instance-not-found request id-str))
         (catch Exception e
           (log/error e "Error in handle-get-instance-web")
@@ -338,14 +382,15 @@
    Args:
      store        - IWorkflowStore
      registry     - IWorkflowRegistry
-     user-service - IUserService (for authentication middleware)"
-  [store registry user-service]
+     user-service - IUserService (for authentication middleware)
+     admin        - {:schema-provider :logo-url} for the admin sidebar, or nil"
+  [store registry user-service admin]
   (let [auth-mw (user-middleware/flexible-authentication-middleware user-service)]
     [["/workflows"
       {:middleware [auth-mw]
-       :get {:handler (fn [req] (handle-list-instances-web store req))
+       :get {:handler (fn [req] (handle-list-instances-web store registry admin req))
              :summary "Workflow instances list"}}]
      ["/workflows/:id"
       {:middleware [auth-mw]
-       :get {:handler (fn [req] (handle-get-instance-web store registry req))
+       :get {:handler (fn [req] (handle-get-instance-web store registry admin req))
              :summary "Workflow instance detail"}}]]))
