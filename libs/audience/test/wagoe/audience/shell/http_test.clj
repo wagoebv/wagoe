@@ -2,6 +2,7 @@
   (:require [cheshire.core :as json]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
+            [wagoe.audience.core.filter :as filter]
             [wagoe.audience.ports :as ports]
             [wagoe.audience.shell.http :as sut]
             [wagoe.audience.shell.service :as service]
@@ -64,7 +65,7 @@
   (let [s (store)]
     (testing "create stores the definition"
       (let [res (sut/create-audience-handler nil s {:parameters {:body {:id :vip :label "VIP"
-                                                                        :filters [{:type :role :field :plan
+                                                                        :filters [{:type :role :field :role
                                                                                    :op :eq :value "gold"}]}}})]
         ;; The id came back as ":vip", which no /audiences/:id path accepts.
         (is (= {:status 201 :body {:id "vip" :label "VIP"}} res))
@@ -141,9 +142,10 @@
     (query-users-sql [_ clause] (if clause [u1] [u1 u2]))
     (load-users [_ ids] (mapv (fn [id] {:id id}) ids))))
 
-(defn- served [s]
-  (let [resolver (service/create-audience-service {:repository s :user-data-source users})
-        handler  (reitit-router/compile-routes (sut/audience-api-routes resolver s)
+(defn- served [s & [filter-fields]]
+  (let [resolver (service/create-audience-service {:repository s :user-data-source users
+                                                   :filter-fields filter-fields})
+        handler  (reitit-router/compile-routes (sut/audience-api-routes resolver s [] {:filter-fields filter-fields})
                                                {:swagger-enabled false})]
     (fn [method uri body]
       (let [r (handler {:request-method method :uri uri
@@ -158,11 +160,11 @@
         call (served s)]
     (testing "create stores the definition sent, its values coerced"
       (let [r (call :post "/audiences" {:id "gold" :label "Gold"
-                                        :filters [{:type "role" :field "plan" :op "eq" :value "gold"}]})]
+                                        :filters [{:type "role" :field "role" :op "eq" :value "gold"}]})]
         (is (= 201 (:status r)))
         (is (= {:id "gold" :label "Gold"} (:body r))))
       (is (= {:id :gold :label "Gold"
-              :filters [{:type :role :field :plan :op :eq :value "gold"}]}
+              :filters [{:type :role :field :role :op :eq :value "gold"}]}
              (ports/find-audience s :gold))))
 
     (testing "an id no /audiences/:id path accepts is refused"
@@ -196,7 +198,7 @@
   (let [s    (store)
         call (served s)
         both {:label   "Both"
-              :filters [{:type "role" :field "plan" :op "eq" :value "gold"}]
+              :filters [{:type "role" :field "role" :op "eq" :value "gold"}]
               :compose {:or [{:ref "a"} {:ref "b"}]}}]
     (doseq [[method uri body] [[:post "/audiences" (assoc both :id "both")]
                                [:put "/audiences/both" both]]]
@@ -208,3 +210,32 @@
     (testing "compose with empty filters is accepted"
       (is (= 201 (:status (call :post "/audiences" (assoc both :id "both" :filters [])))))
       (is (= {:or [{:ref :a} {:ref :b}]} (:compose (ports/find-audience s :both)))))))
+
+(deftest ^:unit ^:security filters-name-only-allowed-fields
+  ;; A filter's field is a SQL column and preview answers a count, so naming
+  ;; password_hash made the API an oracle over credentials.
+  (let [s      (store)
+        call   (served s)
+        secret {:type "demographics" :field "password-hash" :op "contains" :value "$2a$"}]
+    (testing "create refuses a credential column, in any spelling"
+      (doseq [field ["password-hash" "PASSWORD_HASH" "mfa-secret"]]
+        (let [r (call :post "/audiences" {:id "x" :label "X" :filters [(assoc secret :field field)]})]
+          (is (= 422 (:status r)) field)
+          (is (= "validation-error" (get-in r [:body :error :type])) field)))
+      (is (empty? (ports/list-audiences s))))
+    (testing "and a column nobody allowed"
+      (is (= 422 (:status (call :post "/audiences" {:id "x" :label "X"
+                                                    :filters [(assoc secret :field "plan")]})))))
+    (testing "preview refuses one stored before the allowlist"
+      (ports/save-audience s {:id :old :label "Old"
+                              :filters [{:type :demographics :field :password-hash :op :contains :value "$2a$"}]})
+      (let [r (call :post "/audiences/preview" {:audienceId "old"})]
+        (is (= 422 (:status r)))
+        (is (= "validation-error" (get-in r [:body :error :type])))
+        (is (nil? (get-in r [:body :count])))))
+    (testing "a field the app configures is allowed"
+      (let [s    (store)
+            call (served s (filter/allowed-filter-fields #{:plan}))]
+        (is (= 201 (:status (call :post "/audiences" {:id "paid" :label "Paid"
+                                                      :filters [(assoc secret :field "plan" :value "paid")]}))))
+        (is (= 1 (get-in (call :post "/audiences/preview" {:audienceId "paid"}) [:body :count])))))))

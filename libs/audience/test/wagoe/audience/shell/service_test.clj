@@ -4,6 +4,7 @@
    Uses mocked dependencies so no real DB is required, except for the
    cache-miss-then-hit test which uses an atom-backed mock cache."
   (:require [clojure.test :refer [deftest testing is use-fixtures]]
+            [wagoe.audience.core.filter :as filter]
             [wagoe.audience.shell.registry :as registry]
             [wagoe.audience.ports :as ports]
             [wagoe.audience.shell.service :as service])
@@ -99,7 +100,8 @@
    (service/create-audience-service
     {:user-data-source (mock-user-data-source users)
      :cache            cache
-     :repository       repository})))
+     :repository       repository
+     :filter-fields    (filter/allowed-filter-fields #{:plan :churned :region})})))
 
 ;; =============================================================================
 ;; Simple segment resolution — demographics only (SQL path)

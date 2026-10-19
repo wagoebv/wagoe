@@ -6,6 +6,7 @@
    registered at namespace load via the `defaudience` macro (validated against the
    AudienceDefinition schema) and read at runtime by the audience service."
   (:require [wagoe.audience.core.composition :as composition]
+            [wagoe.audience.core.filter :as filter]
             [wagoe.audience.schema :as schema]
             [malli.core :as m]))
 
@@ -35,7 +36,10 @@
                     {:type   :validation-error
                      :errors (audience-definition-explainer definition)
                      :id     (:id definition)})))
-  (when-let [err (:error (composition/explain-filters-beside-compose definition))]
+  ;; Only credentials here: the app's :filter-fields are not known until boot,
+  ;; so the full allowlist is checked when the audience is resolved.
+  (when-let [err (:error (or (composition/explain-filters-beside-compose definition)
+                             (filter/explain-secret-fields (:filters definition))))]
     (throw (ex-info (:message err) (assoc err :id (:id definition)))))
   (let [id (:id definition)]
     (swap! registry assoc id definition)

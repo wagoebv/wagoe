@@ -99,7 +99,7 @@
 ;; IAudienceResolver implementation
 ;; =============================================================================
 
-(defrecord AudienceService [repository cache user-data-source]
+(defrecord AudienceService [repository cache user-data-source filter-fields]
   ports/IAudienceResolver
 
   (resolve-audience [this audience-id]
@@ -128,6 +128,8 @@
                 ;; error before compiling if any filter is unknown/unsupported.
                 _ (unwrap! (filter/explain-filters (:filters definition)))
                 _ (unwrap! (composition/explain-filters-beside-compose definition))
+                ;; Also for rows stored before the allowlist existed.
+                _ (unwrap! (filter/explain-filter-fields (:filters definition) filter-fields))
                 {:keys [sql-clauses predicates unsupported]}
                 (compiler/compile-segment definition {:now eval-date})
                 ;; A filter the compiler could express neither way. Refusing
@@ -192,8 +194,10 @@
        :repository       - IAudienceRepository (optional, for DB-stored definitions)
        :cache            - AudienceCache (optional)
        :user-data-source - IUserDataSource (required)
+       :filter-fields    - fields a filter may name (default `filter/default-filter-fields`)
 
    Returns:
      AudienceService implementing IAudienceResolver"
-  [{:keys [repository cache user-data-source]}]
-  (->AudienceService repository cache user-data-source))
+  [{:keys [repository cache user-data-source filter-fields]}]
+  (->AudienceService repository cache user-data-source
+                     (or filter-fields filter/default-filter-fields)))

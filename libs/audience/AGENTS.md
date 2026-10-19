@@ -252,6 +252,16 @@ The `:wagoe/audience` component returns `{:store <IAudienceRepository> :resolver
 `last_login`, so the shipped source translates it. Override with
 `:wagoe/audience {:users-field-mapping {…}}` for a schema that spells it differently again.
 
+**Filter fields.** A filter's `:field` becomes a SQL column and preview answers a count, so a
+filter may name only allowlisted fields: `filter/default-filter-fields`, the non-secret profile
+columns of Wagoe's `users` table (`:role`, `:name`, `:language`, `:last-login`, …). Add your own
+with `:wagoe/audience {:filter-fields #{:plan :country}}`. Credential-like names (password, hash,
+secret, token, mfa, lockout, failed-login, …) are refused even when configured, and the boot fails
+on them. Create and update answer 422 `validation-error` for any other field, and resolving a
+stored audience that names one throws `:validation-error`. `defaudience` refuses credentials at
+load time; the configured allowlist is not known until boot, so other fields are checked at
+resolve. `:feature-usage` fields name a feature, not a column, and are not checked.
+
 **As a service.** `service audience` refuses to start: its routes need the admin-only guard,
 which is a user-module component that service selection drops. Run `service audience user`.
 Refusing is deliberate — segment management served without authorization is worse than a

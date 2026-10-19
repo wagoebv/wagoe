@@ -7,7 +7,8 @@
    raises the typed error at the HTTP boundary, so the multimethods below assume
    a known filter type and a supported operator and never throw — their unknown
    branches fail safe (nil / a false predicate)."
-  (:require [clojure.string :as str])
+  (:require [clojure.string :as str]
+            [wagoe.core.utils.text :as text])
   (:import [java.util.regex Pattern]))
 
 ;; =============================================================================
@@ -299,3 +300,56 @@
   "Return the first {:error {...}} among `filters`, or nil when all are valid."
   [filters]
   (some explain-filter filters))
+
+;; =============================================================================
+;; Field allowlist
+;; =============================================================================
+
+(def default-filter-fields
+  "Columns of the framework's `users` table a filter may name. A filter's field
+   becomes a SQL column, and an audience's count answers questions about it, so
+   anything not listed here — credentials above all — stays out of reach."
+  #{:name :role :tenant-id :login-count :last-login :created-at :updated-at
+    :language :timezone :theme :date-format :time-format
+    :notifications-email :notifications-push :notifications-sms})
+
+(defn- normalize-field
+  "`:Password_Hash` and `:password-hash` name the same unquoted column."
+  [field]
+  (keyword (str/replace (text/lower-case (subs (str field) 1)) "_" "-")))
+
+(defn allowed-filter-fields
+  "The default fields plus an app's `configured` ones."
+  [configured]
+  (into default-filter-fields (map normalize-field) configured))
+
+(defn secret-field?
+  "Whether `field` looks like a credential, which no configuration may allow."
+  [field]
+  (boolean (re-find #"password|passwd|hash|secret|token|salt|mfa|otp|backup-code|api-key|lockout|failed-login"
+                    (name (normalize-field field)))))
+
+(defn- filter-field
+  "The column a filter reads, or nil. A :feature-usage field names a feature
+   inside the user's usage map, not a column."
+  [{:keys [type field]}]
+  (when (and field (not= :feature-usage type))
+    field))
+
+(defn explain-secret-fields
+  "{:error {...}} for the first filter naming a credential-like field, or nil."
+  [filters]
+  (when-let [field (some #(let [f (filter-field %)] (when (and f (secret-field? f)) f)) filters)]
+    {:error {:type :validation-error :field field
+             :message (str "Filter field " field " is not allowed")}}))
+
+(defn explain-filter-fields
+  "{:error {...}} for the first filter whose field is not in `allowed` or looks
+   like a credential, or nil."
+  [filters allowed]
+  (or (explain-secret-fields filters)
+      (when-let [field (some #(let [f (filter-field %)]
+                                (when (and f (not (contains? allowed (normalize-field f)))) f))
+                             filters)]
+        {:error {:type :validation-error :field field
+                 :message (str "Filter field " field " is not allowed; add it to :filter-fields")}})))

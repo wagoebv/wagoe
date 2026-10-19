@@ -14,6 +14,7 @@
      POST   /audiences/:id/evaluate  — trigger evaluation
      GET    /audiences/:id/members   — list members"
   (:require [wagoe.audience.core.composition :as composition]
+            [wagoe.audience.core.filter :as filter]
             [wagoe.audience.core.ui :as ui]
             [wagoe.audience.ports :as ports]
             [wagoe.audience.schema :as schema]
@@ -60,8 +61,10 @@
 (defn- invalid-definition-response
   "A 422 when `definition` cannot be saved, or nil. The route's body schema has
    already checked its shape."
-  [definition]
-  (when-let [err (:error (composition/explain-filters-beside-compose definition))]
+  [definition filter-fields]
+  (when-let [err (:error (or (composition/explain-filters-beside-compose definition)
+                             (filter/explain-filter-fields (:filters definition)
+                                                           (or filter-fields filter/default-filter-fields))))]
     (error-response 422 "validation-error" (:message err))))
 
 (defn- html-response
@@ -159,14 +162,15 @@
 ;; =============================================================================
 
 (defn create-audience-handler
-  "POST /api/audiences — create a new audience definition."
-  [_resolver store request]
+  "POST /api/audiences — create a new audience definition. `filter-fields` are
+   the fields a filter may name, `filter/default-filter-fields` when nil."
+  [_resolver store request & [filter-fields]]
   (let [definition (get-in request [:parameters :body])]
     ;; The id is used in every /audiences/:id path, so it must be one they accept.
     (if-not (parse-audience-id (some-> (:id definition) symbol str))
       (bad-request-response "Invalid audience id")
       (or
-       (invalid-definition-response definition)
+       (invalid-definition-response definition filter-fields)
        (try
          (log/info "Creating audience" {:label (:label definition)})
          (let [saved (ports/save-audience store definition)]
@@ -180,14 +184,15 @@
            (internal-error-response "Internal error")))))))
 
 (defn update-audience-handler
-  "PUT /api/audiences/:id — update an existing audience definition."
-  [_resolver store request]
+  "PUT /api/audiences/:id — update an existing audience definition. See
+   `create-audience-handler` for `filter-fields`."
+  [_resolver store request & [filter-fields]]
   (let [id (parse-audience-id (get-in request [:path-params :id]))]
     (if-not id
       (bad-request-response "Invalid audience id")
       (let [definition (assoc (get-in request [:parameters :body]) :id id)]
         (or
-         (invalid-definition-response definition)
+         (invalid-definition-response definition filter-fields)
          (try
            (log/info "Updating audience" {:id id})
            (let [updated (ports/save-audience store definition)]
@@ -313,12 +318,14 @@
    Args:
      resolver   - IAudienceResolver
      store      - IAudienceRepository
-     middleware - route middleware every endpoint is wrapped in (authorization)"
+     middleware - route middleware every endpoint is wrapped in (authorization)
+     opts       - {:filter-fields #{...}}, the fields a filter may name"
   ([resolver store] (audience-api-routes resolver store []))
-  ([resolver store middleware]
+  ([resolver store middleware] (audience-api-routes resolver store middleware {}))
+  ([resolver store middleware {:keys [filter-fields]}]
    (guarded middleware
             [["/audiences"
-              {:post {:handler    (fn [req] (create-audience-handler resolver store req))
+              {:post {:handler    (fn [req] (create-audience-handler resolver store req filter-fields))
                       :summary    "Create audience segment"
                       :parameters {:body schema/DynamicAudienceDefinition}}}]
              ["/audiences/preview"
@@ -326,7 +333,7 @@
                       :summary    "Preview audience filter results"
                       :parameters {:body [:map [:audienceId {:optional true} :string]]}}}]
              ["/audiences/:id"
-              {:put    {:handler    (fn [req] (update-audience-handler resolver store req))
+              {:put    {:handler    (fn [req] (update-audience-handler resolver store req filter-fields))
                         :summary    "Update audience segment"
                         :parameters {:body update-body}}
                :delete {:handler (fn [req] (delete-audience-handler resolver store req))
