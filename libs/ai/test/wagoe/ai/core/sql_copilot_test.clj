@@ -81,6 +81,11 @@
              (:errors (sut/check-answer (pr-str {:select [:*] :from [:job]}) t))))
       (is (= "jobs: (columns not listed)" (sut/render-schema {"jobs" nil} "")))))
 
+  (testing "a table a Clojure migration may alter: listed columns shown, others not refused"
+    (let [t (update tables "users" sut/incomplete)]
+      (is (contains? (sut/check-answer (pr-str {:select [:filters] :from [:users]}) t) :sql))
+      (is (str/includes? (sut/render-schema t "users") "users: email TEXT, id UUID, (and columns added in code)"))))
+
   (testing "an answer that is not HoneySQL"
     (is (= ["the honeysql value is not a readable EDN map"]
            (:errors (sut/check-answer "SELECT * FROM invoices" tables))))

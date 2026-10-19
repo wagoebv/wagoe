@@ -357,9 +357,11 @@
           (put out d nil))
         (put out "wagoe/migration-paths/demo.edn" "{:paths [\"wagoe/demo/migrations/\"]}")
         (put out "wagoe/demo/migrations/20260101000001-demo.up.sql" "CREATE TABLE demos (id UUID);")
-        (put out "wagoe/demo/migrations/20260101000001-demo.down.sql" "DROP TABLE demos;"))
+        (put out "wagoe/demo/migrations/20260101000001-demo.down.sql" "DROP TABLE demos;")
+        (put out "wagoe/demo/migrations/20260102000001-demo-column.edn" "{:ns demo.columns}"))
       (.setContextClassLoader th (java.net.URLClassLoader. (into-array [(.toURL (.toURI jar))]) nil))
-      (is (= [["20260101000001-demo.up.sql" "CREATE TABLE demos (id UUID);"]]
+      ;; true: the .edn migration beside it may add columns the SQL does not show.
+      (is (= [["20260101000001-demo.up.sql" "CREATE TABLE demos (id UUID);" true]]
              (#'svc/library-migrations)))
       (finally
         (.setContextClassLoader th old)

@@ -36,6 +36,14 @@
   (count (filter #(str/includes? d (str/replace % #"s$" ""))
                  (remove str/blank? (str/split table #"_")))))
 
+(defn incomplete
+  "`cols` marked as possibly missing columns, as for a table a Clojure
+   migration may alter: its listed columns are shown, others are not refused."
+  [cols]
+  (vary-meta cols assoc ::incomplete true))
+
+(defn- incomplete? [cols] (::incomplete (meta cols)))
+
 (defn render-schema
   "`tables`, {table {column sql-type}}, as one line per table, those
    `description` names first, cut off at `max-chars`. A table whose columns
@@ -51,8 +59,9 @@
                       (map (fn [[t cols]]
                              (str t ": " (if (nil? cols)
                                            "(columns not listed)"
-                                           (str/join ", " (map (fn [[c ty]] (str/trim (str c " " (bare-type ty))))
-                                                               (sort-by key cols))))))))
+                                           (cond-> (str/join ", " (map (fn [[c ty]] (str/trim (str c " " (bare-type ty))))
+                                                                       (sort-by key cols)))
+                                             (incomplete? cols) (str ", (and columns added in code)")))))))
            kept  (reduce (fn [acc line]
                            (if (> (+ (:n acc) (count line) 1) max-chars)
                              (reduced acc)
@@ -133,7 +142,7 @@
         used     (set (map (comp first :parts) (of-kind :table)))
         alias-of (into {} (map (fn [a] [(first (:parts a)) (:of a)])) (of-kind :alias))
         known?   #(contains? tables %)
-        has-col? (fn [cols c] (or (nil? cols) (contains? cols c)))
+        has-col? (fn [cols c] (or (nil? cols) (incomplete? cols) (contains? cols c)))
         ;; A subquery's columns are its own; only check that they exist somewhere.
         derived? (or (seq ctes) (str/includes? sql-str "(SELECT"))
         col-in?  (fn [c ts] (some #(has-col? (get tables %) c) ts))]

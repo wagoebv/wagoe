@@ -291,17 +291,22 @@
        entry))))
 
 (defn- library-migrations
-  "[file-name sql] for the up migrations framework libraries ship, found
+  "[file-name sql code?] for the up migrations framework libraries ship, found
    through their `wagoe/migration-paths/<lib>.edn` manifests (and the legacy
-   shared `wagoe/migration-paths.edn`) as the migration runner finds them."
+   shared `wagoe/migration-paths.edn`) as the migration runner finds them.
+   code? is true when the same directory holds Clojure (.edn) migrations,
+   which can add columns no SQL shows."
   []
   (for [manifest (concat (map second (resource-files "wagoe/migration-paths/" #(str/ends-with? % ".edn")))
                          (map slurp (enumeration-seq (.getResources (class-loader) "wagoe/migration-paths.edn"))))
         :let  [m (edn/read-string manifest)]
         path  (if (map? m) (:paths m) m)
-        entry (resource-files (cond-> path (not (str/ends-with? path "/")) (str "/"))
-                              up-migration?)]
-    entry))
+        :let  [files (resource-files (cond-> path (not (str/ends-with? path "/")) (str "/"))
+                                     #(or (up-migration? %) (str/ends-with? % ".edn")))
+               code? (boolean (some #(str/ends-with? (first %) ".edn") files))]
+        [fname sql] files
+        :when (up-migration? fname)]
+    [fname sql code?]))
 
 (defn- in-run-order
   "The SQL of [file-name sql] pairs, in the order migratus runs them."
@@ -327,11 +332,15 @@
 (defn- schema-tables
   "{table {column sql-type}} after every SQL migration the project and its
    libraries ship. A table created in code has no SQL to read, so its columns
-   are nil."
+   are nil; one created beside Clojure migrations is marked incomplete."
   [project-root]
-  (merge (zipmap (boot-tables) (repeat nil))
-         (admin-entity/migration-columns
-          (in-run-order (concat (library-migrations) (project-migrations project-root))))))
+  (let [libs   (library-migrations)
+        tables (admin-entity/migration-columns
+                (in-run-order (concat libs (project-migrations project-root))))
+        coded  (keys (admin-entity/migration-columns (in-run-order (filter #(nth % 2) libs))))]
+    (merge (zipmap (boot-tables) (repeat nil))
+           (reduce (fn [m t] (cond-> m (get m t) (update t sql-copilot/incomplete)))
+                   tables coded))))
 
 (defn sql-from-description
   "Generate a HoneySQL query from a natural language description.
