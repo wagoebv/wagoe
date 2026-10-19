@@ -969,36 +969,11 @@ document.addEventListener('alpine:init', function () {
       });
     }
 
-    // The toolbar count is outside the table swap: keep it on the filtered total
-    document.addEventListener('htmx:afterSwap', function () {
-      var table = document.getElementById('entity-table-container');
-      var badge = document.querySelector('.record-count-badge');
-      if (table && badge && table.hasAttribute('data-total-count')) {
-        badge.textContent = table.getAttribute('data-total-count');
-      }
-    });
-
     convertFlashMessages();
     document.addEventListener('htmx:afterSwap', function (event) {
       // Scope the scan to the swapped subtree when possible to avoid
       // rescanning the whole document on every swap.
       convertFlashMessages(event.detail && event.detail.target);
-    });
-
-    // The list's fragment endpoint (/web/admin/<entity>/table) is what the
-    // filters, search and the table refresh ask, and htmx would put it in the
-    // address bar. History keeps the page URL instead, without the one-shot
-    // add/remove-filter parameters, so a copied or reloaded link is the list.
-    document.addEventListener('htmx:beforeHistoryUpdate', function (event) {
-      var history = event.detail && event.detail.history;
-      if (!history || !history.path) return;
-      var url = new URL(history.path, window.location.origin);
-      var match = url.pathname.match(/^(\/web\/admin\/[^/]+)\/table\/?$/);
-      if (!match) return;
-      url.pathname = match[1];
-      url.searchParams.delete('add_filter_field');
-      url.searchParams.delete('remove_filter');
-      history.path = url.pathname + url.search;
     });
 
     // Expose public API

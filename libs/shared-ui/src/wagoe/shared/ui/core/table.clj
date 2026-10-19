@@ -250,3 +250,202 @@
                                :title      [:t :admin/pagination-last-page]
                                :data-page  "last"}
          "»"]]])))
+
+;; ---------------------------------------------------------------------------
+;; Data table: query params, filter inputs, sortable table, infinite scroll
+;;
+;; The controls request the list's own URL and push it, so the address bar
+;; holds sort, filters and page. The handler answers an htmx request (the
+;; HX-Request header) with the fragment and anything else with the page.
+;; ---------------------------------------------------------------------------
+
+(def ^:private filter-param-pattern
+  #"^filters\[([^\]]+)\]\[([^\]]+)\](?:\[\])?$")
+
+(defn parse-filter-params
+  "The `filters[f][op|value|min|max|values][]` params of a query string as
+   {:f {:op :eq :value \"x\"}}. Blank values are kept; see `parse-table-params`."
+  [params]
+  (reduce (fn [acc [k v]]
+            (if-let [[_ field part] (re-matches filter-param-pattern (param-name k))]
+              (let [field (keyword field)
+                    vs    (if (sequential? v) v [v])]
+                (case part
+                  "op"     (assoc-in acc [field :op] (keyword (str (first vs))))
+                  "values" (update-in acc [field :values] (fnil into []) vs)
+                  ("value" "min" "max") (assoc-in acc [field (keyword part)] (first vs))
+                  acc))
+              acc))
+          {}
+          params))
+
+(defn- blank-spec? [{:keys [value min max values]}]
+  (and (str/blank? value) (str/blank? min) (str/blank? max)
+       (not-any? (complement str/blank?) values)))
+
+(defn- positive-long [s]
+  (let [n (some-> s str parse-long)]
+    (when (and n (pos? n)) n)))
+
+(defn parse-table-params
+  "The table state in a Ring query-params map: {:sort :dir :page :page-size
+   :search :filters}, each key only when present and valid.
+
+   opts:
+   - :sortable       set of sortable field keywords; any other :sort is dropped
+   - :max-page-size  upper bound for :page-size
+
+   :dir is :asc or :desc (`sort-dir` is accepted too). Filters with no value
+   are dropped: a filter form sends its untouched inputs blank."
+  ([params] (parse-table-params params {}))
+  ([params {:keys [sortable max-page-size]}]
+   (let [params    (update-keys params param-name)
+         sort      (let [s (get params "sort")] (when (and (string? s) (seq s)) (keyword s)))
+         dir       (#{:asc :desc} (some-> (or (get params "dir") (get params "sort-dir")) str keyword))
+         page      (positive-long (get params "page"))
+         page-size (cond-> (positive-long (get params "page-size"))
+                     max-page-size (some-> (min max-page-size)))
+         search    (let [s (get params "search")] (when (and (string? s) (not (str/blank? s))) s))
+         filters   (into {} (remove (comp blank-spec? val)) (parse-filter-params params))]
+     (cond-> {}
+       (and sort (or (nil? sortable) (contains? sortable sort))) (assoc :sort sort)
+       dir             (assoc :dir dir)
+       page            (assoc :page page)
+       page-size       (assoc :page-size page-size)
+       search          (assoc :search search)
+       (seq filters)   (assoc :filters filters)))))
+
+(defn list-url
+  "`path` with the table state and filters as its query string, blank ones
+   left out, so the default view is the bare path."
+  [path table-query filters]
+  (let [qs (encode-query-params
+            (into {}
+                  (remove (fn [[_ v]] (or (nil? v) (= "" v))))
+                  (merge (table-query->params table-query)
+                         (search-filters->params filters))))]
+    (if (str/blank? qs) path (str path "?" qs))))
+
+(defn filter-input
+  "An input that re-queries the table as the user types (a select, with
+   :options [[value label] ...], when it changes) and pushes the URL.
+
+   opts:
+   - :name, :value, :label (aria-label), :placeholder, :options
+   - :url        the list URL to request, carrying the state to keep
+   - :hx-target  the table container selector
+   - :hx-swap    default \"outerHTML\"
+   - :hx-include other inputs to send along, default \"this\"
+   - :attrs      merged last, for classes or a different :type"
+  [{:keys [name value label placeholder options url hx-target hx-swap hx-include attrs]
+    :or   {hx-swap "outerHTML" hx-include "this"}}]
+  (let [htmx {:name        name
+              :aria-label  label
+              :hx-get      url
+              :hx-target   hx-target
+              :hx-swap     hx-swap
+              :hx-push-url "true"
+              :hx-include  hx-include}]
+    (if options
+      [:select (merge htmx {:class "select w-full" :hx-trigger "change"} attrs)
+       [:option {:value ""} (or placeholder "")]
+       (for [[v l] options]
+         [:option {:value v :selected (= (str v) (str value))} l])]
+      [:input (merge htmx {:type        "search"
+                           :class       "input w-full"
+                           :value       (or value "")
+                           :placeholder placeholder
+                           :hx-trigger  "input changed delay:300ms, search"}
+                     attrs)])))
+
+(defn next-page-url
+  "The URL of the page after `table-query`'s, or nil on the last page."
+  [path table-query filters total-count]
+  (let [{:keys [page page-size]} table-query
+        page      (or page 1)
+        page-size (or page-size 20)]
+    (when (< (* page page-size) (or total-count 0))
+      (list-url path (assoc table-query :page (inc page) :page-size page-size) filters))))
+
+(defn infinite-rows
+  "`rows` with the last one loading `next-url` once scrolled into view: the
+   handler answers with the next page's rows, which go in after it, the last
+   of them carrying the page after that. No `next-url`, no loading."
+  [rows next-url]
+  (let [rows (vec rows)]
+    (if (and next-url (seq rows))
+      (update rows (dec (count rows))
+              (fn [[tag & more]]
+                (let [[attrs children] (if (map? (first more)) [(first more) (rest more)] [{} more])]
+                  (into [tag (merge attrs {:hx-get     next-url
+                                           :hx-trigger "revealed"
+                                           :hx-swap    "afterend"
+                                           :hx-target  "this"})]
+                        children))))
+      rows)))
+
+(defn- filter-cell
+  [{:keys [field filter label]} {:keys [url table-query hx-target hx-swap filters]}]
+  [:th {:class (str "filter-cell field-" (name field))}
+   (when filter
+     (filter-input {:name        (str "filters[" (name field) "][value]")
+                    :value       (get-in filters [field :value])
+                    :label       label
+                    :placeholder (:placeholder filter)
+                    :options     (:options filter)
+                    ;; Page one, sorted as now; the filter values come from the row
+                    :url         (list-url url (dissoc table-query :page) nil)
+                    :hx-target   hx-target
+                    :hx-swap     hx-swap
+                    :hx-include  "closest tr"}))])
+
+(defn data-table
+  "A table with sortable headers, an optional row of filter inputs, and
+   either pagination (placed by the caller, see `pagination`) or, with
+   :infinite?, rows that load the next page as the last comes into view.
+
+   opts:
+   - :url          the list URL the controls request and push
+   - :rows-url     what the last row requests with :infinite?; default :url
+   - :hx-target    the container the handler re-renders, e.g. \"#orders\"
+   - :hx-swap      default \"outerHTML\"
+   - :columns      [{:field :label :class :sortable? (default true)
+                     :filter {:placeholder :options}}]
+   - :rows         rendered [:tr ...] rows
+   - :table-query  {:sort :dir :page :page-size :search}
+   - :filters      the parsed filters, kept by every control
+   - :total-count  needed by :infinite?
+   - :head-before, :head-after  seqs of extra [:th] cells, e.g. a select-all box
+   - :colgroup, :tfoot, :class  passed through"
+  [{:keys [url rows-url hx-target hx-swap columns rows table-query filters total-count
+           infinite? head-before head-after colgroup tfoot class]
+    :or   {hx-swap "outerHTML"}}]
+  (let [{:keys [sort dir page page-size]} table-query
+        head-before (keep identity head-before)
+        head-after  (keep identity head-after)
+        ctx  {:url url :table-query table-query :hx-target hx-target :hx-swap hx-swap
+              :filters filters}
+        rows (cond-> rows
+               infinite? (infinite-rows (next-page-url (or rows-url url) table-query filters total-count)))]
+    [:table.data-table {:class (str "table" (when class (str " " class)))}
+     colgroup
+     [:thead
+      [:tr
+       head-before
+       (for [{:keys [field label sortable?] col-class :class :or {sortable? true}} columns]
+         (if sortable?
+           (update (sortable-th {:label label :field field :current-sort sort :current-dir dir
+                                 :base-url url :page page :page-size page-size
+                                 :hx-target hx-target :hx-swap hx-swap :hx-push-url? true
+                                 :extra-params (cond-> (or filters {})
+                                                 (:search table-query) (assoc :search (:search table-query)))})
+                   1 update :class str " field-" (name field) (when col-class (str " " col-class)))
+           [:th {:class (str "field-" (name field) (when col-class (str " " col-class)))} label]))
+       head-after]
+      (when (some :filter columns)
+        [:tr {:class "filter-row"}
+         (for [_ head-before] [:th])
+         (for [column columns] (filter-cell column ctx))
+         (for [_ head-after] [:th])])]
+     [:tbody rows]
+     tfoot]))

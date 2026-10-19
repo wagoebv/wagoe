@@ -615,7 +615,7 @@
 
         ;; Should have HTMX attributes
         (is (str/includes? (str form) "hx-get"))
-        (is (str/includes? (str form) "/web/admin/users/table"))))
+        (is (str/includes? (str form) "\"/web/admin/users\""))))
 
     (testing "Entity without search fields"
       (let [config (dissoc sample-entity-config :search-fields)
@@ -751,7 +751,7 @@
       (is (str/includes? (str page) "/web/admin/users/new"))
 
       ;; Should show record count; the topbar names the page, so no label
-      (is (str/includes? (str page) "[:span.record-count-badge \"1\"]"))
+      (is (str/includes? (str page) "[:span {:id \"record-count-badge\", :class \"record-count-badge\"} \"1\"]"))
 
       ;; Should have the table
       (is (str/includes? (str page) "user@example.com")))))

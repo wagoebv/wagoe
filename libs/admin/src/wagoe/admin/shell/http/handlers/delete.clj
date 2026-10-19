@@ -109,7 +109,8 @@
     ; Return table HTML fragment with toast via showToast event
     (-> (support/htmx-fragment-response request
                                         (admin-ui/entity-table entity-name records entity-config table-query total-count permissions {}
-                                                               (support/display-options config request)))
+                                                               (support/display-options config request))
+                                        [(admin-ui/record-count-badge total-count)])
         (ring-response/header "HX-Trigger" (str "{\"showToast\":" toast-json ",\"entityListUpdated\":{}}")))))
 
 (defn bulk-delete-handler

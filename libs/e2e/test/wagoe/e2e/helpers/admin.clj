@@ -151,6 +151,13 @@
       (loc/dispatch-event input "search")
       (await-swap! pg marked "#entity-table-container"))))
 
+(defn sort-by-column!
+  "Click the sortable header of `field` and wait for the table to be replaced."
+  [pg field]
+  (let [marked (mark-stale! pg "#entity-table-container")]
+    (loc/click (page/locator pg (str "table.data-table th.sortable-header.field-" field)))
+    (await-swap! pg marked "#entity-table-container")))
+
 (defn submit-entity-form!
   "Click an admin entity form's submit button and wait for it to re-render.
 

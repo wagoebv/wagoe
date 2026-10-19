@@ -36,7 +36,9 @@ covers them as such.
   `breadcrumbs`, `modal`, `card`, `render-error-page`
 
 | `wagoe.shared.ui.core.table`
-| `data-table` and `table-wrapper`
+| `data-table` (sortable headers, filter inputs, infinite scroll),
+  `filter-input`, `pagination`, and `parse-table-params` / `list-url` for the
+  query string that holds the table's state
 
 | `wagoe.shared.ui.core.validation`
 | Turning Malli explain output into per-field messages: `explain->field-errors`,
@@ -73,3 +75,38 @@ else.
 Because every function is pure, they are straightforward to test — call one and
 assert on the Hiccup vector it returns, with no rendering step and no system to
 start.
+
+== Tables
+
+The table's controls request the list's own URL and push it, so sort, filters
+and page live in the address bar. The handler answers an htmx request with the
+table and anything else with the whole page.
+
+[source,clojure]
+----
+(require '[wagoe.shared.ui.core.table :as table])
+
+(defn orders-table [orders tq filters total]
+  [:div#orders
+   (table/data-table
+    {:url         "/orders"
+     :hx-target   "#orders"
+     :table-query tq
+     :filters     filters
+     :columns     [{:field :number :label "Number"}
+                   {:field :status :label "Status" :filter {:options [["paid" "Paid"]]}}]
+     :rows        (for [o orders] [:tr [:td (:number o)] [:td (:status o)]])})
+   (table/pagination {:table-query tq :total-count total
+                      :base-url "/orders" :hx-target "#orders" :extra-params filters})])
+
+;; In the handler
+(let [{:keys [filters] :as tq} (table/parse-table-params (:query-params request)
+                                                         {:sortable #{:number :status}
+                                                          :max-page-size 100})]
+  ...)
+----
+
+With `:infinite? true` (and `:total-count`) the last row loads the next page
+once it scrolls into view; the handler at `:rows-url` answers with just the
+`<tr>` rows. Send `Vary: HX-Request` from a handler that answers one URL with
+both the page and the fragment.

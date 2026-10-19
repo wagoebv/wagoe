@@ -3,7 +3,8 @@
 
    Pure Hiccup generators for the filter UI: operator selection per field
    type, value inputs, filter rows, and the overall filter builder."
-  (:require [wagoe.core.utils.text :as text]
+  (:require [wagoe.admin.core.ui.base :as base]
+            [wagoe.core.utils.text :as text]
             [wagoe.shared.ui.core.icons :as icons]
             [wagoe.shared.ui.core.table :as table-ui]
             [clojure.string :as str]))
@@ -246,7 +247,7 @@
 
       ;; Form wrapper for all filters
        [:form.filter-form
-        {:hx-get (str "/web/admin/" (name entity-name) "/table")
+        {:hx-get (base/list-path entity-name)
          :hx-target "#filter-table-container"
          :hx-swap "outerHTML"
          :hx-trigger "submit, change delay:500ms from:find input, change from:find select"
@@ -341,13 +342,11 @@
       (list label " " (get op-symbols op (ops op)) " " (value-label field-config value)))))
 
 (defn- table-url
-  "The table fragment for `filters`, from page one, sorted as now. The search
-   box is included by the caller (hx-include), so a chip keeps the search."
+  "The list for `filters`, from page one, sorted as now. The search box is
+   included by the caller (hx-include), so a chip keeps the search."
   [entity-name table-query filters]
-  (str "/web/admin/" (name entity-name) "/table?"
-       (table-ui/encode-query-params
-        (merge (table-ui/table-query->params (assoc table-query :page 1 :search nil))
-               (table-ui/search-filters->params filters)))))
+  (table-ui/list-url (base/list-path entity-name)
+                     (assoc table-query :page 1 :search nil) filters))
 
 (defn filter-summary
   "The line above the table: Filter (n), a chip per active filter, Clear all."
@@ -436,7 +435,7 @@
                  :aria-label [:t :admin/drawer-close] :title "q"}
         (icons/icon :x {:size 16})]]]
      [:form {:class      "filter-drawer-form"
-             :hx-get     (str "/web/admin/" (name entity-name) "/table")
+             :hx-get     (base/list-path entity-name)
              :hx-target  "#filter-table-container"
              :hx-swap    "outerHTML"
              :hx-push-url "true"
@@ -449,7 +448,7 @@
        [:button {:type "submit" :class "button primary"} [:t :admin/button-apply-filters] [:kbd "↵"]]
        [:button {:type      "button"
                  :class     "button ghost"
-                 :hx-get    (str "/web/admin/" (name entity-name) "/table")
+                 :hx-get    (base/list-path entity-name)
                  :hx-target "#filter-table-container"
                  :hx-swap   "outerHTML"
                  :hx-push-url "true"

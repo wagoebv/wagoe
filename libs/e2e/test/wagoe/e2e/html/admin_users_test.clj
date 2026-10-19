@@ -75,6 +75,52 @@
         (is (= "alive" marker)
             "DOM marker should survive HTMX fragment update (no full page reload)")))))
 
+(defn- column-texts
+  "The text of `field`'s cell in every row, in order."
+  [pg field]
+  (page/evaluate pg (str "() => Array.from(document.querySelectorAll('table.data-table tbody td.field-"
+                         field "')).map(td => td.innerText.trim())")))
+
+(deftest ^:integration ^:e2e sort-header-pushes-the-list-url
+  (testing "Sorting swaps the table and puts the sort in the address bar, which a reload keeps"
+    (spel/with-testing-page [pg]
+      (admin/login-as-admin! pg fx/*seed*)
+      (page/navigate pg (admin/admin-url "/users?sort=email&dir=asc"))
+      (page/wait-for-load-state pg)
+      (let [asc (column-texts pg "email")]
+        (is (< 1 (count asc)) "the seed has more than one user to sort")
+        (admin/sort-by-column! pg "email")
+        (let [url (page/url pg)]
+          (is (str/includes? url "/web/admin/users?") url)
+          (is (not (str/includes? url "/table")) "the page URL is pushed, not the fragment's")
+          (is (str/includes? url "sort=email"))
+          (is (str/includes? url "dir=desc")))
+        (is (= (reverse asc) (column-texts pg "email")) "rows come back in the other order")
+        (page/reload pg)
+        (page/wait-for-load-state pg)
+        (is (= (reverse asc) (column-texts pg "email")) "a reload is the same list")
+        (is (str/includes? (page/evaluate pg "() => document.querySelector('th.field-email').className")
+                           "sort-dir-desc"))))))
+
+(deftest ^:integration ^:e2e search-pushes-the-list-url-and-count
+  (testing "Searching keeps the sort, pushes the page URL and updates the toolbar count"
+    (spel/with-testing-page [pg]
+      (admin/login-as-admin! pg fx/*seed*)
+      (page/navigate pg (admin/admin-url "/users?sort=email&dir=desc"))
+      (page/wait-for-load-state pg)
+      (admin/search! pg "admin@acme")
+      (let [url  (page/url pg)
+            rows (admin/table-row-count pg)]
+        (is (str/includes? url "/web/admin/users?") url)
+        (is (not (str/includes? url "/table")))
+        (is (str/includes? url "search=admin%40acme"))
+        (is (str/includes? url "dir=desc") "the sort survives the search")
+        (is (= (str rows) (page/evaluate pg "() => document.getElementById('record-count-badge').innerText.trim()"))
+            "the count follows the search"))
+      (page/go-back pg)
+      (page/wait-for-load-state pg)
+      (is (not (str/includes? (page/url pg) "search=")) "back returns to the list before the search"))))
+
 ;; ---------------------------------------------------------------------------
 ;; Detail & edit
 ;; ---------------------------------------------------------------------------

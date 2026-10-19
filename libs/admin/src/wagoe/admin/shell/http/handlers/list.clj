@@ -7,7 +7,8 @@
    [wagoe.admin.core.ui :as admin-ui]
    [wagoe.admin.core.ui.filters :as filters]
    [wagoe.admin.core.permissions :as permissions]
-   [wagoe.admin.shell.http.support :as support]))
+   [wagoe.admin.shell.http.support :as support]
+   [ring.util.response :as ring-response]))
 
 (defn- list-options
   "The list's options from the query string, without the filters that filter
@@ -56,127 +57,97 @@
 ;; Entity List Handlers
 ;; =============================================================================
 
-(defn entity-list-handler
-  "Handler for entity list page with table, search, pagination.
+(defn- list-state
+  "Everything the list page and its table fragment render from."
+  [admin-service schema-provider config request user entity-name]
+  (when-not (ports/validate-entity-exists schema-provider entity-name)
+    (throw (ex-info "Unknown entity"
+                    {:type :not-found
+                     :entity-name entity-name})))
+  (let [entity-config (ports/get-entity-config schema-provider entity-name)
+        options (list-options request)
+        result (ports/list-entities admin-service entity-name options)
+        records (support/with-workflow-states config entity-config (:records result))]
+    {:entity-config entity-config
+     :options options
+     :records records
+     :total-count (:total-count result)
+     ;; The page size and page the service used; sort/dir defaulted
+     :table-query (merge {:sort (or (:sort options) (:default-sort entity-config) :id)
+                          :dir (or (:dir options) (:sort-dir options) :asc)}
+                         options
+                         {:page-size (:page-size result)
+                          :page (:page-number result)})
+     :permissions (permissions/get-entity-permissions user entity-name entity-config)
+     :display (display-with-overview admin-service config request entity-name options records)}))
 
-   Supports:
-    - Text search across configured search-fields
-    - Column sorting (ascending/descending)
-    - Pagination (page-based)
-    - Field filters"
+(defn- table-request?
+  "An htmx request from one of the list's controls, aimed at its table. A
+   history restore asks for the page."
+  [request]
+  (let [headers (:headers request)]
+    (boolean (and (get headers "hx-request")
+                  (not (get headers "hx-history-restore-request"))
+                  (#{"entity-table-container" "filter-table-container"} (get headers "hx-target"))))))
+
+(defn- table-fragment-response
+  "The table, or with the filter summary when that is the target, plus the
+   toolbar count out of band."
+  [request entity-name {:keys [entity-config options records total-count table-query
+                               permissions display]}]
+  (let [args [entity-name records entity-config table-query total-count permissions
+              (:filters options) display]]
+    (support/htmx-fragment-response
+     request
+     (if (= "filter-table-container" (get-in request [:headers "hx-target"]))
+       (apply admin-ui/filter-table-container args)
+       (apply admin-ui/entity-table args))
+     [(admin-ui/record-count-badge total-count)])))
+
+(defn entity-list-handler
+  "The entity list page: table, search, sorting, paging, filters. Its own
+   controls request this URL and push it, so the address bar holds the list's
+   state; they get the table fragment back (`table-request?`)."
   [admin-service schema-provider config]
   (fn [request]
     (let [user (support/require-admin-user! request)
           entity-name (support/get-entity-name request)
-
-          ; Verify entity is accessible
-          _ (when-not (ports/validate-entity-exists schema-provider entity-name)
-              (throw (ex-info "Unknown entity"
-                              {:type :not-found
-                               :entity-name entity-name})))
-
-          entity-config (ports/get-entity-config schema-provider entity-name)
-          options (list-options request)
-
-          ; Get entity data
-          result (ports/list-entities admin-service entity-name options)
-          records (support/with-workflow-states config entity-config (:records result))
-          total-count (:total-count result)
-
-          ; Merge pagination info from result into options for UI
-          ; This ensures UI shows the actual page-size used (from config defaults)
-          ; Also ensure sort/dir are present (use defaults if not in options)
-          table-query (merge {:sort (or (:sort options) (:default-sort entity-config) :id)
-                              :dir (or (:dir options) (:sort-dir options) :asc)}
-                             options
-                             {:page-size (:page-size result)
-                              :page (:page-number result)})
-
-          ; Get all available entities for sidebar
-          entities (ports/list-available-entities schema-provider)
-          entity-configs (into {} (map (fn [e] [e (ports/get-entity-config schema-provider e)])) entities)
-
-          ; Get permissions
-          permissions (permissions/get-entity-permissions user entity-name entity-config)
-
-          ; Flash message from redirects
-          flash (:flash request)]
-
-      (support/html-response request
-                             (admin-ui/admin-layout
-                              (admin-ui/entity-list-page entity-name records entity-config table-query total-count permissions
-                                                        (assoc options :display (display-with-overview admin-service config request
-                                                                                                       entity-name options records)))
-                              {:user user
-                               :current-entity entity-name
-                               :entities entities
-                               :entity-configs entity-configs
-                               :flash flash
-                               :logo-url (:logo-url config)})))))
+          state (list-state admin-service schema-provider config request user entity-name)]
+      ;; One URL, two bodies: a cache must not answer one with the other
+      (ring-response/header
+       (if (table-request? request)
+         (table-fragment-response request entity-name state)
+         (let [{:keys [entity-config options records total-count table-query permissions display]} state
+               entities (ports/list-available-entities schema-provider)
+               entity-configs (into {} (map (fn [e] [e (ports/get-entity-config schema-provider e)])) entities)]
+           (support/html-response request
+                                  (admin-ui/admin-layout
+                                   (admin-ui/entity-list-page entity-name records entity-config table-query
+                                                             total-count permissions
+                                                             (assoc options :display display))
+                                   {:user user
+                                    :current-entity entity-name
+                                    :entities entities
+                                    :entity-configs entity-configs
+                                    :flash (:flash request)
+                                    :logo-url (:logo-url config)}))))
+       "Vary" "HX-Request"))))
 
 (defn entity-table-fragment-handler
-  "HTMX handler for entity table fragment.
-
-    Returns just the table HTML for dynamic updates.
-    Used when sorting, filtering, or paginating without full page reload."
+  "GET /:entity/table — the table fragment, for callers that ask for it
+   directly. A browser navigating here is sent to the list page."
   [admin-service schema-provider config]
   (fn [request]
     (let [user (support/require-admin-user! request)
-          entity-name (support/get-entity-name request)
-
-          ; Check if this is an HTMX request or direct browser navigation
-          is-htmx? (get-in request [:headers "hx-request"])
-
-          ; If not HTMX, redirect to main entity page with query params
-          _ (when-not is-htmx?
-              (let [query-string (:query-string request)
-                    redirect-url (str "/web/admin/" (name entity-name)
-                                      (when query-string (str "?" query-string)))]
-                (throw (ex-info "Redirect to full page"
-                                {:type :redirect
-                                 :location redirect-url
-                                 :status 303}))))
-
-          ; Verify entity is accessible
-          _ (when-not (ports/validate-entity-exists schema-provider entity-name)
-              (throw (ex-info "Unknown entity"
-                              {:type :not-found
-                               :entity-name entity-name})))
-
-          entity-config (ports/get-entity-config schema-provider entity-name)
-          options (list-options request)
-
-          ; Get entity data
-          result (ports/list-entities admin-service entity-name options)
-          records (support/with-workflow-states config entity-config (:records result))
-          total-count (:total-count result)
-
-          ; Merge pagination info from result into options for UI
-          table-query (merge {:sort (or (:sort options) (:default-sort entity-config) :id)
-                              :dir (or (:dir options) (:sort-dir options) :asc)}
-                             options
-                             {:page-size (:page-size result)
-                              :page (:page-number result)})
-
-          ; Get permissions
-          permissions (permissions/get-entity-permissions user entity-name entity-config)
-
-          ; HTMX sends the target element id in the HX-Target header.
-          ; Filter actions target #filter-table-container (needs filter+table).
-          ; Search/sort/pagination target #entity-table-container (table only).
-          htmx-target (get-in request [:headers "hx-target"])
-          filters (:filters options)
-          display (display-with-overview admin-service config request entity-name options records)]
-
-      (if (= htmx-target "filter-table-container")
-         ; Filter action: return filter builder + table so the filter UI stays visible
-        (support/htmx-fragment-response request
-                                        (admin-ui/filter-table-container entity-name records entity-config table-query total-count permissions filters
-                                                                         display))
-         ; Search / sort / pagination: return just the table
-        (support/htmx-fragment-response request
-                                        (admin-ui/entity-table entity-name records entity-config table-query total-count permissions filters
-                                                               display))))))
+          entity-name (support/get-entity-name request)]
+      (when-not (get-in request [:headers "hx-request"])
+        (throw (ex-info "Redirect to full page"
+                        {:type :redirect
+                         :location (str "/web/admin/" (name entity-name)
+                                        (when-let [qs (:query-string request)] (str "?" qs)))
+                         :status 303})))
+      (table-fragment-response request entity-name
+                               (list-state admin-service schema-provider config request user entity-name)))))
 
 (defn filter-drawer-handler
   "GET /:entity/filters — the filter drawer for the filters in the query

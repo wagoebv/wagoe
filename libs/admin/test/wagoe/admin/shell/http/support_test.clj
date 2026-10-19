@@ -94,3 +94,21 @@
                      [:tr#row [:td "a"]]
                      [[:span#badge "3"]
                       [:div {:hx-swap-oob "beforeend:#toasts"} [:p [:t :saved]]]])))))))
+
+(deftest ^:unit list-query-params
+  (testing "table state, with dir as :sort-dir"
+    (is (= {:sort :email :sort-dir :desc :page 2 :page-size 25 :search "ann"}
+           (support/parse-query-params {"sort" "email" "dir" "desc" "page" "2"
+                                        "page-size" "25" "search" "ann"}))))
+  (testing "both filter formats, blank ones kept for the drawer"
+    (is (= {:filters {:role {:op :eq :value "admin"}
+                      :name {:op :contains :value ""}}}
+           (support/parse-query-params {"role" "admin"
+                                        "filters[name][op]" "contains"
+                                        "filters[name][value]" ""}))))
+  (testing "add_filter_field and remove_filter"
+    (is (= {:filters {:role {:op :eq :value ""}}}
+           (support/parse-query-params {"add_filter_field" "role"})))
+    (is (= {} (support/parse-query-params {"role" "admin" "remove_filter" "role"}))))
+  (testing "limit and offset"
+    (is (= {:limit 5 :offset 10} (support/parse-query-params {"limit" "5" "offset" "10"})))))
