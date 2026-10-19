@@ -195,7 +195,8 @@
 
    The model is shown the real API of every namespace the source requires.
    With `(:check opts)`, a fn of the generated text returning errors or nil,
-   a failing answer is sent back once with its errors (BOU-572).
+   a failing answer is sent back once with its errors (BOU-572). `(:run? opts)`
+   tells the model its tests will be run.
 
    Returns:
      {:text str :tokens int :provider kw :model str :test-tags #{kw}
@@ -215,7 +216,7 @@
              ;; A test namespace is several times the length of an ordinary
              ;; answer — one run against a 250-line source stopped mid-form at
              ;; 598 lines. The caller can still override.
-             popts     (-> (dissoc opts :check)
+             popts     (-> (dissoc opts :check :run?)
                            (update :max-tokens #(or % test-generator-max-tokens)))
              attempt   (fn [messages]
                          (let [result (resolve-provider service messages popts)]
@@ -228,7 +229,7 @@
                                    (cond-> (merge result repaired)
                                      (seq errors) (assoc :check-errors (vec errors)))))))))
              messages  (prompts/test-generator-messages source-path source-code test-type
-                                                        (api-context source-code))
+                                                        (api-context source-code) (boolean (:run? opts)))
              first-try (attempt messages)
              result    (if (:check-errors first-try)
                          (attempt (prompts/test-fix-messages messages (:text first-try)

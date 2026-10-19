@@ -383,6 +383,7 @@
   [["-o" "--output FILE" "Write to this file instead of stdout"]
    ["-w" "--write" "Write to the conventional test path for the source file"]
    ["-f" "--force" "Overwrite an existing test file; write one that fails its checks"]
+   ["-r" "--run" "Load and run the generated tests (in a separate JVM) before writing. Runs the model's code"]
    ["-h" "--help"]])
 
 (defn gen-tests-outcome
@@ -399,10 +400,10 @@
     (println (str "  " e))))
 
 (defn cmd-gen-tests [args]
-  (let [{:keys [options arguments]} (parse-or-exit! args gen-tests-opts "Usage: bb ai gen-tests <source-file> [-o <output> | --write]")
+  (let [{:keys [options arguments]} (parse-or-exit! args gen-tests-opts "Usage: bb ai gen-tests <source-file> [-o <output> | --write] [--run]")
         source-path (first arguments)]
     (when (or (:help options) (nil? source-path))
-      (println "Usage: bb ai gen-tests <source-file> [-o <output> | --write]")
+      (println "Usage: bb ai gen-tests <source-file> [-o <output> | --write] [--run]")
       (System/exit 0))
     (println (bold "\u2746 Wagoe AI Test Generator"))
     (println (dim (str "Source: " source-path)))
@@ -430,21 +431,28 @@
 
       ;; Linted as the file it will be, so kondo's config and namespace
       ;; checks apply as they will in `bb check`.
-      (println (dim "The answer is linted and its tests run before anything is written."))
-      (let [lint-as (or dest (ctx/derive-test-path source-path) "test/generated_test.clj")
+      (println (dim (if (:run options)
+                      "The answer is linted, then its tests are run, before anything is written."
+                      "The answer is linted and its fixtures checked; nothing it contains is run. Add --run to run its tests.")))
+      (let [run?    (boolean (:run options))
+            lint-as (or dest (ctx/derive-test-path source-path) "test/generated_test.clj")
             check   (fn [text]
                       (test-check/check-errors
-                       text {:root          "."
+                       text {:run?          run?
+                             :root          "."
                              :filename      lint-as
                              :context-files (keep identity
                                                   (cons source-path
                                                         (map test-check/source-file
                                                              (test-check/required-namespaces text))))}))
             service (make-service-from-config)
-            result  (svc/generate-tests service source-path {:check check})]
+            result  (svc/generate-tests service source-path {:check check :run? run?})]
         (when (:error result)
           (println (red (describe-failure result service)))
           (System/exit 1))
+        (when-not run?
+          (doseq [line (:unchecked (test-check/fixture-check (:text result)))]
+            (println (yellow line))))
         (case (gen-tests-outcome result dest (:force options))
           :refuse
           (do (println (red "The generated namespace fails its checks, after one retry:"))
@@ -708,7 +716,7 @@
        "\n"
        "Usage:\n"
        "  bb ai explain [--file path]                  Error explainer, also stdin (experimental)\n"
-       "  bb ai gen-tests <file> [--write]             Test generator (experimental)\n"
+       "  bb ai gen-tests <file> [--write] [--run]     Test generator (experimental)\n"
        "  bb ai sql <description>                      SQL copilot, HoneySQL (experimental)\n"
        "  bb ai docs --module <path> [--type t]        Documentation wizard\n"
        "  bb ai admin-entity <description>             Admin entity EDN generator\n"

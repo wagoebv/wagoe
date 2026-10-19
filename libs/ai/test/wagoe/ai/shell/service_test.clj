@@ -233,6 +233,13 @@
       (is (str/includes? prompt "schema schema/Message\n    [:map [:role [:enum :system :user :assistant]] [:content :string]]")
           prompt))))
 
+(deftest ^:integration generate-tests-says-the-tests-run-only-with-run
+  (doseq [[opts expected] [[{} false] [{:run? true} true]]]
+    (let [[svc calls] (scripted-service ["(ns t-test)\n(deftest a-test (is (= 1 1)))"])]
+      (with-source ports-source #(svc/generate-tests svc % opts))
+      (is (= expected (str/includes? (:content (first (first @calls))) "The tests are run"))
+          (pr-str opts)))))
+
 (deftest ^:integration generate-tests-shows-the-modules-schema-unrequired
   ;; Most core namespaces never require their module's schema namespace.
   (let [[svc calls] (scripted-service ["(ns t-test)\n(deftest a-test (is (= 1 1)))"])]

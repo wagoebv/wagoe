@@ -11,7 +11,9 @@ Framework-aware AI tooling for Wagoe applications. Unlike a generic assistant, i
 4. *SQL Copilot* (experimental) - translate a description into HoneySQL format
 5. *Documentation Wizard* - generate AGENTS.md, OpenAPI YAML, or README
 
-The test generator shows the model the public API and the Malli schemas of every namespace the source requires, plus its module's `schema` namespace. Before writing, it lints the answer, then runs it in a separate JVM that keeps only `PATH`, `HOME`, `LANG` and `WAG_ENV` from your environment (not a sandbox: it can still read files): fixtures tagged `^{:schema s}` must match `s`, and every test must pass. A failing answer goes back to the model once; if it still fails, nothing is written unless you pass `--force`.
+The test generator shows the model the public API and the Malli schemas of every namespace the source requires, plus its module's `schema` namespace. Before writing, it lints the answer and checks each fixture tagged `^{:schema s}` against `s`, reading the file without evaluating it; a fixture whose value is not literal data is reported as not checked. A failing answer goes back to the model once; if it still fails, nothing is written unless you pass `--force`.
+
+`--run` also loads the answer and runs its tests, in a separate JVM that keeps only `PATH`, `HOME`, `LANG` and `WAG_ENV` from your environment, and every test must pass. This runs code the model wrote before anyone has read it. The child is not a sandbox: it can read your files and reach the network.
 
 WARNING: The error explainer, test generator and SQL copilot are experimental for 1.0: their answers can be confidently wrong, so review them before use. `bb ai explain` prints the error's own WGE code and `Fix:` text before the model's summary.
 

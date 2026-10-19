@@ -1,14 +1,16 @@
 (ns wagoe.ai.shell.test-check
   "What gen-tests shows the model, and the checks its answer must pass before
    it is written (BOU-572): rc-4 wrote a namespace with invented protocol names
-   that stopped the whole suite from loading. Since BOU-511 the answer is also
-   run, in a separate JVM, before it is written."
+   that stopped the whole suite from loading. Since BOU-511 its tagged
+   fixtures are checked against their schemas, and with --run it is run, in a
+   separate JVM, before it is written."
   (:require [wagoe.ai.core.context :as ctx]
             [clojure.edn :as edn]
             [clojure.java.io :as io]
             [clojure.java.shell :as sh]
             [clojure.string :as str]
-            [malli.core :as m]))
+            [malli.core :as m]
+            [malli.error :as me]))
 
 ;; =============================================================================
 ;; The API of a required namespace, read from the classpath
@@ -167,9 +169,9 @@
         (spit src text)
         (let [java (str (System/getProperty "java.home") "/bin/java")
               pb   (ProcessBuilder. ^java.util.List
-                                    [java "-cp" (absolute-classpath)
-                                     "clojure.main" "-m" "wagoe.ai.shell.test-runner"
-                                     (.getPath src) (str ns-sym) (.getPath res)])
+                    [java "-cp" (absolute-classpath)
+                     "clojure.main" "-m" "wagoe.ai.shell.test-runner"
+                     (.getPath src) (str ns-sym) (.getPath res)])
               _    (.retainAll (.keySet (.environment pb)) child-env)
               proc (-> pb
                        (.directory (io/file (or root ".")))
@@ -187,9 +189,84 @@
           (run! #(.delete ^java.io.File %) [src res log]))))
     ["It has no ns form"]))
 
+;; =============================================================================
+;; Fixtures checked without running anything
+;; =============================================================================
+
+(defn- read-forms
+  "Every top-level form in `text`, read without evaluation, or nil when it
+   cannot be read that way (an auto-resolved keyword with an alias, say)."
+  [text]
+  (try
+    (binding [*read-eval* false]
+      (let [rdr (java.io.PushbackReader. (java.io.StringReader. (str text)))]
+        (loop [forms []]
+          (let [form (read {:eof ::eof :read-cond :allow} rdr)]
+            (if (= ::eof form) forms (recur (conj forms form)))))))
+    (catch Exception _ nil)))
+
+(defn- literal?
+  "True for data a reader produces on its own: no calls, no references."
+  [x]
+  (cond
+    (or (seq? x) (symbol? x)) false
+    (coll? x)                 (every? literal? (if (map? x) (mapcat identity x) x))
+    :else                     true))
+
+(defn- tagged-fixtures
+  "[{:name :schema :value}] for each top-level (def ^{:schema s} name value)
+   in `forms`."
+  [forms]
+  (for [form forms
+        :when (and (seq? form) (= 'def (first form)) (symbol? (second form)))
+        :let [s (:schema (meta (second form)))]
+        :when s]
+    {:name (second form) :schema s :value (last form)}))
+
+(defn- resolve-schema
+  "The schema `sym` names in a file whose ns form is `ns-form`, or nil. The
+   namespace is loaded: it is the project's own code, not the model's."
+  [ns-form sym]
+  (when-let [ns-sym (and (qualified-symbol? sym)
+                         (let [a (symbol (namespace sym))]
+                           (or (some (fn [[n al]] (when (= al a) n)) (ctx/ns-form-aliases ns-form))
+                               (some #{a} (ctx/ns-form-requires ns-form)))))]
+    (try (require ns-sym)
+         (some-> (ns-resolve ns-sym (symbol (name sym))) deref)
+         (catch Exception _ nil))))
+
+(defn- fixture-result [ns-form {:keys [name schema value]}]
+  (let [s (resolve-schema ns-form schema)]
+    (cond
+      (nil? s)
+      [:errors (str "Fixture " name ": :schema " schema " does not resolve")]
+
+      (not (literal? value))
+      [:unchecked (str "Fixture " name " not checked: its value is not literal data (check it with --run)")]
+
+      :else
+      (when-let [problem (try (some-> (m/explain s value) me/humanize)
+                              (catch Exception e (str "not a schema: " (ex-message e))))]
+        [:errors (str "Fixture " name " does not match its :schema: " (pr-str problem))]))))
+
+(defn fixture-check
+  "The tagged fixtures in `text` checked against their schemas without
+   evaluating anything: {:errors [line] :unchecked [line]}. A value that is
+   not literal data cannot be checked that way, so it is reported, not failed."
+  [text]
+  (if-let [forms (read-forms text)]
+    (reduce (fn [acc [k line]] (update acc k conj line))
+            {:errors [] :unchecked []}
+            (keep #(fixture-result (first forms) %) (tagged-fixtures forms)))
+    {:errors [] :unchecked ["Fixtures not checked: the file cannot be read without evaluating it"]}))
+
 (defn check-errors
-  "Errors in generated `text`, or nil. It is read and linted first; only a
-   namespace that passes both is run, in a separate JVM (`run-errors`)."
-  [text lint-opts]
-  (or (not-empty (into (vec (missing-namespaces text)) (lint-errors text lint-opts)))
-      (run-errors text lint-opts)))
+  "Errors in generated `text`, or nil. It is read and linted, and its tagged
+   fixtures checked statically. Only with `:run?`, and only when those pass,
+   is it loaded and run, in a separate JVM (`run-errors`): running the
+   model's code is opt-in."
+  [text {:keys [run?] :as opts}]
+  (or (not-empty (-> (vec (missing-namespaces text))
+                     (into (lint-errors text opts))
+                     (into (:errors (fixture-check text)))))
+      (when run? (run-errors text opts))))
