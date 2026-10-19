@@ -47,6 +47,19 @@
    content
    opts))
 
+(defn- auth-page
+  "A sign-in page: Wagoe's `header` above `content` in the pilot layout, or,
+   when opts carry the app's `:login-layout`, `content` alone handed to it.
+   The forms, CSRF field and errors are in `content` either way."
+  [title page page-class header content opts]
+  (if-let [app-layout (:login-layout opts)]
+    (app-layout title
+                (into [page-class] content)
+                (-> opts (dissoc :login-layout) (assoc :page page)))
+    (page-layout title
+                 (into (cond-> [page-class] header (conj header)) content)
+                 opts)))
+
 ;; =============================================================================
 ;; User Table Components
 ;; =============================================================================
@@ -785,15 +798,16 @@
   (let [data-with-return (cond-> (or data {})
                            (:return-to opts)      (assoc :return-to (:return-to opts))
                            (:oidc-providers opts) (assoc :oidc-providers (:oidc-providers opts)))]
-    (page-layout
+    (auth-page
      [:t :user/link-signin]
-     [:div.login-page.auth-page
-      [:div.page-header.auth-header
-       (when-let [logo-url (:logo-url opts)]
-         [:img.auth-logo {:src logo-url :alt "" :style "height:48px; width:auto; display:block; margin:0 auto 12px;"}])
-       [:h1 [:t :wagoe/app-name]]
-       [:p [:t :user/login-subtitle]]]
-      (when-let [message (:error opts)]
+     :login
+     :div.login-page.auth-page
+     [:div.page-header.auth-header
+      (when-let [logo-url (:logo-url opts)]
+        [:img.auth-logo {:src logo-url :alt "" :style "height:48px; width:auto; display:block; margin:0 auto 12px;"}])
+      [:h1 [:t :wagoe/app-name]]
+      [:p [:t :user/login-subtitle]]]
+     [(when-let [message (:error opts)]
         (ui/error-message message))
       (login-form data-with-return errors)]
      opts)))
@@ -802,10 +816,12 @@
   "The second-factor prompt after a provider sign-in. The pending sign-in is
    in a cookie, so the form carries only the code."
   [errors opts]
-  (page-layout
+  (auth-page
    [:t :user/mfa-title]
-   [:div.mfa-login-page.auth-page
-    [:div#mfa-login-form {:class "auth-card ui-card"}
+   :oidc-mfa
+   :div.mfa-login-page.auth-page
+   nil
+   [[:div#mfa-login-form {:class "auth-card ui-card"}
      [:div.card-body
       [:h2.auth-title (icons/icon :shield {:size 24}) [:span [:t :user/mfa-title]]]
       [:p.auth-subtitle [:t :user/mfa-prompt]]
@@ -824,12 +840,15 @@
 (defn oidc-continue-page
   "Body of the answer to a provider callback that signed someone in; the
    handler's Refresh header moves the browser on."
-  [location]
-  (page-layout
-   [:t :user/link-signin]
-   [:div.auth-page
-    [:p [:a {:href location} [:t :user/oidc-continue]]]]
-   {}))
+  ([location] (oidc-continue-page location {}))
+  ([location opts]
+   (auth-page
+    [:t :user/link-signin]
+    :oidc-continue
+    :div.auth-page
+    nil
+    [[:p [:a {:href location} [:t :user/oidc-continue]]]]
+    opts)))
 
 ;; =============================================================================
 ;; MFA Login Form & Page
@@ -899,15 +918,16 @@
   (let [data-with-return (if (:return-to opts)
                            (assoc data :return-to (:return-to opts))
                            data)]
-    (page-layout
+    (auth-page
      [:t :user/mfa-title]
-     [:div.mfa-login-page.auth-page
-      [:div.page-header.auth-header
-       (when-let [logo-url (:logo-url opts)]
-         [:img.auth-logo {:src logo-url :alt "" :style "height:48px; width:auto; display:block; margin:0 auto 12px;"}])
-       [:h1 [:t :wagoe/app-name]]
-       [:p [:t :user/mfa-subtitle]]]
-      (mfa-login-form data-with-return errors)]
+     :mfa
+     :div.mfa-login-page.auth-page
+     [:div.page-header.auth-header
+      (when-let [logo-url (:logo-url opts)]
+        [:img.auth-logo {:src logo-url :alt "" :style "height:48px; width:auto; display:block; margin:0 auto 12px;"}])
+      [:h1 [:t :wagoe/app-name]]
+      [:p [:t :user/mfa-subtitle]]]
+     [(mfa-login-form data-with-return errors)]
      opts)))
 
 ;; =============================================================================
@@ -976,16 +996,17 @@
   (let [data-with-return (if (:return-to opts)
                            (assoc data :return-to (:return-to opts))
                            data)]
-    (page-layout
+    (auth-page
      [:t :user/page-create-account-title]
-     [:div.register-page.auth-page
-      [:div.page-header.auth-header
-       [:h1 [:t :user/button-create-account]]
-       [:div.page-actions
-        [:a.button {:href "/web/login"}
-         (icons/icon :arrow-left {:size 16})
-         [:span [:t :user/button-back-to-login]]]]]
-      (register-form data-with-return errors)]
+     :register
+     :div.register-page.auth-page
+     [:div.page-header.auth-header
+      [:h1 [:t :user/button-create-account]]
+      [:div.page-actions
+       [:a.button {:href "/web/login"}
+        (icons/icon :arrow-left {:size 16})
+        [:span [:t :user/button-back-to-login]]]]]
+     [(register-form data-with-return errors)]
      opts)))
 
 ;; =============================================================================
@@ -1185,7 +1206,7 @@
                   (:group-leave :grant-remove) :warning
                   :neutral)]
     (ui/badge (text/capitalize (str/replace action-name "-" " ")) {:variant variant
-                                            :class "audit-action-badge"})))
+                                                                   :class "audit-action-badge"})))
 
 (defn result-badge
   "Display result status with appropriate styling.

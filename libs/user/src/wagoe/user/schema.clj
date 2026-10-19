@@ -475,9 +475,16 @@
    [:fn {:error/message "must not be / or /web, which redirect to it"}
     #(not (contains? #{"/" "/web" "/web/"} (re-find #"^[^?#]*" %)))]])
 
+(def LoginLayout
+  "The page around the sign-in forms: a `(fn [title body opts])`, a symbol in EDN."
+  [:multi {:dispatch #(if (fn? %) :fn :symbol)}
+   [:fn [:fn fn?]]
+   [:symbol [:fn {:error/message "should be a qualified function symbol"} qualified-symbol?]]])
+
 (def UserLandingSettings
   [:map
    [:login-redirect {:optional true} LoginRedirect]
+   [:login-layout {:optional true} LoginLayout]
    [:dashboard {:optional true} Dashboard]
    [:home {:optional true} LocalPath]
    [:landing {:optional true} Landing]])

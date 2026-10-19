@@ -326,7 +326,8 @@
                                :mfa-config      {}}
     ;; Platform adds the modules' :auth part as :contributed.
     :wagoe/auth-hooks         {:configured {:mfa-required?  (:mfa-required? auth-config)
-                                            :login-redirect (get-in config [:active :wagoe/user :login-redirect])}}
+                                            :login-redirect (get-in config [:active :wagoe/user :login-redirect])
+                                            :login-layout   (get-in config [:active :wagoe/user :login-layout])}}
     :wagoe/auth-service       {:user-repository    (ig/ref :wagoe/user-repository)
                                :session-repository (ig/ref :wagoe/session-repository)
                                :mfa-service        (ig/ref :wagoe/mfa-service)
@@ -397,7 +398,7 @@
    the auth service's config, its `:mfa-required?` going through
    `:wagoe/auth-hooks`, where platform adds the hooks modules contribute.
 
-   `:login-redirect`, `:dashboard`, `:home` and `:landing` are checked and resolved here,
+   `:login-redirect`, `:login-layout`, `:dashboard`, `:home` and `:landing` are checked and resolved here,
    once, so a bad value fails boot whichever components start, as are the
    `:groups` schemas."
   [settings {:keys [config validation-config]}]

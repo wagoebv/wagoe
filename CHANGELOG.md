@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **`:wagoe/user :login-layout` lets an app lay out the sign-in pages** (BOU-740): login, MFA and registration.
+  A `(fn [title body opts])` returning the page; Wagoe keeps the form, CSRF and errors.
 - **`capable?` on the database port** (BOU-609): `(capable? adapter :schemas)`.
   An unknown capability or a nil adapter throws; a tenant job with no adapter now fails instead of running in public.
 - **Opt-in virtual threads for requests and job workers** (BOU-471): `:virtual-threads? true` on `:wagoe/http`,

@@ -44,15 +44,19 @@
       (:login-redirect s)
       (update-in [:active :wagoe/user :login-redirect] #(if (map? %) % (hooks/as-fn :login-redirect %)))
 
+      (:login-layout s)
+      (update-in [:active :wagoe/user :login-layout] #(hooks/as-fn :login-layout %))
+
       (map? (:dashboard s))
       (update-in [:active :wagoe/user :dashboard :handler] #(resolve-fn :dashboard %)))))
 
 (defn with-hooks
-  "`config` with the `:login-redirect` the auth hooks settled on, which may be
-   a module's rather than the one config set."
+  "`config` with the `:login-redirect` and `:login-layout` the auth hooks
+   settled on, which may be a module's rather than the one config set."
   [config hooks]
   (cond-> config
-    (:login-redirect hooks) (assoc-in [:active :wagoe/user :login-redirect] (:login-redirect hooks))))
+    (:login-redirect hooks) (assoc-in [:active :wagoe/user :login-redirect] (:login-redirect hooks))
+    (:login-layout hooks)   (assoc-in [:active :wagoe/user :login-layout] (:login-layout hooks))))
 
 (defn path-for
   "Where `user` lands after signing in. A function gets the user and
