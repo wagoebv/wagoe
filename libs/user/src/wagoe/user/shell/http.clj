@@ -776,23 +776,42 @@
         (throw (ex-info "User not authenticated" {:type :unauthorized})))
       (export-response data-export (privacy/export-subject data-export {:type :user :id user-id}) request))))
 
+(defn- path-user-id [request]
+  (or (parse-uuid (str (get-in request [:path-params :id])))
+      (throw (ex-info "User id must be a UUID" {:type :validation-error}))))
+
+(defn- audit-export!
+  "Record `request`'s export of `profile`. Before the export is served or
+   queued, and not caught: an export nobody can trace is not made."
+  [audit-repository request profile]
+  (user-ports/create-audit-log audit-repository
+                               (audit/data-export-audit-entry (user-svc/request-audit-context request) profile)))
+
+(defn- user-not-found [user-id]
+  (ex-info "User not found" {:type :not-found :user-id user-id}))
+
 (defn export-user-data-handler
   "An admin's export of any user's data, for a request made another way.
    Recorded in the user's audit trail."
   [data-export audit-repository]
   (fn [request]
-    (let [user-id (parse-uuid (str (get-in request [:path-params :id])))]
-      (when-not user-id
-        (throw (ex-info "User id must be a UUID" {:type :validation-error})))
-      (let [doc     (privacy/export-subject data-export {:type :user :id user-id})
-            profile (get-in doc [:sections :user :profile])]
-        ;; Other modules' exporters may answer for any id; ours names the account.
-        (when-not profile
-          (throw (ex-info "User not found" {:type :not-found :user-id user-id})))
-        ;; Before the response, and not caught: an export nobody can trace is not served.
-        (user-ports/create-audit-log audit-repository
-                                     (audit/data-export-audit-entry (user-svc/request-audit-context request) profile))
-        (export-response data-export doc request)))))
+    (let [user-id (path-user-id request)
+          doc     (privacy/export-subject data-export {:type :user :id user-id})
+          ;; Other modules' exporters may answer for any id; ours names the account.
+          profile (or (get-in doc [:sections :user :profile]) (throw (user-not-found user-id)))]
+      (audit-export! audit-repository request profile)
+      (export-response data-export doc request))))
+
+(defn request-user-export-job-handler
+  "An admin's export of any user's data as a background job, downloaded from
+   the job's status endpoint. Recorded in the user's audit trail when asked
+   for: that is where the actor and their request are."
+  [user-service export-jobs audit-repository]
+  (fn [request]
+    (let [user-id (path-user-id request)
+          profile (or (user-ports/get-user-by-id user-service user-id) (throw (user-not-found user-id)))]
+      (audit-export! audit-repository request profile)
+      (privacy/request-export-job! export-jobs {:type :user :id user-id} (get-in request [:user :id])))))
 
 (defn- require-platform-admin-middleware
   "An admin outside any tenant only: the export carries the user's audit trail,
@@ -805,19 +824,29 @@
 
 (defn export-routes
   "Data export: a user's own at GET /api/v1/me/export and /web/profile/export,
-   anyone's for an admin at GET /api/v1/users/:id/export."
-  [user-service data-export audit-repository config]
-  (let [auth (user-middleware/flexible-authentication-middleware user-service)
-        own  {:middleware [auth]
-              :get        {:handler (export-own-data-handler data-export)
-                           :summary "Download your data"}}]
-    {:api    [["/me/export" (assoc-in own [:get :tags] ["users"])]
-              ["/users/:id/export"
-               {:middleware [auth require-platform-admin-middleware]
-                :get        {:handler    (export-user-data-handler data-export audit-repository)
-                             :summary    "Download a user's data (admin)"
-                             :tags       ["users"]
-                             :parameters {:path [:map [:id :string]]}}}]]
+   anyone's for an admin at GET /api/v1/users/:id/export, and with
+   `:export-jobs` (privacy/IExportJobs) as a background job at
+   POST /api/v1/users/:id/export-jobs."
+  [{:keys [user-service data-export audit-repository export-jobs config]}]
+  (let [auth  (user-middleware/flexible-authentication-middleware user-service)
+        admin [auth require-platform-admin-middleware]
+        own   {:middleware [auth]
+               :get        {:handler (export-own-data-handler data-export)
+                            :summary "Download your data"}}]
+    {:api    (cond-> [["/me/export" (assoc-in own [:get :tags] ["users"])]
+                      ["/users/:id/export"
+                       {:middleware admin
+                        :get        {:handler    (export-user-data-handler data-export audit-repository)
+                                     :summary    "Download a user's data (admin)"
+                                     :tags       ["users"]
+                                     :parameters {:path [:map [:id :string]]}}}]]
+               export-jobs
+               (conj ["/users/:id/export-jobs"
+                      {:middleware admin
+                       :post       {:handler    (request-user-export-job-handler user-service export-jobs audit-repository)
+                                    :summary    "Ask for a user's data as a background job (admin)"
+                                    :tags       ["users"]
+                                    :parameters {:path [:map [:id :string]]}}}]))
      :web    (when (web-ui-enabled? config)
                [["/profile/export" (assoc own :no-doc true)]])
      :static []}))

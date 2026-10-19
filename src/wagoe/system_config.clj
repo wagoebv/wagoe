@@ -158,7 +158,7 @@
                      :wagoe/job-dead-letter-retention]}
 
    :storage  {:keys [:wagoe/storage-routes :wagoe.storage/data-exporter :wagoe.storage/upload-retention
-                     :wagoe.storage/export-jobs :wagoe.storage/export-job-handlers
+                     :wagoe.storage/export-jobs :wagoe/export-jobs :wagoe.storage/export-job-handlers
                      :wagoe.storage/export-job-routes :wagoe.storage/export-archive-retention]}
 
    ;; The outbox relay, not the outbox: any service may write an event in its

@@ -6,7 +6,8 @@
   (java.time.Duration/ofHours 24))
 
 (def requests-per-hour
-  "How many export jobs one requester may open an hour, by default."
+  "How many export jobs one requester may open an hour, by default. 0 is no
+   limit."
   5)
 
 (defn new-job
@@ -27,6 +28,12 @@
   "Whether `user-id` asked for `job`. Only they may see it."
   [job user-id]
   (and (some? user-id) (= (:requested-by job) (str user-id))))
+
+(defn own-data?
+  "Whether `job` exports the data of who asked for it, rather than an
+   admin's export of someone else."
+  [{:keys [subject requested-by]}]
+  (and (= :user (:type subject)) (= (str (:id subject)) requested-by)))
 
 (defn downloadable?
   [{:keys [status file-key ^java.time.Instant expires-at]} now]

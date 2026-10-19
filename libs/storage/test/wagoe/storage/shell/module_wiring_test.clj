@@ -89,6 +89,8 @@
         without   (ig-config #{})
         with      (ig-config #{:wagoe/jobs})]
     (is (not (contains? (:components without) :wagoe.storage/export-jobs)))
+    (is (not (contains? (:components without) :wagoe/export-jobs)))
+    (is (= {:export-jobs (ig/ref :wagoe.storage/export-jobs)} (get-in with [:components :wagoe/export-jobs])))
     (is (nil? (:routes without)))
     (is (= [(ig/ref :wagoe.storage/export-job-routes)] (:routes with)))
     (is (= [(ig/ref :wagoe.storage/export-job-handlers)] (:job-handlers with)))
@@ -136,3 +138,10 @@
           (is (= (str "/api/v1" base "/download/" key) path-of)
               "the emitted URL addresses the mounted download route")))
       (finally (doseq [f (reverse (file-seq (java.io.File. root)))] (.delete f))))))
+
+(deftest ^:unit export-requests-per-hour-is-a-whole-number
+  (doseq [bad [-1 "5" 1.5]]
+    (is (= :configuration-error
+           (:type (ex-data (is (thrown? clojure.lang.ExceptionInfo
+                                        (ig/init-key :wagoe.storage/export-jobs {:requests-per-hour bad}))))))
+        (pr-str bad))))
