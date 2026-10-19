@@ -5,8 +5,11 @@
             [wagoe.platform.core.privacy :as privacy]
             [wagoe.platform.ports.privacy :as ports]
             [wagoe.platform.shell.privacy :as sut]
-            [wagoe.platform.shell.system.wiring])
-  (:import [java.time Duration Instant Period]))
+            [wagoe.platform.shell.system.wiring]
+            [ring.core.protocols :as ring-protocols])
+  (:import [java.io ByteArrayInputStream ByteArrayOutputStream]
+           [java.time Duration Instant Period]
+           [java.util.zip ZipInputStream]))
 
 (defn- exporter [f]
   (reify ports/IDataExporter
@@ -83,3 +86,61 @@
     (is (= {"cardLast4" "4242" "id" 1 "billing/id" 2 "raw" 3} (get-in body ["sections" "billing/user"]))
         "and at every depth")
     (is (contains? body "exportedAt"))))
+
+(defn- unzip
+  "The entries of a streamed zip response body, {name string}."
+  [response]
+  (let [out (ByteArrayOutputStream.)]
+    (ring-protocols/write-body-to-stream (:body response) response out)
+    (with-open [zip (ZipInputStream. (ByteArrayInputStream. (.toByteArray out)))]
+      (loop [acc {}]
+        (if-let [entry (.getNextEntry zip)]
+          (recur (assoc acc (.getName entry) (String. (.readAllBytes zip))))
+          acc)))))
+
+(deftest ^:unit an-export-asked-for-as-a-zip-carries-the-files
+  (let [files (reify
+                ports/IDataExporter
+                (export-data [_ _] {:uploads [{:key "ab/a.txt"} {:key "gone.txt"} {:key "../x"}]})
+                ports/IFileExporter
+                (export-files [_ _ section]
+                  (for [{:keys [key]} (:uploads section)]
+                    {:path key :content #(when-not (= "gone.txt" key) (.getBytes (str "body of " key)))})))
+        svc   (sut/create-data-export {:storage files
+                                       :user    (exporter (fn [_] {:name "Ann"}))})
+        doc   (ports/export-subject svc {:type :user :id 7})]
+    (testing "JSON unless asked"
+      (is (= "application/json; charset=utf-8"
+             (get-in (ports/export-response svc doc {}) [:headers "Content-Type"]))))
+
+    (testing "a zip on ?format=zip"
+      (let [response (ports/export-response svc doc {:query-params {"format" "zip"}})
+            entries  (unzip response)
+            json     (json/parse-string (get entries "data-export.json"))]
+        (is (= "application/zip" (get-in response [:headers "Content-Type"])))
+        (is (= #{"data-export.json" "storage/ab/a.txt" "storage/x"} (set (keys entries))))
+        (is (= "body of ab/a.txt" (get entries "storage/ab/a.txt")))
+        (is (= {"name" "Ann"} (get-in json ["sections" "user"])))
+        (is (= ["storage/gone.txt"] (get json "missingFiles"))
+            "a file that is gone is named, not silently left out")))))
+
+(deftest ^:unit a-configured-policy-its-module-cannot-run-fails-the-boot
+  (is (= :configuration-error
+         (:type (ex-data (is (thrown? clojure.lang.ExceptionInfo
+                                      (ig/init-key :wagoe/retention {:policies    {:jobs/dead-letter {:retain "P30D"}}
+                                                                     :contributed {:jobs/dead-letter nil}})))))))
+  (is (some? (ig/init-key :wagoe/retention {:policies    {}
+                                            :contributed {:jobs/dead-letter nil}}))
+      "unconfigured, it does not matter"))
+
+(deftest ^:unit two-paths-that-clean-to-one-entry-both-reach-the-zip
+  (let [files (reify
+                ports/IDataExporter
+                (export-data [_ _] {:keys ["a/b.txt" "a//b.txt"]})
+                ports/IFileExporter
+                (export-files [_ _ section]
+                  (for [k (:keys section)] {:path k :content #(.getBytes ^String k)})))
+        svc   (sut/create-data-export {:storage files})
+        doc   (ports/export-subject svc {:type :user :id 7})]
+    (is (= #{"data-export.json" "storage/a/b.txt" "storage/a/b.txt~2"}
+           (set (keys (unzip (ports/export-response svc doc {:query-params {"format" "zip"}}))))))))

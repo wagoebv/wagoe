@@ -160,10 +160,15 @@
 (defmethod ig/halt-key! :wagoe/idempotency-store [_ _] nil)
 
 ;; The job store is the policy: each adapter implements IDeadLetterRetention.
+;; nil for a store that does not, so configuring the policy fails the boot
+;; (:wagoe/retention) rather than every run.
 (defmethod ig/init-key :wagoe/job-dead-letter-retention
   [_ {:keys [store]}]
-  (reify privacy/IRetentionPolicy
-    (purge-before! [_ cutoff] (ports/purge-dead-letters-before! store cutoff))))
+  (if (satisfies? ports/IDeadLetterRetention store)
+    (reify privacy/IRetentionPolicy
+      (purge-before! [_ cutoff] (ports/purge-dead-letters-before! store cutoff)))
+    (log/warn "Jobs: the job store does not implement IDeadLetterRetention, so :jobs/dead-letter retention cannot run"
+              {:store (some-> store class .getName)})))
 
 ;; =============================================================================
 ;; Registry and workers

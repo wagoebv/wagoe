@@ -8,6 +8,7 @@
            "libs/user/resources"                            ;; boot-table manifest
            "libs/admin/src" "libs/admin/test"               ;; Phase 5: Admin
            "libs/storage/src" "libs/storage/test"           ;; Phase 6: Storage
+           "libs/storage/resources"                         ;; upload index migration
            "libs/scaffolder/src" "libs/scaffolder/test"     ;; Phase 8: Scaffolder
            "libs/cache/src" "libs/cache/test"               ;; Phase 9: Cache
            "libs/events/src" "libs/events/test"             ;; Event bus (BOU-93)

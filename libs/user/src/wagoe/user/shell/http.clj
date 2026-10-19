@@ -47,7 +47,6 @@
             [wagoe.user.shell.group-handlers :as group-handlers]
             [wagoe.user.shell.mfa :as mfa]
             [wagoe.platform.ports.privacy :as privacy]
-            [wagoe.platform.core.privacy :as platform-privacy]
             [wagoe.user.core.audit :as audit]
             [wagoe.user.ports :as user-ports]
             [clojure.tools.logging :as log]
@@ -763,10 +762,10 @@
                            {:post {:handler (group-handlers/remove-grant group-service)}})]])}))
 
 (defn- export-response
-  "`doc`, a user's data export, as a JSON download, logged with who asked."
-  [doc request]
+  "`doc`, a user's data export, as a download, logged with who asked."
+  [data-export doc request]
   (log/info "Data export" {:subject-user-id (get-in doc [:subject :id]) :actor-id (get-in request [:user :id])})
-  (platform-privacy/export-response doc))
+  (privacy/export-response data-export doc request))
 
 (defn export-own-data-handler
   "The signed-in user's own data export (GDPR Art. 20)."
@@ -775,7 +774,7 @@
     (let [user-id (get-in request [:user :id])]
       (when-not user-id
         (throw (ex-info "User not authenticated" {:type :unauthorized})))
-      (export-response (privacy/export-subject data-export {:type :user :id user-id}) request))))
+      (export-response data-export (privacy/export-subject data-export {:type :user :id user-id}) request))))
 
 (defn export-user-data-handler
   "An admin's export of any user's data, for a request made another way.
@@ -793,7 +792,7 @@
         ;; Before the response, and not caught: an export nobody can trace is not served.
         (user-ports/create-audit-log audit-repository
                                      (audit/data-export-audit-entry (user-svc/request-audit-context request) profile))
-        (export-response doc request)))))
+        (export-response data-export doc request)))))
 
 (defn- require-platform-admin-middleware
   "An admin outside any tenant only: the export carries the user's audit trail,

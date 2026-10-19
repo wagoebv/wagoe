@@ -1017,6 +1017,7 @@
 (defmethod ig/init-key :wagoe/retention
   [_ {:keys [policies contributed]}]
   (let [plan (privacy/retention-plan! (select-keys policies (keys contributed)) contributed)]
+    (privacy/assert-runnable! plan contributed)
     (log/info "Retention: policies" {:policies (update-vals plan str)
                                      :not-run  (vec (remove contributed (keys policies)))})
     {privacy/retention-job-type (privacy/retention-job-handler plan contributed)}))

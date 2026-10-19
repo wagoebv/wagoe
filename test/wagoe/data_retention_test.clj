@@ -8,13 +8,21 @@
             [wagoe.jobs.ports :as job-ports]
             [wagoe.main :as main]
             [wagoe.platform.ports.privacy :as privacy]
+            [wagoe.storage.ports :as storage-ports]
+            [wagoe.storage.shell.service :as storage]
             [wagoe.system-config :as sys-config]
             [wagoe.user.ports :as user-ports])
-  (:import [java.time Duration Instant]))
+  (:import [java.io ByteArrayInputStream ByteArrayOutputStream]
+           [java.nio.file Files]
+           [java.nio.file.attribute FileAttribute]
+           [java.time Duration Instant]
+           [java.util.zip ZipInputStream]))
 
 (defn- with-system [privacy-settings f]
-  (let [cfg    (cond-> (assoc-in (config/load-config {:profile :test})
-                                 [:active :wagoe/jobs] {:provider :memory :workers {:count 0}})
+  (let [root   (str (Files/createTempDirectory "wagoe-retention" (make-array FileAttribute 0)))
+        cfg    (cond-> (-> (config/load-config {:profile :test})
+                           (assoc-in [:active :wagoe/jobs] {:provider :memory :workers {:count 0}})
+                           (assoc-in [:active :wagoe/storage] {:provider :local :root root}))
                  privacy-settings (assoc-in [:active :wagoe/privacy] privacy-settings))
         system (ig/init (main/worker-ig-config (sys-config/ig-config cfg)))]
     (try (f system) (finally (ig/halt! system)))))
@@ -44,6 +52,44 @@
           (is (= (:email ada)
                  (get-in (privacy/export-subject (:wagoe/data-export system) {:type :user :id (:id ada)})
                          [:sections :user :profile :email]))))))))
+
+(defn- zip-entries [response]
+  (let [out (ByteArrayOutputStream.)]
+    ((requiring-resolve 'ring.core.protocols/write-body-to-stream) (:body response) response out)
+    (with-open [zip (ZipInputStream. (ByteArrayInputStream. (.toByteArray out)))]
+      (loop [acc {}]
+        (if-let [entry (.getNextEntry zip)]
+          (recur (assoc acc (.getName entry) (String. (.readAllBytes zip))))
+          acc)))))
+
+(deftest ^:integration a-users-uploads-are-exported-and-expire
+  (with-system {:retention {:storage/uploads {:retain "P30D"}}}
+    (fn [system]
+      (let [service      (get-in system [:wagoe/storage :service])
+            upload-index (:wagoe.storage/upload-index system)
+            data-export  (:wagoe/data-export system)
+            user-id      (random-uuid)
+            upload!      #(-> (storage/upload-file service {:bytes (.getBytes ^String %) :content-type "text/plain"}
+                                                   {:filename "note.txt" :owner {:user-id user-id}} {})
+                              :data :key)
+            old          (upload! "old")
+            recent       (upload! "recent")
+            subject      {:type :user :id user-id}
+            doc          (privacy/export-subject data-export subject)]
+        (is (= #{old recent} (set (map :key (get-in doc [:sections :storage :uploads])))))
+
+        (testing "a zip export carries the files"
+          (let [entries (zip-entries (privacy/export-response data-export doc {:query-params {"format" "zip"}}))]
+            (is (= "old" (get entries (str "storage/" old))))
+            (is (contains? entries "data-export.json"))))
+
+        (testing "upload retention runs with the retention job"
+          (storage-ports/record-upload! upload-index
+                                        {:key old :user-id (str user-id) :size 3 :content-type "text/plain"
+                                         :stored-at (.minus (Instant/now) (Duration/ofDays 40))})
+          (is (:success? ((job-ports/get-handler (:wagoe/job-registry system) :wagoe/retention) {})))
+          (is (= [recent] (map :key (get-in (privacy/export-subject data-export subject)
+                                            [:sections :storage :uploads])))))))))
 
 (deftest ^:integration retention-is-off-unless-configured
   (with-system nil

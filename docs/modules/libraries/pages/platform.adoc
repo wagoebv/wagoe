@@ -245,6 +245,12 @@ tenant module serves a tenant's export to platform admins at
 `GET /api/v1/tenants/:id/export`. Sections are keyed by exporter id with its
 namespace, so `:orders` and `:billing/orders` do not collide.
 
+Each route answers JSON. With `?format=zip` or `Accept: application/zip` it
+answers a zip of `data-export.json` and the files exporters hold, such as the
+storage module's uploads, each under its exporter id (`storage/<key>`). An
+exporter with files also implements `IFileExporter`. A file that is gone is
+listed under `missingFiles` in the JSON.
+
 Retention is off until you name a policy. It then runs as the recurring job
 `:wagoe/retention`, so `:wagoe/jobs` must be on:
 
@@ -254,7 +260,8 @@ Retention is off until you name a policy. It then runs as the recurring job
                 :retention-schedule {:cron "0 3 * * *" :zone "UTC"}}  ; the default
 ----
 
-A policy no enabled module provides, or a period that is not positive, fails the boot.
+A policy no enabled module provides or can run, or a period that is not
+positive, fails the boot.
 
 [cols="1,3"]
 |===
@@ -262,6 +269,7 @@ A policy no enabled module provides, or a period that is not positive, fails the
 
 | `:user/audit-log` | audit entries older than the period
 | `:jobs/dead-letter` | dead-lettered jobs that finally failed before the period
+| `:storage/uploads` | uploads stored before the period, file and record
 |===
 
 `wagoe.platform.database/delete-in-batches!` deletes in batches of 1000, so a

@@ -40,15 +40,37 @@
   (let [n (case-conversion/kebab-case->camel-case-string (name k))]
     (if-let [ns (namespace k)] (str ns "/" n) n)))
 
+(defn export-json
+  "`doc`, an export from `IDataExport`, as JSON. Keys are camelCased and keep
+   their namespace."
+  [doc]
+  (json/generate-string doc {:key-fn json-key}))
+
 (defn export-response
-  "`doc`, an export from `IDataExport`, as a JSON download. Keys are
-   camelCased and keep their namespace."
+  "`doc`, an export from `IDataExport`, as a JSON download."
   [doc]
   {:status  200
    :headers {"Content-Type"        "application/json; charset=utf-8"
              "Content-Disposition" "attachment; filename=\"data-export.json\""
              "Cache-Control"       "no-store"}
-   :body    (json/generate-string doc {:key-fn json-key})})
+   :body    (export-json doc)})
+
+(defn zip-requested?
+  "Whether `request` asks for the export as a zip: `?format=zip`, or an
+   Accept header naming application/zip. JSON otherwise."
+  [request]
+  (or (= "zip" (or (get-in request [:query-params "format"])
+                   (get-in request [:params :format])))
+      (str/includes? (str (get-in request [:headers "accept"])) "application/zip")))
+
+(defn archive-entry
+  "Where a file an exporter gave as `path` sits in the zip: under the
+   exporter's `id`, namespace kept. Empty, `.` and `..` segments are dropped, so no entry
+   extracts outside the archive's folder; nil when nothing is left."
+  [id path]
+  (let [segments (remove #{"" "." ".."} (str/split (str path) #"[/\\]"))]
+    (when (seq segments)
+      (str/join "/" (cons (subs (str id) 1) segments)))))
 
 (defn parse-retain
   "An ISO-8601 period (\"P2Y\", \"P90D\") or duration (\"PT12H\") as a

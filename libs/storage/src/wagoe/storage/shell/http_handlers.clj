@@ -99,6 +99,13 @@
 ;; HTTP Handlers
 ;; ============================================================================
 
+(defn- request-owner
+  "Who an upload belongs to, for the upload index: the signed-in user and the
+   request's tenant."
+  [request]
+  {:user-id   (get-in request [:user :id])
+   :tenant-id (get-in request [:tenant :id])})
+
 (defn upload-file-handler
   "Handler for file upload endpoint.
 
@@ -112,7 +119,7 @@
   - allowed-types: Comma-separated list of allowed MIME types
   - allowed-extensions: Comma-separated list of allowed extensions"
   [storage-service]
-  (fn [{:keys [multipart-params query-params]}]
+  (fn [{:keys [multipart-params query-params] :as request}]
     (if-let [bad (or (repeated-params multipart-params ["path" "visibility"])
                      (repeated-params query-params
                                       ["max-size" "allowed-types" "allowed-extensions"]))]
@@ -141,7 +148,8 @@
           (let [file-data (extract-file-data file)
                 metadata {:filename (:filename file-data)
                           :path path
-                          :visibility visibility}
+                          :visibility visibility
+                          :owner (request-owner request)}
                 options {:max-size max-size
                          :allowed-types allowed-types
                          :allowed-extensions allowed-extensions}
@@ -167,7 +175,7 @@
   - create-thumbnail: 'true' to create thumbnail (optional)
   - thumbnail-size: Thumbnail max dimension in pixels (optional, default: 200)"
   [storage-service]
-  (fn [{:keys [multipart-params]}]
+  (fn [{:keys [multipart-params] :as request}]
     (if-let [bad (repeated-params multipart-params
                                   ["path" "visibility" "create-thumbnail" "thumbnail-size"])]
       (repeated-params-response bad)
@@ -189,7 +197,8 @@
           (let [file-data (extract-file-data file)
                 metadata {:filename (:filename file-data)
                           :path path
-                          :visibility visibility}
+                          :visibility visibility
+                          :owner (request-owner request)}
                 options {:create-thumbnail create-thumbnail
                          :thumbnail-size thumbnail-size}
 

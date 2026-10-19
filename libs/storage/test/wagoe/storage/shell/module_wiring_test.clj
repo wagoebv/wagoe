@@ -76,6 +76,14 @@
                                   (assoc base :expose-http? v) {}))))
             (pr-str v))))))
 
+(deftest ^:unit ig-config-indexes-uploads-and-contributes-them-to-privacy
+  (let [{:keys [components data-export retention]}
+        (wagoe.storage.shell.module-wiring/ig-config {:provider :local :root "/tmp/x"} {})]
+    (is (= (ig/ref :wagoe.storage/upload-index) (get-in components [:wagoe/storage :upload-index])))
+    (is (= (ig/ref :wagoe/db-context) (get-in components [:wagoe.storage/upload-index :ctx])))
+    (is (= {:storage (ig/ref :wagoe.storage/data-exporter)} data-export))
+    (is (= {:storage/uploads (ig/ref :wagoe.storage/upload-retention)} retention))))
+
 (deftest ^:unit routes-address-the-sharded-keys-the-adapter-returns
   ;; The local adapter shards every key it hands back — `2a/photo.jpg` — so a
   ;; single-segment :file-key could never match the key it had just returned.

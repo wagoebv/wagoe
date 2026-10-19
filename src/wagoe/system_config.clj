@@ -155,7 +155,7 @@
    ;; `:wagoe/job-workers` and `:wagoe/storage-routes`.
    :jobs     {:keys [:wagoe/job-workers :wagoe/job-scheduler :wagoe/job-dead-letter-retention]}
 
-   :storage  {:keys [:wagoe/storage-routes]}
+   :storage  {:keys [:wagoe/storage-routes :wagoe.storage/data-exporter :wagoe.storage/upload-retention]}
 
    ;; The outbox relay, not the outbox: any service may write an event in its
    ;; transaction, one place needs to publish them (BOU-448).

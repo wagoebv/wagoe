@@ -31,6 +31,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **Storage records every upload's owner, and exports and expires uploads** (BOU-738): a `storage_uploads` table
+  feeds a `:storage` export section and the `:storage/uploads` retention policy. Run `migrate up`.
+- **Data export as a zip with the files** (BOU-738): `?format=zip` or `Accept: application/zip` on any export
+  route. JSON stays the default.
 - **`start-workflow!` and `transition!` take the caller's transaction** (BOU-575): `(start-workflow! engine tx input)`.
   Scaffolded creates write the entity and its workflow instance atomically; regenerate ports, persistence, service and workflow files together.
 
@@ -186,6 +190,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Redis dead-letter retention could delete a job `retry-job!` had just retried** (BOU-738). It now purges in
+  one atomic pass. Upgrade if you retain `:jobs/dead-letter` on Redis.
+- **A job store without `IDeadLetterRetention` failed every retention run** (BOU-738); configuring
+  `:jobs/dead-letter` over one now fails the boot instead.
 - **Any signed-in user could open the workflow admin pages** (BOU-747); they now answer 403 to anyone but a
   platform admin. Upgrade if you run workflow; tenant admins lose access.
 - **`bb ai sql` invented table and column names** (BOU-513): it now sees the tables your migrations create, and

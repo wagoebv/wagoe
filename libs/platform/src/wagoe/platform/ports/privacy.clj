@@ -10,6 +10,14 @@
     "The data this module holds about `subject`, {:type :user|:tenant :id …},
     as JSON-encodable data. nil when it holds nothing for that type of subject."))
 
+(defprotocol IFileExporter
+  "Optional, beside `IDataExporter`, for an exporter whose data has files."
+  (export-files [this subject section]
+    "The files behind `section`, what `export-data` returned for `subject`,
+    for an export served as a zip: [{:path \"a/b.pdf\" :content (fn [] bytes)}].
+    Each sits under the exporter's id in the zip. `:content` is called while
+    the zip is written and returns nil for a file that is gone."))
+
 (defprotocol IRetentionPolicy
   (purge-before! [this cutoff]
     "Delete what this policy covers that is older than `cutoff`, an Instant.
@@ -20,4 +28,9 @@
     "Every contributed exporter's data about `subject`:
     {:format :subject :exported-at :sections {exporter-id data}}. Throws
     :validation-error for a malformed subject, and whatever an exporter throws:
-    a partial export would read as a complete one."))
+    a partial export would read as a complete one.")
+
+  (export-response [this doc request]
+    "`doc`, from `export-subject`, as a Ring download: JSON, or a zip of the
+    JSON and the exporters' files when `request` asks for one with
+    `?format=zip` or `Accept: application/zip`."))

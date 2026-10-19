@@ -7,6 +7,7 @@
   (:require [clojure.test :refer [deftest testing is use-fixtures]]
             [wagoe.jobs.shell.adapters.redis :as redis-adapter]
             [wagoe.jobs.core.job :as job]
+            [wagoe.jobs.shell.adapters.codec :as codec]
             [wagoe.jobs.ports :as ports])
   (:import [java.time Instant]
            [java.util UUID]
@@ -291,3 +292,39 @@
          (is (contains? qstats :size))
          (is (contains? qstats :processed-total))
          (is (>= (:processed-total qstats) 1)))))))
+
+;; =============================================================================
+;; Dead-letter retention
+;; =============================================================================
+
+(deftest ^:integration redis-purge-keeps-a-job-retried-while-it-runs
+  (when-redis
+   (let [j      (make-job {:max-retries 0})
+         decode codec/decode-job
+         race   (atom true)]
+     (ports/save-job! *store* j)
+     (ports/update-job-status! *store* (:id j) :failed {:message "boom"})
+     ;; retry-job! lands between the purge reading the job and deleting it.
+     (with-redefs [codec/decode-job (fn [raw]
+                                      (when (compare-and-set! race true false)
+                                        (ports/retry-job! *store* (:id j)))
+                                      (decode raw))]
+       (is (zero? (ports/purge-dead-letters-before! *store* (.plusSeconds (Instant/now) 3600)))))
+     (is (= :pending (:status (ports/find-job *store* (:id j))))
+         "the retried job was deleted"))))
+
+(deftest ^:integration redis-purge-removes-only-older-dead-letters
+  (when-redis
+   (let [fail!  (fn [] (let [j (make-job {:max-retries 0})]
+                         (ports/save-job! *store* j)
+                         (ports/update-job-status! *store* (:id j) :failed {:message "boom"})
+                         j))
+         old    (vec (repeatedly 3 fail!))
+         _      (Thread/sleep 20)
+         cutoff (Instant/now)
+         _      (Thread/sleep 20)
+         newer  (vec (repeatedly 2 fail!))]
+     (is (= 3 (ports/purge-dead-letters-before! *store* cutoff)))
+     (is (= (set (map :id newer)) (set (map :id (ports/failed-jobs *store* 10)))))
+     (is (every? nil? (map #(ports/find-job *store* (:id %)) old)))
+     (is (zero? (ports/purge-dead-letters-before! *store* cutoff))))))
