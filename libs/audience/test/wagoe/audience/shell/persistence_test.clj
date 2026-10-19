@@ -3,7 +3,7 @@
 
    Uses H2 in-memory database (PostgreSQL compatibility mode) to verify
    all IAudienceRepository operations:
-   - save-audience (upsert)
+   - save-audience (upsert), create-audience, update-audience
    - find-audience
    - list-audiences
    - delete-audience
@@ -86,6 +86,22 @@
       (ports/save-audience @test-store (assoc definition :label "Updated"))
       (let [found (ports/find-audience @test-store :upsert-test)]
         (is (= "Updated" (:label found)))))))
+
+(defn- error-type [f]
+  (try (f) nil (catch clojure.lang.ExceptionInfo e (:type (ex-data e)))))
+
+(deftest ^:contract create-and-update-audience
+  (let [store @test-store
+        gold  {:id :gold :label "Gold" :filters []}]
+    (testing "create inserts, and refuses an id that is taken"
+      (ports/create-audience store gold)
+      (is (= :audience-exists (error-type #(ports/create-audience store (assoc gold :label "Other")))))
+      (is (= "Gold" (:label (ports/find-audience store :gold)))))
+    (testing "update replaces, and refuses an id that is not stored"
+      (ports/update-audience store (assoc gold :label "Golder"))
+      (is (= "Golder" (:label (ports/find-audience store :gold))))
+      (is (= :audience-not-found (error-type #(ports/update-audience store {:id :nope :label "N" :filters []}))))
+      (is (nil? (ports/find-audience store :nope))))))
 
 ;; =============================================================================
 ;; list-audiences

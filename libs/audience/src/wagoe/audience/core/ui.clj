@@ -1,6 +1,7 @@
 (ns wagoe.audience.core.ui
   "Pure Hiccup UI components for audience segments.
-   No I/O, no side effects.")
+   No I/O, no side effects."
+  (:require [cheshire.core :as json]))
 
 ;; =============================================================================
 ;; filter-badge
@@ -72,22 +73,38 @@
   "Page layout for the audience builder.
 
    Renders a form with:
-     - Name + description fields
-     - Placeholder div for Replicant filter panel widget
-     - Placeholder div for Replicant composition builder
+     - Id (new segments only), name and description fields
+     - Placeholder divs for the Replicant filter panel and composition builder
      - Placeholder for live preview
-     - Hidden input for serialized filter state
+     - Hidden inputs for the serialized filters and composition
 
    Args:
-     opts - map with optional key :segment (existing AudienceDefinition for edit mode)
+     opts - map with optional keys
+            :segment    - AudienceDefinition whose values fill the form
+            :edit?      - post to the segment's update route rather than create
+            :error      - message shown above the form
+            :csrf-token - the request's anti-forgery token
 
    Returns:
      Hiccup [:div ...] element"
-  [{:keys [segment]}]
+  [{:keys [segment edit? error csrf-token]}]
   [:div.max-w-4xl.mx-auto.p-6
-   [:h1.text-2xl.font-bold.mb-6 (if segment "Edit Audience" "New Audience")]
-   [:form {:method "post" :action "/api/audiences"}
+   [:h1.text-2xl.font-bold.mb-6 (if edit? "Edit Audience" "New Audience")]
+   (when error
+     [:p.mb-4.rounded-md.bg-red-50.p-3.text-sm.text-red-700 {:role "alert"} error])
+   [:form {:method "post"
+           :action (if edit?
+                     (str "/web/audiences/builder/" (some-> (:id segment) name))
+                     "/web/audiences")}
+    (when csrf-token
+      [:input {:type "hidden" :name "__anti-forgery-token" :value csrf-token}])
     [:div.space-y-4
+     (when-not edit?
+       [:div
+        [:label.block.text-sm.font-medium "Id"]
+        [:input.mt-1.block.w-full.rounded-md.border-gray-300
+         {:type "text" :name "id" :required true :pattern "[a-z0-9][a-z0-9\\-]{0,63}"
+          :value (some-> (:id segment) name)}]])
      [:div
       [:label.block.text-sm.font-medium "Name"]
       [:input.mt-1.block.w-full.rounded-md.border-gray-300
@@ -105,8 +122,11 @@
      ;; Placeholder for live preview
      [:div#audience-preview.mt-4
       [:p.text-gray-400 "Preview will appear here"]]
-     ;; Hidden input for serialized filter state (populated by Replicant)
-     [:input {:type "hidden" :name "filters-data" :id "audience-filters-data"}]
+     ;; Serialized state the widgets edit, filled in so a save keeps what is there
+     [:input {:type "hidden" :name "filters-data" :id "audience-filters-data"
+              :value (json/generate-string (:filters segment []))}]
+     [:input {:type "hidden" :name "compose-data" :id "audience-compose-data"
+              :value (some-> (:compose segment) json/generate-string)}]
      [:div.mt-6.flex.gap-3
       [:button.rounded-md.bg-blue-600.px-4.py-2.text-white {:type "submit"} "Save"]
       [:a.rounded-md.bg-gray-100.px-4.py-2.text-gray-700 {:href "/web/audiences"} "Cancel"]]]]])

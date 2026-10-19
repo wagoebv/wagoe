@@ -6,6 +6,7 @@
             [wagoe.audience.ports :as ports]
             [wagoe.audience.shell.http :as sut]
             [wagoe.audience.shell.service :as service]
+            [ring.util.codec :as codec]
             [wagoe.platform.shell.http.reitit-router :as reitit-router]))
 
 (defn- store
@@ -15,6 +16,12 @@
    (let [db (atom {})]
      (reify ports/IAudienceRepository
        (save-audience [_ d] (when ex (throw ex)) (swap! db assoc (:id d) d) d)
+       (create-audience [this d]
+         (when (get @db (:id d)) (throw (ex-info "taken" {:type :audience-exists})))
+         (ports/save-audience this d))
+       (update-audience [this d]
+         (when-not (or ex (get @db (:id d))) (throw (ex-info "missing" {:type :audience-not-found})))
+         (ports/save-audience this d))
        (find-audience [_ id] (when ex (throw ex)) (get @db id))
        (list-audiences [_] (when ex (throw ex)) (vec (vals @db)))
        (list-audiences [this _] (ports/list-audiences this))
@@ -142,16 +149,19 @@
     (query-users-sql [_ clause] (if clause [u1] [u1 u2]))
     (load-users [_ ids] (mapv (fn [id] {:id id}) ids))))
 
-(defn- served [s & [filter-fields]]
+(defn- request [method uri content-type body]
+  {:request-method method :uri uri
+   :headers {"content-type" content-type "accept" "application/json"}
+   :body (java.io.ByteArrayInputStream. (.getBytes ^String body))})
+
+(defn- served [s & [{:keys [filter-fields cache]}]]
   (let [resolver (service/create-audience-service {:repository s :user-data-source users
-                                                   :filter-fields filter-fields})
+                                                   :filter-fields filter-fields :cache cache})
         handler  (reitit-router/compile-routes (sut/audience-api-routes resolver s [] {:filter-fields filter-fields})
                                                {:swagger-enabled false})]
     (fn [method uri body]
-      (let [r (handler {:request-method method :uri uri
-                        :headers {"content-type" "application/json" "accept" "application/json"}
-                        :body (java.io.ByteArrayInputStream. (.getBytes (json/generate-string body)))})]
-        (update r :body #(some-> % slurp (json/parse-string true)))))))
+      (-> (handler (request method uri "application/json" (json/generate-string body)))
+          (update :body #(some-> % slurp (json/parse-string true)))))))
 
 (deftest ^:unit ^:security create-update-and-preview-read-the-body
   ;; No route declared :parameters, so [:parameters :body] was empty and every
@@ -238,7 +248,120 @@
         (is (nil? (get-in r [:body :count])))))
     (testing "a field the app configures is allowed"
       (let [s    (store)
-            call (served s (filter/allowed-filter-fields #{:plan}))]
+            call (served s {:filter-fields (filter/allowed-filter-fields #{:plan})})]
         (is (= 201 (:status (call :post "/audiences" {:id "paid" :label "Paid"
                                                       :filters [(assoc secret :field "plan" :value "paid")]}))))
         (is (= 1 (get-in (call :post "/audiences/preview" {:audienceId "paid"}) [:body :count])))))))
+
+(defn- atom-cache
+  "An IAudienceCache that keeps every result, whatever its TTL."
+  []
+  (let [db (atom {})]
+    (reify ports/IAudienceCache
+      (get-cached [_ id] (some-> (get @db id) (assoc :cached? true)))
+      (put-cached [_ id result _] (swap! db assoc id result) result)
+      (invalidate [_ id] (swap! db dissoc id) nil)
+      (invalidate-all [_] (reset! db {}) nil))))
+
+(deftest ^:unit create-and-update-do-not-stand-in-for-each-other
+  ;; Both saved unconditionally: create overwrote an existing audience and still
+  ;; answered 201, update of an unknown id created it.
+  (let [s    (store)
+        call (served s)
+        gold {:id "gold" :label "Gold" :filters []}]
+    (is (= 201 (:status (call :post "/audiences" gold))))
+    (testing "create of a taken id is a conflict and leaves it alone"
+      (let [r (call :post "/audiences" (assoc gold :label "Other"))]
+        (is (= 409 (:status r)))
+        (is (= "conflict" (get-in r [:body :error :type]))))
+      (is (= "Gold" (:label (ports/find-audience s :gold)))))
+    (testing "update of an unknown id is not found and creates nothing"
+      (let [r (call :put "/audiences/silver" {:label "Silver" :filters []})]
+        (is (= 404 (:status r)))
+        (is (= "not-found" (get-in r [:body :error :type]))))
+      (is (nil? (ports/find-audience s :silver))))))
+
+(deftest ^:unit json-keys-are-camel-case
+  ;; Create and update read `cache-config` while preview read `audienceId`;
+  ;; coercion dropped `cacheConfig` without a word.
+  (let [s    (store)
+        call (served s)]
+    (is (= 201 (:status (call :post "/audiences" {:id "gold" :label "Gold" :filters []
+                                                  :cacheConfig {:ttlMinutes 30 :refreshSchedule "hourly"}}))))
+    (is (= {:ttl-minutes 30 :refresh-schedule "hourly"} (:cache-config (ports/find-audience s :gold))))
+    (is (= 200 (:status (call :put "/audiences/gold" {:label "Gold" :filters [] :cacheConfig {:ttlMinutes 5}}))))
+    (is (= {:ttl-minutes 5} (:cache-config (ports/find-audience s :gold))))))
+
+(deftest ^:unit preview-needs-an-audience-id
+  ;; Without one it resolved an audience named :preview.
+  (let [call (served (store))]
+    (doseq [body [{} {:audienceId ""}]]
+      (let [r (call :post "/audiences/preview" body)]
+        (is (= 400 (:status r)) (pr-str body))
+        (is (str/includes? (pr-str (:body r)) "audienceId") (pr-str body))))))
+
+(deftest ^:unit ^:security cached-results-honour-the-definition-checks
+  ;; The checks run before the cache, so a result cached for a definition that
+  ;; is now refused is not served until its TTL runs out.
+  (let [s    (store)
+        call (served s {:cache (atom-cache)})]
+    (ports/save-audience s {:id :gold :label "Gold" :filters [] :cache-config {:ttl-minutes 60}})
+    (is (= 2 (get-in (call :get "/audiences/gold/members" nil) [:body :count])))
+    (ports/save-audience s {:id :gold :label "Gold" :cache-config {:ttl-minutes 60}
+                            :filters [{:type :role :field :role :op :eq :value "x"}]
+                            :compose {:or [{:ref :a}]}})
+    (let [r (call :get "/audiences/gold/members" nil)]
+      (is (= 422 (:status r)))
+      (is (nil? (get-in r [:body :count]))))))
+
+(defn- served-web [s]
+  (let [handler (reitit-router/compile-routes (sut/audience-web-routes nil s [])
+                                              {:swagger-enabled false})]
+    (fn [method uri form]
+      (let [r (handler (assoc (request method uri "application/x-www-form-urlencoded"
+                                       (codec/form-encode form))
+                              :anti-forgery-token "tok"))]
+        (update r :body #(cond-> % (instance? java.io.InputStream %) slurp))))))
+
+(deftest ^:unit the-builder-form-saves
+  ;; It posted form fields to the unversioned /api/audiences, which nothing
+  ;; served, so the builder could not create an audience.
+  (let [s    (store)
+        post (served-web s)]
+    (testing "the new form posts to the web create route, with its CSRF token"
+      (let [page (:body (post :get "/audiences/builder" {}))]
+        (is (str/includes? page "action=\"/web/audiences\""))
+        (is (str/includes? page "value=\"tok\""))))
+    (testing "create stores the definition and goes back to the list"
+      (let [r (post :post "/audiences" {"id" "gold" "label" "Gold" "description" ""
+                                        "filters-data" (json/generate-string [{:type "role" :field "role"
+                                                                               :op "eq" :value "gold"}])
+                                        "compose-data" ""})]
+        (is (= 303 (:status r)))
+        (is (= "/web/audiences" (get-in r [:headers "Location"]))))
+      (is (= {:id :gold :label "Gold" :filters [{:type :role :field :role :op :eq :value "gold"}]}
+             (ports/find-audience s :gold))))
+    (testing "a taken id shows the form again with the conflict"
+      (let [r (post :post "/audiences" {"id" "gold" "label" "Again" "filters-data" "[]"})]
+        (is (= 409 (:status r)))
+        (is (str/includes? (:body r) "already exists"))
+        (is (str/includes? (:body r) "value=\"Again\""))))
+    (testing "a refused definition shows the form again"
+      (is (= 422 (:status (post :post "/audiences" {"id" "pw" "label" "PW"
+                                                    "filters-data" (json/generate-string
+                                                                    [{:type "demographics" :field "password-hash"
+                                                                      :op "eq" :value "x"}])}))))
+      (let [r (post :post "/audiences" {"id" "bad" "label" "Bad" "filters-data" "{not json"})]
+        (is (= 400 (:status r)))
+        (is (str/includes? (:body r) "value=\"bad\"") "the id typed is shown again"))
+      (is (nil? (ports/find-audience s :pw))))
+    (testing "the edit form posts to the update route, keeping what it has no field for"
+      (ports/save-audience s (assoc (ports/find-audience s :gold) :cache-config {:ttl-minutes 5}))
+      (let [page (:body (post :get "/audiences/builder/gold" {}))]
+        (is (str/includes? page "action=\"/web/audiences/builder/gold\"")))
+      (is (= 303 (:status (post :post "/audiences/builder/gold" {"label" "Golder" "filters-data" "[]"}))))
+      (is (= {:id :gold :label "Golder" :filters [] :cache-config {:ttl-minutes 5}}
+             (ports/find-audience s :gold))))
+    (testing "editing an unknown id is not found"
+      (is (= 404 (:status (post :post "/audiences/builder/nope" {"label" "N" "filters-data" "[]"}))))
+      (is (nil? (ports/find-audience s :nope))))))

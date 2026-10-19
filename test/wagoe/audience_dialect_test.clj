@@ -118,6 +118,17 @@
                      (:compose (ports/find-audience store :combo)))
                   "a nested composition ref did not survive as a keyword"))
 
+            (testing "create refuses a taken id and update an unknown one"
+              (is (= :audience-exists
+                     (try (ports/create-audience store {:id :premium :label "Again" :filters []})
+                          (catch clojure.lang.ExceptionInfo e (:type (ex-data e))))))
+              (is (= :audience-not-found
+                     (try (ports/update-audience store {:id :nobody :label "N" :filters []})
+                          (catch clojure.lang.ExceptionInfo e (:type (ex-data e))))))
+              (is (nil? (ports/find-audience store :nobody)))
+              (ports/update-audience store {:id :combo :label "Renamed" :filters []})
+              (is (= "Renamed" (:label (ports/find-audience store :combo)))))
+
             (testing "a cached result is read back, TTL and all"
               ;; PostgreSQL returns a JSONB column as a PGobject, and the cache
               ;; had its own decoder that answered nil for one — so the TTL was

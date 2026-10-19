@@ -56,6 +56,10 @@
       (save-audience [_ definition]
         (swap! store assoc (:id definition) definition)
         definition)
+      (create-audience [this definition]
+        (ports/save-audience this definition))
+      (update-audience [this definition]
+        (ports/save-audience this definition))
       (find-audience [_ audience-id]
         (get @store audience-id))
       (list-audiences [_]
