@@ -509,3 +509,45 @@
     (doseq [typed ["inReview" "Inreview" " inreview "]]
       (sut/handle-list-instances-web store reg nil {:query-params {"state" typed}})
       (is (= :inReview (:current-state @seen)) typed))))
+
+;; =============================================================================
+;; Who may see the admin pages
+;; =============================================================================
+
+(defn- served-web-pages
+  "The admin pages as mounted, with authentication outermost."
+  []
+  ((user-middleware/authenticate-if-present user-service)
+   (reitit/compile-routes
+    [["/web/admin" (sut/workflow-web-routes (service-test/create-memory-store)
+                                            (registry/create-workflow-registry)
+                                            user-service
+                                            nil)]]
+    {})))
+
+(deftest ^:unit the-admin-pages-require-a-platform-admin
+  ;; Any signed-in user could list every instance and its audit trail. The
+  ;; store has no tenant column, so a tenant admin would see every tenant's.
+  (let [handler (served-web-pages)
+        get-as  (fn [uri user]
+                  (handler (cond-> {:request-method :get :uri uri :headers {}}
+                             user (assoc-in [:headers "authorization"]
+                                            (str "Bearer " (token-for (assoc user :id (UUID/randomUUID))))))))
+        uris    ["/web/admin/workflows" (str "/web/admin/workflows/" (UUID/randomUUID))]]
+    (doseq [uri uris]
+      (testing uri
+        (doseq [[who user] {"a plain user"   {:email "u@example.com" :role :user}
+                            "a tenant admin" {:email "t@example.com" :role :admin
+                                              :tenant-id (UUID/randomUUID)}}]
+          (testing (str who " is refused")
+            (let [response (get-as uri user)]
+              (is (= 403 (:status response)))
+              (is (str/includes? (:body response) "403")))))
+        (testing "a platform admin is admitted"
+          ;; The detail id is unknown: 404, past the guard.
+          (is (= (if (str/ends-with? uri "workflows") 200 404)
+                 (:status (get-as uri {:email "a@example.com" :role :admin})))))
+        (testing "a signed-out caller is still sent to the login form"
+          (let [response (get-as uri nil)]
+            (is (= 302 (:status response)))
+            (is (str/starts-with? (get-in response [:headers "Location"]) "/web/login"))))))))

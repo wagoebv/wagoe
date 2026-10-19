@@ -194,6 +194,8 @@ for what is public API, what is internal, and how deprecations are announced.
   one atomic pass. Upgrade if you retain `:jobs/dead-letter` on Redis.
 - **A job store without `IDeadLetterRetention` failed every retention run** (BOU-738); configuring
   `:jobs/dead-letter` over one now fails the boot instead.
+- **Any signed-in user could open the workflow admin pages** (BOU-747); they now answer 403 to anyone but a
+  platform admin. Upgrade if you run workflow; tenant admins lose access.
 - **`bb ai sql` invented table and column names** (BOU-513): it now sees the tables your migrations create, and
   refuses an answer naming anything else. Nothing to do.
 - **Workflow admin pages use the admin sidebar shell** (BOU-743); every audit row read as the current state, and the
