@@ -201,15 +201,16 @@
   [active known-keys]
   (when-let [orphans (seq (unclaimed-keys active known-keys))]
     (throw (ex-info
-            (str ":active names " (count orphans) " key(s) nothing will assemble:\n"
+            (str ":active names " (count orphans) " key(s) nothing will assemble (WGE-106):\n"
                  (str/join "\n" (map #(str "  " %) orphans))
                  "\n\n  A module?   Give it :enabled? true — bb scaffold integrate"
                  " writes that.\n"
                  "  Settings one of your own components reads? Name it:\n"
                  "                :wagoe/config-keys #{" (str/join " " orphans) "}\n"
                  "  A typo?     That is what this check is for.")
-            {:type :wagoe/unclaimed-config-keys
-             :keys (vec orphans)}))))
+            {:type              :wagoe/unclaimed-config-keys
+             :wagoe/error-code  "WGE-106"
+             :keys              (vec orphans)}))))
 
 (defn wiring-candidates
   "Where a module's wiring namespace may live, most preferred first.
