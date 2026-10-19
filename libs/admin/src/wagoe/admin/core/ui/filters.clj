@@ -442,7 +442,7 @@
              :hx-target  "#filter-table-container"
              :hx-swap    "outerHTML"
              :hx-push-url "true"
-             :hx-include ".toolbar-search .search-input"
+             :hx-include ".toolbar-search .search-input, #entity-table-container .table-sort input"
              "hx-on::after-request" "if (event.detail.successful && event.detail.elt === this) window.AdminUX.closeDrawer()"}
       [:div {:class "filter-fields"}
        (for [field ordered]
@@ -455,6 +455,6 @@
                  :hx-target "#filter-table-container"
                  :hx-swap   "outerHTML"
                  :hx-push-url "true"
-                 :hx-include ".toolbar-search .search-input"
+                 :hx-include ".toolbar-search .search-input, #entity-table-container .table-sort input"
                  "hx-on::after-request" "if (event.detail.successful) window.AdminUX.closeDrawer()"}
         [:t :admin/button-clear-all-filters]]]]]))

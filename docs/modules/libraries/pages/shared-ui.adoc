@@ -106,7 +106,7 @@ table and anything else with the whole page.
   ...)
 ----
 
-With `:infinite? true` (and `:total-count`) the last row loads the next page
+With `:infinite? true` (and `:total-count` and `:rows-url`) the last row loads the next page
 once it scrolls into view; the handler at `:rows-url` answers with just the
-`<tr>` rows. Send `Vary: HX-Request` from a handler that answers one URL with
+`<tr>` rows. Send `Vary: HX-Request, HX-Target` from a handler that answers one URL with
 both the page and the fragment.

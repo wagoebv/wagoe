@@ -94,7 +94,7 @@
         (is (re-find #"^\s*<div[^>]*id=\"entity-table-container\"" body))
         (is (not (re-find #"<html" body)))
         (is (re-find #"<span[^>]*hx-swap-oob=\"true\"[^>]*>100</span>" body))
-        (is (= "HX-Request" (get headers "Vary")))))
+        (is (= "HX-Request, HX-Target" (get headers "Vary")))))
     (testing "the filter container gets the filter summary too"
       (is (re-find #"^\s*<div[^>]*id=\"filter-table-container\""
                    (:body (answer {"hx-request" "true" "hx-target" "filter-table-container"})))))
@@ -105,4 +105,20 @@
                         "hx-history-restore-request" "true"}]]
         (let [response (answer headers)]
           (is (re-find #"class=\"[^\"]*entity-list-page" (:body response)) (pr-str headers))
-          (is (= "HX-Request" (get-in response [:headers "Vary"]))))))))
+          (is (= "HX-Request, HX-Target" (get-in response [:headers "Vary"]))))))))
+
+(deftest ^:unit controls-outside-the-swap-keep-the-sort-test
+  ;; The toolbar search and the filter drawer sit outside the table swap, so
+  ;; they read the sort from the table rather than from their own URL.
+  (let [table  (ui/entity-table :users [record] entity-config tq 100 permissions filters)
+        inputs (fn [cls] (->> (tree-seq coll? seq table)
+                              (filter #(and (vector? %) (= cls (get-in % [1 :class]))))
+                              first
+                              (tree-seq coll? seq)
+                              (filter #(and (vector? %) (= :input (first %))))
+                              (map #(get-in % [1 :name]))
+                              set))
+        drawer (str (ui/filter-drawer :users entity-config filters))]
+    (is (= #{"sort" "dir" "page-size"} (inputs "table-sort")) "no page: a new search starts at one")
+    (is (contains? (inputs "table-state") "filters[email][value]"))
+    (is (re-find #"table-sort input" drawer) "the drawer sends the sort, not the old filters")))

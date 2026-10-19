@@ -252,7 +252,10 @@
      ;; The sort and filters the toolbar search sends along: it sits outside
      ;; this swap, so its own URL would go stale
      [:div {:class "table-state" :hidden true}
-      (table-ui/hidden-inputs (merge (dissoc table-params "page" "search") filter-params))]
+      ;; The filter drawer sends its own filters, so it takes only these
+      [:div {:class "table-sort"}
+       (table-ui/hidden-inputs (dissoc table-params "page" "search"))]
+      (table-ui/hidden-inputs filter-params)]
      ;; Inside the swap target, so search, sort and paging keep them current
      (overview-strip entity-name entity-config table-query filters display)
      (cond

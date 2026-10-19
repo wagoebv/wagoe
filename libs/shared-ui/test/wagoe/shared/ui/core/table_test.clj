@@ -123,6 +123,20 @@
   (is (= {:name {:op :contains :value ""}}
          (table-ui/parse-filter-params {"filters[name][op]" "contains" "filters[name][value]" ""}))))
 
+(deftest ^:unit parse-filter-params-defaults-op-test
+  ;; A filter-row input sends only the value
+  (is (= {:status {:op :eq :value "paid"}}
+         (table-ui/parse-filter-params {"filters[status][value]" "paid"}))))
+
+(deftest ^:unit is-empty-filters-survive-the-round-trip-test
+  (let [filters {:deleted-at {:op :is-null}}]
+    (is (= {:filters filters}
+           (table-ui/parse-table-params
+            (into {} (for [kv (str/split (second (str/split (table-ui/list-url "/o" {} filters) #"\?")) #"&")
+                           :let [[k v] (map #(java.net.URLDecoder/decode ^String % "UTF-8")
+                                            (str/split kv #"=" 2))]]
+                       [k v])))))))
+
 (deftest ^:unit list-url-round-trips-test
   (let [tq      {:sort :email :dir :desc :page 2 :page-size 20 :search "a b"}
         filters {:status {:op :eq :value "paid"}}
@@ -196,7 +210,10 @@
         (is (every? #(str/includes? (get-in % [1 :hx-get]) "sort=number") inputs))
         (is (not-any? #(str/includes? (get-in % [1 :hx-get]) "page=") inputs))
         (is (= #{"filters[status][value]" "filters[customer][value]"}
-               (set (map #(get-in % [1 :name]) inputs))))))
+               (set (map #(get-in % [1 :name]) inputs))))
+        (is (= #{"orders-filter-status" "orders-filter-customer"}
+               (set (map #(get-in % [1 :id]) inputs)))
+            "an id, so htmx keeps focus in the input across the swap")))
     (testing "no infinite scroll unless asked"
       (is (not-any? #(= "revealed" (get-in % [1 :hx-trigger])) (requesting-elements table))))))
 
@@ -226,6 +243,10 @@
         (is (nil? (:hx-push-url attrs)) "scrolling is not navigation")))
     (testing "the last page loads nothing"
       (is (empty? (loaders (table 3 5)))))
+    (testing "no :rows-url, no loading: the list URL answers with the page"
+      (is (empty? (loaders (table-ui/data-table {:url "/orders" :hx-target "#o" :infinite? true
+                                                 :total-count 5 :table-query {:page 1 :page-size 2}
+                                                 :columns [{:field :id :label "Id"}] :rows rows})))))
     (testing "infinite-rows keeps the row's own attributes"
       (is (= "r1" (get-in (table-ui/infinite-rows [[:tr {:id "r1"}]] "/n") [0 1 :id]))))
     (testing "no next page, rows unchanged"

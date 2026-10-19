@@ -123,7 +123,7 @@
                                     :entity-configs entity-configs
                                     :flash (:flash request)
                                     :logo-url (:logo-url config)}))))
-       "Vary" "HX-Request"))))
+       "Vary" "HX-Request, HX-Target"))))
 
 (defn entity-table-fragment-handler
   "GET /:entity/table — the table fragment, for callers that ask for it

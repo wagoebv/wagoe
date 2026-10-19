@@ -266,23 +266,29 @@
 
 (defn parse-filter-params
   "The `filters[f][op|value|min|max|values][]` params of a query string as
-   {:f {:op :eq :value \"x\"}}. Blank values are kept; see `parse-table-params`."
+   {:f {:op :eq :value \"x\"}}, :op defaulting to :eq as `search-filters->params`
+   writes it. Blank values are kept; see `parse-table-params`."
   [params]
-  (reduce (fn [acc [k v]]
-            (if-let [[_ field part] (re-matches filter-param-pattern (param-name k))]
-              (let [field (keyword field)
-                    vs    (if (sequential? v) v [v])]
-                (case part
-                  "op"     (assoc-in acc [field :op] (keyword (str (first vs))))
-                  "values" (update-in acc [field :values] (fnil into []) vs)
-                  ("value" "min" "max") (assoc-in acc [field (keyword part)] (first vs))
-                  acc))
-              acc))
-          {}
-          params))
+  (update-vals
+   (reduce (fn [acc [k v]]
+             (if-let [[_ field part] (re-matches filter-param-pattern (param-name k))]
+               (let [field (keyword field)
+                     vs    (if (sequential? v) v [v])]
+                 (case part
+                   "op"     (assoc-in acc [field :op] (keyword (str (first vs))))
+                   "values" (update-in acc [field :values] (fnil into []) vs)
+                   ("value" "min" "max") (assoc-in acc [field (keyword part)] (first vs))
+                   acc))
+               acc))
+           {}
+           params)
+   #(merge {:op :eq} %)))
 
-(defn- blank-spec? [{:keys [value min max values]}]
-  (and (str/blank? value) (str/blank? min) (str/blank? max)
+(defn- blank-spec?
+  "A filter with nothing to compare against. An is-empty check needs no value."
+  [{:keys [op value min max values]}]
+  (and (not (#{:is-null :is-not-null} op))
+       (str/blank? value) (str/blank? min) (str/blank? max)
        (not-any? (complement str/blank?) values)))
 
 (defn parse-table-params
@@ -339,7 +345,7 @@
    - :attrs      merged last, for classes or a different :type"
   [{:keys [name value label placeholder options url hx-target hx-swap hx-include attrs]
     :or   {hx-swap "outerHTML" hx-include "this"}}]
-  (let [htmx {:name        name
+  (let [base {:name        name
               :aria-label  label
               :hx-get      url
               :hx-target   hx-target
@@ -347,11 +353,11 @@
               :hx-push-url "true"
               :hx-include  hx-include}]
     (if options
-      [:select (merge htmx {:class "select w-full" :hx-trigger "change"} attrs)
+      [:select (merge base {:class "select w-full" :hx-trigger "change"} attrs)
        [:option {:value ""} (or placeholder "")]
        (for [[v l] options]
          [:option {:value v :selected (= (str v) (str value))} l])]
-      [:input (merge htmx {:type        "search"
+      [:input (merge base {:type        "search"
                            :class       "input w-full"
                            :value       (or value "")
                            :placeholder placeholder
@@ -392,6 +398,7 @@
 
 (defn- filter-cell
   [{:keys [field filter label]} {:keys [filter-url hx-target hx-swap filters]}]
+  ;; The swap replaces the input being typed in; htmx refocuses it by id
   [:th {:class (str "filter-cell field-" (name field))}
    (when filter
      (filter-input {:name        (str "filters[" (name field) "][value]")
@@ -402,7 +409,8 @@
                     :url         filter-url
                     :hx-target   hx-target
                     :hx-swap     hx-swap
-                    :hx-include  "closest tr"}))])
+                    :hx-include  "closest tr"
+                    :attrs       {:id (str (str/replace (str hx-target) #"^#" "") "-filter-" (name field))}}))])
 
 (defn data-table
   "A table with sortable headers, an optional row of filter inputs, and
@@ -411,7 +419,8 @@
 
    opts:
    - :url          the list URL the controls request and push
-   - :rows-url     what the last row requests with :infinite?; default :url
+   - :rows-url     what the last row requests with :infinite?, answered with
+                   just the next rows; no :rows-url, no loading
    - :hx-target    the container the handler re-renders, e.g. \"#orders\"
    - :hx-swap      default \"outerHTML\"
    - :columns      [{:field :label :class :sortable? (default true)
@@ -419,7 +428,7 @@
    - :rows         rendered [:tr ...] rows
    - :table-query  {:sort :dir :page :page-size :search}
    - :filters      the parsed filters, kept by every control
-   - :total-count  needed by :infinite?
+   - :total-count  needed by :infinite?, with :rows-url
    - :head-before, :head-after  seqs of extra [:th] cells, e.g. a select-all box
    - :colgroup, :tfoot, :class  passed through"
   [{:keys [url rows-url hx-target hx-swap columns rows table-query filters total-count
@@ -432,7 +441,7 @@
         ctx  {:filter-url (list-url url (dissoc table-query :page) nil)
               :hx-target hx-target :hx-swap hx-swap :filters filters}
         rows (cond-> rows
-               infinite? (infinite-rows (next-page-url (or rows-url url) table-query filters total-count)))]
+               (and infinite? rows-url) (infinite-rows (next-page-url rows-url table-query filters total-count)))]
     [:table.data-table {:class (str "table" (when class (str " " class)))}
      colgroup
      [:thead

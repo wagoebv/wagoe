@@ -12,7 +12,7 @@
   "Whether a request is an htmx control asking for one of `target-ids`, so a
    handler serving the page and its fragment from one URL answers with the
    fragment. A history restore asks for the page. Such a handler sends
-   `Vary: HX-Request`, so a cache does not answer one with the other."
+   `Vary: HX-Request, HX-Target`, so a cache does not answer one with the other."
   [headers target-ids]
   (boolean (and (get headers "hx-request")
                 (not (get headers "hx-history-restore-request"))
