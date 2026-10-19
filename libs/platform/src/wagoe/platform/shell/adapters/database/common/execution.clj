@@ -92,22 +92,23 @@
 
 (defn as-kebab-maps
   "next.jdbc builder-fn: unqualified maps keyed as `snake-case->kebab-case-string`
-   names a column. next.jdbc's kebab builder splits digits off (`e2e_id`
-   becomes `e-2e-id`)."
+   names a column, where the default splits digits off (`e2e_id` becomes
+   `:e-2e-id`). Opt in with `:builder-fn` on the db context."
   [rs opts]
   (rs/as-unqualified-modified-maps
    rs (assoc opts :label-fn (comp case-conversion/snake-case->kebab-case-string text/lower-case))))
 
 (defn- row-builder
-  "Kebab-case maps, each value decoded as the engine's adapter reads it, where
-   it does: while the row is built, not in a second pass over every row."
-  [adapter]
+  "The context's `:builder-fn`, next.jdbc's kebab maps by default, each value
+   decoded as the engine's adapter reads it, where it does: while the row is
+   built, not in a second pass over every row."
+  [{:keys [adapter builder-fn] :or {builder-fn rs/as-unqualified-kebab-maps}}]
   (if-let [decode (and (instance? wagoe.platform.ports.database.ResultDecoder adapter)
                        (protocols/value-decoder adapter))]
-    (rs/builder-adapter as-kebab-maps
+    (rs/builder-adapter builder-fn
                         (fn [builder ^java.sql.ResultSet rs ^Integer i]
                           (decode (rs/read-column-by-index (.getObject rs i) (:rsmeta builder) i))))
-    as-kebab-maps))
+    builder-fn))
 
 (defn- prepare-sql-query
   "Normalize supported query inputs into a JDBC-ready `[sql & params]` vector."
@@ -350,7 +351,7 @@
       ;; Kebab-case builder converts column names once per result set —
       ;; a per-row snake->kebab map rebuild would double result-processing cost.
       (let [result (jdbc/execute! (current-datasource ctx) sql-query
-                                  {:builder-fn (row-builder (:adapter ctx))})
+                                  {:builder-fn (row-builder ctx)})
             duration (- (System/currentTimeMillis) start-time)
             success-details (merge operation-details
                                    {:duration-ms duration

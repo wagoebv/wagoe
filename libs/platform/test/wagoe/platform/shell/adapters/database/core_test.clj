@@ -11,6 +11,7 @@
 
    Uses H2 in-memory database for fast, isolated tests."
   (:require [wagoe.platform.shell.adapters.database.common.core :as db]
+            [wagoe.platform.shell.adapters.database.common.execution :as execution]
             [wagoe.platform.shell.adapters.database.sqlite.core :as sqlite]
             [wagoe.platform.shell.adapters.database.h2.core :as h2]
             [wagoe.platform.ports.database :as protocols]
@@ -144,10 +145,13 @@
           result (db/execute-query! ctx ["SELECT 42 AS answer"])]
       (is (= [{:answer 42}] result)))))
 
-(deftest ^:integration a-column-with-digits-keeps-them-in-its-key
-  ;; next.jdbc's kebab builder split them off: e2e_id was :e-2e-id
-  (is (= [{:x2y-ref-id 1 :address-line1 2 :e2e-id 3}]
-         (db/execute-query! @test-ctx ["SELECT 1 AS x2y_ref_id, 2 AS address_line1, 3 AS \"E2E_ID\""]))))
+(deftest ^:integration a-column-with-digits-keeps-them-in-its-key-on-request
+  (let [sql ["SELECT 1 AS x2y_ref_id, 2 AS address_line1, 3 AS \"E2E_ID\""]]
+    (testing "the default is next.jdbc's, unchanged"
+      (is (= [{:x-2y-ref-id 1 :address-line-1 2 :e-2-e-id 3}] (db/execute-query! @test-ctx sql))))
+    (testing "as-kebab-maps keeps the digits with their word"
+      (is (= [{:x2y-ref-id 1 :address-line1 2 :e2e-id 3}]
+             (db/execute-query! (assoc @test-ctx :builder-fn execution/as-kebab-maps) sql))))))
 
 (deftest ^:integration test-execute-update
   (testing "Execute-update returns affected row count"
