@@ -216,8 +216,7 @@
    root, so the move stays on one filesystem and is atomic, and in one place,
    so the boot can clear what a crash left."
   ^Path [base-path]
-  (doto (Paths/get base-path (into-array String [".spool"]))
-    (ensure-directory-exists)))
+  (Paths/get base-path (into-array String [".spool"])))
 
 (defn- file-url
   "Signed when a secret is configured: the download route rejects an
@@ -363,7 +362,7 @@
     ;; half a file and a failed writer leaves none.
     (let [storage-key (or (named-storage-key metadata) (streamed-storage-key (:filename metadata)))
           file-path   (target-path base-path storage-key)]
-      (spool/with-spooled write! (spool-dir base-path)
+      (spool/with-spooled write! (doto (spool-dir base-path) ensure-directory-exists)
         #(Files/move ^Path % file-path (into-array CopyOption [StandardCopyOption/REPLACE_EXISTING
                                                                 StandardCopyOption/ATOMIC_MOVE])))
       (stored logger url-base signing-secret storage-key (Files/size file-path) content-type))))
@@ -395,8 +394,8 @@
   ;; Create base directory if needed
   (when create-directories?
     (let [path (Paths/get base-path (into-array String []))]
-      (ensure-directory-exists path)
-      (spool/remove-abandoned! (spool-dir base-path) (Duration/ofHours 1))))
+      (ensure-directory-exists path)))
+  (spool/remove-abandoned! (spool-dir base-path) (Duration/ofHours 1))
 
   (when logger
     (logging/info logger "Local storage initialized"

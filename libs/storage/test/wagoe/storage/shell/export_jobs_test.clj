@@ -146,7 +146,7 @@
       (let [user {:id (random-uuid)}]
         (with-redefs [job-ports/enqueue-job! (fn [& _] (throw (ex-info "queue down" {:type :internal-error})))]
           (is (thrown? clojure.lang.ExceptionInfo (request! app user))))
-        (is (nil? (ports/open-export-job (:store ctx) {:type :user :id (:id user)})))))))
+        (is (nil? (ports/open-export-job (:store ctx) {:type :user :id (:id user)} (:id user))))))))
 
 (deftest ^:integration a-stale-open-job-does-not-block-a-new-request
   (with-export-jobs
@@ -213,14 +213,14 @@
           (doseq [user [(assoc admin :role :user) (assoc admin :tenant-id "acme")]]
             (is (= :not-found (:type (ex-data (is (thrown? clojure.lang.ExceptionInfo (call app :get path user)))))))))))))
 
-(deftest ^:integration someone-elses-open-export-of-a-subject-is-a-conflict
+(deftest ^:integration a-users-own-export-and-an-admins-of-them-are-separate-jobs
   (with-export-jobs
     (fn [{:keys [ctx]}]
-      (let [subject {:type :user :id (str (random-uuid))}]
-        (sut/request-export! ctx subject (:id subject))
-        (is (= :conflict (:type (ex-data (is (thrown? clojure.lang.ExceptionInfo
-                                                      (sut/request-export! ctx subject (str (random-uuid))))))))
-            "an admin is not handed the user's own job, which they could not see")))))
+      (let [subject {:type :user :id (str (random-uuid))}
+            own     (:id (sut/request-export! ctx subject (:id subject)))
+            admins  (:id (sut/request-export! ctx subject (str (random-uuid))))]
+        (is (not= own admins))
+        (is (= own (:id (sut/request-export! ctx subject (:id subject)))))))))
 
 (deftest ^:integration an-adapter-that-cannot-stream-gets-the-archive-in-memory
   (with-export-jobs

@@ -299,10 +299,9 @@
   (data-export/->AuditLogRetention audit-repository))
 
 (defmethod ig/init-key :wagoe/user-export-routes
-  [_ {:keys [user-service data-export audit-repository export-jobs config]}]
+  [_ config]
   (require 'wagoe.user.shell.http)
-  ((ns-resolve 'wagoe.user.shell.http 'export-routes)
-   user-service data-export audit-repository (first export-jobs) config))
+  ((ns-resolve 'wagoe.user.shell.http 'export-routes) (update config :export-jobs first)))
 
 ;; =============================================================================
 ;; Module graph

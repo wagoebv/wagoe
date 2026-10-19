@@ -80,11 +80,10 @@
             #(is (= 3 (count (:audit-log (privacy/export-data exporter {:type :user :id (:id ada)})))))))))))
 
 (defn- app [users audit exporter & [export-jobs]]
-  (let [routes (http/export-routes (user-service/->UserService users nil audit {} nil)
-                                   (platform-privacy/create-data-export {:user exporter})
-                                   audit
-                                   export-jobs
-                                   nil)]
+  (let [routes (http/export-routes {:user-service     (user-service/->UserService users nil audit {} nil)
+                                    :data-export      (platform-privacy/create-data-export {:user exporter})
+                                    :audit-repository audit
+                                    :export-jobs      export-jobs})]
     (ring/ring-handler (ring/router [["/api/v1" (:api routes)] ["/web" (:web routes)]]))))
 
 (deftest ^:integration ^:security users-download-their-own-data-and-admins-anyones
@@ -155,7 +154,7 @@
           (is (= 1 (count (audited)))))
         (testing "without export jobs there is no such route"
           (is (= ["/me/export" "/users/:id/export"]
-                 (map first (:api (http/export-routes nil nil audit nil nil))))))))))
+                 (map first (:api (http/export-routes {:audit-repository audit}))))))))))
 
 (deftest ^:integration audit-log-retention-deletes-only-older-entries
   (with-repos

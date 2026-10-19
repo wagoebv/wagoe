@@ -100,7 +100,7 @@
 
 (defmethod ig/init-key :wagoe.storage/export-jobs
   [_ {:keys [ctx storage data-export job-queue queue requests-per-hour]}]
-  (when-not (or (nil? requests-per-hour) (nat-int? requests-per-hour))
+  (when-not ((some-fn nil? nat-int?) requests-per-hour)
     (throw (ex-info ":export-requests-per-hour must be a whole number, 0 for no limit"
                     {:type :configuration-error :value requests-per-hour})))
   {:store             (export-job-store/create-export-job-store ctx)

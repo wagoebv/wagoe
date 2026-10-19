@@ -21,7 +21,7 @@ S3 / S3-compatible, and Google Cloud Storage adapters behind a single
 | `wagoe.storage.shell.data-export` | `UploadDataExporter` (`IDataExporter` + `IFileExporter`) and `UploadRetention` (`:storage/uploads`) |
 | `wagoe.storage.core.export-jobs` | Pure: an export job's states, expiry and status view |
 | `wagoe.storage.shell.export-job-store` | `JdbcExportJobStore` (`IExportJobStore`) on `storage_export_jobs` |
-| `wagoe.storage.shell.export-jobs` | Data export as a background job: request (one open job per subject, `:export-requests-per-hour` per requester, default 5), job handler, download, `:storage/export-archives` retention |
+| `wagoe.storage.shell.export-jobs` | Data export as a background job: request (one open job per subject and requester, `:export-requests-per-hour` per requester, default 5), job handler, download, `:storage/export-archives` retention |
 | `wagoe.storage.shell.export-job-http` | `/me/export-jobs` routes, mounted when the jobs module is on; `ExportJobs`, the `privacy/IExportJobs` other modules ask as `:wagoe/export-jobs` |
 | `wagoe.storage.schema` | Malli schemas: `FileData`, `FileMetadata`, `StorageResult`, `ImageInfo`, `*StorageConfig` |
 | `wagoe.storage.shell.service` | `IStorageService` protocol + `StorageService` record — validation + storage + optional image processing |

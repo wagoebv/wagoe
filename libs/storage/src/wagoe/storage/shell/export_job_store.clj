@@ -3,15 +3,17 @@
   (:require [wagoe.core.utils.type-conversion :as tc]
             [wagoe.platform.database :as db]
             [wagoe.storage.ports :as ports])
-  (:import (java.sql Timestamp)
+  (:import (java.nio.charset StandardCharsets)
+           (java.security MessageDigest)
+           (java.sql Timestamp)
            (java.time Instant)))
 
 (def migration-resource "wagoe/storage/migrations/20261021100007-storage-export-jobs.up.sql")
 
 (defn add-open-subject!
-  "`open_subject`, the subject of a :pending or :running job and null
-   otherwise. Unique, so two requests racing to open a job for one subject
-   cannot both succeed. Binary on MySQL, so ids differing in case do not
+  "`open_subject`, naming the subject and requester of a :pending or :running
+   job and null otherwise. Unique, so two requests racing to open a job for
+   one subject cannot both succeed. Binary on MySQL, so ids differing in case do not
    collide. With the requester index the hourly limit counts by."
   [ctx]
   (db/add-column-if-not-exists! ctx :storage_export_jobs :open_subject "VARCHAR(272)")
@@ -36,9 +38,15 @@
 
 (defn- ->ts [^Instant i] (some-> i Timestamp/from))
 
-(defn- open-subject [{:keys [status subject]}]
+(defn- open-subject
+  "Subject and requester, hashed to fit the column: one open job per pair, so
+   an admin's export of a user and the user's own do not wait on each other."
+  [{:keys [status subject requested-by]}]
   (when (#{:pending :running} status)
-    (str (name (:type subject)) ":" (:id subject))))
+    (let [digest (.digest (MessageDigest/getInstance "SHA-256")
+                          (.getBytes (str (name (:type subject)) ":" (:id subject) "\n" requested-by)
+                                     StandardCharsets/UTF_8))]
+      (apply str (map #(format "%02x" %) digest)))))
 
 (defn- job->row [job]
   {:id           (str (:id job))
@@ -84,12 +92,13 @@
   (find-export-job [_ id]
     (row->job (db/execute-one! ctx {:select [:*] :from [:storage_export_jobs] :where [:= :id (str id)]})))
 
-  (open-export-job [_ {:keys [type id]}]
+  (open-export-job [_ {:keys [type id]} requested-by]
     (row->job (db/execute-one! ctx {:select   [:*]
                                     :from     [:storage_export_jobs]
                                     :where    [:and
                                                [:= :subject_type (name type)]
                                                [:= :subject_id (str id)]
+                                               [:= :requested_by (str requested-by)]
                                                [:in :status ["pending" "running"]]]
                                     :order-by [[:created_at :desc]]
                                     :limit    1})))
