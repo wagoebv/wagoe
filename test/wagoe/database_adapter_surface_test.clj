@@ -391,10 +391,13 @@
 
 (deftest ^:unit an-adapter-without-a-param-encoder-still-runs-queries
   ;; ParamEncoder is its own protocol so an adapter written before it keeps
-  ;; working; its parameters pass through as they are (BOU-648).
+  ;; working; its parameters pass through as they are (BOU-648), but for an
+  ;; Instant, which it gets as the ISO string it always did (BOU-655).
   (let [encode #'execution/encode-params
-        id     (java.util.UUID/randomUUID)]
+        id     (java.util.UUID/randomUUID)
+        at     (java.time.Instant/parse "2026-10-15T14:16:48Z")]
     (is (= ["SELECT ?" id] (encode (reify protocols/DBAdapter) ["SELECT ?" id])))
+    (is (= ["SELECT ?" "2026-10-15T14:16:48Z"] (encode (reify protocols/DBAdapter) ["SELECT ?" at])))
     (is (= ["SELECT ?" (str id)] (encode (mysql/new-adapter) ["SELECT ?" id])))))
 
 (deftest ^:integration mysql-reports-the-types-the-admin-reads
