@@ -544,10 +544,10 @@
           (is (not= 403 (:status (get-as uri {:email "t@example.com" :role :admin
                                               :tenant-id (UUID/randomUUID)})))))
         (testing "a platform admin is admitted"
-          (is (not= 403 (:status (get-as uri {:email "a@example.com" :role :admin})))))
+          ;; The detail id is unknown: 404, past the guard.
+          (is (= (if (str/ends-with? uri "workflows") 200 404)
+                 (:status (get-as uri {:email "a@example.com" :role :admin})))))
         (testing "a signed-out caller is still sent to the login form"
           (let [response (get-as uri nil)]
             (is (= 302 (:status response)))
-            (is (str/starts-with? (get-in response [:headers "Location"]) "/web/login"))))))
-    (testing "the list page serves an admin"
-      (is (= 200 (:status (get-as "/web/admin/workflows" {:email "a@example.com" :role :admin})))))))
+            (is (str/starts-with? (get-in response [:headers "Location"]) "/web/login"))))))))

@@ -397,12 +397,12 @@
      user-service - IUserService (for authentication middleware)
      admin        - {:schema-provider :logo-url} for the admin sidebar, or nil"
   [store registry user-service admin]
-  (let [auth-mw (user-middleware/flexible-authentication-middleware user-service)]
+  (let [middleware [(user-middleware/flexible-authentication-middleware user-service) admin-only]]
     [["/workflows"
-      {:middleware [auth-mw admin-only]
+      {:middleware middleware
        :get {:handler (fn [req] (handle-list-instances-web store registry admin req))
              :summary "Workflow instances list"}}]
      ["/workflows/:id"
-      {:middleware [auth-mw admin-only]
+      {:middleware middleware
        :get {:handler (fn [req] (handle-get-instance-web store registry admin req))
              :summary "Workflow instance detail"}}]]))
