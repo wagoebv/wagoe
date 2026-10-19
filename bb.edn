@@ -170,7 +170,9 @@
   ;; a test namespace to only one silently loaded it without running it. Same
   ;; class as the drift this task removes elsewhere (BOU-246 / BOU-250).
   test:tools {:doc "Run wagoe-tools unit tests (bb test:tools)"
-              :extra-paths ["libs/tools/test"]
+              :extra-paths ["libs/tools/test" "libs/wagoe-cli/test"]
+              ;; The config.edn editor lives in wagoe-cli but setup and
+              ;; integrate run it under bb, so its tests run here too.
               :task (let [nss (->> (fs/glob "libs/tools/test" "**/*_test.clj")
                                    (map (fn [f]
                                           (-> (str f)
@@ -179,6 +181,7 @@
                                               (str/replace "/" ".")
                                               (str/replace "_" "-")
                                               symbol)))
+                                   (cons 'wagoe.cli.config-edn-test)
                                    sort)]
                       (when (empty? nss)
                         (println "no test namespaces found under libs/tools/test")
