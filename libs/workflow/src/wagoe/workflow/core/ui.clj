@@ -12,8 +12,7 @@
      instances-table      — paginated instance list table
      instances-page       — full page: instance list
      instance-detail-page — full page: instance detail with state viz + audit trail"
-  (:require [wagoe.admin.core.ui.layout :as admin-layout]
-            [wagoe.shared.ui.core.layout :as layout]
+  (:require [wagoe.shared.ui.core.shell :as shell]
             [wagoe.shared.ui.core.icons :as icons]
             [wagoe.shared.ui.core.components :as ui]
             [wagoe.shared.ui.core.form :as form]
@@ -251,18 +250,12 @@
 ;; =============================================================================
 
 (defn- admin-page
-  "`content` in the admin shell, with its sidebar, under `heading` in the
-   topbar. `opts` carries the shell's :entities, :entity-configs and :logo-url,
-   which the shell reads from the admin; without them the sidebar lists no
-   entities."
+  "`content` in the admin shell under `heading` in the topbar. `opts` carries
+   the shell's :nav and :logo-url, which come from the admin; without them the
+   sidebar lists no entities."
   [title heading content opts]
-  (layout/admin-pilot-page-layout
-   title
-   (admin-layout/admin-shell [:div.workflow-page content]
-                             (assoc opts :page-title heading))
-   {:user        (:user opts)
-    :flash       (:flash opts)
-    :skip-header true}))
+  (shell/shell-page title [:div.workflow-page content]
+                    (assoc opts :page-title heading)))
 
 (defn- card
   "A titled card on the detail page."
@@ -279,7 +272,7 @@
      instances - vector of WorkflowInstance maps
      params    - query-params map (string keys from ring request)
      opts      - map with :user, :flash, :states (for the filter), and the
-                 admin shell's :entities, :entity-configs and :logo-url
+                 admin shell's :nav and :logo-url
 
    Returns:
      Complete HTML page structure (doctype + html)"

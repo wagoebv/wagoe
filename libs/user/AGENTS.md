@@ -414,6 +414,10 @@ grants through their groups on every call; `wagoe.user.core.group` has `holds?`,
 - `:wagoe/user {:groups {:permissions <schema> :scope <schema>}}`, Malli or a
   symbol naming one, resolved in `ig-config`; a bad one fails boot. Grants that do
   not fit are refused with `:validation-error` and `:field`.
+- The group page adds a member through a user lookup (`/:id/members/options`).
+  A `:scope` map key with `{:wagoe/entity :domains}` gets a lookup reading the
+  admin's `/web/admin/domains/lookup`; its value is decoded with the scope schema
+  and merged into the EDN typed beside it.
 - Audit is per user: `:group-join`/`:group-leave` for the member,
   `:grant-add`/`:grant-remove` for every member, so a grant changed in an empty
   group writes nothing. A join lists the group's grants.

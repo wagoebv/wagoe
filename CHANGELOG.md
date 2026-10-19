@@ -33,6 +33,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **Permission registry and code roles** (BOU-770): modules declare permissions and roles under `:authorization`;
   boot fails on an unknown one. Nothing is enforced yet; `bb scaffold` adds viewer, editor and manager roles.
+- **Lookups instead of raw IDs in admin filters and group pages** (BOU-762): foreign-key filters, group members and
+  scope keys marked `:wagoe/entity` pick from a list. Mark scope keys to get their lookup.
+- **Admin shell in `shared-ui`** (BOU-764): `wagoe.shared.ui.core.shell` renders the sidebar from nav data, so any module's
+  pages can use it. Admin pages look the same; nothing to do.
 - **Admin and tenant data exports as background jobs** (BOU-759): `POST /api/v1/users/:id/export-jobs` and
   `/tenants/:id/export-jobs`, audited when asked for. Needs the storage and jobs modules.
 - **`shared-ui` data table with sortable headers, filter inputs and infinite scroll** (BOU-756): `data-table`,
@@ -194,6 +198,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Deprecated
 
+- **`shared-ui` `alpine/sidebar-store-init`** (BOU-761): a second copy of the sidebar store that needs the unbundled
+  Persist plugin; goes in 2.0. Load the `:admin-pilot` bundle, which registers the store.
 - **Kebab-case keys in the login response's `user` and `session`** (BOU-737): each now has a camelCase twin with the same
   value, and goes in 2.0. Read `session.sessionToken`, `session.expiresAt` and so on.
 - **`/swagger.json` and `:swagger` route docs** (BOU-462): the path serves the 3.1 document and `:swagger` is
@@ -214,6 +220,12 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **The admin sidebar forgot its pin and collapsed on every page** (BOU-761): the pin, and a pinned sidebar's
+  collapsed state, now survive navigation and reload. Nothing to do.
+- **Admin showed a column with a digit in its name as empty** (BOU-760), e.g. `e2e_customer_id` in lists and forms.
+  Other query results are keyed as before; `db/as-kebab-maps` is the opt-in builder that keys it `:e2e-customer-id`.
+- **Admin foreign-key cells showed no label when the parent's name differs from the key** (BOU-760). The parent a
+  `:has-many` declares is used.
 - **Workflow auto-transitions skipped tenant instances; side-effect jobs could run before the transition committed**
   (BOU-757). Both fixed; `db/after-commit!` defers work to a commit. Nothing to do.
 - **Tenant schemas migrated modules enabled only in code** (BOU-757): they now migrate what `:active` names, as public
