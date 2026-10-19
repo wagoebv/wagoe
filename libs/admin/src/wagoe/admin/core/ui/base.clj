@@ -8,6 +8,7 @@
   (:require [wagoe.core.utils.text :as text]
             [wagoe.core.utils.type-conversion :as tc]
             [wagoe.shared.ui.core.components :as ui]
+            [wagoe.shared.ui.core.form :as form]
             [wagoe.shared.ui.core.table :as table-ui]
             [clojure.string :as str])
   (:import (java.math BigDecimal)
@@ -412,12 +413,12 @@
 
 (defn workflow-state-link
   "An entity's workflow state, linking to its instance page, or a dash when
-   it has no instance (BOU-563). `workflow` is {:instance-id :state}."
+   it has no instance (BOU-563). `workflow` is {:instance-id :state}. Toned
+   and labelled as the workflow pages show a current state."
   [workflow]
   (if-let [{:keys [instance-id state]} workflow]
     [:a.workflow-state {:href (str "/web/admin/workflows/" instance-id)}
-     [:span.enum-badge {:class "badge ui-badge ui-badge-outline enum-badge"}
-      (text/capitalize (name state))]]
+     (ui/tone-badge (form/label-text state) :success)]
     [:span.null-value {:class "badge ui-badge ui-badge-neutral null-value"} "—"]))
 
 ;; =============================================================================

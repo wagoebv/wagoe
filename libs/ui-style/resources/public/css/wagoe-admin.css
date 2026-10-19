@@ -793,9 +793,9 @@ time.tone-danger  { color: var(--tone-danger-fg);  font-weight: 600; }
   gap: 8px;
   width: 100%;
 }
-.entity-detail-page .page-breadcrumbs { font-size: 12px; color: var(--text-muted); }
-.entity-detail-page .page-breadcrumbs a { color: var(--text-muted); text-decoration: none; }
-.entity-detail-page .page-breadcrumbs a:hover { color: var(--accent-primary); text-decoration: underline; }
+:is(.entity-detail-page, .workflow-page) .page-breadcrumbs { font-size: 12px; color: var(--text-muted); }
+:is(.entity-detail-page, .workflow-page) .page-breadcrumbs a { color: var(--text-muted); text-decoration: none; }
+:is(.entity-detail-page, .workflow-page) .page-breadcrumbs a:hover { color: var(--accent-primary); text-decoration: underline; }
 .entity-detail-page .page-header-actions .button {
   height: 30px !important;
   min-height: 0 !important;
@@ -1230,3 +1230,38 @@ time.tone-danger  { color: var(--tone-danger-fg);  font-weight: 600; }
 @media (prefers-reduced-motion: reduce) {
   .admin-content .data-table .row-nav-hint { transition: none; }
 }
+
+/* -----------------------------------------------------------------------------
+   Workflow pages (wagoe.workflow.core.ui)
+   ----------------------------------------------------------------------------- */
+
+/* .admin-content pads it already; the grid gap spaces the filter form */
+.workflow-page { display: grid; gap: var(--space-5); padding: 0; }
+.workflow-page .workflow-filter-form { margin-bottom: 0; }
+/* Not an entity list: no checkbox, sticky identifier or actions column */
+.admin-content .workflow-page .data-table { table-layout: auto; }
+.admin-content .workflow-page .data-table :is(th, td) {
+  width: auto; position: static; text-align: left; box-shadow: none;
+}
+.workflow-card {
+  background: var(--surface-0);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  padding: var(--space-5);
+}
+.workflow-card-header { margin-bottom: var(--space-4); }
+.workflow-card-title {
+  display: flex; align-items: center; gap: var(--space-2);
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 600;
+}
+.workflow-card-count { margin-left: auto; font-size: var(--text-sm); font-weight: 400; color: var(--text-muted); }
+.workflow-details {
+  display: grid; grid-template-columns: 140px 1fr; gap: var(--space-2) var(--space-4);
+  margin: 0;
+}
+.workflow-details dt { color: var(--text-muted); }
+.workflow-details dd { margin: 0; }
