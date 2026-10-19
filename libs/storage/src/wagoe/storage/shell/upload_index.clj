@@ -1,35 +1,21 @@
 (ns wagoe.storage.shell.upload-index
   "`IUploadIndex` on the application database, and the boot step that creates
    its table."
-  (:require [clojure.java.io :as io]
-            [clojure.string :as str]
-            [clojure.tools.logging :as log]
+  (:require [clojure.tools.logging :as log]
             [wagoe.core.utils.type-conversion :as tc]
-            [wagoe.platform.core.database.migration-sql :as migration-sql]
             [wagoe.platform.database :as db]
-            [wagoe.platform.ports.database :as db-ports]
             [wagoe.storage.ports :as ports])
   (:import (java.sql Timestamp)
            (java.time Instant)))
 
 (def migration-resource "wagoe/storage/migrations/20261021100001-storage-uploads.up.sql")
 
-(defn- migration-statements []
-  (->> (str/split (slurp (io/resource migration-resource)) #"--;;")
-       ;; Without comment lines, as migratus runs it: the MySQL rewrite reads a
-       ;; statement from its first word.
-       (map #(str/trim (str/replace % #"(?m)^\s*--.*$" "")))
-       (remove str/blank?)))
-
 (defn create-tables!
   "Create the upload index table when absent, for installations that boot
    without running `migrate up`."
   [ctx]
-  (let [mysql?   (= :mysql (db-ports/engine (:adapter ctx)))
-        execute! (if mysql? db/execute-ddl-if-absent! db/execute-ddl!)]
-    (doseq [statement (cond-> (migration-statements) mysql? migration-sql/for-mysql)]
-      (execute! ctx statement))
-    (log/info "Upload index ready")))
+  (db/execute-migration-ddl! ctx migration-resource)
+  (log/info "Upload index ready"))
 
 (defn- ->ts [^Instant i] (Timestamp/from i))
 

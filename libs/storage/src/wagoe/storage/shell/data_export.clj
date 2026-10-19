@@ -46,6 +46,5 @@
       (let [batch (ports/uploads-stored-before upload-index cutoff page-size)]
         (doseq [{:keys [key]} batch]
           (delete-upload! upload-index storage key))
-        (if (< (count batch) page-size)
-          (+ n (count batch))
-          (recur (+ n (count batch))))))))
+        (let [n (+ n (count batch))]
+          (if (< (count batch) page-size) n (recur n)))))))

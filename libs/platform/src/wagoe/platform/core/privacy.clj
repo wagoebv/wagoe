@@ -55,11 +55,6 @@
              "Cache-Control"       "no-store"}
    :body    (export-json doc)})
 
-(def archive-headers
-  {"Content-Type"        "application/zip"
-   "Content-Disposition" "attachment; filename=\"data-export.zip\""
-   "Cache-Control"       "no-store"})
-
 (defn zip-requested?
   "Whether `request` asks for the export as a zip: `?format=zip`, or an
    Accept header naming application/zip. JSON otherwise."

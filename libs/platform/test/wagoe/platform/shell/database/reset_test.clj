@@ -23,7 +23,7 @@
 (defn- boot-ddl-tables
   "The tables the libraries' sources create at boot, found in the source:
    literal CREATE TABLE IF NOT EXISTS, the maps given to
-   initialize-tables-from-schemas!, and the migration workflow runs at boot."
+   initialize-tables-from-schemas!, and the migrations run at boot."
   []
   (let [libs (io/file "libs")]
     (set
@@ -43,7 +43,8 @@
                                                         src)))]
                         [_ t] (re-seq #"\"(\w+)\"" (or m ""))]
                     t)
-                  (for [[_ sql-file] (re-seq #"\(migration-resource \"([^\"]+)\"" src)
+                  ;; A migration the boot runs through execute-migration-ddl!.
+                  (for [[_ sql-file] (re-seq #"\"wagoe/[\w/]+/migrations/([\w.-]+\.up\.sql)\"" src)
                         sql          (file-seq (io/file lib "resources"))
                         :when        (= sql-file (.getName sql))
                         [_ t]        (re-seq #"CREATE TABLE IF NOT EXISTS (\w+)" (slurp sql))]

@@ -65,16 +65,17 @@
 (deftest ^:integration a-users-uploads-are-exported-and-expire
   (with-system {:retention {:storage/uploads {:retain "P30D"}}}
     (fn [system]
-      (let [{:keys [service upload-index]} (:wagoe/storage system)
-            data-export (:wagoe/data-export system)
-            user-id     (random-uuid)
-            upload!     #(-> (storage/upload-file service {:bytes (.getBytes ^String %) :content-type "text/plain"}
-                                                  {:filename "note.txt" :owner {:user-id user-id}} {})
-                             :data :key)
-            old         (upload! "old")
-            recent      (upload! "recent")
-            subject     {:type :user :id user-id}
-            doc         (privacy/export-subject data-export subject)]
+      (let [service      (get-in system [:wagoe/storage :service])
+            upload-index (:wagoe.storage/upload-index system)
+            data-export  (:wagoe/data-export system)
+            user-id      (random-uuid)
+            upload!      #(-> (storage/upload-file service {:bytes (.getBytes ^String %) :content-type "text/plain"}
+                                                   {:filename "note.txt" :owner {:user-id user-id}} {})
+                              :data :key)
+            old          (upload! "old")
+            recent       (upload! "recent")
+            subject      {:type :user :id user-id}
+            doc          (privacy/export-subject data-export subject)]
         (is (= #{old recent} (set (map :key (get-in doc [:sections :storage :uploads])))))
 
         (testing "a zip export carries the files"

@@ -21,6 +21,7 @@
            [redis.clients.jedis.params ScanParams SetParams]
            [java.nio.charset StandardCharsets]
            [java.security MessageDigest]
+           [java.util HexFormat]
            [java.time Instant]))
 
 ;; =============================================================================
@@ -524,8 +525,7 @@
    return purged")
 
 (defn- sha1-hex [^String s]
-  (let [digest (.digest (MessageDigest/getInstance "SHA-1") (.getBytes s StandardCharsets/UTF_8))]
-    (apply str (map #(format "%02x" (bit-and % 0xff)) digest))))
+  (.formatHex (HexFormat/of) (.digest (MessageDigest/getInstance "SHA-1") (.getBytes s StandardCharsets/UTF_8))))
 
 (extend-type RedisJobStore
   ports/IDeadLetterRetention

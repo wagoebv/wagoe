@@ -54,7 +54,6 @@
     {:provider       provider
      :storage        file-storage
      :service        svc
-     :upload-index   upload-index
      ;; Where the routes sit, when they are mounted. Configurable because a
      ;; signed URL has to arrive at the route that verifies it: the adapter
      ;; emits `<url-base>/<key>?expires&signature`, so `:url-base` must be
@@ -82,11 +81,11 @@
 (defmethod ig/init-key :wagoe.storage/upload-index [_ {:keys [ctx]}]
   (upload-index/create-upload-index ctx))
 
-(defmethod ig/init-key :wagoe.storage/data-exporter [_ {:keys [storage]}]
-  (data-export/->UploadDataExporter (:upload-index storage) (:storage storage)))
+(defmethod ig/init-key :wagoe.storage/data-exporter [_ {:keys [upload-index storage]}]
+  (data-export/->UploadDataExporter upload-index (:storage storage)))
 
-(defmethod ig/init-key :wagoe.storage/upload-retention [_ {:keys [storage]}]
-  (data-export/->UploadRetention (:upload-index storage) (:storage storage)))
+(defmethod ig/init-key :wagoe.storage/upload-retention [_ {:keys [upload-index storage]}]
+  (data-export/->UploadRetention upload-index (:storage storage)))
 
 ;; =============================================================================
 ;; Storage Routes Component
@@ -148,8 +147,10 @@
                                                :schema (ig/ref :wagoe.storage/db-schema)}
               :wagoe/storage                  (assoc settings :upload-index (ig/ref :wagoe.storage/upload-index))
               :wagoe/storage-routes           {:storage (ig/ref :wagoe/storage)}
-              :wagoe.storage/data-exporter    {:storage (ig/ref :wagoe/storage)}
-              :wagoe.storage/upload-retention {:storage (ig/ref :wagoe/storage)}}
+              :wagoe.storage/data-exporter    {:upload-index (ig/ref :wagoe.storage/upload-index)
+                                               :storage      (ig/ref :wagoe/storage)}
+              :wagoe.storage/upload-retention {:upload-index (ig/ref :wagoe.storage/upload-index)
+                                               :storage      (ig/ref :wagoe/storage)}}
              :data-export {:storage (ig/ref :wagoe.storage/data-exporter)}
              :retention   {:storage/uploads (ig/ref :wagoe.storage/upload-retention)}}
       expose?

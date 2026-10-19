@@ -16,7 +16,11 @@
    HoneySQL map against a JDBC connection, and the differences between engines
    live behind the `DBAdapter` port. A second protocol here would name a seam
    nothing implements — the mistake ADR-037 removed."
-  (:require [wagoe.platform.shell.adapters.database.common.connection :as connection]
+  (:require [clojure.java.io :as io]
+            [clojure.string :as str]
+            [wagoe.platform.core.database.migration-sql :as migration-sql]
+            [wagoe.platform.ports.database :as db-ports]
+            [wagoe.platform.shell.adapters.database.common.connection :as connection]
             [wagoe.platform.shell.adapters.database.common.execution :as execution]
             [wagoe.observability.core.sql-redaction :as redaction]
             [wagoe.platform.shell.adapters.database.common.schema :as schema]
@@ -137,6 +141,25 @@
 (def execute-ddl-if-absent!
   "Run DDL, counting \"already exists\" as done."
   schema/execute-ddl-if-absent!)
+
+(defn execute-migration-ddl!
+  "Run the statements of the migration at classpath `resource`, for a module
+   that creates its tables at boot as well as through `migrate up`. On MySQL
+   they are rewritten as `migrate up` does, and an index that exists counts
+   as done, since the rewrite drops IF NOT EXISTS."
+  [ctx resource]
+  (let [mysql?     (= :mysql (db-ports/engine (:adapter ctx)))
+        execute!   (if mysql? execute-ddl-if-absent! execute-ddl!)
+        statements (->> (str/split (slurp (or (io/resource resource)
+                                              (throw (ex-info (str "Migration missing from the classpath: " resource)
+                                                              {:type :internal-error :resource resource}))))
+                                   #"--;;")
+                        ;; Without comment lines, as migratus runs it: the MySQL
+                        ;; rewrite reads a statement from its first word.
+                        (map #(str/trim (str/replace % #"(?m)^\s*--.*$" "")))
+                        (remove str/blank?))]
+    (doseq [statement (cond-> statements mysql? migration-sql/for-mysql)]
+      (execute! ctx statement))))
 
 (def drop-index-if-exists!
   "Drop an index if it is there."

@@ -11,8 +11,8 @@ CREATE TABLE IF NOT EXISTS storage_uploads (
   stored_at     TIMESTAMP WITH TIME ZONE NOT NULL
 );
 --;;
-CREATE INDEX IF NOT EXISTS idx_storage_uploads_user ON storage_uploads (user_id);
+CREATE INDEX IF NOT EXISTS idx_storage_uploads_user ON storage_uploads (user_id, file_key);
 --;;
-CREATE INDEX IF NOT EXISTS idx_storage_uploads_tenant ON storage_uploads (tenant_id);
+CREATE INDEX IF NOT EXISTS idx_storage_uploads_tenant ON storage_uploads (tenant_id, file_key);
 --;;
 CREATE INDEX IF NOT EXISTS idx_storage_uploads_stored_at ON storage_uploads (stored_at);

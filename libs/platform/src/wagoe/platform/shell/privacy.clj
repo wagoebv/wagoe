@@ -33,7 +33,7 @@
         :when entry]
     (assoc file :entry entry)))
 
-(defn write-archive!
+(defn- write-archive!
   "Write `doc` and `files` to `out` as a zip: the files, then
    data-export.json, which lists a file that was gone under :missing-files."
   [doc files ^OutputStream out]
@@ -57,7 +57,9 @@
    one at a time rather than held in memory together."
   [doc files]
   {:status  200
-   :headers privacy/archive-headers
+   :headers {"Content-Type"        "application/zip"
+             "Content-Disposition" "attachment; filename=\"data-export.zip\""
+             "Cache-Control"       "no-store"}
    :body    (reify ring-protocols/StreamableResponseBody
               (write-body-to-stream [_ _ out]
                 (try
@@ -100,9 +102,10 @@
    fail."
   [plan policies]
   (when-let [broken (seq (sort (remove #(satisfies? ports/IRetentionPolicy (get policies %)) (keys plan))))]
-    (throw (ex-info (str "Retention policies " (vec broken) " are configured, but their modules cannot run them;"
-                         " the log says why.")
-                    {:type :configuration-error :policies (vec broken)}))))
+    (let [broken (vec broken)]
+      (throw (ex-info (str "Retention policies " broken " are configured, but their modules cannot run them;"
+                           " the log says why.")
+                      {:type :configuration-error :policies broken})))))
 
 (defn run-retention!
   "Run each policy in `plan` against `policies` at `now`. One failing policy
