@@ -480,7 +480,9 @@
    [:login-redirect {:optional true} LoginRedirect]
    [:dashboard {:optional true} Dashboard]
    [:home {:optional true} LocalPath]
-   [:landing {:optional true} Landing]])
+   [:landing {:optional true} Landing]
+   ;; false drops /web/register and the login page's link to it.
+   [:registration {:optional true} :boolean]])
 
 (def ^:private user-validator (m/validator User))
 (def ^:private user-explainer (m/explainer User))

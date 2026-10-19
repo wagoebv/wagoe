@@ -230,7 +230,8 @@ After signing in, an administrator lands on `/web/admin/users` and everyone else
 {:login-redirect {:user "/web/overzicht" :default "/web/overzicht"}  ; by role
  :dashboard      false                                                ; or {:handler my.app.web/dashboard}
  :home           "/web/overzicht"                                     ; where the layouts link home
- :landing        "/web/welkom"}                                       ; where / and /web send everyone
+ :landing        "/web/welkom"                                        ; where / and /web send everyone
+ :registration   false}                                               ; no self-registration
 ----
 
 `:login-redirect` is a map of role to path (`:default` covers roles it does not name,
@@ -255,7 +256,11 @@ is sent to log in. `:login-redirect` still decides where someone goes after sign
 Without the user module, a module that contributes a `:static` route at `/` replaces
 the platform's redirect.
 
-All four keys are checked at boot: a path off this site, an unknown role or a symbol
+`:registration false` turns off self-registration: `/web/register` is not mounted and
+the login page drops its "Create Account" link. Accounts then come from an
+administrator or an import. It is on by default.
+
+All five keys are checked at boot: a path off this site, an unknown role or a symbol
 that does not resolve stops it.
 
 == Groups and permissions

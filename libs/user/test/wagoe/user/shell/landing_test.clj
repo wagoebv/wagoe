@@ -1,6 +1,7 @@
 (ns wagoe.user.shell.landing-test
   "Where a user lands after signing in, and who serves /web/dashboard."
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [clojure.string :as str]
+            [clojure.test :refer [deftest is testing]]
             [wagoe.platform.shell.http.reitit-router :as reitit-router]
             [wagoe.platform.shell.system.wiring :as wiring]
             [wagoe.shared.ui.core.home :as home]
@@ -100,7 +101,8 @@
                     {:landing "/"}
                     {:landing "/web"}
                     {:landing "/?ref=home"}
-                    {:landing "/web#top"}]]
+                    {:landing "/web#top"}
+                    {:registration "no"}]]
     (is (= :configuration-error
            (:type (ex-data (try (landing/prepare (config settings)) nil
                                 (catch Exception e e)))))
@@ -194,3 +196,38 @@
       (is (= "/web/welkom" (root-location settings))))
     (testing ":login-redirect still decides where signing in lands"
       (is (= "/web/overzicht" (login-location (config settings) :user))))))
+
+;; =============================================================================
+;; :registration — whether /web/register exists
+;; =============================================================================
+
+(defn- web-app [settings]
+  (reitit-router/compile-routes
+   (:web (wiring/module-route-contributions [{:web (user-web-routes settings)}]))
+   {:swagger-enabled false}))
+
+(defn- links-to-register? [response]
+  (str/includes? (str (:body response)) "/web/register"))
+
+(defn- login-pages
+  "The login page as GET renders it, and as a failed sign-in re-renders it."
+  [settings]
+  (let [cfg (landing/prepare (config settings))]
+    [((web-handlers/login-page-handler cfg) {})
+     ((web-handlers/login-submit-handler (reify ports/IUserService) cfg)
+      {:form-params {"email" "user@example.com"}})]))
+
+(deftest ^:contract registration-on-by-default
+  (let [app (web-app {})]
+    (is (= 200 (:status (app {:request-method :get :uri "/web/register"})))))
+  (doseq [page (login-pages {})]
+    (is (links-to-register? page))))
+
+(deftest ^:contract registration-false-drops-the-routes-and-the-link
+  (let [app (web-app {:registration false})]
+    (is (= 404 (:status (app {:request-method :get :uri "/web/register"}))))
+    (is (= 404 (:status (app {:request-method :post :uri "/web/register"
+                              :form-params {"email" "x@example.com" "password" "Secret-pass-123"}})))
+        "a signed-out POST creates nothing"))
+  (doseq [page (login-pages {:registration false})]
+    (is (not (links-to-register? page)))))

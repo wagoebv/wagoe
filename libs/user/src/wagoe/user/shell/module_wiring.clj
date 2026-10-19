@@ -397,7 +397,7 @@
    the auth service's config, its `:mfa-required?` going through
    `:wagoe/auth-hooks`, where platform adds the hooks modules contribute.
 
-   `:login-redirect`, `:dashboard`, `:home` and `:landing` are checked and resolved here,
+   `:login-redirect`, `:dashboard`, `:home`, `:landing` and `:registration` are checked and resolved here,
    once, so a bad value fails boot whichever components start, as are the
    `:groups` schemas."
   [settings {:keys [config validation-config]}]

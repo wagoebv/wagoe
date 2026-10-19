@@ -443,6 +443,7 @@
   "Login page options every rendering of it shares."
   [config]
   {:logo-url       (get-in config [:wagoe/settings :logo-url])
+   :registration?  (landing/registration? config)
    :oidc-providers (oidc-core/login-buttons (get-in config [:active :wagoe/user :oidc :providers]))})
 
 (defn- session-cookie [config session-token]
@@ -487,7 +488,8 @@
                                            {:user (get request :user)
                                             :flash (get request :flash)
                                             :return-to raw-return-to
-                                            :logo-url logo-url})
+                                            :logo-url logo-url
+                                            :registration? (landing/registration? config)})
                        400)
         (try
           ;; Use IUserService/authenticate-user with validated data
@@ -581,7 +583,8 @@
                                                      {:user (get request :user)
                                                       :flash (get request :flash)
                                                       :return-to raw-return-to
-                                                      :logo-url logo-url}))
+                                                      :logo-url logo-url
+                                                      :registration? (landing/registration? config)}))
                                401))))
           (catch Exception e
             (log/error e "Login error" {:email (:email prepared-data)})
