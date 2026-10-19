@@ -37,6 +37,10 @@ Enabling `:wagoe/jobs` builds the runtime. Nothing else to assemble.
              :scheduler {:tick-ms 5000 :lease-ms 30000 :zone "UTC"}}
 ```
 
+`:redis` is one Redis server, not Redis Cluster:
+the keys carry no hash tags, and the dead-letter purge script touches keys in
+several slots.
+
 | Key | What it is |
 |---|---|
 | `:wagoe/job-queue` | `IJobQueue` — what you enqueue on, and what other modules take a ref to |

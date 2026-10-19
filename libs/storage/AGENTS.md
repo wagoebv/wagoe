@@ -36,7 +36,7 @@ S3 / S3-compatible, and Google Cloud Storage adapters behind a single
 (store-file          [this file-data metadata])       ; => {:key :url :size :content-type :stored-at}
 (retrieve-file       [this file-key])                 ; => {:bytes :content-type :size} or nil
 (delete-file         [this file-key])                 ; => boolean
-(file-exists?        [this file-key])                 ; => boolean
+(file-exists?        [this file-key])                 ; => boolean; throws when it cannot tell
 (generate-signed-url [this file-key expiration-seconds]) ; => url string or nil
 ```
 

@@ -50,7 +50,8 @@
     - file-key: Unique identifier for the stored file
 
     Returns:
-    Boolean indicating existence")
+    Boolean indicating existence. Throws when it cannot tell: a caller that
+    deletes a record for a file that is gone must not read an outage as gone.")
 
   (generate-signed-url [this file-key expiration-seconds]
     "Generate a time-limited signed URL for secure file access.

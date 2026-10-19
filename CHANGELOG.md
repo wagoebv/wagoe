@@ -190,6 +190,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Storage `file-exists?` answered false when it could not check** (BOU-749), so retention could forget a file
+  still stored. It throws now; catch it if you call it directly.
 - **The audience API ignored the request body** (BOU-744): create and update always answered 422. An audience with
   both `:filters` and `:compose` is now refused rather than its filters dropped; give it `:filters []`.
 - **An audience filter could name any users column, password hashes included** (BOU-745). Filters now take only

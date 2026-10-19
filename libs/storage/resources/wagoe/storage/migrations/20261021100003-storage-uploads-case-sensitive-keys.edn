@@ -1,0 +1,5 @@
+;; storage_uploads.file_key in a binary collation on MySQL, whose default
+;; merges keys differing only in case. Nothing to do on the other engines.
+{:ns      wagoe.storage.shell.upload-index
+ :up-fn   "up"
+ :down-fn "down"}

@@ -494,22 +494,26 @@
 
               retry-job)))))))
 
-;; ARGV is the job key prefix, then pairs of an id and the SHA-1 of the job as
-;; it was read ("" for a job already gone). A job whose value changed since
-;; then, as retry-job! changes it, is kept. The list is rewritten once rather
-;; than LREM'd per id, which scans it each time.
+;; KEYS are the dead letter list, then each candidate's job key; ARGV is,
+;; per candidate, its id and the SHA-1 of the job as it was read ("" for a job
+;; already gone). Every key the script touches is declared, as Redis requires.
+;; They do not share a hash slot, so on Redis Cluster this needs the keys
+;; hash-tagged; this adapter talks to one Redis (JedisPool), not a cluster.
+;; A job whose value changed since it was read, as retry-job! changes it, is
+;; kept. The list is rewritten once rather than LREM'd per id, which scans it
+;; each time.
 (def ^:private purge-dead-letters-script
   "local wanted = {}
-   for i = 2, #ARGV, 2 do wanted[ARGV[i]] = ARGV[i + 1] end
+   for i = 2, #KEYS do wanted[ARGV[2 * i - 3]] = {KEYS[i], ARGV[2 * i - 2]} end
    local keep, purged, gone = {}, 0, {}
    for _, id in ipairs(redis.call('LRANGE', KEYS[1], 0, -1)) do
-     local expected = wanted[id]
+     local w = wanted[id]
      local purge = gone[id]
-     if expected ~= nil and not purge then
-       local raw = redis.call('GET', ARGV[1] .. id)
-       if raw then purge = redis.sha1hex(raw) == expected else purge = expected == '' end
+     if w ~= nil and not purge then
+       local raw = redis.call('GET', w[1])
+       if raw then purge = redis.sha1hex(raw) == w[2] else purge = w[2] == '' end
        if purge then
-         if raw then redis.call('DEL', ARGV[1] .. id) end
+         if raw then redis.call('DEL', w[1]) end
          purged = purged + 1
          gone[id] = true
        end
@@ -546,8 +550,8 @@
           (if (empty? candidates)
             0
             (long (.eval redis ^String purge-dead-letters-script
-                         ^java.util.List [(dead-letter-key)]
-                         ^java.util.List (into [(job-key "")] cat candidates)))))))))
+                         ^java.util.List (into [(dead-letter-key)] (map (comp job-key first)) candidates)
+                         ^java.util.List (into [] cat candidates)))))))))
 
 ;; =============================================================================
 ;; Job Statistics Implementation
