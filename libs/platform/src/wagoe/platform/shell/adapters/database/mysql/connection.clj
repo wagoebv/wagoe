@@ -1,7 +1,6 @@
 (ns wagoe.platform.shell.adapters.database.mysql.connection
   "MySQL connection settings and JDBC URL."
-  (:require [clojure.string :as str]
-            [wagoe.core.utils.type-conversion :as tc])
+  (:require [clojure.string :as str])
   (:import [java.time Instant LocalDateTime ZoneOffset]))
 
 (def ^:private default-sql-mode
@@ -32,14 +31,14 @@
     (str base-url "?" param-str)))
 
 (defn param->db
-  "MySQL Java-serialises a UUID and strict mode rejects an ISO instant string,
-   which persistence writes; send text and a UTC DATETIME (BOU-648)."
+  "MySQL Java-serialises a UUID; send text. An Instant as the UTC DATETIME the
+   session's time zone reads it as (BOU-648). A string is sent as it is, so a
+   text column keeps an ISO instant verbatim (BOU-655)."
   [value]
-  (let [v (or (tc/iso-instant value) value)]
-    (cond
-      (uuid? v)              (str v)
-      (instance? Instant v)  (LocalDateTime/ofInstant v ZoneOffset/UTC)
-      :else                  v)))
+  (cond
+    (uuid? value)              (str value)
+    (instance? Instant value)  (LocalDateTime/ofInstant value ZoneOffset/UTC)
+    :else                      value))
 
 (defn db->value
   "A DATETIME as the UTC Instant it was written as: the driver returns it

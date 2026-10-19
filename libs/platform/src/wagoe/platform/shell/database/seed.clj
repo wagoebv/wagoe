@@ -48,12 +48,22 @@
 
 (defn- insert-table!
   "Inserts one table's rows inside the caller's transaction, each value encoded
-   as `adapter`'s engine takes it: MySQL refuses an ISO instant string. Returns
-   the count."
-  [tx adapter {:keys [table rows]}]
-  (jdbc/execute! tx (execution/encode-params adapter (sql/format {:insert-into (keyword table)
-                                                                  :values      rows})))
-  (count rows))
+   as `adapter`'s engine takes it. A `…Z` string in one of `timestamp-columns`
+   goes as the Instant it names: MySQL refuses the Z (BOU-657). One with an
+   offset stays text, so a zone-less column keeps its wall time. Returns the
+   count."
+  [tx adapter timestamp-columns {:keys [table rows]}]
+  (let [rows (cond->> rows
+               (seq timestamp-columns)
+               (mapv (fn [row]
+                       (into row (for [[k v] row
+                                       :when (timestamp-columns (name k))
+                                       :let  [t (type-conversion/iso-instant v)]
+                                       :when t]
+                                   [k t])))))]
+    (jdbc/execute! tx (execution/encode-params adapter (sql/format {:insert-into (keyword table)
+                                                                    :values      rows})))
+    (count rows)))
 
 (defn hook-summary
   "The lines the seeder prints for what hook `k` returned: a string or strings
@@ -99,9 +109,9 @@
       (if (.next rs) (recur (conj out (f rs))) out))))
 
 (defn- table-info
-  "{:columns #{name} :uuid-id? bool} of `table`, or nil when the database does
-   not know it. H2 keeps unquoted names upper-case, so that spelling is asked
-   for too."
+  "{:columns #{name} :timestamp-columns #{name} :uuid-id? bool} of `table`, or
+   nil when the database does not know it. H2 keeps unquoted names upper-case,
+   so that spelling is asked for too."
   [^Connection c adapter table]
   (let [md     (.getMetaData c)
         catalog (try (.getCatalog c) (catch Exception _ nil))
@@ -118,8 +128,9 @@
     (when t
       (let [pk (set (metadata-rows (.getPrimaryKeys md catalog schema t)
                                    #(lc (.getString ^ResultSet % "COLUMN_NAME"))))]
-        {:columns  (set (keys columns))
-         :uuid-id? (boolean (and (= #{"id"} pk) (some->> (get columns "id") (re-find #"uuid"))))}))))
+        {:columns           (set (keys columns))
+         :timestamp-columns (into #{} (keep (fn [[n t]] (when (re-find #"timestamp|datetime" (str t)) n))) columns)
+         :uuid-id?          (boolean (and (= #{"id"} pk) (some->> (get columns "id") (re-find #"uuid"))))}))))
 
 (defn admin-missing?
   "Whether an application with the user module has no admin: its users table
@@ -151,14 +162,16 @@
                                           (some->> (table-info tx adapter n) (vector n)))))
                              (core-seed/entries data))
               resolved (core-seed/resolve-seed data {:tables tables
-                                                     :now    (type-conversion/instant->string (Instant/now))
+                                                     :now    (Instant/now)
                                                      :new-id #(str (UUID/randomUUID))})]
           (if-let [err (:error resolved)]
             {:error err}
             (let [plan    (core-seed/seed-plan (:ok resolved))
                   detail  (mapv (fn [{:keys [table] :as entry}]
                                   {:table table
-                                   :rows  (insert-table! tx adapter entry)})
+                                   :rows  (insert-table! tx adapter
+                                                         (get-in tables [table :timestamp-columns] #{})
+                                                         entry)})
                                 plan)]
               {:ok {:tables   (count detail)
                     :rows     (reduce + (map :rows detail))
