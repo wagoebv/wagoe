@@ -77,7 +77,9 @@
     (is (= 401 (:status response)))
     (is (str/includes? (body-of response) "Invalid email or password"))
     (is (str/includes? (body-of response) "Ministerie van BZK"))
-    (is (str/includes? (body-of response) "csrf-token-123")))
+    (is (str/includes? (body-of response) "csrf-token-123"))
+    (is (= {"email" "a@b.nl"} (get-in @seen [:request :form-params]))
+        "the layout never sees the password"))
   (testing "a request the schema refuses"
     (let [response (submit nil config {"email" "not-an-email" "password" ""})]
       (is (= 400 (:status response)))
@@ -112,6 +114,7 @@
 (deftest ^:unit registration-uses-the-app-layout
   (let [body (body-of (with-token #((web-handlers/register-page-handler config) {})))]
     (is (str/includes? body "action=\"/web/register\""))
+    (is (str/includes? body "href=\"/web/login\"") "the way back to login stays")
     (is (str/includes? body "Ministerie van BZK"))
     (is (= :register (:page @seen)))))
 

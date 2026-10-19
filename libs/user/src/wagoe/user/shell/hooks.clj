@@ -11,12 +11,12 @@
    :login-redirect [ports/ILoginRedirect ports/login-path "ILoginRedirect"]
    :login-layout   [ports/ILoginLayout ports/login-page "ILoginLayout"]})
 
-(def ^:private hook-keys (sort (keys protocols)))
+(def ^:private hook-keys (apply sorted-set (keys protocols)))
 
 (def config-hooks
   "The hooks handlers read from `[:active :wagoe/user]`; `:mfa-required?` goes
    to the auth service instead."
-  [:login-redirect :login-layout])
+  (disj hook-keys :mfa-required?))
 
 (defn as-fn
   "Hook `x` as a function of the protocol method's arguments: a function, a
@@ -39,7 +39,7 @@
    as it is. `contributed` is the modules' `:auth`. A hook set in both, or an
    unknown `:auth` key, throws :configuration-error."
   [configured contributed]
-  (when-let [unknown (seq (remove (set hook-keys) (keys contributed)))]
+  (when-let [unknown (seq (remove hook-keys (keys contributed)))]
     (throw (ex-info (str "Unknown :auth hook(s) " (vec unknown) "; expected " (vec hook-keys))
                     {:type :configuration-error :keys (vec unknown)})))
   (when-let [both (seq (filter #(and (get configured %) (some? (get contributed %))) hook-keys))]

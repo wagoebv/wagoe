@@ -441,20 +441,22 @@
 
 (defn- sign-in-opts
   "Page options every sign-in page takes, the app's `:login-layout` among them
-   with the request it may want to read."
-  ([config request] (sign-in-opts config request nil))
-  ([config request return-to]
+   with the request it may want to read, minus the password and MFA code. The
+   OIDC pages take the 2-arity: they never rendered the user or a flash."
+  ([config request]
    (let [app-layout (get-in config [:active :wagoe/user :login-layout])]
-     (cond-> {:user      (get request :user)
-              :flash     (get request :flash)
-              :return-to return-to
-              :logo-url  (get-in config [:wagoe/settings :logo-url])}
-       app-layout (assoc :login-layout app-layout :request request)))))
+     (cond-> {:logo-url (get-in config [:wagoe/settings :logo-url])}
+       app-layout (assoc :login-layout app-layout :request (without-secrets request)))))
+  ([config request return-to]
+   (assoc (sign-in-opts config request)
+          :user      (get request :user)
+          :flash     (get request :flash)
+          :return-to return-to)))
 
 (defn- login-branding
   "Login page options every rendering of it shares."
-  [config request return-to]
-  (assoc (sign-in-opts config request return-to)
+  [opts config]
+  (assoc opts
          :oidc-providers (oidc-core/login-buttons (get-in config [:active :wagoe/user :oidc :providers]))))
 
 (defn- session-cookie [config session-token]
@@ -471,7 +473,7 @@
                          {:email remembered-email
                           :remember true}
                          {})
-          page-opts (login-branding config request return-to)]
+          page-opts (login-branding (sign-in-opts config request return-to) config)]
       (html-response request (user-ui/login-page initial-data {} page-opts)))))
 
 (defn login-submit-handler
@@ -488,7 +490,7 @@
           prepared-data (merge prepared-data (login-context request))
           [valid? validation-errors validated-data]
           (validate-request-data user-schema/LoginRequest prepared-data)
-          page-opts (sign-in-opts config request raw-return-to)]
+          page-opts (login-branding (sign-in-opts config request raw-return-to) config)]
       (if-not valid?
         ;; Re-render login page with validation errors, preserving return-to
         (html-response request
@@ -633,7 +635,9 @@
                            [502 [:t :user/oidc-failed]]
                            [400 [:t :user/oidc-failed]])]
     (-> (html-response request
-                       (user-ui/login-page {} {} (assoc (login-branding config request nil) :error message))
+                       (user-ui/login-page {} {} (-> (sign-in-opts config request)
+                                                     (login-branding config)
+                                                     (assoc :error message)))
                        status)
         clear-oidc-cookies)))
 

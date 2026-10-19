@@ -283,8 +283,9 @@ returns the whole page:
 
 `body` is Wagoe's form card: fields, CSRF token, error messages and the MFA step stay
 Wagoe's, so the layout cannot weaken them. Wagoe's logo and subtitle are left out.
-`opts` has `:page` (`:login`, `:mfa`, `:oidc-mfa`, `:oidc-continue` or `:register`),
-the Ring `:request`, `:user`, `:flash`, `:return-to` and `:logo-url`. An application
+`title` is a `[:t …]` marker, translated with the rest of the page. `opts` has `:page`
+(`:login`, `:mfa`, `:oidc-mfa`, `:oidc-continue` or `:register`), the Ring `:request`
+(without the password and MFA code), `:user`, `:flash`, `:return-to` and `:logo-url`. An application
 module can contribute it as `:auth {:login-layout (ig/ref …)}`, a function or a
 `wagoe.user.ports/ILoginLayout`. Without it the pages are unchanged.
 

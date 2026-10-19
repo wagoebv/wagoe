@@ -1000,13 +1000,15 @@
      [:t :user/page-create-account-title]
      :register
      :div.register-page.auth-page
-     [:div.page-header.auth-header
-      [:h1 [:t :user/button-create-account]]
-      [:div.page-actions
-       [:a.button {:href "/web/login"}
-        (icons/icon :arrow-left {:size 16})
-        [:span [:t :user/button-back-to-login]]]]]
-     [(register-form data-with-return errors)]
+     nil
+     ;; In the content, not the header: an app layout keeps the way back.
+     [[:div.page-header.auth-header
+       [:h1 [:t :user/button-create-account]]
+       [:div.page-actions
+        [:a.button {:href "/web/login"}
+         (icons/icon :arrow-left {:size 16})
+         [:span [:t :user/button-back-to-login]]]]]
+      (register-form data-with-return errors)]
      opts)))
 
 ;; =============================================================================
