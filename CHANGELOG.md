@@ -33,6 +33,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **`shared-ui` data table with sortable headers, filter inputs and infinite scroll** (BOU-756): `data-table`,
   `filter-input`, `parse-table-params`. Admin lists now push their own URL; nothing to do.
+- **Combobox in `shared-ui`** (BOU-754): `wagoe.shared.ui.core.combobox`, a server-searched typeahead. The admin uses it
+  for a foreign key whose parent has more rows than `:max-page-size`, which was a text input.
 - **Streamed storage and `db/upsert!`** (BOU-752): `IStreamingFileStorage` stores what a writer streams (local, S3,
   GCS); `db/upsert!` and `db/ensure-binary-collation!` serve any keyed table. Nothing to do.
 - **`wagoe.shared.ui.core.modal`: modal and confirm on native `<dialog>`** (BOU-753); admin deletes confirm with it, bulk

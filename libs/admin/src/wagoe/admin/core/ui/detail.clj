@@ -8,6 +8,7 @@
             [wagoe.admin.core.ui.cells :as cells]
             [wagoe.admin.core.forms :as forms]
             [wagoe.admin.core.schema-introspection :as introspection]
+            [wagoe.shared.ui.core.combobox :as combobox]
             [wagoe.shared.ui.core.components :as ui]
             [wagoe.shared.ui.core.form :as form]
             [wagoe.shared.ui.core.icons :as icons]
@@ -126,6 +127,22 @@
                         {:required required?
                          :disabled readonly?
                          :class "form-control"})
+
+       ;; A foreign key with too many parents for a select
+       (= widget-type :combobox)
+       (combobox/combobox field-name
+                          (assoc (:combobox field-config)
+                                 :value       value
+                                 :placeholder [:t :admin/combobox-placeholder]
+                                 :required    required?
+                                 :readonly    readonly?
+                                 ;; with-live-validation and describe-input find no
+                                 ;; named visible control here.
+                                 :value-attrs (when-let [{:keys [url vals]} (:validate field-config)]
+                                                (form/live-attrs url field-name vals))
+                                 :attrs       (when has-errors?
+                                                {:aria-invalid     "true"
+                                                 :aria-describedby (ui/field-error-id field-name)})))
 
        ;; Textarea
        (= widget-type :textarea)
@@ -669,12 +686,16 @@
 
 (defn with-field-options
   "`entity-config` with each field in `field-options` rendered as a select
-   over them, unless the config chose a widget other than a text input."
+   over them — or, given {:url :label}, as a combobox reading its options
+   there — unless the config chose a widget other than a text input."
   [entity-config field-options]
   (reduce-kv (fn [cfg field options]
                (cond-> cfg
                  (#{nil :text-input} (get-in cfg [:fields field :widget]))
-                 (update-in [:fields field] assoc :widget :select :options options)))
+                 (update-in [:fields field] merge
+                            (if (map? options)
+                              {:widget :combobox :combobox options}
+                              {:widget :select :options options}))))
              entity-config
              (or field-options {})))
 

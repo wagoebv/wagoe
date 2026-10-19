@@ -568,12 +568,51 @@
               :when        (= entity-name (:entity rel))]
           [(keyword (str/replace (name (:foreign-key rel)) "_" "-")) parent])))
 
+(defn- label-field
+  "The field a parent row is named by in a picker: its `:title-field`, what
+   its relation cells show."
+  [parent-cfg]
+  (or (:title-field parent-cfg)
+      (first (:search-fields parent-cfg))
+      (:primary-key parent-cfg :id)))
+
+(defn- text-label?
+  "Whether a parent's label can be searched as text: a combobox filters it
+   with LIKE, which an integer column refuses on PostgreSQL."
+  [parent-cfg]
+  (contains? #{:string :text} (get-in parent-cfg [:fields (label-field parent-cfg) :type])))
+
+(defn- row-label [parent-cfg row]
+  (let [pk (:primary-key parent-cfg :id)]
+    (str (or (get row (label-field parent-cfg)) (get row pk)))))
+
+(defn- row->option [parent-cfg row]
+  [(str (get row (:primary-key parent-cfg :id))) (row-label parent-cfg row)])
+
+(defn options-url
+  "Where the combobox of foreign key `field` of `entity-name` reads its options."
+  [entity-name field]
+  (str "/web/admin/" (name entity-name) "/options/" (name field)))
+
+(defn- current-label
+  "What the combobox shows for the parent `id`: its label, from `rows` when it
+   is there, or the id when the row cannot be read."
+  [admin-service parent parent-cfg rows id]
+  (or (some #(when (= id (first %)) (second %)) (map #(row->option parent-cfg %) rows))
+      (try (some->> (ports/get-entity admin-service parent id) (row-label parent-cfg))
+           (catch Exception e
+             (log/warn e "foreign key shown by its id: parent row unreadable" {:parent parent :id id})
+             nil))
+      id))
+
 (defn foreign-key-options
   "The choices for each editable foreign key of `entity-name`: the parent's
    rows as [id label], where the label is the parent's `:title-field` — what
-   its relation cells show. Only when every parent fits in the maximum page size: a select
-   capped there would silently offer a subset, so past it the key stays a
-   text input. An optional key can be left empty."
+   its relation cells show. Only when every parent fits in the maximum page
+   size: a select capped there would silently offer a subset, so past it the
+   key is a combobox, {:url :label}, searching the label — or a text input
+   when the label is not text. An optional key can be left
+   empty."
   [admin-service config entity-configs entity-name values]
   (let [entity-config (get entity-configs entity-name)
         page-size     (get-in config [:pagination :max-page-size] 200)]
@@ -581,10 +620,7 @@
           (for [[field parent] (parent-entities entity-name entity-configs)
                 :when (some #{field} (:editable-fields entity-config))
                 :let  [parent-cfg (get entity-configs parent)
-                       pk         (:primary-key parent-cfg :id)
-                       label      (or (:title-field parent-cfg)
-                                      (first (:search-fields parent-cfg))
-                                      pk)
+                       label      (label-field parent-cfg)
                        page       (try (ports/list-entities admin-service parent
                                                             {:limit page-size :sort label :sort-dir :asc})
                                        (catch Exception e
@@ -592,24 +628,31 @@
                                                    {:entity entity-name :field field :parent parent})
                                          ::unreadable))
                        rows       (:records page)
-                       current    (some-> (get values field) str)]
-                :when (and (not= ::unreadable page)
-                           (<= (:total-count page 0) (count rows)))]
-            (let [options (mapv (fn [r] [(str (get r pk)) (str (or (get r label) (get r pk)))]) rows)]
-              [field (cond->> (cond-> options
-                                ;; A parent the list does not show (soft-deleted): kept,
-                                ;; so saving the form does not change it.
-                                (and current (not-any? #(= current (first %)) options))
-                                (conj [current current]))
-                       (not (get-in entity-config [:fields field :required])) (into [["" "—"]]))])))))
+                       current    (some-> (get values field) str)
+                       readable?  (not= ::unreadable page)
+                       fits?      (and readable? (<= (:total-count page 0) (count rows)))]
+                :when (and readable? (or fits? (text-label? parent-cfg)))]
+            (if-not fits?
+              [field {:url   (options-url entity-name field)
+                      :label (when current (current-label admin-service parent parent-cfg rows current))}]
+              (let [options (mapv #(row->option parent-cfg %) rows)]
+                [field (cond->> (cond-> options
+                                  ;; A parent the list does not show (soft-deleted): kept,
+                                  ;; so saving the form does not change it.
+                                  (and current (not-any? #(= current (first %)) options))
+                                  (conj [current current]))
+                         (not (get-in entity-config [:fields field :required])) (into [["" "—"]]))]))))))
+
+(defn- all-entity-configs [schema-provider]
+  (into {} (map (fn [e] [e (ports/get-entity-config schema-provider e)]))
+        (ports/list-available-entities schema-provider)))
 
 (defn field-options
   "The choices `field` of `entity-name` is rendered with, as
    `foreign-key-options` finds them, or nil when it is no foreign key. Reads
    only the parent of that field."
   [admin-service schema-provider config entity-name field values]
-  (let [entities       (ports/list-available-entities schema-provider)
-        entity-configs (into {} (map (fn [e] [e (ports/get-entity-config schema-provider e)])) entities)]
+  (let [entity-configs (all-entity-configs schema-provider)]
     (when-let [parent (get (parent-entities entity-name entity-configs) field)]
       ;; Only `field` editable, so a second key to the same parent is not read
       (get (foreign-key-options admin-service config
@@ -617,6 +660,28 @@
                                     (assoc-in [entity-name :editable-fields] [field]))
                                 entity-name values)
            field))))
+
+(def ^:private combobox-limit
+  "The most options a foreign key's combobox lists for one query."
+  20)
+
+(defn search-foreign-key-options
+  "What the combobox of foreign key `field` of `entity-name` offers for the
+   typed `q`: {:parent :parent-cfg :options}, where the options are the first
+   parent rows, by label, whose label contains `q`, as [id label]. Nil when
+   `field` is no foreign key, or its parent's label is not text."
+  [admin-service schema-provider entity-name field q]
+  (let [entity-configs (all-entity-configs schema-provider)]
+    (when-let [parent (some-> (get (parent-entities entity-name entity-configs) field)
+                              (#(when (text-label? (get entity-configs %)) %)))]
+      (let [parent-cfg (get entity-configs parent)
+            label      (label-field parent-cfg)
+            page       (ports/list-entities admin-service parent
+                                            (cond-> {:limit combobox-limit :sort label :sort-dir :asc}
+                                              q (assoc :filters {label {:op :contains :value q}})))]
+        {:parent     parent
+         :parent-cfg parent-cfg
+         :options (mapv #(row->option parent-cfg %) (:records page))}))))
 
 (defn nested-relationships
   "The has-many entries `entity-config` is created with, as
