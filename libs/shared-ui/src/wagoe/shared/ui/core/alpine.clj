@@ -14,7 +14,6 @@
    - x-on/@: Event handlers
    - x-show: Conditional visibility with transitions
    - x-model: Two-way data binding
-   - $persist: LocalStorage persistence
    - $store: Global reactive stores"
   (:require [clojure.string :as str]
             [hiccup2.core :as h]))
@@ -173,8 +172,11 @@
 ;; Persistence Helpers
 ;; =============================================================================
 
-(defn x-persist
-  "Generate Alpine $persist expression for localStorage.
+(defn ^:deprecated x-persist
+  "DEPRECATED: Alpine's Persist plugin is not bundled, so this expression fails.
+   Read and write localStorage directly, as the sidebar store in admin-ux.js does.
+
+   Generate Alpine $persist expression for localStorage.
 
    Args:
      key: Storage key string
@@ -289,8 +291,11 @@
 ;; Sidebar Store Initialization
 ;; =============================================================================
 
-(defn sidebar-store-init
-  "Generate Alpine store initialization script for sidebar state.
+(defn ^:deprecated sidebar-store-init
+  "DEPRECATED: the ui-style :admin-pilot bundle's admin-ux.js registers this
+   store and persists it; this copy needs the unbundled Persist plugin.
+
+   Generate Alpine store initialization script for sidebar state.
 
    This creates a global Alpine store that:
    - Persists sidebar state to localStorage

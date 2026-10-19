@@ -14,17 +14,35 @@
 //    Must be outside the IIFE so it runs immediately.
 // =========================================================================
 document.addEventListener('alpine:init', function () {
-  var persist = function (value, key) {
-    if (window.Alpine && window.Alpine.$persist) {
-      return window.Alpine.$persist(value).as(key);
+  // Plain localStorage rather than Alpine's Persist plugin: alpine.min.js is
+  // the core build, and two keys do not justify vendoring a second plugin.
+  // Storage can throw (disabled, private mode); then state lives per page.
+  var stored = function (key, fallback) {
+    try {
+      var raw = window.localStorage.getItem(key);
+      return raw === null ? fallback : JSON.parse(raw);
+    } catch (e) {
+      return fallback;
     }
-    return value;
+  };
+  var store = function (key, value) {
+    try {
+      window.localStorage.setItem(key, JSON.stringify(value));
+    } catch (e) { /* not persisted */ }
   };
 
   window.Alpine.store('sidebar', {
-    state: persist('expanded', 'wagoe-admin-sidebar-state'),
-    pinned: persist(false, 'wagoe-admin-sidebar-pinned'),
+    state: stored('wagoe-admin-sidebar-state', 'expanded'),
+    pinned: stored('wagoe-admin-sidebar-pinned', false),
     mobileOpen: false,
+
+    init: function () {
+      var self = this;
+      window.Alpine.effect(function () {
+        store('wagoe-admin-sidebar-state', self.state);
+        store('wagoe-admin-sidebar-pinned', self.pinned);
+      });
+    },
 
     toggle: function () {
       this.state = this.state === 'expanded' ? 'collapsed' : 'expanded';

@@ -192,6 +192,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Deprecated
 
+- **`shared-ui` `alpine/x-persist` and `alpine/sidebar-store-init`** (BOU-761): both need Alpine's Persist plugin, which
+  is not bundled, and go in 2.0. Load the `:admin-pilot` bundle for the sidebar store.
 - **Kebab-case keys in the login response's `user` and `session`** (BOU-737): each now has a camelCase twin with the same
   value, and goes in 2.0. Read `session.sessionToken`, `session.expiresAt` and so on.
 - **`/swagger.json` and `:swagger` route docs** (BOU-462): the path serves the 3.1 document and `:swagger` is
@@ -212,6 +214,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **The admin sidebar forgot its pin and collapsed on every page** (BOU-761): pin and collapsed state now persist
+  across navigation and reload. Nothing to do.
 - **Workflow auto-transitions skipped tenant instances; side-effect jobs could run before the transition committed**
   (BOU-757). Both fixed; `db/after-commit!` defers work to a commit. Nothing to do.
 - **Tenant schemas migrated modules enabled only in code** (BOU-757): they now migrate what `:active` names, as public
