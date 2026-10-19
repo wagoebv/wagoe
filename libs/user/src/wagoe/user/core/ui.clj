@@ -753,7 +753,8 @@
   "Login form for email/password sign-in.
 
    Args:
-      data   - map with optional :email / :remember / :return-to
+      data   - map with optional :email / :remember / :return-to; :registration?
+               false hides the link to /web/register
       errors - map of field keyword -> vector of error messages"
   [data errors]
   (let [_err (fn [k]
@@ -792,9 +793,10 @@
                         (when (:return-to data)
                           (str "?return-to=" (java.net.URLEncoder/encode ^String (:return-to data) "UTF-8"))))}
             [:t :user/oidc-sign-in-with {:provider label}]])])
-      [:div.auth-footer
-       [:p [:t :user/text-no-account]]
-       [:a.button.secondary {:href "/web/register"} [:t :user/button-create-account]]]]]))
+      (when-not (false? (:registration? data))
+        [:div.auth-footer
+         [:p [:t :user/text-no-account]]
+         [:a.button.secondary {:href "/web/register"} [:t :user/button-create-account]]])]]))
 
 (defn login-page
   "Complete login page.
@@ -806,7 +808,8 @@
   [& [data errors opts]]
   (let [data-with-return (cond-> (or data {})
                            (:return-to opts)      (assoc :return-to (:return-to opts))
-                           (:oidc-providers opts) (assoc :oidc-providers (:oidc-providers opts)))]
+                           (:oidc-providers opts) (assoc :oidc-providers (:oidc-providers opts))
+                           (false? (:registration? opts)) (assoc :registration? false))]
     (auth-page
      [:t :user/link-signin]
      :login

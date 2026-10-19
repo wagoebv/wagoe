@@ -141,3 +141,9 @@
                                                {:login-layout rijks-layout})
                                 nil
                                 (catch clojure.lang.ExceptionInfo e e))))))))
+
+(deftest ^:unit registration-off-hides-the-link-inside-the-app-layout
+  (let [cfg  (assoc-in config [:active :wagoe/user :registration] false)
+        body (body-of (with-token #((web-handlers/login-page-handler cfg) {})))]
+    (is (str/includes? body "Ministerie van BZK"))
+    (is (not (str/includes? body "/web/register")))))

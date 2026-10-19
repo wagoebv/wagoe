@@ -457,6 +457,7 @@
   "Login page options every rendering of it shares."
   [opts config]
   (assoc opts
+         :registration?  (landing/registration? config)
          :oidc-providers (oidc-core/login-buttons (get-in config [:active :wagoe/user :oidc :providers]))))
 
 (defn- session-cookie [config session-token]
