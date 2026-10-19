@@ -303,6 +303,10 @@ HoneySQL rules for Wagoe:
 - Joins: {:join [:other-table [:= :table/id :other-table/foreign-id]]}
 - Always use kebab-case keywords (HoneySQL converts to snake_case automatically)
 - is/is-not for NULL checks: [:is :column nil] or [:is-not :column nil]
+- Use only the tables and columns in the schema you are given, kebab-cased
+  (invoice_line_items -> :invoice-line-items). Never invent or singularise a
+  name; qualify a column with its table's name or alias. If the schema cannot
+  answer the question, say so in the explanation.
 
 Output ONLY the JSON object, no markdown fences."))
 
@@ -318,7 +322,8 @@ Output ONLY the JSON object, no markdown fences."))
   (str "Convert this description to HoneySQL:\n\n"
        description
        (when (seq schema-context)
-         (str "\n\nAvailable schema context:\n" schema-context))))
+         (str "\n\nThe project's tables, from its migrations (table: column type, ...):\n"
+              schema-context))))
 
 (defn sql-copilot-messages
   "Return a messages vector for the SQL copilot feature.
@@ -332,6 +337,16 @@ Output ONLY the JSON object, no markdown fences."))
   [description schema-context]
   [{:role :system :content (build-sql-copilot-system-prompt)}
    {:role :user   :content (build-sql-copilot-user-prompt description schema-context)}])
+
+(defn sql-fix-messages
+  "`messages` continued with the model's `answer` and what was wrong with it."
+  [messages answer errors]
+  (conj (vec messages)
+        {:role :assistant :content answer}
+        {:role :user
+         :content (str "That query names what the schema does not have:\n\n"
+                       (str/join "\n" errors)
+                       "\n\nReturn the corrected JSON object, using only the tables and columns given.")}))
 
 ;; =============================================================================
 ;; Feature 5: Documentation Wizard
