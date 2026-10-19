@@ -83,6 +83,17 @@
     (is (empty? (ports/get-user-devices store alice)))
     (is (= ["shared-token"] (map :token (ports/get-user-devices store bob))))))
 
+(deftest ^:contract tokens-differing-only-in-case-are-two-devices
+  ;; MySQL's default collation made them one row.
+  (let [store (p/->DeviceTokenStore *db*)
+        alice (random-uuid)
+        bob   (random-uuid)]
+    (ports/register-device! store alice {:token "Tok-A" :platform :fcm :app-id "com.example"})
+    (ports/register-device! store bob {:token "tok-a" :platform :fcm :app-id "com.example"})
+    (ports/mark-token-invalid! store "tok-a")
+    (is (= ["Tok-A"] (map :token (ports/get-user-devices store alice))))
+    (is (empty? (ports/get-user-devices store bob)))))
+
 (deftest ^:contract get-devices-by-platform-pages-by-id
   ;; The broadcast test deactivates every device it reads, so it passes with :after-id ignored.
   (let [store (p/->DeviceTokenStore *db*)]

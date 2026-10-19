@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **Streamed storage and `db/upsert!`** (BOU-752): `IStreamingFileStorage` stores what a writer streams (local, S3,
+  GCS); `db/upsert!` and `db/ensure-binary-collation!` serve any keyed table. Nothing to do.
 - **A user's data export as a background job** (BOU-749): with the jobs module, `POST /api/v1/me/export-jobs`
   builds the zip in file storage and the user downloads it for a day. Run `migrate up`.
 - **Tenant exports are audited** (BOU-749): each download of `GET /api/v1/tenants/:id/export` is recorded in a new
@@ -196,6 +198,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Export jobs: racing requests opened duplicates, archives were built in memory** (BOU-752). One open job per
+  subject, five requests an hour per user (`:export-requests-per-hour`). Run `migrate up`.
+- **Push tokens differing only in case were one device on MySQL** (BOU-752); racing uploads could deadlock there.
+  Run `migrate up`.
 - **Storage `file-exists?` answered false when it could not check** (BOU-749), so retention could forget a file
   still stored. It throws now; catch it if you call it directly.
 - **The audience API ignored the request body** (BOU-744): create and update always answered 422. An audience with

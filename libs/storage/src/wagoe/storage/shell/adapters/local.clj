@@ -5,9 +5,10 @@
   Suitable for development and single-server deployments."
   (:require [wagoe.storage.ports :as ports]
             [wagoe.storage.core.validation :as validation]
+            [wagoe.storage.shell.adapters.spool :as spool]
             [wagoe.observability.logging.ports :as logging]
             [clojure.string :as str])
-  (:import [java.nio.file Files Path Paths]
+  (:import [java.nio.file CopyOption Files Path Paths StandardCopyOption]
            [java.nio.file.attribute FileAttribute]
            [java.security MessageDigest]
            [java.nio.charset StandardCharsets]
@@ -181,6 +182,45 @@
       (path-join shard (str key-name "." ext))
       (path-join shard key-name))))
 
+(defn- streamed-storage-key
+  "`generate-storage-key` for a file not yet written: sharded by a random id
+   instead of its hash."
+  [filename]
+  (let [id  (str (UUID/randomUUID))
+        ext (validation/get-file-extension filename)]
+    (path-join (subs id 0 2) (cond-> (str (System/currentTimeMillis) "-" id) ext (str "." ext)))))
+
+(defn- named-storage-key
+  "The key a caller names with `:path`, or nil."
+  [{:keys [filename path]}]
+  (when path
+    (path-join (or (validation/normalize-path path) "")
+               (validation/sanitize-filename filename))))
+
+(defn- target-path
+  "Where `storage-key` is written, with its directory created. Through the
+   same containment check the read paths use: an upload naming a symlinked
+   directory inside the root created or truncated files outside it (BOU-421)."
+  ^Path [base-path storage-key]
+  (let [full-path (or (resolve-within-root base-path storage-key)
+                      (throw (ex-info "Storage key resolves outside the storage root"
+                                      {:type :validation-error
+                                       :key  storage-key})))
+        file-path (Paths/get full-path (into-array String []))]
+    (ensure-directory-exists (.getParent file-path))
+    file-path))
+
+(defn- file-url
+  "Signed when a secret is configured: the download route rejects an
+   unsigned URL, so reporting one would hand the caller a link that 403s
+   (BOU-421)."
+  [url-base signing-secret storage-key]
+  (when url-base
+    (let [base (str url-base "/" (canonical-key storage-key))]
+      (if signing-secret
+        (sign-url signing-secret storage-key base nil)
+        base))))
+
 ;; ============================================================================
 ;; Local Storage Adapter
 ;; ============================================================================
@@ -191,50 +231,21 @@
   (store-file [_ file-data metadata]
     (try
       (let [{:keys [bytes content-type]} file-data
-            {:keys [filename path]} metadata
-
-            ;; Generate storage key
-            storage-key (if path
-                          (path-join (or (validation/normalize-path path) "")
-                                     (validation/sanitize-filename filename))
-                          (generate-storage-key bytes filename))
-
-            ;; Full filesystem path — through the same containment check the
-            ;; read paths use. It was applied to retrieve/delete/exists and not
-            ;; to the write, so an upload naming a symlinked directory inside
-            ;; the root created or truncated files outside it (BOU-421).
-            full-path (or (resolve-within-root base-path storage-key)
-                          (throw (ex-info "Storage key resolves outside the storage root"
-                                          {:type :validation-error
-                                           :key  storage-key})))
-            file-path (Paths/get full-path (into-array String []))
-
-            ;; Ensure parent directory exists
-            _ (ensure-directory-exists (.getParent file-path))
-
-            ;; Write file
-            _ (Files/write file-path bytes (make-array java.nio.file.OpenOption 0))
-
-            ;; Generate URL if url-base is configured
-            ;; Signed when a secret is configured: the download route rejects
-            ;; an unsigned URL, so reporting one would hand the caller a link
-            ;; that 403s (BOU-421).
-            url (when url-base
-                  (let [base (str url-base "/" (canonical-key storage-key))]
-                    (if signing-secret
-                      (sign-url signing-secret storage-key base nil)
-                      base)))]
+            storage-key (or (named-storage-key metadata)
+                            (generate-storage-key bytes (:filename metadata)))
+            file-path   (target-path base-path storage-key)]
+        (Files/write file-path ^bytes bytes (make-array java.nio.file.OpenOption 0))
 
         (when logger
           (logging/info logger "File stored"
                         {:event ::file-stored
                          :key storage-key
-                         :size (alength bytes)
+                         :size (alength ^bytes bytes)
                          :content-type content-type}))
 
         {:key storage-key
-         :url url
-         :size (alength bytes)
+         :url (file-url url-base signing-secret storage-key)
+         :size (alength ^bytes bytes)
          :content-type content-type
          :stored-at (java.util.Date.)})
 
@@ -334,7 +345,31 @@
       (let [base (str url-base "/" (canonical-key file-key))]
         (if signing-secret
           (sign-url signing-secret file-key base expiration-seconds)
-          base)))))
+          base))))
+
+  ports/IStreamingFileStorage
+
+  (store-stream [_ {:keys [write! content-type]} metadata]
+    ;; Written beside its target and moved into place, so a reader never
+    ;; sees half a file and a failed writer leaves none.
+    (let [storage-key (or (named-storage-key metadata) (streamed-storage-key (:filename metadata)))
+          file-path   (target-path base-path storage-key)
+          spooled     (spool/spool! write! (.getParent file-path))
+          _           (try (Files/move spooled file-path
+                                       (into-array CopyOption [StandardCopyOption/REPLACE_EXISTING
+                                                               StandardCopyOption/ATOMIC_MOVE]))
+                           (catch Exception e
+                             (Files/deleteIfExists spooled)
+                             (throw e)))
+          size        (Files/size file-path)]
+      (when logger
+        (logging/info logger "File stored"
+                      {:event ::file-stored :key storage-key :size size :content-type content-type}))
+      {:key          storage-key
+       :url          (file-url url-base signing-secret storage-key)
+       :size         size
+       :content-type content-type
+       :stored-at    (java.util.Date.)})))
 
 ;; ============================================================================
 ;; Factory

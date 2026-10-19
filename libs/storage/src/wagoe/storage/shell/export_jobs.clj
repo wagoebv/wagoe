@@ -4,14 +4,15 @@
    downloads it for a day. Needs the jobs module.
 
    `ctx` here is {:store IExportJobStore :file-storage IFileStorage
-   :provider kw :data-export IDataExport :job-queue IJobQueue :queue kw}."
+   :provider kw :data-export IDataExport :job-queue IJobQueue :queue kw
+   :requests-per-hour n}."
   (:require [clojure.tools.logging :as log]
             [wagoe.platform.ports.privacy :as privacy]
             [wagoe.storage.core.export-jobs :as core]
             [wagoe.storage.ports :as ports]
             [wagoe.storage.shell.data-export :as data-export])
   (:import [java.io ByteArrayOutputStream]
-           [java.time Instant]))
+           [java.time Duration Instant]))
 
 (def job-type :storage/data-export)
 
@@ -29,35 +30,52 @@
                                          (random-uuid) (Instant/now)))))
 
 (defn- open-job
-  "The open job for `subject`, unless it is older than a download window: a
-   worker that died mid-export leaves one running, and it must not block
-   every later request."
+  "The open job for `subject`. One older than a download window is a worker
+   that died mid-export: it is failed, so it blocks no later request."
   [store subject ^Instant now]
   (when-let [job (ports/open-export-job store subject)]
-    (when (.isAfter ^Instant (:created-at job) (.minus now ^java.time.Duration core/download-window))
-      job)))
+    (if (.isAfter ^Instant (:created-at job) (.minus now ^Duration core/download-window))
+      job
+      (do (ports/save-export-job! store (core/failed job "No worker finished it" now))
+          nil))))
+
+(defn- refuse-over-limit!
+  [store requested-by limit ^Instant now]
+  (when (>= (ports/count-export-jobs-requested-since store requested-by (.minus now (Duration/ofHours 1))) limit)
+    (throw (ex-info "Too many data exports requested in the last hour. Try again later."
+                    {:type :rate-limit-exceeded}))))
 
 (defn request-export!
   "Queue an export of `subject` for `requested-by`; the job already open for
-   it, if there is one."
-  [{:keys [store job-queue queue]} subject requested-by]
+   it, if there is one. At most `:requests-per-hour` new jobs per requester."
+  [{:keys [store job-queue queue requests-per-hour]} subject requested-by]
   (let [now (Instant/now)]
     (or (open-job store subject now)
-        (let [job (ports/save-export-job! store (core/new-job (str (random-uuid)) subject requested-by now))]
-          (try
-            (enqueue! job-queue (or queue :default) (:id job))
-            (catch Exception e
-              ;; Left behind, it would be the open job every later request returns.
-              (ports/remove-export-job! store (:id job))
-              (throw e)))
-          job))))
+        (do (refuse-over-limit! store requested-by (or requests-per-hour core/requests-per-hour) now)
+            (if-let [job (ports/create-export-job! store (core/new-job (str (random-uuid)) subject requested-by now))]
+              (do (try
+                    (enqueue! job-queue (or queue :default) (:id job))
+                    (catch Exception e
+                      ;; Left behind, it would be the open job every later request returns.
+                      (ports/remove-export-job! store (:id job))
+                      (throw e)))
+                  job)
+              ;; A concurrent request opened one first.
+              (or (ports/open-export-job store subject)
+                  (throw (ex-info "Another export of this subject was just requested. Try again."
+                                  {:type :conflict}))))))))
 
-(defn- archive-bytes
-  [data-export subject]
-  (let [doc (privacy/export-subject data-export subject)
-        out (ByteArrayOutputStream.)]
-    (privacy/write-archive! data-export doc out)
-    (.toByteArray out)))
+(defn- store-archive!
+  "The archive of `subject` in file storage, streamed where the adapter can;
+   another adapter gets it built in memory."
+  [file-storage data-export subject metadata]
+  (let [doc    (privacy/export-subject data-export subject)
+        write! #(privacy/write-archive! data-export doc %)]
+    (if (satisfies? ports/IStreamingFileStorage file-storage)
+      (ports/store-stream file-storage {:write! write! :content-type "application/zip"} metadata)
+      (let [out (ByteArrayOutputStream.)]
+        (write! out)
+        (ports/store-file file-storage {:bytes (.toByteArray out) :content-type "application/zip"} metadata)))))
 
 (defn run-export-job
   "The handler of `job-type`. The archive is private and kept out of the
@@ -79,9 +97,8 @@
       (let [stored (volatile! nil)]
         (try
           (ports/save-export-job! store (assoc job :status :running))
-          (vreset! stored (ports/store-file file-storage
-                                            {:bytes (archive-bytes data-export (:subject job)) :content-type "application/zip"}
-                                            {:filename (str export-id ".zip") :path "data-exports" :visibility :private}))
+          (vreset! stored (store-archive! file-storage data-export (:subject job)
+                                          {:filename (str export-id ".zip") :path "data-exports" :visibility :private}))
           (ports/save-export-job! store (core/finished job (:key @stored) (Instant/now)))
           {:success? true :result {:export-id export-id}}
           (catch Exception e
@@ -114,7 +131,7 @@
   privacy/IRetentionPolicy
   (purge-before! [_ cutoff]
     (data-export/purge-in-pages! #(ports/export-jobs-created-before
-                                   store cutoff (.minus (Instant/now) ^java.time.Duration core/download-window) %)
+                                   store cutoff (.minus (Instant/now) ^Duration core/download-window) %)
                                  :id
                                  (fn [{:keys [id file-key]}]
                                    (when file-key (data-export/delete-or-confirm-gone! file-storage file-key))
