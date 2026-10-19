@@ -22,19 +22,16 @@
     :present? entity-uuid/present?
     :ensure!  entity-uuid/ensure-entity-uuid!}])
 
-(def ^:private schemas-with-tables
-  "Tenant schemas seen to hold workflow's tables, so each is asked once."
-  (atom #{}))
-
 (defn- tables-in?
-  "Whether `schema` holds workflow_instances, on `conn`."
+  "Whether `schema` holds workflow_instances, on `conn`. Asked once per
+   transaction, not per process: a process-wide yes outlived a schema dropped
+   and provisioned again, and a missing table then resolves to public's."
   [conn schema]
-  (or (contains? @schemas-with-tables schema)
-      (when (:present (jdbc/execute-one! conn ["SELECT to_regclass(?) IS NOT NULL AS present"
-                                               (str schema ".workflow_instances")]
-                                         {:builder-fn rs/as-unqualified-lower-maps}))
-        (swap! schemas-with-tables conj schema)
-        true)))
+  (db/remembered-in-transaction
+   [::tables schema]
+   #(:present (jdbc/execute-one! conn ["SELECT to_regclass(?) IS NOT NULL AS present"
+                                       (str schema ".workflow_instances")]
+                                 {:builder-fn rs/as-unqualified-lower-maps}))))
 
 (defn- refusal [message data]
   (ex-info message (merge {:type :configuration-error :message message} data)))

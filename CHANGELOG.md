@@ -212,6 +212,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Workflow auto-transitions skipped tenant instances; side-effect jobs could run before the transition committed**
+  (BOU-757). Both fixed; `db/after-commit!` defers work to a commit. Nothing to do.
+- **Tenant schemas migrated modules enabled only in code** (BOU-757): they now migrate what `:active` names, as public
+  does. Put such a module's key in `:active`.
 - **A crash mid-export left `.spool-*.tmp` files in the local storage root** (BOU-759). Spools now go to
   `<root>/.spool/`, cleared at boot; delete old `.spool-*.tmp` files by hand.
 - **Export jobs: racing requests opened duplicates, archives were built in memory** (BOU-752). One open job per

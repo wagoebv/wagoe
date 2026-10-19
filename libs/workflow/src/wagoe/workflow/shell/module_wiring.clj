@@ -15,6 +15,7 @@
        {:db-ctx        (ig/ref :wagoe/db-context)
         :db-schema     (ig/ref :wagoe/workflow-db-schema)
         :job-queue     (ig/ref :wagoe/job-queue)
+        :each-tenant   (ig/ref :wagoe/each-tenant)   ; with tenancy
         :guard-registry {}}
 
    :wagoe/workflow-routes
@@ -70,14 +71,14 @@
   (log/info "Workflow database schema component halted"))
 
 (defmethod ig/init-key :wagoe/workflow
-  [_ {:keys [db-ctx db-schema job-queue guard-registry]}]
+  [_ {:keys [db-ctx db-schema job-queue guard-registry each-tenant]}]
   (log/info "Initializing workflow component")
   (when-not db-schema
     (log/warn "Workflow component started without :db-schema dependency"))
   (let [datasource (:datasource db-ctx)
         store      (persistence/create-workflow-store datasource)
         registry   (registry/create-workflow-registry)
-        engine     (service/create-workflow-service store registry job-queue guard-registry)]
+        engine     (service/create-workflow-service store registry job-queue guard-registry each-tenant)]
     (log/info "Workflow component initialized")
     {:store    store
      :registry registry
@@ -145,7 +146,10 @@
                                         :db-schema      (ig/ref :wagoe/workflow-db-schema)
                                         :guard-registry {}}
                                  (contains? (or enabled #{}) :wagoe/jobs)
-                                 (assoc :job-queue (ig/ref :wagoe/job-queue)))
+                                 (assoc :job-queue (ig/ref :wagoe/job-queue))
+                                 ;; So auto-transitions reach tenant instances.
+                                 (contains? (or enabled #{}) :wagoe/tenant)
+                                 (assoc :each-tenant (ig/ref :wagoe/each-tenant)))
      :wagoe/workflow-routes    {:workflow-service (ig/ref :wagoe/workflow)
                                 :user-service     (ig/ref :wagoe/user-service)
                                 :group-service    (ig/ref :wagoe/user-group-service)}}
