@@ -185,6 +185,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **`bb ai sql` invented table and column names** (BOU-513): it now sees the tables your migrations create, and
   refuses an answer naming anything else. Nothing to do.
+- **Workflow admin pages use the admin sidebar shell** (BOU-743); every audit row read as the current state, and the
+  state filter is now a select of the registered states. Nothing to do.
 - **`wagoe add` checked only the first config key of a module** (BOU-742), so observability or platform could be
   left half-configured or written twice. It now adds each missing key; re-run `wagoe add` to fill gaps.
 - **Error reporting failed on exceptions without a message** (BOU-463), so a `NullPointerException` never reached
