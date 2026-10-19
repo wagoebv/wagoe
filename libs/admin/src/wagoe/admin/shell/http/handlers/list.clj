@@ -8,6 +8,7 @@
    [wagoe.admin.core.ui.filters :as filters]
    [wagoe.admin.core.permissions :as permissions]
    [wagoe.admin.shell.http.support :as support]
+   [wagoe.admin.shell.permissions :as shell-permissions]
    [wagoe.shared.ui.core.htmx :as htmx]
    [ring.util.response :as ring-response]))
 
@@ -145,13 +146,19 @@
   "GET /:entity/filters — the filter drawer for the filters in the query
    string, blank ones kept: re-rendered when an operator changes, it keeps
    the operator chosen for a field that has no value yet."
-  [_admin-service schema-provider _config]
+  [admin-service schema-provider config]
   (fn [request]
-    (let [_user         (support/require-admin-user! request)
+    (let [user          (support/require-admin-user! request)
           entity-name   (support/get-entity-name request)
           _             (when-not (ports/validate-entity-exists schema-provider entity-name)
                           (throw (ex-info "Unknown entity" {:type :not-found :entity-name entity-name})))
           entity-config (ports/get-entity-config schema-provider entity-name)
-          options       (support/parse-query-params (:query-params request))]
+          _             (shell-permissions/assert-can-view-entity! user entity-name entity-config)
+          filters       (:filters (support/parse-query-params (:query-params request)))]
       (support/html-response request
-                             (admin-ui/filter-drawer entity-name entity-config (:filters options))))))
+                             (admin-ui/filter-drawer entity-name
+                                                     (admin-ui/with-field-options
+                                                      entity-config
+                                                      (support/filter-field-options admin-service schema-provider config
+                                                                                    user entity-name filters))
+                                                     filters)))))

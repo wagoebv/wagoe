@@ -312,12 +312,14 @@ symbol naming one:
 :wagoe/user
 {:groups {:permissions [:enum :invoice/approve :invoice/view]
           :scope       [:map {:closed true}
-                        [:domain-id {:optional true} :int]
+                        [:domain-id {:optional true :wagoe/entity :domains} :int]
                         [:director-general-id {:optional true} :uuid]]}}
 ----
 
 Without them any keyword and any map of EDN values is accepted. A scope is stored as
-EDN, so a uuid or keyword in it reads back as one.
+EDN, so a uuid or keyword in it reads back as one. A scope key with `:wagoe/entity`
+names the admin entity it points at: the group page offers a lookup of its rows for
+that key, and the rest of the scope stays EDN.
 
 Check grants on each request; nothing is cached, so a change applies to the next one:
 

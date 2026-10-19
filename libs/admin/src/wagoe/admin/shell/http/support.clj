@@ -6,6 +6,7 @@
    namespaces and the route definitions in `wagoe.admin.shell.http`."
   (:require
    [wagoe.admin.core.forms :as forms]
+   [wagoe.admin.core.permissions :as core-permissions]
    [wagoe.admin.core.ui :as admin-ui]
    [wagoe.admin.core.ui.base :as ui-base]
    [wagoe.admin.core.ui.filters :as ui-filters]
@@ -661,9 +662,35 @@
                                 entity-name values)
            field))))
 
+(defn filter-field-options
+  "The choices of each filterable foreign key of `entity-name`, as
+   `foreign-key-options` finds them, for the parents `user` may view: a
+   filter lists them as the form does. `filters` are the current ones, whose
+   values the comboboxes show by label."
+  [admin-service schema-provider config user entity-name filters]
+  (let [entity-configs (all-entity-configs schema-provider)
+        parents        (parent-entities entity-name entity-configs)
+        fields         (filter #(when-let [parent (parents %)]
+                                  (core-permissions/can-view-entity? user parent (get entity-configs parent)))
+                               (ui-filters/filterable-fields (get entity-configs entity-name)))]
+    (when (seq fields)
+      (foreign-key-options admin-service config
+                           (assoc-in entity-configs [entity-name :editable-fields] fields)
+                           entity-name
+                           (update-vals (or filters {}) :value)))))
+
 (def ^:private combobox-limit
-  "The most options a foreign key's combobox lists for one query."
+  "The most options a combobox lists for one query."
   20)
+
+(defn- search-rows
+  "The first rows of `entity` by label whose label contains `q`, as [id label]."
+  [admin-service entity entity-cfg q]
+  (let [label (label-field entity-cfg)]
+    (mapv #(row->option entity-cfg %)
+          (:records (ports/list-entities admin-service entity
+                                         (cond-> {:limit combobox-limit :sort label :sort-dir :asc}
+                                           q (assoc :filters {label {:op :contains :value q}})))))))
 
 (defn search-foreign-key-options
   "What the combobox of foreign key `field` of `entity-name` offers for the
@@ -674,14 +701,17 @@
   (let [entity-configs (all-entity-configs schema-provider)]
     (when-let [parent (some-> (get (parent-entities entity-name entity-configs) field)
                               (#(when (text-label? (get entity-configs %)) %)))]
-      (let [parent-cfg (get entity-configs parent)
-            label      (label-field parent-cfg)
-            page       (ports/list-entities admin-service parent
-                                            (cond-> {:limit combobox-limit :sort label :sort-dir :asc}
-                                              q (assoc :filters {label {:op :contains :value q}})))]
+      (let [parent-cfg (get entity-configs parent)]
         {:parent     parent
          :parent-cfg parent-cfg
-         :options (mapv #(row->option parent-cfg %) (:records page))}))))
+         :options    (search-rows admin-service parent parent-cfg q)}))))
+
+(defn search-entity-options
+  "The rows of `entity-name` whose label contains the typed `q`, as [id label],
+   for a combobox choosing one of them. Nil when its label is not text."
+  [admin-service entity-cfg entity-name q]
+  (when (text-label? entity-cfg)
+    (search-rows admin-service entity-name entity-cfg q)))
 
 (defn nested-relationships
   "The has-many entries `entity-config` is created with, as

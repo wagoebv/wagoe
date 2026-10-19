@@ -525,9 +525,15 @@
                                              profile-where)))
 
           ;; Handle email LIKE separately (on auth_users table)
-          where-parts (if-let [pattern (:filter-email-contains options)]
-                        (conj where-parts (protocols/like (:adapter ctx) :a.email :contains pattern))
-                        where-parts)
+          where-parts (cond-> where-parts
+                        (:filter-email-contains options)
+                        (conj (protocols/like (:adapter ctx) :a.email :contains (:filter-email-contains options)))
+
+                        (:filter-name-or-email-contains options)
+                        (conj (let [pattern (:filter-name-or-email-contains options)]
+                                [:or
+                                 (protocols/like (:adapter ctx) :a.email :contains pattern)
+                                 (protocols/like (:adapter ctx) :u.name :contains pattern)])))
 
           where-clause (when (seq where-parts)
                          (if (= 1 (count where-parts))

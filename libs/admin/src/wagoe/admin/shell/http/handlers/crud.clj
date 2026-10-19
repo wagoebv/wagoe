@@ -462,3 +462,21 @@
       (shell-permissions/assert-can-view-entity! user (:parent found) (:parent-cfg found))
       (support/html-response request
                              (combobox/options field (:options found) [:t :admin/combobox-no-matches])))))
+
+(defn lookup-handler
+  "GET /:entity/lookup?q= — the rows of an entity whose label contains the
+   typed text, as combobox options, for a page outside the admin that picks
+   one of them (a grant's scope). The user has to be able to view the entity."
+  [admin-service schema-provider _config]
+  (fn [request]
+    (let [user        (support/require-admin-user! request)
+          entity-name (support/get-entity-name request)
+          _           (when-not (ports/validate-entity-exists schema-provider entity-name)
+                        (throw (ex-info "Unknown entity" {:type :not-found :entity-name entity-name})))
+          entity-cfg  (ports/get-entity-config schema-provider entity-name)
+          _           (shell-permissions/assert-can-view-entity! user entity-name entity-cfg)
+          options     (support/search-entity-options admin-service entity-cfg entity-name (combobox/query request))]
+      (when-not options
+        (throw (ex-info "No text label to search" {:type :not-found :entity-name entity-name})))
+      (support/html-response request
+                             (combobox/options entity-name options [:t :admin/combobox-no-matches])))))

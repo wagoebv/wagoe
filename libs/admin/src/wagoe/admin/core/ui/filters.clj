@@ -5,6 +5,7 @@
    type, value inputs, filter rows, and the overall filter builder."
   (:require [wagoe.admin.core.ui.base :as base]
             [wagoe.core.utils.text :as text]
+            [wagoe.shared.ui.core.combobox :as combobox]
             [wagoe.shared.ui.core.icons :as icons]
             [wagoe.shared.ui.core.table :as table-ui]
             [clojure.string :as str]))
@@ -119,6 +120,24 @@
           :name (str "filters[" (name field-name) "][values]")
           :placeholder "value1, value2, value3"
           :value (str/join ", " (or (:values filter-value) []))}])
+
+      ;; A foreign key, given its parents by `with-field-options`: what the
+      ;; form offers, so the admin picks a parent rather than typing its id
+      (= :combobox (:widget field-config))
+      (combobox/combobox (keyword (str "filter-" (name field-name)))
+                         (assoc (:combobox field-config)
+                                :name        (str "filters[" (name field-name) "][value]")
+                                :value       (:value filter-value)
+                                :placeholder [:t :admin/combobox-placeholder]))
+
+      (= :select (:widget field-config))
+      [:select.filter-value-input
+       {:name (str "filters[" (name field-name) "][value]")}
+       [:option {:value ""} [:t :admin/select-placeholder]]
+       (for [[value label] options
+             :when (not= "" value)]
+         [:option {:value value :selected (same-value? (:value filter-value) value)}
+          label])]
 
       ;; Boolean field - dropdown
       (= field-type :boolean)
@@ -413,8 +432,10 @@
       (when (= 1 (count operators))
         [:input {:type "hidden" :name (str "filters[" (name field) "][op]") :value (name op)}])
       (let [inputs (render-filter-value-inputs field field-config op spec)]
-        ;; The first value input carries the label's id
-        (if (and (vector? inputs) (map? (second inputs)))
+        ;; The first value input carries the label's id; a combobox has
+        ;; given its text input that id already
+        (if (and (vector? inputs) (map? (second inputs))
+                 (not= :combobox (:widget field-config)))
           (update inputs 1 assoc :id (str "filter-" (name field)))
           inputs))]]))
 

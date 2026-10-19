@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **Lookups instead of raw IDs in admin filters and group pages** (BOU-762): foreign-key filters, group members and
+  scope keys marked `:wagoe/entity` pick from a list. Mark scope keys to get their lookup.
 - **Admin and tenant data exports as background jobs** (BOU-759): `POST /api/v1/users/:id/export-jobs` and
   `/tenants/:id/export-jobs`, audited when asked for. Needs the storage and jobs modules.
 - **`shared-ui` data table with sortable headers, filter inputs and infinite scroll** (BOU-756): `data-table`,

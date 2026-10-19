@@ -319,6 +319,40 @@
                    (catch Exception e e))]
         (is (= :forbidden (:type (ex-data e))))))))
 
+(deftest ^:contract a-foreign-key-filter-picks-a-parent-as-the-form-does
+  (let [acme    (create-named-order! "Acme filter")
+        total   (:n (db/execute-one! (:db @sys) {:select [[:%count.* :n]] :from [:hm_orders]}))
+        drawer  (fn [max-size query]
+                  (:body ((list/filter-drawer-handler (:svc @sys) (:sp @sys)
+                                                      (assoc-in config [:pagination :max-page-size] max-size))
+                          (assoc (request :get "hm-items" :query query) :uri "/web/admin/hm-items/filters"))))]
+    (testing "every parent fits: a select of them, the filtered one selected"
+      (let [select (re-find #"(?s)<select[^>]*name=\"filters\[hm-order-id\]\[value\]\".*?</select>"
+                            (drawer total {"filters[hm-order-id][value]" (str acme)}))]
+        (is (some? select))
+        (is (re-find (re-pattern (str "<option[^>]*(selected[^>]*value=\"" acme "\"|value=\"" acme "\"[^>]*selected)"))
+                     select))
+        (is (str/includes? select "Acme filter"))))
+    (testing "past the page size: a combobox on the options endpoint, showing the filtered parent's label"
+      (let [body (drawer (dec total) {"filters[hm-order-id][value]" (str acme)})]
+        (is (re-find (re-pattern (str "<input[^>]*name=\"filters\\[hm-order-id\\]\\[value\\]\"[^>]*type=\"hidden\"[^>]*value=\"" acme "\""))
+                     body))
+        (is (re-find #"<input[^>]*hx-get=\"/web/admin/hm-items/options/hm-order-id\"[^>]*id=\"filter-hm-order-id\"" body))
+        (is (re-find #"<input[^>]*role=\"combobox\"[^>]*value=\"Acme filter\"" body))))))
+
+(deftest ^:contract the-lookup-lists-an-entitys-rows-matching-the-typed-text
+  (let [acme   (create-named-order! "Acme lookup")
+        _      (create-named-order! "Beta lookup")
+        lookup (fn [user q]
+                 ((handler crud/lookup-handler)
+                  (assoc (request :get "hm-orders" :query {"q" q}) :user user)))]
+    (let [body (:body (lookup admin "acme LOOK"))]
+      (is (re-find (re-pattern (str "<li[^>]*data-label=\"Acme lookup\"[^>]*data-value=\"" acme "\"")) body))
+      (is (not (str/includes? body "Beta lookup"))))
+    (testing "a user who may not view the entity is refused"
+      (is (= :forbidden (:type (ex-data (try (lookup {:id (random-uuid) :role :user :active true} "a")
+                                             (catch Exception e e)))))))))
+
 (deftest ^:contract ^:security detail-page-ignores-an-off-site-return-to
   ;; return_to became the breadcrumb, "Back to list", create and delete links
   ;; unchecked, so `javascript:` rendered as an href (BOU-553).

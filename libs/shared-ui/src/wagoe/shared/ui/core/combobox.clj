@@ -18,18 +18,20 @@
 
    opts:
      :url         where the options come from; answered with `options`
+     :name        what the value is submitted as; `field-key` by default
      :value       the chosen value, submitted
      :label       what the chosen value is shown as
      :placeholder, :required, :readonly
      :attrs       extra attributes for the text input
      :value-attrs extra attributes for the hidden input, which fires `change`
                   when an option is picked"
-  [field-key {:keys [url value label placeholder required readonly attrs value-attrs]}]
+  [field-key {:keys [url value label placeholder required readonly attrs value-attrs]
+              submitted-as :name}]
   (let [id (name field-key)
         lb (listbox-id field-key)]
     [:div {:class "combobox" :x-data "combobox" :data-query-param query-param
            (keyword "@click.outside") "close()"}
-     [:input (merge {:type "hidden" :name id :id (str id "-value") :value (str (or value "")) :x-ref "value"}
+     [:input (merge {:type "hidden" :name (or submitted-as id) :id (str id "-value") :value (str (or value "")) :x-ref "value"}
                     value-attrs)]
      ;; No name: the typed text is the query, not the value, so the form does
      ;; not submit it. The component sends it as `query-param`.
