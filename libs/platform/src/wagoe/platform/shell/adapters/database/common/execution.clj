@@ -514,16 +514,28 @@
     (do (swap! state update :hooks conj f) nil)
     (f)))
 
+(defn forgetting-hooks-on-failure
+  "`(f)`; when it throws, drop the after-commit hooks it added, as a savepoint
+   rollback drops its writes."
+  [f]
+  (if-let [state *tx-state*]
+    (let [n (count (:hooks @state))]
+      (try (f)
+           (catch Throwable t
+             (swap! state update :hooks #(subvec % 0 (min n (count %))))
+             (throw t))))
+    (f)))
+
 (defn remembered-in-transaction
-  "`(f)`, called once per `k` for the transaction open on this thread; with
-   none open, each time. For a catalog answer the transaction's locks keep
-   true until it ends."
+  "`(f)`, called until it answers truthy once per `k` for the transaction open
+   on this thread; with none open, each time. For a catalog answer such as a
+   table being there, which the transaction's locks keep true until it ends."
   [k f]
   (if-let [state *tx-state*]
     (let [memo (:memo @state)]
       (if (contains? memo k)
         (get memo k)
-        (let [v (f)] (swap! state assoc-in [:memo k] v) v)))
+        (let [v (f)] (when v (swap! state assoc-in [:memo k] v)) v)))
     (f)))
 
 (defn- run-after-commit!

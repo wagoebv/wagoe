@@ -399,9 +399,10 @@
         (nil? definition) {:processed 0 :attempted 0 :failed 0}
         (nil? each-tenant) (run)
         :else
-        ;; Public's instances and each tenant's, in its schema.
-        (let [{:keys [results failed]} (each-tenant (fn [_tenant] (run)))]
-          (assoc (apply merge-with + (run) results) :failed-tenants failed))))))
+        ;; Public's instances, then each tenant's, in its schema.
+        (let [public                   (run)
+              {:keys [results failed]} (each-tenant (fn [_tenant] (run)))]
+          (assoc (apply merge-with + public results) :failed-tenants failed))))))
 
 (defn create-workflow-service
   "Create a WorkflowService.

@@ -65,3 +65,10 @@
       (is (= 100 (:processed result)))
       (is (= 1 (:failed result)))
       (is (= 100 (count (:results result)))))))
+
+(deftest ^:unit for-each-tenant-refuses-an-open-transaction
+  (with-redefs [db/current-transaction (constantly ::open-tx)]
+    (is (= :configuration-error
+           (:type (ex-data (is (thrown? clojure.lang.ExceptionInfo
+                                        (sut/for-each-tenant (tenant-service 1 (atom [])) (fake-provider [])
+                                                             {:datasource :ds} (fn [_] :ok))))))))))

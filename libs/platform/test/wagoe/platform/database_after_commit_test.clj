@@ -37,6 +37,17 @@
                          (throw (ex-info "boom" {:type :internal-error})))))
           (is (empty? @seen)))
 
+        (testing "a savepoint rolled back drops the hooks it added"
+          (reset! seen [])
+          (db/with-transaction [tx ctx]
+            (db/after-commit! #(swap! seen conj :kept))
+            (is (thrown? clojure.lang.ExceptionInfo
+                         (db/in-savepoint (db/current-transaction)
+                                          #(do (db/after-commit! (fn [] (swap! seen conj :dropped)))
+                                               (throw (ex-info "boom" {:type :internal-error}))))))
+            (db/execute-update! tx {:insert-into :ac :values [{:k "c"}]}))
+          (is (= [:kept] @seen)))
+
         (testing "a failing hook does not stop the next, nor fail the commit"
           (reset! seen [])
           (is (= :done (db/with-transaction [_tx ctx]
@@ -61,4 +72,9 @@
             (is (= 1 (ask)) "a nested transaction shares it")))
         (db/with-transaction [_tx ctx]
           (is (= 2 (ask)) "the next transaction asks again"))
-        (is (= 3 (ask)) "and outside one, every time")))))
+        (is (= 3 (ask)) "and outside one, every time")
+        (testing "a falsey answer is asked again"
+          (let [n (atom 0)]
+            (db/with-transaction [_tx ctx]
+              (dotimes [_ 2] (db/remembered-in-transaction ::no #(do (swap! n inc) nil))))
+            (is (= 2 @n))))))))

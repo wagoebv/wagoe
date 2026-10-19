@@ -109,8 +109,8 @@
   execution/after-commit!)
 
 (def remembered-in-transaction
-  "`(f)`, called once per `k` for the transaction open on this thread; with
-   none open, each time."
+  "`(f)`, called until it answers truthy once per `k` for the transaction open
+   on this thread; with none open, each time."
   execution/remembered-in-transaction)
 
 (defn current-transaction
@@ -162,7 +162,8 @@
     (f)
     (let [sp (.setSavepoint conn)]
       (try
-        (let [result (f)]
+        ;; A job deferred to the commit must not outlive the rollback.
+        (let [result (execution/forgetting-hooks-on-failure f)]
           (.releaseSavepoint conn sp)
           result)
         (catch Exception e

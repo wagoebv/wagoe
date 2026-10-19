@@ -50,24 +50,29 @@
 (def ^:private tenant-page-size 100)
 
 (defn- active-tenants
-  "Every active tenant, a page at a time."
+  "Every active tenant, listed before any runs, so a tenant created or
+   suspended meanwhile cannot shift the offset pages and repeat or skip one."
   [tenant-service]
-  (letfn [(page [offset]
-            (lazy-seq
-             (let [ts (ports/list-tenants tenant-service {:status :active
-                                                          :limit  tenant-page-size
-                                                          :offset offset})]
-               (when (seq ts)
-                 (concat ts (when (= tenant-page-size (count ts))
-                              (page (+ offset tenant-page-size))))))))]
-    (page 0)))
+  (loop [offset 0 acc []]
+    (let [ts  (ports/list-tenants tenant-service {:status :active
+                                                  :limit  tenant-page-size
+                                                  :offset offset})
+          acc (into acc ts)]
+      (if (= tenant-page-size (count ts))
+        (recur (+ offset tenant-page-size) acc)
+        acc))))
 
 (defn for-each-tenant
   "Call `(f tenant)` for every active tenant, in one transaction on its schema
    with `db/*tenant-id*` bound, as a tenant request runs. A tenant whose run
-   throws is logged and counted, and the rest still run.
+   throws is logged and counted, and the rest still run. Refused inside a
+   transaction: each tenant's would join it and leave its search_path behind.
 
    Returns {:processed n :failed n :results [<f's result per tenant that ran>]}."
   [tenant-service schema-provider db-ctx f]
+  (when (db/current-transaction)
+    (throw (ex-info "for-each-tenant cannot run inside a transaction"
+                    {:type    :configuration-error
+                     :message "Call it outside any transaction; each tenant gets its own"})))
   (each-schema schema-provider db-ctx (active-tenants tenant-service) :schema-name
                (fn [tenant] (binding [db/*tenant-id* (:id tenant)] (f tenant)))))
