@@ -181,6 +181,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **`bb ai explain` quotes a Wagoe error's own fix first, code or not, and tells the model to keep it** (BOU-512).
+  The unclaimed `:active` key error is now WGE-106.
 - **Tables without a checkbox column squeezed their first and last columns** (BOU-595). Your own `data-table`
   with a checkbox or actions column: add `checkbox-header`/`checkbox-cell` or `actions-header`/`actions-cell`.
 - **`wagoe add reports` wrote no config, and a key named only in another value read as installed** (BOU-584):

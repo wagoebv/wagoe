@@ -352,6 +352,7 @@
 (def explain-opts
   [["-f" "--file FILE" "Read stack trace from file"]
    ["-r" "--root ROOT" "Project root" :default "."]
+   ["-k" "--known-fix TEXT" "What the error says about fixing itself; the model is told to keep it"]
    ["-h" "--help"]])
 
 (defn cmd-explain [args]
@@ -363,7 +364,8 @@
       (println (red "No stack trace provided. Pipe via stdin or use --file."))
       (System/exit 1))
     (let [service (make-service-from-config)
-          result  (svc/explain-error service stacktrace (:root options))]
+          result  (svc/explain-error service stacktrace (:root options)
+                                     (select-keys options [:known-fix]))]
       (if (:error result)
         (do (println (red (describe-failure result service))) (System/exit 1))
         (do

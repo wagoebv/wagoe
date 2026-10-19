@@ -29,6 +29,12 @@
             :description ":test/reset-endpoint-enabled? is true outside of dev/test profiles."
             :fix         "Remove or set to false in production config."}
 
+ "WGE-106" {:code        "WGE-106"
+            :category    :config
+            :title       "Config Key Nothing Assembles"
+            :description "An :active key in the wagoe namespace is not a core key, a framework module, a known settings block, or a module with :enabled?."
+            :fix         "A module: give it :enabled? true (bb scaffold integrate writes that). A settings block your own component reads: name it in :wagoe/config-keys. Otherwise it is a typo."}
+
  ;; WGE-2xx — Validation
  "WGE-201" {:code        "WGE-201"
             :category    :validation
