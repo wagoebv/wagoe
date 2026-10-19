@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **SMTP and IMAP take `:ssl-trust` and `:check-server-identity?`** (BOU-741): for a server whose certificate is
+  self-signed or names another host, which Angus Mail now refuses. Both weaken TLS; see the external docs.
 - **`capable?` on the database port** (BOU-609): `(capable? adapter :schemas)`.
   An unknown capability or a nil adapter throws; a tenant job with no adapter now fails instead of running in public.
 - **Opt-in virtual threads for requests and job workers** (BOU-471): `:virtual-threads? true` on `:wagoe/http`,

@@ -63,7 +63,9 @@
                         :username (:username email-sender)
                         :password (:password email-sender)
                         :tls? (:tls? email-sender)
-                        :ssl? (:ssl? email-sender)}
+                        :ssl? (:ssl? email-sender)
+                        :ssl-trust (:ssl-trust email-sender)
+                        :check-server-identity? (:check-server-identity? email-sender)}
           
           ;; Build job map
           job {:job-type :send-email
@@ -115,6 +117,7 @@
                       :password - SMTP auth password (optional)
                       :tls? - Enable STARTTLS
                       :ssl? - Enable SSL
+                      :ssl-trust, :check-server-identity? - TLS trust (optional)
    
    Returns:
      Job result map with:

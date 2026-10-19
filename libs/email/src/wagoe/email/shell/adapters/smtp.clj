@@ -20,6 +20,7 @@
      (send-email! sender prepared-email)"
   (:require [wagoe.email.ports :as ports]
             [wagoe.external.ports :as external-ports]
+            [wagoe.external.schema :as external-schema]
             [wagoe.external.shell.adapters.smtp :as smtp-provider]
             [clojure.string :as str]
             [clojure.tools.logging :as log]))
@@ -57,7 +58,7 @@
 ;; Adapter Record
 ;; =============================================================================
 
-(defrecord SmtpEmailSender [host port username password tls? ssl?])
+(defrecord SmtpEmailSender [host port username password tls? ssl? ssl-trust check-server-identity?])
 
 (defn- ->provider
   "Create a SmtpProviderAdapter from an SmtpEmailSender.
@@ -71,6 +72,8 @@
     :password (:password this)
     :tls?     (boolean (:tls? this))
     :ssl?     (boolean (:ssl? this))
+    :ssl-trust              (:ssl-trust this)
+    :check-server-identity? (:check-server-identity? this)
     :from     ""}))
 
 (extend-protocol ports/EmailSenderProtocol
@@ -110,16 +113,23 @@
     :password - SMTP auth password (optional)
     :tls?     - Enable STARTTLS (default: true)
     :ssl?     - Enable SSL (default: false)
+    :ssl-trust              - \"*\" or hosts to trust whatever certificate they
+                              present (optional; the JVM trust store otherwise)
+    :check-server-identity? - require the certificate to name :host (default: true)
 
   Returns:
     SmtpEmailSender implementing EmailSenderProtocol"
-  [{:keys [host port username password tls? ssl?]
-    :or   {tls? true ssl? false}}]
+  [{:keys [host port username password tls? ssl? ssl-trust check-server-identity?]
+    :or   {tls? true ssl? false}
+    :as   config}]
   {:pre [(string? host) (some? port)]}
+  (when-let [errors (external-schema/mail-tls-errors config)]
+    (throw (ex-info "Invalid SMTP TLS configuration"
+                    {:type :validation-error :host host :errors errors})))
   (log/info "Creating SMTP email sender"
             {:host  host
              :port  port
              :tls?  tls?
              :ssl?  ssl?
              :auth? (boolean (and username password))})
-  (->SmtpEmailSender host port username password tls? ssl?))
+  (->SmtpEmailSender host port username password tls? ssl? ssl-trust check-server-identity?))
