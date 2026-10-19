@@ -243,6 +243,8 @@
     :wagoe/http-handler :wagoe/http-server :wagoe/dashboard
     ;; Collect what the running modules contribute, whichever they are.
     :wagoe/data-export :wagoe/retention
+    ;; Every route's :permission is checked against it, in every service.
+    :wagoe/permission-registry
     ;; Emitted only when running as a service, and by definition part of it.
     :wagoe/rpc-server})
 
