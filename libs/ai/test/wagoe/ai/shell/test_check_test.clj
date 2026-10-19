@@ -1,6 +1,8 @@
 (ns wagoe.ai.shell.test-check-test
   "BOU-572: gen-tests wrote a namespace that did not load and did not lint."
-  (:require [wagoe.ai.shell.test-check :as sut]
+  (:require [wagoe.ai.shell.cli-entry :as cli]
+            [wagoe.ai.shell.test-check :as sut]
+            [wagoe.ai.shell.test-runner :as runner]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]))
 
@@ -12,6 +14,12 @@
     (is (= '([this messages opts]) (:arglists (first (filter #(= 'complete (:name %)) (:methods provider))))))
     (testing "protocol methods are not listed again as vars"
       (is (not-any? #(= 'complete (:name %)) vars))))
+  (testing "a schema var carries its form, and is not listed again as a var"
+    (let [{:keys [schemas vars]} (sut/namespace-api 'wagoe.ai.schema)]
+      (is (= [:map [:role [:enum :system :user :assistant]] [:content :string]]
+             (:form (first (filter #(= 'Message (:name %)) schemas)))))
+      (is (not-any? #(= 'Message (:name %)) vars))
+      (is (some #(= 'valid-message? (:name %)) vars) "functions stay vars")))
   (testing "a namespace that does not exist is reported, not thrown"
     (is (string? (:error (sut/namespace-api 'wagoe.no-such-namespace))))))
 
@@ -59,13 +67,93 @@
       (is (some #(str/includes? % "Requires wagoe.ai.invented-store, which is not on the classpath") errors)
           (pr-str errors)))))
 
-(deftest ^:integration checking-runs-nothing-the-model-wrote
+(deftest ^:integration the-answer-runs-only-in-a-child-without-secrets
   ;; BOU-572 review: the check used to `load-string` the answer, so a
-  ;; top-level form ran with the developer's environment before anyone read it.
-  (let [marker (java.io.File/createTempFile "bou572" ".txt")
-        path   (.getPath marker)
-        hostile (str good-ns "\n(def pwned (spit " (pr-str path) " \"ran\"))\n")]
+  ;; top-level form ran in this process, API key and all. With --run (BOU-511)
+  ;; it runs in a child JVM that keeps only sut/child-env.
+  (let [marker  (java.io.File/createTempFile "bou572" ".txt")
+        hostile (str good-ns "\n(def env (spit " (pr-str (.getPath marker)) " (pr-str (set (keys (System/getenv))))))\n")]
+    (try
+      (sut/check-errors hostile (assoc lint-ctx :run? true))
+      ;; macOS's java launcher sets __CF_USER_TEXT_ENCODING itself.
+      (let [seen (disj (read-string (slurp marker)) "__CF_USER_TEXT_ENCODING")]
+        (is (every? sut/child-env seen) (pr-str seen))
+        (is (contains? seen "PATH")))
+      (is (nil? (find-ns 'wagoe.ai.generated-good-test)))
+      (finally (.delete marker)))))
+
+;; BOU-511 -------------------------------------------------------------------
+
+(defn- generated [fixture assertion]
+  (str "(ns wagoe.ai.generated-run-test
+  (:require [clojure.test :refer [deftest is]]
+            [wagoe.ai.schema :as schema]))
+
+(def ^{:schema schema/Message} message " fixture ")
+
+(deftest ^:unit a-test
+  " assertion ")
+"))
+
+(defn- run-in-process
+  "The child's checks, run here. Only for answers that never reach the tests:
+   a nested run-tests would report into kaocha's counters."
+  [text ns-sym]
+  (let [f (java.io.File/createTempFile "gen" ".clj")]
+    (try (spit f text) (runner/errors (.getPath f) ns-sym)
+         (finally (.delete f)))))
+
+(deftest ^:integration a-passing-namespace-runs-clean
+  (is (nil? (sut/run-errors (generated "{:role :user :content \"hi\"}" "(is (= :user (:role message)))") {}))))
+
+(deftest ^:integration fixture-data-that-breaks-its-schema-is-refused
+  (let [errors (run-in-process (generated "{:role :user :content 42}" "(is (= :user (:role message)))")
+                               'wagoe.ai.generated-run-test)]
+    (is (some #(and (str/includes? % "Fixture message does not match its :schema")
+                    (str/includes? % ":content"))
+              errors)
+        (pr-str errors))))
+
+(deftest ^:integration with-run-a-failing-generated-test-is-not-written
+  (let [errors (sut/check-errors (generated "{:role :user :content \"hi\"}" "(is (= :admin (:role message)))")
+                                 (assoc lint-ctx :run? true :filename "libs/ai/test/wagoe/ai/generated_run_test.clj"))]
+    (is (some #(str/includes? % "Running it: 1 failures, 0 errors") errors) (pr-str errors))
+    (is (= :refuse (cli/gen-tests-outcome {:text "" :check-errors errors} "test/x_test.clj" false)))))
+
+(deftest ^:integration a-namespace-that-does-not-load-is-reported
+  (is (some #(str/starts-with? % "It does not load")
+            (run-in-process "(ns wagoe.ai.generated-broken-test (:require [clojure.test :refer [deftest is]]))\n(deftest a (is (= 1 (nope))))"
+                            'wagoe.ai.generated-broken-test))))
+
+(deftest ^:unit fixtures-are-checked-without-running-anything
+  (testing "a literal that breaks its schema is an error"
+    (let [{:keys [errors]} (sut/fixture-check (generated "{:role :user :content 42}" "(is true)"))]
+      (is (some #(and (str/includes? % "Fixture message does not match its :schema")
+                      (str/includes? % ":content"))
+                errors)
+          (pr-str errors))))
+  (testing "a literal that matches is clean"
+    (is (= {:errors [] :unchecked []}
+           (sut/fixture-check (generated "{:role :user :content \"hi\"}" "(is true)")))))
+  (testing "a value that is not literal data is reported, not failed"
+    (let [{:keys [errors unchecked]} (sut/fixture-check (generated "{:role :user :content (str 42)}" "(is true)"))]
+      (is (empty? errors))
+      (is (some #(str/includes? % "Fixture message not checked") unchecked) (pr-str unchecked))))
+  (testing "a schema that does not resolve is an error"
+    (let [text (str/replace (generated "{}" "(is true)") "schema/Message" "schema/Invented")]
+      (is (some #(str/includes? % "schema/Invented does not resolve") (:errors (sut/fixture-check text)))))))
+
+(deftest ^:integration without-run-nothing-the-model-wrote-is-loaded
+  ;; Running the model's code is opt-in (--run). By default the answer is
+  ;; read and linted only: no child JVM, no eval here.
+  (let [marker  (java.io.File/createTempFile "bou511" ".txt")
+        path    (.getPath marker)
+        text    (str (str/replace (generated "{:role :user :content \"hi\"}" "(is (= :admin (:role message)))")
+                                  "generated-run-test" "generated-static-test")
+                     "\n(def ran (spit " (pr-str path) " \"ran\"))\n")]
     (.delete marker)
-    (sut/check-errors hostile lint-ctx)
+    (with-redefs [sut/run-errors (fn [& _] (throw (ex-info "started a JVM" {:type :internal-error})))]
+      (is (nil? (sut/check-errors text (assoc lint-ctx :filename "libs/ai/test/wagoe/ai/generated_static_test.clj")))
+          "the failing assertion is never run"))
     (is (not (.exists marker)))
-    (is (nil? (find-ns 'wagoe.ai.generated-good-test)))))
+    (is (nil? (find-ns 'wagoe.ai.generated-static-test)))))
