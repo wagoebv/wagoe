@@ -53,9 +53,12 @@
     (let [instance (ports/start-workflow! *svc* tx {:workflow-id :tx-order-workflow
                                                     :entity-type :order
                                                     :entity-id   id})]
+      (is (= [:paid] (map :id (ports/available-transitions *svc* tx (:id instance) [:admin] nil))))
       (is (:success? (ports/transition! *svc* tx {:instance-id (:id instance)
                                                   :transition  :paid
-                                                  :actor-roles [:admin]}))))
+                                                  :actor-roles [:admin]})))
+      (is (= [] (ports/available-transitions *svc* tx (:id instance) [:admin] nil))
+          "read on the transaction, which has moved it"))
     id))
 
 (deftest ^:integration a-rolled-back-transaction-leaves-no-instance-and-no-audit

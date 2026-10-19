@@ -116,6 +116,23 @@
                (not (.getAutoCommit ^java.sql.Connection conn)))
       conn)))
 
+(defn in-savepoint
+  "Call `f`, and on failure roll back only what it did on `conn`: PostgreSQL
+   refuses every later statement of a transaction after a failed one. A nil
+   `conn` just calls `f`."
+  [^java.sql.Connection conn f]
+  (if-not conn
+    (f)
+    (let [sp (.setSavepoint conn)]
+      (try
+        (let [result (f)]
+          (.releaseSavepoint conn sp)
+          result)
+        (catch Exception e
+          (try (.rollback conn sp)
+               (catch java.sql.SQLException re (.addSuppressed e re)))
+          (throw e))))))
+
 (defmacro with-transaction
   "Run `body` in a transaction, bound to the first name in `binding`.
 

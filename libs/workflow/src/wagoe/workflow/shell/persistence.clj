@@ -11,7 +11,7 @@
             [clojure.tools.logging :as log]
             [clojure.edn :as edn])
   (:import [java.util Date UUID]
-           [java.sql Connection SQLException Timestamp]
+           [java.sql SQLException Timestamp]
            [java.time Instant LocalDateTime OffsetDateTime ZoneOffset]))
 
 ;; =============================================================================
@@ -134,21 +134,6 @@
       (= 1062 (.getErrorCode e))
       (boolean (re-find #"SQLITE_CONSTRAINT_UNIQUE|UNIQUE constraint failed" (str (ex-message e))))))
 
-(defn- in-savepoint
-  "Call `f` on `conn`, and on failure roll back only what it did: PostgreSQL
-   refuses every statement of a transaction after a failed one, and the engine
-   reads the winning instance after a conflict."
-  [^Connection conn f]
-  (let [sp (.setSavepoint conn)]
-    (try
-      (let [result (f)]
-        (.releaseSavepoint conn sp)
-        result)
-      (catch Exception e
-        (try (.rollback conn sp)
-             (catch SQLException re (.addSuppressed e re)))
-        (throw e)))))
-
 (defrecord WorkflowStore [datasource]
   ports/ITransactionalWorkflowStore
 
@@ -170,9 +155,9 @@
                                      {:return-keys true
                                       :builder-fn  rs/as-unqualified-lower-maps})]
       (try
-        (if-let [conn (db/tx-connection datasource)]
-          (in-savepoint conn insert)
-          (insert))
+        ;; In a caller's transaction, a savepoint: the engine reads the winning
+        ;; instance after a conflict.
+        (db/in-savepoint (db/tx-connection datasource) insert)
         (catch SQLException e
           (throw (if (unique-violation? e)
                    (ex-info "The entity already has an instance of this workflow"

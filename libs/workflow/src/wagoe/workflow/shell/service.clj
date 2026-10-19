@@ -101,8 +101,10 @@
      3. :on-any-transition      — fires on every successful transition
 
    Each hook fn receives [updated-instance audit-entry context].
-   Exceptions are caught and logged; they do not abort the transition."
-  [definition from-state to-state instance audit-entry context]
+   Exceptions are caught and logged; they do not abort the transition. On the
+   caller's transaction `conn`, each runs in a savepoint, so one that fails
+   does not leave the transaction refusing the rest."
+  [definition conn from-state to-state instance audit-entry context]
   (let [hooks     (get definition :hooks {})
         exit-key  (keyword (str "on-exit-" (name from-state)))
         enter-key (keyword (str "on-enter-" (name to-state)))
@@ -110,7 +112,7 @@
         run!      (fn [stage-key]
                     (doseq [f (get hooks stage-key [])]
                       (try
-                        (f instance audit-entry context)
+                        (db/in-savepoint conn #(f instance audit-entry context))
                         (catch Exception e
                           (log/warn e "Lifecycle hook failed"
                                     {:stage       stage-key
@@ -146,7 +148,8 @@
             create-fn  (ns-resolve (the-ns 'wagoe.jobs.core.job) 'create-job)
             enqueue-fn (if (and conn ((ns-resolve jobs-ports 'transactional-queue?) job-queue))
                          (let [f (ns-resolve jobs-ports 'enqueue-in-tx!)]
-                           (fn [q queue job] (f q conn queue job)))
+                           ;; A savepoint, as for hooks: the failure is swallowed.
+                           (fn [q queue job] (db/in-savepoint conn #(f q conn queue job))))
                          (ns-resolve jobs-ports 'enqueue-job!))]
         (doseq [effect-key side-effect-keys]
           (try
@@ -285,7 +288,7 @@
                 updated-instance (ports/update-instance-state! store instance-id to-state)]
 
             (ports/save-audit-entry! store audit-entry)
-            (fire-hooks! definition (:current-state instance) to-state
+            (fire-hooks! definition conn (:current-state instance) to-state
                          updated-instance audit-entry context)
             (dispatch-side-effects! job-queue conn side-fx-keys updated-instance audit-entry context)
 
@@ -330,8 +333,11 @@
   (audit-log [_ instance-id]
     (ports/find-audit-log store instance-id))
 
-  (available-transitions [_ instance-id actor-roles context]
-    (let [instance   (ports/find-instance store instance-id)
+  (available-transitions [this instance-id actor-roles context]
+    (ports/available-transitions this nil instance-id actor-roles context))
+
+  (available-transitions [_ tx instance-id actor-roles context]
+    (let [instance   (ports/find-instance (store-for store tx) instance-id)
           definition (when instance
                        (ports/get-workflow registry (:workflow-id instance)))]
       (if (nil? instance)

@@ -174,8 +174,10 @@
        Vector of AuditEntry maps, oldest first")
 
   (available-transitions [this instance-id actor-roles context]
+                         [this tx instance-id actor-roles context]
     "Return all transitions reachable from the current state, annotated with
-     :enabled? and, when blocked, a :reason keyword.
+     :enabled? and, when blocked, a :reason keyword. With `tx`, as for
+     `start-workflow!`, the instance is read on it.
 
      Runs full permission + guard checks for each reachable transition so UIs
      can render buttons as enabled or disabled accordingly.
