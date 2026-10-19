@@ -624,11 +624,6 @@
            (let [db-auth (-> auth-fields
                              (update :id type-conversion/uuid->string)
                              (update :active #(protocols/boolean->db adapter %))
-                             (update :created-at type-conversion/instant->string)
-                             (update :updated-at type-conversion/instant->string)
-                             (update :deleted-at type-conversion/instant->string)
-                             (update :mfa-enabled-at type-conversion/instant->string)
-                             (update :lockout-until type-conversion/instant->string)
                              (update :mfa-backup-codes #(when % (cheshire.core/generate-string %)))
                              (update :mfa-backup-codes-used #(when % (cheshire.core/generate-string %)))
                              (set/rename-keys {:password-hash :password_hash
@@ -651,10 +646,6 @@
                                 (update :id type-conversion/uuid->string)
                                 (update :tenant-id type-conversion/uuid->string)
                                 (update :role type-conversion/keyword->string)
-                                (update :last-login type-conversion/instant->string)
-                                (update :created-at type-conversion/instant->string)
-                                (update :updated-at type-conversion/instant->string)
-                                (update :deleted-at type-conversion/instant->string)
                                 (update :notifications-email #(protocols/boolean->db adapter %))
                                 (update :notifications-push #(protocols/boolean->db adapter %))
                                 (update :notifications-sms #(protocols/boolean->db adapter %))
@@ -716,10 +707,6 @@
              (when has-auth-updates?
                (let [db-auth (-> auth-updates
                                  (update-present :active #(when (some? %) (protocols/boolean->db adapter %)))
-                                 (update-present :updated-at type-conversion/instant->string)
-                                 (update-present :deleted-at type-conversion/instant->string)
-                                 (update-present :mfa-enabled-at type-conversion/instant->string)
-                                 (update-present :lockout-until type-conversion/instant->string)
                                  (update-present :mfa-backup-codes #(when % (cheshire.core/generate-string %)))
                                  (update-present :mfa-backup-codes-used #(when % (cheshire.core/generate-string %)))
                                  (set/rename-keys {:password-hash :password_hash
@@ -742,9 +729,6 @@
                (let [db-profile (-> profile-updates
                                     (update-present :tenant-id type-conversion/uuid->string)
                                     (update-present :role type-conversion/keyword->string)
-                                    (update-present :last-login type-conversion/instant->string)
-                                    (update-present :updated-at type-conversion/instant->string)
-                                    (update-present :deleted-at type-conversion/instant->string)
                                     (update-present :notifications-email #(when (some? %) (protocols/boolean->db adapter %)))
                                     (update-present :notifications-push #(when (some? %) (protocols/boolean->db adapter %)))
                                     (update-present :notifications-sms #(when (some? %) (protocols/boolean->db adapter %)))
@@ -772,10 +756,6 @@
              has-auth-updates?
              (let [db-auth (-> auth-updates
                                (update-present :active #(when (some? %) (protocols/boolean->db adapter %)))
-                               (update-present :updated-at type-conversion/instant->string)
-                               (update-present :deleted-at type-conversion/instant->string)
-                               (update-present :mfa-enabled-at type-conversion/instant->string)
-                               (update-present :lockout-until type-conversion/instant->string)
                                (update-present :mfa-backup-codes #(when % (cheshire.core/generate-string %)))
                                (update-present :mfa-backup-codes-used #(when % (cheshire.core/generate-string %)))
                                (set/rename-keys {:password-hash :password_hash
@@ -801,9 +781,6 @@
              (let [db-profile (-> profile-updates
                                   (update-present :tenant-id type-conversion/uuid->string)
                                   (update-present :role type-conversion/keyword->string)
-                                  (update-present :last-login type-conversion/instant->string)
-                                  (update-present :updated-at type-conversion/instant->string)
-                                  (update-present :deleted-at type-conversion/instant->string)
                                   (update-present :notifications-email #(when (some? %) (protocols/boolean->db adapter %)))
                                   (update-present :notifications-push #(when (some? %) (protocols/boolean->db adapter %)))
                                   (update-present :notifications-sms #(when (some? %) (protocols/boolean->db adapter %)))
@@ -851,10 +828,10 @@
                         tx {:update :auth_users
                             :set    (array-map
                                      :lockout_until      [:case [:>= next max-attempts]
-                                                          (type-conversion/instant->string until)
+                                                          until
                                                           :else :lockout_until]
                                      :failed_login_count next
-                                     :updated_at         (type-conversion/instant->string (java.time.Instant/now)))
+                                     :updated_at         (java.time.Instant/now))
                             :where  [:= :id id]}))
              (:failed-login-count (db/execute-one! tx {:select [:failed_login_count]
                                                        :from   [:auth_users]
@@ -873,7 +850,7 @@
          (pos? (db/execute-update!
                 ctx {:update :auth_users
                      :set    {:mfa_backup_codes_used (json (conj (vec mfa-backup-codes-used) code-hash))
-                              :updated_at            (type-conversion/instant->string (java.time.Instant/now))}
+                              :updated_at            (java.time.Instant/now)}
                      :where  [:and
                               [:= :id (type-conversion/uuid->string (:id user))]
                               [:= :mfa_backup_codes (json mfa-backup-codes)]
@@ -905,8 +882,8 @@
              ;; Soft delete only needs to update auth_users (master record)
              ;; The deleted_at flag in auth_users controls visibility across both tables
              query   {:update :auth_users
-                      :set {:deleted_at (type-conversion/instant->string now)
-                            :updated_at (type-conversion/instant->string now)
+                      :set {:deleted_at now
+                            :updated_at now
                             :active     (protocols/boolean->db adapter false)}
                       :where [:and
                               [:= :id (type-conversion/uuid->string user-id)]
@@ -987,7 +964,7 @@
                     :from [:user_sessions]
                     :where [:and
                             [:= :session_token (session-token-hash session-token)]
-                            [:> :expires_at (type-conversion/instant->string now)]
+                            [:> :expires_at now]
                             [:is :revoked_at nil]]}
              result (db/execute-one! ctx query)]
          ;; A read only: validate-session decides whether the access is worth
@@ -1006,7 +983,7 @@
                     :from [:user_sessions]
                     :where [:and
                             [:= :user_id (type-conversion/uuid->string user-id)]
-                            [:> :expires_at (type-conversion/instant->string now)]
+                            [:> :expires_at now]
                             [:is :revoked_at nil]]
                     :order-by [[:created_at :desc]]}
              results (db/execute-query! ctx query)]
@@ -1021,7 +998,7 @@
        (let [session-token (:session-token params)
              now (java.time.Instant/now)
              query {:update :user_sessions
-                    :set {:revoked_at (type-conversion/instant->string now)}
+                    :set {:revoked_at now}
                     :where [:and
                             [:= :session_token (session-token-hash session-token)]
                             [:is :revoked_at nil]]}
@@ -1035,7 +1012,7 @@
      {:user-id user-id :session-id session-id}
      (fn [{:keys [params]}]
        (pos? (db/execute-update! ctx {:update :user_sessions
-                                      :set    {:revoked_at (type-conversion/instant->string (java.time.Instant/now))}
+                                      :set    {:revoked_at (java.time.Instant/now)}
                                       :where  [:and
                                                [:= :id (type-conversion/uuid->string (:session-id params))]
                                                [:= :user_id (type-conversion/uuid->string (:user-id params))]
@@ -1050,7 +1027,7 @@
        (let [user-id (:user-id params)
              now (java.time.Instant/now)
              query {:update :user_sessions
-                    :set {:revoked_at (type-conversion/instant->string now)}
+                    :set {:revoked_at now}
                     :where [:and
                             [:= :user_id (type-conversion/uuid->string user-id)]
                             [:is :revoked_at nil]]}
@@ -1099,7 +1076,7 @@
        ;; is removed on the same terms as any other once it has expired.
        (let [query {:delete-from :user_sessions
                     :where [:< :expires_at
-                            (type-conversion/instant->string (:cutoff params))]}]
+                            (:cutoff params)]}]
          (db/execute-update! ctx query)))
      {:db-ctx ctx})))
 
@@ -1164,10 +1141,10 @@
                              (conj (protocols/like (:adapter ctx) :actor_email :contains filter-actor-email))
 
                              filter-created-after
-                             (conj [:>= :created_at (type-conversion/instant->string filter-created-after)])
+                             (conj [:>= :created_at filter-created-after])
 
                              filter-created-before
-                             (conj [:<= :created_at (type-conversion/instant->string filter-created-before)])
+                             (conj [:<= :created_at filter-created-before])
 
                              after-id
                              (conj [:> :id (type-conversion/uuid->string after-id)]))
@@ -1219,7 +1196,7 @@
      {:cutoff cutoff}
      (fn [{:keys [params]}]
        (db/delete-in-batches! ctx :user_audit_log
-                              [:< :created_at (type-conversion/instant->string (:cutoff params))]))
+                              [:< :created_at (:cutoff params)]))
      {:db-ctx ctx})))
 
 ;; =============================================================================
