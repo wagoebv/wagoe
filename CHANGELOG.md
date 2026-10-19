@@ -190,6 +190,8 @@ for what is public API, what is internal, and how deprecations are announced.
   both `:filters` and `:compose` is now refused rather than its filters dropped; give it `:filters []`.
 - **An audience filter could name any users column, password hashes included** (BOU-745). Filters now take only
   allowlisted fields; list your own columns in `:wagoe/audience {:filter-fields #{...}}`.
+- **Any signed-in user could open the workflow admin pages** (BOU-747); they now answer 403 to anyone but a
+  platform admin. Upgrade if you run workflow; tenant admins lose access.
 - **`bb ai sql` invented table and column names** (BOU-513): it now sees the tables your migrations create, and
   refuses an answer naming anything else. Nothing to do.
 - **Workflow admin pages use the admin sidebar shell** (BOU-743); every audit row read as the current state, and the
