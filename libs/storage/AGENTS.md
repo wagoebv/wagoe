@@ -14,20 +14,21 @@ S3 / S3-compatible, and Google Cloud Storage adapters behind a single
 
 | Namespace | Purpose |
 |-----------|---------|
-| `wagoe.storage.ports` | Protocols: `IFileStorage`, `IUploadIndex`, `IExportJobStore`, `IImageProcessor` |
+| `wagoe.storage.ports` | Protocols: `IFileStorage`, `IStreamingFileStorage`, `IUploadIndex`, `IExportJobStore`, `IImageProcessor` |
 | `wagoe.storage.core.validation` | Pure: size/type/extension validation, filename sanitization, MIME lookup |
 | `wagoe.storage.core.uploads` | Pure: the upload index record and the data-export section |
 | `wagoe.storage.shell.upload-index` | `JdbcUploadIndex` on `storage_uploads`, and its boot-time table creation |
 | `wagoe.storage.shell.data-export` | `UploadDataExporter` (`IDataExporter` + `IFileExporter`) and `UploadRetention` (`:storage/uploads`) |
 | `wagoe.storage.core.export-jobs` | Pure: an export job's states, expiry and status view |
 | `wagoe.storage.shell.export-job-store` | `JdbcExportJobStore` (`IExportJobStore`) on `storage_export_jobs` |
-| `wagoe.storage.shell.export-jobs` | Data export as a background job: request, job handler, download, `:storage/export-archives` retention |
+| `wagoe.storage.shell.export-jobs` | Data export as a background job: request (one open job per subject, `:export-requests-per-hour` per requester, default 5), job handler, download, `:storage/export-archives` retention |
 | `wagoe.storage.shell.export-job-http` | `/me/export-jobs` routes, mounted when the jobs module is on |
 | `wagoe.storage.schema` | Malli schemas: `FileData`, `FileMetadata`, `StorageResult`, `ImageInfo`, `*StorageConfig` |
 | `wagoe.storage.shell.service` | `IStorageService` protocol + `StorageService` record — validation + storage + optional image processing |
 | `wagoe.storage.shell.adapters.local` | `LocalFileStorage` — filesystem, content-addressed keys with directory sharding |
 | `wagoe.storage.shell.adapters.s3` | `S3FileStorage` — AWS S3 / S3-compatible (MinIO, DO Spaces) via AWS SDK v2 |
 | `wagoe.storage.shell.adapters.gcs` | `GCSFileStorage` — Google Cloud Storage via `google-cloud-storage`; V4 signed URLs |
+| `wagoe.storage.shell.adapters.spool` | A streamed file spooled to a temporary file before upload |
 | `wagoe.storage.shell.adapters.image-processor` | `JavaImageProcessor` — Java AWT / `javax.imageio` |
 | `wagoe.storage.shell.module-wiring` | `:wagoe/storage` + `:wagoe/storage-routes` Integrant keys |
 | `wagoe.storage.shell.http-handlers` | Ring handlers + `storage-routes` (the module's `:api` contribution) |
@@ -57,6 +58,17 @@ S3 / S3-compatible, and Google Cloud Storage adapters behind a single
   with a secret configured, point `:url-base` at that route. Aimed at a CDN or
   a static server, the link resolves and the signature is never verified.
 
+### `IStreamingFileStorage` — optional, a file written to a stream
+
+```clojure
+(store-stream [this {:keys [write! content-type]} metadata]) ; => store-file's result
+```
+
+`(write! out)` writes the file to an OutputStream. Local, S3 and GCS implement
+it by spooling to a temporary file, so the length is known up front and a
+writer that throws stores nothing. Export archives use it; a caller holding
+another adapter falls back to `store-file` (see `export-jobs/store-archive!`).
+
 ### `IUploadIndex` — who stored which file
 
 `IFileStorage` cannot list files, so the service records every upload in
@@ -66,7 +78,9 @@ upload routes take it from the request. When recording fails the file is
 deleted and the upload fails. `remove-file` forgets the record. Data export
 (`:storage` section, files in a zip export) and the `:storage/uploads`
 retention policy read the index. A store straight through `IFileStorage` is
-not recorded.
+not recorded. Keys are compared case-sensitively on every engine
+(`db/ensure-binary-collation!` on MySQL), and a re-store of one key is a
+`db/upsert!`, which retries a racing insert and a MySQL deadlock.
 
 ### `IImageProcessor` — optional image ops
 

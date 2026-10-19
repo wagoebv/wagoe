@@ -8,7 +8,37 @@
 
 (def migration-resource "wagoe/storage/migrations/20261021100007-storage-export-jobs.up.sql")
 
+(defn add-open-subject!
+  "`open_subject`, the subject of a :pending or :running job and null
+   otherwise. Unique, so two requests racing to open a job for one subject
+   cannot both succeed. Binary on MySQL, so ids differing in case do not
+   collide. With the requester index the hourly limit counts by."
+  [ctx]
+  (db/add-column-if-not-exists! ctx :storage_export_jobs :open_subject "VARCHAR(272)")
+  (db/ensure-binary-collation! ctx :storage_export_jobs :open_subject "VARCHAR(272)" false)
+  (db/create-index-if-not-exists! ctx "uq_storage_export_jobs_open_subject" :storage_export_jobs [:open_subject]
+                                  {:unique? true})
+  (db/create-index-if-not-exists! ctx "idx_storage_export_jobs_requested_by" :storage_export_jobs
+                                  [:requested_by :created_at]))
+
+(defn up
+  "Migratus entry point of the open-subject migration."
+  [config]
+  (add-open-subject! (db/context-of (db/migration-connectable config))))
+
+(defn down
+  "Migratus entry point."
+  [config]
+  (let [ctx (db/context-of (db/migration-connectable config))]
+    (db/drop-index-if-exists! ctx "idx_storage_export_jobs_requested_by" :storage_export_jobs)
+    (db/drop-index-if-exists! ctx "uq_storage_export_jobs_open_subject" :storage_export_jobs)
+    (db/drop-column-if-exists! ctx :storage_export_jobs :open_subject)))
+
 (defn- ->ts [^Instant i] (some-> i Timestamp/from))
+
+(defn- open-subject [{:keys [status subject]}]
+  (when (#{:pending :running} status)
+    (str (name (:type subject)) ":" (:id subject))))
 
 (defn- job->row [job]
   {:id           (str (:id job))
@@ -20,7 +50,8 @@
    :error        (some-> (:error job) (subs 0 (min 1024 (count (:error job)))))
    :created_at   (->ts (:created-at job))
    :finished_at  (->ts (:finished-at job))
-   :expires_at   (->ts (:expires-at job))})
+   :expires_at   (->ts (:expires-at job))
+   :open_subject (open-subject job)})
 
 (defn- row->job [row]
   (when row
@@ -36,13 +67,18 @@
 
 (defrecord JdbcExportJobStore [ctx]
   ports/IExportJobStore
+  (create-export-job! [_ job]
+    ;; A savepoint: in a tenant request's transaction a refused insert would
+    ;; abort it on PostgreSQL, and the caller reads the winner's job next.
+    (try
+      (db/in-savepoint (db/current-transaction)
+                       #(db/execute-update! ctx {:insert-into :storage_export_jobs :values [(job->row job)]}))
+      job
+      (catch clojure.lang.ExceptionInfo e
+        (when-not (db/unique-conflict? e) (throw e)))))
+
   (save-export-job! [_ job]
-    (let [row (job->row job)]
-      (db/with-transaction [tx ctx]
-        (when (zero? (db/execute-update! tx {:update :storage_export_jobs
-                                             :set    (dissoc row :id)
-                                             :where  [:= :id (:id row)]}))
-          (db/execute-update! tx {:insert-into :storage_export_jobs :values [row]}))))
+    (db/upsert! ctx :storage_export_jobs (job->row job) [:id])
     job)
 
   (find-export-job [_ id]
@@ -70,6 +106,11 @@
                                   :order-by [[:created_at :asc] [:id :asc]]
                                   :limit    limit})))
 
+  (count-export-jobs-requested-since [_ requested-by since]
+    (:n (db/execute-one! ctx {:select [[:%count.* :n]]
+                              :from   [:storage_export_jobs]
+                              :where  [:and [:= :requested_by (str requested-by)] [:>= :created_at (->ts since)]]})))
+
   (remove-export-job! [_ id]
     (db/execute-update! ctx {:delete-from :storage_export_jobs :where [:= :id (str id)]})))
 
@@ -77,7 +118,8 @@
   "Create the export job table when absent, for installations that boot
    without running `migrate up`."
   [ctx]
-  (db/execute-migration-ddl! ctx migration-resource))
+  (db/execute-migration-ddl! ctx migration-resource)
+  (add-open-subject! ctx))
 
 (defn create-export-job-store
   [ctx]

@@ -369,3 +369,23 @@
         (is (false? (ports/delete-file storage k)) (pr-str k))
         (is (.exists (java.io.File. root)) (str "root survives " (pr-str k)))
         (finally (.delete (java.io.File. root)))))))
+
+(deftest ^:integration a-streamed-file-is-stored-and-a-failed-one-leaves-nothing
+  (let [storage (sut/create-local-storage {:base-path test-dir})
+        write!  (fn [^java.io.OutputStream out] (.write out (.getBytes "streamed")))]
+    (testing "with a generated key and a named one"
+      (doseq [meta [{:filename "s.txt"} {:filename "s.txt" :path "exports"}]]
+        (let [r (ports/store-stream storage {:write! write! :content-type "text/plain"} meta)]
+          (is (= 8 (:size r)))
+          (is (= "streamed" (String. ^bytes (:bytes (ports/retrieve-file storage (:key r)))))))))
+    (testing "a writer that throws stores nothing"
+      (let [files  #(set (filter (fn [^java.io.File f] (.isFile f)) (file-seq (io/file test-dir))))
+            before (files)]
+        (is (thrown-with-msg? clojure.lang.ExceptionInfo #"half"
+                              (ports/store-stream storage
+                                                  {:write! (fn [^java.io.OutputStream out]
+                                                             (.write out (.getBytes "partial"))
+                                                             (throw (ex-info "half" {:type :internal-error})))
+                                                   :content-type "text/plain"}
+                                                  {:filename "f.txt" :path "exports"})))
+        (is (= before (files)))))))
