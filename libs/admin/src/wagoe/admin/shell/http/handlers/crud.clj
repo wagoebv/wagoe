@@ -54,7 +54,7 @@
    :prefill       form-data
    :return-to     (support/safe-return-to request)
    :field-options (support/foreign-key-options admin-service config entity-configs entity-name form-data)
-   :links         (support/link-fields admin-service entity-configs entity-name nil (:admin/links form-data))
+   :links         (support/link-fields admin-service config entity-configs entity-name nil (:admin/links form-data))
    :nested        (:sections nested)})
 
 ;; =============================================================================

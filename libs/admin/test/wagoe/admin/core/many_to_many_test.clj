@@ -61,7 +61,11 @@
         (is (= [:product-tags] (map :entity (introspection/inverse-has-many :products partial))))))
     (testing "a key that is also a field's name is the join's"
       (let [all (assoc all :products (cfg "Products" [:id :name :tags] [#{:id}]))]
-        (is (= [:product-tags-by-tag-id] (map :key (introspection/many-to-many :products all))))))))
+        (is (= [:product-tags-by-tag-id] (map :key (introspection/many-to-many :products all))))))
+    (testing "a key a has-many already names is the join's: the list column would be the count"
+      (let [owned (assoc products :has-many [{:entity :tags :foreign-key :owner-id}])]
+        (is (= [:product-tags-by-tag-id]
+               (map :key (:many-to-many (introspection/with-many-to-many :products owned all)))))))))
 
 (deftest ^:unit a-many-to-many-is-a-links-column
   (let [config (assoc products :many-to-many [{:key :tags :entity :tags :label "Tags"}])]

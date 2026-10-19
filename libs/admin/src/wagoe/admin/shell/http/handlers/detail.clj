@@ -135,7 +135,7 @@
                                                                  :field-options (support/foreign-key-options
                                                                                  admin-service config entity-configs
                                                                                  entity-name prefill)
-                                                                 :links (support/link-fields admin-service entity-configs
+                                                                 :links (support/link-fields admin-service config entity-configs
                                                                                              entity-name nil {})})
                                    {:user user
                                     :current-entity entity-name

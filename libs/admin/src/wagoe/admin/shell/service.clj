@@ -866,7 +866,8 @@
       (throw (ex-info (str "No many-to-many " (name k))
                       {:type :validation-error :errors {k [[:t :admin/links-unknown]]}})))
     (let [wanted (set ids)
-          found  (set (map #(str (get % (:primary-key (ports/get-entity-config schema-provider (:entity rel)) :id)))
+          pk     (:primary-key (ports/get-entity-config schema-provider (:entity rel)) :id)
+          found  (set (map #(str (get % pk))
                            (when (seq wanted)
                              (live-records db-ctx schema-provider (:entity rel) (vec wanted)))))]
       (when-not (= wanted found)
@@ -875,12 +876,15 @@
 
 (defn- sync-links!
   "Make the links of record `id` in each relation of `links` exactly those
-   ids, on `tx`: the missing join rows added, the others removed."
+   ids, on `tx`: the missing join rows added, the others removed. A link to
+   a soft-deleted record stays: the form cannot show it, so its absence from
+   `ids` is no choice to remove it."
   [tx schema-provider entity-config id links]
   (let [id-str (str id)
         now    (Instant/now)]
     (doseq [[k ids] links
-            :let  [{:keys [table foreign-key other-key through]} (display/link-rel entity-config k)
+            :let  [{:keys [table foreign-key other-key through entity]} (display/link-rel entity-config k)
+                   tcfg    (ports/get-entity-config schema-provider entity)
                    jcfg    (ports/get-entity-config schema-provider through)
                    jpk     (:primary-key jcfg :id)
                    fk-col  (case-conversion/kebab-case->snake-case-keyword foreign-key)
@@ -889,13 +893,18 @@
                                      (db/execute-query! tx {:select [[oth-col :other]] :from [table]
                                                             :where  [:= fk-col id-str]})))
                    wanted  (set ids)
-                   gone    (vec (remove wanted current))
+                   gone    (let [g (vec (remove wanted current))]
+                             (if (and (seq g) (:soft-delete tcfg false))
+                               (mapv #(str (get % (:primary-key tcfg :id)))
+                                     (live-records tx schema-provider entity g))
+                               g))
                    added   (remove current wanted)]]
-      (when (seq gone)
-        (db/execute-update! tx {:delete-from table :where [:and [:= fk-col id-str] [:in oth-col gone]]}))
-      (when (seq added)
-        (db/execute-update!
-         tx {:insert-into table
+      (try
+        (when (seq gone)
+          (db/execute-update! tx {:delete-from table :where [:and [:= fk-col id-str] [:in oth-col gone]]}))
+        (when (seq added)
+          (db/execute-update!
+           tx {:insert-into table
              :values (for [other added]
                        (case-conversion/kebab-case->snake-case-map
                         (cond-> {foreign-key id-str other-key other}
@@ -904,7 +913,9 @@
                                (#{:uuid :string} (get-in jcfg [:fields jpk :type])))
                           (assoc jpk (str (UUID/randomUUID)))
                           (contains? (:fields jcfg) :created-at) (assoc :created-at now)
-                          (contains? (:fields jcfg) :updated-at) (assoc :updated-at now))))})))))
+                          (contains? (:fields jcfg) :updated-at) (assoc :updated-at now))))}))
+        (catch Exception e
+          (throw (refused-write jcfg e)))))))
 
 (defn- links-of
   "`data` as [data links]: the record's own fields, and its `:admin/links`
@@ -1564,7 +1575,9 @@
 
   ports/ILinks
   (linked-records [_ entity-name rel-key ids opts]
-    (ports/linked-records inner entity-name rel-key ids opts))
+    (if (satisfies? ports/ILinks inner)
+      (ports/linked-records inner entity-name rel-key ids opts)
+      {}))
 
   ports/IAdminService
   (list-entities [_ entity-name options] (ports/list-entities inner entity-name options))

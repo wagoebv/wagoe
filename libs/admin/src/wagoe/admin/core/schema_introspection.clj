@@ -1079,10 +1079,10 @@
   "The many-to-many relations of `entity-name`: one per join table among
    `entity-configs` with a key to it, through to the entity its other key
    names. `:key` names the relation on a form, in a list and in a filter:
-   the other entity, or `<join>-by-<other-key>` when that is ambiguous or a
-   field's name."
-  [entity-name entity-configs]
-  (let [fields (set (keys (get-in entity-configs [entity-name :fields])))
+   the other entity, or `<join>-by-<other-key>` when that is ambiguous, a
+   field's name or in `taken` (the has-many keys, which name list columns too)."
+  [entity-name entity-configs & [taken]]
+  (let [fields (into (set (keys (get-in entity-configs [entity-name :fields]))) taken)
         rels   (vec (for [[join cfg] entity-configs
                           :let  [parent (join-parents cfg entity-configs)
                                  ks     (join-keys cfg)]
@@ -1109,7 +1109,8 @@
    its `:join-keys`, hidden from the sidebar unless the config says
    otherwise."
   [entity-name entity-config entity-configs]
-  (cond-> (assoc entity-config :many-to-many (many-to-many entity-name entity-configs))
+  (cond-> (assoc entity-config :many-to-many
+                 (many-to-many entity-name entity-configs (map :entity (:has-many entity-config))))
     (join-parents entity-config entity-configs)
     (-> (assoc :join-keys (join-keys entity-config))
         (update :sidebar-hidden #(if (nil? %) true %)))))
