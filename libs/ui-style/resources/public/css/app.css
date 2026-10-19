@@ -3753,15 +3753,17 @@ textarea:focus-visible,
 }
 .link-chip a { color: inherit; text-decoration: none; overflow: hidden; text-overflow: ellipsis; }
 .link-chip a:hover { text-decoration: underline; }
-.link-chip-remove {
+.link-chip .link-chip-remove {
   display: inline-flex;
+  min-width: 0;
+  min-height: 0;
   padding: 0;
   border: 0;
   background: none;
   color: var(--text-muted);
   cursor: pointer;
 }
-.link-chip-remove:hover { color: var(--text-primary); }
+.link-chip .link-chip-remove:hover { color: var(--text-primary); }
 .link-chip-more { color: var(--text-muted); font-size: var(--text-xs); }
 .link-checkboxes {
   display: flex;
