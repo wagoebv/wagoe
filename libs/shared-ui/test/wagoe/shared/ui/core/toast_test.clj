@@ -1,0 +1,55 @@
+(ns wagoe.shared.ui.core.toast-test
+  (:require [clojure.string :as str]
+            [clojure.test :refer [deftest is testing]]
+            [hiccup2.core :as h]
+            [wagoe.shared.ui.core.layout :as layout]
+            [wagoe.shared.ui.core.toast :as toast]))
+
+(defn- html [hiccup] (str (h/html hiccup)))
+
+(deftest ^:unit a-toast-has-its-type-and-dismisses-itself
+  (let [out (html (toast/toast {:type :success :message "Saved"}))]
+    (is (str/includes? out "class=\"alert alert-success shadow-lg\""))
+    (is (str/includes? out "x-data=\"toast(5000)\""))
+    (is (str/includes? out "<span>Saved</span>"))
+    (is (str/includes? out "aria-label=\"Dismiss\""))
+    (is (str/includes? out "@click=\"dismiss()\""))
+    (is (not (str/includes? out "role="))))
+  (testing "info by default, and a duration of its own"
+    (is (str/includes? (html (toast/toast {:message "x" :duration 900})) "alert-info shadow-lg\" x-data=\"toast(900)\"")))
+  (testing "an error interrupts and stays until closed"
+    (let [out (html (toast/toast {:type "error" :message "No"}))]
+      (is (str/includes? out "alert-error"))
+      (is (str/includes? out "role=\"alert\""))
+      (is (str/includes? out "toast(0)"))))
+  (testing "the message is escaped"
+    (is (str/includes? (html (toast/toast {:message "<b>"})) "&lt;b&gt;"))))
+
+(deftest ^:unit flash-toasts-reads-both-flash-shapes
+  (is (nil? (toast/flash-toasts nil)))
+  (is (= [(toast/toast {:type :success :message "a"})]
+         (toast/flash-toasts {:type :success :message "a"})))
+  (is (= [(toast/toast {:type :error :message "b"}) (toast/toast {:type :info :message "c"})]
+         (toast/flash-toasts {:error "b" :info "c"}))))
+
+(deftest ^:unit the-region-is-polite-and-holds-its-toasts
+  (let [region (toast/toast-region [(toast/toast {:message "hi"})])
+        out    (html region)]
+    (is (str/includes? out "id=\"toasts\""))
+    (is (str/includes? out "aria-live=\"polite\""))
+    (is (str/includes? out "class=\"toast toast-top toast-end"))
+    (is (str/includes? out "<span>hi</span>"))))
+
+(deftest ^:unit every-page-layout-has-the-region-and-shows-a-flash-in-it
+  (let [region #(some (fn [n] (when (and (vector? n) (= "toasts" (:id (second n)))) n))
+                      (tree-seq vector? seq %))]
+    (is (= (toast/toast-region nil) (region (layout/page-layout "t" [:p "x"]))))
+    (is (= (toast/toast-region (toast/flash-toasts {:success "Done"}))
+           (region (layout/page-layout "t" [:p "x"] {:flash {:success "Done"}}))))))
+
+(deftest ^:unit with-toast-appends-an-out-of-band-toast
+  (let [resp (toast/with-toast {:status 200 :body "<tr>row</tr>"} {:type :warning :message "Careful"})]
+    (is (= 200 (:status resp)))
+    (is (str/starts-with? (:body resp) "<tr>row</tr><div hx-swap-oob=\"beforeend:#toasts\"><div class=\"alert alert-warning")))
+  (testing "an empty body, and a render of the caller's"
+    (is (= "<div>t</div>" (:body (toast/with-toast {} {:message "m"} (constantly "<div>t</div>")))))))

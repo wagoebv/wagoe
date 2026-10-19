@@ -7,6 +7,7 @@
             [wagoe.shared.ui.core.components :as components]
             [wagoe.shared.ui.core.home :as home]
             [wagoe.shared.ui.core.icons :as icons]
+            [wagoe.shared.ui.core.toast :as toast]
             [wagoe.platform.core.csrf :as csrf]
             [wagoe.platform.core.http.access :as access]
             [wagoe.platform.core.http.pages :as pages]
@@ -141,16 +142,8 @@
          (main-navigation {:user user
                            :brand brand
                            :brand-href brand-href})])
-      (let [children (cond-> []
-                       flash (conj [:div.flash-messages
-                                    (let [flash-type (or (:type flash)
-                                                         (first (keys flash)))
-                                          flash-msg  (or (:message flash)
-                                                         (first (vals flash)))]
-                                      [:div {:class (str "alert alert-" (name flash-type))}
-                                       flash-msg])])
-                       true (conj content))]
-        (into [:main.main-content] children))
+      [:main.main-content content]
+      (toast/toast-region (toast/flash-toasts flash))
       (for [js-file js]
         [:script {:src js-file :defer true}])]]))
 
