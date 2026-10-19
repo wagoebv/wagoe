@@ -65,11 +65,16 @@
     (throw (ex-info "Unknown entity"
                     {:type :not-found
                      :entity-name entity-name})))
-  (let [entity-config (ports/get-entity-config schema-provider entity-name)
-        options (list-options request)
-        ;; A link filter's chip names the record, not its id
-        entity-config (support/with-link-options admin-service schema-provider config entity-config
-                                                 #(contains? (:filters options) (:key %)))
+  (let [options (list-options request)
+        entity-config (ports/get-entity-config schema-provider entity-name)
+        ;; The bare table is the one response without the filter chips
+        entity-config (if (htmx/fragment-request? (:headers request) ["entity-table-container"])
+                        entity-config
+                        (-> (support/with-filter-value-labels admin-service schema-provider user entity-name
+                              entity-config (:filters options))
+                            ;; A link filter's chip names the record, not its id
+                            (as-> c (support/with-link-options admin-service schema-provider config c
+                                      #(contains? (:filters options) (:key %))))))
         result (ports/list-entities admin-service entity-name options)
         records (support/with-workflow-states config entity-config (:records result))]
     {:entity-config entity-config
@@ -150,13 +155,13 @@
    the operator chosen for a field that has no value yet."
   [admin-service schema-provider config]
   (fn [request]
-    (let [_user         (support/require-admin-user! request)
-          entity-name   (support/get-entity-name request)
-          _             (when-not (ports/validate-entity-exists schema-provider entity-name)
-                          (throw (ex-info "Unknown entity" {:type :not-found :entity-name entity-name})))
-          entity-config (support/with-link-options admin-service schema-provider config
-                                                   (ports/get-entity-config schema-provider entity-name)
-                                                   any?)
-          options       (support/parse-query-params (:query-params request))]
+    (let [[user entity-name entity-config] (support/viewable-entity! schema-provider request)
+          entity-config (support/with-link-options admin-service schema-provider config entity-config any?)
+          filters (:filters (support/parse-query-params (:query-params request)))]
       (support/html-response request
-                             (admin-ui/filter-drawer entity-name entity-config (:filters options))))))
+                             (admin-ui/filter-drawer entity-name
+                                                     (admin-ui/with-field-options
+                                                       entity-config
+                                                       (support/filter-field-options admin-service schema-provider config
+                                                                                     user entity-name filters))
+                                                     filters)))))

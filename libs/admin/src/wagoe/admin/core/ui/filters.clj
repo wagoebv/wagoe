@@ -6,6 +6,7 @@
   (:require [wagoe.admin.core.display :as display]
             [wagoe.admin.core.ui.base :as base]
             [wagoe.core.utils.text :as text]
+            [wagoe.shared.ui.core.combobox :as combobox]
             [wagoe.shared.ui.core.icons :as icons]
             [wagoe.shared.ui.core.table :as table-ui]
             [clojure.string :as str]))
@@ -125,6 +126,27 @@
           :placeholder "value1, value2, value3"
           :value (str/join ", " (or (:values filter-value) []))}])
 
+      ;; A foreign key, given its parents by `with-field-options`: what the
+      ;; form offers, so the admin picks a parent rather than typing its id
+      (= :combobox (:widget field-config))
+      (combobox/combobox (keyword (str "filter-" (name field-name)))
+                         (assoc (:combobox field-config)
+                                :name        (str "filters[" (name field-name) "][value]")
+                                :value       (:value filter-value)
+                                :placeholder [:t :admin/combobox-placeholder]))
+
+      ;; An enum's options, a foreign key's parents, or the records a
+      ;; many-to-many links; the form's blank choice is the placeholder here
+      (and options (or (= :select (:widget field-config)) (#{:enum :link} field-type)))
+      [:select.filter-value-input
+       {:name (str "filters[" (name field-name) "][value]")}
+       [:option {:value ""} [:t :admin/select-placeholder]]
+       (for [[value label] options
+             :when (not= "" value)]
+         [:option {:value    (if (keyword? value) (name value) (str value))
+                   :selected (same-value? (:value filter-value) value)}
+          label])]
+
       ;; Boolean field - dropdown
       (= field-type :boolean)
       [:select.filter-value-input
@@ -132,16 +154,6 @@
        [:option {:value ""} [:t :admin/select-placeholder]]
        [:option {:value "true" :selected (same-value? (:value filter-value) true)} [:t :common/option-yes]]
        [:option {:value "false" :selected (same-value? (:value filter-value) false)} [:t :common/option-no]]]
-
-      ;; Enum field, or a many-to-many relation, with options - dropdown
-      (and (#{:enum :link} field-type) options)
-      [:select.filter-value-input
-       {:name (str "filters[" (name field-name) "][value]")}
-       [:option {:value ""} [:t :admin/select-placeholder]]
-       (for [[value label] options]
-         [:option {:value (name value)
-                   :selected (same-value? (:value filter-value) value)}
-          label])]
 
       ;; Date/instant fields - date input
       (#{:instant :date} field-type)
@@ -341,11 +353,12 @@
    :contains "∋" :starts-with "^" :ends-with "$"})
 
 (defn- value-label
-  "How a filter value reads in a chip: an enum's option label, yes/no for a
-   boolean, else the value."
+  "How a filter value reads in a chip: a parent's label (`:value-labels`), an
+   enum's option label, yes/no for a boolean, else the value."
   [field-config v]
   (let [s (if (keyword? v) (name v) (str v))]
-    (or (some (fn [[k label]] (when (= s (name k)) label)) (:options field-config))
+    (or (get (:value-labels field-config) s)
+        (some (fn [[k label]] (when (= s (name k)) label)) (:options field-config))
         (when (= :boolean (:type field-config))
           (if (= "true" s) [:t :common/option-yes] [:t :common/option-no]))
         s)))
@@ -430,8 +443,10 @@
       (when (= 1 (count operators))
         [:input {:type "hidden" :name (str "filters[" (name field) "][op]") :value (name op)}])
       (let [inputs (render-filter-value-inputs field field-config op spec)]
-        ;; The first value input carries the label's id
-        (if (and (vector? inputs) (map? (second inputs)))
+        ;; The first value input carries the label's id; a combobox has
+        ;; given its text input that id already
+        (if (and (vector? inputs) (map? (second inputs))
+                 (not= :combobox (:widget field-config)))
           (update inputs 1 assoc :id (str "filter-" (name field)))
           inputs))]]))
 

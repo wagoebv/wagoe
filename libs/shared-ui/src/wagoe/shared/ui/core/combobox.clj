@@ -7,6 +7,10 @@
   (:require [clojure.string :as str]
             [wagoe.shared.ui.core.icons :as icons]))
 
+(def limit
+  "The most options an options endpoint answers one query with."
+  20)
+
 (def query-param
   "The query parameter the typed text is sent as."
   "q")
@@ -32,17 +36,19 @@
 
    opts:
      :url          where the options come from; answered with `options`
+     :name         what the value is submitted as; `field-key` by default
      :value        the chosen value, submitted
      :label        what the chosen value is shown as
      :multiple     choose several: `:chosen` [[value label] ...] are chips,
-                   and each option picked adds one; the form submits
-                   `field-key` once per chip
+                   and each option picked adds one; the form submits the
+                   value once per chip
      :remove-label the accessible name of a chip's remove button
      :placeholder, :required, :readonly
      :attrs        extra attributes for the text input
      :value-attrs  extra attributes for the hidden input, which fires `change`
                    when an option is picked"
-  [field-key {:keys [url value label multiple chosen remove-label placeholder required readonly attrs value-attrs]}]
+  [field-key {:keys [url value label multiple chosen remove-label placeholder required readonly attrs value-attrs]
+              submitted-as :name}]
   (let [id (name field-key)
         lb (listbox-id field-key)]
     [:div {:class (if multiple "combobox combobox-multiple" "combobox")
@@ -52,10 +58,10 @@
      (if multiple
        (list
         [:div {:class "link-chips" :x-ref "chips"}
-         (for [[v l] chosen] (chip field-key v l readonly remove-label))]
+         (for [[v l] chosen] (chip (or submitted-as id) v l readonly remove-label))]
         ;; What a picked option becomes: filled in and appended by the component
-        [:template {:x-ref "chip"} (chip field-key "" "" readonly remove-label)])
-       [:input (merge {:type "hidden" :name id :id (str id "-value") :value (str (or value "")) :x-ref "value"}
+        [:template {:x-ref "chip"} (chip (or submitted-as id) "" "" readonly remove-label)])
+       [:input (merge {:type "hidden" :name (or submitted-as id) :id (str id "-value") :value (str (or value "")) :x-ref "value"}
                       value-attrs)])
      ;; No name: the typed text is the query, not the value, so the form does
      ;; not submit it. The component sends it as `query-param`.

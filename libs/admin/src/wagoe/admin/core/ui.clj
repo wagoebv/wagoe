@@ -8,7 +8,7 @@
 
    Implementation namespaces:
    - `wagoe.admin.core.ui.base`           — shared URL/field/column primitives
-   - `wagoe.admin.core.ui.layout`         — shell, sidebar, home, error pages, dialog
+   - `wagoe.admin.core.ui.layout`         — sidebar nav, home, error pages
    - `wagoe.admin.core.ui.list`           — entity list page, table, rows, search
    - `wagoe.admin.core.ui.filters`        — advanced filter builder
    - `wagoe.admin.core.ui.inline-editing` — inline (double-click) cell editing
