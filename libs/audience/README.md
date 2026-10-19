@@ -27,6 +27,7 @@
    :filters [{:type :role        :field :plan :op :eq          :value "free"}
              {:type :last-active              :op :within-days :value 30}]
    :cache   {:ttl-minutes 60}})
+;; :plan is not a default filter field: add it with :wagoe/audience {:filter-fields #{:plan}}
 
 ;; Resolve the audience (via injected IAudienceResolver)
 (ports/resolve-audience resolver :active-free-users)

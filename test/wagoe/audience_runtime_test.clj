@@ -112,6 +112,7 @@
         (doseq [[label request]
                 [["list members" (h/make-get "/api/v1/audiences/secret-cohort/members")]
                  ["preview"      (h/make-post "/api/v1/audiences/preview" {})]
+                 ["create"       (h/make-post "/api/v1/audiences" {})]
                  ["delete"       (h/make-delete "/api/v1/audiences/secret-cohort")]
                  ["web list"     (h/make-get "/web/audiences")]]]
           (testing (str "anonymous " label)

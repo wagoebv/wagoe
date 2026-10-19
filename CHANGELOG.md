@@ -190,6 +190,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **The audience API ignored the request body** (BOU-744): create and update always answered 422. An audience with
+  both `:filters` and `:compose` is now refused rather than its filters dropped; give it `:filters []`.
+- **An audience filter could name any users column, password hashes included** (BOU-745). Filters now take only
+  allowlisted fields; list your own columns in `:wagoe/audience {:filter-fields #{...}}`.
 - **Redis dead-letter retention could delete a job `retry-job!` had just retried** (BOU-738). It now purges in
   one atomic pass. Upgrade if you retain `:jobs/dead-letter` on Redis.
 - **A job store without `IDeadLetterRetention` failed every retention run** (BOU-738); configuring

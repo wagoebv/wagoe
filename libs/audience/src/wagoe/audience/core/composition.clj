@@ -197,3 +197,11 @@
    Pure; `lookup` is (fn [id] -> segment-map-or-nil)."
   [tree lookup]
   (explain-tree tree lookup #{}))
+
+(defn explain-filters-beside-compose
+  "{:error {...}} when `definition` has both `:compose` and non-empty `:filters`.
+   Evaluation takes one path or the other, so the filters would be ignored."
+  [{:keys [filters compose]}]
+  (when (and compose (seq filters))
+    {:error {:type    :validation-error
+             :message "An audience has either :filters or :compose, not both"}}))
