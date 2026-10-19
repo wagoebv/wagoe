@@ -25,6 +25,7 @@
  :common/button-edit        "Edit"
  :common/button-delete      "Delete"
  :common/button-copy        "Copy"
+ :common/button-confirm     "Confirm"
  :common/button-print       "Print"
  :common/button-search      "Search"
 
@@ -465,7 +466,6 @@
  :admin/form-create-heading        "New {label}"
  :admin/confirm-delete-record      "Delete this record? This action cannot be undone."
  :admin/modal-confirm-delete-title   "Confirm Delete"
- :admin/modal-confirm-delete-message "Are you sure you want to delete this record? This action cannot be undone."
  :admin/page-access-denied-title   "Access Denied"
  :admin/page-access-denied-message "You do not have permission to access the admin interface."
  :admin/button-go-dashboard        "Go to Dashboard"
@@ -534,8 +534,6 @@
  :admin/pagination-next-page       "Next page"
  :admin/pagination-last-page       "Last page"
  :admin/pagination-page            "Page {page}"
- :admin/modal-button-cancel        "Cancel"
- :admin/modal-button-delete        "Delete"
 
  ;; Overview (ADR-040)
  :admin/relative-today             "today"
