@@ -170,6 +170,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **`bb setup` switching back to a database added a fresh one** (BOU-560): it now restores the one in `:inactive`.
+  It also keeps comments after a key, syncs what it writes to disk, and no longer reports a no-op `none` as written.
 - **The login response's `user` carried the hashes of spent MFA backup codes** (BOU-737). Upgrade if you use MFA.
 - **Generated projects printed JDK restricted-method warnings on every SQLite task** (BOU-593). New projects pass
   `--enable-native-access=ALL-UNNAMED`; add it to your aliases' `:jvm-opts`, and `:manifest {"Enable-Native-Access" "ALL-UNNAMED"}` to `b/uber`.
