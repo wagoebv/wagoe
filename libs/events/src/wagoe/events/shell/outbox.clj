@@ -81,17 +81,6 @@
             n    (max now (inc prev))]
         (if (.compareAndSet ^AtomicLong last-seq prev n) n (recur))))))
 
-(defn- open-connection
-  "The connection behind `tx` when it is an open transaction: a next.jdbc tx,
-   or the platform's tx context. A datasource is refused because it would
-   succeed — autocommitting the row and reopening the dual-write window.
-   `:connectable` unwraps `jdbc/with-transaction+options`."
-  [tx]
-  (let [conn (if (map? tx) (or (:datasource tx) (:connectable tx)) tx)]
-    (when (and (instance? java.sql.Connection conn)
-               (not (.getAutoCommit ^java.sql.Connection conn)))
-      conn)))
-
 (defn- insert-row! [conn topic event]
   (jdbc/execute-one! conn ["INSERT INTO event_outbox (id, seq, topic, envelope) VALUES (?,?,?,?)"
                            (str (random-uuid)) (next-seq)
@@ -101,7 +90,7 @@
 (defrecord EventOutbox [ds bus opts owner]
   ports/ITransactionalPublisher
   (publish-in-tx! [_ tx topic event]
-    (let [conn    (open-connection tx)
+    (let [conn    (db/tx-connection tx)
           problem (or (when-not conn "publish-in-tx! needs an open transaction, not a datasource")
                       (event/topic-problem topic)
                       (when (< 255 (count (event/topic-name topic)))

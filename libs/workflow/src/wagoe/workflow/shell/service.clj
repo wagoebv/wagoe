@@ -14,6 +14,7 @@
             [wagoe.workflow.core.transitions :as transitions]
             [wagoe.workflow.core.audit :as audit]
             [wagoe.workflow.schema :as schema]
+            [wagoe.platform.database :as db]
             [clojure.tools.logging :as log])
   (:import [java.util UUID]
            [java.time Instant]))
@@ -100,8 +101,10 @@
      3. :on-any-transition      — fires on every successful transition
 
    Each hook fn receives [updated-instance audit-entry context].
-   Exceptions are caught and logged; they do not abort the transition."
-  [definition from-state to-state instance audit-entry context]
+   Exceptions are caught and logged; they do not abort the transition. On the
+   caller's transaction `conn`, each runs in a savepoint, so one that fails
+   does not leave the transaction refusing the rest."
+  [definition conn from-state to-state instance audit-entry context]
   (let [hooks     (get definition :hooks {})
         exit-key  (keyword (str "on-exit-" (name from-state)))
         enter-key (keyword (str "on-enter-" (name to-state)))
@@ -109,7 +112,7 @@
         run!      (fn [stage-key]
                     (doseq [f (get hooks stage-key [])]
                       (try
-                        (f instance audit-entry context)
+                        (db/in-savepoint conn #(f instance audit-entry context))
                         (catch Exception e
                           (log/warn e "Lifecycle hook failed"
                                     {:stage       stage-key
@@ -124,9 +127,11 @@
 
 (defn- dispatch-side-effects!
   "Enqueue jobs for each declared side-effect key after a successful transition.
+   On the caller's transaction `conn` when the queue can join it.
 
    Args:
      job-queue      - IJobQueue or nil
+     conn           - Connection of the caller's transaction, or nil
      side-effect-keys - Vector of keywords
      instance       - Updated WorkflowInstance
      audit-entry    - AuditEntry
@@ -134,17 +139,20 @@
 
    Returns:
      nil"
-  [job-queue side-effect-keys instance audit-entry context]
+  [job-queue conn side-effect-keys instance audit-entry context]
   (when (and job-queue (seq side-effect-keys))
-    (doseq [effect-key side-effect-keys]
-      (try
-        ;; We import the jobs port lazily to avoid a hard compile-time dependency.
-        ;; The jobs library is an optional runtime companion.
-        (let [jobs-ports-ns (the-ns 'wagoe.jobs.ports)
-              enqueue-fn    (ns-resolve jobs-ports-ns 'enqueue-job!)
-              job-ns        (the-ns 'wagoe.jobs.core.job)
-              create-fn     (ns-resolve job-ns 'create-job)]
-          (when (and enqueue-fn create-fn)
+    (try
+      ;; We import the jobs port lazily to avoid a hard compile-time dependency.
+      ;; The jobs library is an optional runtime companion.
+      (let [jobs-ports (the-ns 'wagoe.jobs.ports)
+            create-fn  (ns-resolve (the-ns 'wagoe.jobs.core.job) 'create-job)
+            enqueue-fn (if (and conn ((ns-resolve jobs-ports 'transactional-queue?) job-queue))
+                         (let [f (ns-resolve jobs-ports 'enqueue-in-tx!)]
+                           ;; A savepoint, as for hooks: the failure is swallowed.
+                           (fn [q queue job] (db/in-savepoint conn #(f q conn queue job))))
+                         (ns-resolve jobs-ports 'enqueue-job!))]
+        (doseq [effect-key side-effect-keys]
+          (try
             (let [job (create-fn {:job-type effect-key
                                   :args     {:instance-id  (str (:id instance))
                                              :workflow-id  (name (:workflow-id instance))
@@ -153,10 +161,13 @@
                                              :context      (or context {})}}
                                  (UUID/randomUUID)
                                  (Instant/now))]
-              (enqueue-fn job-queue :default job))))
-        (catch Exception e
-          (log/warn e "Failed to enqueue side-effect job"
-                    {:effect effect-key :instance-id (:id instance)}))))))
+              (enqueue-fn job-queue :default job))
+            (catch Exception e
+              (log/warn e "Failed to enqueue side-effect job"
+                        {:effect effect-key :instance-id (:id instance)})))))
+      (catch Exception e
+        (log/warn e "Failed to enqueue side-effect jobs"
+                  {:effects side-effect-keys :instance-id (:id instance)})))))
 
 (defn- refuse-long-entity-keys!
   "Throw when entity-type or entity-id will not fit its VARCHAR(255) column,
@@ -175,119 +186,146 @@
 ;; WorkflowService record
 ;; =============================================================================
 
+(defn- start-on
+  "Start a workflow instance, written through `store`."
+  [{:keys [registry]} store input]
+  (let [workflow-id  (:workflow-id input)
+        definition   (ports/get-workflow registry workflow-id)]
+    (when (nil? definition)
+      (throw (ex-info "Workflow definition not found"
+                      {:type        :not-found
+                       :workflow-id workflow-id
+                       :message     (str "No workflow registered with id: " (name workflow-id))})))
+    (refuse-long-entity-keys! input)
+    (let [now      (Instant/now)
+          instance {:id            (UUID/randomUUID)
+                    :workflow-id   workflow-id
+                    :entity-type   (:entity-type input)
+                    :entity-id     (:entity-id input)
+                    :current-state (machine/initial-state definition)
+                    :created-at    now
+                    :updated-at    now
+                    :metadata      (or (:metadata input) {})}]
+      (log/info "Starting workflow instance"
+                {:workflow-id workflow-id
+                 :entity-type (:entity-type input)
+                 :entity-id   (:entity-id input)})
+      (try
+        (ports/save-instance! store instance)
+        (catch clojure.lang.ExceptionInfo e
+          ;; Another start won the race: the entity has its one instance of
+          ;; this workflow (BOU-581).
+          (or (when (= :conflict (:type (ex-data e)))
+                (first (ports/list-instances store {:workflow-id workflow-id
+                                                    :entity-type (:entity-type input)
+                                                    :entity-id   (:entity-id input)
+                                                    :limit       1})))
+              (throw e)))))))
+
+(defn- transition-on
+  "Execute a transition, written through `store`; `conn` is the caller's
+   transaction, or nil."
+  [{:keys [registry job-queue guard-registry]} store conn request]
+  (let [instance-id (:instance-id request)
+        transition  (:transition request)
+        actor-id    (:actor-id request)
+        actor-roles (:actor-roles request)
+        context     (:context request)
+        instance    (ports/find-instance store instance-id)]
+    (when (nil? instance)
+      (throw (ex-info "Workflow instance not found"
+                      {:type        :not-found
+                       :instance-id instance-id
+                       :message     "Workflow instance does not exist"})))
+
+    (let [workflow-id (:workflow-id instance)
+          definition  (ports/get-workflow registry workflow-id)]
+      (when (nil? definition)
+        (throw (ex-info "Workflow definition not found for instance"
+                        {:type        :not-found
+                         :workflow-id workflow-id
+                         :instance-id instance-id
+                         :message     (str "Definition missing: " (name workflow-id))})))
+
+      (let [check (transitions/can-transition?
+                   definition
+                   (:current-state instance)
+                   transition
+                   actor-roles
+                   (guards-for guard-registry definition)
+                   (guard-input definition instance context))]
+
+        (if-not (:allowed? check)
+          (do
+            (log/info "Workflow transition rejected"
+                      {:instance-id instance-id
+                       :transition  transition
+                       :reason      (:reason check)})
+            {:success? false
+             :error    {:type    (or (:reason check) :forbidden)
+                        :message (case (:reason check)
+                                   :transition-not-found
+                                   (str "Transition '" (describe transition)
+                                        "' is not allowed from state '"
+                                        (describe (:current-state instance)) "'")
+                                   :insufficient-permissions
+                                   (str "Actor does not have required permissions: "
+                                        (mapv describe (:required check)))
+                                   :guard-rejected
+                                   (str "Guard '" (describe (:guard check)) "' rejected the transition")
+                                   :guard-not-registered
+                                   (str "Guard '" (describe (:guard check)) "' is not registered")
+                                   "Transition not allowed")}})
+
+          (let [t-def        (:transition-def check)
+                to-state     (transitions/destination-state t-def)
+                side-fx-keys (transitions/side-effects t-def)
+                now          (Instant/now)
+                entry-id     (UUID/randomUUID)
+                audit-entry  (audit/create-audit-entry
+                              entry-id instance t-def
+                              actor-id actor-roles context now)
+                updated-instance (ports/update-instance-state! store instance-id to-state)]
+
+            (ports/save-audit-entry! store audit-entry)
+            (fire-hooks! definition conn (:current-state instance) to-state
+                         updated-instance audit-entry context)
+            (dispatch-side-effects! job-queue conn side-fx-keys updated-instance audit-entry context)
+
+            (log/info "Workflow transition completed"
+                      {:instance-id instance-id
+                       :transition  transition
+                       :from        (:current-state instance)
+                       :to          to-state})
+
+            {:success?    true
+             :instance    updated-instance
+             :audit-entry audit-entry}))))))
+
+(defn- store-for
+  "`store`, or with `tx` the same store on the caller's transaction."
+  [store tx]
+  (cond
+    (nil? tx) store
+    (satisfies? ports/ITransactionalWorkflowStore store) (ports/store-in-tx store tx)
+    :else (throw (ex-info "This workflow store cannot join a transaction"
+                          {:type    :validation-error
+                           :message "The workflow store does not implement ITransactionalWorkflowStore"}))))
+
 (defrecord WorkflowService [store registry job-queue guard-registry]
   ports/IWorkflowEngine
 
-  (start-workflow! [_ input]
-    (let [workflow-id  (:workflow-id input)
-          definition   (ports/get-workflow registry workflow-id)]
-      (when (nil? definition)
-        (throw (ex-info "Workflow definition not found"
-                        {:type        :not-found
-                         :workflow-id workflow-id
-                         :message     (str "No workflow registered with id: " (name workflow-id))})))
-      (refuse-long-entity-keys! input)
-      (let [now      (Instant/now)
-            instance {:id            (UUID/randomUUID)
-                      :workflow-id   workflow-id
-                      :entity-type   (:entity-type input)
-                      :entity-id     (:entity-id input)
-                      :current-state (machine/initial-state definition)
-                      :created-at    now
-                      :updated-at    now
-                      :metadata      (or (:metadata input) {})}]
-        (log/info "Starting workflow instance"
-                  {:workflow-id workflow-id
-                   :entity-type (:entity-type input)
-                   :entity-id   (:entity-id input)})
-        (try
-          (ports/save-instance! store instance)
-          (catch clojure.lang.ExceptionInfo e
-            ;; Another start won the race: the entity has its one instance of
-            ;; this workflow (BOU-581).
-            (or (when (= :conflict (:type (ex-data e)))
-                  (first (ports/list-instances store {:workflow-id workflow-id
-                                                      :entity-type (:entity-type input)
-                                                      :entity-id   (:entity-id input)
-                                                      :limit       1})))
-                (throw e)))))))
+  (start-workflow! [this input]
+    (ports/start-workflow! this nil input))
 
-  (transition! [_ request]
-    (let [instance-id (:instance-id request)
-          transition  (:transition request)
-          actor-id    (:actor-id request)
-          actor-roles (:actor-roles request)
-          context     (:context request)
-          instance    (ports/find-instance store instance-id)]
-      (when (nil? instance)
-        (throw (ex-info "Workflow instance not found"
-                        {:type        :not-found
-                         :instance-id instance-id
-                         :message     "Workflow instance does not exist"})))
+  (start-workflow! [this tx input]
+    (start-on this (store-for store tx) input))
 
-      (let [workflow-id (:workflow-id instance)
-            definition  (ports/get-workflow registry workflow-id)]
-        (when (nil? definition)
-          (throw (ex-info "Workflow definition not found for instance"
-                          {:type        :not-found
-                           :workflow-id workflow-id
-                           :instance-id instance-id
-                           :message     (str "Definition missing: " (name workflow-id))})))
+  (transition! [this request]
+    (ports/transition! this nil request))
 
-        (let [check (transitions/can-transition?
-                     definition
-                     (:current-state instance)
-                     transition
-                     actor-roles
-                     (guards-for guard-registry definition)
-                     (guard-input definition instance context))]
-
-          (if-not (:allowed? check)
-            (do
-              (log/info "Workflow transition rejected"
-                        {:instance-id instance-id
-                         :transition  transition
-                         :reason      (:reason check)})
-              {:success? false
-               :error    {:type    (or (:reason check) :forbidden)
-                          :message (case (:reason check)
-                                     :transition-not-found
-                                     (str "Transition '" (describe transition)
-                                          "' is not allowed from state '"
-                                          (describe (:current-state instance)) "'")
-                                     :insufficient-permissions
-                                     (str "Actor does not have required permissions: "
-                                          (mapv describe (:required check)))
-                                     :guard-rejected
-                                     (str "Guard '" (describe (:guard check)) "' rejected the transition")
-                                     :guard-not-registered
-                                     (str "Guard '" (describe (:guard check)) "' is not registered")
-                                     "Transition not allowed")}})
-
-            (let [t-def        (:transition-def check)
-                  to-state     (transitions/destination-state t-def)
-                  side-fx-keys (transitions/side-effects t-def)
-                  now          (Instant/now)
-                  entry-id     (UUID/randomUUID)
-                  audit-entry  (audit/create-audit-entry
-                                entry-id instance t-def
-                                actor-id actor-roles context now)
-                  updated-instance (ports/update-instance-state! store instance-id to-state)]
-
-              (ports/save-audit-entry! store audit-entry)
-              (fire-hooks! definition (:current-state instance) to-state
-                           updated-instance audit-entry context)
-              (dispatch-side-effects! job-queue side-fx-keys updated-instance audit-entry context)
-
-              (log/info "Workflow transition completed"
-                        {:instance-id instance-id
-                         :transition  transition
-                         :from        (:current-state instance)
-                         :to          to-state})
-
-              {:success?    true
-               :instance    updated-instance
-               :audit-entry audit-entry}))))))
+  (transition! [this tx request]
+    (transition-on this (store-for store tx) (db/tx-connection tx) request))
 
   (current-state [_ instance-id]
     (:current-state (ports/find-instance store instance-id)))
@@ -295,8 +333,11 @@
   (audit-log [_ instance-id]
     (ports/find-audit-log store instance-id))
 
-  (available-transitions [_ instance-id actor-roles context]
-    (let [instance   (ports/find-instance store instance-id)
+  (available-transitions [this instance-id actor-roles context]
+    (ports/available-transitions this nil instance-id actor-roles context))
+
+  (available-transitions [_ tx instance-id actor-roles context]
+    (let [instance   (ports/find-instance (store-for store tx) instance-id)
           definition (when instance
                        (ports/get-workflow registry (:workflow-id instance)))]
       (if (nil? instance)
