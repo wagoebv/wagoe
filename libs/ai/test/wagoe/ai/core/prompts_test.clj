@@ -62,13 +62,13 @@
 
 (deftest ^:unit error-explainer-messages-test
   (testing "returns system + user messages"
-    (let [msgs (prompts/error-explainer-messages "ExceptionInfo: ..." {})]
+    (let [msgs (prompts/error-explainer-messages "ExceptionInfo: ..." {} nil)]
       (is (= 2 (count msgs)))
       (is (= :system (:role (first msgs))))))
 
   (testing "user message contains the stack trace"
     (let [trace "clojure.lang.ExceptionInfo: validation failed"
-          msgs  (prompts/error-explainer-messages trace {})]
+          msgs  (prompts/error-explainer-messages trace {} nil)]
       (is (str/includes? (:content (second msgs)) trace))))
 
   (testing "BOU-512: the error's own fix goes in as the answer"
@@ -76,7 +76,7 @@
                                   "ExceptionInfo: boom" {} "Fix: Start the database.")))]
       (is (str/includes? user "Fix: Start the database."))
       (is (str/includes? user "authoritative")))
-    (is (not (str/includes? (:content (second (prompts/error-explainer-messages "boom" {})))
+    (is (not (str/includes? (:content (second (prompts/error-explainer-messages "boom" {} nil)))
                             "authoritative"))
         "no fix, no claim of one"))
 

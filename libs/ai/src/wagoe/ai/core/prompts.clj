@@ -183,11 +183,9 @@ Known common error patterns in Wagoe:
 
    Returns:
      [{:role :system :content str} {:role :user :content str}]"
-  ([stacktrace source-files]
-   (error-explainer-messages stacktrace source-files nil))
-  ([stacktrace source-files known-fix]
-   [{:role :system :content (build-error-explainer-system-prompt)}
-    {:role :user   :content (build-error-explainer-user-prompt stacktrace source-files known-fix)}]))
+  [stacktrace source-files known-fix]
+  [{:role :system :content (build-error-explainer-system-prompt)}
+   {:role :user   :content (build-error-explainer-user-prompt stacktrace source-files known-fix)}])
 
 ;; =============================================================================
 ;; Feature 3: Test Generator

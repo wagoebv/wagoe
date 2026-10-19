@@ -13,6 +13,7 @@
 
 (ns wagoe.tools.ai
   (:require [wagoe.tools.ansi :refer [bold red yellow]]
+            [wagoe.tools.text :as text]
             [wagoe.tools.help :as help]
             [clojure.java.io :as io]
             [clojure.string :as str]
@@ -160,14 +161,19 @@
   [line]
   (second (re-find #"^at ([^$\s(]+)\$" (str/trim line))))
 
+(defn- some-tail
+  "The first truthy `(f [line & more])` over the tails of `lines`."
+  [f lines]
+  (some f (take-while seq (iterate rest lines))))
+
 (defn- cli-message
   "The message under a Clojure CLI report header thrown in a wagoe namespace."
   [lines]
-  (some (fn [[line & more]]
-          (when (some->> (re-find cli-header line) second (re-find #"^wagoe\."))
-            {:message (take-while #(not (str/starts-with? (str/trim %) "Full report at:"))
-                                  more)}))
-        (take-while seq (iterate rest lines))))
+  (some-tail (fn [[line & more]]
+               (when (some->> (re-find cli-header line) second (re-find #"^wagoe\."))
+                 {:message (take-while #(not (str/starts-with? (str/trim %) "Full report at:"))
+                                       more)}))
+             lines))
 
 (defn- split-data
   "The lines of a printed `ExceptionInfo: msg {data}` as message and data,
@@ -184,15 +190,17 @@
   "The message and data of a printed `ExceptionInfo: msg {data}` whose first
    frame outside clojure.* and java.* is in a wagoe namespace."
   [lines]
-  (some (fn [[line & more]]
-          (when-let [[_ first-line] (re-find #"ExceptionInfo: (.*)$" line)]
-            (let [[msg frames] (split-with #(not (frame-ns %)) more)
-                  thrower      (->> (keep frame-ns frames)
-                                    (remove #(re-find #"^(?:clojure|java|jdk|sun)\." %))
-                                    first)]
-              (when (some->> thrower (re-find #"^wagoe\."))
-                (split-data (cons first-line msg))))))
-        (take-while seq (iterate rest lines))))
+  (some-tail (fn [[line & more]]
+               (when-let [[_ first-line] (re-find #"ExceptionInfo: (.*)$" line)]
+                 (let [[msg frames] (split-with #(not (frame-ns %)) more)
+                       ;; The JVM prefixes of wagoe.devtools.core.stacktrace,
+                       ;; which bb cannot load.
+                       thrower      (->> (keep frame-ns frames)
+                                         (remove #(re-find #"^(?:clojure|javax?|jdk|sun)\." %))
+                                         first)]
+                   (when (some->> thrower (re-find #"^wagoe\."))
+                     (split-data (cons first-line msg))))))
+             lines))
 
 (defn- own-words
   "What a Wagoe-thrown error says, verbatim: its message, then any `:fix` or
@@ -205,7 +213,7 @@
       (concat ["The error says:"]
               (map #(if (str/blank? %) "" (str "  " %)) (str/split-lines body))
               (for [[_ k v] (re-seq #":(fix|hint) \"((?:[^\"\\]|\\.)*)\"" (str data))]
-                (str ({"fix" "Fix" "hint" "Hint"} k) ": " v))))))
+                (str (text/capitalize k) ": " v))))))
 
 (defn known-remedy
   "What the error already says about fixing itself, or nil.
@@ -231,8 +239,7 @@
         own-fixes (wge-fix-lines lines)
         fixes     (distinct (concat from-code own-fixes))
         words     (own-words raw-lines)]
-    (when (or (seq fixes) words)
-      (str/join "\n" (concat fixes (when (and (seq fixes) words) [""]) words)))))
+    (some->> [fixes words] (remove empty?) (map #(str/join "\n" %)) seq (str/join "\n\n"))))
 
 (defn- file-arg
   "The value of -f/--file in `args`, or nil."
