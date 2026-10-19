@@ -10,7 +10,7 @@
 
 (defn group-path [group-id] (str base-path "/" group-id))
 
-(defn member-options-path
+(defn- member-options-path
   "Where the member combobox of a group's page reads its options."
   [group-id]
   (str (group-path group-id) "/members/options"))

@@ -17,6 +17,7 @@
    [wagoe.i18n.shell.middleware :as i18n-middleware]
    [wagoe.i18n.shell.render :as i18n]
    [wagoe.platform.core.http.problem-details :as problem-details]
+   [wagoe.shared.ui.core.combobox :as combobox]
    [wagoe.shared.ui.core.htmx :as htmx]
    [wagoe.shared.ui.core.table :as table-ui]
    [clojure.string :as str]
@@ -604,13 +605,17 @@
    size: a select capped there would silently offer a subset, so past it the
    key is a combobox, {:url :label}, searching the label — or a text input
    when the label is not text. An optional key can be left
-   empty."
-  [admin-service config entity-configs entity-name values]
+   empty. `fields` limits it to those keys; the form's editable fields by
+   default."
+  ([admin-service config entity-configs entity-name values]
+   (foreign-key-options admin-service config entity-configs entity-name
+                        (get-in entity-configs [entity-name :editable-fields]) values))
+  ([admin-service config entity-configs entity-name fields values]
   (let [entity-config (get entity-configs entity-name)
         page-size     (get-in config [:pagination :max-page-size] 200)]
     (into {}
           (for [[field parent] (introspection/declared-parents entity-name entity-configs)
-                :when (some #{field} (:editable-fields entity-config))
+                :when (some #{field} fields)
                 :let  [parent-cfg (get entity-configs parent)
                        label      (label-field parent-cfg)
                        page       (try (ports/list-entities admin-service parent
@@ -633,7 +638,7 @@
                                   ;; so saving the form does not change it.
                                   (and current (not-any? #(= current (first %)) options))
                                   (conj [current current]))
-                         (not (get-in entity-config [:fields field :required])) (into [["" "—"]]))]))))))
+                         (not (get-in entity-config [:fields field :required])) (into [["" "—"]]))])))))))
 
 (defn- all-entity-configs [schema-provider]
   (into {} (map (fn [e] [e (ports/get-entity-config schema-provider e)]))
@@ -646,11 +651,9 @@
   [admin-service schema-provider config entity-name field values]
   (let [entity-configs (all-entity-configs schema-provider)]
     (when-let [parent (get (introspection/declared-parents entity-name entity-configs) field)]
-      ;; Only `field` editable, so a second key to the same parent is not read
-      (get (foreign-key-options admin-service config
-                                (-> (select-keys entity-configs [entity-name parent])
-                                    (assoc-in [entity-name :editable-fields] [field]))
-                                entity-name values)
+      ;; Only `field`, so a second key to the same parent is not read
+      (get (foreign-key-options admin-service config (select-keys entity-configs [entity-name parent])
+                                entity-name [field] values)
            field))))
 
 (defn- viewable-parents
@@ -670,26 +673,36 @@
         parents        (viewable-parents entity-configs user entity-name)
         fields         (filter parents (ui-filters/filterable-fields (get entity-configs entity-name)))]
     (when (seq fields)
-      (foreign-key-options admin-service config
-                           (assoc-in entity-configs [entity-name :editable-fields] fields)
-                           entity-name
+      (foreign-key-options admin-service config entity-configs entity-name fields
                            (update-vals (or filters {}) :value)))))
 
-(defn filter-value-labels
-  "{field {value label}} for each active foreign-key filter of `entity-name`,
-   so its chip names the parent rather than its id."
-  [admin-service schema-provider user entity-name filters]
-  (when (seq filters)
+(defn with-filter-value-labels
+  "`entity-config` with each active foreign-key filter's parent label under
+   `[:fields field :value-labels]`, so its chip names the parent rather than
+   its id."
+  [admin-service schema-provider user entity-name entity-config filters]
+  (if (empty? filters)
+    entity-config
     (let [entity-configs (all-entity-configs schema-provider)]
-      (into {}
-            (for [[field parent] (viewable-parents entity-configs user entity-name)
-                  :let  [v (some-> (get-in filters [field :value]) str not-empty)]
-                  :when v]
-              [field {v (current-label admin-service parent (get entity-configs parent) nil v)}])))))
+      (reduce-kv (fn [cfg field parent]
+                   (if-let [v (some-> (get-in filters [field :value]) str not-empty)]
+                     (assoc-in cfg [:fields field :value-labels]
+                               {v (current-label admin-service parent (get entity-configs parent) nil v)})
+                     cfg))
+                 entity-config
+                 (viewable-parents entity-configs user entity-name)))))
 
-(def ^:private combobox-limit
-  "The most options a combobox lists for one query."
-  20)
+(defn viewable-entity!
+  "[user entity-name entity-config] for the entity in the path, which the
+   signed-in admin may view. Throws :not-found or :forbidden."
+  [schema-provider request]
+  (let [user        (require-admin-user! request)
+        entity-name (get-entity-name request)]
+    (when-not (ports/validate-entity-exists schema-provider entity-name)
+      (throw (ex-info "Unknown entity" {:type :not-found :entity-name entity-name})))
+    (let [entity-config (ports/get-entity-config schema-provider entity-name)]
+      (shell-permissions/assert-can-view-entity! user entity-name entity-config)
+      [user entity-name entity-config])))
 
 (defn- search-rows
   "The first rows of `entity` by label whose label contains `q`, as [id label]."
@@ -697,8 +710,15 @@
   (let [label (label-field entity-cfg)]
     (mapv #(row->option entity-cfg %)
           (:records (ports/list-entities admin-service entity
-                                         (cond-> {:limit combobox-limit :sort label :sort-dir :asc}
+                                         (cond-> {:limit combobox/limit :sort label :sort-dir :asc}
                                            q (assoc :filters {label {:op :contains :value q}})))))))
+
+(defn search-entity-options
+  "The rows of `entity-name` whose label contains the typed `q`, as [id label],
+   for a combobox choosing one of them. Nil when its label is not text."
+  [admin-service entity-cfg entity-name q]
+  (when (text-label? entity-cfg)
+    (search-rows admin-service entity-name entity-cfg q)))
 
 (defn search-foreign-key-options
   "What the combobox of foreign key `field` of `entity-name` offers for the
@@ -707,19 +727,12 @@
    `field` is no foreign key, or its parent's label is not text."
   [admin-service schema-provider entity-name field q]
   (let [entity-configs (all-entity-configs schema-provider)]
-    (when-let [parent (some-> (get (introspection/declared-parents entity-name entity-configs) field)
-                              (#(when (text-label? (get entity-configs %)) %)))]
+    (when-let [parent (get (introspection/declared-parents entity-name entity-configs) field)]
       (let [parent-cfg (get entity-configs parent)]
-        {:parent     parent
-         :parent-cfg parent-cfg
-         :options    (search-rows admin-service parent parent-cfg q)}))))
-
-(defn search-entity-options
-  "The rows of `entity-name` whose label contains the typed `q`, as [id label],
-   for a combobox choosing one of them. Nil when its label is not text."
-  [admin-service entity-cfg entity-name q]
-  (when (text-label? entity-cfg)
-    (search-rows admin-service entity-name entity-cfg q)))
+        (when-let [options (search-entity-options admin-service parent-cfg parent q)]
+          {:parent     parent
+           :parent-cfg parent-cfg
+           :options    options})))))
 
 (defn nested-relationships
   "The has-many entries `entity-config` is created with, as

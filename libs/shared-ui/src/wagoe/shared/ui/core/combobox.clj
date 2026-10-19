@@ -5,6 +5,10 @@
    `combobox` Alpine component in ui-style's components.js."
   (:require [clojure.string :as str]))
 
+(def limit
+  "The most options an options endpoint answers one query with."
+  20)
+
 (def query-param
   "The query parameter the typed text is sent as."
   "q")

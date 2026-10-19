@@ -130,13 +130,16 @@
                                 :value       (:value filter-value)
                                 :placeholder [:t :admin/combobox-placeholder]))
 
-      (= :select (:widget field-config))
+      ;; An enum's options, or a foreign key's parents; the form's blank
+      ;; choice is the placeholder here
+      (and options (or (= :select (:widget field-config)) (= field-type :enum)))
       [:select.filter-value-input
        {:name (str "filters[" (name field-name) "][value]")}
        [:option {:value ""} [:t :admin/select-placeholder]]
        (for [[value label] options
              :when (not= "" value)]
-         [:option {:value value :selected (same-value? (:value filter-value) value)}
+         [:option {:value    (if (keyword? value) (name value) (str value))
+                   :selected (same-value? (:value filter-value) value)}
           label])]
 
       ;; Boolean field - dropdown
@@ -146,16 +149,6 @@
        [:option {:value ""} [:t :admin/select-placeholder]]
        [:option {:value "true" :selected (same-value? (:value filter-value) true)} [:t :common/option-yes]]
        [:option {:value "false" :selected (same-value? (:value filter-value) false)} [:t :common/option-no]]]
-
-      ;; Enum field with options - dropdown
-      (and (= field-type :enum) options)
-      [:select.filter-value-input
-       {:name (str "filters[" (name field-name) "][value]")}
-       [:option {:value ""} [:t :admin/select-placeholder]]
-       (for [[value label] options]
-         [:option {:value (name value)
-                   :selected (same-value? (:value filter-value) value)}
-          label])]
 
       ;; Date/instant fields - date input
       (#{:instant :date} field-type)

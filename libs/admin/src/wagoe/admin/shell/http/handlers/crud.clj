@@ -448,12 +448,7 @@
    able to view the entity and the parent whose labels this lists."
   [admin-service schema-provider _config]
   (fn [request]
-    (let [user        (support/require-admin-user! request)
-          entity-name (support/get-entity-name request)
-          _           (when-not (ports/validate-entity-exists schema-provider entity-name)
-                        (throw (ex-info "Unknown entity" {:type :not-found :entity-name entity-name})))
-          _           (shell-permissions/assert-can-view-entity!
-                       user entity-name (ports/get-entity-config schema-provider entity-name))
+    (let [[user entity-name] (support/viewable-entity! schema-provider request)
           field       (keyword (get-in request [:path-params :field]))
           found       (support/search-foreign-key-options admin-service schema-provider entity-name field
                                                           (combobox/query request))
@@ -469,13 +464,8 @@
    one of them (a grant's scope). The user has to be able to view the entity."
   [admin-service schema-provider _config]
   (fn [request]
-    (let [user        (support/require-admin-user! request)
-          entity-name (support/get-entity-name request)
-          _           (when-not (ports/validate-entity-exists schema-provider entity-name)
-                        (throw (ex-info "Unknown entity" {:type :not-found :entity-name entity-name})))
-          entity-cfg  (ports/get-entity-config schema-provider entity-name)
-          _           (shell-permissions/assert-can-view-entity! user entity-name entity-cfg)
-          options     (support/search-entity-options admin-service entity-cfg entity-name (combobox/query request))]
+    (let [[_ entity-name entity-cfg] (support/viewable-entity! schema-provider request)
+          options (support/search-entity-options admin-service entity-cfg entity-name (combobox/query request))]
       (when-not options
         (throw (ex-info "No text label to search" {:type :not-found :entity-name entity-name})))
       (support/html-response request

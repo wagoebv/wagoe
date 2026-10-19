@@ -145,10 +145,6 @@
                   (ports/add-group-member group-service id (:id user))
                   (throw (ex-info "No such user" {:type :not-found :field :email}))))))))
 
-(def ^:private member-option-limit
-  "The most users the member lookup lists for one query."
-  20)
-
 (defn- user-label [{:keys [name email]}]
   (if (str/blank? name) email (str name " <" email ">")))
 
@@ -157,21 +153,17 @@
    typed text and who are not members yet, for the member lookup."
   [user-service group-service]
   (fn [request]
-    (if-let [group (some->> (path-uuid request :id) (ports/get-group group-service))]
-      (let [members (into #{} (map :id) (:members group))
-            q       (combobox/query request)
-            users   (:users (ports/list-users user-service
-                                              (cond-> {:limit          (+ member-option-limit (count members))
-                                                       :filter-active  true
-                                                       :sort-by        :email
-                                                       :sort-direction :asc}
-                                                q (assoc :filter-name-or-email-contains q))))]
+    (if-let [group-id (some->> (path-uuid request :id) (ports/get-group group-service) :id)]
+      (let [q     (combobox/query request)
+            users (:users (ports/list-users user-service
+                                            (cond-> {:limit                 combobox/limit
+                                                     :filter-active         true
+                                                     :exclude-group-members group-id
+                                                     :sort-by               :email
+                                                     :sort-direction        :asc}
+                                              q (assoc :filter-name-or-email-contains q))))]
         (html-response request
-                       (combobox/options :user-id
-                                         (->> users
-                                              (remove (comp members :id))
-                                              (take member-option-limit)
-                                              (map (juxt :id user-label)))
+                       (combobox/options :user-id (map (juxt :id user-label) users)
                                          [:t :user.groups/member-no-matches])
                        200))
       (not-found request))))

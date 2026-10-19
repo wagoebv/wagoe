@@ -8,7 +8,6 @@
    [wagoe.admin.core.ui.filters :as filters]
    [wagoe.admin.core.permissions :as permissions]
    [wagoe.admin.shell.http.support :as support]
-   [wagoe.admin.shell.permissions :as shell-permissions]
    [wagoe.shared.ui.core.htmx :as htmx]
    [ring.util.response :as ring-response]))
 
@@ -67,11 +66,13 @@
                     {:type :not-found
                      :entity-name entity-name})))
   (let [options (list-options request)
-        ;; An active foreign-key filter's chip names the parent (BOU-762)
-        entity-config (reduce-kv (fn [cfg field labels] (assoc-in cfg [:fields field :value-labels] labels))
-                                 (ports/get-entity-config schema-provider entity-name)
-                                 (support/filter-value-labels admin-service schema-provider user entity-name
-                                                              (:filters options)))
+        entity-config (ports/get-entity-config schema-provider entity-name)
+        ;; Only what renders the filter chips reads their labels
+        entity-config (if (or (not (get-in request [:headers "hx-request"]))
+                              (= "filter-table-container" (get-in request [:headers "hx-target"])))
+                        (support/with-filter-value-labels admin-service schema-provider user entity-name
+                          entity-config (:filters options))
+                        entity-config)
         result (ports/list-entities admin-service entity-name options)
         records (support/with-workflow-states config entity-config (:records result))]
     {:entity-config entity-config
@@ -152,17 +153,12 @@
    the operator chosen for a field that has no value yet."
   [admin-service schema-provider config]
   (fn [request]
-    (let [user          (support/require-admin-user! request)
-          entity-name   (support/get-entity-name request)
-          _             (when-not (ports/validate-entity-exists schema-provider entity-name)
-                          (throw (ex-info "Unknown entity" {:type :not-found :entity-name entity-name})))
-          entity-config (ports/get-entity-config schema-provider entity-name)
-          _             (shell-permissions/assert-can-view-entity! user entity-name entity-config)
-          filters       (:filters (support/parse-query-params (:query-params request)))]
+    (let [[user entity-name entity-config] (support/viewable-entity! schema-provider request)
+          filters (:filters (support/parse-query-params (:query-params request)))]
       (support/html-response request
                              (admin-ui/filter-drawer entity-name
                                                      (admin-ui/with-field-options
-                                                      entity-config
-                                                      (support/filter-field-options admin-service schema-provider config
-                                                                                    user entity-name filters))
+                                                       entity-config
+                                                       (support/filter-field-options admin-service schema-provider config
+                                                                                     user entity-name filters))
                                                      filters)))))
