@@ -1,5 +1,6 @@
 (ns wagoe.devtools.core.config-editor-test
   (:require [clojure.test :refer [deftest testing is]]
+            [clojure.edn :as edn]
             [clojure.string]
             [wagoe.devtools.core.config-editor :as cfg-edit]
             [integrant.core :as ig]))
@@ -74,3 +75,25 @@
       (is (string? tree))
       (is (clojure.string/includes? tree ":wagoe/http"))
       (is (clojure.string/includes? tree "3000")))))
+
+(defrecord Opts [retries])
+
+(deftest ^:unit format-edn-pretty-prints-edn-that-reads-back
+  (let [cfg {:url     "jdbc:h2:mem:app"
+             :pool    {:min 1 :max 10 :timeout-ms 30000 :idle-ms 600000
+                       :name "a-pool-name-long-enough-to-push-the-map-past-the-right-margin"}
+             :at      #inst "2026-01-01T00:00:00.000-00:00"
+             :id      #uuid "00000000-0000-0000-0000-000000000001"
+             :aliases ["a" "b"]}
+        s   (cfg-edit/format-edn cfg)]
+    (testing "one key per line, sorted, no commas"
+      (is (clojure.string/starts-with? s "{:aliases [\"a\" \"b\"]\n :at #inst"))
+      (is (not (clojure.string/includes? s ","))))
+    (testing "nothing runs past the right margin"
+      (is (every? #(<= (count %) 100) (clojure.string/split-lines s))))
+    (testing "reader tags print as tags, so the text reads back to the same value"
+      (is (= cfg (edn/read-string s))))
+    (testing "a record and a tagged literal keep their tags"
+      (is (= "#wagoe.devtools.core.config_editor_test.Opts{:retries 3}"
+             (cfg-edit/format-edn (->Opts 3))))
+      (is (= "#env \"PORT\"" (cfg-edit/format-edn (tagged-literal 'env "PORT")))))))

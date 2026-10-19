@@ -55,7 +55,7 @@ Recommended bundle per page type:
 
 daisyUI/Tailwind on `wagoe-tokens.css` is the one CSS system. Pages on the
 default layout carry `body.wagoe-default`, which gives bare headings, lists,
-tables and buttons the styling pico used to (`resources/tailwind/admin-pilot.css`).
+tables and buttons a base style (`resources/tailwind/admin-pilot.css`).
 
 ## Assets shipped (`resources/public/`)
 

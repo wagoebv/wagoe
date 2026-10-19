@@ -96,8 +96,8 @@
                 skip-header false
                 body-attrs  {}
                 lang        "en"}} opts
-        ;; On the default stack, wagoe-default gives bare elements the styling
-        ;; pico used to; a caller's own body class is kept beside it.
+        ;; On the default stack, wagoe-default styles bare elements; a caller's
+        ;; own body class is kept beside it.
         ;; Hiccup also takes :class as a collection.
         body-attrs (cond-> body-attrs
                      (nil? css) (update :class #(if (coll? %)
