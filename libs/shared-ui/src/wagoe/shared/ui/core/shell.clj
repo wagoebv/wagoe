@@ -5,7 +5,6 @@
    render in it. The sidebar takes its navigation as data, a vector of groups:
 
      [{:label [:t :admin/sidebar-entities-title]   ; heading, optional
-       :icon  :database                            ; optional, unused for now
        :items [{:href \"/web/admin/users\" :label \"Users\"
                 :icon :users :active? true}]}]"
   (:require [wagoe.core.utils.text :as text]
@@ -19,16 +18,17 @@
 
 (defn- nav-link [attrs icon label]
   [:a (merge attrs (alpine/sidebar-nav-link-attrs))
-   (when icon (icons/icon icon {:size 20}))
+   (icons/icon icon {:size 20})
    [:span.nav-text label]])
 
 (defn- nav-group [{:keys [label items]}]
   (list
    (when label [:h3 label])
    [:ul.entity-list
-    (for [{:keys [href label icon active?]} items]
-      [:li {:class (when active? "active")}
-       (nav-link {:href href :data-label label} icon label)])]))
+    (for [item items]
+      [:li {:class (when (:active? item) "active")}
+       ;; Always an icon: a collapsed sidebar hides the label
+       (nav-link {:href (:href item)} (:icon item :file) (:label item))])]))
 
 (defn sidebar
   "The sidebar for `nav` (see the ns docstring). `opts` supports :logo-url for

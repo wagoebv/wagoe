@@ -1,5 +1,5 @@
 (ns wagoe.admin.core.ui.layout
-  "Admin shell/layout, error pages, and URL utilities.
+  "Admin sidebar nav, error pages, and URL utilities.
 
    Pure Hiccup generators for the admin chrome: the sidebar navigation for the
    shell in `wagoe.shared.ui.core.shell`, the dashboard home, 403/404 error
@@ -18,16 +18,18 @@
 
 (defn entity-nav
   "The shell's sidebar navigation for the admin's entities: one group, an item
-   per entity not marked :sidebar-hidden."
+   per entity not marked :sidebar-hidden. No group, so no heading, when no
+   entity is listed."
   [entities entity-configs current-entity]
-  [{:label [:t :admin/sidebar-entities-title]
-    :items (for [entity entities
-                 :let  [entity-config (get entity-configs entity)]
-                 :when (not (:sidebar-hidden entity-config))]
-             {:href    (str "/web/admin/" (name entity))
-              :label   (:label entity-config (text/capitalize (name entity)))
-              :icon    (keyword (or (:icon entity-config) "database"))
-              :active? (= entity current-entity)})}])
+  (when-let [items (seq (for [entity entities
+                              :let  [entity-config (get entity-configs entity)]
+                              :when (not (:sidebar-hidden entity-config))]
+                          {:href    (str "/web/admin/" (name entity))
+                           :label   (:label entity-config (text/capitalize (name entity)))
+                           :icon    (keyword (or (:icon entity-config) "database"))
+                           :active? (= entity current-entity)}))]
+    [{:label [:t :admin/sidebar-entities-title]
+      :items items}]))
 
 (defn admin-sidebar
   "The shell's sidebar listing `entities`. `opts` supports :logo-url."
