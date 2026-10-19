@@ -219,6 +219,17 @@
   [ns-form]
   (vec (distinct (map first (libspecs ns-form)))))
 
+(defn module-schema-ns
+  "`a.b.schema` for a namespace `a.b.core.x` or `a.b.shell.x`, else nil. Most
+   core namespaces take their entity as data and never require the schema
+   that describes it (BOU-511)."
+  [ns-sym]
+  (let [parts (str/split (str ns-sym) #"\.")
+        i     (.indexOf ^java.util.List parts "core")
+        i     (if (neg? i) (.indexOf ^java.util.List parts "shell") i)]
+    (when (pos? i)
+      (symbol (str (str/join "." (take i parts)) ".schema")))))
+
 (defn ns-form-aliases
   "{ns-sym alias-sym} for the requires that name an alias."
   [ns-form]

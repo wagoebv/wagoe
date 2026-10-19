@@ -51,15 +51,14 @@
                          (keep (fn [[n v]]
                                  (when-let [form (and (bound? v) (schema-form @v))]
                                    {:name n :form form})))
-                         (sort-by :name)
-                         vec)
+                         (sort-by :name))
           schema?   (into #{} (map :name) schemas)
           vars      (->> publics
                          (remove (fn [[n v]] (or (protocol? v) (contains? methods n) (schema? n))))
                          (sort-by key)
                          (take max-vars)
                          (mapv (fn [[n v]] {:name n :arglists (:arglists (meta v))})))]
-      {:ns ns-sym :protocols protocols :schemas schemas :vars vars})
+      {:ns ns-sym :protocols protocols :schemas (vec (take max-vars schemas)) :vars vars})
     (catch Throwable t
       {:ns ns-sym :error (or (ex-message t) (.getName (class t)))})))
 
@@ -96,7 +95,7 @@
 ;; Checks
 ;; =============================================================================
 
-(defn- on-classpath? [ns-sym]
+(defn on-classpath? [ns-sym]
   (let [base (-> (str ns-sym) (str/replace "-" "_") (str/replace "." "/"))]
     (boolean (some #(io/resource (str base %)) [".clj" ".cljc"]))))
 
@@ -137,13 +136,28 @@
 
 (def ^:private run-timeout-ms 180000)
 
+(def child-env
+  "Environment variables the child keeps: enough to find tools and select the
+   profile, none that hold secrets."
+  #{"PATH" "HOME" "LANG" "WAG_ENV"})
+
+(defn- absolute-classpath
+  "This process's classpath with each entry absolute: the child runs from
+   `root`, where the CLI's relative entries would not resolve."
+  []
+  (->> (str/split (System/getProperty "java.class.path")
+                  (re-pattern (java.util.regex.Pattern/quote java.io.File/pathSeparator)))
+       (map #(.getAbsolutePath (io/file %)))
+       (str/join java.io.File/pathSeparator)))
+
 (defn run-errors
   "Load `text` and run its tests in a separate JVM on this process's
    classpath, the one the namespace check used. Returns [line], or nil when
    every tagged fixture matches its schema and every test passes.
 
-   The child gets an empty environment: the code is the model's, unread, and
-   this process holds the provider's API key (BOU-572 review)."
+   The child sees only `child-env` of this process's environment, so the
+   provider's API key is not handed to code nobody has read (BOU-572 review).
+   It is not a sandbox: the code can still reach files and the network."
   [text {:keys [root]}]
   (if-let [ns-sym (second (read-ns-form text))]
     (let [src (java.io.File/createTempFile "wagoe-ai-gen" ".clj")
@@ -153,10 +167,10 @@
         (spit src text)
         (let [java (str (System/getProperty "java.home") "/bin/java")
               pb   (ProcessBuilder. ^java.util.List
-                                    [java "-cp" (System/getProperty "java.class.path")
+                                    [java "-cp" (absolute-classpath)
                                      "clojure.main" "-m" "wagoe.ai.shell.test-runner"
                                      (.getPath src) (str ns-sym) (.getPath res)])
-              _    (.clear (.environment pb))
+              _    (.retainAll (.keySet (.environment pb)) child-env)
               proc (-> pb
                        (.directory (io/file (or root ".")))
                        (.redirectErrorStream true)

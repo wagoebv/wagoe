@@ -151,12 +151,17 @@
   16384)
 
 (defn- api-context
-  "The public API of every namespace `source` requires, read from the
-   classpath, as prompt text."
+  "The public API of every namespace `source` requires, and of its module's
+   schema namespace, read from the classpath, as prompt text."
   [source]
   (when-let [ns-form (test-check/read-ns-form source)]
-    (ctx/render-namespace-apis (ctx/ns-form-aliases ns-form)
-                               (map test-check/namespace-api (ctx/ns-form-requires ns-form)))))
+    (let [requires (ctx/ns-form-requires ns-form)
+          schema   (ctx/module-schema-ns (second ns-form))
+          nss      (cond-> requires
+                     (and schema (not (some #{schema} requires)) (test-check/on-classpath? schema))
+                     (conj schema))]
+      (ctx/render-namespace-apis (ctx/ns-form-aliases ns-form)
+                                 (map test-check/namespace-api nss)))))
 
 (defn- repaired-tests
   "The model's answer with the repairs applied, or {:error ..} when it was cut

@@ -67,16 +67,18 @@
       (is (some #(str/includes? % "Requires wagoe.ai.invented-store, which is not on the classpath") errors)
           (pr-str errors)))))
 
-(deftest ^:integration the-answer-runs-only-in-a-child-without-the-environment
+(deftest ^:integration the-answer-runs-only-in-a-child-without-secrets
   ;; BOU-572 review: the check used to `load-string` the answer, so a
   ;; top-level form ran in this process, API key and all. BOU-511 runs it, but
-  ;; in a child JVM with an empty environment.
+  ;; in a child JVM that keeps only sut/child-env.
   (let [marker  (java.io.File/createTempFile "bou572" ".txt")
-        hostile (str good-ns "\n(def path (spit " (pr-str (.getPath marker)) " (pr-str (System/getenv \"PATH\"))))\n")]
+        hostile (str good-ns "\n(def env (spit " (pr-str (.getPath marker)) " (pr-str (set (keys (System/getenv))))))\n")]
     (try
       (sut/check-errors hostile lint-ctx)
-      (is (some? (System/getenv "PATH")) "precondition")
-      (is (= "nil" (slurp marker)))
+      ;; macOS's java launcher sets __CF_USER_TEXT_ENCODING itself.
+      (let [seen (disj (read-string (slurp marker)) "__CF_USER_TEXT_ENCODING")]
+        (is (every? sut/child-env seen) (pr-str seen))
+        (is (contains? seen "PATH")))
       (is (nil? (find-ns 'wagoe.ai.generated-good-test)))
       (finally (.delete marker)))))
 
@@ -120,5 +122,5 @@
 
 (deftest ^:integration a-namespace-that-does-not-load-is-reported
   (is (some #(str/starts-with? % "It does not load")
-            (run-in-process "(ns wagoe.ai.generated-broken-test)\n(deftest a (is (= 1 (nope))))"
+            (run-in-process "(ns wagoe.ai.generated-broken-test (:require [clojure.test :refer [deftest is]]))\n(deftest a (is (= 1 (nope))))"
                             'wagoe.ai.generated-broken-test))))

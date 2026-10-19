@@ -233,6 +233,13 @@
       (is (str/includes? prompt "schema schema/Message\n    [:map [:role [:enum :system :user :assistant]] [:content :string]]")
           prompt))))
 
+(deftest ^:integration generate-tests-shows-the-modules-schema-unrequired
+  ;; Most core namespaces never require their module's schema namespace.
+  (let [[svc calls] (scripted-service ["(ns t-test)\n(deftest a-test (is (= 1 1)))"])]
+    (with-source "(ns wagoe.ai.core.msg-roles)\n(defn role [m] (:role m))"
+      #(svc/generate-tests svc %))
+    (is (str/includes? (:content (second (first @calls))) "schema wagoe.ai.schema/Message"))))
+
 ;; =============================================================================
 ;; sql-from-description tests
 ;; =============================================================================
