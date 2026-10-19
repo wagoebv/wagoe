@@ -8,10 +8,6 @@
     (is (= {:label "Read orders" :source :derived :module :wagoe/orders}
            (:orders/read permissions)))))
 
-(deftest ^:unit admin-entities-derive-read-and-write
-  (is (= #{:admin.users/read :admin.users/write}
-         (set (keys (sut/entity-permissions :users))))))
-
 (deftest ^:unit declared-permissions-roles-and-scopes-join-the-registry
   (let [registry (sut/build-registry
                   {:wagoe/orders {:permissions {:orders/refund {:label "Refund orders"}}
@@ -48,11 +44,11 @@
     (is (= [:orders/refnud] (:permissions error)))))
 
 (deftest ^:unit only-admin-code-roles-hold-admin-permissions
-  (let [decls {:wagoe/admin  {:permissions (sut/entity-permissions :users)}
+  (let [decls {:wagoe/admin  {:permissions (sut/read-write-permissions "admin.users" "users")}
                :wagoe/orders {:roles {:orders/boss {:permissions #{:admin.users/write}}}}}]
     (is (= :orders/boss (get-in (sut/build-registry decls) [:error :role])))
     (is (nil? (:error (sut/build-registry
-                       (assoc decls :wagoe/admin {:permissions (sut/entity-permissions :users)
+                       (assoc decls :wagoe/admin {:permissions (sut/read-write-permissions "admin.users" "users")
                                                   :roles {:admin/users {:permissions #{:admin.users/write}}}}
                               :wagoe/orders nil)))))))
 
@@ -71,8 +67,8 @@
 
 (deftest ^:unit route-permissions-outside-the-registry
   (let [permissions {:orders/read {} :orders/refund {}}
-        routes      [["/orders" {:get {:handler identity :permission :orders/read}}
-                      ["/:id/refund" {:post {:handler identity :permission :orders/refnud}}]]
+        routes      [["/orders" {:get {:handler identity :permission :orders/read}}]
+                     ["/orders/:id/refund" {:post {:handler identity :permission :orders/refnud}}]
                      ["/reports" {:permission :reports/read :get {:handler identity}}]
                      ["/open" {:get {:handler identity}}]]]
     (is (= [{:path "/orders/:id/refund" :permission :orders/refnud}

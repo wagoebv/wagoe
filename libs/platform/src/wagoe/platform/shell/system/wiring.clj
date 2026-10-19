@@ -51,6 +51,7 @@
             [wagoe.platform.shell.privacy :as privacy]
             [wagoe.platform.shell.authorization :as authorization]
             [wagoe.platform.ports.authorization :as ports.authorization]
+            [reitit.core]
             ;; NOTE: no module-wiring is required here any more (BOU-131). Each
             ;; was a static require, so every consumer of platform had to ship
             ;; every module's jar whether or not it used it — a missing one is a
@@ -603,10 +604,6 @@
                            versioned-api-routes
                            (or test-reset-routes []))
 
-        ;; A :permission no module declares fails the boot, not the request.
-        _ (when permission-registry
-            (authorization/assert-route-permissions! permission-registry all-routes))
-
         {csrf-config :csrf
          rate-limit-config :rate-limit
          trusted-proxies :trusted-proxies} (security-config {:config config :cache cache})
@@ -657,6 +654,10 @@
                              ;; "do not check" (BOU-356).
                              (select-keys settings [:coercion :muuntaja :multipart :conflicts]))
         handler (reitit-router/compile-routes all-routes router-config)
+        ;; A :permission no module declares fails the boot, not the request.
+        ;; Checked on the router's flattened routes, where data is inherited.
+        _ (when-let [router (and permission-registry (:reitit/router (meta handler)))]
+            (authorization/assert-route-permissions! permission-registry (reitit.core/routes router)))
 
         ;; Wrap handler with version headers middleware
         versioned-handler (http-versioning/wrap-handler-with-version-headers handler config)

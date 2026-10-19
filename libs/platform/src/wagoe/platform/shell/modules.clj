@@ -428,9 +428,10 @@
   ([active known-keys] (discovered-route-refs active known-keys nil))
   ([active known-keys built]
    (into []
-         (comp (map (juxt identity #(keyword "wagoe" (str (name %) "-routes"))))
-               (filter #(or (nil? built) (contains? built (second %))))
-               (map (fn [[k routes]] (module-routes-ref k (ig/ref routes)))))
+         (keep (fn [k]
+                 (let [routes (keyword "wagoe" (str (name k) "-routes"))]
+                   (when (or (nil? built) (contains? built routes))
+                     (module-routes-ref k (ig/ref routes))))))
          (scaffolded-module-keys active known-keys))))
 
 ;; =============================================================================

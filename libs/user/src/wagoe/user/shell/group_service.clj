@@ -46,7 +46,7 @@
   (when (and permissions (= :enum (m/type permissions)))
     {:permissions (into {}
                         (comp (filter keyword?)
-                              (map (fn [p] [p {:label (subs (str p) 1) :source :groups-schema}])))
+                              (map (fn [p] [p {:label (group-core/permission-str p) :source :groups-schema}])))
                         (m/children permissions))}))
 
 ;; =============================================================================

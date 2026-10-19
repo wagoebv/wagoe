@@ -14,72 +14,63 @@
             [malli.error :as me]))
 
 (def Declaration
-  "What a module contributes under `:authorization`."
+  "What a module contributes under `:authorization`. A permission's `:source`
+   is `:declared` unless it says otherwise."
   [:map {:closed true}
    [:permissions {:optional true}
-    [:map-of :keyword [:map [:label :string]
-                       [:source {:optional true} [:enum :declared :derived :groups-schema]]]]]
+    [:map-of :keyword [:map [:label :string] [:source {:optional true} :keyword]]]]
    [:roles {:optional true}
     [:map-of :qualified-keyword [:map [:description {:optional true} :string]
                                  [:permissions [:set :keyword]]]]]
    [:scopes {:optional true}
     [:map-of :keyword [:map [:label :string]]]]])
 
-(defn module-permissions
-  "`<module>/read` and `<module>/write` for `module-key`, `:wagoe/orders`."
-  [module-key]
-  (let [m (name module-key)]
-    {(keyword m "read")  {:label (str "Read " m) :source :derived}
-     (keyword m "write") {:label (str "Change " m) :source :derived}}))
+(def ^:private explain-declaration (m/explainer Declaration))
 
-(defn entity-permissions
-  "`admin.<entity>/read` and `admin.<entity>/write` for an admin entity."
-  [entity]
-  (let [ns (str "admin." (name entity))]
-    {(keyword ns "read")  {:label (str "Read " (name entity) " in the admin") :source :derived}
-     (keyword ns "write") {:label (str "Change " (name entity) " in the admin") :source :derived}}))
+(defn read-write-permissions
+  "`<ns>/read` and `<ns>/write`, derived, labelled with `noun`."
+  [ns noun]
+  {(keyword ns "read")  {:label (str "Read " noun) :source :derived}
+   (keyword ns "write") {:label (str "Change " noun) :source :derived}})
 
 (defn- error [message data]
   {:error (merge {:type :configuration-error :message message} data)})
 
-(def ^:private rank
-  "Which of two declarations of one permission stands. Equal ranks clash."
-  {:declared 2 :derived 1 :groups-schema 0})
+(defn- rank
+  "Which of two declarations of one permission stands; equal ranks clash. Any
+   other source, such as the user module's groups schema, yields to both."
+  [entry]
+  (case (:source entry) :declared 2 :derived 1 0))
 
-(defn- add-permission
-  [acc [p entry]]
-  (let [have (get-in acc [:permissions p])]
-    (cond
-      (:error acc) acc
-      (nil? have) (assoc-in acc [:permissions p] entry)
-      (= (rank (:source have)) (rank (:source entry)))
-      (error (str "Modules " (:module have) " and " (:module entry) " both declare " p ".")
-             {:permission p})
-      (> (rank (:source entry)) (rank (:source have))) (assoc-in acc [:permissions p] entry)
-      :else acc)))
+(defn- by-rank [have entry]
+  (cond (= (rank have) (rank entry)) nil
+        (> (rank entry) (rank have)) entry
+        :else have))
+
+(defn- if-equal [have entry]
+  (when (= (dissoc have :module) (dissoc entry :module)) have))
 
 (defn- add-entries
-  "`entries` into `acc` under `part`, refusing a key two modules set
-   differently."
-  [acc part entries]
-  (reduce (fn [acc [k entry]]
-            (let [have (get-in acc [part k])]
-              (cond
-                (:error acc) acc
-                (nil? have) (assoc-in acc [part k] entry)
-                (= (dissoc have :module) (dissoc entry :module)) acc
-                :else (error (str "Modules " (:module have) " and " (:module entry)
-                                  " declare " (name part) " " k " differently.")
-                             {part k}))))
-          acc
-          entries))
-
-(defn- tag [module-key entries]
-  (update-vals entries #(assoc % :module module-key)))
+  "`entries` of `module-key` into `acc` under `part`. Where a key is already
+   there, `settle` returns the entry that stands, or nil for a clash."
+  [acc part settle module-key entries]
+  (if (:error acc)
+    acc
+    (reduce (fn [acc [k entry]]
+              (let [entry (assoc entry :module module-key)
+                    have  (get-in acc [part k])
+                    kept  (if have (settle have entry) entry)]
+                (if kept
+                  (assoc-in acc [part k] kept)
+                  (reduced (error (str "Modules " (:module have) " and " module-key
+                                       " both declare " (name part) " " k ".")
+                                  {part k})))))
+            acc
+            entries)))
 
 (defn- invalid-declaration [declarations]
   (some (fn [[k decl]]
-          (when-let [e (m/explain Declaration (or decl {}))]
+          (when-let [e (explain-declaration (or decl {}))]
             (error (str k " declares :authorization wrongly: " (pr-str (me/humanize e)))
                    {:module k})))
         declarations))
@@ -113,38 +104,29 @@
    {:permissions {..} :roles {..} :scopes {..}}, each entry tagged with its
    `:module`, or {:error {:type :configuration-error …}}. A permission two
    modules declare is an error, except that a declared one stands over a
-   derived one and either over the `:wagoe/user :groups` schema's."
+   derived one, and either over any other source."
   [declarations]
   (or (invalid-declaration declarations)
       (let [acc (reduce (fn [acc [k {:keys [permissions roles scopes]}]]
-                          (-> (reduce add-permission acc
-                                      (tag k (merge (module-permissions k)
-                                                    (update-vals permissions #(merge {:source :declared} %)))))
-                              (add-entries :roles (tag k roles))
-                              (add-entries :scopes (tag k scopes))))
+                          (let [acc (-> acc
+                                        (add-entries :permissions by-rank k
+                                                     (merge (read-write-permissions (name k) (name k))
+                                                            (update-vals permissions #(merge {:source :declared} %))))
+                                        (add-entries :roles if-equal k roles)
+                                        (add-entries :scopes if-equal k scopes))]
+                            (cond-> acc (:error acc) reduced)))
                         {:permissions {} :roles {} :scopes {}}
                         (sort-by key declarations))]
         (or (when (:error acc) acc)
             (role-error acc)
             acc))))
 
-(defn- route-entries
-  "{:path :permission} for each `:permission` in `route`, at the path or on a
-   method, and in its children."
-  [prefix route]
-  (if (string? (first route))
-    (let [[path & more] route
-          path (str prefix path)
-          data (when (map? (first more)) (first more))]
-      (concat (for [p (cons (:permission data) (keep #(when (map? %) (:permission %)) (vals data)))
-                    :when (some? p)]
-                {:path path :permission p})
-              (mapcat #(route-entries path %) (filter sequential? (if data (rest more) more)))))
-    (mapcat #(route-entries prefix %) (filter sequential? route))))
-
 (defn unknown-route-permissions
-  "The `:permission`s in `routes` that `permissions` (the registry's map) does
-   not hold, as [{:path :permission}]."
+  "The `:permission`s in `routes`, a router's flattened [path data] pairs, that
+   `permissions` (the registry's map) does not hold, as [{:path :permission}].
+   A `:permission` may sit in the route data or in a method's."
   [permissions routes]
-  (vec (remove #(contains? permissions (:permission %))
-               (mapcat #(route-entries "" %) routes))))
+  (vec (for [[path data] routes
+             p (cons (:permission data) (keep #(when (map? %) (:permission %)) (vals data)))
+             :when (and (some? p) (not (contains? permissions p)))]
+         {:path path :permission p})))

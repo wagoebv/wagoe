@@ -6,8 +6,8 @@
 (defprotocol IPermissionRegistry
   (permissions [this]
     "{permission {:label :module :source}}. `:source` is `:derived`
-    (`<module>/read|write`, `admin.<entity>/read|write`), `:declared`, or
-    `:groups-schema` (the `:wagoe/user :groups :permissions` enum).")
+    (`<module>/read|write`, `admin.<entity>/read|write`), `:declared`, or one
+    a module names, such as the user module's `:groups-schema`.")
 
   (roles [this]
     "Code roles, {role {:description :permissions #{..} :module}}.")

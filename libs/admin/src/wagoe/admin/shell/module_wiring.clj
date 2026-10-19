@@ -61,7 +61,7 @@
 
 (defmethod ig/init-key :wagoe/admin-service
   [_ {:keys [db-ctx schema-provider logger error-reporter config event-publisher workflows]
-       users :user-service}]
+      users :user-service}]
   (service/create-admin-service db-ctx schema-provider logger error-reporter config
                                 event-publisher workflows
                                 ;; An entity config says `:writer :user` to be written
@@ -131,6 +131,12 @@
               admin-schema/default-admin-config
               settings))
 
+(defn- entity-permissions
+  "`admin.<entity>/read` and `admin.<entity>/write`."
+  [entity]
+  (authorization/read-write-permissions (str "admin." (name entity))
+                                        (str (name entity) " in the admin")))
+
 (defn ig-config
   "This module's Integrant entries, for `wagoe.platform.shell.system.config`.
 
@@ -178,5 +184,5 @@
      ;; no list of which modules may contribute routes (BOU-330).
      :routes [(ig/ref :wagoe/admin-routes)]
      ;; admin.<entity>/read and /write for every entity the admin manages.
-     :authorization {:permissions (into {} (map authorization/entity-permissions)
+     :authorization {:permissions (into {} (map entity-permissions)
                                         (get-in settings [:entity-discovery :allowlist]))}}))

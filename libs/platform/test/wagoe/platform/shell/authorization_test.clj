@@ -1,6 +1,7 @@
 (ns wagoe.platform.shell.authorization-test
   (:require [clojure.test :refer [deftest is testing]]
             [integrant.core :as ig]
+            [reitit.core]
             [wagoe.platform.ports.authorization :as ports]
             [wagoe.platform.shell.http.reitit-router]
             [wagoe.platform.shell.system.config :as sys]
@@ -23,7 +24,8 @@
     (is (re-find #":orders/raed" (ex-message e)))))
 
 (defn- handler [registry module-routes]
-  (with-redefs [wagoe.platform.shell.http.reitit-router/compile-routes (fn [_ _] identity)]
+  (with-redefs [wagoe.platform.shell.http.reitit-router/compile-routes
+                (fn [routes _] (with-meta identity {:reitit/router (reitit.core/router routes)}))]
     (ig/init-key :wagoe/http-handler
                  {:module-routes       module-routes
                   :permission-registry registry
