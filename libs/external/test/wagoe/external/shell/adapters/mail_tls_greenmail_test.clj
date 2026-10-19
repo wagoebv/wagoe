@@ -54,15 +54,11 @@
       (testing "a host not in :ssl-trust is still refused"
         (is (not (connects? {:ssl-trust "mail.example.com" :check-server-identity? false})))))))
 
+(defn- error-type [create config]
+  (try (create config) nil (catch clojure.lang.ExceptionInfo e (:type (ex-data e)))))
+
 (deftest ^:unit invalid-tls-config-test
-  (doseq [bad [{:ssl-trust true} {:ssl-trust ""} {:ssl-trust []} {:check-server-identity? "no"}]]
-    (is (= :validation-error
-           (:type (ex-data (try (smtp/create-smtp-provider (merge {:host "h" :port 25 :from "a@b.c"} bad))
-                                nil
-                                (catch clojure.lang.ExceptionInfo e e)))))
-        (pr-str bad))
-    (is (= :validation-error
-           (:type (ex-data (try (imap/create-imap-mailbox (merge {:host "h" :port 993 :username "u" :password "p"} bad))
-                                nil
-                                (catch clojure.lang.ExceptionInfo e e)))))
-        (pr-str bad))))
+  (doseq [bad                [{:ssl-trust true} {:ssl-trust ""} {:ssl-trust []} {:check-server-identity? "no"}]
+          [create base]      [[smtp/create-smtp-provider {:host "h" :port 25 :from "a@b.c"}]
+                              [imap/create-imap-mailbox {:host "h" :port 993 :username "u" :password "p"}]]]
+    (is (= :validation-error (error-type create (merge base bad))) (pr-str bad))))

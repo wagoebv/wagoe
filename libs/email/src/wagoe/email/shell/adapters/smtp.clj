@@ -66,15 +66,10 @@
    is always present in the OutboundEmail map produced by email->outbound."
   [this]
   (smtp-provider/create-smtp-provider
-   {:host     (:host this)
-    :port     (:port this)
-    :username (:username this)
-    :password (:password this)
-    :tls?     (boolean (:tls? this))
-    :ssl?     (boolean (:ssl? this))
-    :ssl-trust              (:ssl-trust this)
-    :check-server-identity? (:check-server-identity? this)
-    :from     ""}))
+   (assoc (into {} this)
+          :tls?  (boolean (:tls? this))
+          :ssl?  (boolean (:ssl? this))
+          :from  "")))
 
 (extend-protocol ports/EmailSenderProtocol
   SmtpEmailSender
@@ -113,9 +108,8 @@
     :password - SMTP auth password (optional)
     :tls?     - Enable STARTTLS (default: true)
     :ssl?     - Enable SSL (default: false)
-    :ssl-trust              - \"*\" or hosts to trust whatever certificate they
-                              present (optional; the JVM trust store otherwise)
-    :check-server-identity? - require the certificate to name :host (default: true)
+    :ssl-trust, :check-server-identity?
+              - TLS trust; see wagoe.external.schema/MailTls
 
   Returns:
     SmtpEmailSender implementing EmailSenderProtocol"
@@ -123,9 +117,7 @@
     :or   {tls? true ssl? false}
     :as   config}]
   {:pre [(string? host) (some? port)]}
-  (when-let [errors (external-schema/mail-tls-errors config)]
-    (throw (ex-info "Invalid SMTP TLS configuration"
-                    {:type :validation-error :host host :errors errors})))
+  (external-schema/assert-mail-tls! config)
   (log/info "Creating SMTP email sender"
             {:host  host
              :port  port

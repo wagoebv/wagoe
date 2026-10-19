@@ -207,9 +207,8 @@
     :tls?     - Enable STARTTLS (default false)
     :ssl?     - Enable SSL (default false)
     :from     - Default From address (required)
-    :ssl-trust              - \"*\" or hosts to trust whatever certificate they
-                              present (optional; the JVM trust store otherwise)
-    :check-server-identity? - require the certificate to name :host (default true)
+    :ssl-trust, :check-server-identity?
+              - TLS trust; see wagoe.external.schema/MailTls
     :retries, :retry-delay-ms, :cache, :circuit-breaker
               - see wagoe.external.shell.resilience/settings
 
@@ -219,9 +218,7 @@
     :or   {tls? false ssl? false}
     :as   config}]
   {:pre [(string? host) (some? port) (string? from)]}
-  (when-let [errors (schema/mail-tls-errors config)]
-    (throw (ex-info "Invalid SMTP TLS configuration"
-                    {:type :validation-error :host host :errors errors})))
+  (schema/assert-mail-tls! config)
   (log/info "Creating SMTP provider adapter" {:host host :port port :tls? tls? :ssl? ssl?})
   (-> (->SmtpProviderAdapter host port username password tls? ssl? from)
       (merge (select-keys config [:ssl-trust :check-server-identity?]))

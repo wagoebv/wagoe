@@ -197,10 +197,14 @@
   [config]
   (imap-config-validator config))
 
-(defn mail-tls-errors
-  "Humanized errors in config's TLS trust settings, or nil when they are valid."
+(def ^:private mail-tls-explainer (m/explainer MailTls))
+
+(defn assert-mail-tls!
+  "Throw a :validation-error when config's TLS trust settings are invalid."
   [config]
-  (some-> (m/explain MailTls config) me/humanize))
+  (when-let [errors (some-> (mail-tls-explainer config) me/humanize)]
+    (throw (ex-info "Invalid mail TLS configuration"
+                    {:type :validation-error :host (:host config) :errors errors}))))
 
 (defn valid-twilio-config?
   "Validate Twilio configuration against schema."

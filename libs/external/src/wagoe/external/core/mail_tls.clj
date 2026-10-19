@@ -1,6 +1,7 @@
 (ns wagoe.external.core.mail-tls
   "TLS trust settings shared by the SMTP and IMAP adapters, as Angus Mail
-   session properties.")
+   session properties."
+  (:require [clojure.string :as str]))
 
 (defn tls-properties
   "Session properties for :ssl-trust and :check-server-identity? under the
@@ -9,4 +10,4 @@
   [prefix {:keys [ssl-trust check-server-identity?]}]
   (cond-> {(str prefix ".ssl.checkserveridentity") (str (not (false? check-server-identity?)))}
     ssl-trust (assoc (str prefix ".ssl.trust")
-                     (if (string? ssl-trust) ssl-trust (apply str (interpose " " ssl-trust))))))
+                     (if (string? ssl-trust) ssl-trust (str/join " " ssl-trust)))))
