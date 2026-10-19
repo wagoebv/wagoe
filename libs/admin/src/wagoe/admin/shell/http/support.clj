@@ -653,6 +653,13 @@
                                 entity-name values)
            field))))
 
+(defn- viewable-parents
+  "{foreign-key-field parent} of `entity-name`, for the parents `user` may view."
+  [entity-configs user entity-name]
+  (into {}
+        (filter (fn [[_ parent]] (core-permissions/can-view-entity? user parent (get entity-configs parent))))
+        (introspection/declared-parents entity-name entity-configs)))
+
 (defn filter-field-options
   "The choices of each filterable foreign key of `entity-name`, as
    `foreign-key-options` finds them, for the parents `user` may view: a
@@ -660,15 +667,25 @@
    values the comboboxes show by label."
   [admin-service schema-provider config user entity-name filters]
   (let [entity-configs (all-entity-configs schema-provider)
-        parents        (introspection/declared-parents entity-name entity-configs)
-        fields         (filter #(when-let [parent (parents %)]
-                                  (core-permissions/can-view-entity? user parent (get entity-configs parent)))
-                               (ui-filters/filterable-fields (get entity-configs entity-name)))]
+        parents        (viewable-parents entity-configs user entity-name)
+        fields         (filter parents (ui-filters/filterable-fields (get entity-configs entity-name)))]
     (when (seq fields)
       (foreign-key-options admin-service config
                            (assoc-in entity-configs [entity-name :editable-fields] fields)
                            entity-name
                            (update-vals (or filters {}) :value)))))
+
+(defn filter-value-labels
+  "{field {value label}} for each active foreign-key filter of `entity-name`,
+   so its chip names the parent rather than its id."
+  [admin-service schema-provider user entity-name filters]
+  (when (seq filters)
+    (let [entity-configs (all-entity-configs schema-provider)]
+      (into {}
+            (for [[field parent] (viewable-parents entity-configs user entity-name)
+                  :let  [v (some-> (get-in filters [field :value]) str not-empty)]
+                  :when v]
+              [field {v (current-label admin-service parent (get entity-configs parent) nil v)}])))))
 
 (def ^:private combobox-limit
   "The most options a combobox lists for one query."

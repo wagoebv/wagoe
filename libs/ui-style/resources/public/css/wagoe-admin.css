@@ -298,7 +298,7 @@
 }
 .filter-field-name { font-size: 12px; font-weight: 500; color: var(--text-muted); }
 .filter-field.is-active .filter-field-name { color: var(--accent-primary); }
-.filter-field-inputs { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.filter-field-inputs { display: flex; flex-wrap: wrap; gap: 6px; align-items: flex-start; }
 .filter-field-inputs select,
 .filter-field-inputs input {
   height: 30px !important;
@@ -314,7 +314,9 @@
 .filter-field-inputs select[multiple] { height: auto !important; padding: 4px !important; }
 .filter-field-inputs .filter-operator-select { flex: 0 0 auto; width: auto !important; color: var(--text-muted); }
 .filter-field-inputs .filter-value-input,
-.filter-field-inputs .filter-value-range { flex: 1 1 160px; min-width: 0; width: auto !important; }
+.filter-field-inputs .filter-value-range,
+.filter-field-inputs .combobox { flex: 1 1 160px; min-width: 0; width: auto !important; }
+.filter-field-inputs .combobox input { width: 100%; }
 .filter-value-range { display: flex; align-items: center; gap: 6px; }
 .filter-value-range input { flex: 1 1 0; min-width: 0; }
 .filter-field-inputs :focus { border-color: var(--accent-primary) !important; outline: none; box-shadow: 0 0 0 3px var(--accent-primary-light) !important; }

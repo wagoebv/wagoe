@@ -321,7 +321,8 @@
 
 (deftest ^:contract a-foreign-key-filter-picks-a-parent-as-the-form-does
   (let [acme    (create-named-order! "Acme filter")
-        total   (:n (db/execute-one! (:db @sys) {:select [[:%count.* :n]] :from [:hm_orders]}))
+        _       (create-named-order! "Beta filter")   ; so one fewer than all is a page
+        total  (:n (db/execute-one! (:db @sys) {:select [[:%count.* :n]] :from [:hm_orders]}))
         drawer  (fn [max-size query]
                   (:body ((list/filter-drawer-handler (:svc @sys) (:sp @sys)
                                                       (assoc-in config [:pagination :max-page-size] max-size))
@@ -338,7 +339,13 @@
         (is (re-find (re-pattern (str "<input[^>]*name=\"filters\\[hm-order-id\\]\\[value\\]\"[^>]*type=\"hidden\"[^>]*value=\"" acme "\""))
                      body))
         (is (re-find #"<input[^>]*hx-get=\"/web/admin/hm-items/options/hm-order-id\"[^>]*id=\"filter-hm-order-id\"" body))
-        (is (re-find #"<input[^>]*role=\"combobox\"[^>]*value=\"Acme filter\"" body))))))
+        (is (re-find #"<input[^>]*role=\"combobox\"[^>]*value=\"Acme filter\"" body))))
+    (testing "the active filter's chip names the parent, not its id"
+      (let [body (:body ((handler list/entity-list-handler)
+                         (request :get "hm-items" :query {"filters[hm-order-id][value]" (str acme)})))
+            chip (re-find #"(?s)<span class=\"filter-chip\">.*?</span>" body)]
+        (is (str/includes? (str chip) "Acme filter"))
+        (is (not (str/includes? (str chip) (str acme))))))))
 
 (deftest ^:contract the-lookup-lists-an-entitys-rows-matching-the-typed-text
   (let [acme   (create-named-order! "Acme lookup")

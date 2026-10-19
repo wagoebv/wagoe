@@ -343,11 +343,12 @@
    :contains "∋" :starts-with "^" :ends-with "$"})
 
 (defn- value-label
-  "How a filter value reads in a chip: an enum's option label, yes/no for a
-   boolean, else the value."
+  "How a filter value reads in a chip: a parent's label (`:value-labels`), an
+   enum's option label, yes/no for a boolean, else the value."
   [field-config v]
   (let [s (if (keyword? v) (name v) (str v))]
-    (or (some (fn [[k label]] (when (= s (name k)) label)) (:options field-config))
+    (or (get (:value-labels field-config) s)
+        (some (fn [[k label]] (when (= s (name k)) label)) (:options field-config))
         (when (= :boolean (:type field-config))
           (if (= "true" s) [:t :common/option-yes] [:t :common/option-no]))
         s)))

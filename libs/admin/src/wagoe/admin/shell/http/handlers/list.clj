@@ -66,8 +66,12 @@
     (throw (ex-info "Unknown entity"
                     {:type :not-found
                      :entity-name entity-name})))
-  (let [entity-config (ports/get-entity-config schema-provider entity-name)
-        options (list-options request)
+  (let [options (list-options request)
+        ;; An active foreign-key filter's chip names the parent (BOU-762)
+        entity-config (reduce-kv (fn [cfg field labels] (assoc-in cfg [:fields field :value-labels] labels))
+                                 (ports/get-entity-config schema-provider entity-name)
+                                 (support/filter-value-labels admin-service schema-provider user entity-name
+                                                              (:filters options)))
         result (ports/list-entities admin-service entity-name options)
         records (support/with-workflow-states config entity-config (:records result))]
     {:entity-config entity-config
