@@ -179,8 +179,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
-- **Tables without a checkbox column squeezed their first and last columns** (BOU-595): workflows and search
-  overlapped. Workflow state badges now match the entity pages. Nothing to do.
+- **Tables without a checkbox column squeezed their first and last columns** (BOU-595). Your own `data-table`
+  with a checkbox or actions column: add `checkbox-header`/`checkbox-cell` or `actions-header`/`actions-cell`.
 - **`bb setup` switching back to a database added a fresh one** (BOU-560): it now restores the one in `:inactive`.
   It also keeps comments after a key, syncs what it writes to disk, and no longer reports a no-op `none` as written.
 - **`bb ai gen-tests` grounds fixtures in the entity's Malli schema and refuses ones that break it** (BOU-511).

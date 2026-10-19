@@ -1,6 +1,7 @@
 (ns wagoe.ui-style-test
   (:require [wagoe.ui-style :as sut]
             [clojure.java.io :as io]
+            [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]))
 
 (deftest ^:unit css-bundle-selection-test
@@ -41,6 +42,6 @@
   ;; Sized by :first-child/:last-child, every table without a checkbox or
   ;; actions column squeezed its first and last columns (the workflow list).
   (let [css (slurp (io/resource "public/css/app.css"))]
-    (is (not (re-find #"table\.data-table t[hd]:(first|last)-child" css)))
-    (is (re-find #"table\.data-table th\.checkbox-header" css))
-    (is (re-find #"table\.data-table th\.actions-header" css))))
+    (is (not (re-find #"\.data-table t[hd]:(first|last)-child" css)))
+    (doseq [sel ["th.checkbox-header" "td.checkbox-cell" "th.actions-header" "td.actions-cell"]]
+      (is (str/includes? css (str "table.data-table " sel)) sel))))
