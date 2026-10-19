@@ -73,7 +73,19 @@
     (let [service (fallback-service "fallback explanation")
           result  (svc/explain-error service "ExceptionInfo: ..." ".")]
       (is (= "fallback explanation" (:text result)))
-      (is (= :fallback (:provider result))))))
+      (is (= :fallback (:provider result)))))
+
+  (testing "BOU-512: the known fix reaches the prompt, not the provider's opts"
+    (let [seen    (atom nil)
+          service {:provider (mock-provider
+                              (fn [messages opts]
+                                (reset! seen {:messages messages :opts opts})
+                                {:text "ok" :provider :mock :model "mock"})
+                              (fn [_ _ _] nil))}]
+      (svc/explain-error service "ExceptionInfo: boom" "."
+                         {:known-fix "Give it :enabled? true" :max-tokens 10})
+      (is (str/includes? (:content (second (:messages @seen))) "Give it :enabled? true"))
+      (is (= {:max-tokens 10} (:opts @seen))))))
 
 ;; =============================================================================
 ;; scaffold-from-description tests

@@ -112,14 +112,15 @@
      service      - AIService map
      stacktrace   - stack trace string
      project-root - project root path string (for source file lookup)
-     opts         - optional completion opts
+     opts         - optional completion opts, plus :known-fix, what the error
+                    says about fixing itself
 
    Returns:
      {:text str :tokens int :provider kw :model str}
      or {:error str} on failure."
   ([service stacktrace project-root]
    (explain-error service stacktrace project-root {}))
-  ([service stacktrace project-root opts]
+  ([service stacktrace project-root {:keys [known-fix] :as opts}]
    (log/info "ai explain-error")
    (let [truncated    (ctx/summarise-stacktrace stacktrace)
          file-refs    (ctx/extract-file-references stacktrace)
@@ -133,8 +134,8 @@
                                     m)))
                               {}
                               file-refs)
-         messages     (prompts/error-explainer-messages truncated source-files)]
-     (resolve-provider service messages opts))))
+         messages     (prompts/error-explainer-messages truncated source-files known-fix)]
+     (resolve-provider service messages (dissoc opts :known-fix)))))
 
 ;; =============================================================================
 ;; Feature 3: Test Generator

@@ -6,7 +6,8 @@
    and friends have no `ig-config`, so the assembler passes their settings
    through, and that is enough to check the parts this namespace owns — the core
    components, the HTTP handler's inputs, and scaffolded-module discovery."
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [clojure.string :as str]
+            [clojure.test :refer [deftest is testing]]
             [integrant.core :as ig]
             [wagoe.platform.ports.privacy :as privacy]
             [wagoe.platform.shell.system.config :as sut]
@@ -91,7 +92,11 @@
                  clojure.lang.ExceptionInfo #":wagoe/dashbaord"
                  (sut/system-config (config :wagoe/dashbaord {:port 9999}))))]
       (is (= :wagoe/unclaimed-config-keys (:type (ex-data e))))
-      (is (= [:wagoe/dashbaord] (:keys (ex-data e))))))
+      (is (= [:wagoe/dashbaord] (:keys (ex-data e))))
+      ;; The code is in the message so `bb ai explain` finds its catalogue fix
+      ;; in a pasted trace (BOU-512).
+      (is (= "WGE-106" (:wagoe/error-code (ex-data e))))
+      (is (str/includes? (ex-message e) "(WGE-106):"))))
 
   (testing "a module says so with :enabled?, and is looked for by name"
     ;; Not this check's error any more: it reaches module discovery, which
