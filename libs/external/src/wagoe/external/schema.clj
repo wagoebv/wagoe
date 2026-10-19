@@ -1,21 +1,37 @@
 (ns wagoe.external.schema
   "Malli validation schemas for external service adapters."
-  (:require [malli.core :as m]))
+  (:require [malli.core :as m]
+            [malli.error :as me]))
 
 ;; =============================================================================
 ;; SMTP Schemas
 ;; =============================================================================
 
+(def ^:private mail-tls-entries
+  ;; :ssl-trust is "*" alone, or hosts as a space-separated string or a vector:
+  ;; Angus reads a "*" among hosts, or a comma, as part of a host name. nil is
+  ;; allowed so an unset #env reads as absent.
+  [[:ssl-trust {:optional true}
+    [:maybe [:or [:= "*"]
+             [:re #"^[^,*\s]+(\s+[^,*\s]+)*$"]
+             [:vector {:min 1} [:re #"^[^,*\s]+$"]]]]]
+   [:check-server-identity? {:optional true} [:maybe :boolean]]])
+
+(def MailTls
+  "TLS trust settings the SMTP and IMAP adapters accept."
+  (into [:map] mail-tls-entries))
+
 (def SmtpConfig
   "SMTP transport configuration schema."
-  [:map
-   [:host [:string {:min 1}]]
-   [:port [:int {:min 1 :max 65535}]]
-   [:username {:optional true} [:string {:min 1}]]
-   [:password {:optional true} [:string {:min 1}]]
-   [:tls? {:optional true} :boolean]
-   [:ssl? {:optional true} :boolean]
-   [:from [:string {:min 3}]]])
+  (into [:map
+         [:host [:string {:min 1}]]
+         [:port [:int {:min 1 :max 65535}]]
+         [:username {:optional true} [:string {:min 1}]]
+         [:password {:optional true} [:string {:min 1}]]
+         [:tls? {:optional true} :boolean]
+         [:ssl? {:optional true} :boolean]
+         [:from [:string {:min 3}]]]
+        mail-tls-entries))
 
 (def Attachment
   "Outbound email attachment. :content is raw bytes or a base64-encoded string."
@@ -57,13 +73,14 @@
 
 (def ImapConfig
   "IMAP mailbox configuration schema."
-  [:map
-   [:host [:string {:min 1}]]
-   [:port [:int {:min 1 :max 65535}]]
-   [:username [:string {:min 1}]]
-   [:password [:string {:min 1}]]
-   [:ssl? {:optional true} :boolean]
-   [:folder {:optional true} [:string {:min 1}]]])
+  (into [:map
+         [:host [:string {:min 1}]]
+         [:port [:int {:min 1 :max 65535}]]
+         [:username [:string {:min 1}]]
+         [:password [:string {:min 1}]]
+         [:ssl? {:optional true} :boolean]
+         [:folder {:optional true} [:string {:min 1}]]]
+        mail-tls-entries))
 
 (def InboundAttachment
   "A file from an inbound message: a part with Content-Disposition attachment,
@@ -183,6 +200,15 @@
   "Validate IMAP configuration against schema."
   [config]
   (imap-config-validator config))
+
+(def ^:private mail-tls-explainer (m/explainer MailTls))
+
+(defn assert-mail-tls!
+  "Throw a :validation-error when config's TLS trust settings are invalid."
+  [config]
+  (when-let [errors (some-> (mail-tls-explainer config) me/humanize)]
+    (throw (ex-info "Invalid mail TLS configuration"
+                    {:type :validation-error :host (:host config) :errors errors}))))
 
 (defn valid-twilio-config?
   "Validate Twilio configuration against schema."

@@ -64,6 +64,10 @@ wagoe-email (application layer)  →  wagoe-external (transport layer)
 (ports/send-email! sender prepared)
 ----
 
+The sender also takes `:ssl-trust` and `:check-server-identity?` for a server
+whose certificate is self-signed or names another host. Both weaken TLS; see
+xref:external.adoc#_tls_trust_and_certificate_names[TLS trust and certificate names].
+
 == Sending modes
 
 [cols="1,2",options="header"]

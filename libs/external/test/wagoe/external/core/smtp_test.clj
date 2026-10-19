@@ -46,7 +46,23 @@
   (testing "sets auth when username and password provided"
     (let [props (smtp/build-mime-properties {:host "h" :port 587
                                              :username "u" :password "p"})]
-      (is (= "true" (.getProperty props "mail.smtp.auth"))))))
+      (is (= "true" (.getProperty props "mail.smtp.auth")))))
+
+  (testing "checks the server's name unless told not to"
+    (is (= "true" (.getProperty (smtp/build-mime-properties {:host "h" :port 587})
+                                "mail.smtp.ssl.checkserveridentity")))
+    (is (= "false" (.getProperty (smtp/build-mime-properties {:host "h" :port 587
+                                                              :check-server-identity? false})
+                                 "mail.smtp.ssl.checkserveridentity"))))
+
+  (testing "passes :ssl-trust as a space-separated host list"
+    (is (nil? (.getProperty (smtp/build-mime-properties {:host "h" :port 587}) "mail.smtp.ssl.trust")))
+    (is (= "*" (.getProperty (smtp/build-mime-properties {:host "h" :port 587 :ssl-trust "*"})
+                             "mail.smtp.ssl.trust")))
+    (is (= "a.example b.example"
+           (.getProperty (smtp/build-mime-properties {:host "h" :port 587
+                                                      :ssl-trust ["a.example" "b.example"]})
+                         "mail.smtp.ssl.trust")))))
 
 (deftest ^:unit validate-config-test
   (testing "valid config returns {:valid? true}"

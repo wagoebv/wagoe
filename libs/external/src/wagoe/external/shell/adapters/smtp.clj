@@ -18,6 +18,7 @@
                             :body \"World\"})"
   (:require [wagoe.external.core.smtp :as smtp-core]
             [wagoe.external.ports :as ports]
+            [wagoe.external.schema :as schema]
             [wagoe.external.shell.resilience :as resilience]
             [clojure.tools.logging :as log])
   (:import [java.util Base64]
@@ -206,6 +207,8 @@
     :tls?     - Enable STARTTLS (default false)
     :ssl?     - Enable SSL (default false)
     :from     - Default From address (required)
+    :ssl-trust, :check-server-identity?
+              - TLS trust; see wagoe.external.schema/MailTls
     :retries, :retry-delay-ms, :cache, :circuit-breaker
               - see wagoe.external.shell.resilience/settings
 
@@ -215,6 +218,10 @@
     :or   {tls? false ssl? false}
     :as   config}]
   {:pre [(string? host) (some? port) (string? from)]}
-  (log/info "Creating SMTP provider adapter" {:host host :port port :tls? tls? :ssl? ssl?})
-  (assoc (->SmtpProviderAdapter host port username password tls? ssl? from)
-         :resilience (resilience/settings config (str "smtp:" host ":" port) nil)))
+  (schema/assert-mail-tls! config)
+  (log/info "Creating SMTP provider adapter"
+            (merge {:host host :port port :tls? tls? :ssl? ssl?}
+                   (select-keys config [:ssl-trust :check-server-identity?])))
+  (-> (->SmtpProviderAdapter host port username password tls? ssl? from)
+      (merge (select-keys config [:ssl-trust :check-server-identity?]))
+      (assoc :resilience (resilience/settings config (str "smtp:" host ":" port) nil))))

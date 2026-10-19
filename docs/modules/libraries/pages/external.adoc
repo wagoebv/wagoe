@@ -55,6 +55,26 @@ All four adapters ship as `:inactive` in `config.edn`. Move to `:active` to enab
  :password #env FTPS_PASSWORD}
 ----
 
+== TLS trust and certificate names
+
+The SMTP and IMAP adapters check that the server's certificate is trusted by the
+JVM and names `:host`. Two settings relax that, for a relay reached by IP or a
+provider alias:
+
+[source,clojure]
+----
+:ssl-trust              "relay.internal"   ; "*" or hosts, string or vector
+:check-server-identity? false              ; default true
+----
+
+`:ssl-trust` accepts any certificate from the listed hosts, self-signed or
+expired; `"*"` does so for every host. `:check-server-identity? false` accepts a
+certificate issued for another name. Either one lets someone who can intercept
+the connection read the credentials and the mail, so prefer adding the server's
+CA to the JVM trust store and connecting by the name on the certificate.
+Trusting a host does not skip the name check; set both when the certificate is
+self-signed for another name.
+
 == Twilio SMS / WhatsApp
 
 [source,clojure]

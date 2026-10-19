@@ -1,7 +1,8 @@
 (ns wagoe.external.core.smtp
   "Pure functions for SMTP email preparation and validation.
    No I/O, no side effects."
-  (:require [wagoe.external.schema :as schema]
+  (:require [wagoe.external.core.mail-tls :as mail-tls]
+            [wagoe.external.schema :as schema]
             [malli.core :as m])
   (:import [java.util Properties]))
 
@@ -33,11 +34,12 @@
    Pure function — returns a Properties object with no I/O.
 
   Args:
-    config - map with :host :port :tls? :ssl? (all optional except host/port)
+    config - map with :host :port :tls? :ssl? :ssl-trust :check-server-identity?
+             (all optional except host/port)
 
   Returns:
     java.util.Properties instance"
-  [{:keys [host port tls? ssl? username password]}]
+  [{:keys [host port tls? ssl? username password] :as config}]
   (let [props (Properties.)]
     (.put props "mail.smtp.host" (str host))
     (.put props "mail.smtp.port" (str port))
@@ -50,6 +52,8 @@
       (.put props "mail.smtp.socketFactory.class" "javax.net.ssl.SSLSocketFactory"))
     (when (and username password)
       (.put props "mail.smtp.auth" "true"))
+    (doseq [[k v] (mail-tls/tls-properties "mail.smtp" config)]
+      (.put props k v))
     props))
 
 ;; =============================================================================

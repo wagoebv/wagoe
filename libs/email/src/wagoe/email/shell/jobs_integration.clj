@@ -58,12 +58,8 @@
   [job-queue email-sender email]
   (if-let [enqueue-fn (requiring-resolve 'wagoe.jobs.ports/enqueue-job!)]
     (let [;; Extract SMTP configuration from sender
-          sender-config {:host (:host email-sender)
-                        :port (:port email-sender)
-                        :username (:username email-sender)
-                        :password (:password email-sender)
-                        :tls? (:tls? email-sender)
-                        :ssl? (:ssl? email-sender)}
+          sender-config (select-keys email-sender [:host :port :username :password :tls? :ssl?
+                                                   :ssl-trust :check-server-identity?])
           
           ;; Build job map
           job {:job-type :send-email
@@ -115,6 +111,7 @@
                       :password - SMTP auth password (optional)
                       :tls? - Enable STARTTLS
                       :ssl? - Enable SSL
+                      :ssl-trust, :check-server-identity? - TLS trust (optional)
    
    Returns:
      Job result map with:

@@ -54,6 +54,18 @@
       (is (nil? (:password sender)))
       (is (not (:tls? sender))))))
 
+(deftest ^:unit tls-trust-config-test
+  (testing "TLS trust settings reach the transport provider"
+    (let [provider (#'smtp/->provider (smtp/create-smtp-sender {:host "relay.internal" :port 587
+                                                                :ssl-trust ["relay.internal"]
+                                                                :check-server-identity? false}))]
+      (is (= ["relay.internal"] (:ssl-trust provider)))
+      (is (false? (:check-server-identity? provider)))))
+
+  (testing "an invalid setting is refused when the sender is created"
+    (is (thrown-with-msg? clojure.lang.ExceptionInfo #"TLS"
+                          (smtp/create-smtp-sender {:host "h" :port 587 :ssl-trust true})))))
+
 ;; =============================================================================
 ;; Domain Translation — attachment pass-through (BOU-150)
 ;; =============================================================================
