@@ -166,14 +166,12 @@
 ;; ─── config.edn patching ─────────────────────────────────────────────────────
 
 (defn- snippet-entries
-  "The snippet's top-level entries in order, as [key text]: the key a keyword,
-   the text the entry with any comment lines above it. Read by the config
-   editor, so reports' opening comment, which names `(ig/ref :wagoe/reports)`,
-   is not taken for a key."
+  "The snippet's entries as {:k key :text text}. Read by the config editor, so
+   reports' opening comment, which names `(ig/ref :wagoe/reports)`, is not
+   taken for a key."
   [snippet]
-  (let [wrapped (str "{:active {\n" snippet "\n}}")]
-    (for [{:keys [key from end]} (config-edn/entries wrapped ":active")]
-      [(keyword (subs key 1)) (subs wrapped from end)])))
+  (for [{:keys [key text]} (config-edn/snippet-entries snippet)]
+    {:k (keyword (subs key 1)) :text text}))
 
 (defn- active-keys
   "The keys of the :active map in config `text`, or nil when it does not read.
@@ -184,48 +182,45 @@
       (when (map? active) (set (keys active))))
     (catch Exception _ nil)))
 
-(defn- in-active?
-  "Whether `k` (:wagoe/jobs) is a key of :active in `text`. A key parked under
+(defn- absent
+  "The `entries` whose key is not in :active of `text`. A key parked under
    :inactive does not count. Text that does not read as EDN falls back to the
    text editor's reading of :active."
-  [text k]
-  (if-let [ks (active-keys text)]
-    (contains? ks k)
-    (= :already-present (config-edn/key-status text (str k)))))
+  [text entries]
+  (let [ks (active-keys text)]
+    (remove (fn [{:keys [k]}]
+              (if ks
+                (contains? ks k)
+                (= :already-present (config-edn/key-status text (str k)))))
+            entries)))
 
 (defn patch-config!
   "Inject each of the snippet's keys missing from the :active map of a config
-   file. They go after the last entry, at that entry's column, with the
-   closing brace right after them. Returns {:result r :added ks :present ks},
-   r being :added, :present when every key is there, :no-active when there is
-   no :active map to write into, or :not-written when the result would not
-   have every key under :active."
+   file, after the last entry, at that entry's column, with the closing brace
+   right after them. Returns {:result r :added ks :present ks}, r being
+   :added, :present when every key is there, :no-active when there is no
+   :active map to write into, or :not-written when the result would not have
+   every key under :active."
   [dir relative-path snippet]
   (let [f       (io/file dir relative-path)
         content (slurp f)
         entries (snippet-entries snippet)
-        {missing false present true} (group-by #(in-active? content (first %)) entries)
+        missing (absent content entries)
         result  (fn [r] {:result  r
-                         :added   (if (= :added r) (mapv first missing) [])
-                         :present (mapv first present)})]
+                         :added   (if (= :added r) (mapv :k missing) [])
+                         :present (mapv :k (remove (set missing) entries))})]
     (if (empty? missing)
-      (result (if (seq entries) :present :not-written))
-      (let [out (config-edn/append-entry content ":active"
-                                         (if present
-                                           (str/join "\n\n" (map (comp str/trim second) missing))
-                                           snippet))]
+      (result :present)
+      (let [out (reduce #(config-edn/append-entry %1 ":active" (:text %2)) content missing)]
         (cond
           ;; append-entry returns the text unchanged when there is no :active map.
           (= out content) (result :no-active)
           ;; Checked by reading, not trusted: a key written into the wrong map
-          ;; boots nothing, and the next run writes it again.
-          (if-let [ks (active-keys out)]
-            (every? #(contains? ks (first %)) entries)
-            ;; Not EDN (a regex, say): the text's own reading, unless the
-            ;; original read and the insertion broke that.
-            (and (nil? (active-keys content))
-                 (let [ks (set (map :key (config-edn/entries out ":active")))]
-                   (every? #(contains? ks (str (first %))) entries))))
+          ;; boots nothing, and the next run writes it again. Text that stopped
+          ;; reading as EDN is refused; text that never did gets the editor's
+          ;; reading.
+          (and (or (active-keys out) (nil? (active-keys content)))
+               (empty? (absent out entries)))
           (do (spit f out) (result :added))
           :else (result :not-written))))))
 
@@ -307,7 +302,7 @@
   (and dep-present?
        (every? (fn [[env snippet]]
                  (let [text (slurp (io/file dir "resources/conf" env "config.edn"))]
-                   (every? #(in-active? text (first %)) (snippet-entries snippet))))
+                   (empty? (absent text (snippet-entries snippet)))))
                (target-profiles dir module))))
 
 (defn patch-env-example!
@@ -348,7 +343,7 @@
   (let [dev (io/file dir "resources/conf/dev/config.edn")
         k   (str module-key)]
     (or (contains? (extra-modules dir) k)
-        (and (.exists dev) (in-active? (slurp dev) (keyword module-key))))))
+        (and (.exists dev) (empty? (absent (slurp dev) [{:k module-key}]))))))
 
 (defn module-states
   "Each catalogue module with where the project has it: :enabled, :configurable

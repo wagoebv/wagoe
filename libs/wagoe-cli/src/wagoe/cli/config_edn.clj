@@ -202,6 +202,17 @@
   (when-let [[open close] (section text kw)]
     (map-entries text (lex text) open close)))
 
+(defn snippet-entries
+  "The entries of `snippet`, a map body without its braces as modules write
+   it, in order, as maps of `:key` (the key's text) and `:text` (the entry
+   with the comment lines above it). nil when it cannot be read."
+  [snippet]
+  ;; The brace on its own line, so a comment opening the snippet stays with
+  ;; its entry.
+  (let [text (str "{\n" snippet "\n}")]
+    (some->> (map-entries text (lex text) 0 (dec (count text)))
+             (map (fn [{:keys [key from end]}] {:key key :text (subs text from end)})))))
+
 (defn insert-into
   "`text` with `snippet` inserted just inside the closing brace of the map
    under `kw`, or unchanged when there is none."
