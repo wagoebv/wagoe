@@ -44,8 +44,7 @@
   (is (= "On hold" (last (ui/state-badge :on-hold)))))
 
 (deftest ^:unit pages-sit-in-the-admin-shell
-  (let [page (ui/instances-page [] {} {:entities [:users]
-                                       :entity-configs {:users {:label "Users"}}})]
+  (let [page (ui/instances-page [] {} {:nav [{:items [{:href "/web/admin/users" :label "Users"}]}]})]
     (is (some #(tag? % :aside.admin-sidebar) (nodes page)))
     (is (some #(= "/web/admin/users" (:href (second %))) (nodes page)))
     (testing "the sidebar's dashboard link is the configured home"

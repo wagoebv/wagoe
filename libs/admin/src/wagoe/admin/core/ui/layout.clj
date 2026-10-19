@@ -1,145 +1,48 @@
 (ns wagoe.admin.core.ui.layout
   "Admin shell/layout, error pages, and URL utilities.
 
-   Pure Hiccup generators for the admin chrome: sidebar navigation, the
-   collapsible shell + topbar, the dashboard home, 403/404 error pages and the
-   `build-table-url` helper."
+   Pure Hiccup generators for the admin chrome: the sidebar navigation for the
+   shell in `wagoe.shared.ui.core.shell`, the dashboard home, 403/404 error
+   pages and the `build-table-url` helper."
   (:require [wagoe.core.utils.text :as text]
             [wagoe.shared.ui.core.home :as home]
             [wagoe.shared.ui.core.icons :as icons]
             [wagoe.shared.ui.core.layout :as layout]
             [wagoe.shared.ui.core.table :as table-ui]
-            [wagoe.shared.ui.core.alpine :as alpine]
-            [wagoe.platform.core.csrf :as csrf]
-            [wagoe.platform.core.http.pages :as pages]
-            [clojure.string :as str]))
+            [wagoe.shared.ui.core.shell :as shell]
+            [wagoe.platform.core.http.pages :as pages]))
 
 ;; =============================================================================
 ;; Admin Layout Components
 ;; =============================================================================
 
+(defn entity-nav
+  "The shell's sidebar navigation for the admin's entities: one group, an item
+   per entity not marked :sidebar-hidden."
+  [entities entity-configs current-entity]
+  [{:label [:t :admin/sidebar-entities-title]
+    :items (for [entity entities
+                 :let  [entity-config (get entity-configs entity)]
+                 :when (not (:sidebar-hidden entity-config))]
+             {:href    (str "/web/admin/" (name entity))
+              :label   (:label entity-config (text/capitalize (name entity)))
+              :icon    (keyword (or (:icon entity-config) "database"))
+              :active? (= entity current-entity)})}])
+
 (defn admin-sidebar
-  "Admin sidebar with entity navigation and icons.
-
-   Args:
-     entities: Vector of entity name keywords available to user
-     entity-configs: Map of entity-name -> entity-config
-     current-entity: Currently active entity name (optional)
-     opts: Optional map; supports :logo-url for a custom brand image
-
-   Returns:
-     Hiccup sidebar structure with entity list"
+  "The shell's sidebar listing `entities`. `opts` supports :logo-url."
   ([entities entity-configs current-entity]
    (admin-sidebar entities entity-configs current-entity {}))
   ([entities entity-configs current-entity opts]
-   ;; Alpine.js sidebar - hover expand/collapse via $store.sidebar
-   [:aside.admin-sidebar (alpine/sidebar-attrs)
-    [:div.admin-sidebar-header
-     ;; One row the height of the topbar: the mark at full height and the
-     ;; wordmark. The text is nav-text, so a collapsed sidebar keeps the mark.
-     [:a {:class "sidebar-brand" :href "/web/admin/"}
-      (if-let [logo-url (:logo-url opts)]
-        [:img.sidebar-brand-logo {:src logo-url :alt ""}]
-        (list
-         (icons/brand-logo {:size 48 :variant :icon :class "sidebar-brand-mark"})
-         [:span {:class "nav-text sidebar-wordmark"} "wagoe"]))]
-     [:div.sidebar-controls
-      [:button.sidebar-pin {:type "button"
-                            :aria-label [:t :admin/sidebar-pin-button]
-                            :title [:t :admin/sidebar-pin-hint]
-                            (keyword "@click") "$store.sidebar.togglePin()"
-                            :x-bind:aria-pressed "$store.sidebar.pinned"}
-       (icons/icon :pin {:size 16})]
-      [:button.sidebar-toggle {:type "button"
-                               :aria-label [:t :admin/sidebar-toggle-button]
-                               :title [:t :admin/sidebar-toggle-hint]
-                               (keyword "@click") "$store.sidebar.toggle()"}
-       (icons/icon :panel-left-close {:size 16})]]]
-    [:nav.admin-sidebar-nav
-     [:h3 [:t :admin/sidebar-entities-title]]
-     [:ul.entity-list
-      (for [entity entities
-            :let  [entity-config (get entity-configs entity)]
-            :when (not (:sidebar-hidden entity-config))]
-        (let [label      (:label entity-config (text/capitalize (name entity)))
-              icon       (keyword (or (:icon entity-config) "database"))
-              is-active? (= entity current-entity)]
-          [:li {:class (when is-active? "active")}
-           [:a (merge {:href (str "/web/admin/" (name entity))
-                       :data-label label}
-                      (alpine/sidebar-nav-link-attrs))
-            (icons/icon icon {:size 20})
-            [:span.nav-text label]]]))]]
-    [:div.admin-sidebar-footer
-     [:a (merge {:href home/*path*}
-                (alpine/sidebar-nav-link-attrs))
-      (icons/icon :home {:size 20})
-      [:span.nav-text [:t :admin/sidebar-dashboard]]]
-     [:a (merge {:href "/web"}
-                (alpine/sidebar-nav-link-attrs))
-      (icons/icon :external-link {:size 20})
-      [:span.nav-text [:t :admin/sidebar-main-site]]]]]))
-
-(defn- user-initials
-  "One or two letters for the user menu: from the display name's words, else
-   the email's local part."
-  [user]
-  (let [name-words (some-> (:display-name user) str/trim not-empty (str/split #"\s+"))
-        from-email (some-> (:email user) (str/split #"@") first)]
-    (text/upper-case
-     (cond
-       (< 1 (count name-words)) (str (ffirst name-words) (first (last name-words)))
-       (seq name-words)         (subs (first name-words) 0 (min 2 (count (first name-words))))
-       (seq from-email)         (subs from-email 0 (min 2 (count from-email)))
-       :else                    "?"))))
+   (shell/sidebar (entity-nav entities entity-configs current-entity) opts)))
 
 (defn admin-shell
-  "New admin shell layout with collapsible sidebar (Phase 2).
-
-   Args:
-     content: Main content (Hiccup structure)
-     opts: Map with :user, :current-entity, :entities, :entity-configs, :flash, :page-title
-
-   Returns:
-     Admin shell structure with sidebar and topbar"
-  [content opts]
-  (let [{:keys [user current-entity entities entity-configs page-title]} opts]
-    ;; Alpine.js sidebar shell - replaces sidebar.js
-    ;; State is persisted to localStorage via $store.sidebar
-    ;; Note: Using a wrapper div instead of fragment [:<>] for Hiccup compatibility with Alpine.js initialization
-    [:div.hiccup-fragment-wrapper
-     ;; Alpine sidebar store is initialized in admin-ux.js (external script, CSP-safe)
-     [:div.admin-shell (alpine/sidebar-shell-attrs)
-      (admin-sidebar entities entity-configs current-entity opts)
-      [:div.admin-overlay (alpine/sidebar-overlay-attrs)]
-      [:div.admin-main
-       [:header.admin-topbar
-        [:button.mobile-menu-toggle (merge {:type "button"
-                                            :aria-label [:t :admin/menu-open-button]}
-                                           (alpine/mobile-menu-toggle-attrs))
-         (icons/icon :menu {:size 24})]
-        [:h1 {:class "admin-topbar-title"} (or page-title [:t :admin/page-heading])]
-        [:div.admin-topbar-actions
-         (icons/theme-toggle-button)
-         ;; Who is signed in, and signing out, behind the initials: the
-         ;; topbar keeps its room for the page
-         (let [who (:display-name user (:email user))]
-           [:details {:class "user-menu"}
-            [:summary {:class "user-menu-button" :aria-label [:t :admin/user-menu] :title (str who)}
-             (user-initials user)]
-            [:div {:class "user-menu-panel"}
-             [:div {:class "user-menu-who"}
-              [:span [:t :admin/header-welcome {:name who}]]
-              (when (and (:display-name user) (:email user))
-                [:span {:class "user-menu-email"} (:email user)])]
-             (when (pages/mounted? "/web/logout")
-               [:form {:method "POST" :action "/web/logout" :class "logout-form"}
-                (csrf/hidden-field)
-                [:button {:type "submit" :class "logout-button"}
-                 (icons/icon :log-out {:size 14})
-                 [:span [:t :admin/button-logout]]]])]])]]
-       [:main.admin-content
-        content]]]]))
+  "`content` in the shell, its sidebar listing the admin's entities.
+   `opts`: :user, :current-entity, :entities, :entity-configs, :page-title,
+   :logo-url."
+  [content {:keys [entities entity-configs current-entity] :as opts}]
+  (shell/admin-shell content
+                     (assoc opts :nav (entity-nav entities entity-configs current-entity))))
 
 (defn admin-layout
   "Main admin layout with new shell structure (Phase 2).
@@ -151,18 +54,16 @@
    Returns:
      Complete HTML page structure with new admin shell"
   [content opts]
-  (let [{:keys [user current-entity entity-configs flash]} opts
+  (let [{:keys [current-entity entities entity-configs]} opts
         title (if current-entity
                 [:t :admin/page-title {:label (:label (get entity-configs current-entity))}]
                 [:t :admin/page-title-dashboard])
         page-title (when current-entity
                      (:label (get entity-configs current-entity)))]
-    (layout/admin-pilot-page-layout
-     title
-     (admin-shell content (assoc opts :page-title page-title))
-     {:user user
-      :flash flash
-      :skip-header true})))
+    (shell/shell-page title content
+                      (assoc opts
+                             :page-title page-title
+                             :nav (entity-nav entities entity-configs current-entity)))))
 
 (def page-cards
   "Dashboard cards for pages other modules serve; a card is shown only when its
