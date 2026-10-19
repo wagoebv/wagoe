@@ -457,8 +457,7 @@
           found       (support/search-foreign-key-options admin-service schema-provider entity-name field
                                                           (combobox/query request))
           _           (when-not found
-                        (throw (ex-info "No such foreign key" {:type :not-found :entity-name entity-name :field field})))
-          parent      (:parent found)]
-      (shell-permissions/assert-can-view-entity! user parent (ports/get-entity-config schema-provider parent))
+                        (throw (ex-info "No such foreign key" {:type :not-found :entity-name entity-name :field field})))]
+      (shell-permissions/assert-can-view-entity! user (:parent found) (:parent-cfg found))
       (support/html-response request
                              (combobox/options field (:options found) [:t :admin/combobox-no-matches])))))

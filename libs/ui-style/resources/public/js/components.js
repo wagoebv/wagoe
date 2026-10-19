@@ -91,7 +91,7 @@ document.addEventListener('alpine:init', function () {
         var self = this;
         // The text input has no name, so htmx would send nothing.
         this.$el.addEventListener('htmx:configRequest', function (e) {
-          e.detail.parameters[self.$el.dataset.queryParam || 'q'] = self.$refs.input.value;
+          e.detail.parameters[self.$el.dataset.queryParam] = self.$refs.input.value;
         });
         this.$el.addEventListener('htmx:afterSwap', function () {
           self.active = -1;
@@ -118,11 +118,10 @@ document.addEventListener('alpine:init', function () {
               return;
             }
             this.open = true;
-            if (e.key === 'ArrowDown') {
-              this.active = (this.active + 1) % items.length;
-            } else {
-              this.active = this.active <= 0 ? items.length - 1 : this.active - 1;
-            }
+            // From none, ArrowUp lands on the last option.
+            var step = e.key === 'ArrowDown' ? 1 : -1;
+            var from = this.active < 0 && step < 0 ? 0 : this.active;
+            this.active = (from + step + items.length) % items.length;
             this.highlight();
             break;
           case 'Enter':

@@ -671,9 +671,12 @@
       (first (:search-fields parent-cfg))
       (:primary-key parent-cfg :id)))
 
-(defn- row->option [parent-cfg row]
+(defn- row-label [parent-cfg row]
   (let [pk (:primary-key parent-cfg :id)]
-    [(str (get row pk)) (str (or (get row (label-field parent-cfg)) (get row pk)))]))
+    (str (or (get row (label-field parent-cfg)) (get row pk)))))
+
+(defn- row->option [parent-cfg row]
+  [(str (get row (:primary-key parent-cfg :id))) (row-label parent-cfg row)])
 
 (defn options-url
   "Where the combobox of foreign key `field` of `entity-name` reads its options."
@@ -681,10 +684,11 @@
   (str "/web/admin/" (name entity-name) "/options/" (name field)))
 
 (defn- current-label
-  "What the combobox shows for the parent `id`: its label, or the id when the
-   row cannot be read."
-  [admin-service parent parent-cfg id]
-  (or (try (some->> (ports/get-entity admin-service parent id) (row->option parent-cfg) second)
+  "What the combobox shows for the parent `id`: its label, from `rows` when it
+   is there, or the id when the row cannot be read."
+  [admin-service parent parent-cfg rows id]
+  (or (some #(when (= id (first %)) (second %)) (map #(row->option parent-cfg %) rows))
+      (try (some->> (ports/get-entity admin-service parent id) (row-label parent-cfg))
            (catch Exception e
              (log/warn e "foreign key shown by its id: parent row unreadable" {:parent parent :id id})
              nil))
@@ -715,12 +719,12 @@
                                          ::unreadable))
                        rows       (:records page)
                        current    (some-> (get values field) str)
-                       fits?      (and (not= ::unreadable page)
-                                       (<= (:total-count page 0) (count rows)))]
-                :when (or fits? (and (not= ::unreadable page) (not= label pk)))]
+                       readable?  (not= ::unreadable page)
+                       fits?      (and readable? (<= (:total-count page 0) (count rows)))]
+                :when (and readable? (or fits? (not= label pk)))]
             (if-not fits?
               [field {:url   (options-url entity-name field)
-                      :label (when current (current-label admin-service parent parent-cfg current))}]
+                      :label (when current (current-label admin-service parent parent-cfg rows current))}]
               (let [options (mapv #(row->option parent-cfg %) rows)]
                 [field (cond->> (cond-> options
                                   ;; A parent the list does not show (soft-deleted): kept,
@@ -753,7 +757,7 @@
 
 (defn search-foreign-key-options
   "What the combobox of foreign key `field` of `entity-name` offers for the
-   typed `q`: {:parent :options}, the options the first parent rows by label
+   typed `q`: {:parent :parent-cfg :options}, the options the first parent rows by label
    whose label contains `q`, as [id label]. Nil when `field` is no foreign key."
   [admin-service schema-provider entity-name field q]
   (let [entity-configs (all-entity-configs schema-provider)]
@@ -763,7 +767,8 @@
             page       (ports/list-entities admin-service parent
                                             (cond-> {:limit combobox-limit :sort label :sort-dir :asc}
                                               q (assoc :filters {label {:op :contains :value q}})))]
-        {:parent  parent
+        {:parent     parent
+         :parent-cfg parent-cfg
          :options (mapv #(row->option parent-cfg %) (:records page))}))))
 
 (defn nested-relationships
