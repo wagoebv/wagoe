@@ -157,6 +157,30 @@ you would rather not commit the imports, keep the rule local:
 ;; => [{:from-state :pending :to-state :paid :transition :paid ...}]
 ```
 
+### In the caller's transaction
+
+`start-workflow!` and `transition!` take an optional `tx` before their input:
+an open transaction on the store's datasource, either a next.jdbc connection
+or a platform `with-transaction` context. The instance and its audit entry
+then commit or roll back with the caller's own writes. A nil `tx` writes on
+the store's own connection, as the two-argument form does.
+
+```clojure
+(jdbc/with-transaction [tx ds]
+  (orders/create! tx order)
+  (ports/start-workflow! engine tx {:workflow-id :order-workflow
+                                    :entity-type :order
+                                    :entity-id   (:id order)}))
+```
+
+- `wagoe.platform.database/current-transaction` is the connection a platform
+  `with-transaction` holds on this thread, for code that has no handle on it.
+  Scaffolded workflow adapters use it, so a create and its instance are atomic.
+- A datasource is refused with `:validation-error`: it would autocommit.
+- Hooks run before the caller commits. Side-effect jobs join `tx` only on a
+  transactional (database) job queue; otherwise they are enqueued at once.
+- The store needs `ITransactionalWorkflowStore`; the JDBC store has it.
+
 ## Lifecycle Hooks
 
 Hooks fire synchronously after every successful transition (after the audit entry is

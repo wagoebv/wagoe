@@ -1,8 +1,7 @@
 (ns wagoe.scaffolder.child-workflow-test
   "An invoice created with line items that have a workflow of their own
-   (BOU-578). Their workflows start after the invoice's transaction commits:
-   inside it, SQLite made the workflow store wait on the transaction's lock,
-   and a rollback left instances for rows that were never written."
+   (BOU-578). Their workflows start in the invoice's transaction, on its
+   connection, so SQLite does not wait on itself (BOU-575)."
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [clojure.walk :as walk]
