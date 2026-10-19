@@ -153,6 +153,10 @@ document.addEventListener('alpine:init', function () {
     return {
       open: false,
       active: -1,
+      // Declared, so init sets them here: an undeclared property lands on the
+      // enclosing form's scope, which every combobox in it shares.
+      multiple: false,
+      chosen: null,
       init: function () {
         var self = this;
         this.multiple = this.$el.dataset.multiple === 'true';
