@@ -349,4 +349,7 @@
             svc  (make-service [{:id (uuid) :plan "paid"}] nil repo)]
         (registry/register-audience! {:id :paid :label "P" :filters []})
         (ports/save-audience repo both)
-        (is (= :validation-error (type-of #(ports/resolve-audience svc :both))))))))
+        (is (= :validation-error (type-of #(ports/resolve-audience svc :both))))
+        (testing "and so does composing it"
+          (registry/register-audience! {:id :outer :label "O" :filters [] :compose {:or [{:ref :both}]}})
+          (is (= :validation-error (type-of #(ports/resolve-audience svc :outer)))))))))

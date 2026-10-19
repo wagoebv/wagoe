@@ -148,6 +148,9 @@
               (let [lookup  (memoize
                              (fn [id]
                                (when-let [d (load-definition id repository)]
+                                 ;; A composed ref is read here, not resolved,
+                                 ;; so the check above never sees it.
+                                 (unwrap! (composition/explain-filters-beside-compose d))
                                  (if (:compose d)
                                    {:compose (:compose d)}
                                    {:user-ids (:user-ids (ports/resolve-audience

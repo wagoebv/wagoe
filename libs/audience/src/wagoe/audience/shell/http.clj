@@ -162,19 +162,22 @@
   "POST /api/audiences — create a new audience definition."
   [_resolver store request]
   (let [definition (get-in request [:parameters :body])]
-    (or
-     (invalid-definition-response definition)
-     (try
-       (log/info "Creating audience" {:label (:label definition)})
-       (let [saved (ports/save-audience store definition)]
-         (json-response {:id    (name (:id saved))
-                         :label (:label saved)}
-                        201))
-       (catch clojure.lang.ExceptionInfo e
-         (handle-audience-error e (:id definition)))
-       (catch Exception e
-         (log/error e "Failed to create audience" {:label (:label definition)})
-         (internal-error-response "Internal error"))))))
+    ;; The id is used in every /audiences/:id path, so it must be one they accept.
+    (if-not (parse-audience-id (some-> (:id definition) symbol str))
+      (bad-request-response "Invalid audience id")
+      (or
+       (invalid-definition-response definition)
+       (try
+         (log/info "Creating audience" {:label (:label definition)})
+         (let [saved (ports/save-audience store definition)]
+           (json-response {:id    (name (:id saved))
+                           :label (:label saved)}
+                          201))
+         (catch clojure.lang.ExceptionInfo e
+           (handle-audience-error e (:id definition)))
+         (catch Exception e
+           (log/error e "Failed to create audience" {:label (:label definition)})
+           (internal-error-response "Internal error")))))))
 
 (defn update-audience-handler
   "PUT /api/audiences/:id — update an existing audience definition."

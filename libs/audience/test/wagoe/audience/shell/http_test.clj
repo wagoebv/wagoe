@@ -165,6 +165,11 @@
               :filters [{:type :role :field :plan :op :eq :value "gold"}]}
              (ports/find-audience s :gold))))
 
+    (testing "an id no /audiences/:id path accepts is refused"
+      (doseq [id ["Gold Plan" "" "a/b"]]
+        (is (= 400 (:status (call :post "/audiences" {:id id :label "X" :filters []}))) id))
+      (is (= [:gold] (mapv :id (ports/list-audiences s)))))
+
     (testing "preview resolves the audience named in the body"
       (let [r (call :post "/audiences/preview" {:audienceId "gold"})]
         (is (= 200 (:status r)))
