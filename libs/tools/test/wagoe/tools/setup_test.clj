@@ -1020,6 +1020,17 @@
           (is (re-find #"Cache:\s+\S*none" (summary-line out "Cache:")) out))
         (finally (fs/delete-tree dir))))))
 
+(deftest ^:unit none-for-a-prod-made-from-dev-says-keep
+  (with-project
+    (fn [dir]
+      (spit (conf-file dir "dev")
+            (config-edn/insert-into (slurp (conf-file dir "dev")) ":active"
+                                    "\n   :wagoe/cache {:provider :redis}"))
+      (let [[exit out] (run-setup dir "" "--prod" "true" "--cache" "none")]
+        (is (nil? exit) out)
+        (is (= :redis (get-in (conf dir "prod") [:active :wagoe/cache :provider])) "carried over from dev")
+        (is (str/includes? (summary-line out "Cache:") "keep (setup never removes one)") out)))))
+
 (deftest ^:unit a-comment-after-the-key-survives-a-replace
   (with-project
     (fn [dir]

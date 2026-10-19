@@ -1034,6 +1034,9 @@
                                                         {:switch-db? (not= "test" env) :env env
                                                          :spec spec :nl %2}))
                                        true)
+                      (and (prod? env) carried)
+                      (assoc :from-dev? true)
+
                       (and (prod? env) (seq (:left-out carried)))
                       (assoc :changes (for [k (:left-out carried)]
                                         (str "leave out " k ": dev's provider is a stand-in; configure a real one")))))
@@ -1080,15 +1083,17 @@
 
 (defn- fsync!
   "Flush `p`, a file or a directory, to disk. A directory that cannot be opened
-   for it (Windows) is skipped."
+   for it (Windows) is skipped. A file is opened for writing: on Windows, force
+   on a read-only handle silently does nothing."
   [^java.nio.file.Path p]
-  (try
-    (with-open [ch (java.nio.channels.FileChannel/open
-                    p (into-array java.nio.file.OpenOption [java.nio.file.StandardOpenOption/READ]))]
-      (.force ch true))
-    (catch java.io.IOException e
-      (when-not (java.nio.file.Files/isDirectory p (make-array java.nio.file.LinkOption 0))
-        (throw e)))))
+  (let [dir? (java.nio.file.Files/isDirectory p (make-array java.nio.file.LinkOption 0))
+        mode (if dir? java.nio.file.StandardOpenOption/READ java.nio.file.StandardOpenOption/WRITE)]
+    (try
+      (with-open [ch (java.nio.channels.FileChannel/open
+                      p (into-array java.nio.file.OpenOption [mode]))]
+        (.force ch true))
+      (catch java.io.IOException e
+        (when-not dir? (throw e))))))
 
 (defn- write-all!
   "Write `items` ({:path :content}) all or nothing, as far as the filesystem
@@ -1118,12 +1123,13 @@
           (io/make-parents (.toFile tmp))
           (swap! temps conj tmp)
           (spit (.toFile tmp) (:content it))
-          (fsync! tmp)
           (when (java.nio.file.Files/exists t (make-array java.nio.file.LinkOption 0))
             (try
               (java.nio.file.Files/setPosixFilePermissions
                tmp (java.nio.file.Files/getPosixFilePermissions t (make-array java.nio.file.LinkOption 0)))
-              (catch UnsupportedOperationException _ nil)))))
+              (catch UnsupportedOperationException _ nil)))
+          ;; After the permissions, so they are on disk with the content.
+          (fsync! tmp)))
       (let [done (atom [])]
         (try
           (doseq [it items]
@@ -1261,8 +1267,10 @@
 
 (defn- display-summary [spec plan]
   (let [;; Merging never removes a provider, so there "none" changes nothing.
+        ;; Nor does it in a prod made from dev: carry-over adds dev's back.
         merge? (some #(and (str/ends-with? (:path %) "config.edn")
-                           (#{:changed :unchanged :refused} (:status %)))
+                           (or (#{:changed :unchanged :refused} (:status %))
+                               (:from-dev? %)))
                      plan)
         kept   "keep (setup never removes one)"
         shown  #(let [v (get spec %)]
