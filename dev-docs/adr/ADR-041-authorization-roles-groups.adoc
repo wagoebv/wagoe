@@ -1,0 +1,245 @@
+= ADR-041: Authorization through roles on groups
+:status: Proposed
+:date: 2026-10-19
+:deciders: wagoe-team
+
+== Status
+
+Proposed (BOU-769). Builds on the groups of BOU-701 and BOU-718, and on the
+route conventions of ADR-037 (`:public true`, module route contributions).
+
+== Context
+
+Rights are assigned in two unconnected ways:
+
+* `:role` on the user (`:admin`, `:user`, `:viewer`). The admin checks only
+  `:admin`, all or nothing (`wagoe.admin.core.permissions`); `:require-role` in
+  the admin config is read by nothing. Outside the admin nothing reads `:user`
+  or `:viewer`: a viewer may write on every other route.
+* Groups with grants, `{:permission kw :scope map}` (`wagoe.user.core.group`),
+  validated against the `:permissions` and `:scope` schemas under
+  `:wagoe/user :groups`. An app checks them with `holds?` and `authorized?`
+  (today only workflow). The admin does not, and Wagoe does not interpret a
+  scope.
+
+So an admin cannot give someone "edit orders, read customers", cannot keep
+someone inside one domain, and cannot see on a user's page what that user may
+do. Every non-public route is open to every signed-in user.
+
+A permission per entity, action and route would close that and be unreadable
+in a large app. The design has to keep the number of things an administrator
+assigns small.
+
+== Decision
+
+=== 1. Permissions come from convention, exceptions are declared
+
+A permission is a keyword `<module>/<action>`. Every module has two without
+declaring them, `<module>/read` and `<module>/write`; every admin entity has
+`admin.<entity>/read` and `admin.<entity>/write`. A module declares its own
+actions only for what does not fit, with a label:
+`{:orders/refund {:label "Refund orders"}}`.
+
+At boot the platform collects these into one permission registry. Nothing
+outside it can be granted. The `:permissions` schema under
+`:wagoe/user :groups` is read as a declaration into the registry until 2.0, and
+then removed.
+
+=== 2. Roles bundle permissions; code ships them, administrators add their own
+
+A role is a name, a description and a set of permissions. Roles do not contain
+roles, so "why may X do this" is one step.
+
+* *Code roles* ship with a module (`orders/viewer`, `orders/editor`,
+  `orders/manager`; the scaffolder generates these three). They are versioned
+  and read-only in the UI; a deploy never overwrites an administrator's work.
+  No code role outside the admin module holds an `admin.*` permission.
+* *Managed roles* are composed in the UI from the registry and stored in the
+  database. A code role can be duplicated into a managed one to adapt it.
+
+=== 3. Roles are assigned to groups, with an optional scope
+
+An assignment is group + role + optional scope. It replaces today's grant
+(group + permission + scope): a bare permission is no longer assigned. A user's
+effective rights are the permissions of the roles of all their groups, each
+with its scope, read per request (no grants cached in the session, as now).
+
+There is one built-in group, *Everyone*: every signed-in user is a member
+without being added, including users who sign up later. It is how an app says
+what any user may do.
+
+Membership may also come from outside. An app that signs users in through an
+identity provider (Entra, LDAP; ADR-014) registers a membership hook,
+`(fn [user] #{"Redactie" …})`, mapping the provider's groups to Wagoe group
+names. Those memberships count as if added by hand, are read-only in the UI
+with their source shown, and are not stored, so they cannot drift from the
+provider. A provider group with no Wagoe group of that name gives nothing.
+
+Groups stay global; groups per tenant are a follow-up. The tenant membership
+role is unchanged.
+
+The superuser is the *platform* admin (`access/platform-admin?`: role `:admin`
+and no tenant). It passes every check, scope included, and the last-admin
+guard stays. A tenant user with role `:admin` is not a superuser: they hold
+what their groups and tenant membership give them. `:role` becomes
+`[:maybe [:enum :admin]]`; the role-hierarchy checks in `core.user` and
+`core.validation` become "only a platform admin sets or clears `:admin`".
+
+=== 4. Scopes are declared and enforced
+
+An app declares its scope keys and what they point at, replacing the `:scope`
+schema under `:wagoe/user :groups`:
+
+[source,clojure]
+----
+{:domain-id   {:label "Domain"   :entity :domains}
+ :category-id {:label "Category" :entity :categories}}
+----
+
+A key may declare `:expand`, a function from values to those values and
+everything beneath them: `{:department-id {:expand with-descendants}}`. An
+assignment on a directorate then holds for its departments, including ones
+added later. Expansion runs after a user-sourced value is resolved.
+
+An entity maps a field to a key (`orders.domain_id` → `:domain-id`). When the
+scope lies on a related record instead (an order's domain is its customer's),
+the entity declares a function from the allowed values to a HoneySQL condition,
+`{:domain-id (fn [ids] [:in :customer_id {:select [:id] :from [:customers]
+:where [:in :domain_id ids]}])}`. The admin uses it wherever it would use the
+field. An assignment without a scope holds everywhere; two assignments of the same role
+with different scopes add up.
+
+A scope value is either fixed (`{:domain-id 42}`) or taken from the user
+(`{:department-id :user/department}`). The app registers a resolver per
+source, `{:user/department (fn [user] #{7})}`, reading its own data. Several
+departments then share one group: each member's assignment resolves to their
+own department, and follows them when they move, with nobody editing the
+group. A resolver that returns nothing gives the assignment no rights, not
+rights everywhere. A source with no resolver fails boot.
+
+Scope is safe by default: a scoped right never passes where nobody checks the
+scope.
+
+* *Admin:* lists, search and export show only records inside the user's
+  scopes. Create and edit refuse a record outside them, or one moved outside;
+  the field offers only allowed values. Entities without a mapped field admit
+  only unscoped holders.
+* *App routes:* a route without `:scope` admits only holders whose right is
+  unscoped. `:scope {:domain-id :path/domain-id}` admits a scoped holder when
+  the parameter is inside their scope, checked by the platform.
+  `:scope :handler` admits any holder and leaves the filtering to the handler,
+  which reads the allowed scopes from the request and applies them with the
+  `scope-filter` helper (a HoneySQL `WHERE`).
+* A record or parameter outside the user's scope is a 404, in the admin and on
+  routes alike, so its existence does not leak.
+
+=== 5. One interceptor enforces it, behind a mode
+
+Route contributions today are anonymous maps, merged and reordered by
+specificity in `module-route-contributions` (`shell/system/wiring.clj`). Each
+contribution will carry its module key, and every route is tagged with
+`:wagoe/module` before the merge.
+
+The interceptor decides per route:
+
+. `:public true`: no check.
+. `:authorization :signed-in`: any signed-in user (profile, MFA, logout, the
+  dashboard).
+. `:authorization :self`: the handler checks itself. The admin routes, whose
+  entity is a path parameter, are marked so and check per section 6.
+. `:permission <kw>` in route data: that permission.
+. Otherwise, with `:wagoe/module`, `<module>/read` for GET and HEAD,
+  `<module>/write` for the rest.
+. Otherwise refused: a route with no module and no marker has no rule.
+
+Then the scope rule of section 4. A missing permission is a 403 `:forbidden`,
+logged with the permission; a signed-in user on a web page gets a 403 page
+instead of today's redirect to the login form, which would loop.
+
+`:wagoe/authorization {:mode …}` sets how hard:
+
+* `:off`: today's behaviour. Default in 1.x.
+* `:report`: nothing is refused; every refusal that would happen is logged with
+  user, route and permission, so an app sees what `:enforce` would break.
+* `:enforce`: refusals hold. Default for `wagoe new`, and for every app in 2.0.
+
+A role or `:permission` naming a permission outside the registry fails boot.
+`bb doctor` lists routes that `:enforce` would refuse for want of a rule.
+
+=== 6. The admin reads permissions
+
+`wagoe.admin.core.permissions` replaces the role check with
+`admin.<entity>/read|write` and applies the scope of section 4. Access to
+`/web/admin` at all needs `admin.<entity>/read` on at least one entity. The
+sidebar lists the entities a user may read; actions the user may not take are
+not rendered. `:require-role` is removed from the admin config.
+
+=== 7. The UI answers "who may do what"
+
+* *Roles:* code roles (locked) and managed roles; a managed role is a checklist
+  of the registry, grouped by module.
+* *Group:* members through a user lookup, with provider memberships listed
+  read-only; assignments as role + scope, per
+  scope key a lookup (BOU-762) or a user source such as "the member's
+  department". Everyone shows its roles, not its members.
+* *User:* a Rights tab with their groups and effective permissions, each with
+  the group, role and scope it comes from; a resolved scope shows its value and
+  its source.
+* *Permission or role:* the groups and users holding it (`permission-holders`,
+  BOU-718).
+
+Every change is audited, as group changes are today.
+
+== Migration
+
+Runs once at boot, idempotent, beside `initialize-user-schema!`. Its rule:
+under `:enforce`, nobody can do less than under `:off`, and nobody gains admin.
+
+* Each distinct permission in `user_group_grants` becomes a managed role of the
+  same name; each grant becomes an assignment of that role with its scope. A
+  permission the app no longer declares is registered as a legacy permission,
+  listed by `bb doctor`, rather than dropped.
+* Everyone gets every module's `editor` role, unscoped. That is today's
+  behaviour for every signed-in user; the app narrows it when it is ready.
+  `admin.*` permissions are not in those roles, so nobody becomes an admin.
+* Users with `:viewer` join a group "Readers" with every module's `viewer`
+  role. Today nothing enforces `:viewer`, so this changes nothing until the app
+  narrows Everyone; then it is where read-only users already are.
+* `role` then holds `:admin` or nothing.
+
+== Consequences
+
+* An administrator assigns a handful of roles to groups, not hundreds of
+  permissions; a new module adds three roles.
+* Under `:enforce`, routes outside any module without a marker are refused, and
+  an action that writes on a GET needs `:permission`. `:report` and `bb doctor`
+  find both first.
+* A tenant user who relied on `:admin` for admin pages needs a group. Platform
+  admins are unaffected.
+* `holds?` and `authorized?` keep working on the effective rights, so app code
+  that checks grants itself needs no change.
+* Every request reads the user's assignments: one indexed query, as group
+  grants already cost.
+* Scope enforcement in the admin adds a `WHERE` to every list and a check to
+  every write; an entity with no mapped scope field is unaffected.
+* Out of scope: groups per tenant, role hierarchies, field-level permissions,
+  direct grants to a single user (use a group), per-record rules such as "not
+  your own expense claim" (`:authorization :self`), and assignments with an
+  end date or delegation during absence.
+
+== Testing
+
+* Pure core: permission derivation per marker, method and route data; roles to
+  effective rights; scope to `WHERE`; a scoped right refused on a route without
+  `:scope`; a user-sourced scope resolving per member, and to no rights when
+  the resolver returns nothing; `:expand` covering descendants added after the
+  assignment; a relation scope filtering the same rows as the equivalent
+  join; provider groups counting as membership and unknown ones giving
+  nothing.
+* The interceptor in each mode; boot failing on an unknown permission; a
+  signed-in web user refused gets 403, not the login form.
+* Migration on H2, PostgreSQL and MySQL: every user can reach under `:enforce`
+  what they reached under `:off`, and no former `:user` or `:viewer` reaches
+  `/web/admin`.
+* E2E: a user with `orders/viewer` scoped to domain 42 sees only that domain's
+  orders and cannot edit them.
