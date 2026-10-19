@@ -86,7 +86,12 @@
       (is (str/includes? prompt "^:unit"))
       (is (str/includes? prompt "real I/O"))
       (is (not (str/includes? prompt "For shell/ files: use ^:integration")))
-      (is (str/includes? prompt "every method")))))
+      (is (str/includes? prompt "every method"))))
+
+  (testing "BOU-511: the model is told its tests run only when they will"
+    (is (not (str/includes? (prompts/build-test-generator-system-prompt) "The tests are run")))
+    (is (str/includes? (prompts/build-test-generator-system-prompt true) "The tests are run"))
+    (is (str/includes? (prompts/build-test-generator-system-prompt) "^{:schema schema/LineItem}"))))
 
 (deftest ^:unit sql-copilot-messages-test
   (testing "description is included in user message"
