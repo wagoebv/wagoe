@@ -1241,8 +1241,6 @@ time.tone-danger  { color: var(--tone-danger-fg);  font-weight: 600; }
 .admin-content .workflow-page .data-table :is(th, td) {
   width: auto; position: static; text-align: left; box-shadow: none;
 }
-.workflow-breadcrumb { font-size: var(--text-sm); color: var(--text-muted); }
-.workflow-breadcrumb code { font-size: inherit; }
 .workflow-card {
   background: var(--surface-0);
   border: 1px solid var(--border-default);

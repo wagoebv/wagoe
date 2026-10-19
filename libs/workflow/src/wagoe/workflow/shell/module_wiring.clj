@@ -21,8 +21,8 @@
      {:workflow-service (ig/ref :wagoe/workflow)
       :user-service     (ig/ref :wagoe/user-service)
       ;; With the admin on, for the admin shell's sidebar:
-      :schema-provider  (ig/ref :wagoe/admin-schema-provider)
-      :logo-url         <the admin's :logo-url>}
+      :admin            {:schema-provider (ig/ref :wagoe/admin-schema-provider)
+                         :logo-url        <the admin's :logo-url>}}
 
      Returns {:api [...] :web [...] :static []} for composition
      by the HTTP handler."
@@ -130,7 +130,7 @@
 ;; =============================================================================
 
 (defmethod ig/init-key :wagoe/workflow-routes
-  [_ {:keys [workflow-service user-service schema-provider logo-url]}]
+  [_ {:keys [workflow-service user-service admin]}]
   (log/info "Initializing workflow routes")
   {:api    (workflow-http/workflow-routes
             (:engine workflow-service))
@@ -138,9 +138,7 @@
             (:store workflow-service)
             (:registry workflow-service)
             user-service
-            ;; For the admin shell's sidebar, which lists the admin's entities.
-            (when schema-provider
-              {:schema-provider schema-provider :logo-url logo-url}))
+            admin)
    :static []
    ;; Mounted alongside the admin UI rather than at /web, because that is where
    ;; a reader looks for it. Platform used to hold this fact (BOU-330).
@@ -192,6 +190,6 @@
     ;; instances with (BOU-563); the admin's wiring refs it when workflow is on.
     (contains? (or enabled #{}) :wagoe/admin)
     (-> (assoc-in [:components :wagoe/workflow-admin] {:workflow (ig/ref :wagoe/workflow)})
-        (update-in [:components :wagoe/workflow-routes] merge
-                   {:schema-provider (ig/ref :wagoe/admin-schema-provider)
-                    :logo-url        (get-in config [:active :wagoe/admin :logo-url])}))))
+        (assoc-in [:components :wagoe/workflow-routes :admin]
+                  {:schema-provider (ig/ref :wagoe/admin-schema-provider)
+                   :logo-url        (get-in config [:active :wagoe/admin :logo-url])}))))

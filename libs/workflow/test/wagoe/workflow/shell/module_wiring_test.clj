@@ -18,8 +18,8 @@
                                     :config  {:active {:wagoe/admin {:logo-url "/l.png"}}}})
           off (wiring/ig-config {} {:enabled #{:wagoe/workflow}})]
       (is (= {:schema-provider (ig/ref :wagoe/admin-schema-provider) :logo-url "/l.png"}
-             (select-keys (get-in on [:components :wagoe/workflow-routes]) [:schema-provider :logo-url])))
-      (is (not (contains? (get-in off [:components :wagoe/workflow-routes]) :schema-provider)))))
+             (get-in on [:components :wagoe/workflow-routes :admin])))
+      (is (not (contains? (get-in off [:components :wagoe/workflow-routes]) :admin)))))
   (testing "the component satisfies the admin's port"
     (is (satisfies? admin-ports/IEntityWorkflows
                     (ig/init-key :wagoe/workflow-admin {:workflow {:store nil}})))))

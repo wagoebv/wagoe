@@ -211,10 +211,12 @@
 
    Args:
      params - current query-params map (string keys)
+     states - the registered workflows' states; the state filter is a select
+              of them, or a text field when none is registered
 
    Returns:
      Hiccup form structure"
-  [params]
+  [params states]
   [:form.workflow-filter-form {:method "GET"
                                :action "/web/admin/workflows"}
    [:label.form-field
@@ -227,8 +229,13 @@
                    {:placeholder [:t :workflow/filter-placeholder-entity-type]})]
    [:label.form-field
     [:t :workflow/filter-label-current-state]
-    (ui/text-input :state (get params "state" "")
-                   {:placeholder [:t :workflow/filter-placeholder-current-state]})]
+    (if (seq states)
+      (ui/select-field :state
+                       (cons ["" [:t :workflow/filter-option-any-state]]
+                             (map (juxt name form/label-text) states))
+                       (get params "state" ""))
+      (ui/text-input :state (get params "state" "")
+                     {:placeholder [:t :workflow/filter-placeholder-current-state]}))]
    [:button.button.secondary {:type "submit"}
     (icons/icon :search {:size 14})
     " " [:t :common/button-search]]])
@@ -265,8 +272,8 @@
    Args:
      instances - vector of WorkflowInstance maps
      params    - query-params map (string keys from ring request)
-     opts      - map with :user, :flash, and the admin shell's :entities,
-                 :entity-configs and :logo-url
+     opts      - map with :user, :flash, :states (for the filter), and the
+                 admin shell's :entities, :entity-configs and :logo-url
 
    Returns:
      Complete HTML page structure (doctype + html)"
@@ -274,7 +281,7 @@
   (admin-page
    [:t :workflow/page-instances-title]
    [:t :workflow/page-instances-heading]
-   (list (instances-filter-form params)
+   (list (instances-filter-form params (:states opts))
          (instances-table instances))
    opts))
 
@@ -300,7 +307,7 @@
      [:t :workflow/page-detail-title {:name wf-name}]
      [:t :workflow/breadcrumb-instances]
      (list
-      [:nav.workflow-breadcrumb {:aria-label [:t :common/aria-breadcrumb]}
+      [:nav.page-breadcrumbs {:aria-label [:t :common/aria-breadcrumb]}
        [:a {:href "/web/admin/workflows"} [:t :workflow/breadcrumb-instances]]
        " / "
        [:code (str (:id instance))]]

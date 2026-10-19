@@ -684,6 +684,7 @@
  :workflow/filter-placeholder-workflow-id "e.g. order-workflow"
  :workflow/filter-placeholder-entity-type "e.g. order"
  :workflow/filter-placeholder-current-state "e.g. pending"
+ :workflow/filter-option-any-state       "Any state"
  :workflow/page-instances-title          "Workflow Instances — Admin"
  :workflow/page-instances-heading        "Workflow Instances"
  :workflow/page-detail-title             "Workflow: {name} — Admin"

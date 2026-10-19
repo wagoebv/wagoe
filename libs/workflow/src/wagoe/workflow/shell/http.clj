@@ -265,10 +265,10 @@
     :body    (i18n/render hiccup (resolve-t request))}))
 
 (defn- state-param
-  "The state id a filter value names. The badge shows `:on-hold` as \"On
-   hold\", so that is accepted as well as the id."
+  "The state id a filter value names, or nil for a blank one. The badge shows
+   `:on-hold` as \"On hold\", so that is accepted as well as the id."
   [s]
-  (-> s str/trim text/lower-case (str/replace #"\s+" "-") keyword))
+  (some-> s str/trim not-empty text/lower-case (str/replace #"\s+" "-") keyword))
 
 (defn- page-opts
   "What a page needs besides its data: the user, the flash, and the admin
@@ -281,21 +281,31 @@
     {:user           (:user request)
      :flash          (:flash request)
      :entities       entities
-     :entity-configs (into {} (map (fn [e] [e (admin-ports/get-entity-config schema-provider e)])) entities)
+     :entity-configs (into {} (map (juxt identity #(admin-ports/get-entity-config schema-provider %))) entities)
      :logo-url       (:logo-url admin)}))
 
 (defn- parse-list-opts
   "Extract list-instances filter options from query-params."
   [query-params]
-  (cond-> {:limit 50 :offset 0}
-    (not-empty (get query-params "workflow-id"))
-    (assoc :workflow-id (keyword (get query-params "workflow-id")))
+  (let [state (state-param (get query-params "state"))]
+    (cond-> {:limit 50 :offset 0}
+      (not-empty (get query-params "workflow-id"))
+      (assoc :workflow-id (keyword (get query-params "workflow-id")))
 
-    (not-empty (get query-params "entity-type"))
-    (assoc :entity-type (keyword (get query-params "entity-type")))
+      (not-empty (get query-params "entity-type"))
+      (assoc :entity-type (keyword (get query-params "entity-type")))
 
-    (not-empty (str/trim (get query-params "state" "")))
-    (assoc :current-state (state-param (get query-params "state")))))
+      state
+      (assoc :current-state state))))
+
+(defn- known-states
+  "Every state of the registered workflows, for the state filter's options."
+  [registry]
+  (->> (ports/list-workflows registry)
+       (keep #(ports/get-workflow registry %))
+       (mapcat :states)
+       distinct
+       (sort-by name)))
 
 ;; =============================================================================
 ;; Admin web UI handlers
@@ -303,12 +313,14 @@
 
 (defn handle-list-instances-web
   "GET /workflows — render the workflow instances list page."
-  [store admin request]
+  [store registry admin request]
   (try
     (let [qp        (or (:query-params request) {})
           opts      (parse-list-opts qp)
           instances (ports/list-instances store opts)]
-      (html-response request (workflow-ui/instances-page instances qp (page-opts request admin))))
+      (html-response request (workflow-ui/instances-page instances qp
+                                                         (assoc (page-opts request admin)
+                                                                :states (known-states registry)))))
     (catch Exception e
       (log/error e "Error in handle-list-instances-web")
       (html-response request
@@ -364,7 +376,7 @@
   (let [auth-mw (user-middleware/flexible-authentication-middleware user-service)]
     [["/workflows"
       {:middleware [auth-mw]
-       :get {:handler (fn [req] (handle-list-instances-web store admin req))
+       :get {:handler (fn [req] (handle-list-instances-web store registry admin req))
              :summary "Workflow instances list"}}]
      ["/workflows/:id"
       {:middleware [auth-mw]
