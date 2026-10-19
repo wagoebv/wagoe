@@ -126,6 +126,12 @@
    the call can refuse to fall back to public and can pass the tenant on."
   nil)
 
+(def ^:dynamic *tenant-schema*
+  "The schema the transaction open on this thread is bound to, or nil. The
+   tenant module binds it with the transaction, so a store can check its
+   tables are there without asking the database for its search_path."
+  nil)
+
 (defn connectable-for
   "What code holding `datasource` runs a statement on: `datasource` when it is
    an open transaction already, else the platform transaction open on this

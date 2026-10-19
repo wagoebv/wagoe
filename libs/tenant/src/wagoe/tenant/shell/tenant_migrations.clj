@@ -29,10 +29,9 @@
    tenant directories the libraries on the classpath ship — given
    `enabled-libs`, only those of modules switched on, as `migrate up` does.
    They share one ledger per schema, so two migrations with one id are refused."
-  ([] (tenant-migration-dirs nil))
-  ([enabled-libs]
-   (doto (into [default-tenant-migration-dir] (db/discover-tenant-migration-dirs enabled-libs))
-     db/refuse-duplicate-migration-ids!)))
+  [enabled-libs]
+  (doto (into [default-tenant-migration-dir] (db/discover-tenant-migration-dirs enabled-libs))
+    db/refuse-duplicate-migration-ids!))
 
 (defn migrate-tenant!
   "Run all pending tenant-scoped migrations inside one tenant schema of the

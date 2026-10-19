@@ -60,7 +60,9 @@
   (and (= :admin (some-> (:role user) keyword))
        (nil? (:tenant-id user))))
 
-(defn- same-id? [a b]
+(defn same-id?
+  "Whether `a` names the same id as `b`, a UUID or its string; never for nil `a`."
+  [a b]
   (and (some? a) (= (str a) (str b))))
 
 (defn in-tenant-scope?

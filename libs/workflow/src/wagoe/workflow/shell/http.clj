@@ -116,7 +116,7 @@
                  tenant-id (get-in request [:tenant :id])]
              (if tenant-id
                (group/authorized? grants read-permission
-                                  #(= (str tenant-id) (some-> (:tenant-id %) str)))
+                                  #(access/same-id? (:tenant-id %) tenant-id))
                (group/holds? grants read-permission))))))
 
 (defn- forbidden [message request]

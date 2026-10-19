@@ -212,8 +212,7 @@
       (into []
             (mapcat (fn [q]
                       (worker/create-worker-pool
-                       (cond-> (merge workers {:queue-name q :worker-count count*})
-                         tenant-runner (assoc :tenant-runner tenant-runner))
+                       (merge workers {:queue-name q :worker-count count* :tenant-runner tenant-runner})
                        queue store registry)))
             queues)
       (do (log/info "Jobs: no workers started (:count 0) — this node enqueues only")
