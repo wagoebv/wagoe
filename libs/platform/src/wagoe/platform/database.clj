@@ -108,6 +108,16 @@
   "Call `f` with a transaction context, committing or rolling back around it."
   execution/with-transaction*)
 
+(def after-commit!
+  "Call `f` once the transaction `with-transaction` holds open on this thread
+   commits, never if it rolls back; with none open, now."
+  execution/after-commit!)
+
+(def remembered-in-transaction
+  "`(f)`, called until it answers truthy once per `k` for the transaction open
+   on this thread; with none open, each time."
+  execution/remembered-in-transaction)
+
 (defn current-transaction
   "The connection of the transaction `with-transaction` holds open on this
    thread, or nil. For a port that takes a caller's transaction explicitly."
@@ -157,7 +167,8 @@
     (f)
     (let [sp (.setSavepoint conn)]
       (try
-        (let [result (f)]
+        ;; A job deferred to the commit must not outlive the rollback.
+        (let [result (execution/forgetting-hooks-on-failure f)]
           (.releaseSavepoint conn sp)
           result)
         (catch Exception e

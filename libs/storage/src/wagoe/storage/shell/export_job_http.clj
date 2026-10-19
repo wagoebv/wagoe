@@ -1,8 +1,12 @@
 (ns wagoe.storage.shell.export-job-http
-  "A signed-in user's own data export as a background job:
-   POST /me/export-jobs, then GET /me/export-jobs/:id until it is done, then
-   GET /me/export-jobs/:id/download. A job is visible only to who asked."
-  (:require [wagoe.storage.core.export-jobs :as core]
+  "Data export as a background job: POST /me/export-jobs for a signed-in
+   user's own, or `ExportJobs` for another module's admin export; then
+   GET /me/export-jobs/:id until it is done, then
+   GET /me/export-jobs/:id/download. A job is visible only to who asked, and
+   an export of someone else's data only while they are a platform admin."
+  (:require [wagoe.platform.core.http.access :as access]
+            [wagoe.platform.ports.privacy :as privacy]
+            [wagoe.storage.core.export-jobs :as core]
             [wagoe.storage.ports :as ports]
             [wagoe.storage.shell.export-jobs :as export-jobs])
   (:import [java.time Instant]))
@@ -19,20 +23,30 @@
 
 (defn- own-job
   "The path's job, when the signed-in user asked for it. Anyone else's is
-   not found, rather than forbidden: its id is no business of theirs."
+   not found, rather than forbidden: its id is no business of theirs. An
+   admin's export of another subject needs them to be one still."
   [{:keys [store]} request]
   (let [job (ports/find-export-job store (get-in request [:path-params :id]))]
-    (if (and job (core/requested-by? job (user-id request)))
+    (if (and job
+             (core/requested-by? job (user-id request))
+             (or (core/own-data? job) (access/platform-admin? (:user request))))
       job
       (throw (ex-info "Export not found" {:type :not-found})))))
 
+(defn- accepted [job]
+  {:status  202
+   :headers {"Location" (job-path (:id job))}
+   :body    (view job)})
+
+(defrecord ExportJobs [ctx]
+  privacy/IExportJobs
+  (request-export-job! [_ subject requested-by]
+    (accepted (export-jobs/request-export! ctx subject requested-by))))
+
 (defn request-handler [ctx]
   (fn [request]
-    (let [id  (user-id request)
-          job (export-jobs/request-export! ctx {:type :user :id id} id)]
-      {:status  202
-       :headers {"Location" (job-path (:id job))}
-       :body    (view job)})))
+    (let [id (user-id request)]
+      (accepted (export-jobs/request-export! ctx {:type :user :id id} id)))))
 
 (defn status-handler [ctx]
   (fn [request]

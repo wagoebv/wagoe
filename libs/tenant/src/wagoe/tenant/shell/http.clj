@@ -319,6 +319,16 @@
      :ip-address  (at-most 64 (client-ip/request-ip request))
      :user-agent  (at-most 512 (get-in request [:headers "user-agent"]))}))
 
+(defn- audit-export!
+  "Record `request`'s export of `tenant-id`. Before the export is served or
+   queued, and not caught: an export nobody can trace is not made."
+  [audit-repository tenant-id request]
+  (let [context (audit-context request)]
+    (log/info "Tenant data export" {:tenant-id tenant-id :actor-id (:actor-id context)})
+    (tenant-ports/record-tenant-audit!
+     audit-repository
+     (audit/data-export-entry (random-uuid) tenant-id context (Instant/now)))))
+
 (defn export-tenant-handler
   "A tenant's data export: what every module holds about it. Recorded in the
    tenant audit log."
@@ -328,23 +338,44 @@
       (fn [tenant-id]
         (let [doc (privacy/export-subject data-export {:type :tenant :id tenant-id})]
           (if (get-in doc [:sections :tenant])
-            (let [context (audit-context request)]
-              (log/info "Tenant data export" {:tenant-id tenant-id :actor-id (:actor-id context)})
-              ;; Before the response, and not caught: an export nobody can trace is not served.
-              (tenant-ports/record-tenant-audit!
-               audit-repository
-               (audit/data-export-entry (random-uuid) tenant-id context (Instant/now)))
-              (privacy/export-response data-export doc request))
+            (do (audit-export! audit-repository tenant-id request)
+                (privacy/export-response data-export doc request))
             (error-response 404 :not-found "Tenant not found")))))))
 
+(defn request-export-job-handler
+  "A tenant's data export as a background job, downloaded from the job's
+   status endpoint. Recorded in the tenant audit log when asked for: that is
+   where the actor and their request are."
+  [tenant-repository export-jobs audit-repository]
+  (fn [request]
+    (with-tenant-id request
+      (fn [tenant-id]
+        (if (tenant-ports/find-tenant-by-id tenant-repository tenant-id)
+          (do (audit-export! audit-repository tenant-id request)
+              (privacy/request-export-job! export-jobs {:type :tenant :id tenant-id} (get-in request [:user :id])))
+          (error-response 404 :not-found "Tenant not found"))))))
+
+(def ^:private id-parameter
+  {:swagger {:parameters [{:name "id" :in "path" :required true :type "string"}]}})
+
 (defn export-routes
-  "GET /api/v1/tenants/:id/export, for a platform admin."
-  [data-export audit-repository]
-  {:api [["/tenants/:id/export"
-          {:middleware [require-platform-admin]
-           :get        {:handler   (export-tenant-handler data-export audit-repository)
-                        :summary   "Download a tenant's data (platform admin)"
-                        :tags      ["tenants"]
-                        :swagger   {:parameters [{:name "id" :in "path" :required true :type "string"}]}
-                        :responses {200 {:description "The export, as a JSON download"}
-                                    404 {:description "Tenant not found"}}}}]]})
+  "GET /api/v1/tenants/:id/export, for a platform admin; with `:export-jobs`
+   (privacy/IExportJobs) also POST /api/v1/tenants/:id/export-jobs."
+  [{:keys [data-export audit-repository tenant-repository export-jobs]}]
+  {:api (cond-> [["/tenants/:id/export"
+                  {:middleware [require-platform-admin]
+                   :get        (merge id-parameter
+                                      {:handler   (export-tenant-handler data-export audit-repository)
+                                       :summary   "Download a tenant's data (platform admin)"
+                                       :tags      ["tenants"]
+                                       :responses {200 {:description "The export, as a JSON download"}
+                                                   404 {:description "Tenant not found"}}})}]]
+          export-jobs
+          (conj ["/tenants/:id/export-jobs"
+                 {:middleware [require-platform-admin]
+                  :post       (merge id-parameter
+                                     {:handler   (request-export-job-handler tenant-repository export-jobs audit-repository)
+                                      :summary   "Ask for a tenant's data as a background job (platform admin)"
+                                      :tags      ["tenants"]
+                                      :responses {202 {:description "Queued; Location is the job's status"}
+                                                  404 {:description "Tenant not found"}}})}]))})

@@ -510,6 +510,53 @@
 ;; Transaction Management
 ;; =============================================================================
 
+(def ^:dynamic ^:private *tx-state*
+  "The outermost `with-transaction*` on this thread's {:hooks [..] :memo {..}}:
+   what it calls once it commits, and what was remembered while it was open."
+  nil)
+
+(defn after-commit!
+  "Call `f` once the transaction `with-transaction*` holds open on this thread
+   commits, and never if it rolls back; with none open, now. For work another
+   system sees, such as a job on a queue outside the database."
+  [f]
+  (if-let [state *tx-state*]
+    (do (swap! state update :hooks conj f) nil)
+    (f)))
+
+(defn forgetting-hooks-on-failure
+  "`(f)`; when it throws, drop the after-commit hooks it added, as a savepoint
+   rollback drops its writes."
+  [f]
+  (if-let [state *tx-state*]
+    (let [n (count (:hooks @state))]
+      (try (f)
+           (catch Throwable t
+             (swap! state update :hooks #(subvec % 0 (min n (count %))))
+             (throw t))))
+    (f)))
+
+(defn remembered-in-transaction
+  "`(f)`, called until it answers truthy once per `k` for the transaction open
+   on this thread; with none open, each time. For a catalog answer such as a
+   table being there, which the transaction's locks keep true until it ends."
+  [k f]
+  (if-let [state *tx-state*]
+    (let [memo (:memo @state)]
+      (if (contains? memo k)
+        (get memo k)
+        (let [v (f)] (when v (swap! state assoc-in [:memo k] v)) v)))
+    (f)))
+
+(defn- run-after-commit!
+  "Call each of `hooks`. The transaction has committed, so a failing one is
+   logged, not thrown."
+  [hooks]
+  (doseq [f hooks]
+    (try (f)
+         (catch Exception e
+           (log/error e "After-commit hook failed")))))
+
 (defn with-transaction*
   "Execute function within database transaction context.
 
@@ -530,24 +577,32 @@
     ;; Add breadcrumb for transaction start
     (add-database-breadcrumb "transaction" :start operation-details)
 
-    (jdbc/with-transaction [tx-conn (current-datasource ctx)]
-      (binding [*transaction-datasource* tx-conn
-                *outside-datasource*     (or *outside-datasource* (current-datasource ctx))]
-        (try
-          (let [tx-ctx (assoc ctx :datasource tx-conn)
-                result (f tx-ctx)
-                success-details (merge operation-details {:status "committed"})]
+    ;; A nested call joins the outer transaction, so only the outermost runs
+    ;; the after-commit hooks.
+    (let [outermost? (nil? *tx-state*)
+          state      (or *tx-state* (atom {:hooks [] :memo {}}))
+          result
+          (binding [*tx-state* state]
+            (jdbc/with-transaction [tx-conn (current-datasource ctx)]
+              (binding [*transaction-datasource* tx-conn
+                        *outside-datasource*     (or *outside-datasource* (current-datasource ctx))]
+                (try
+                  (let [tx-ctx (assoc ctx :datasource tx-conn)
+                        result (f tx-ctx)
+                        success-details (merge operation-details {:status "committed"})]
 
-            ;; Add breadcrumb for successful transaction
-            (add-database-breadcrumb "transaction" :success success-details)
+                    ;; Add breadcrumb for successful transaction
+                    (add-database-breadcrumb "transaction" :success success-details)
 
-            (log/debug "Transaction completed successfully"
-                       {:adapter (protocols/dialect (:adapter ctx))})
-            result)
+                    (log/debug "Transaction completed successfully"
+                               {:adapter (protocols/dialect (:adapter ctx))})
+                    result)
 
-          (catch Exception e
-            ;; A refused key is the caller's to answer, not a fault (BOU-712).
-            (log/logp (problem/exception-log-level e {}) "Transaction failed, rolling back"
-                      {:adapter (protocols/dialect (:adapter ctx))
-                       :error (redaction/loggable-message e)})
-            (throw e)))))))
+                  (catch Exception e
+                    ;; A refused key is the caller's to answer, not a fault (BOU-712).
+                    (log/logp (problem/exception-log-level e {}) "Transaction failed, rolling back"
+                              {:adapter (protocols/dialect (:adapter ctx))
+                               :error (redaction/loggable-message e)})
+                    (throw e))))))]
+      (when outermost? (run-after-commit! (:hooks @state)))
+      result)))

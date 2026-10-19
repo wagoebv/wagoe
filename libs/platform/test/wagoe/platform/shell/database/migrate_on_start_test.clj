@@ -126,12 +126,14 @@
 (deftest ^:unit a-boot-migration-migrates-the-modules-that-are-on
   ;; The system config names them; migrating every library on the classpath
   ;; created tables for modules nobody switched on (BOU-579).
-  (let [asked (atom [])]
-    (with-redefs [db-factory/engine-of (constantly :postgresql)
-                  db-factory/db-context (fn [_] {:adapter ::adapter :datasource ::the-pool})
-                  migrations/refuse-shadowed-migration-dirs! (fn [] nil)
-                  migrations/migration-dirs (fn [libs] (swap! asked conj libs) ["migrations"])
-                  migratus/migrate (fn [_] nil)]
-      (ig/init-key :wagoe/db-context {:adapter :h2 :migrate-on-start? true
-                                      :migrate-libraries #{"workflow"}}))
-    (is (= [#{"workflow"}] @asked))))
+  (let [asked (atom [])
+        ctx   (with-redefs [db-factory/engine-of (constantly :postgresql)
+                            db-factory/db-context (fn [_] {:adapter ::adapter :datasource ::the-pool})
+                            migrations/refuse-shadowed-migration-dirs! (fn [] nil)
+                            migrations/migration-dirs (fn [libs] (swap! asked conj libs) ["migrations"])
+                            migratus/migrate (fn [_] nil)]
+                (ig/init-key :wagoe/db-context {:adapter :h2 :migrate-on-start? true
+                                                :enabled-libraries #{"workflow"}}))]
+    (is (= [#{"workflow"}] @asked))
+    (is (= #{"workflow"} (:enabled-libraries ctx))
+        "carried on the context, for a tenant schema's migrations")))

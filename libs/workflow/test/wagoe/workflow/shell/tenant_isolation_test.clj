@@ -7,12 +7,15 @@
             [clojure.test :refer [deftest is testing use-fixtures]]
             [migratus.core :as migratus]
             [next.jdbc :as jdbc]
+            [next.jdbc.result-set :as rs]
             [support.embedded-pg :as epg]
             [wagoe.jobs.core.job] ; the service resolves create-job from it at run time
             [wagoe.jobs.ports :as jobs-ports]
             [wagoe.platform.database :as db]
             [wagoe.platform.shell.database.migrations :as mig]
+            [wagoe.tenant.ports :as tenant-ports]
             [wagoe.tenant.shell.provisioning :as provisioning]
+            [wagoe.tenant.shell.tenant-iteration :as iteration]
             [wagoe.tenant.shell.tenant-migrations :as tmig]
             [wagoe.workflow.ports :as ports]
             [wagoe.workflow.shell.http :as http]
@@ -165,11 +168,11 @@
         store    (persistence/create-workflow-store (:datasource ctx))
         enqueued (atom [])
         queue    #_{:clj-kondo/ignore [:missing-protocol-method]}
-                 (reify
-                   jobs-ports/IJobQueue
-                   (enqueue-job! [_ _ job] (swap! enqueued conj [:plain job]) (:id job))
-                   jobs-ports/ITransactionalJobQueue
-                   (enqueue-in-tx! [_ _ _ job] (swap! enqueued conj [:in-tx job]) (:id job)))
+        (reify
+          jobs-ports/IJobQueue
+          (enqueue-job! [_ _ job] (swap! enqueued conj [:plain job]) (:id job))
+          jobs-ports/ITransactionalJobQueue
+          (enqueue-in-tx! [_ _ _ job] (swap! enqueued conj [:in-tx job]) (:id job)))
         svc      (service/create-workflow-service store (registry/create-workflow-registry) queue)]
     (reset! hook-calls [])
     (registry/register-workflow!
@@ -182,8 +185,8 @@
     (binding [db/*tenant-id* tenant]
       (in-tenant schema
                  #(let [inst (ports/start-workflow! svc {:workflow-id :tenant-order-workflow
-                                                        :entity-type :order
-                                                        :entity-id   (random-uuid)})]
+                                                         :entity-type :order
+                                                         :entity-id   (random-uuid)})]
                     (is (:success? (ports/transition! svc {:instance-id (:id inst)
                                                            :transition  :paid
                                                            :actor-roles [:admin]}))))))
@@ -192,3 +195,51 @@
     (testing "the job joins the request's transaction and carries the tenant"
       (is (= [[:in-tx {:tenant-id (str tenant)}]]
              (map (fn [[how job]] [how (:metadata job)]) @enqueued))))))
+
+(def ^:private expiring-def
+  {:id            :tenant-expiring-workflow
+   :initial-state :pending
+   :states        #{:pending :expired}
+   :transitions   [{:from :pending :to :expired :auto? true :side-effects [:notify-expired]}]})
+
+(defn- tenants-service
+  "An ITenantService that lists `tenants` as active."
+  [tenants]
+  #_{:clj-kondo/ignore [:missing-protocol-method]}
+  (reify tenant-ports/ITenantService
+    (list-tenants [_ {:keys [offset]}] (if (zero? offset) tenants []))))
+
+(deftest ^:integration auto-transitions-reach-tenant-instances
+  (let [ctx      @db-ctx
+        schema   (str "tenant_wfauto" (System/nanoTime))
+        tenant   (random-uuid)
+        store    (persistence/create-workflow-store (:datasource ctx))
+        seen     (atom [])
+        ;; Outside the transaction: what another connection sees when it gets the job.
+        queue    #_{:clj-kondo/ignore [:missing-protocol-method]}
+        (reify jobs-ports/IJobQueue
+          (enqueue-job! [_ _ job]
+            (swap! seen conj [(get-in job [:metadata :tenant-id])
+                              (:current_state
+                               (jdbc/execute-one! (:datasource ctx)
+                                                  [(str "SELECT current_state FROM " schema
+                                                        ".workflow_instances WHERE id = ?")
+                                                   (get-in job [:args :instance-id])]
+                                                  {:builder-fn rs/as-unqualified-maps}))])
+            (:id job)))
+        each     (fn [f] (iteration/for-each-tenant (tenants-service [{:id tenant :schema-name schema}])
+                                                    (provisioning/create-tenant-schema-provider) ctx f))
+        svc      (service/create-workflow-service store (registry/create-workflow-registry) queue nil each)]
+    (registry/register-workflow! expiring-def)
+    (migrate-public! ctx)
+    (tenant-schema! schema)
+    (let [inst (binding [db/*tenant-id* tenant]
+                 (in-tenant schema #(ports/start-workflow! svc {:workflow-id :tenant-expiring-workflow
+                                                                :entity-type :order
+                                                                :entity-id   (random-uuid)})))
+          result (ports/process-auto-transitions! svc :tenant-expiring-workflow)]
+      (testing "the tenant's instance moves, in its schema"
+        (is (= {:processed 1 :attempted 1 :failed 0 :failed-tenants 0} result))
+        (is (= :expired (in-tenant schema #(:current-state (ports/find-instance store (:id inst)))))))
+      (testing "its job carries the tenant, and is enqueued once the transition is committed"
+        (is (= [[(str tenant) "expired"]] @seen))))))
