@@ -88,14 +88,15 @@
   (or (= href uri) (str/starts-with? (str uri) (str href "/"))))
 
 (defn for-user
-  "`groups` with only the items `user` may open and `mounted?` says exist. The
-   item whose href is the longest prefix of `uri` is `:active?`, and its group
-   `:open?`."
+  "`groups` with only the items `user` may open and `mounted?` says exist. An
+   entity item is not asked: its page is a parameter of the admin's route, and
+   the admin contributes it only when mounted. The item whose href is the
+   longest prefix of `uri` is `:active?`, and its group `:open?`."
   [groups uri user mounted?]
   (let [groups (into []
                      (keep (fn [group]
                              (when-let [items (seq (filter #(and (allowed? (:access %) user)
-                                                                 (mounted? (:href %)))
+                                                                 (or (:entity %) (mounted? (:href %))))
                                                            (:items group)))]
                                (assoc group :items (vec items)))))
                      groups)

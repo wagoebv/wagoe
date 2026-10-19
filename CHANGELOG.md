@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **Admin sidebar grouped by module** (BOU-777): modules contribute `:nav` in their routes. Set `:module` on an admin
+  entity to move it out of "Other", and `:wagoe/settings :nav-order` to order the groups.
 - **Admin shell in `shared-ui`** (BOU-764): `wagoe.shared.ui.core.shell` renders the sidebar from nav data, so any module's
   pages can use it. Admin pages look the same; nothing to do.
 - **Admin and tenant data exports as background jobs** (BOU-759): `POST /api/v1/users/:id/export-jobs` and

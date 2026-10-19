@@ -60,6 +60,9 @@
            (->> (nav/for-user groups "/" {:role "admin" :tenant-id 1} (constantly true)) first :items (mapv :href)))))
   (testing "a user sees no admin pages, so no groups"
     (is (= [] (nav/for-user groups "/" {:role :user} (constantly true)))))
+  (testing "an entity is linked though /web/admin/:entity, not its path, is the route"
+    (is (= [:user :tenant :other]
+           (map :id (nav/for-user groups "/" {:role :admin} #{"/web/admin/groups" "/web/audit"})))))
   (testing "an unmounted page is not linked"
     (is (= ["/web/admin/users" "/web/audit"]
            (->> (nav/for-user groups "/" {:role :admin} #(not= % "/web/admin/groups")) first :items (mapv :href))))))
