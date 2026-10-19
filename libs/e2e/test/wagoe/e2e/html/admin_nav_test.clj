@@ -50,6 +50,13 @@
       (await! pg "!!window.Alpine && !!document.querySelector('.nav-module')")
       (is (= "true" (expanded pg "tenant"))))
 
+    (testing "the current page's group opens again, though it was closed"
+      (loc/click (toggle pg "other"))
+      (is (= "false" (expanded pg "other")))
+      (page/reload pg)
+      (await! pg "!!window.Alpine && !!document.querySelector('.nav-module')")
+      (is (= "true" (expanded pg "other"))))
+
     (testing "collapsed, a module's pages open in a flyout"
       (loc/click (page/locator pg "button.sidebar-pin"))
       (loc/click (page/locator pg "button.sidebar-toggle"))

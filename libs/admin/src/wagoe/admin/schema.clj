@@ -335,6 +335,8 @@
               :hide-fields :readonly-fields :field-order :default-sort
               :default-sort-dir :soft-delete :create-redirect-url
               [:writer :keyword]
+              ;; The sidebar group the entity sits in (BOU-777)
+              [:module [:or :keyword :string]]
               [:fields [:map-of :keyword FieldOverride]]
               [:field-groups [:sequential (closed-map :id :label :fields)]]
               [:has-many [:sequential HasManyEntry]]

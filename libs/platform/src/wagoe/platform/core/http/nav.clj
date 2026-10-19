@@ -81,7 +81,8 @@
     false))
 
 (defn- prefix-of? [href uri]
-  (or (= href uri) (str/starts-with? (str uri) (str href "/"))))
+  (and (some? href)
+       (or (= href uri) (str/starts-with? (str uri) (str href "/")))))
 
 (defn for-user
   "`groups` with only the items `user` may open. The item whose href is the

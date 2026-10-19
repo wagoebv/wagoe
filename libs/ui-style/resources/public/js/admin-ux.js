@@ -102,13 +102,13 @@ document.addEventListener('alpine:init', function () {
     };
   });
 
-  // NavGroup: a module's sidebar group. Open/closed is remembered per module;
-  // until it is, the group holding the current page is the open one.
+  // NavGroup: a module's sidebar group. The group holding the current page is
+  // open, so its marked item shows; the others are as last left.
   window.Alpine.data('navGroup', function (id, active) {
     var key = 'wagoe-admin-nav-' + id;
     var stored = load(key);
     return {
-      open: typeof stored === 'boolean' ? stored : active,
+      open: active || stored === true,
 
       toggle: function () {
         this.open = !this.open;

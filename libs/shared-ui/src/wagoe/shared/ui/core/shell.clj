@@ -36,14 +36,13 @@
 
 (defn- nav-group [{:keys [id label icon items open?]}]
   (if id
-    ;; navGroup (admin-ux.js) remembers open/closed per module; until it has
-    ;; run, the group of the current page is the open one.
+    ;; The current page's group is open; navGroup (admin-ux.js) remembers
+    ;; open/closed for the others.
     [:div {:class  (cond-> "nav-module" open? (str " has-active"))
            :x-data (str "navGroup('" (name id) "', " (boolean open?) ")")}
-     [:button.nav-module-toggle {:type                 "button"
-                                 :aria-expanded        (str (boolean open?))
-                                 :x-bind:aria-expanded "open"
-                                 (keyword "@click")    "toggle()"}
+     [:button.nav-module-toggle (assoc (alpine/toggle-button-attrs)
+                                       :type          "button"
+                                       :aria-expanded (str (boolean open?)))
       (icons/icon (or icon :folder) {:size 20})
       [:span.nav-text label]
       (icons/icon :chevron-down {:size 14 :class "nav-chevron"})]

@@ -127,7 +127,11 @@
    :static []  ; Week 2+: Admin-specific static assets
 
    ;; Its entities, for the sidebar every page renders. Listed once, at boot.
-   :nav (layout/nav (ports/list-available-entities schema-provider) (:entities config))
+   ;; Only :allowlist discovery lists; the other modes throw, and must fail the
+   ;; admin's pages rather than the whole boot.
+   :nav (layout/nav (try (ports/list-available-entities schema-provider)
+                         (catch clojure.lang.ExceptionInfo _ []))
+                    (:entities config))
 
    ;; Where these mount. Platform held this for six modules and a seventh could
    ;; not contribute routes without editing it (BOU-330).
