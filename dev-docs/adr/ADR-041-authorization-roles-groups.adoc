@@ -93,6 +93,14 @@ An entity maps a field to a key (`orders.domain_id` → `:domain-id`). An
 assignment without a scope holds everywhere; two assignments of the same role
 with different scopes add up.
 
+A scope value is either fixed (`{:domain-id 42}`) or taken from the user
+(`{:department-id :user/department}`). The app registers a resolver per
+source, `{:user/department (fn [user] #{7})}`, reading its own data. Several
+departments then share one group: each member's assignment resolves to their
+own department, and follows them when they move, with nobody editing the
+group. A resolver that returns nothing gives the assignment no rights, not
+rights everywhere. A source with no resolver fails boot.
+
 Scope is safe by default: a scoped right never passes where nobody checks the
 scope.
 
@@ -154,10 +162,12 @@ not rendered. `:require-role` is removed from the admin config.
 
 * *Roles:* code roles (locked) and managed roles; a managed role is a checklist
   of the registry, grouped by module.
-* *Group:* members through a user lookup; assignments as role + scope, a
-  lookup per scope key (BOU-762). Everyone shows its roles, not its members.
+* *Group:* members through a user lookup; assignments as role + scope, per
+  scope key a lookup (BOU-762) or a user source such as "the member's
+  department". Everyone shows its roles, not its members.
 * *User:* a Rights tab with their groups and effective permissions, each with
-  the group, role and scope it comes from.
+  the group, role and scope it comes from; a resolved scope shows its value and
+  its source.
 * *Permission or role:* the groups and users holding it (`permission-holders`,
   BOU-718).
 
@@ -202,7 +212,8 @@ under `:enforce`, nobody can do less than under `:off`, and nobody gains admin.
 
 * Pure core: permission derivation per marker, method and route data; roles to
   effective rights; scope to `WHERE`; a scoped right refused on a route without
-  `:scope`.
+  `:scope`; a user-sourced scope resolving per member, and to no rights when
+  the resolver returns nothing.
 * The interceptor in each mode; boot failing on an unknown permission; a
   signed-in web user refused gets 403, not the login form.
 * Migration on H2, PostgreSQL and MySQL: every user can reach under `:enforce`
