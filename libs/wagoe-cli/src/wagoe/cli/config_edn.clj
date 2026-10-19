@@ -272,13 +272,17 @@
      in one file.
    - `:wagoe/h2` appears only under `:inactive`, and `:wagoe/cache` only in a
      comment. Reporting those as present is the configured-and-switched-off
-     outcome this namespace exists to avoid."
+     outcome this namespace exists to avoid.
+
+   A value naming the key, `#ig/ref :wagoe/jobs`, is not the key. Only a map
+   whose entries cannot be read falls back to searching its text."
   [text key-str]
   (if-let [[open end] (active-section text)]
-    (let [active (subs (code-only text) open end)]
+    (if-let [es (entries text ":active")]
+      (if (some #(= key-str (:key %)) es) :already-present :absent)
       (if (re-find (re-pattern (str (java.util.regex.Pattern/quote key-str)
                                     "(?![A-Za-z0-9*+!?<>=_-])"))
-                   active)
+                   (subs (code-only text) open end))
         :already-present
         :absent))
     :absent))

@@ -165,8 +165,11 @@
 
 ;; ─── config.edn patching ─────────────────────────────────────────────────────
 
-(defn- config-key-of [snippet]
-  (second (re-find #":(\S+)" snippet)))
+(defn- config-key-of
+  "The first key starting a line: reports' snippet opens with a comment that
+   names `(ig/ref :wagoe/reports).`"
+  [snippet]
+  (second (re-find #"(?m)^[ \t]*:(\S+)" snippet)))
 
 (defn- active-keys
   "The keys of the :active map in config `text`, or nil when it does not read.
@@ -198,19 +201,20 @@
         config-key (config-key-of snippet)]
     (if (in-active? content config-key)
       :present
-      (if (config-edn/section content ":active")
-        (let [out (config-edn/append-entry content ":active" snippet)]
+      (let [out (config-edn/append-entry content ":active" snippet)]
+        (cond
+          ;; append-entry returns the text unchanged when there is no :active map.
+          (= out content) :no-active
           ;; Checked by reading, not trusted: a key written into the wrong map
           ;; boots nothing, and the next run writes it again.
-          (if (if-let [ks (active-keys out)]
-                (contains? ks (keyword config-key))
-                ;; Not EDN (a regex, say): the text's own reading, unless the
-                ;; original read and the insertion broke that.
-                (and (nil? (active-keys content))
-                     (some #(= (str ":" config-key) (:key %)) (config-edn/entries out ":active"))))
-            (do (spit f out) :added)
-            :not-written))
-        :no-active))))
+          (if-let [ks (active-keys out)]
+            (contains? ks (keyword config-key))
+            ;; Not EDN (a regex, say): the text's own reading, unless the
+            ;; original read and the insertion broke that.
+            (and (nil? (active-keys content))
+                 (some #(= (str ":" config-key) (:key %)) (config-edn/entries out ":active"))))
+          (do (spit f out) :added)
+          :else :not-written)))))
 
 (defn- snippet-for
   "What `module` writes into profile `env`. Dev may differ from prod: events

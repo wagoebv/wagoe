@@ -51,6 +51,12 @@
       (is (= :already-present (sut/key-status text ":wagoe/payment-provider")))
       (is (= :already-present (sut/key-status text ":wagoe/settings"))))))
 
+(deftest ^:unit a-value-naming-a-key-is-not-the-key
+  ;; Searching :active's text found `#ig/ref :wagoe/jobs`, so jobs was never written.
+  (let [text "{:active\n {:wagoe/a {:re #\"x\" :dep #ig/ref :wagoe/jobs}}}\n"]
+    (is (= :absent (sut/key-status text ":wagoe/jobs")))
+    (is (= :already-present (sut/key-status text ":wagoe/a")))))
+
 (deftest ^:unit only-the-active-section-counts-as-configured
   ;; `:wagoe/h2` lives under :inactive in the shipped config and `:wagoe/cache`
   ;; only in a comment. Reporting either as present writes nothing to :active —

@@ -262,6 +262,16 @@
           (is (= :not-written (add/patch-config! dir path "  :wagoe/jobs\n  {:workers 1}\n")))
           (is (not (str/includes? (slurp f) ":wagoe/jobs"))))))))
 
+(deftest ^:integration a-snippet-opening-with-a-comment-is-written
+  ;; reports' snippet names `(ig/ref :wagoe/reports).` in its comment, which was
+  ;; taken for its key: every write was refused as :not-written.
+  (with-config "{:active\n {:wagoe/a 1}\n\n :inactive\n {}}\n"
+    (fn [dir path f]
+      (let [snippet (:config-snippet (cat/find-module "reports"))]
+        (is (= :added (add/patch-config! dir path snippet)))
+        (is (contains? (active-keys-of (slurp f)) :wagoe/reports))
+        (is (= :present (add/patch-config! dir path snippet)))))))
+
 (deftest ^:integration a-crlf-config-stays-crlf
   (with-config (str/replace (templates/render (templates/read-template "dev-config.edn.tmpl")
                                               {:project-name "shop"})
