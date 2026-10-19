@@ -511,9 +511,10 @@ table.data-table th {
   border-bottom: 1px solid var(--border-default);
 }
 
-/* Checkbox column - fixed narrow width */
-table.data-table th:first-child,
-table.data-table td:first-child {
+/* Checkbox and actions columns - fixed narrow width. Keyed on class, not
+   position: a table without them would squeeze its first and last columns. */
+table.data-table th.checkbox-header,
+table.data-table td.checkbox-cell {
   width: 40px;
   min-width: 40px;
   max-width: 40px;
@@ -522,9 +523,8 @@ table.data-table td:first-child {
   overflow: visible;
 }
 
-/* Actions column - fixed narrow width */
-table.data-table th:last-child,
-table.data-table td:last-child {
+table.data-table th.actions-header,
+table.data-table td.actions-cell {
   width: 80px;
   min-width: 80px;
   max-width: 80px;
@@ -1916,15 +1916,6 @@ button.full-width {
 /* Sessions table: no checkbox column, so use auto layout to size by content */
 .user-sessions-page .data-table {
   table-layout: auto;
-}
-
-.user-sessions-page .data-table th:first-child,
-.user-sessions-page .data-table td:first-child {
-  width: auto;
-  min-width: auto;
-  max-width: none;
-  padding-left: var(--space-3);
-  text-align: left;
 }
 
 .user-sessions-page .data-table td form {
@@ -3846,7 +3837,7 @@ textarea:focus-visible,
   overflow: hidden;
 }
 
-/* Audit table: auto layout, timestamp column not a checkbox */
+/* Audit table: auto layout, fixed-width timestamp column */
 #audit-table {
   table-layout: auto;
 }
@@ -3855,8 +3846,6 @@ textarea:focus-visible,
 #audit-table td:first-child {
   width: 170px;
   min-width: 170px;
-  max-width: none;
-  text-align: left;
   white-space: nowrap;
 }
 
