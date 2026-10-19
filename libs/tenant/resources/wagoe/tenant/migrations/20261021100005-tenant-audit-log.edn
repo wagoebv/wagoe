@@ -1,0 +1,5 @@
+;; tenant_audit_log, on a database migrated before it. The same idempotent
+;; definition boot runs.
+{:ns      wagoe.tenant.shell.tenant-tables
+ :up-fn   "up"
+ :down-fn "down"}

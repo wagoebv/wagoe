@@ -242,7 +242,7 @@ subject it holds nothing about. The user module serves it to a signed-in user at
 `GET /api/v1/me/export` and `/web/profile/export`, and to platform admins at
 `GET /api/v1/users/:id/export`, which is recorded in the user's audit log. The
 tenant module serves a tenant's export to platform admins at
-`GET /api/v1/tenants/:id/export`. Sections are keyed by exporter id with its
+`GET /api/v1/tenants/:id/export`, recorded in `tenant_audit_log`. Sections are keyed by exporter id with its
 namespace, so `:orders` and `:billing/orders` do not collide.
 
 Each route answers JSON. With `?format=zip` or `Accept: application/zip` it

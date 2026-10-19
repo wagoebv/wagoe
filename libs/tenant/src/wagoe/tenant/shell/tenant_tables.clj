@@ -10,7 +10,8 @@
   "Tenant's tables, by name, and the Malli schema each is built from."
   {"tenants"               tenant-schema/Tenant
    "tenant_memberships"    tenant-schema/TenantMembership
-   "tenant_member_invites" tenant-schema/TenantInvite})
+   "tenant_member_invites" tenant-schema/TenantInvite
+   "tenant_audit_log"      tenant-schema/TenantAuditEntry})
 
 (def ^:private indexes
   "[name table columns unique?] the generated DDL does not make. Created
@@ -21,7 +22,8 @@
    ["uk_tenants_schema_name" "tenants" ["schema_name"] true]
    ["uk_tenant_memberships_tenant_user" "tenant_memberships" ["tenant_id" "user_id"] true]
    ["uk_tenant_member_invites_token_hash" "tenant_member_invites" ["token_hash"] true]
-   ["idx_tenant_member_invites_email" "tenant_member_invites" ["email"] false]])
+   ["idx_tenant_member_invites_email" "tenant_member_invites" ["email"] false]
+   ["idx_tenant_audit_log_tenant" "tenant_audit_log" ["tenant_id" "created_at"] false]])
 
 (defn ensure-tables!
   "Create the tenant tables and their indexes, unless they are there."

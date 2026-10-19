@@ -135,3 +135,9 @@
     "List all tenant_* schemas in the database.
      Returns a vector of schema name strings.
      Returns empty vector for non-PostgreSQL databases."))
+
+(defprotocol ITenantAuditRepository
+  (record-tenant-audit! [this entry]
+    "Store `entry`, a TenantAuditEntry. Returns it.")
+  (find-tenant-audit [this tenant-id options]
+    "A tenant's audit entries, newest first. `options`: :limit, :offset."))

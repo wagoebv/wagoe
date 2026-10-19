@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **Tenant exports are audited** (BOU-749): each download of `GET /api/v1/tenants/:id/export` is recorded in a new
+  `tenant_audit_log` table. Run `migrate up`.
 - **Storage records every upload's owner, and exports and expires uploads** (BOU-738): a `storage_uploads` table
   feeds a `:storage` export section and the `:storage/uploads` retention policy. Run `migrate up`.
 - **Data export as a zip with the files** (BOU-738): `?format=zip` or `Accept: application/zip` on any export
