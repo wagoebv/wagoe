@@ -105,6 +105,17 @@
   []
   execution/*transaction-datasource*)
 
+(defn tx-connection
+  "The connection behind `tx` when it is an open transaction: a next.jdbc
+   connection, or a platform transaction context. nil for anything else, a
+   datasource included, so a port that joins a caller's transaction can
+   refuse what would autocommit."
+  [tx]
+  (let [conn (if (map? tx) (or (:datasource tx) (:connectable tx)) tx)]
+    (when (and (instance? java.sql.Connection conn)
+               (not (.getAutoCommit ^java.sql.Connection conn)))
+      conn)))
+
 (defmacro with-transaction
   "Run `body` in a transaction, bound to the first name in `binding`.
 

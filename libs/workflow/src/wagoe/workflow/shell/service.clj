@@ -14,7 +14,7 @@
             [wagoe.workflow.core.transitions :as transitions]
             [wagoe.workflow.core.audit :as audit]
             [wagoe.workflow.schema :as schema]
-            [wagoe.workflow.shell.persistence :as persistence]
+            [wagoe.platform.database :as db]
             [clojure.tools.logging :as log])
   (:import [java.util UUID]
            [java.time Instant]))
@@ -139,19 +139,17 @@
      nil"
   [job-queue conn side-effect-keys instance audit-entry context]
   (when (and job-queue (seq side-effect-keys))
-    (doseq [effect-key side-effect-keys]
-      (try
-        ;; We import the jobs port lazily to avoid a hard compile-time dependency.
-        ;; The jobs library is an optional runtime companion.
-        (let [jobs-ports-ns (the-ns 'wagoe.jobs.ports)
-              in-tx?        (and conn ((ns-resolve jobs-ports-ns 'transactional-queue?) job-queue))
-              enqueue-fn    (if in-tx?
-                              (let [f (ns-resolve jobs-ports-ns 'enqueue-in-tx!)]
-                                (fn [q queue job] (f q conn queue job)))
-                              (ns-resolve jobs-ports-ns 'enqueue-job!))
-              job-ns        (the-ns 'wagoe.jobs.core.job)
-              create-fn     (ns-resolve job-ns 'create-job)]
-          (when (and enqueue-fn create-fn)
+    (try
+      ;; We import the jobs port lazily to avoid a hard compile-time dependency.
+      ;; The jobs library is an optional runtime companion.
+      (let [jobs-ports (the-ns 'wagoe.jobs.ports)
+            create-fn  (ns-resolve (the-ns 'wagoe.jobs.core.job) 'create-job)
+            enqueue-fn (if (and conn ((ns-resolve jobs-ports 'transactional-queue?) job-queue))
+                         (let [f (ns-resolve jobs-ports 'enqueue-in-tx!)]
+                           (fn [q queue job] (f q conn queue job)))
+                         (ns-resolve jobs-ports 'enqueue-job!))]
+        (doseq [effect-key side-effect-keys]
+          (try
             (let [job (create-fn {:job-type effect-key
                                   :args     {:instance-id  (str (:id instance))
                                              :workflow-id  (name (:workflow-id instance))
@@ -160,10 +158,13 @@
                                              :context      (or context {})}}
                                  (UUID/randomUUID)
                                  (Instant/now))]
-              (enqueue-fn job-queue :default job))))
-        (catch Exception e
-          (log/warn e "Failed to enqueue side-effect job"
-                    {:effect effect-key :instance-id (:id instance)}))))))
+              (enqueue-fn job-queue :default job))
+            (catch Exception e
+              (log/warn e "Failed to enqueue side-effect job"
+                        {:effect effect-key :instance-id (:id instance)})))))
+      (catch Exception e
+        (log/warn e "Failed to enqueue side-effect jobs"
+                  {:effects side-effect-keys :instance-id (:id instance)})))))
 
 (defn- refuse-long-entity-keys!
   "Throw when entity-type or entity-id will not fit its VARCHAR(255) column,
@@ -312,16 +313,16 @@
   ports/IWorkflowEngine
 
   (start-workflow! [this input]
-    (start-on this store input))
+    (ports/start-workflow! this nil input))
 
   (start-workflow! [this tx input]
     (start-on this (store-for store tx) input))
 
   (transition! [this request]
-    (transition-on this store nil request))
+    (ports/transition! this nil request))
 
   (transition! [this tx request]
-    (transition-on this (store-for store tx) (some-> tx persistence/tx-connection) request))
+    (transition-on this (store-for store tx) (db/tx-connection tx) request))
 
   (current-state [_ instance-id]
     (:current-state (ports/find-instance store instance-id)))

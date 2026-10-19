@@ -35,14 +35,14 @@
     (str "count-" (:entity-plural entity) "-by-" (:belongs-to entity))))
 
 (defn- transact-fn
-  "The repository method that runs a further entity's work in one
-   transaction: a child's guarded delete or move, for a child with a minimum
-   (BOU-578), or a create with its workflow (BOU-575). nil otherwise, and for
-   the first entity, whose method is `transact`."
+  "The repository method that runs work in one transaction: `transact` on the
+   first entity; on a further one, for a child's guarded delete or move
+   (BOU-578) or a create with its workflow (BOU-575). Else nil. Further
+   entities' names differ because their protocols share one namespace."
   [entity]
-  (when (and (not (:primary? entity true))
-             (or (count-fn entity) (:workflow entity)))
-    (str "transact-" (:entity-plural entity))))
+  (cond
+    (:primary? entity true) "transact"
+    (or (count-fn entity) (:workflow entity)) (str "transact-" (:entity-plural entity))))
 
 (defn- find-by-parents-fn
   "The repository method that reads a child's rows for several parents at
@@ -206,9 +206,6 @@
           "\n"
           "  (" delete " [this id]\n"
           "    \"Delete " e " by ID.\")"
-          (when (get entity :primary? true)
-            (str "\n\n  (transact [this f]\n"
-                 "    \"Call `f` in one database transaction, and return what it returns.\")"))
           (when-let [t (transact-fn entity)]
             (str "\n\n  (" t " [this f]\n"
                  "    \"Call `f` in one database transaction, and return what it returns.\")"))
@@ -1001,9 +998,6 @@ DROP TABLE IF EXISTS %s;
           "      (select-by-id db-ctx (:id entity))))\n"
           "  (" delete " [_this id]\n"
           "    (db/execute-update! db-ctx {:delete-from :" table-name " :where [:= :id id]}))"
-          (when (:primary? entity true)
-            (str "\n  (transact [_this f]\n"
-                 "    (db/with-transaction* db-ctx (fn [_] (f))))"))
           (when-let [t (transact-fn entity)]
             (str "\n  (" t " [_this f]\n"
                  "    (db/with-transaction* db-ctx (fn [_] (f))))"))
@@ -1201,7 +1195,6 @@ DROP TABLE IF EXISTS %s;
           "                      (" find-all " [_ _opts] [])\n"
           "                      (" update " [_ entity] entity)\n"
           "                      (" delete " [_ _id] nil)"
-          (when (:primary? entity true) "\n                      (transact [_ f] (f))")
           (when-let [t (transact-fn entity)]
             (str "\n                      (" t " [_ f] (f))"))
           (when-let [c (count-fn entity)]

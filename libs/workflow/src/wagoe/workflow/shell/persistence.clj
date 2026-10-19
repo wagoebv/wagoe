@@ -7,6 +7,7 @@
             [next.jdbc :as jdbc]
             [next.jdbc.result-set :as rs]
             [honey.sql :as sql]
+            [wagoe.platform.database :as db]
             [clojure.tools.logging :as log]
             [clojure.edn :as edn])
   (:import [java.util Date UUID]
@@ -133,15 +134,6 @@
       (= 1062 (.getErrorCode e))
       (boolean (re-find #"SQLITE_CONSTRAINT_UNIQUE|UNIQUE constraint failed" (str (ex-message e))))))
 
-(defn tx-connection
-  "The connection behind `tx` when it is an open transaction: a next.jdbc
-   connection, or a platform transaction context. nil for anything else."
-  [tx]
-  (let [conn (if (map? tx) (or (:datasource tx) (:connectable tx)) tx)]
-    (when (and (instance? Connection conn)
-               (not (.getAutoCommit ^Connection conn)))
-      conn)))
-
 (defn- in-savepoint
   "Call `f` on `conn`, and on failure roll back only what it did: PostgreSQL
    refuses every statement of a transaction after a failed one, and the engine
@@ -161,7 +153,7 @@
   ports/ITransactionalWorkflowStore
 
   (store-in-tx [_ tx]
-    (if-let [conn (tx-connection tx)]
+    (if-let [conn (db/tx-connection tx)]
       (->WorkflowStore conn)
       (throw (ex-info "A workflow store joins an open transaction, not a datasource"
                       {:type    :validation-error
@@ -178,7 +170,7 @@
                                      {:return-keys true
                                       :builder-fn  rs/as-unqualified-lower-maps})]
       (try
-        (if-let [conn (tx-connection datasource)]
+        (if-let [conn (db/tx-connection datasource)]
           (in-savepoint conn insert)
           (insert))
         (catch SQLException e
@@ -287,7 +279,7 @@
                         :next.jdbc/update-count
                         pos?))]
       ;; On a caller's transaction, that one decides.
-      (if (tx-connection datasource)
+      (if (db/tx-connection datasource)
         (delete! datasource)
         (jdbc/with-transaction [tx datasource] (delete! tx))))))
 
