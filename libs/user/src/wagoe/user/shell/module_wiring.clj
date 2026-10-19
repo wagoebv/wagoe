@@ -404,9 +404,10 @@
    once, so a bad value fails boot whichever components start, as are the
    `:groups` schemas."
   [settings {:keys [config validation-config]}]
-  (let [config (landing/prepare config)]
-    (cond-> (base-graph config validation-config (:auth settings {})
-                        (group-service/prepare-settings (:groups settings)))
+  (let [config (landing/prepare config)
+        groups (group-service/prepare-settings (:groups settings))]
+    (cond-> (assoc (base-graph config validation-config (:auth settings {}) groups)
+                   :authorization (group-service/declared-permissions groups))
       (seq (get-in settings [:oidc :providers]))
       (-> (update :components assoc
                   :wagoe/user-oidc        {:settings            (:oidc settings)
