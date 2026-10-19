@@ -181,11 +181,13 @@ Known common error patterns in Wagoe:
 ;; =============================================================================
 
 (defn build-test-generator-system-prompt
-  "Build the system prompt for the test generator feature.
+  "Build the system prompt for the test generator feature. `run?` when the
+   answer will be run before it is written (gen-tests --run).
 
    Returns a string."
-  []
-  (str framework-system-context "
+  ([] (build-test-generator-system-prompt false))
+  ([run?]
+   (str framework-system-context "
 
 Your task: generate a complete Kaocha-compatible test namespace for a Wagoe source file.
 
@@ -201,10 +203,17 @@ Rules:
 - A reify implements every method of each protocol it names, with the listed arities;
   a method the test does not need returns nil. A partial reify fails lint
 - The namespace must compile and pass clj-kondo with no warnings: no unused requires or bindings
+- Build test data from the Malli schemas listed with the source: every required key, with
+  its type. Define each valid entity as a top-level def tagged with its schema, e.g.
+  (def ^{:schema schema/LineItem} line-item {...}); it is validated against that schema.
+  Write its value as literal data (#uuid \"...\", #inst \"...\"), not function calls.
+  Derive invalid inputs from it with assoc or dissoc"
+        (when run? "
+- The tests are run before the file is written; every one must pass") "
 - Namespace: replace src/ with test/ and add -test suffix to ns name
 - Follow existing test patterns: (deftest function-name-test (testing \"description\" (is (= expected (f args)))))
 
-Output ONLY valid Clojure code — no markdown fences, no explanation."))
+Output ONLY valid Clojure code — no markdown fences, no explanation.")))
 
 (defn build-test-generator-user-prompt
   "Build the user message for test generation.
@@ -234,13 +243,16 @@ Output ONLY valid Clojure code — no markdown fences, no explanation."))
      source-code - file content string
      test-type   - :unit, :integration, or :contract (unused; tags are applied after)
      api-context - context/render-namespace-apis text, or nil
+     run?        - true when the answer will be run before it is written
 
    Returns:
      [{:role :system :content str} {:role :user :content str}]"
   ([source-file source-code test-type]
    (test-generator-messages source-file source-code test-type nil))
   ([source-file source-code test-type api-context]
-   [{:role :system :content (build-test-generator-system-prompt)}
+   (test-generator-messages source-file source-code test-type api-context false))
+  ([source-file source-code test-type api-context run?]
+   [{:role :system :content (build-test-generator-system-prompt run?)}
     {:role :user   :content (build-test-generator-user-prompt source-file source-code test-type api-context)}]))
 
 (defn test-fix-messages
