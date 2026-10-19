@@ -132,7 +132,7 @@
    assertion (BOU-444).
 
    Keyed on WAGOE_REQUIRE_S3, which the job that starts MinIO sets, and not on
-   CI: the `:unit` suite runs this namespace too, from a job with no MinIO and
+   CI: this namespace once also ran in a job with no MinIO and
    no reason to have one, and a bare CI check made every job in the workflow
    answer for an endpoint only one of them provides."
   [& body]

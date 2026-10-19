@@ -1,6 +1,7 @@
 (ns wagoe.tenant.shell.tenant-iteration-test
   (:require [clojure.test :refer [deftest is testing]]
             [wagoe.tenant.shell.tenant-iteration :as sut]
+            [wagoe.platform.database :as db]
             [wagoe.tenant.ports :as ports]))
 
 (defn- fake-provider [schemas]
@@ -33,3 +34,41 @@
       (is (= ["tenant_a" "tenant_b"] @seen))
       (is (= 1 (:processed result)))
       (is (= 1 (:failed result))))))
+
+(defn- tenant-service
+  "Lists `n` active tenants a page at a time, recording each request."
+  [n asked]
+  #_{:clj-kondo/ignore [:missing-protocol-method]}
+  (reify ports/ITenantService
+    (list-tenants [_ {:keys [status limit offset] :as opts}]
+      (swap! asked conj opts)
+      (when (= :active status)
+        (->> (range n)
+             (map (fn [i] {:id (str "t" i) :schema-name (str "tenant_" i)}))
+             (drop offset)
+             (take limit))))))
+
+(deftest ^:unit for-each-tenant-runs-f-in-every-active-tenant
+  (let [asked  (atom [])
+        seen   (atom [])
+        result (sut/for-each-tenant
+                (tenant-service 101 asked) (fake-provider []) {:datasource :ds}
+                (fn [tenant]
+                  (swap! seen conj [(:id tenant) db/*tenant-id*])
+                  (when (= "t3" (:id tenant)) (throw (ex-info "boom" {})))
+                  :ok))]
+    (testing "a page at a time, every tenant, with its id bound"
+      (is (= [0 100] (map :offset @asked)))
+      (is (= 101 (count @seen)))
+      (is (every? (fn [[id bound]] (= id bound)) @seen)))
+    (testing "one tenant's failure is counted, and the rest run"
+      (is (= 100 (:processed result)))
+      (is (= 1 (:failed result)))
+      (is (= 100 (count (:results result)))))))
+
+(deftest ^:unit for-each-tenant-refuses-an-open-transaction
+  (with-redefs [db/current-transaction (constantly ::open-tx)]
+    (is (= :configuration-error
+           (:type (ex-data (is (thrown? clojure.lang.ExceptionInfo
+                                        (sut/for-each-tenant (tenant-service 1 (atom [])) (fake-provider [])
+                                                             {:datasource :ds} (fn [_] :ok))))))))))

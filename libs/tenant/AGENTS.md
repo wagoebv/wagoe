@@ -276,6 +276,9 @@ Fan-out happens automatically: `provision-tenant!` runs the set into a new
 schema, and the `:wagoe/tenant-db-schema` component runs pending tenant
 migrations across all existing schemas on startup (so a deploy reaches every
 tenant). See `libs/tenant/src/wagoe/tenant/shell/tenant_migrations.clj`.
+Library tenant migrations run for the modules the context's
+`:enabled-libraries` names: what `:active` switches on, which the system config
+sets on `:wagoe/db-context`, as `migrate up` does for public.
 
 ---
 
@@ -339,6 +342,7 @@ The four tenant-aware HTTP interceptors live in `wagoe.user.shell.http-intercept
 | `:wagoe/tenant-repository` | `TenantRepository` record |
 | `:wagoe/tenant-service` | `TenantService` record |
 | `:wagoe/tenant-routes` | Normalized tenant API routes |
+| `:wagoe/each-tenant` | `(fn [f])`: `(f tenant)` in each active tenant's schema, `db/*tenant-id*` bound (`tenant-iteration/for-each-tenant`) |
 | `:wagoe/membership-repository` | `MembershipRepository` record |
 | `:wagoe/membership-service` | `MembershipService` record |
 | `:wagoe/membership-routes` | Normalized membership API routes |

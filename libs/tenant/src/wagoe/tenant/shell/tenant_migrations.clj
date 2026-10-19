@@ -38,7 +38,8 @@
    database `ctx` (the boot `:wagoe/db-context`) is connected to.
    `migration-dir` is a classpath-relative tenant migration directory, or a
    vector of them; by default `tenant-migration-dirs` of the libraries `ctx`
-   names under `:enabled-libraries`. Throws on a malformed schema name.
+   names under `:enabled-libraries`, which the system's `:wagoe/db-context`
+   carries; without them, every library's. Throws on a malformed schema name.
 
    Runs on a connection outside the pool, so its session settings close with it
    instead of reaching the application's next query. No statement timeout:

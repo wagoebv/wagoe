@@ -109,7 +109,7 @@
       (is (= {:tenant-service (ig/ref :wagoe/tenant-service)
               :db-context (ig/ref :wagoe/db-context)
               :config config}
-             (dissoc (:wagoe/tenant-routes ig-config) :enabled-libraries))))
+             (:wagoe/tenant-routes ig-config))))
 
     (testing "http handler receives membership routes and the injected tenant middleware (BOU-200)"
       ;; In the module-routes collection, not a :membership-routes slot of its
@@ -298,22 +298,27 @@
   (let [config (-> (base-config)
                    (assoc-in [:active :wagoe/sqlite :migrate-on-start?] true)
                    (assoc-in [:active :wagoe/workflow] {}))
-        libs   (get-in (sys-config/ig-config config) [:wagoe/db-context :migrate-libraries])]
+        libs   (get-in (sys-config/ig-config config) [:wagoe/db-context :enabled-libraries])]
     (is (contains? libs "workflow"))
     (is (not-any? libs ["geo" "push" "audience"]))))
 
 (deftest ^:unit a-boot-migration-sees-what-migrate-up-sees
   ;; `migrate up` reads config.edn and cannot see :extra-modules, which live in
-  ;; code. The boot used to add them, so the two migrated different sets.
+  ;; code. The boot used to add them, so the two migrated different sets. A
+  ;; tenant schema migrates the set the context carries, so it agrees too.
   (let [config (-> (base-config)
                    (assoc-in [:active :wagoe/sqlite :migrate-on-start?] true)
-                   (assoc-in [:active :wagoe/workflow] {}))]
+                   (assoc-in [:active :wagoe/workflow] {})
+                   (assoc-in [:active :wagoe/tenant] {}))]
     (log-test/with-log
-      (let [libs (get-in (platform-config/system-config config {:extra-modules #{:wagoe/geo-service}})
-                         [:wagoe/db-context :migrate-libraries])]
+      (let [ig   (platform-config/system-config config {:extra-modules #{:wagoe/geo-service}})
+            libs (get-in ig [:wagoe/db-context :enabled-libraries])]
         (is (= (modules/enabled-libraries (:active config)) libs)
             "the set migrate up computes from the same config")
         (is (not (contains? libs "geo")))
+        (is (= (ig/ref :wagoe/db-context) (get-in ig [:wagoe/tenant-db-schema :ctx]))
+            "tenant schemas migrate what the context names")
+        (is (not (contains? (:wagoe/tenant-db-schema ig) :enabled-libraries)))
         (is (log-test/logged? 'wagoe.platform.shell.system.config :warn #"geo module is enabled in code")
             "a module enabled only in code is named, since its tables will not exist")))))
 

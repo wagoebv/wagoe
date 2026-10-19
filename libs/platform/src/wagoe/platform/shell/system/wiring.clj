@@ -100,7 +100,10 @@
 (defmethod ig/init-key :wagoe/db-context
   [_ config]
   (log/info "Initializing database context" {:adapter (:adapter config)})
-  (let [ctx (db-factory/db-context config)]
+  (let [ctx (cond-> (db-factory/db-context config)
+              ;; So code handed only the context, a tenant migration among
+              ;; it, knows which modules are on.
+              (:enabled-libraries config) (assoc :enabled-libraries (:enabled-libraries config)))]
     ;; `:migrate-on-start?` here rather than as its own component: Integrant
     ;; orders by refs, so a sibling that also refs :wagoe/db-context gives no
     ;; guarantee it runs before the repositories do. Migrating inside this
@@ -120,7 +123,7 @@
     ;; any SQLite file lock would outlive the failed boot (BOU-485).
     (when (:migrate-on-start? config)
       (try
-        (migrations/migrate-datasource! (:datasource ctx) (:migrate-libraries config))
+        (migrations/migrate-datasource! (:datasource ctx) (:enabled-libraries config))
         (catch Throwable t
           (log/error t "Boot migration failed; closing the database context")
           ;; Its own try: a pool that fails to close must not replace the
@@ -849,7 +852,7 @@
 ;; the first call.
 (defmethod ig/init-key :wagoe/rpc-server
   [_ {:keys [protocol implementation port host service-key auth max-request-body virtual-threads?]
-       :or   {max-request-body default-max-request-body}}]
+      :or   {max-request-body default-max-request-body}}]
   (let [protocol-var (or (requiring-resolve protocol)
                          (throw (ex-info (str "RPC protocol not found: " protocol)
                                          {:type :configuration-error})))
@@ -875,7 +878,7 @@
 
 (defmethod ig/init-key :wagoe/http-server
   [_ {:keys [handler port host join? config drain-timeout-ms max-request-body virtual-threads?]
-       :or   {max-request-body default-max-request-body}}]
+      :or   {max-request-body default-max-request-body}}]
   (let [http-config (or config {})
         port-allocation (port-manager/allocate-port port http-config)
         allocated-port (:port port-allocation)]

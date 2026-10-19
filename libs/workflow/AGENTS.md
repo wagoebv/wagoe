@@ -363,7 +363,10 @@ outside a tenant transaction (all of it on H2 under `:allow-h2?`), throw
 The tenant middleware and the jobs tenant runner bind `db/*tenant-id*`. Hooks
 run with it bound; side-effect jobs carry it as `:metadata {:tenant-id ...}`,
 and a nil-tx `transition!` hands hooks and jobs the transaction the store
-joined. Auto-transitions (`process-auto-transitions!`) still read `public` only.
+joined. A job for a queue that cannot join the transaction is enqueued once it
+commits (`db/after-commit!`). `process-auto-transitions!` runs in `public` and
+then in each active tenant's schema, through the tenant module's
+`:wagoe/each-tenant`; the result adds `:failed-tenants`.
 
 In a tenant, reads need `access/tenant-admin?` or a `:workflow/read` grant
 scoped `{:tenant-id <id>}`; the global `:admin` role of another tenant's user

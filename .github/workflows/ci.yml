@@ -508,20 +508,6 @@ jobs:
     if: needs.changes.outputs.code == 'true'
 
     services:
-      # `:unit` spans every library's tests, so it inherits their services. The
-      # cache, events and jobs sweeps compare a Redis adapter against the others
-      # and fail loudly rather than silently comparing two backends where three
-      # were promised — which is how this job first ran red.
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 5s
-          --health-timeout 3s
-          --health-retries 10
-
       # The audience adapter sweep compares H2, SQLite, PostgreSQL and MySQL.
       # PostgreSQL is embedded and SQLite is a file; MySQL needs a server, and
       # without one the sweep fails saying so rather than reporting three
@@ -546,7 +532,7 @@ jobs:
     #
     # `:app` is the root tree only. `:unit` added every library's tests again,
     # which the per-library jobs already run, and made this the job the whole
-    # run waited on (BOU-615). `bb test:all` still runs `:unit` locally.
+    # run waited on (BOU-615). It is gone now: it ran every test twice locally.
     steps:
       - uses: actions/checkout@v6
 
@@ -555,7 +541,7 @@ jobs:
         with:
           aliases: -M:test:test/all
 
-      - name: Run app + unit suite
+      - name: Run app suite
         env:
           JWT_SECRET: "ci-test-secret-minimum-32-characters"
           WAG_ENV: test
