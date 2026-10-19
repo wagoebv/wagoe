@@ -32,10 +32,9 @@
 (defn- relevance
   "How many of the table name's words the description mentions, singular or
    plural."
-  [description table]
-  (let [d (text/lower-case (str description))]
-    (count (filter #(str/includes? d (str/replace % #"s$" ""))
-                   (remove str/blank? (str/split table #"_"))))))
+  [d table]
+  (count (filter #(str/includes? d (str/replace % #"s$" ""))
+                 (remove str/blank? (str/split table #"_")))))
 
 (defn render-schema
   "`tables`, {table {column sql-type}}, as one line per table, those
@@ -44,8 +43,11 @@
   ([tables description] (render-schema tables description max-schema-chars))
   ([tables description max-chars]
    (when (seq tables)
-     (let [lines (->> tables
-                      (sort-by (fn [[t _]] [(- (relevance description t)) t]))
+     (let [d     (text/lower-case (str description))
+           lines (->> tables
+                      (map (fn [[t _ :as e]] [[(- (relevance d t)) t] e]))
+                      (sort-by first)
+                      (map second)
                       (map (fn [[t cols]]
                              (str t ": " (if (nil? cols)
                                            "(columns not listed)"
@@ -57,7 +59,7 @@
                              (-> acc (update :lines conj line) (update :n + (count line) 1))))
                          {:lines [] :n 0}
                          lines)
-           left  (- (count lines) (count (:lines kept)))]
+           left  (- (count tables) (count (:lines kept)))]
        (str/join "\n" (cond-> (:lines kept)
                         (pos? left) (conj (str "(" left " more tables not shown)"))))))))
 
@@ -103,9 +105,8 @@
             (= "AS" (up (dec i)))
             (recur (inc i) clause
                    (conj out {:kind  :alias :parts parts
-                              :of    (let [prev (get tokens (- i 2))]
-                                       (when (and (table-clauses clause) (ident-parts prev))
-                                         (peek (ident-parts prev))))}))
+                              :of    (when (table-clauses clause)
+                                       (some-> (get tokens (- i 2)) ident-parts peek))}))
 
             (and (= "AS" (up (inc i))) (= "(" (get tokens (+ i 2))))
             (recur (inc i) clause (conj out {:kind :cte :parts parts}))
@@ -159,17 +160,16 @@
 (defn check-answer
   "Read the model's HoneySQL `edn-str` and check it against `tables`.
 
-   Returns {:query map :sql str} or {:errors [str] :sql str?}."
+   Returns {:sql str}, the query as HoneySQL renders it, or {:errors [str]}."
   [edn-str tables]
-  (let [query (try (edn/read-string (str edn-str)) (catch Exception _ ::unreadable))]
+  (let [query (try (edn/read-string edn-str) (catch Exception _ nil))]
     (if-not (map? query)
       {:errors ["the honeysql value is not a readable EDN map"]}
-      (let [quoted (try (first (sql/format query {:quoted true :quoted-snake true :inline true}))
-                        (catch Exception e {:error (ex-message e)}))]
-        (if (map? quoted)
-          {:errors [(str "HoneySQL cannot format it: " (:error quoted))]}
-          (let [errors (unknown-identifiers quoted tables)
-                plain  (first (sql/format query {:inline true}))]
-            (if (seq errors)
-              {:errors errors :sql plain}
-              {:query query :sql plain})))))))
+      (let [[quoted failure] (try [(first (sql/format query {:quoted true :quoted-snake true :inline true}))]
+                                  (catch Exception e [nil (or (ex-message e) (str e))]))
+            errors (if failure
+                     [(str "HoneySQL cannot format it: " failure)]
+                     (unknown-identifiers quoted tables))]
+        (if (seq errors)
+          {:errors errors}
+          {:sql (first (sql/format query {:inline true}))})))))

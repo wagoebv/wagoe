@@ -24,7 +24,7 @@
     (is (nil? (sut/render-schema {} "anything")))))
 
 (deftest ^:unit check-answer-accepts-the-real-schema
-  (let [ok #(contains? (sut/check-answer % tables) :query)]
+  (let [ok #(contains? (sut/check-answer % tables) :sql)]
     (testing "qualified columns, kebab-cased names, select aliases"
       (is (ok (pr-str {:select   [:invoices/id [[:count :invoice-line-items/id] :n]
                                   [[:sum :invoice-line-items.line-total] :total]]
@@ -53,7 +53,7 @@
       (is (= ["table invoice does not exist" "table invoice_line_item does not exist"
               "table line_item does not exist"]
              (:errors r)))
-      (is (str/includes? (:sql r) "FROM invoice LEFT JOIN"))))
+      (is (nil? (:sql r)))))
 
   (testing "a column the table does not have"
     (is (= ["column invoice_line_items.amount does not exist"]
@@ -67,7 +67,7 @@
 
   (testing "a table known by name only: the table is checked, its columns are not"
     (let [t (assoc tables "jobs" nil)]
-      (is (contains? (sut/check-answer (pr-str {:select [:jobs/anything :status] :from [:jobs]}) t) :query))
+      (is (contains? (sut/check-answer (pr-str {:select [:jobs/anything :status] :from [:jobs]}) t) :sql))
       (is (= ["table job does not exist"]
              (:errors (sut/check-answer (pr-str {:select [:*] :from [:job]}) t))))
       (is (= "jobs: (columns not listed)" (sut/render-schema {"jobs" nil} "")))))

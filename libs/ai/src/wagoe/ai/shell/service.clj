@@ -13,7 +13,6 @@
             [wagoe.ai.core.sql-copilot :as sql-copilot]
             [wagoe.ai.ports :as ports]
             [wagoe.ai.shell.test-check :as test-check]
-            [cheshire.core :as json]
             [clojure.edn :as edn]
             [clojure.java.io :as io]
             [clojure.string :as str]
@@ -251,21 +250,26 @@
 
 (defn- up-migration? [name] (str/ends-with? name ".up.sql"))
 
+(def ^:private project-migration-dirs ["migrations" "resources/migrations"])
+
 (defn- project-migrations
   "[file-name sql] for the project's own up migrations."
   [project-root]
-  (->> ["migrations" "resources/migrations"]
+  (->> project-migration-dirs
        (map #(io/file project-root %))
        (filter #(.isDirectory ^java.io.File %))
        (mapcat file-seq)
        (filter #(and (.isFile ^java.io.File %) (up-migration? (.getName ^java.io.File %))))
        (map (fn [^java.io.File f] [(.getName f) (slurp f)]))))
 
+(defn- class-loader []
+  (or (.getContextClassLoader (Thread/currentThread)) (clojure.lang.RT/baseLoader)))
+
 (defn- resource-files
   "[file-name content] for the files directly inside classpath directory `dir`,
    in every directory and jar that has one."
   [dir pred]
-  (let [cl (.getContextClassLoader (Thread/currentThread))]
+  (let [cl (class-loader)]
     (doall
      (for [^java.net.URL url (enumeration-seq (.getResources cl dir))
            entry (case (.getProtocol url)
@@ -287,20 +291,26 @@
 
 (defn- library-migrations
   "[file-name sql] for the up migrations framework libraries ship, found
-   through their `wagoe/migration-paths/<lib>.edn` manifests as the migration
-   runner finds them."
+   through their `wagoe/migration-paths/<lib>.edn` manifests (and the legacy
+   shared `wagoe/migration-paths.edn`) as the migration runner finds them."
   []
-  (for [[_ manifest] (resource-files "wagoe/migration-paths/" #(str/ends-with? % ".edn"))
+  (for [manifest (concat (map second (resource-files "wagoe/migration-paths/" #(str/ends-with? % ".edn")))
+                         (map slurp (enumeration-seq (.getResources (class-loader) "wagoe/migration-paths.edn"))))
         :let  [m (edn/read-string manifest)]
         path  (if (map? m) (:paths m) m)
         entry (resource-files (cond-> path (not (str/ends-with? path "/")) (str "/"))
                               up-migration?)]
     entry))
 
+(defn- in-run-order
+  "The SQL of [file-name sql] pairs, in the order migratus runs them."
+  [migrations]
+  (->> migrations (sort-by first) (map second)))
+
 (defn- migration-sqls
   "The project's up migrations, in the order they run."
   [project-root]
-  (->> (project-migrations project-root) (sort-by first) (map second)))
+  (in-run-order (project-migrations project-root)))
 
 ;; =============================================================================
 ;; Feature 4: SQL Copilot
@@ -310,8 +320,8 @@
   "The tables libraries create in code, at boot or from a Clojure migration,
    as their `wagoe/boot-tables/<lib>.edn` manifests name them."
   []
-  (mapcat (fn [[_ manifest]] (:tables (edn/read-string manifest)))
-          (resource-files "wagoe/boot-tables/" #(str/ends-with? % ".edn"))))
+  (distinct (mapcat (fn [[_ manifest]] (:tables (edn/read-string manifest)))
+                    (resource-files "wagoe/boot-tables/" #(str/ends-with? % ".edn")))))
 
 (defn- schema-tables
   "{table {column sql-type}} after every SQL migration the project and its
@@ -319,10 +329,8 @@
    are nil."
   [project-root]
   (merge (zipmap (boot-tables) (repeat nil))
-         (->> (concat (library-migrations) (project-migrations project-root))
-              (sort-by first)
-              (map second)
-              admin-entity/migration-columns)))
+         (admin-entity/migration-columns
+          (in-run-order (concat (library-migrations) (project-migrations project-root))))))
 
 (defn sql-from-description
   "Generate a HoneySQL query from a natural language description.
@@ -346,8 +354,8 @@
    (log/info "ai sql-from-description" {:description description})
    (let [tables (schema-tables project-root)]
      (if (empty? tables)
-       {:error (str "No tables found in " project-root "/migrations, resources/migrations "
-                    "or the libraries' migrations — cannot generate SQL without a schema.")}
+       {:error (str "No tables found in " (str/join ", " (map #(str project-root "/" %) project-migration-dirs))
+                    " or the libraries' migrations — cannot generate SQL without a schema.")}
        (let [messages (prompts/sql-copilot-messages description (sql-copilot/render-schema tables description))
              attempt  (fn [msgs]
                         (let [result (resolve-provider-json service msgs "SQLResponse" opts)]
@@ -362,7 +370,7 @@
              first-try (attempt messages)
              result    (if (:errors first-try)
                          (attempt (prompts/sql-fix-messages
-                                   messages (json/generate-string (select-keys first-try [:honeysql :explanation]))
+                                   messages (:honeysql first-try)
                                    (:errors first-try)))
                          first-try)]
          (cond
