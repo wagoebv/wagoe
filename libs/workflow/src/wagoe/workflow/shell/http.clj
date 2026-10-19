@@ -17,8 +17,10 @@
 
    Every route requires authentication and answers 401 without it."
   (:require [clojure.string :as str]
+            [wagoe.admin.core.permissions :as admin-permissions]
             [wagoe.admin.ports :as admin-ports]
             [wagoe.core.utils.text :as text]
+            [wagoe.shared.ui.core.form :as form]
             [wagoe.i18n.shell.middleware :as i18n-middleware]
             [wagoe.i18n.shell.render :as i18n]
             [wagoe.platform.core.http.errors :as errors]
@@ -265,18 +267,25 @@
     :body    (i18n/render hiccup (resolve-t request))}))
 
 (defn- state-param
-  "The state id a filter value names, or nil for a blank one. The badge shows
-   `:on-hold` as \"On hold\", so that is accepted as well as the id."
-  [s]
-  (some-> s str/trim not-empty text/lower-case (str/replace #"\s+" "-") keyword))
+  "The state a filter value names, or nil for a blank one: a registered state
+   by its id or by its badge label (\"On hold\" for `:on-hold`), else the
+   value read as an id. Matching registered ids exactly keeps `:inReview`."
+  [s states]
+  (when-let [v (some-> s str/trim not-empty)]
+    (let [lower (text/lower-case v)]
+      (or (some #(when (= v (name %)) %) states)
+          (some #(when (= lower (text/lower-case (form/label-text %))) %) states)
+          (keyword (str/replace lower #"\s+" "-"))))))
 
 (defn- page-opts
   "What a page needs besides its data: the user, the flash, and the admin
    shell's sidebar. `admin` is {:schema-provider :logo-url}, or nil when the
-   admin module is off and the sidebar lists no entities."
+   admin module is off. The sidebar lists the admin's entities only to a user
+   the admin admits, as its own pages do."
   [request admin]
   (let [schema-provider (:schema-provider admin)
-        entities        (when schema-provider
+        entities        (when (and schema-provider
+                                   (admin-permissions/can-access-admin? (:user request)))
                           (admin-ports/list-available-entities schema-provider))]
     {:user           (:user request)
      :flash          (:flash request)
@@ -286,8 +295,8 @@
 
 (defn- parse-list-opts
   "Extract list-instances filter options from query-params."
-  [query-params]
-  (let [state (state-param (get query-params "state"))]
+  [query-params states]
+  (let [state (state-param (get query-params "state") states)]
     (cond-> {:limit 50 :offset 0}
       (not-empty (get query-params "workflow-id"))
       (assoc :workflow-id (keyword (get query-params "workflow-id")))
@@ -316,11 +325,14 @@
   [store registry admin request]
   (try
     (let [qp        (or (:query-params request) {})
-          opts      (parse-list-opts qp)
+          states    (known-states registry)
+          opts      (parse-list-opts qp states)
           instances (ports/list-instances store opts)]
-      (html-response request (workflow-ui/instances-page instances qp
-                                                         (assoc (page-opts request admin)
-                                                                :states (known-states registry)))))
+      ;; The form shows the state the list is filtered by, not what was typed
+      (html-response request (workflow-ui/instances-page
+                              instances
+                              (cond-> qp (:current-state opts) (assoc "state" (name (:current-state opts))))
+                              (assoc (page-opts request admin) :states states))))
     (catch Exception e
       (log/error e "Error in handle-list-instances-web")
       (html-response request

@@ -459,14 +459,18 @@
   (let [store (service-test/create-memory-store)
         reg   (registry/create-workflow-registry)
         admin {:schema-provider schema-provider :logo-url "/logo.png"}
-        body  (:body (sut/handle-list-instances-web store reg admin {}))]
+        req   {:user {:role :admin}}
+        body  (:body (sut/handle-list-instances-web store reg admin req))]
     (is (str/includes? body "admin-sidebar"))
     (is (str/includes? body "href=\"/web/admin/invoices\""))
     (is (str/includes? body "Label invoices"))
     (is (str/includes? body "/logo.png"))
     (testing "without the admin the shell lists no entities"
-      (let [body (:body (sut/handle-list-instances-web store reg nil {}))]
+      (let [body (:body (sut/handle-list-instances-web store reg nil req))]
         (is (str/includes? body "admin-sidebar"))
+        (is (not (str/includes? body "/web/admin/invoices")))))
+    (testing "nor to a user the admin would not admit"
+      (let [body (:body (sut/handle-list-instances-web store reg admin {:user {:role :user}}))]
         (is (not (str/includes? body "/web/admin/invoices")))))))
 
 (deftest ^:unit the-state-filter-takes-the-badge-label
@@ -488,4 +492,20 @@
     (let [body (:body (sut/handle-list-instances-web (listing-store (constantly [])) reg nil
                                                      {:query-params {"state" "on-hold"}}))]
       (is (str/includes? body "<option selected=\"selected\" value=\"on-hold\">On hold</option>"))
-      (is (str/includes? body "<option value=\"pending\">Pending</option>")))))
+      (is (str/includes? body "<option value=\"pending\">Pending</option>")))
+    (testing "a filter typed as the label selects that state"
+      (let [body (:body (sut/handle-list-instances-web (listing-store (constantly [])) reg nil
+                                                       {:query-params {"state" "On hold"}}))]
+        (is (str/includes? body "<option selected=\"selected\" value=\"on-hold\">On hold</option>"))))))
+
+(deftest ^:unit the-state-filter-keeps-a-registered-id-as-it-is
+  ;; Lower-casing every value turned :inReview into :inreview, which matches nothing.
+  (let [seen  (atom nil)
+        store (listing-store (fn [opts] (reset! seen opts) []))
+        reg   (registry/create-workflow-registry)]
+    (ports/register-workflow! reg {:id :state-case-test :initial-state :draft
+                                   :states #{:draft :inReview}
+                                   :transitions [{:from :draft :to :inReview}]})
+    (doseq [typed ["inReview" "Inreview" " inreview "]]
+      (sut/handle-list-instances-web store reg nil {:query-params {"state" typed}})
+      (is (= :inReview (:current-state @seen)) typed))))

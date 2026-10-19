@@ -230,10 +230,16 @@
    [:label.form-field
     [:t :workflow/filter-label-current-state]
     (if (seq states)
-      (ui/select-field :state
-                       (cons ["" [:t :workflow/filter-option-any-state]]
-                             (map (juxt name form/label-text) states))
-                       (get params "state" ""))
+      (let [current (get params "state" "")]
+        ;; A filtered-by state no workflow registers stays selectable, so
+        ;; the select never shows "any" over a filtered list
+        (ui/select-field :state
+                         (cond-> (into [["" [:t :workflow/filter-option-any-state]]]
+                                       (map (juxt name form/label-text))
+                                       states)
+                           (and (seq current) (not-any? #(= current (name %)) states))
+                           (conj [current (form/label-text current)]))
+                         current))
       (ui/text-input :state (get params "state" "")
                      {:placeholder [:t :workflow/filter-placeholder-current-state]}))]
    [:button.button.secondary {:type "submit"}
