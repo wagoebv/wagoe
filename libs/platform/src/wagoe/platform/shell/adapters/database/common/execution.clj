@@ -7,9 +7,9 @@
             [wagoe.platform.core.database.constraint :as constraint]
             [wagoe.platform.core.http.problem-details :as problem]
             [wagoe.platform.core.database.query :as core-query]
+            [wagoe.platform.shell.adapters.database.common.adapter :as common-adapter]
             [wagoe.platform.shell.adapters.database.common.connection :as connection]
             [wagoe.platform.shell.database.validation :as core-validation]
-            [wagoe.core.utils.type-conversion :as type-conversion]
             [wagoe.platform.ports.database :as protocols]
             [wagoe.observability.core.sql-redaction :as redaction]
             ;; Loaded for its effect: every log call writes its throwable
@@ -17,7 +17,6 @@
             [wagoe.observability.logging.shell.redacting-factory]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
-            [clojure.walk :as walk]
             [next.jdbc :as jdbc]
             [next.jdbc.result-set :as rs])
   (:import [com.zaxxer.hikari HikariDataSource]
@@ -80,24 +79,15 @@
 ;; Query Execution
 ;; =============================================================================
 
-(defn- normalize-query-params
-  "Convert JDBC-unfriendly values in a query map to database-safe values.
-
-   Instants are stored as ISO-8601 strings throughout the project, so convert
-   them recursively before formatting or executing SQL."
-  [query-map]
-  (walk/postwalk (fn [value]
-                   (if (instance? java.time.Instant value)
-                     (type-conversion/instant->string value)
-                     value))
-                 query-map))
-
 (defn encode-params
-  "`[sql & params]` with each param as the engine takes it (BOU-648)."
-  [adapter [sql & params :as query]]
-  (if (instance? wagoe.platform.ports.database.ParamEncoder adapter)
-    (into [sql] (map #(protocols/param->db adapter %)) params)
-    query))
+  "`[sql & params]` with each param as the engine takes it (BOU-648). An
+   adapter without an encoder gets an Instant as its ISO string (BOU-655)."
+  [adapter [sql & params]]
+  (into [sql]
+        (map (if (instance? wagoe.platform.ports.database.ParamEncoder adapter)
+               #(protocols/param->db adapter %)
+               common-adapter/instant->iso))
+        params))
 
 (defn- row-builder
   "Kebab-case maps, each value decoded as the engine's adapter reads it, where
@@ -115,11 +105,9 @@
   [ctx query]
   (cond
     (map? query)
-    (let [adapter-dialect (protocols/dialect (:adapter ctx))
-          normalized-query (normalize-query-params query)]
-      {:query normalized-query
-       :sql-query (encode-params (:adapter ctx)
-                                 (core-query/format-sql adapter-dialect normalized-query))})
+    {:query query
+     :sql-query (encode-params (:adapter ctx)
+                               (core-query/format-sql (protocols/dialect (:adapter ctx)) query))}
 
     (string? query)
     {:query query

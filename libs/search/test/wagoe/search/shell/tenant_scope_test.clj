@@ -79,6 +79,10 @@
   (testing "a resolved tenant the caller is not a member of is refused"
     (is (= 403 (:status (call :search :scoped-items {:user   {:id (UUID/randomUUID) :role :user}
                                                      :tenant {:id tenant-b}} {})))))
+  (testing "a tenant's admin with no tenant resolved is refused, not given every tenant"
+    (is (= 403 (:status (call :search :scoped-items {:user {:id (UUID/randomUUID) :role :admin
+                                                            :tenant-id tenant-a}}
+                              {:filters {:tenant_id (str tenant-b)}})))))
   (testing "a global admin reads across tenants, and may filter"
     (let [admin {:user {:id (UUID/randomUUID) :role :admin}}]
       (is (= #{(str doc-a) (str doc-b)} (ids (call :search :scoped-items admin {}))))

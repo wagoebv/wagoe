@@ -21,6 +21,48 @@ document.addEventListener('alpine:init', function () {
 });
 
 /**
+ * Modal: wagoe.shared.ui.core.modal. The native <dialog> closes itself on Esc,
+ * backdrop and close button, traps focus and returns it; this only opens it.
+ */
+(function () {
+  function show(dialog) {
+    if (dialog && !dialog.open) dialog.showModal();
+  }
+
+  // A trigger: [data-modal-open="<dialog id>"]
+  document.addEventListener('click', function (event) {
+    var trigger = event.target.closest && event.target.closest('[data-modal-open]');
+    if (trigger) show(document.getElementById(trigger.getAttribute('data-modal-open')));
+  });
+
+  // A dialog an htmx swap brought in, rendered with :open?
+  document.addEventListener('htmx:load', function (event) {
+    var root = event.detail.elt;
+    if (root.matches('dialog[data-modal-show]')) show(root);
+    root.querySelectorAll('dialog[data-modal-show]').forEach(show);
+  });
+
+  // Confirm: the request waits for the dialog's answer instead of window.confirm
+  document.addEventListener('htmx:confirm', function (event) {
+    var id = event.detail.elt.getAttribute('data-confirm-modal');
+    if (!id) return;
+    event.preventDefault();
+    var dialog = document.getElementById(id);
+    // No dialog to ask, or it is already asking: send nothing
+    if (!dialog) {
+      console.error('No confirm dialog #' + id + '; request not sent');
+      return;
+    }
+    if (dialog.open) return;
+    dialog.returnValue = '';
+    dialog.addEventListener('close', function () {
+      if (dialog.returnValue === 'confirm') event.detail.issueRequest(true);
+    }, { once: true });
+    show(dialog);
+  });
+})();
+
+/**
  * Cross-page toast persistence via X-Toast response header + sessionStorage.
  *
  * Works on ALL page layouts (base, pilot, admin-pilot) because components.js

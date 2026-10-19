@@ -154,7 +154,8 @@
    ;; and storage any service legitimately uses. What is here is the surface a
    ;; module owns — including the two that must not run everywhere,
    ;; `:wagoe/job-workers` and `:wagoe/storage-routes`.
-   :jobs     {:keys [:wagoe/job-workers :wagoe/job-scheduler :wagoe/job-dead-letter-retention]}
+   :jobs     {:keys [:wagoe/job-workers :wagoe/job-tenant-runner :wagoe/job-scheduler
+                     :wagoe/job-dead-letter-retention]}
 
    :storage  {:keys [:wagoe/storage-routes :wagoe.storage/data-exporter :wagoe.storage/upload-retention
                      :wagoe.storage/export-jobs :wagoe.storage/export-job-handlers

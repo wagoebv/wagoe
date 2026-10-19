@@ -26,12 +26,24 @@
      :now-ms-sql         SQL for the database clock in epoch millis
      :on-connect         optional (fn [java.sql.Connection]), run on each new
                          connection after the session statements
-     :param->db          optional (fn [value] -> value) for each query parameter
+     :param->db          optional (fn [value] -> value) for each query parameter;
+                         without one, `instant->iso`
      :db->value          optional (fn [value] -> value) for each value read"
   (:require [wagoe.core.utils.type-conversion :as tc]
             [wagoe.platform.ports.database :as protocols]
             [clojure.tools.logging :as log]
             [next.jdbc :as jdbc]))
+
+;; =============================================================================
+;; Parameters
+;; =============================================================================
+
+(defn instant->iso
+  "An Instant parameter as its ISO string, anything else as it is: PostgreSQL
+   and H2 parse that into a timestamp column and keep it verbatim in a text
+   one, where a bound timestamp became unreadable text (BOU-655)."
+  [value]
+  (if (instance? java.time.Instant value) (tc/instant->string value) value))
 
 ;; =============================================================================
 ;; Boolean representation
@@ -182,7 +194,7 @@
   (like [_ field mode value] (case-insensitive-like (:string-match spec) field mode value))
 
   protocols/ParamEncoder
-  (param->db [_ value] ((:param->db spec identity) value))
+  (param->db [_ value] ((:param->db spec instant->iso) value))
 
   protocols/ResultDecoder
   (value-decoder [_] (:db->value spec)))
