@@ -35,10 +35,14 @@
     (str "count-" (:entity-plural entity) "-by-" (:belongs-to entity))))
 
 (defn- transact-fn
-  "The repository method that runs a child's guarded delete or move in one
-   transaction, for a child with a minimum (BOU-578), else nil."
+  "The repository method that runs a further entity's work in one
+   transaction: a child's guarded delete or move, for a child with a minimum
+   (BOU-578), or a create with its workflow (BOU-575). nil otherwise, and for
+   the first entity, whose method is `transact`."
   [entity]
-  (when (count-fn entity) (str "transact-" (:entity-plural entity))))
+  (when (and (not (:primary? entity true))
+             (or (count-fn entity) (:workflow entity)))
+    (str "transact-" (:entity-plural entity))))
 
 (defn- find-by-parents-fn
   "The repository method that reads a child's rows for several parents at
@@ -205,10 +209,11 @@
           (when (get entity :primary? true)
             (str "\n\n  (transact [this f]\n"
                  "    \"Call `f` in one database transaction, and return what it returns.\")"))
+          (when-let [t (transact-fn entity)]
+            (str "\n\n  (" t " [this f]\n"
+                 "    \"Call `f` in one database transaction, and return what it returns.\")"))
           (when-let [c (count-fn entity)]
-            (str "\n\n  (" (transact-fn entity) " [this f]\n"
-                 "    \"Call `f` in one database transaction, and return what it returns.\")\n\n"
-                 "  (" c " [this " (:belongs-to entity) "-id]\n"
+            (str "\n\n  (" c " [this " (:belongs-to entity) "-id]\n"
                  "    \"How many " (:entity-plural entity) " the " (:belongs-to entity) " has. In a transaction, it\n"
                  "     holds the " (:belongs-to entity) "'s row until the end, so two deletes cannot both count\n"
                  "     the same children.\")"))
@@ -641,31 +646,19 @@ DROP TABLE IF EXISTS %s;
          "     (f))))\n"
          "\n")))
 
-(defn- start-workflows-fn
+(def ^:private start-workflows-fn
   "The first entity's service: the workflows of a new row and its children,
-   started after the transaction (BOU-578)."
-  [delete]
+   started in its transaction (BOU-575)."
   (str "(defn- start-workflows!\n"
        "  \"Start the workflows of the children created with `created`, then its own\n"
-       "   (`start`, when it has one), after the commit: the workflow store writes on\n"
-       "   a connection of its own. No row without its workflow: on a failure the ones\n"
-       "   started are removed, the row deleted with its children, and the error\n"
-       "   rethrown.\"\n"
-       "  [repository children created start]\n"
-       "  (let [steps   (concat (for [[k {start-child :start undo :remove}] children\n"
-       "                              :when start-child\n"
-       "                              {:keys [id]} (get created k)]\n"
-       "                          [#(start-child id) #(undo id)])\n"
-       "                        (when start [[#(start (:id created)) (constantly nil)]]))\n"
-       "        started (volatile! [])]\n"
-       "    (try\n"
-       "      (doseq [[run undo] steps]\n"
-       "        (run)\n"
-       "        (vswap! started conj undo))\n"
-       "      (catch Exception e\n"
-       "        (run! #(%) @started)\n"
-       "        (ports/" delete " repository (:id created))\n"
-       "        (throw e)))))\n"
+       "   (`start`, when it has one). In the create's transaction, which each\n"
+       "   workflow joins: no row without its workflow.\"\n"
+       "  [children created start]\n"
+       "  (doseq [[k {start-child :start}] children\n"
+       "          :when start-child\n"
+       "          {:keys [id]} (get created k)]\n"
+       "    (start-child id))\n"
+       "  (when start (start (:id created))))\n"
        "\n"))
 
 (defn- create-with-children-fn
@@ -673,16 +666,19 @@ DROP TABLE IF EXISTS %s;
   [entity-lower]
   (str "(defn- create-with-children\n"
        "  \"Create `prepared` and each child `data` carries under a key of `children`,\n"
-       "   in one transaction: all of them or none. The " entity-lower " comes back with them.\"\n"
-       "  [repository children prepared data]\n"
+       "   with their workflows, in one transaction: all of them or none. The\n"
+       "   " entity-lower " comes back with its children.\"\n"
+       "  [repository children prepared data start]\n"
        "  (ports/transact repository\n"
        "                  (fn []\n"
-       "                    (reduce-kv (fn [created k {:keys [foreign-key create]}]\n"
-       "                                 (cond-> created\n"
-       "                                   (contains? data k)\n"
-       "                                   (assoc k (mapv #(create (assoc % foreign-key (:id created))) (get data k)))))\n"
-       "                               (ports/create repository prepared)\n"
-       "                               children))))\n"
+       "                    (let [created (reduce-kv (fn [created k {:keys [foreign-key create]}]\n"
+       "                                               (cond-> created\n"
+       "                                                 (contains? data k)\n"
+       "                                                 (assoc k (mapv #(create (assoc % foreign-key (:id created))) (get data k)))))\n"
+       "                                             (ports/create repository prepared)\n"
+       "                                             children)]\n"
+       "                      (start-workflows! children created start)\n"
+       "                      created))))\n"
        "\n"))
 
 (def ^:private with-children-fn
@@ -744,7 +740,8 @@ DROP TABLE IF EXISTS %s;
                       (if primary? "(apply dissoc data (keys children))" "data")
                       " (generate-" entity-lower "-id) (current-time))")
          insert  (if primary?
-                   "(create-with-children repository children prepared data)"
+                   (str "(create-with-children repository children prepared data "
+                        (if wf (str "#(ports/start-" entity-lower "-workflow! workflow %)") "nil") ")")
                    (str "(ports/" create " repository prepared)"))
          ;; A child with a minimum deletes, or moves to another parent, only
          ;; through keeping-minimum. The row is read first, so the lock is the
@@ -774,7 +771,7 @@ DROP TABLE IF EXISTS %s;
           "(defn- generate-" entity-lower "-id []\n"
           "  (UUID/randomUUID))\n"
           "\n"
-          (when primary? (str (create-with-children-fn entity-lower) (start-workflows-fn delete) with-children-fn))
+          (when primary? (str start-workflows-fn (create-with-children-fn entity-lower) with-children-fn))
           (when wf (workflow-of-fn entity-lower))
           (when minimum? (keep-minimum-fn entity))
           (when wf
@@ -802,24 +799,17 @@ DROP TABLE IF EXISTS %s;
           "  (create-" entity-lower " [_this data]\n"
           (cond
             primary?
-            (str "    (let [prepared " prepare "\n"
-                 "          created  " insert "]\n"
-                 "      (start-workflows! repository children created"
-                 (if wf (str " #(ports/start-" entity-lower "-workflow! workflow %)") " nil") ")\n"
-                 "      created))\n")
+            (str "    (let [prepared " prepare "]\n"
+                 "      " insert "))\n")
 
             wf
-            (str "    (let [prepared " prepare "\n"
-                 "          created  " insert "]\n"
-                 ;; After the transaction: the workflow store writes on a
-                 ;; connection of its own, which SQLite would make wait on it.
-                 "      (try\n"
-                 "        (ports/start-" entity-lower "-workflow! workflow (:id created))\n"
-                 "        (catch Exception e\n"
-                 "          ;; No row without its workflow.\n"
-                 "          (ports/" delete " repository (:id created))\n"
-                 "          (throw e)))\n"
-                 "      created))\n")
+            (str "    (let [prepared " prepare "]\n"
+                 "      ;; One transaction, which the workflow joins: no row without it.\n"
+                 "      (ports/" (transact-fn entity) " repository\n"
+                 "       (fn []\n"
+                 "         (let [created " insert "]\n"
+                 "           (ports/start-" entity-lower "-workflow! workflow (:id created))\n"
+                 "           created)))))\n")
 
             :else
             (str "    (let [prepared " prepare "]\n"
@@ -905,7 +895,7 @@ DROP TABLE IF EXISTS %s;
             (str "\n"
                  "(defn create-row\n"
                  "  \"The row alone, as the " (:belongs-to entity) "'s create makes it inside its transaction."
-                 (when wf "\n   Its workflow is started after the commit.") "\"\n"
+                 (when wf "\n   Its workflow is started in that transaction too.") "\"\n"
                  "  [{:keys [repository]} data]\n"
                  "  (ports/" create " repository " (str/replace prepare "(apply dissoc data (keys children))" "data") "))\n"
                  "\n"
@@ -1014,12 +1004,13 @@ DROP TABLE IF EXISTS %s;
           (when (:primary? entity true)
             (str "\n  (transact [_this f]\n"
                  "    (db/with-transaction* db-ctx (fn [_] (f))))"))
+          (when-let [t (transact-fn entity)]
+            (str "\n  (" t " [_this f]\n"
+                 "    (db/with-transaction* db-ctx (fn [_] (f))))"))
           (when-let [c (count-fn entity)]
             (let [p      (:belongs-to entity)
                   parent (some #(when (= (str p "-id") (:field-name-kebab %)) (:relation-table %)) (:fields entity))]
-              (str "\n  (" (transact-fn entity) " [_this f]\n"
-                   "    (db/with-transaction* db-ctx (fn [_] (f))))\n"
-                   "  (" c " [_this " p "-id]\n"
+              (str "\n  (" c " [_this " p "-id]\n"
                    ;; A write, not SELECT … FOR UPDATE: it locks the row on
                    ;; PostgreSQL, MySQL and H2 alike, and takes SQLite's write
                    ;; lock, which has no FOR UPDATE.
@@ -1211,9 +1202,10 @@ DROP TABLE IF EXISTS %s;
           "                      (" update " [_ entity] entity)\n"
           "                      (" delete " [_ _id] nil)"
           (when (:primary? entity true) "\n                      (transact [_ f] (f))")
+          (when-let [t (transact-fn entity)]
+            (str "\n                      (" t " [_ f] (f))"))
           (when-let [c (count-fn entity)]
-            (str "\n                      (" (transact-fn entity) " [_ f] (f))"
-                 "\n                      (" c " [_ _id] 0)"))
+            (str "\n                      (" c " [_ _id] 0)"))
           (when-let [f (find-by-parents-fn entity)]
             (str "\n                      (" f " [_ _ids] [])"))
           ")\n"
@@ -1356,6 +1348,7 @@ DROP TABLE IF EXISTS %s;
          "   only thing that moves it.\"\n"
          "  (:require [" base-ns "." module-name ".ports :as ports]\n"
          "            [wagoe.events.ports :as events]\n"
+         "            [wagoe.platform.database :as db]\n"
          "            [wagoe.workflow.core.transitions :as transitions]\n"
          "            [wagoe.workflow.ports :as workflow]))\n"
          "\n"
@@ -1390,17 +1383,21 @@ DROP TABLE IF EXISTS %s;
          "(defrecord " entity-name "Workflow [engine store repository bus subscription]\n"
          "  ports/I" entity-name "Workflow\n"
          "  (start-" e "-workflow! [_ id]\n"
-         "    ;; Once: an admin event may be delivered twice. In the state the row\n"
-         "    ;; holds, so a row seeded as paid is not reset to the first.\n"
-         "    (or (instance-of store id)\n"
-         "        (let [state    (state-of repository id)\n"
-         "              instance (workflow/start-workflow! engine {:workflow-id (:id definition)\n"
-         "                                                         :entity-type entity-type\n"
-         "                                                         :entity-id   (->uuid id)})]\n"
-         "          (if (= state (:current-state instance))\n"
-         "            instance\n"
-         "            (do (workflow/update-instance-state! store (:id instance) state)\n"
-         "                (assoc instance :current-state state))))))\n"
+         "    ;; On the caller's transaction when there is one: the create's, so its\n"
+         "    ;; row and this instance commit or roll back together.\n"
+         "    (let [tx    (db/current-transaction)\n"
+         "          store (cond-> store tx (workflow/store-in-tx tx))]\n"
+         "      ;; Once: an admin event may be delivered twice. In the state the row\n"
+         "      ;; holds, so a row seeded as paid is not reset to the first.\n"
+         "      (or (instance-of store id)\n"
+         "          (let [state    (state-of repository id)\n"
+         "                instance (workflow/start-workflow! engine tx {:workflow-id (:id definition)\n"
+         "                                                              :entity-type entity-type\n"
+         "                                                              :entity-id   (->uuid id)})]\n"
+         "            (if (= state (:current-state instance))\n"
+         "              instance\n"
+         "              (do (workflow/update-instance-state! store (:id instance) state)\n"
+         "                  (assoc instance :current-state state)))))))\n"
          "  (remove-" e "-workflow! [_ id]\n"
          "    (when-let [instance (instance-of store id)]\n"
          "      (workflow/delete-instance! store (:id instance))))\n"

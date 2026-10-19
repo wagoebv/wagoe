@@ -99,6 +99,12 @@
   "Call `f` with a transaction context, committing or rolling back around it."
   execution/with-transaction*)
 
+(defn current-transaction
+  "The connection of the transaction `with-transaction` holds open on this
+   thread, or nil. For a port that takes a caller's transaction explicitly."
+  []
+  execution/*transaction-datasource*)
+
 (defmacro with-transaction
   "Run `body` in a transaction, bound to the first name in `binding`.
 

@@ -31,6 +31,9 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **`start-workflow!` and `transition!` take the caller's transaction** (BOU-575): `(start-workflow! engine tx input)`.
+  Scaffolded creates now write the entity and its workflow instance atomically; regenerate a service to get it.
+
 - **`bb scaffold entity` gives the entity web pages** (BOU-542): a list and a create form, as the first entity has,
   with a select for its `--belongs-to` parent. Nothing to do; a module generated with `--no-web` gets none.
 - **`:wagoe/user :login-layout` lets an app lay out the sign-in pages** (BOU-740): login, MFA and registration.

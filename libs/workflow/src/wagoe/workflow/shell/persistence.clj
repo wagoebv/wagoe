@@ -10,7 +10,7 @@
             [clojure.tools.logging :as log]
             [clojure.edn :as edn])
   (:import [java.util Date UUID]
-           [java.sql SQLException Timestamp]
+           [java.sql Connection SQLException Timestamp]
            [java.time Instant LocalDateTime OffsetDateTime ZoneOffset]))
 
 ;; =============================================================================
@@ -133,18 +133,54 @@
       (= 1062 (.getErrorCode e))
       (boolean (re-find #"SQLITE_CONSTRAINT_UNIQUE|UNIQUE constraint failed" (str (ex-message e))))))
 
+(defn tx-connection
+  "The connection behind `tx` when it is an open transaction: a next.jdbc
+   connection, or a platform transaction context. nil for anything else."
+  [tx]
+  (let [conn (if (map? tx) (or (:datasource tx) (:connectable tx)) tx)]
+    (when (and (instance? Connection conn)
+               (not (.getAutoCommit ^Connection conn)))
+      conn)))
+
+(defn- in-savepoint
+  "Call `f` on `conn`, and on failure roll back only what it did: PostgreSQL
+   refuses every statement of a transaction after a failed one, and the engine
+   reads the winning instance after a conflict."
+  [^Connection conn f]
+  (let [sp (.setSavepoint conn)]
+    (try
+      (let [result (f)]
+        (.releaseSavepoint conn sp)
+        result)
+      (catch Exception e
+        (try (.rollback conn sp)
+             (catch SQLException re (.addSuppressed e re)))
+        (throw e)))))
+
 (defrecord WorkflowStore [datasource]
+  ports/ITransactionalWorkflowStore
+
+  (store-in-tx [_ tx]
+    (if-let [conn (tx-connection tx)]
+      (->WorkflowStore conn)
+      (throw (ex-info "A workflow store joins an open transaction, not a datasource"
+                      {:type    :validation-error
+                       :message "Pass the transaction from with-transaction; a datasource would autocommit"}))))
+
   ports/IWorkflowStore
 
   (save-instance! [_ instance]
     (log/debug "Saving workflow instance" {:id (:id instance)})
-    (let [row (instance->db instance)]
+    (let [row    (instance->db instance)
+          insert #(jdbc/execute-one! datasource
+                                     (sql/format {:insert-into :workflow_instances
+                                                  :values      [row]})
+                                     {:return-keys true
+                                      :builder-fn  rs/as-unqualified-lower-maps})]
       (try
-        (jdbc/execute-one! datasource
-                           (sql/format {:insert-into :workflow_instances
-                                        :values      [row]})
-                           {:return-keys true
-                            :builder-fn  rs/as-unqualified-lower-maps})
+        (if-let [conn (tx-connection datasource)]
+          (in-savepoint conn insert)
+          (insert))
         (catch SQLException e
           (throw (if (unique-violation? e)
                    (ex-info "The entity already has an instance of this workflow"
@@ -242,14 +278,18 @@
 
   (delete-instance! [_ instance-id]
     (log/debug "Deleting workflow instance" {:id instance-id})
-    (jdbc/with-transaction [tx datasource]
-      ;; The audit rows reference the instance.
-      (jdbc/execute! tx (sql/format {:delete-from :workflow_audit
-                                     :where       [:= :instance_id (uuid->str instance-id)]}))
-      (-> (jdbc/execute-one! tx (sql/format {:delete-from :workflow_instances
-                                             :where       [:= :id (uuid->str instance-id)]}))
-          :next.jdbc/update-count
-          pos?))))
+    (let [delete! (fn [tx]
+                    ;; The audit rows reference the instance.
+                    (jdbc/execute! tx (sql/format {:delete-from :workflow_audit
+                                                   :where       [:= :instance_id (uuid->str instance-id)]}))
+                    (-> (jdbc/execute-one! tx (sql/format {:delete-from :workflow_instances
+                                                           :where       [:= :id (uuid->str instance-id)]}))
+                        :next.jdbc/update-count
+                        pos?))]
+      ;; On a caller's transaction, that one decides.
+      (if (tx-connection datasource)
+        (delete! datasource)
+        (jdbc/with-transaction [tx datasource] (delete! tx))))))
 
 (defn create-workflow-store
   "Create a WorkflowStore backed by a JDBC datasource.
