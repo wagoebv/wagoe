@@ -348,7 +348,8 @@ Five `:wagoe/user` keys, all checked at boot; a bad value fails it.
  :landing "/web/welkom"
 
  ;; false: /web/register is not mounted and the login page drops its
- ;; "Create Account" link; accounts come from an admin or an import. Default true.
+ ;; "Create Account" link; accounts come from an admin, an import, or an OIDC
+ ;; provider with :auto-create? true. Default true.
  :registration false}
 ```
 
@@ -432,7 +433,7 @@ or `WAG_WEB_UI_ENABLED=false` with the shipped configs. `web-ui-enabled?` in
 `wagoe.user.shell.http` is the one check; `user-routes` and `group-routes` use it.
 
 Removed:
-- `/web` landing page, `/web/login`, `/web/register` (unless `:registration false`), `/web/logout`
+- `/web` landing page, `/web/login`, `/web/register`, `/web/logout`
 - `/web/dashboard`, `/web/profile/**` (incl. MFA setup/disable pages)
 - `/web/users/**` (user management, sessions), `/web/audit`
 - `/web/admin/groups/**`

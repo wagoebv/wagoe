@@ -137,7 +137,7 @@ The module registers these routes automatically:
 | `/web/login` | POST | Login action |
 | `/web/logout` | POST | Logout action |
 | `/web/register` | GET | Registration page (not mounted with `:registration false`) |
-| `/web/register` | POST | Registration action |
+| `/web/register` | POST | Registration action (not mounted with `:registration false`) |
 | `/web/profile` | GET | User profile page |
 | `/web/profile` | PUT | Update profile |
 | `/web/mfa/setup` | GET | MFA setup page |

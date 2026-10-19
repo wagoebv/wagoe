@@ -258,7 +258,7 @@ the platform's redirect.
 
 `:registration false` turns off self-registration: `/web/register` is not mounted and
 the login page drops its "Create Account" link. Accounts then come from an
-administrator or an import. It is on by default.
+administrator, an import, or an OIDC provider with `:auto-create? true`. It is on by default.
 
 All five keys are checked at boot: a path off this site, an unknown role or a symbol
 that does not resolve stops it.

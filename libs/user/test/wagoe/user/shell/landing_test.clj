@@ -128,20 +128,20 @@
   {:web [["/dashboard" {:public true
                         :get    {:handler (fn [_] {:status 200 :body "app dashboard"})}}]]})
 
-(defn- mounted [settings]
+(defn- mounted [settings & contributions]
   (reitit-router/compile-routes
-   (:web (wiring/module-route-contributions [{:web (user-web-routes settings)} app-dashboard]))
+   (:web (wiring/module-route-contributions (cons {:web (user-web-routes settings)} contributions)))
    {:swagger-enabled false}))
 
 (deftest ^:contract dashboard-false-leaves-the-path-to-the-app
   (is (nil? (dashboard-route {:dashboard false})))
   (is (= "app dashboard"
-         (:body ((mounted {:dashboard false}) {:request-method :get :uri "/web/dashboard"})))))
+         (:body ((mounted {:dashboard false} app-dashboard) {:request-method :get :uri "/web/dashboard"})))))
 
 (deftest ^:contract default-dashboard-still-claims-the-path
   (is (some? (dashboard-route {})))
   (is (= :wagoe/ambiguous-routes
-         (:type (ex-data (try (mounted {}) nil (catch Exception e e)))))))
+         (:type (ex-data (try (mounted {} app-dashboard) nil (catch Exception e e)))))))
 
 (defn custom-dashboard [_request]
   {:status 200 :body "custom"})
@@ -201,11 +201,6 @@
 ;; :registration — whether /web/register exists
 ;; =============================================================================
 
-(defn- web-app [settings]
-  (reitit-router/compile-routes
-   (:web (wiring/module-route-contributions [{:web (user-web-routes settings)}]))
-   {:swagger-enabled false}))
-
 (defn- links-to-register? [response]
   (str/includes? (str (:body response)) "/web/register"))
 
@@ -218,13 +213,13 @@
       {:form-params {"email" "user@example.com"}})]))
 
 (deftest ^:contract registration-on-by-default
-  (let [app (web-app {})]
+  (let [app (mounted {})]
     (is (= 200 (:status (app {:request-method :get :uri "/web/register"})))))
   (doseq [page (login-pages {})]
     (is (links-to-register? page))))
 
 (deftest ^:contract registration-false-drops-the-routes-and-the-link
-  (let [app (web-app {:registration false})]
+  (let [app (mounted {:registration false})]
     (is (= 404 (:status (app {:request-method :get :uri "/web/register"}))))
     (is (= 404 (:status (app {:request-method :post :uri "/web/register"
                               :form-params {"email" "x@example.com" "password" "Secret-pass-123"}})))
