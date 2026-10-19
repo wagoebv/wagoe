@@ -16,38 +16,33 @@
             [wagoe.shared.ui.core.layout :as layout]
             [wagoe.shared.ui.core.icons :as icons]
             [wagoe.shared.ui.core.components :as ui]
-            [clojure.string :as str]))
+            [clojure.string :as str]
+            [wagoe.core.utils.text :as text]))
 
 ;; =============================================================================
 ;; State Badge
 ;; =============================================================================
 
 (defn state-badge
-  "Render a state keyword as a colored badge.
+  "Render a state keyword as a tone badge, the look the admin entity pages give
+   an enum value (`c-badge tone-*` in wagoe-admin.css).
 
    Args:
      state-kw - keyword (e.g. :pending, :paid)
-     variant  - :current | :reachable | :visited | :default
-
-   CSS classes map:
-     :current   → status-badge success  (green  — active state)
-     :reachable → status-badge info     (blue   — reachable from current)
-     :visited   → status-badge          (grey   — previously visited)
-     :default   → status-badge          (grey   — all other states)
+     variant  - :current (success) | :reachable (info) | :visited | :default (neutral)
 
    Returns:
      Hiccup span element"
   ([state-kw]
    (state-badge state-kw :default))
   ([state-kw variant]
-   (let [badge-variant (case variant
-                         :current :success
-                         :reachable :info
-                         :visited :neutral
-                         :neutral)]
-     (ui/badge (name state-kw)
-               {:variant badge-variant
-                :class "status-badge"}))))
+   (let [tone (case variant
+                :current :success
+                :reachable :info
+                :neutral)]
+     (ui/badge (text/capitalize (str/replace (name state-kw) "-" " "))
+               {:variant tone
+                :class (str "c-badge tone-" (name tone))}))))
 
 ;; =============================================================================
 ;; State Machine Visualization

@@ -179,6 +179,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **`/web/admin/workflows` columns overlapped and the timestamp was clipped** (BOU-595): state badges now use
+  the entity pages' tone badges. Nothing to do.
 - **`bb setup` switching back to a database added a fresh one** (BOU-560): it now restores the one in `:inactive`.
   It also keeps comments after a key, syncs what it writes to disk, and no longer reports a no-op `none` as written.
 - **`bb ai gen-tests` grounds fixtures in the entity's Malli schema and refuses ones that break it** (BOU-511).
