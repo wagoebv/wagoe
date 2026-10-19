@@ -141,16 +141,15 @@
 
             ;; If :compose present, resolve composition tree
             (if-let [compose (:compose definition)]
-              ;; Composition path — resolve referenced segments via recursive call
-              ;; A composed ref is handed back as its tree, so the core's cycle
-              ;; guard sees it: resolving it here recursed until the stack ran
-              ;; out on A -> B -> A. A missing ref is nil, which the core
-              ;; reports as :unknown-segment-ref.
-              (let [lookup  (fn [id]
-                              (when-let [d (load-definition id repository)]
-                                (if (:compose d)
-                                  {:compose (:compose d)}
-                                  {:user-ids (:user-ids (ports/resolve-audience this id))})))
+              ;; Composed refs return their tree so the core's cycle guard sees
+              ;; them; a missing ref is nil. Memoized: validation and evaluation
+              ;; both walk the tree.
+              (let [lookup  (memoize
+                             (fn [id]
+                               (when-let [d (load-definition id repository)]
+                                 (if (:compose d)
+                                   {:compose (:compose d)}
+                                   {:user-ids (:user-ids (ports/resolve-audience this id))}))))
                     ;; Validate the composition tree (structure + refs) before
                     ;; evaluating it, so bad trees raise instead of failing safe.
                     _ (unwrap! (composition/explain-composition compose lookup))

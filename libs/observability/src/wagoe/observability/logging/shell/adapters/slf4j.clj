@@ -87,17 +87,8 @@
     (MDC/put "security" "true")))
 
 (defn- with-mdc
-  "Execute function with MDC context populated, then put back the MDC the
-   caller had: clearing it dropped values the application had set.
-
-   Args:
-     context - Context map
-     f - Zero-argument function to execute
-
-   Returns:
-     Result of calling (f)
-
-   Pure: No (manages MDC state)"
+  "Call (f) with `context` in the MDC, then put back the MDC the caller had:
+   clearing it dropped values the application had set."
   [context f]
   (if (seq context)
     (let [previous (MDC/getCopyOfContextMap)]

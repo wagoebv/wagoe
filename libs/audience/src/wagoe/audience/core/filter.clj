@@ -118,13 +118,14 @@
   ;; A missing value matches no ordering, as NULL does in SQL: compare sorts
   ;; nil below everything, so :lt matched every user without the field.
   (let [[honey-op honey-val] (sql-op op value)
+        ord        (fn [p] #(and (some? %) (p (compare % honey-val))))
         compare-fn (case honey-op
                      :=    #(= % honey-val)
                      :<>   #(not= % honey-val)
-                     :>    #(and (some? %) (pos? (compare % honey-val)))
-                     :>=   #(and (some? %) (>= (compare % honey-val) 0))
-                     :<    #(and (some? %) (neg? (compare % honey-val)))
-                     :<=   #(and (some? %) (<= (compare % honey-val) 0))
+                     :>    (ord pos?)
+                     :>=   (ord (complement neg?))
+                     :<    (ord neg?)
+                     :<=   (ord (complement pos?))
                      :in   #(contains? (set honey-val) %)
                      :like (let [pat (re-pattern (str "(?i).*" (Pattern/quote (str value)) ".*"))]
                              #(boolean (re-find pat (str %))))
@@ -235,13 +236,13 @@
 
 (defmethod filter->predicate :feature-usage [{:keys [field op value now]}]
   ;; nil without a date — see :account-tenure above.
-  (when-let [today now]
+  (when now
     (case op
       :used-within
       (fn [user]
         (let [usage (get-in user [:feature-usage field])]
           (when usage
-            (let [cutoff    (.minusDays today value)
+            (let [cutoff    (.minusDays now value)
                   last-used (.toLocalDate (.atZone (.toInstant usage)
                                                    java.time.ZoneOffset/UTC))]
               (not (.isBefore last-used cutoff))))))
