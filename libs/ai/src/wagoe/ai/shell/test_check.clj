@@ -28,7 +28,7 @@
    compiled schemas count: a var holding `:string` is more likely a constant."
   [v]
   (when (or (and (vector? v) (keyword? (first v))) (m/schema? v))
-    (try (m/form (m/schema v)) (catch Exception _ nil))))
+    (try (m/form v) (catch Exception _ nil))))
 
 (defn namespace-api
   "{:ns :protocols [{:name :methods [{:name :arglists}]}] :schemas [{:name :form}]
@@ -135,46 +135,6 @@
       :else                 [(str "clj-kondo could not run (exit " exit "): "
                                   (str/trim (str err out)))])))
 
-(def ^:private runner
-  "Run in the child JVM with the generated file and a result file as system
-   properties. Fixtures tagged ^{:schema s} are checked first; a test that
-   passes on invented data proves nothing."
-  '(do
-     (require 'clojure.string 'clojure.test 'malli.core 'malli.error)
-     (let [file   (System/getProperty "wagoe.ai.test-file")
-           out    (java.io.StringWriter.)
-           result (try
-                    (let [ns-sym (binding [*read-eval* false]
-                                   (second (read-string (slurp file))))]
-                      (load-file file)
-                      (let [bad (vec (for [[n v] (sort-by key (ns-interns ns-sym))
-                                           :let [s (:schema (meta v))]
-                                           :when s
-                                           :let [problem (try (some-> (malli.core/explain s @v)
-                                                                      malli.error/humanize)
-                                                              (catch Throwable e (str "not a schema: " (ex-message e))))]
-                                           :when problem]
-                                       (str "Fixture " n " does not match its :schema: " (pr-str problem))))]
-                        (if (seq bad)
-                          {:errors bad}
-                          (let [{:keys [test fail error]}
-                                (binding [clojure.test/*test-out* out]
-                                  (clojure.test/run-tests ns-sym))]
-                            (cond
-                              (zero? test) {:errors ["The namespace defines no tests"]}
-                              (pos? (+ fail error))
-                              {:errors (into [(str "Running it: " fail " failures, " error " errors")]
-                                             (->> (clojure.string/split-lines (str out))
-                                                  (remove clojure.string/blank?)
-                                                  (take 60)))}
-                              :else {})))))
-                    (catch Throwable e
-                      {:errors [(str "It does not load: " (ex-message e)
-                                     (some->> (ex-cause e) ex-message (str " — ")))]}))]
-       (spit (System/getProperty "wagoe.ai.result-file") (pr-str result))
-       (shutdown-agents)
-       (System/exit 0))))
-
 (def ^:private run-timeout-ms 180000)
 
 (defn run-errors
@@ -184,35 +144,34 @@
 
    The child gets an empty environment: the code is the model's, unread, and
    this process holds the provider's API key (BOU-572 review)."
-  ([text] (run-errors text {}))
-  ([text {:keys [root timeout-ms] :or {timeout-ms run-timeout-ms}}]
-   (let [src (java.io.File/createTempFile "wagoe-ai-gen" ".clj")
-         res (java.io.File/createTempFile "wagoe-ai-gen" ".edn")
-         log (java.io.File/createTempFile "wagoe-ai-gen" ".log")]
-     (try
-       (spit src text)
-       (let [java (str (System/getProperty "java.home") "/bin/java")
-             pb   (ProcessBuilder. ^java.util.List
-                                   [java "-cp" (System/getProperty "java.class.path")
-                                    (str "-Dwagoe.ai.test-file=" (.getPath src))
-                                    (str "-Dwagoe.ai.result-file=" (.getPath res))
-                                    "clojure.main" "-e" (pr-str runner)])
-             _    (.clear (.environment pb))
-             proc (-> pb
-                      (.directory (io/file (or root ".")))
-                      (.redirectErrorStream true)
-                      (.redirectOutput log)
-                      (.start))]
-         (if-not (.waitFor proc timeout-ms java.util.concurrent.TimeUnit/MILLISECONDS)
-           (do (.destroyForcibly proc)
-               [(str "Running it did not finish within " (quot timeout-ms 1000) "s")])
-           (let [result (some-> (slurp res) not-empty edn/read-string)]
-             (if result
-               (not-empty (:errors result))
-               [(str "Running it failed before reporting (exit " (.exitValue proc) "): "
-                     (str/trim (slurp log)))]))))
-       (finally
-         (run! #(.delete ^java.io.File %) [src res log]))))))
+  [text {:keys [root]}]
+  (if-let [ns-sym (second (read-ns-form text))]
+    (let [src (java.io.File/createTempFile "wagoe-ai-gen" ".clj")
+          res (java.io.File/createTempFile "wagoe-ai-gen" ".edn")
+          log (java.io.File/createTempFile "wagoe-ai-gen" ".log")]
+      (try
+        (spit src text)
+        (let [java (str (System/getProperty "java.home") "/bin/java")
+              pb   (ProcessBuilder. ^java.util.List
+                                    [java "-cp" (System/getProperty "java.class.path")
+                                     "clojure.main" "-m" "wagoe.ai.shell.test-runner"
+                                     (.getPath src) (str ns-sym) (.getPath res)])
+              _    (.clear (.environment pb))
+              proc (-> pb
+                       (.directory (io/file (or root ".")))
+                       (.redirectErrorStream true)
+                       (.redirectOutput log)
+                       (.start))]
+          (if-not (.waitFor proc run-timeout-ms java.util.concurrent.TimeUnit/MILLISECONDS)
+            (do (.destroyForcibly proc)
+                [(str "Running it did not finish within " (quot run-timeout-ms 1000) "s")])
+            (if-let [errors (some-> (slurp res) not-empty edn/read-string)]
+              (not-empty errors)
+              [(str "Running it failed before reporting (exit " (.exitValue proc) "): "
+                    (str/trim (slurp log)))])))
+        (finally
+          (run! #(.delete ^java.io.File %) [src res log]))))
+    ["It has no ns form"]))
 
 (defn check-errors
   "Errors in generated `text`, or nil. It is read and linted first; only a

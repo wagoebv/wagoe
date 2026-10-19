@@ -430,6 +430,7 @@
 
       ;; Linted as the file it will be, so kondo's config and namespace
       ;; checks apply as they will in `bb check`.
+      (println (dim "The answer is linted and its tests run before anything is written."))
       (let [lint-as (or dest (ctx/derive-test-path source-path) "test/generated_test.clj")
             check   (fn [text]
                       (test-check/check-errors
@@ -440,7 +441,6 @@
                                                         (map test-check/source-file
                                                              (test-check/required-namespaces text))))}))
             service (make-service-from-config)
-            _       (println (dim "The answer is linted and its tests run before anything is written."))
             result  (svc/generate-tests service source-path {:check check})]
         (when (:error result)
           (println (red (describe-failure result service)))

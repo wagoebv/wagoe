@@ -2,6 +2,7 @@
   "BOU-572: gen-tests wrote a namespace that did not load and did not lint."
   (:require [wagoe.ai.shell.cli-entry :as cli]
             [wagoe.ai.shell.test-check :as sut]
+            [wagoe.ai.shell.test-runner :as runner]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]))
 
@@ -92,11 +93,20 @@
   " assertion ")
 "))
 
+(defn- run-in-process
+  "The child's checks, run here. Only for answers that never reach the tests:
+   a nested run-tests would report into kaocha's counters."
+  [text ns-sym]
+  (let [f (java.io.File/createTempFile "gen" ".clj")]
+    (try (spit f text) (runner/errors (.getPath f) ns-sym)
+         (finally (.delete f)))))
+
 (deftest ^:integration a-passing-namespace-runs-clean
-  (is (nil? (sut/run-errors (generated "{:role :user :content \"hi\"}" "(is (= :user (:role message)))")))))
+  (is (nil? (sut/run-errors (generated "{:role :user :content \"hi\"}" "(is (= :user (:role message)))") {}))))
 
 (deftest ^:integration fixture-data-that-breaks-its-schema-is-refused
-  (let [errors (sut/run-errors (generated "{:role :user :content 42}" "(is (= :user (:role message)))"))]
+  (let [errors (run-in-process (generated "{:role :user :content 42}" "(is (= :user (:role message)))")
+                               'wagoe.ai.generated-run-test)]
     (is (some #(and (str/includes? % "Fixture message does not match its :schema")
                     (str/includes? % ":content"))
               errors)
@@ -110,4 +120,5 @@
 
 (deftest ^:integration a-namespace-that-does-not-load-is-reported
   (is (some #(str/starts-with? % "It does not load")
-            (sut/run-errors "(ns wagoe.ai.generated-broken-test)\n(deftest a (is (= 1 (nope))))"))))
+            (run-in-process "(ns wagoe.ai.generated-broken-test)\n(deftest a (is (= 1 (nope))))"
+                            'wagoe.ai.generated-broken-test))))
