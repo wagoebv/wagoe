@@ -109,8 +109,6 @@
     ;; Note: Using a wrapper div instead of fragment [:<>] for Hiccup compatibility with Alpine.js initialization
     [:div.hiccup-fragment-wrapper
      ;; Alpine sidebar store is initialized in admin-ux.js (external script, CSP-safe)
-     ;; Toast notification container
-     [:div.toast-container {:role "status" :aria-live "polite"}]
      [:div.admin-shell (alpine/sidebar-shell-attrs)
       (admin-sidebar entities entity-configs current-entity opts)
       [:div.admin-overlay (alpine/sidebar-overlay-attrs)]

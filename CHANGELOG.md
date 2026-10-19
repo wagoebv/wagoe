@@ -37,6 +37,8 @@ for what is public API, what is internal, and how deprecations are announced.
   GCS); `db/upsert!` and `db/ensure-binary-collation!` serve any keyed table. Nothing to do.
 - **`wagoe.shared.ui.core.modal`: modal and confirm on native `<dialog>`** (BOU-753); admin deletes confirm with it, bulk
   delete now too. The broken `layout/modal` is removed: use `modal/modal`.
+- **Toasts in every page layout** (BOU-755): a flash shows as a toast, and `toast/oob-toast` / `toast/with-toast`
+  add one to any htmx response.
 - **A user's data export as a background job** (BOU-749): with the jobs module, `POST /api/v1/me/export-jobs`
   builds the zip in file storage and the user downloads it for a day. Run `migrate up`.
 - **Tenant exports are audited** (BOU-749): each download of `GET /api/v1/tenants/:id/export` is recorded in a new
@@ -197,6 +199,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Removed
 
+- **`window.AdminUX.showToast` and the `.flash-messages` banner** (BOU-755): send `HX-Trigger: {"showToast": {"type": ..., "message": ...}}`
+  or a toast out of band instead; `title` is no longer shown.
 - **The `:base` CSS bundle: pico, open-props, `tokens-openprops.css`, `base-css`** (BOU-458): `(bundle :base)` serves `:pilot` and warns.
   Use `pilot-css` and restyle pages that relied on pico with daisy classes.
 

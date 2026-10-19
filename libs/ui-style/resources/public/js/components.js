@@ -18,6 +18,17 @@ document.addEventListener('alpine:init', function () {
       close: function () { this.open = false; }
     };
   });
+
+  // Toast (shared-ui toast/toast): goes after `ms`, or when closed; 0 stays.
+  window.Alpine.data('toast', function (ms) {
+    return {
+      init: function () {
+        var self = this;
+        if (ms > 0) setTimeout(function () { self.dismiss(); }, ms);
+      },
+      dismiss: function () { this.$root.remove(); }
+    };
+  });
 });
 
 /**
@@ -63,22 +74,30 @@ document.addEventListener('alpine:init', function () {
 })();
 
 /**
- * Cross-page toast persistence via X-Toast response header + sessionStorage.
- *
- * Works on ALL page layouts (base, pilot, admin-pilot) because components.js
- * is included in every bundle. The toast DISPLAY is handled by admin-ux.js
- * (showToast) on admin pages, or by this script's simple fallback on non-admin pages.
- *
- * Flow:
- * 1. HTMX POST → server returns X-Toast header + HX-Redirect
- * 2. htmx:afterRequest fires BEFORE the redirect navigates away
- * 3. This listener reads X-Toast from XHR and stores in sessionStorage
- * 4. After page load, pending toast is shown via AdminUX.showToast or fallback
+ * Toasts the server cannot render: one carried across an HX-Redirect in the
+ * X-Toast header (kept in sessionStorage until the next page loads), and one
+ * an error response names in HX-Trigger {"showToast": {type, message}},
+ * whose body htmx does not swap. Each fills in a template the region holds.
+ * The region is hx-preserve: a swap of the body keeps it, and its toasts.
  */
 (function () {
-  // Intercept XHR responses to capture X-Toast header before HTMX redirects.
-  // htmx:afterRequest does NOT fire before HX-Redirect (HTMX does location.href
-  // before dispatching the event). The XHR load listener fires reliably.
+  // A swap of the whole body runs this script again: wire it once
+  if (window.wagoeToastsWired) return;
+  window.wagoeToastsWired = true;
+
+  function showToast(data) {
+    if (!data) return;
+    // A type without a template shows as info rather than not at all
+    var template = document.querySelector('#toasts template[data-toast-type="' + CSS.escape(String(data.type)) + '"]') ||
+      document.querySelector('#toasts template[data-toast-type="info"]');
+    if (!template) return;
+    var toast = template.content.firstElementChild.cloneNode(true);
+    toast.querySelector('span').textContent = data.message || '';
+    template.parentNode.appendChild(toast);
+  }
+
+  // htmx:afterRequest does NOT fire before HX-Redirect (htmx sets
+  // location.href first). The XHR load listener does.
   var origOpen = XMLHttpRequest.prototype.open;
   XMLHttpRequest.prototype.open = function () {
     this.addEventListener('load', function () {
@@ -90,30 +109,32 @@ document.addEventListener('alpine:init', function () {
     return origOpen.apply(this, arguments);
   };
 
-  // Show pending toast on page load.
-  // Uses setTimeout(0) to defer until after ALL DOMContentLoaded handlers have run,
-  // ensuring AdminUX.showToast (registered in admin-ux.js DOMContentLoaded) is available.
-  document.addEventListener('DOMContentLoaded', function () {
-    setTimeout(function () {
-      try {
-        var pending = sessionStorage.getItem('pendingToast');
-        if (!pending) return;
-        sessionStorage.removeItem('pendingToast');
-        var data = JSON.parse(pending);
+  document.addEventListener('showToast', function (event) { showToast(event.detail); });
 
-        // Use AdminUX toast system if available (admin pages), otherwise simple alert banner
-        if (window.AdminUX && window.AdminUX.showToast) {
-          window.AdminUX.showToast(data);
-        } else {
-          var el = document.createElement('div');
-          el.className = 'toast-banner toast-banner-' + (data.type || 'success');
-          el.textContent = data.message || '';
-          el.style.cssText = 'position:fixed;top:16px;right:16px;z-index:9999;padding:12px 20px;border-radius:8px;background:#065f46;color:#fff;font-size:14px;box-shadow:0 4px 12px rgba(0,0,0,.15);transition:opacity .3s';
-          document.body.appendChild(el);
-          setTimeout(function () { el.style.opacity = '0'; setTimeout(function () { el.remove(); }, 300); }, 5000);
-        }
-      } catch (e) {}
-    }, 0);
+  // A history snapshot holds the toasts on screen when it was taken: not news on Back
+  document.addEventListener('htmx:historyRestore', function () {
+    document.querySelectorAll('#toasts > .alert').forEach(function (t) { t.remove(); });
+  });
+
+  // A flash waits in a template until the page is up: a live region
+  // announces what is added to it, not what it was rendered with.
+  function showFlash() {
+    var region = document.getElementById('toasts');
+    document.querySelectorAll('template[data-toast-flash]').forEach(function (t) {
+      if (region) region.appendChild(t.content.cloneNode(true));
+      t.remove();
+    });
+  }
+  document.addEventListener('htmx:afterSettle', showFlash);
+
+  document.addEventListener('DOMContentLoaded', function () {
+    showFlash();
+    try {
+      var pending = sessionStorage.getItem('pendingToast');
+      if (!pending) return;
+      sessionStorage.removeItem('pendingToast');
+      showToast(JSON.parse(pending));
+    } catch (e) {}
   });
 })();
 

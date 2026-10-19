@@ -356,7 +356,7 @@
           conflict (when-not rejected refusal)]
 
       (if (and valid? (not refusal))
-        ; Update entity and re-render detail page with success flash
+        ; Update entity and re-render detail page with a success toast
         (let [permissions    (permissions/get-entity-permissions user entity-name entity-config)
               ctx             (when-not then-list?
                                 (support/build-entity-detail-opts admin-service schema-provider config entity-name entity-config updated-record request))]
@@ -371,14 +371,15 @@
           (support/html-response request
                                  (admin-ui/admin-layout
                                   (admin-ui/entity-detail-page entity-name entity-config updated-record {} permissions
-                                                               (assoc (:page-opts ctx) :flash
-                                                                      {:type :success
-                                                                       :message [:t :admin/flash-updated {:label (introspection/singular-label entity-config entity-name)}]}))
+                                                               (:page-opts ctx))
                                   {:user user
                                    :current-entity entity-name
                                    :entities (:entities ctx)
                                    :entity-configs (:entity-configs ctx)
-                                   :logo-url (:logo-url config)}))))
+                                   :logo-url (:logo-url config)
+                                   ;; A toast in the new page's region: out of band it would go with the body
+                                   :flash {:type :success
+                                           :message [:t :admin/flash-updated {:label (introspection/singular-label entity-config entity-name)}]}}))))
 
         ; Validation errors - re-render form with flash inside page content
         (let [permissions (permissions/get-entity-permissions user entity-name entity-config)
