@@ -127,8 +127,10 @@
 
 (defn- dispatch-side-effects!
   "Enqueue jobs for each declared side-effect key after a successful transition.
-   On the caller's transaction `conn` when the queue can join it. In a tenant's
-   work, each job carries the tenant.
+   On the caller's transaction `conn` when the queue can join it, else once the
+   platform transaction open on this thread commits (`db/after-commit!`); a
+   caller's own next.jdbc transaction is not seen, and its jobs go at once. In a
+   tenant's work, each job carries the tenant.
 
    Args:
      job-queue      - IJobQueue or nil
@@ -147,28 +149,32 @@
       ;; The jobs library is an optional runtime companion.
       (let [jobs-ports (the-ns 'wagoe.jobs.ports)
             create-fn  (ns-resolve (the-ns 'wagoe.jobs.core.job) 'create-job)
-            enqueue-fn (if (and conn ((ns-resolve jobs-ports 'transactional-queue?) job-queue))
+            logged     (fn [job enqueue]
+                         (try (enqueue)
+                              (catch Exception e
+                                (log/warn e "Failed to enqueue side-effect job"
+                                          {:effect (:job-type job) :instance-id (:id instance)}))))
+            enqueue!   (if (and conn ((ns-resolve jobs-ports 'transactional-queue?) job-queue))
                          (let [f (ns-resolve jobs-ports 'enqueue-in-tx!)]
                            ;; A savepoint, as for hooks: the failure is swallowed.
-                           (fn [q queue job] (db/in-savepoint conn #(f q conn queue job))))
-                         (ns-resolve jobs-ports 'enqueue-job!))]
+                           (fn [job] (logged job #(db/in-savepoint conn (fn [] (f job-queue conn :default job))))))
+                         (let [f (ns-resolve jobs-ports 'enqueue-job!)]
+                           ;; A queue outside the transaction gets the job once it
+                           ;; commits, so a worker never runs it against a write
+                           ;; that may yet roll back.
+                           (fn [job] (db/after-commit! #(logged job (fn [] (f job-queue :default job)))))))]
         (doseq [effect-key side-effect-keys]
-          (try
-            (let [job (create-fn (cond-> {:job-type effect-key
-                                          :args     {:instance-id  (str (:id instance))
-                                                     :workflow-id  (name (:workflow-id instance))
-                                                     :from-state   (name (:from-state audit-entry))
-                                                     :to-state     (name (:to-state audit-entry))
-                                                     :context      (or context {})}}
-                                   ;; So the worker runs it in the tenant's schema,
-                                   ;; where the instance is.
-                                   db/*tenant-id* (assoc :metadata {:tenant-id (str db/*tenant-id*)}))
-                                 (UUID/randomUUID)
-                                 (Instant/now))]
-              (enqueue-fn job-queue :default job))
-            (catch Exception e
-              (log/warn e "Failed to enqueue side-effect job"
-                        {:effect effect-key :instance-id (:id instance)})))))
+          (enqueue! (create-fn (cond-> {:job-type effect-key
+                                        :args     {:instance-id  (str (:id instance))
+                                                   :workflow-id  (name (:workflow-id instance))
+                                                   :from-state   (name (:from-state audit-entry))
+                                                   :to-state     (name (:to-state audit-entry))
+                                                   :context      (or context {})}}
+                                 ;; So the worker runs it in the tenant's schema,
+                                 ;; where the instance is.
+                                 db/*tenant-id* (assoc :metadata {:tenant-id (str db/*tenant-id*)}))
+                               (UUID/randomUUID)
+                               (Instant/now)))))
       (catch Exception e
         (log/warn e "Failed to enqueue side-effect jobs"
                   {:effects side-effect-keys :instance-id (:id instance)})))))
@@ -316,7 +322,36 @@
                           {:type    :validation-error
                            :message "The workflow store does not implement ITransactionalWorkflowStore"}))))
 
-(defrecord WorkflowService [store registry job-queue guard-registry]
+(defn- auto-transitions!
+  "Fire `definition`'s auto transitions on up to 100 instances in each source
+   state, through `engine`, in the schema this thread's work runs in. Each in a
+   savepoint, so one that fails does not abort the rest of a tenant's
+   transaction."
+  [engine workflow-id definition]
+  (let [result (atom {:processed 0 :attempted 0 :failed 0})]
+    (doseq [t-def     (filter :auto? (:transitions definition))
+            instance  (ports/list-instances (:store engine)
+                                            {:workflow-id   workflow-id
+                                             :current-state (:from t-def)
+                                             :limit         100})]
+      (swap! result update :attempted inc)
+      (try
+        (let [tr (db/in-savepoint
+                  (db/current-transaction)
+                  #(ports/transition! engine
+                                      {:instance-id (:id instance)
+                                       :transition  (or (:name t-def) (:to t-def))
+                                       :actor-roles [:system]
+                                       :context     (merge (or (:metadata instance) {})
+                                                           {:auto-transition? true})}))]
+          (swap! result update (if (:success? tr) :processed :failed) inc))
+        (catch Exception e
+          (log/warn e "Auto-transition failed"
+                    {:instance-id (:id instance) :workflow-id workflow-id})
+          (swap! result update :failed inc))))
+    @result))
+
+(defrecord WorkflowService [store registry job-queue guard-registry each-tenant]
   ports/IWorkflowEngine
 
   (start-workflow! [this input]
@@ -358,38 +393,16 @@
          (guard-input definition instance context)))))
 
   (process-auto-transitions! [this workflow-id]
-    (let [definition (ports/get-workflow registry workflow-id)]
-      (if (nil? definition)
-        {:processed 0 :attempted 0 :failed 0}
-        (let [auto-ts (filter :auto? (:transitions definition))
-              result  (atom {:processed 0 :attempted 0 :failed 0})]
-          (doseq [t-def auto-ts]
-            (let [instances (ports/list-instances
-                             store
-                             {:workflow-id   workflow-id
-                              :current-state (:from t-def)
-                              :limit         100})]
-              (doseq [instance instances]
-                (swap! result update :attempted inc)
-                (let [t-name (or (:name t-def) (:to t-def))]
-                  (try
-                    (let [tr (ports/transition!
-                              this
-                              {:instance-id (:id instance)
-                               :transition  t-name
-                               :actor-roles [:system]
-                               :context     (merge
-                                             (or (:metadata instance) {})
-                                             {:auto-transition? true})})]
-                      (if (:success? tr)
-                        (swap! result update :processed inc)
-                        (swap! result update :failed inc)))
-                    (catch Exception e
-                      (log/warn e "Auto-transition failed"
-                                {:instance-id (:id instance)
-                                 :workflow-id workflow-id})
-                      (swap! result update :failed inc)))))))
-          @result)))))
+    (let [definition (ports/get-workflow registry workflow-id)
+          run        #(auto-transitions! this workflow-id definition)]
+      (cond
+        (nil? definition) {:processed 0 :attempted 0 :failed 0}
+        (nil? each-tenant) (run)
+        :else
+        ;; Public's instances, then each tenant's, in its schema.
+        (let [public                   (run)
+              {:keys [results failed]} (each-tenant (fn [_tenant] (run)))]
+          (assoc (apply merge-with + public results) :failed-tenants failed))))))
 
 (defn create-workflow-service
   "Create a WorkflowService.
@@ -399,6 +412,10 @@
      registry       - IWorkflowRegistry implementation
      job-queue      - IJobQueue or nil (optional; required for side-effects)
      guard-registry - Map of guard-key -> (fn [ctx] bool?) or nil
+     each-tenant    - With tenancy, (fn [f]) that calls (f tenant) in each
+                      tenant's schema and returns {:results [...] :failed n}
+                      (`wagoe.tenant.shell.tenant-iteration/for-each-tenant`),
+                      so auto-transitions reach tenant instances too
 
    Returns:
      WorkflowService implementing IWorkflowEngine"
@@ -407,4 +424,6 @@
   ([store registry job-queue]
    (create-workflow-service store registry job-queue nil))
   ([store registry job-queue guard-registry]
-   (->WorkflowService store registry job-queue (or guard-registry {}))))
+   (create-workflow-service store registry job-queue guard-registry nil))
+  ([store registry job-queue guard-registry each-tenant]
+   (->WorkflowService store registry job-queue (or guard-registry {}) each-tenant)))
