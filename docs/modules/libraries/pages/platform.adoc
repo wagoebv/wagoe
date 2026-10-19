@@ -134,6 +134,12 @@ second, it names no columns.
            "details": {"constraint": "unique", "field": "number"}}}
 ----
 
+`db/upsert!` writes a row by its key on every engine: it updates the row, or
+inserts it, and retries a writer that lost the race to insert. Outside a
+transaction it also retries a deadlock. `db/ensure-binary-collation!` makes a
+MySQL column compare case-sensitively, as the other engines do; use it for a
+key such as a file name or a token.
+
 A handler that knows only its status gets its type from `errors/status->type`:
 `validation-error` for a 4xx with no type of its own, `internal-error` for a 5xx.
 

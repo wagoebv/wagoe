@@ -5,8 +5,7 @@
    db-context through platform's execution layer, which encodes each parameter
    as the engine takes it.
 
-   Upsert strategy: attempt INSERT, catch the unique-key conflict, then UPDATE.
-   This needs no dialect-specific ON CONFLICT syntax."
+   A token is upserted on (token, app_id) with platform's `upsert!`."
   (:require [wagoe.push.ports :as ports]
             [wagoe.push.core.device :as device]
             [wagoe.core.utils.type-conversion :as tc]
@@ -30,10 +29,6 @@
   [days]
   (.minus (Instant/now) (java.time.Duration/ofDays days)))
 
-(defn- unique-conflict? [e]
-  (= {:type :conflict :constraint :unique}
-     (select-keys (ex-data e) [:type :constraint])))
-
 ;; =============================================================================
 ;; DeviceTokenStore
 ;; =============================================================================
@@ -48,49 +43,28 @@
         (assoc :active? (boolean (:active row)))
         (dissoc :active))))
 
-(defn- insert-device-row! [db row]
-  (database/execute-update! db
-                            (-> (h/insert-into :push-device-tokens)
-                                (h/values [row]))))
-
-(defn- token-key [{:keys [token app-id]}]
-  [:and [:= :token token] [:= :app-id app-id]])
-
-(defn- update-device-row! [db row]
-  (database/execute-update! db
-                            (-> (h/update :push-device-tokens)
-                                (h/set (select-keys row [:user-id :active :last-used-at :device-name :os-version]))
-                                (h/where (token-key row)))))
-
-(defn- stored-device-id [db row]
-  (-> (database/execute-one! db
-                             (-> (h/select :id)
-                                 (h/from :push-device-tokens)
-                                 (h/where (token-key row))))
-      :id
-      tc/string->uuid))
-
 (defn- upsert-device!
-  "Returns the stored row's id: on conflict that is the existing row's, not ours."
+  "Returns the stored row's id: when the token was registered already, that
+   row's, not ours. The token then belongs to whoever registered it last."
   [db record]
-  (let [row {:id          (:id record)
-             :user-id     (:user-id record)
-             :token       (:token record)
-             :platform    (name (:platform record))
-             :app-id      (:app-id record)
-             :device-name (:device-name record)
-             :os-version  (:os-version record)
-             :active      true
-             :created-at  (->instant (:created-at record))
+  (let [row {:id           (:id record)
+             :user-id      (:user-id record)
+             :token        (:token record)
+             :platform     (name (:platform record))
+             :app-id       (:app-id record)
+             :device-name  (:device-name record)
+             :os-version   (:os-version record)
+             :active       true
+             :created-at   (->instant (:created-at record))
              :last-used-at (->instant (:last-used-at record))}]
-    (try
-      (insert-device-row! db row)
+    (if (= :inserted (database/upsert! db :push-device-tokens row [:token :app-id]
+                                       {:update-columns [:user-id :active :last-used-at :device-name :os-version]}))
       (:id row)
-      (catch clojure.lang.ExceptionInfo e
-        (when-not (unique-conflict? e) (throw e))
-        ;; Duplicate token+app_id: the token now belongs to whoever registered it last.
-        (update-device-row! db row)
-        (stored-device-id db row)))))
+      (-> (database/execute-one! db (-> (h/select :id)
+                                        (h/from :push-device-tokens)
+                                        (h/where [:= :token (:token row)] [:= :app-id (:app-id row)])))
+          :id
+          tc/string->uuid))))
 
 (defrecord DeviceTokenStore [db]
   ports/IDeviceTokenStore

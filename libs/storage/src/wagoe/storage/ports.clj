@@ -63,6 +63,15 @@
     Returns:
     String containing the signed URL, or nil if not supported"))
 
+(defprotocol IStreamingFileStorage
+  "Optional, beside `IFileStorage`, for an adapter that can store a file
+  without holding all of it in memory."
+
+  (store-stream [this file-data metadata]
+    "Store what `(write! out)` writes to an OutputStream. `file-data` is
+    {:write! fn :content-type}; `metadata` and the result are `store-file`'s.
+    When `write!` throws, nothing is stored and its exception propagates."))
+
 ;; ============================================================================
 ;; Upload Index Port
 ;; ============================================================================
@@ -97,8 +106,15 @@
   `:subject` {:type :user|:tenant :id}, `:status` :pending, :running, :done or
   :failed."
 
+  (create-export-job! [this job]
+    "Store `job`, a new :pending one, and return it; nil when its subject has
+    a :pending or :running job already.")
+
   (save-export-job! [this job]
     "Store `job`, replacing the one with its id. Returns it.")
+
+  (count-export-jobs-requested-since [this requested-by since]
+    "How many jobs `requested-by` asked for since `since`, an Instant.")
 
   (find-export-job [this id]
     "The job with `id`, or nil.")

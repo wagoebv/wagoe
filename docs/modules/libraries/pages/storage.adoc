@@ -127,11 +127,18 @@ too long to stream:
   and GCS it redirects to a signed URL that lives five minutes; on local
   storage the route sends the file.
 
-Only the user who asked sees a job; to anyone else it does not exist. The
-archive is stored private under `data-exports/`, is not an upload, and is
-held in memory once while stored. Jobs run on the `:default` queue, or
-`:export-queue` in `:wagoe/storage`. The `:storage/export-archives` retention
-policy deletes old archives and their jobs:
+Only the user who asked sees a job; to anyone else it does not exist. A
+subject has at most one open job, even when requests race, and a user may
+open five an hour (`:export-requests-per-hour` in `:wagoe/storage`); more
+answer 429. The archive is streamed to a temporary file and stored private
+under `data-exports/`; it is not an upload. Jobs run on the `:default` queue,
+or `:export-queue` in `:wagoe/storage`.
+
+Nothing deletes old archives until you configure the
+`:storage/export-archives` retention policy. There is no default because
+retention in Wagoe is always opt-in: an upgrade must not start deleting data.
+After 24 hours an archive cannot be downloaded, but it still holds personal
+data, so configure the policy when you enable export jobs:
 
 [source,clojure]
 ----

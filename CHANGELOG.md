@@ -33,6 +33,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **`shared-ui` data table with sortable headers, filter inputs and infinite scroll** (BOU-756): `data-table`,
   `filter-input`, `parse-table-params`. Admin lists now push their own URL; nothing to do.
+- **Streamed storage and `db/upsert!`** (BOU-752): `IStreamingFileStorage` stores what a writer streams (local, S3,
+  GCS); `db/upsert!` and `db/ensure-binary-collation!` serve any keyed table. Nothing to do.
 - **`wagoe.shared.ui.core.modal`: modal and confirm on native `<dialog>`** (BOU-753); admin deletes confirm with it, bulk
   delete now too. The broken `layout/modal` is removed: use `modal/modal`.
 - **A user's data export as a background job** (BOU-749): with the jobs module, `POST /api/v1/me/export-jobs`
@@ -200,6 +202,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Export jobs: racing requests opened duplicates, archives were built in memory** (BOU-752). One open job per
+  subject, five requests an hour per user (`:export-requests-per-hour`). Run `migrate up`.
+- **Push tokens differing only in case were one device on MySQL** (BOU-752); racing uploads could deadlock there.
+  Run `migrate up`.
 - **Storage `file-exists?` answered false when it could not check** (BOU-749), so retention could forget a file
   still stored. It throws now; catch it if you call it directly.
 - **MySQL rewrote text that looked like a timestamp into a DATETIME** (BOU-655): persistence now passes Instants and
