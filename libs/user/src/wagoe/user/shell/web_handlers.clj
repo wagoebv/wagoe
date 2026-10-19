@@ -480,16 +480,15 @@
           prepared-data (merge prepared-data (login-context request))
           [valid? validation-errors validated-data]
           (validate-request-data user-schema/LoginRequest prepared-data)
-          logo-url (get-in config [:wagoe/settings :logo-url])]
+          page-opts (merge {:user      (get request :user)
+                            :flash     (get request :flash)
+                            :return-to raw-return-to}
+                           (login-branding config))]
       (if-not valid?
         ;; Re-render login page with validation errors, preserving return-to
         (html-response request
                        (user-ui/login-page prepared-data validation-errors
-                                           {:user (get request :user)
-                                            :flash (get request :flash)
-                                            :return-to raw-return-to
-                                            :logo-url logo-url
-                                            :registration? (landing/registration? config)})
+                                           page-opts)
                        400)
         (try
           ;; Use IUserService/authenticate-user with validated data
@@ -545,10 +544,7 @@
                 (html-response request
                                (user-ui/mfa-login-page prepared-data
                                                        {}
-                                                       {:user (get request :user)
-                                                        :flash (get request :flash)
-                                                        :return-to raw-return-to
-                                                        :logo-url logo-url})
+                                                       page-opts)
                                200))
 
               ;; Authentication failed (e.g. wrong password or invalid MFA code)
@@ -573,18 +569,11 @@
                    ;; If MFA code was provided, show MFA page with error
                                  (user-ui/mfa-login-page prepared-data
                                                          {:mfa-code [error-message]}
-                                                         {:user (get request :user)
-                                                          :flash (get request :flash)
-                                                          :return-to raw-return-to
-                                                          :logo-url logo-url})
+                                                         page-opts)
                    ;; Otherwise show regular login page
                                  (user-ui/login-page prepared-data
                                                      {:password [error-message]}
-                                                     {:user (get request :user)
-                                                      :flash (get request :flash)
-                                                      :return-to raw-return-to
-                                                      :logo-url logo-url
-                                                      :registration? (landing/registration? config)}))
+                                                     page-opts))
                                401))))
           (catch Exception e
             (log/error e "Login error" {:email (:email prepared-data)})
