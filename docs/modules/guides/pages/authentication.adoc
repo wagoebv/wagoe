@@ -263,6 +263,37 @@ administrator, an import, or an OIDC provider with `:auto-create? true`. It is o
 All five keys are checked at boot: a path off this site, an unknown role or a symbol
 that does not resolve stops it.
 
+== Login page layout
+
+The login, MFA and registration pages use Wagoe's layout and header. An application
+with its own look sets `:login-layout`, a function of `title`, `body` and `opts` that
+returns the whole page:
+
+[source,clojure]
+----
+:wagoe/user {:login-layout my.app.web/login-layout}
+----
+
+[source,clojure]
+----
+(defn login-layout [title body {:keys [page flash]}]
+  (layout/page-layout title
+                      [:div.login
+                       [:img.hero {:src "/img/hero.jpg"}]
+                       body
+                       (when (= :login page)
+                         [:a {:href "/web/wachtwoord-vergeten"} "Wachtwoord vergeten?"])]
+                      {:css ["/css/app.css"] :skip-header true :flash flash}))
+----
+
+`body` is Wagoe's form card: fields, CSRF token, error messages and the MFA step stay
+Wagoe's, so the layout cannot weaken them. Wagoe's logo and subtitle are left out.
+`title` is a `[:t …]` marker, translated with the rest of the page. `opts` has `:page`
+(`:login`, `:mfa`, `:oidc-mfa`, `:oidc-continue` or `:register`), the Ring `:request`
+(without the password and MFA code), `:user`, `:flash`, `:return-to` and `:logo-url`. An application
+module can contribute it as `:auth {:login-layout (ig/ref …)}`, a function or a
+`wagoe.user.ports/ILoginLayout`. Without it the pages are unchanged.
+
 == Groups and permissions
 
 A group has a name, members and grants. A grant is a permission, a keyword your

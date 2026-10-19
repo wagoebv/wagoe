@@ -439,12 +439,26 @@
 ;; Authentication Handlers (Login / Logout)
 ;; =============================================================================
 
+(defn- sign-in-opts
+  "Page options every sign-in page takes, the app's `:login-layout` among them
+   with the request it may want to read, minus the password and MFA code. The
+   OIDC pages take the 2-arity: they never rendered the user or a flash."
+  ([config request]
+   (let [app-layout (get-in config [:active :wagoe/user :login-layout])]
+     (cond-> {:logo-url (get-in config [:wagoe/settings :logo-url])}
+       app-layout (assoc :login-layout app-layout :request (without-secrets request)))))
+  ([config request return-to]
+   (assoc (sign-in-opts config request)
+          :user      (get request :user)
+          :flash     (get request :flash)
+          :return-to return-to)))
+
 (defn- login-branding
   "Login page options every rendering of it shares."
-  [config]
-  {:logo-url       (get-in config [:wagoe/settings :logo-url])
-   :registration?  (landing/registration? config)
-   :oidc-providers (oidc-core/login-buttons (get-in config [:active :wagoe/user :oidc :providers]))})
+  [opts config]
+  (assoc opts
+         :registration?  (landing/registration? config)
+         :oidc-providers (oidc-core/login-buttons (get-in config [:active :wagoe/user :oidc :providers]))))
 
 (defn- session-cookie [config session-token]
   {:value session-token :http-only true :secure (secure-cookies? config) :same-site :strict :path "/"})
@@ -460,10 +474,7 @@
                          {:email remembered-email
                           :remember true}
                          {})
-          page-opts (merge {:user (get request :user)
-                            :flash (get request :flash)
-                            :return-to return-to}
-                           (login-branding config))]
+          page-opts (login-branding (sign-in-opts config request return-to) config)]
       (html-response request (user-ui/login-page initial-data {} page-opts)))))
 
 (defn login-submit-handler
@@ -480,15 +491,11 @@
           prepared-data (merge prepared-data (login-context request))
           [valid? validation-errors validated-data]
           (validate-request-data user-schema/LoginRequest prepared-data)
-          page-opts (merge {:user      (get request :user)
-                            :flash     (get request :flash)
-                            :return-to raw-return-to}
-                           (login-branding config))]
+          page-opts (login-branding (sign-in-opts config request raw-return-to) config)]
       (if-not valid?
         ;; Re-render login page with validation errors, preserving return-to
         (html-response request
-                       (user-ui/login-page prepared-data validation-errors
-                                           page-opts)
+                       (user-ui/login-page prepared-data validation-errors page-opts)
                        400)
         (try
           ;; Use IUserService/authenticate-user with validated data
@@ -542,9 +549,7 @@
               (do
                 (log/info "MFA code required for login" {:email (:email prepared-data)})
                 (html-response request
-                               (user-ui/mfa-login-page prepared-data
-                                                       {}
-                                                       page-opts)
+                               (user-ui/mfa-login-page prepared-data {} page-opts)
                                200))
 
               ;; Authentication failed (e.g. wrong password or invalid MFA code)
@@ -567,13 +572,9 @@
                 (html-response request
                                (if (:mfa-code prepared-data)
                    ;; If MFA code was provided, show MFA page with error
-                                 (user-ui/mfa-login-page prepared-data
-                                                         {:mfa-code [error-message]}
-                                                         page-opts)
+                                 (user-ui/mfa-login-page prepared-data {:mfa-code [error-message]} page-opts)
                    ;; Otherwise show regular login page
-                                 (user-ui/login-page prepared-data
-                                                     {:password [error-message]}
-                                                     page-opts))
+                                 (user-ui/login-page prepared-data {:password [error-message]} page-opts))
                                401))))
           (catch Exception e
             (log/error e "Login error" {:email (:email prepared-data)})
@@ -635,7 +636,9 @@
                            [502 [:t :user/oidc-failed]]
                            [400 [:t :user/oidc-failed]])]
     (-> (html-response request
-                       (user-ui/login-page {} {} (assoc (login-branding config) :error message))
+                       (user-ui/login-page {} {} (-> (sign-in-opts config request)
+                                                     (login-branding config)
+                                                     (assoc :error message)))
                        status)
         clear-oidc-cookies)))
 
@@ -643,7 +646,7 @@
   "Set the session cookie exactly as password login does, and move on."
   [request config {:keys [user session return-to]}]
   (let [location (safe-return-url return-to (landing-path config user request))]
-    (-> (html-response request (user-ui/oidc-continue-page location) 200
+    (-> (html-response request (user-ui/oidc-continue-page location (sign-in-opts config request)) 200
                        {"Refresh" (str "0;url=" location)})
         (assoc-in [:cookies "session-token"] (session-cookie config (:session-token session)))
         clear-oidc-cookies)))
@@ -654,7 +657,7 @@
     (oidc-failure request config (:error result))
 
     (= :mfa-required (get-in result [:ok :outcome]))
-    (-> (html-response request (user-ui/oidc-mfa-page {} {}))
+    (-> (html-response request (user-ui/oidc-mfa-page {} (sign-in-opts config request)))
         clear-oidc-cookies
         ;; Strict: only the same-site MFA form posts it back.
         (assoc-in [:cookies oidc-mfa-cookie]
@@ -700,7 +703,8 @@
                                       (login-context request))]
         (if (= :oidc/mfa-failed (get-in result [:error :type]))
           (html-response request
-                         (user-ui/oidc-mfa-page {:mfa-code [[:t :user/oidc-mfa-invalid]]} {})
+                         (user-ui/oidc-mfa-page {:mfa-code [[:t :user/oidc-mfa-invalid]]}
+                                               (sign-in-opts config request))
                          401)
           (oidc-outcome request config result)))
       (catch Exception e
@@ -708,11 +712,9 @@
 
 (defn register-page-handler
   "GET /web/register - render self-service registration page."
-  [_config]
+  [config]
   (fn [request]
-    (let [page-opts {:user (get request :user)
-                     :flash (get request :flash)
-                     :return-to (get-in request [:query-params "return-to"])}]
+    (let [page-opts (sign-in-opts config request (get-in request [:query-params "return-to"]))]
       (html-response request (user-ui/register-page {} {} page-opts)))))
 
 (defn- error-field-key
@@ -782,9 +784,7 @@
           rerender (fn [errors status]
                      (html-response request
                                     (user-ui/register-page prepared-data errors
-                                                           {:user (get request :user)
-                                                            :flash (get request :flash)
-                                                            :return-to raw-return-to})
+                                                           (sign-in-opts config request raw-return-to))
                                     status))
           ;; The exception message can carry driver or config detail; it goes
           ;; to the log, not the page (BOU-552).

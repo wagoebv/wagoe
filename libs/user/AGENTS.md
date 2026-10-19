@@ -369,6 +369,19 @@ visitor is sent to log in. The user module contributes `/` as a `:static`
 route for it; the platform drops its own `/` whenever a module's `:static`
 routes claim `/`, so an app without the user module can do the same.
 
+## Login Page Layout
+
+`:wagoe/user {:login-layout my.app.web/login-layout}` puts the login, MFA
+(password and OIDC), OIDC-continue and registration pages in the app's page.
+It is a `(fn [title body opts])` returning the whole page, resolved at boot;
+`body` is Wagoe's form card (fields, CSRF field, errors), without Wagoe's logo
+and subtitle. `opts`: `:page` (`:login` `:mfa` `:oidc-mfa` `:oidc-continue`
+`:register`), `:request`, `:user`, `:flash`, `:return-to`, `:logo-url`. A
+module can contribute it as `:auth {:login-layout (ig/ref …)}`, a function or
+a `ports/ILoginLayout`. Unset, the pages render as before
+(`core.ui/auth-page`). The "Create Account" link lives in `login-form`, not the
+layout.
+
 ## Session Pruning
 
 An expired session is invisible to every read — `find-session-by-token` and
