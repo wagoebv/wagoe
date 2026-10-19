@@ -12,7 +12,7 @@
      instances-table      — paginated instance list table
      instances-page       — full page: instance list
      instance-detail-page — full page: instance detail with state viz + audit trail"
-  (:require [wagoe.shared.ui.core.home :as home]
+  (:require [wagoe.admin.core.ui.layout :as admin-layout]
             [wagoe.shared.ui.core.layout :as layout]
             [wagoe.shared.ui.core.icons :as icons]
             [wagoe.shared.ui.core.components :as ui]
@@ -36,13 +36,11 @@
   ([state-kw]
    (state-badge state-kw :default))
   ([state-kw variant]
-   (let [tone (case variant
-                :current :success
-                :reachable :info
-                :neutral)]
-     (ui/badge (form/label-text state-kw)
-               {:variant tone
-                :class (str "c-badge tone-" (name tone))}))))
+   (ui/tone-badge (form/label-text state-kw)
+                  (case variant
+                    :current :success
+                    :reachable :info
+                    :neutral))))
 
 ;; =============================================================================
 ;; State Machine Visualization
@@ -77,10 +75,12 @@
              ordered     (concat [initial]
                                  (sort-by name (disj (set all-states) initial)))
              state-var   (fn [s]
+                           ;; Reachable before visited: a state the instance
+                           ;; left can be the next one again.
                            (cond
                              (= s current-state) :current
-                             (contains? visited s) :visited
                              (contains? reachable s) :reachable
+                             (contains? visited s) :visited
                              :else :default))]
          [:div
           [:div {:style "display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; margin-bottom: 1rem;"}
@@ -114,11 +114,13 @@
   "Render a chronological audit log table for a workflow instance.
 
    Args:
-     entries - vector of AuditEntry maps (oldest first)
+     entries       - vector of AuditEntry maps (oldest first)
+     current-state - the instance's state now; only the last entry's to-state
+                     can be it, so only that badge reads as current
 
    Returns:
      Hiccup table or empty-state structure"
-  [entries]
+  [entries current-state]
   (if (empty? entries)
     [:div.empty-state
      (icons/icon :file-text {:size 32})
@@ -135,13 +137,15 @@
         [:th [:t :workflow/audit-column-actors]]
         [:th [:t :workflow/audit-column-context]]]]
       [:tbody
-       (for [entry entries]
+       (for [[i entry] (map-indexed vector entries)
+             :let [now? (and (= i (dec (count entries)))
+                             (= (:to-state entry) current-state))]]
          [:tr
           [:td {:style "white-space: nowrap; font-size: 0.85em;"}
            (str (:occurred-at entry))]
           [:td [:code (name (:transition entry))]]
           [:td (state-badge (:from-state entry) :visited)]
-          [:td (state-badge (:to-state entry) :current)]
+          [:td (state-badge (:to-state entry) (if now? :current :visited))]
           [:td
            (if (seq (:actor-roles entry))
              (str/join ", " (map name (:actor-roles entry)))
@@ -233,31 +237,46 @@
 ;; Full Pages
 ;; =============================================================================
 
+(defn- admin-page
+  "`content` in the admin shell, with its sidebar, under `heading` in the
+   topbar. `opts` carries the shell's :entities, :entity-configs and :logo-url,
+   which the shell reads from the admin; without them the sidebar lists no
+   entities."
+  [title heading content opts]
+  (layout/admin-pilot-page-layout
+   title
+   (admin-layout/admin-shell [:div.workflow-page content]
+                             (assoc opts :page-title heading))
+   {:user        (:user opts)
+    :flash       (:flash opts)
+    :skip-header true}))
+
+(defn- card
+  "A titled card on the detail page."
+  [title & body]
+  (into [:article.workflow-card
+         [:header.workflow-card-header
+          [:h2.workflow-card-title title]]]
+        body))
+
 (defn instances-page
   "Render the full workflow instances list page.
 
    Args:
      instances - vector of WorkflowInstance maps
      params    - query-params map (string keys from ring request)
-     opts      - map with :user, :flash
+     opts      - map with :user, :flash, and the admin shell's :entities,
+                 :entity-configs and :logo-url
 
    Returns:
      Complete HTML page structure (doctype + html)"
   [instances params opts]
-  (let [{:keys [user flash]} opts]
-    (layout/admin-pilot-page-layout
-     [:t :workflow/page-instances-title]
-     [:div.workflow-page
-      [:div.page-header
-       [:h1.page-title
-        (icons/icon :layout-list {:size 24})
-        [:t :workflow/page-instances-heading]]
-       [:a.button.secondary {:href home/*path*}
-        [:t :workflow/button-dashboard]]]
-      (instances-filter-form params)
-      (instances-table instances)]
-     {:user  user
-      :flash flash})))
+  (admin-page
+   [:t :workflow/page-instances-title]
+   [:t :workflow/page-instances-heading]
+   (list (instances-filter-form params)
+         (instances-table instances))
+   opts))
 
 (defn instance-detail-page
   "Render the workflow instance detail page.
@@ -269,56 +288,44 @@
      instance   - WorkflowInstance map
      definition - WorkflowDefinition map or nil
      audit-log  - vector of AuditEntry maps (oldest first)
-     opts       - map with :user, :flash
+     opts       - as for `instances-page`
 
    Returns:
      Complete HTML page structure"
   [instance definition audit-entries opts]
-  (let [{:keys [user flash]} opts
-        visited-states (map :to-state audit-entries)
-        wf-name (name (:workflow-id instance))]
-    (layout/admin-pilot-page-layout
+  (let [current-state (:current-state instance)
+        wf-name       (name (:workflow-id instance))
+        n             (count audit-entries)]
+    (admin-page
      [:t :workflow/page-detail-title {:name wf-name}]
-     [:div.workflow-page
-      ;; Breadcrumb
-      [:nav {:aria-label [:t :common/aria-breadcrumb]
-             :style "margin-bottom: 1rem; font-size: 0.9em;"}
+     [:t :workflow/breadcrumb-instances]
+     (list
+      [:nav.workflow-breadcrumb {:aria-label [:t :common/aria-breadcrumb]}
        [:a {:href "/web/admin/workflows"} [:t :workflow/breadcrumb-instances]]
        " / "
-       [:code {:style "font-size: inherit;"} (str (:id instance))]]
+       [:code (str (:id instance))]]
 
-      ;; Instance summary card
-      [:article
-       [:header
-        [:h2 {:style "margin: 0;"} [:t :workflow/card-details-title]]]
-       [:dl {:style "display: grid; grid-template-columns: 140px 1fr; gap: 0.4rem 1rem; margin: 0;"}
-        [:dt [:t :workflow/detail-workflow]]
-        [:dd [:code (name (:workflow-id instance))]]
-        [:dt [:t :workflow/detail-entity-type]]
-        [:dd [:code (name (:entity-type instance))]]
-        [:dt [:t :workflow/detail-entity-id]]
-        [:dd [:code (str (:entity-id instance))]]
-        [:dt [:t :workflow/detail-state]]
-        [:dd (state-badge (:current-state instance) :current)]
-        [:dt [:t :workflow/detail-created]]
-        [:dd {:style "font-size: 0.9em;"} (str (:created-at instance))]
-        [:dt [:t :workflow/detail-updated]]
-        [:dd {:style "font-size: 0.9em;"} (str (:updated-at instance))]]]
+      (card [:t :workflow/card-details-title]
+            [:dl.workflow-details
+             [:dt [:t :workflow/detail-workflow]]
+             [:dd [:code wf-name]]
+             [:dt [:t :workflow/detail-entity-type]]
+             [:dd [:code (name (:entity-type instance))]]
+             [:dt [:t :workflow/detail-entity-id]]
+             [:dd [:code (str (:entity-id instance))]]
+             [:dt [:t :workflow/detail-state]]
+             [:dd (state-badge current-state :current)]
+             [:dt [:t :workflow/detail-created]]
+             [:dd (str (:created-at instance))]
+             [:dt [:t :workflow/detail-updated]]
+             [:dd (str (:updated-at instance))]])
 
-      ;; State machine visualization card
-      [:article
-       [:header
-        [:h2 {:style "margin: 0 0 1rem;"} [:t :workflow/card-state-machine-title]]]
-       (state-machine-vis definition (:current-state instance) visited-states)]
+      (card [:t :workflow/card-state-machine-title]
+            (state-machine-vis definition current-state (map :to-state audit-entries)))
 
-      ;; Audit trail card
-      [:article
-       [:header {:style "margin-bottom: 1rem;"}
-        [:h2 {:style "margin: 0; display: flex; align-items: center; gap: 0.5rem;"}
-         (icons/icon :file-text {:size 20})
-         [:t :workflow/card-audit-title]]
-        [:small {:style "color: var(--muted-color);"}
-         [:t :workflow/audit-count {:count (count audit-entries)} (count audit-entries)]]]
-       (audit-log-table audit-entries)]]
-     {:user  user
-      :flash flash})))
+      (card (list (icons/icon :file-text {:size 18})
+                  [:t :workflow/card-audit-title]
+                  [:small.workflow-card-count
+                   [:t :workflow/audit-count {:count n} n]])
+            (audit-log-table audit-entries current-state)))
+     opts)))

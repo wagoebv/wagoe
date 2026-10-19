@@ -424,3 +424,7 @@
       (is (= "outerHTML" (:hx-swap result)))
       (is (not (contains? result :disabled)))
       (is (not (contains? result :name))))))
+
+(deftest ^:unit tone-badge-test
+  (is (= [:span {:class "badge ui-badge ui-badge-info c-badge tone-info"} "On hold"]
+         (components/tone-badge "On hold" :info))))

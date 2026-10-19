@@ -183,6 +183,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Workflow admin pages use the admin sidebar shell** (BOU-743); every audit row read as the current state, and the
+  state filter now takes the badge's label ("On hold"). Nothing to do.
 - **Error reporting failed on exceptions without a message** (BOU-463), so a `NullPointerException` never reached
   Sentry. Upgrade if you report errors.
 - **A circular audience composition overflowed the stack** (BOU-463); it now answers 422, as does an unknown ref.

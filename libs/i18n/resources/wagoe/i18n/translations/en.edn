@@ -686,7 +686,6 @@
  :workflow/filter-placeholder-current-state "e.g. pending"
  :workflow/page-instances-title          "Workflow Instances — Admin"
  :workflow/page-instances-heading        "Workflow Instances"
- :workflow/button-dashboard              "← Dashboard"
  :workflow/page-detail-title             "Workflow: {name} — Admin"
  :workflow/breadcrumb-instances          "Workflow Instances"
  :workflow/card-details-title            "Instance Details"
