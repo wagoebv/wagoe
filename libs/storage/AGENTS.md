@@ -22,7 +22,7 @@ S3 / S3-compatible, and Google Cloud Storage adapters behind a single
 | `wagoe.storage.core.export-jobs` | Pure: an export job's states, expiry and status view |
 | `wagoe.storage.shell.export-job-store` | `JdbcExportJobStore` (`IExportJobStore`) on `storage_export_jobs` |
 | `wagoe.storage.shell.export-jobs` | Data export as a background job: request (one open job per subject, `:export-requests-per-hour` per requester, default 5), job handler, download, `:storage/export-archives` retention |
-| `wagoe.storage.shell.export-job-http` | `/me/export-jobs` routes, mounted when the jobs module is on |
+| `wagoe.storage.shell.export-job-http` | `/me/export-jobs` routes, mounted when the jobs module is on; `ExportJobs`, the `privacy/IExportJobs` other modules ask as `:wagoe/export-jobs` |
 | `wagoe.storage.schema` | Malli schemas: `FileData`, `FileMetadata`, `StorageResult`, `ImageInfo`, `*StorageConfig` |
 | `wagoe.storage.shell.service` | `IStorageService` protocol + `StorageService` record — validation + storage + optional image processing |
 | `wagoe.storage.shell.adapters.local` | `LocalFileStorage` — filesystem, content-addressed keys with directory sharding |
@@ -65,7 +65,8 @@ S3 / S3-compatible, and Google Cloud Storage adapters behind a single
 ```
 
 `(write! out)` writes the file to an OutputStream. Local, S3 and GCS implement
-it by spooling to a temporary file, so the length is known up front and a
+it by spooling to a temporary file (local: `<root>/.spool/`, cleared of
+abandoned spools at boot), so the length is known up front and a
 writer that throws stores nothing. Export archives use it; a caller holding
 another adapter falls back to `store-file` (see `export-jobs/store-archive!`).
 

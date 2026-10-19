@@ -39,3 +39,14 @@
     "Write `doc` and the exporters' files to OutputStream `out` as the zip
     `export-response` serves. Throws when a file cannot be read, leaving the
     zip unfinished."))
+
+(defprotocol IExportJobs
+  "Data export as a background job. The storage module provides it as
+  `:wagoe/export-jobs` when the jobs module runs; another module refers to it
+  with `(ig/refset :wagoe/export-jobs)`, empty without them."
+  (request-export-job! [this subject requested-by]
+    "Queue an export of `subject` for the signed-in user `requested-by`, or
+    return the one they have open for it. A 202 Ring response, `Location` the
+    job's status endpoint, where they download the archive once it is done.
+    Throws :rate-limit-exceeded over their hourly limit, and :conflict while
+    someone else's export of `subject` is open."))

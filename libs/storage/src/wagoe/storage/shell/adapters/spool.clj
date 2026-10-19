@@ -3,8 +3,9 @@
    gives the length an upload needs up front without holding the file in
    memory, and leaves nothing stored when the writer fails."
   (:import [java.io BufferedOutputStream]
-           [java.nio.file Files OpenOption Path]
-           [java.nio.file.attribute FileAttribute]))
+           [java.nio.file Files LinkOption OpenOption Path]
+           [java.nio.file.attribute FileAttribute]
+           [java.time Duration Instant]))
 
 (defn- spool!
   "Call `(write! out)` on a new temporary file in directory `dir`, the
@@ -31,3 +32,14 @@
    (let [path (spool! write! dir)]
      (try (f path)
           (finally (Files/deleteIfExists path))))))
+
+(defn remove-abandoned!
+  "Delete the spools in `dir` nobody has written to for `idle`, a Duration:
+   left by a process that died mid-write. One being written is newer."
+  [^Path dir ^Duration idle]
+  (when (Files/isDirectory dir (make-array LinkOption 0))
+    (let [cutoff (.minus (Instant/now) idle)]
+      (with-open [paths (Files/newDirectoryStream dir ".spool-*.tmp")]
+        (doseq [^Path p paths
+                :when (.isBefore (.toInstant (Files/getLastModifiedTime p (make-array LinkOption 0))) cutoff)]
+          (Files/deleteIfExists p))))))

@@ -79,10 +79,11 @@
           (with-redefs-fn {#'sut/page-size 1}
             #(is (= 3 (count (:audit-log (privacy/export-data exporter {:type :user :id (:id ada)})))))))))))
 
-(defn- app [users audit exporter]
+(defn- app [users audit exporter & [export-jobs]]
   (let [routes (http/export-routes (user-service/->UserService users nil audit {} nil)
                                    (platform-privacy/create-data-export {:user exporter})
                                    audit
+                                   export-jobs
                                    nil)]
     (ring/ring-handler (ring/router [["/api/v1" (:api routes)] ["/web" (:web routes)]]))))
 
@@ -124,6 +125,37 @@
           (is (= :not-found
                  (:type (ex-data (try (fetch admin (str "/api/v1/users/" (random-uuid) "/export"))
                                       (catch clojure.lang.ExceptionInfo e e)))))))))))
+
+(deftest ^:integration ^:security an-admin-asks-for-a-users-export-as-a-job
+  (with-repos
+    (fn [{:keys [users audit exporter]}]
+      (let [ada      (user! users "ada@example.com" :user)
+            admin    (user! users "admin@example.com" :admin)
+            asked    (atom [])
+            jobs     (reify privacy/IExportJobs
+                       (request-export-job! [_ subject requested-by]
+                         (swap! asked conj [subject requested-by])
+                         {:status 202 :headers {"Location" "/api/v1/me/export-jobs/j1"} :body {:id "j1"}}))
+            app      (app users audit exporter jobs)
+            ask      (fn [user id] (app {:request-method :post :uri (str "/api/v1/users/" id "/export-jobs")
+                                         :user user :headers {}}))
+            audited  #(map (juxt :actor-id :target-user-id)
+                           (:audit-logs (ports/find-audit-logs audit {:filter-action :data-export :limit 10})))]
+        (is (= 202 (:status (ask admin (:id ada)))))
+        (is (= [[{:type :user :id (:id ada)} (:id admin)]] @asked))
+        (testing "recorded in the audit trail when asked for"
+          (is (= [[(:id admin) (:id ada)]] (audited))))
+        (testing "a platform admin's only"
+          (is (= 403 (:status (ask ada (:id ada)))))
+          (is (= 403 (:status (ask (assoc admin :tenant-id "acme") (:id ada))))))
+        (testing "an unknown user is not found, and nothing is queued or recorded"
+          (is (= :not-found (:type (ex-data (try (ask admin (random-uuid))
+                                                 (catch clojure.lang.ExceptionInfo e e))))))
+          (is (= 1 (count @asked)))
+          (is (= 1 (count (audited)))))
+        (testing "without export jobs there is no such route"
+          (is (= ["/me/export" "/users/:id/export"]
+                 (map first (:api (http/export-routes nil nil audit nil nil))))))))))
 
 (deftest ^:integration audit-log-retention-deletes-only-older-entries
   (with-repos

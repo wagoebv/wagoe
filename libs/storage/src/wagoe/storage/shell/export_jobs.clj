@@ -41,7 +41,8 @@
 
 (defn- refuse-over-limit!
   [store requested-by limit ^Instant now]
-  (when (>= (ports/count-export-jobs-requested-since store requested-by (.minus now (Duration/ofHours 1))) limit)
+  (when (and (pos? limit)
+             (>= (ports/count-export-jobs-requested-since store requested-by (.minus now (Duration/ofHours 1))) limit))
     (throw (ex-info "Too many data exports requested in the last hour. Try again later."
                     {:type :rate-limit-exceeded}))))
 
@@ -57,15 +58,26 @@
         (throw e)))
     job))
 
+(defn- theirs
+  "`job`, when `requested-by` asked for it. Someone else's is refused, not
+   shared: only who asked may see a job."
+  [job requested-by]
+  (when job
+    (if (core/requested-by? job requested-by)
+      job
+      (throw (ex-info "An export of this subject is in progress. Try again later."
+                      {:type :conflict})))))
+
 (defn request-export!
-  "Queue an export of `subject` for `requested-by`; the job already open for
-   it, if there is one. At most `:requests-per-hour` new jobs per requester."
+  "Queue an export of `subject` for `requested-by`; their job already open
+   for it, if there is one. At most `:requests-per-hour` new jobs per
+   requester, 0 for no limit."
   [{:keys [store job-queue queue requests-per-hour]} subject requested-by]
   (let [now (Instant/now)]
-    (or (open-job store subject now)
+    (or (theirs (open-job store subject now) requested-by)
         (do (refuse-over-limit! store requested-by (or requests-per-hour core/requests-per-hour) now)
             (or (create-and-enqueue! store job-queue queue subject requested-by now)
-                (ports/open-export-job store subject)
+                (theirs (ports/open-export-job store subject) requested-by)
                 (throw (ex-info "Another export of this subject was just requested. Try again."
                                 {:type :conflict})))))))
 

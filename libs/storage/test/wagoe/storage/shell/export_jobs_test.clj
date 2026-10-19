@@ -186,6 +186,42 @@
                (:type (ex-data (is (thrown? clojure.lang.ExceptionInfo
                                             (sut/request-export! ctx subject (:id subject))))))))))))
 
+(deftest ^:integration a-zero-limit-is-no-limit
+  (with-export-jobs
+    (fn [{:keys [ctx]}]
+      (let [ctx     (assoc ctx :requests-per-hour 0)
+            subject {:type :user :id (str (random-uuid))}]
+        (dotimes [_ 6]
+          (sut/request-export! ctx subject (:id subject))
+          (run-queued-job! ctx))
+        (is (= 6 (ports/count-export-jobs-requested-since (:store ctx) (:id subject) (.minusSeconds (Instant/now) 60))))))))
+
+(deftest ^:integration ^:security an-admin-follows-their-export-of-someone-else-while-a-platform-admin
+  (with-export-jobs
+    (fn [{:keys [ctx app]}]
+      (let [admin   {:id (random-uuid) :role :admin}
+            subject {:type :tenant :id (str (random-uuid))}
+            r       (privacy/request-export-job! (http/->ExportJobs ctx) subject (:id admin))
+            path    (get-in r [:headers "Location"])]
+        (is (= 202 (:status r)))
+        (is (= (str "/api/v1/me/export-jobs/" (get-in r [:body :id])) path))
+        (run-queued-job! ctx)
+        (let [status (call app :get path admin)]
+          (is (= :done (get-in status [:body :status])))
+          (is (= 200 (:status (call app :get (get-in status [:body :download-path]) admin)))))
+        (testing "not once they are no platform admin"
+          (doseq [user [(assoc admin :role :user) (assoc admin :tenant-id "acme")]]
+            (is (= :not-found (:type (ex-data (is (thrown? clojure.lang.ExceptionInfo (call app :get path user)))))))))))))
+
+(deftest ^:integration someone-elses-open-export-of-a-subject-is-a-conflict
+  (with-export-jobs
+    (fn [{:keys [ctx]}]
+      (let [subject {:type :user :id (str (random-uuid))}]
+        (sut/request-export! ctx subject (:id subject))
+        (is (= :conflict (:type (ex-data (is (thrown? clojure.lang.ExceptionInfo
+                                                      (sut/request-export! ctx subject (str (random-uuid))))))))
+            "an admin is not handed the user's own job, which they could not see")))))
+
 (deftest ^:integration an-adapter-that-cannot-stream-gets-the-archive-in-memory
   (with-export-jobs
     (fn [{:keys [ctx app]}]
