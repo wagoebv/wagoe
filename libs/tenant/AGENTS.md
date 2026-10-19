@@ -257,6 +257,10 @@ migration sets:
 (tenant-migrations/migrate-all-tenants! db-ctx schemas)         ; fan out
 ```
 
+The set is the application's `migrations-tenant/` plus each library's
+`:tenant-paths` from its `wagoe/migration-paths/<lib>.edn` manifest
+(`tenant-migration-dirs`); workflow ships its tables this way.
+
 `db-ctx` is the boot `:wagoe/db-context`. Each run opens its own connection with
 search_path set to the tenant schema **only** (no `,public` fallback) so
 migratus keeps a per-tenant ledger. Consequences:

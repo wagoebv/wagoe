@@ -25,6 +25,7 @@
             [wagoe.scaffolder.multi-entity-test :as multi]
             [wagoe.scaffolder.ports :as ports]
             [wagoe.scaffolder.shell.service :as service]
+            [wagoe.user.ports :as user-ports]
             [wagoe.workflow.ports :as workflow]
             [wagoe.workflow.shell.http :as workflow-http]
             [wagoe.workflow.shell.module-wiring]))
@@ -378,7 +379,12 @@
       (let [id       (get-in (call :post "/invoices" {:number "A-1"}) [:body :id])
             moved    (get-in (call :post (str "/invoices/" id "/transition") {:transition "delivered"})
                              [:body :workflow])
-            wf-call  (http-caller (workflow-http/workflow-routes (get-in system [:wagoe/workflow :engine])))
+            ;; The caller holds :workflow/read, which the API's reads need.
+            readers  #_{:clj-kondo/ignore [:missing-protocol-method]}
+                     (reify user-ports/IUserGroupService
+                       (user-grants [_ _] [{:permission :workflow/read :scope {}}]))
+            wf-call  (http-caller (workflow-http/workflow-routes (get-in system [:wagoe/workflow :engine])
+                                                                 readers))
             instance (:body (wf-call :get (str "/workflow/instances/" (:instance-id moved)) nil))]
         (is (seq (:available-transitions moved)) (pr-str moved))
         (is (= (:available-transitions instance) (:available-transitions moved)))
