@@ -16,6 +16,7 @@
             [clojure.string :as str]
             [clojure.tools.logging :as log]
             [wagoe.platform.core.http.errors :as errors]
+            [wagoe.platform.database :as db]
             [wagoe.tenant.ports :as tenant-ports]
             [wagoe.tenant.shell.provisioning :as provisioning]))
 
@@ -332,7 +333,8 @@
         (try
           ;; One connection for the full request, so the tenant search_path
           ;; applies to every query downstream.
-          (provisioning/call-in-schema db-context schema-name (fn [_] (handler request)))
+          (binding [db/*tenant-id* (:id tenant)]
+            (provisioning/call-in-schema db-context schema-name (fn [_] (handler request))))
 
           (catch Exception e
             (log/error "Failed to execute request in tenant schema"

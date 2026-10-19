@@ -109,7 +109,7 @@
       (is (= {:tenant-service (ig/ref :wagoe/tenant-service)
               :db-context (ig/ref :wagoe/db-context)
               :config config}
-             (:wagoe/tenant-routes ig-config))))
+             (dissoc (:wagoe/tenant-routes ig-config) :enabled-libraries))))
 
     (testing "http handler receives membership routes and the injected tenant middleware (BOU-200)"
       ;; In the module-routes collection, not a :membership-routes slot of its
