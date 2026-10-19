@@ -27,22 +27,26 @@
 
 (defn flash-toasts
   "Toasts for a Ring flash, in either shape it is set in:
-   {:type :success :message m} or {:success m, :error m2}."
+   {:type :success :message m} or {:success m, :error m2}. They wait in a
+   template that components.js empties into the region once the page is up,
+   since a live region announces only what is added to it."
   [flash]
-  (cond
-    (empty? flash)            nil
-    (contains? flash :message) [(toast flash)]
-    :else                     (for [[type message] flash]
-                                (toast {:type type :message message}))))
+  (when (seq flash)
+    (into [:template {:data-toast-flash ""}]
+          (if (contains? flash :message)
+            [(toast flash)]
+            (for [[type message] flash]
+              (toast {:type type :message message}))))))
 
 (defn toast-region
-  "The region toasts appear in, holding `toasts` already. An empty toast of
+  "The region toasts appear in. A swap of the body keeps it (hx-preserve), so
+   it stays the live region a screen reader is watching. An empty toast of
    each type waits in a template, for components.js to fill in."
-  [toasts]
-  (-> [:div {:id region-id :class "toast toast-top toast-end z-(--z-toast)" :aria-live "polite"}]
-      (into (for [type types]
-              [:template {:data-toast-type (name type)} (toast {:type type})]))
-      (into toasts)))
+  []
+  (into [:div {:id region-id :class "toast toast-top toast-end z-(--z-toast)"
+               :aria-live "polite" :hx-preserve "true"}]
+        (for [type types]
+          [:template {:data-toast-type (name type)} (toast {:type type})])))
 
 (defn oob-toast
   "A toast as an out-of-band swap: htmx appends it to the region, whatever

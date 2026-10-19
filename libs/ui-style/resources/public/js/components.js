@@ -36,6 +36,7 @@ document.addEventListener('alpine:init', function () {
  * X-Toast header (kept in sessionStorage until the next page loads), and one
  * an error response names in HX-Trigger {"showToast": {type, message}},
  * whose body htmx does not swap. Each fills in a template the region holds.
+ * The region is hx-preserve: a swap of the body keeps it, and its toasts.
  */
 (function () {
   // A swap of the whole body runs this script again: wire it once
@@ -43,8 +44,10 @@ document.addEventListener('alpine:init', function () {
   window.wagoeToastsWired = true;
 
   function showToast(data) {
-    var template = data && document.querySelector(
-      '#toasts template[data-toast-type="' + (data.type || 'info') + '"]');
+    if (!data) return;
+    // A type without a template shows as info rather than not at all
+    var template = document.querySelector('#toasts template[data-toast-type="' + CSS.escape(String(data.type)) + '"]') ||
+      document.querySelector('#toasts template[data-toast-type="info"]');
     if (!template) return;
     var toast = template.content.firstElementChild.cloneNode(true);
     toast.querySelector('span').textContent = data.message || '';
@@ -66,7 +69,24 @@ document.addEventListener('alpine:init', function () {
 
   document.addEventListener('showToast', function (event) { showToast(event.detail); });
 
+  // A history snapshot holds the toasts on screen when it was taken: not news on Back
+  document.addEventListener('htmx:historyRestore', function () {
+    document.querySelectorAll('#toasts > .alert').forEach(function (t) { t.remove(); });
+  });
+
+  // A flash waits in a template until the page is up: a live region
+  // announces what is added to it, not what it was rendered with.
+  function showFlash() {
+    var region = document.getElementById('toasts');
+    document.querySelectorAll('template[data-toast-flash]').forEach(function (t) {
+      if (region) region.appendChild(t.content.cloneNode(true));
+      t.remove();
+    });
+  }
+  document.addEventListener('htmx:afterSettle', showFlash);
+
   document.addEventListener('DOMContentLoaded', function () {
+    showFlash();
     try {
       var pending = sessionStorage.getItem('pendingToast');
       if (!pending) return;

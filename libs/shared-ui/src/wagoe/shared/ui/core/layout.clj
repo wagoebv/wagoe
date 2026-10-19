@@ -143,7 +143,8 @@
                            :brand brand
                            :brand-href brand-href})])
       [:main.main-content content]
-      (toast/toast-region (toast/flash-toasts flash))
+      (toast/toast-region)
+      (toast/flash-toasts flash)
       (for [js-file js]
         [:script {:src js-file :defer true}])]]))
 
