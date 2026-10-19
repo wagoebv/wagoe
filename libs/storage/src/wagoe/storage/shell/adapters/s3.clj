@@ -12,7 +12,7 @@
            [software.amazon.awssdk.services.s3 S3Client S3Configuration]
            [software.amazon.awssdk.services.s3.model
             PutObjectRequest GetObjectRequest DeleteObjectRequest
-            HeadObjectRequest NoSuchKeyException ObjectCannedACL]
+            HeadObjectRequest NoSuchKeyException ObjectCannedACL S3Exception]
            [software.amazon.awssdk.services.s3.presigner S3Presigner]
            [software.amazon.awssdk.services.s3.presigner.model
             GetObjectPresignRequest]
@@ -84,6 +84,20 @@
 ;; S3 Storage Adapter
 ;; ============================================================================
 
+(defn- exists-check-failed!
+  "Throw for a `file-exists?` that could not tell: read as false, retention
+   would drop the record of a file still there."
+  [logger bucket file-key ^Exception e]
+  (when logger
+    (logging/error logger "S3 file exists check failed"
+                   {:event ::s3-exists-check-failed
+                    :bucket bucket
+                    :key file-key
+                    :error (.getMessage e)}))
+  (throw (ex-info "Could not check whether the file exists in S3"
+                  {:type :storage-error :bucket bucket :key file-key}
+                  e)))
+
 (defrecord S3FileStorage [bucket prefix public-read? s3-client presigner logger]
   ports/IFileStorage
 
@@ -97,7 +111,7 @@
             object-key (generate-s3-key filename object-path)
 
             ;; Determine ACL based on visibility
-            is-public (or (= visibility :public) public-read?)
+            is-public (case visibility :public true :private false public-read?)
             acl (if is-public
                   ObjectCannedACL/PUBLIC_READ
                   ObjectCannedACL/PRIVATE)
@@ -222,17 +236,14 @@
         (.headObject s3-client head-request)
         true)
 
-      (catch NoSuchKeyException _
-        false)
+      ;; HEAD has no body, so a missing key is a bare 404, not NoSuchKeyException.
+      (catch S3Exception e
+        (if (= 404 (.statusCode e))
+          false
+          (exists-check-failed! logger bucket file-key e)))
 
       (catch Exception e
-        (when logger
-          (logging/error logger "S3 file exists check failed"
-                         {:event ::s3-exists-check-failed
-                          :bucket bucket
-                          :key file-key
-                          :error (.getMessage e)}))
-        false)))
+        (exists-check-failed! logger bucket file-key e))))
 
   (generate-signed-url [_ file-key expiration-seconds]
     (try

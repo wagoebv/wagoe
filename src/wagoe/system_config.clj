@@ -116,7 +116,8 @@
                      :wagoe/membership-repository :wagoe/membership-service
                      :wagoe/membership-routes
                      :wagoe/invite-repository :wagoe/invite-service
-                     :wagoe/tenant-data-exporter :wagoe/tenant-export-routes]}
+                     :wagoe/tenant-data-exporter :wagoe/tenant-export-routes
+                     :wagoe/tenant-audit-repository]}
 
    :admin    {:keys [:wagoe/admin-schema-provider :wagoe/admin-service
                      :wagoe/admin-routes]}
@@ -155,7 +156,9 @@
    ;; `:wagoe/job-workers` and `:wagoe/storage-routes`.
    :jobs     {:keys [:wagoe/job-workers :wagoe/job-scheduler :wagoe/job-dead-letter-retention]}
 
-   :storage  {:keys [:wagoe/storage-routes :wagoe.storage/data-exporter :wagoe.storage/upload-retention]}
+   :storage  {:keys [:wagoe/storage-routes :wagoe.storage/data-exporter :wagoe.storage/upload-retention
+                     :wagoe.storage/export-jobs :wagoe.storage/export-job-handlers
+                     :wagoe.storage/export-job-routes :wagoe.storage/export-archive-retention]}
 
    ;; The outbox relay, not the outbox: any service may write an event in its
    ;; transaction, one place needs to publish them (BOU-448).

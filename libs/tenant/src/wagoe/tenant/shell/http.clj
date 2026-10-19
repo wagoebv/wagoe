@@ -8,15 +8,18 @@
    
    All routes require the global admin role (BOU-568)."
   (:require [wagoe.platform.core.http.access :as access]
+            [wagoe.platform.core.http.client-ip :as client-ip]
             [wagoe.platform.core.http.errors :as errors]
             [wagoe.platform.ports.privacy :as privacy]
+            [wagoe.tenant.core.audit :as audit]
             [wagoe.tenant.ports :as tenant-ports]
             [wagoe.tenant.schema :as tenant-schema]
             [wagoe.tenant.shell.provisioning :as provisioning]
             [cheshire.core :as json]
             [clojure.tools.logging :as log]
             [malli.core :as m]
-            [malli.error :as me]))
+            [malli.error :as me])
+  (:import [java.time Instant]))
 
 ;; =============================================================================
 ;; Utilities
@@ -303,24 +306,43 @@
 ;; Data export
 ;; =============================================================================
 
+(defn- at-most [n s]
+  (some-> s (subs 0 (min n (count s)))))
+
+(defn- audit-context
+  "Cut to the audit columns' lengths: a header too long to store would fail
+   the insert, and with it the export."
+  [request]
+  (let [actor (or (:user request) (get-in request [:session :user]))]
+    {:actor-id    (:id actor)
+     :actor-email (at-most 255 (:email actor))
+     :ip-address  (at-most 64 (client-ip/request-ip request))
+     :user-agent  (at-most 512 (get-in request [:headers "user-agent"]))}))
+
 (defn export-tenant-handler
-  "A tenant's data export: what every module holds about it."
-  [data-export]
+  "A tenant's data export: what every module holds about it. Recorded in the
+   tenant audit log."
+  [data-export audit-repository]
   (fn [request]
     (with-tenant-id request
       (fn [tenant-id]
         (let [doc (privacy/export-subject data-export {:type :tenant :id tenant-id})]
           (if (get-in doc [:sections :tenant])
-            (do (log/info "Tenant data export" {:tenant-id tenant-id :actor-id (get-in request [:user :id])})
-                (privacy/export-response data-export doc request))
+            (let [context (audit-context request)]
+              (log/info "Tenant data export" {:tenant-id tenant-id :actor-id (:actor-id context)})
+              ;; Before the response, and not caught: an export nobody can trace is not served.
+              (tenant-ports/record-tenant-audit!
+               audit-repository
+               (audit/data-export-entry (random-uuid) tenant-id context (Instant/now)))
+              (privacy/export-response data-export doc request))
             (error-response 404 :not-found "Tenant not found")))))))
 
 (defn export-routes
   "GET /api/v1/tenants/:id/export, for a platform admin."
-  [data-export]
+  [data-export audit-repository]
   {:api [["/tenants/:id/export"
           {:middleware [require-platform-admin]
-           :get        {:handler   (export-tenant-handler data-export)
+           :get        {:handler   (export-tenant-handler data-export audit-repository)
                         :summary   "Download a tenant's data (platform admin)"
                         :tags      ["tenants"]
                         :swagger   {:parameters [{:name "id" :in "path" :required true :type "string"}]}

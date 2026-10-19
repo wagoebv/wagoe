@@ -33,4 +33,9 @@
   (export-response [this doc request]
     "`doc`, from `export-subject`, as a Ring download: JSON, or a zip of the
     JSON and the exporters' files when `request` asks for one with
-    `?format=zip` or `Accept: application/zip`."))
+    `?format=zip` or `Accept: application/zip`.")
+
+  (write-archive! [this doc out]
+    "Write `doc` and the exporters' files to OutputStream `out` as the zip
+    `export-response` serves. Throws when a file cannot be read, leaving the
+    zip unfinished."))

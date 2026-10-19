@@ -31,6 +31,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **A user's data export as a background job** (BOU-749): with the jobs module, `POST /api/v1/me/export-jobs`
+  builds the zip in file storage and the user downloads it for a day. Run `migrate up`.
+- **Tenant exports are audited** (BOU-749): each download of `GET /api/v1/tenants/:id/export` is recorded in a new
+  `tenant_audit_log` table. Run `migrate up`.
 - **SOAP 1.1 client for WCF services in `external`** (BOU-750): `ISoapClient` calls an operation with a map, reading
   faults, WCF arrays and dictionaries; retries and breaker included. Enable `:wagoe.external/soap`.
 - **Storage records every upload's owner, and exports and expires uploads** (BOU-738): a `storage_uploads` table
@@ -192,6 +196,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Storage `file-exists?` answered false when it could not check** (BOU-749), so retention could forget a file
+  still stored. It throws now; catch it if you call it directly.
 - **The audience API ignored the request body** (BOU-744): create and update always answered 422. An audience with
   both `:filters` and `:compose` is now refused rather than its filters dropped; give it `:filters []`.
 - **The audience API: create overwrote a taken id, update created an unknown one** (BOU-746): now 409 and 404. Keys are

@@ -322,7 +322,9 @@
                          {:event ::file-exists-check-failed
                           :key file-key
                           :error (.getMessage e)}))
-        false)))
+        (throw (ex-info "Could not check whether the file exists"
+                        {:type :storage-error :key file-key}
+                        e)))))
 
   (generate-signed-url [_ file-key expiration-seconds]
     ;; With a signing-secret we issue a genuinely signed URL (HMAC-SHA256 over

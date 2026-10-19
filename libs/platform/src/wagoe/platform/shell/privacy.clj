@@ -41,7 +41,7 @@
     (some #(let [e (str entry "~" %)] (when-not (seen e) e)) (iterate inc 2))
     entry))
 
-(defn- write-archive!
+(defn- write-zip!
   "Write `doc` and `files` to `out` as a zip: the files, then
    data-export.json, which lists a file that was gone under :missing-files.
    The zip is finished only when all of it was written: closed early, it
@@ -77,7 +77,7 @@
    :body    (reify ring-protocols/StreamableResponseBody
               (write-body-to-stream [_ _ out]
                 (try
-                  (write-archive! doc files out)
+                  (write-zip! doc files out)
                   (catch Exception e
                     ;; The status has gone; a zip left unfinished does not
                     ;; open, so it cannot pass for a complete one.
@@ -99,7 +99,10 @@
     (export-response [_ doc request]
       (if (privacy/zip-requested? request)
         (archive-response doc (export-files exporters doc))
-        (privacy/export-response doc)))))
+        (privacy/export-response doc)))
+
+    (write-archive! [_ doc out]
+      (write-zip! doc (export-files exporters doc) out))))
 
 (defn retention-plan!
   "The policies `configured` names, each with its period. Throws

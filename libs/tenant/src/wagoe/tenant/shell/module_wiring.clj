@@ -1,5 +1,6 @@
 (ns wagoe.tenant.shell.module-wiring
-  (:require [wagoe.tenant.shell.data-export :as data-export]
+  (:require [wagoe.tenant.shell.audit-persistence :as audit-persistence]
+            [wagoe.tenant.shell.data-export :as data-export]
             [wagoe.tenant.shell.invite-persistence :as invite-persistence]
             [wagoe.tenant.shell.invite-service :as invite-service]
             [wagoe.tenant.shell.membership-middleware :as membership-mw]
@@ -118,10 +119,14 @@
   [_ repositories]
   (data-export/map->TenantDataExporter repositories))
 
+(defmethod ig/init-key :wagoe/tenant-audit-repository
+  [_ {:keys [ctx]}]
+  (audit-persistence/create-tenant-audit-repository ctx))
+
 (defmethod ig/init-key :wagoe/tenant-export-routes
-  [_ {:keys [data-export]}]
+  [_ {:keys [data-export audit-repository]}]
   (require 'wagoe.tenant.shell.http)
-  ((ns-resolve 'wagoe.tenant.shell.http 'export-routes) data-export))
+  ((ns-resolve 'wagoe.tenant.shell.http 'export-routes) data-export audit-repository))
 
 ;; =============================================================================
 ;; Membership Repository
@@ -274,7 +279,10 @@
                                     :membership-repository (ig/ref :wagoe/membership-repository)
                                     :invite-repository     (ig/ref :wagoe/invite-repository)}
       ;; :wagoe/data-export is platform's, over every module's :data-export.
-      :wagoe/tenant-export-routes  {:data-export (ig/ref :wagoe/data-export)}
+      :wagoe/tenant-audit-repository {:ctx (ig/ref :wagoe/db-context)
+                                      :schema (ig/ref :wagoe/tenant-db-schema)}
+      :wagoe/tenant-export-routes  {:data-export      (ig/ref :wagoe/data-export)
+                                    :audit-repository (ig/ref :wagoe/tenant-audit-repository)}
       ;; Builds the tenant HTTP middleware seq (tenant resolution + membership).
       ;; The http-handler takes it as :extra-middleware rather than constructing
       ;; it, so it does not need to know this module exists.

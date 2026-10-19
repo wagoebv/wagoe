@@ -9,6 +9,7 @@
             [wagoe.main :as main]
             [wagoe.platform.ports.privacy :as privacy]
             [wagoe.storage.ports :as storage-ports]
+            [wagoe.storage.shell.export-jobs :as export-jobs]
             [wagoe.storage.shell.service :as storage]
             [wagoe.system-config :as sys-config]
             [wagoe.user.ports :as user-ports])
@@ -96,3 +97,18 @@
     (fn [system]
       (is (nil? (job-ports/get-handler (:wagoe/job-registry system) :wagoe/retention)))
       (is (not (contains? @(:schedules (:wagoe/job-scheduler system)) :wagoe/retention))))))
+
+(deftest ^:integration a-requested-export-is-produced-by-the-job-and-expires
+  (with-system {:retention {:storage/export-archives {:retain "P1D"}}}
+    (fn [system]
+      (let [{:keys [store job-queue] :as ctx} (:wagoe.storage/export-jobs system)
+            registry (:wagoe/job-registry system)
+            user-id  (random-uuid)
+            {:keys [id]} (export-jobs/request-export! ctx {:type :user :id user-id} user-id)
+            job      (job-ports/dequeue-job! job-queue :default "w1")]
+        (is (:success? ((job-ports/get-handler registry :storage/data-export) (:args job))))
+        (is (= :done (:status (storage-ports/find-export-job store id))))
+        (storage-ports/save-export-job! store (assoc (storage-ports/find-export-job store id)
+                                                     :created-at (.minus (Instant/now) (Duration/ofDays 2))))
+        (is (:success? ((job-ports/get-handler registry :wagoe/retention) {})))
+        (is (nil? (storage-ports/find-export-job store id)))))))

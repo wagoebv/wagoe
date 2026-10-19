@@ -14,11 +14,15 @@ S3 / S3-compatible, and Google Cloud Storage adapters behind a single
 
 | Namespace | Purpose |
 |-----------|---------|
-| `wagoe.storage.ports` | Protocols: `IFileStorage`, `IUploadIndex`, `IImageProcessor` |
+| `wagoe.storage.ports` | Protocols: `IFileStorage`, `IUploadIndex`, `IExportJobStore`, `IImageProcessor` |
 | `wagoe.storage.core.validation` | Pure: size/type/extension validation, filename sanitization, MIME lookup |
 | `wagoe.storage.core.uploads` | Pure: the upload index record and the data-export section |
 | `wagoe.storage.shell.upload-index` | `JdbcUploadIndex` on `storage_uploads`, and its boot-time table creation |
 | `wagoe.storage.shell.data-export` | `UploadDataExporter` (`IDataExporter` + `IFileExporter`) and `UploadRetention` (`:storage/uploads`) |
+| `wagoe.storage.core.export-jobs` | Pure: an export job's states, expiry and status view |
+| `wagoe.storage.shell.export-job-store` | `JdbcExportJobStore` (`IExportJobStore`) on `storage_export_jobs` |
+| `wagoe.storage.shell.export-jobs` | Data export as a background job: request, job handler, download, `:storage/export-archives` retention |
+| `wagoe.storage.shell.export-job-http` | `/me/export-jobs` routes, mounted when the jobs module is on |
 | `wagoe.storage.schema` | Malli schemas: `FileData`, `FileMetadata`, `StorageResult`, `ImageInfo`, `*StorageConfig` |
 | `wagoe.storage.shell.service` | `IStorageService` protocol + `StorageService` record — validation + storage + optional image processing |
 | `wagoe.storage.shell.adapters.local` | `LocalFileStorage` — filesystem, content-addressed keys with directory sharding |
@@ -36,7 +40,7 @@ S3 / S3-compatible, and Google Cloud Storage adapters behind a single
 (store-file          [this file-data metadata])       ; => {:key :url :size :content-type :stored-at}
 (retrieve-file       [this file-key])                 ; => {:bytes :content-type :size} or nil
 (delete-file         [this file-key])                 ; => boolean
-(file-exists?        [this file-key])                 ; => boolean
+(file-exists?        [this file-key])                 ; => boolean; throws when it cannot tell
 (generate-signed-url [this file-key expiration-seconds]) ; => url string or nil
 ```
 
