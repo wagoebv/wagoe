@@ -336,12 +336,17 @@
     (is (= #{(:id user)}
            (:user-ids (ports/resolve-audience svc :all-exporters {:as-of (java.time.LocalDate/of 2026 1 10)}))))))
 
-(deftest ^:unit filters-beside-compose-refuse-to-resolve
+(deftest ^:unit filters-beside-compose-are-refused
   ;; Resolving took the :compose path and dropped the filters, so the audience
   ;; was larger than its definition.
-  (let [svc (make-service [{:id (uuid) :plan "paid"}])]
-    (registry/register-audience! {:id :paid :label "P" :filters []})
-    (registry/register-audience! {:id :both :label "B" :compose {:or [{:ref :paid}]}
-                                  :filters [{:type :demographics :field :plan :op :eq :value "free"}]})
-    (let [e (try (ports/resolve-audience svc :both) nil (catch clojure.lang.ExceptionInfo e e))]
-      (is (= :validation-error (:type (ex-data e)))))))
+  (let [both {:id :both :label "B" :compose {:or [{:ref :paid}]}
+              :filters [{:type :demographics :field :plan :op :eq :value "free"}]}
+        type-of (fn [f] (try (f) nil (catch clojure.lang.ExceptionInfo e (:type (ex-data e)))))]
+    (testing "registering one throws"
+      (is (= :validation-error (type-of #(registry/register-audience! both)))))
+    (testing "resolving one stored before the rule throws"
+      (let [repo (mock-repository)
+            svc  (make-service [{:id (uuid) :plan "paid"}] nil repo)]
+        (registry/register-audience! {:id :paid :label "P" :filters []})
+        (ports/save-audience repo both)
+        (is (= :validation-error (type-of #(ports/resolve-audience svc :both))))))))

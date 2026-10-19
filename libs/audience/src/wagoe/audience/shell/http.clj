@@ -19,19 +19,11 @@
             [wagoe.audience.schema :as schema]
             [clojure.tools.logging :as log]
             [hiccup2.core :as h]
-            [malli.core :as m]
-            [malli.error :as me]
             [malli.util :as mu]))
 
 ;; =============================================================================
 ;; Helpers
 ;; =============================================================================
-
-(def ^:private dynamic-audience-definition-validator
-  (m/validator schema/DynamicAudienceDefinition))
-
-(def ^:private dynamic-audience-definition-explainer
-  (m/explainer schema/DynamicAudienceDefinition))
 
 (def ^:private update-body
   "An update takes its id from the path."
@@ -66,15 +58,11 @@
   (error-response 500 "internal-error" message))
 
 (defn- invalid-definition-response
-  "A 422 when `definition` cannot be saved, or nil."
+  "A 422 when `definition` cannot be saved, or nil. The route's body schema has
+   already checked its shape."
   [definition]
-  (if-not (dynamic-audience-definition-validator definition)
-    (let [explanation (dynamic-audience-definition-explainer definition)]
-      (log/warn "Invalid audience definition submitted" {:errors explanation})
-      (unprocessable-response "Invalid audience definition"
-                              {:errors (me/humanize explanation)}))
-    (when-let [err (:error (composition/explain-filters-beside-compose definition))]
-      (error-response 422 "validation-error" (:message err)))))
+  (when-let [err (:error (composition/explain-filters-beside-compose definition))]
+    (error-response 422 "validation-error" (:message err))))
 
 (defn- html-response
   ([hiccup]
@@ -173,7 +161,7 @@
 (defn create-audience-handler
   "POST /api/audiences — create a new audience definition."
   [_resolver store request]
-  (let [definition (get-in request [:parameters :body] {})]
+  (let [definition (get-in request [:parameters :body])]
     (or
      (invalid-definition-response definition)
      (try
@@ -194,8 +182,7 @@
   (let [id (parse-audience-id (get-in request [:path-params :id]))]
     (if-not id
       (bad-request-response "Invalid audience id")
-      (let [body       (get-in request [:parameters :body] {})
-            definition (assoc body :id id)]
+      (let [definition (assoc (get-in request [:parameters :body]) :id id)]
         (or
          (invalid-definition-response definition)
          (try

@@ -358,8 +358,8 @@ The cache reads `cache_config` from the DB as either a `PGobject` (PostgreSQL) o
 
 ### 5. `compose` vs `filters` — pick one
 A segment is either filters or a composition. One with `:compose` and non-empty `:filters` is
-refused: create and update answer 422 `validation-error`, and resolving a stored or registered one
-throws `:validation-error`. Give a composed segment `:filters []`, and put the filters in a segment
+refused: create and update answer 422 `validation-error`, and `defaudience` and resolving a stored
+one throw `:validation-error`. Give a composed segment `:filters []`, and put the filters in a segment
 it refers to.
 
 ### 6. Member count vs user-id set
