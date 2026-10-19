@@ -60,19 +60,27 @@
   {:pilot       pilot-js
    :admin-pilot admin-pilot-js})
 
-(def ^:private warn-removed-base
-  (delay (binding [*out* *err*]
-           (println "WARN wagoe.ui-style: the :base CSS bundle (pico, open-props) was removed; serving :pilot."))))
+(defonce ^:private warned-keys (atom #{}))
+
+(defn- lookup
+  "`k`'s bundle in `registry`, else `fallback`, warning once per unknown key —
+   a typo, or `:base`, which was removed."
+  [registry k fallback]
+  (or (get registry k)
+      (let [[before] (swap-vals! warned-keys conj k)]
+        (when-not (contains? before k)
+          (binding [*out* *err*]
+            (println "WARN wagoe.ui-style: unknown bundle" k "; serving :pilot")))
+        fallback)))
 
 (defn bundle
   "Return stylesheet list for `k` bundle key.
-   Falls back to `:pilot`; `:base` was removed and warns once."
+   An unknown key, `:base` included, warns once and gets `:pilot`."
   [k]
-  (when (= :base k) @warn-removed-base)
-  (get css-bundles k pilot-css))
+  (lookup css-bundles k pilot-css))
 
 (defn js-bundle
   "Return JavaScript list for `k` bundle key.
-   Falls back to `:pilot`."
+   An unknown key warns once and gets `:pilot`."
   [k]
-  (get js-bundles k pilot-js))
+  (lookup js-bundles k pilot-js))

@@ -22,8 +22,8 @@ Namespace: `wagoe.ui-style`
 
 * `pilot-css`, `admin-pilot-css`
 * `pilot-js`, `admin-pilot-js`
-* `(bundle k)` for CSS bundle selection. An unknown key gets `:pilot`; so does
-  the removed `:base` (pico and open-props), with a warning
+* `(bundle k)` for CSS bundle selection. An unknown key, including the removed
+  `:base` (pico and open-props), warns once and gets `:pilot`
 * `(js-bundle k)` for JS bundle selection
 
 For implementation details and migration notes, see `libs/ui-style/README.md` in the repository.

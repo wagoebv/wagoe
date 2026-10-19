@@ -12,6 +12,14 @@
   (testing "the removed :base bundle serves pilot"
     (is (= sut/pilot-css (sut/bundle :base)))))
 
+(deftest ^:unit unknown-key-warns-once-test
+  (let [k     (keyword (str "typo-" (random-uuid)))
+        warn! #(let [w (java.io.StringWriter.)]
+                 (binding [*err* w] (sut/bundle k) (sut/js-bundle k))
+                 (str w))]
+    (is (re-find #"unknown bundle" (warn!)))
+    (is (= "" (warn!)))))
+
 (deftest ^:unit js-bundle-selection-test
   (testing "known bundle keys return configured stacks"
     (is (= sut/pilot-js (sut/js-bundle :pilot)))

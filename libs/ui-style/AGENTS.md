@@ -43,10 +43,9 @@ Lookup functions:
 (ui-style/bundle :pilot)          ;; => ["/css/wagoe-tokens.css" "/css/app.css" "/css/daisy-admin.css"]
 (ui-style/js-bundle :admin-pilot) ;; => ["/js/theme.js" "/js/components.js" ...]
 
-;; Unknown keys fall back to the :pilot stack (never nil):
+;; Unknown keys, including the removed :base, warn once and fall back to :pilot:
 (ui-style/bundle :nope)           ;; => pilot-css
 (ui-style/js-bundle :nope)        ;; => pilot-js
-;; :base (pico + open-props) was removed: it gets pilot-css and warns once.
 ```
 
 Recommended bundle per page type:
