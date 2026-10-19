@@ -42,6 +42,8 @@ bb ai docs --module libs/user --type openapi
 bb ai docs --module libs/user --type readme
 ----
 
+`bb ai sql` shows the model the tables and columns your migrations create (`migrations/`, `resources/migrations/` and the libraries' own), tables your description names first. Tables a library creates in code are listed by name only. An answer that names a table or column outside that schema is sent back once and then refused, and with no tables found it refuses rather than guess. The query is never run.
+
 == Prerequisites per provider
 
 The config a provider needs is written by `bb setup --ai-provider <name>`;
