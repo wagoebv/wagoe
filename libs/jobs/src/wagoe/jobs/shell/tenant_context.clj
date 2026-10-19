@@ -24,6 +24,7 @@
    
    See ADR-004 for architecture details (lines 525-554)."
   (:require [wagoe.jobs.ports :as ports]
+            [wagoe.platform.database :as db]
             [wagoe.platform.ports.database :as db-ports]
             [wagoe.tenant.ports :as tenant-ports]
             [wagoe.jobs.shell.worker :as worker]
@@ -230,7 +231,8 @@
           (tenant-ports/with-tenant-schema tenant-schema-provider db-ctx tenant-schema
             (fn [tx]
               ;; Handler receives args and db context with transaction
-              (handler-fn (:args job) (assoc db-ctx :tx tx)))))
+              (binding [db/*tenant-id* tenant-id]
+                (handler-fn (:args job) (assoc db-ctx :tx tx))))))
 
         ;; No tenant or non-PostgreSQL - use public schema
         (do
@@ -293,3 +295,15 @@
   [handler-fn db-ctx tenant-service tenant-schema-provider]
   (fn [job]
     (process-tenant-job! job handler-fn db-ctx tenant-service tenant-schema-provider)))
+
+(defn tenant-runner
+  "The worker's `:tenant-runner`: (fn [tenant-id f]) that calls `f` in one
+   transaction on the tenant's schema, with `db/*tenant-id*` bound. Throws when
+   the tenant is gone or the database has no schemas, so a tenant's job never
+   runs against public."
+  [db-ctx tenant-service tenant-schema-provider]
+  (fn [tenant-id f]
+    (let [{:keys [tenant-schema]} (extract-tenant-context {:metadata {:tenant-id tenant-id}}
+                                                          tenant-service)]
+      (tenant-ports/with-tenant-schema tenant-schema-provider db-ctx tenant-schema
+        (fn [_tx] (binding [db/*tenant-id* tenant-id] (f)))))))

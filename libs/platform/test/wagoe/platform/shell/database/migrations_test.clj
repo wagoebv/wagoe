@@ -130,6 +130,24 @@
           (is (= ["wagoe/workflow/migrations-tenant/"] (migrations/discover-tenant-migration-dirs)))
           (is (not-any? #{"wagoe/workflow/migrations-tenant/"} (migrations/discover-migration-dirs))))))))
 
+(deftest ^:unit a-module-that-is-off-is-not-migrated-in-tenant-schemas
+  (with-temp-dir
+    (fn [dir]
+      (let [mdir     (doto (io/file dir "wagoe" "migration-paths") .mkdirs)
+            manifest (fn [lib m]
+                       (io/as-url (doto (io/file mdir (str lib ".edn")) (spit (pr-str m)))))]
+        (with-redefs [migrations/manifest-urls
+                      (fn [] [(manifest "workflow" {:paths        ["wagoe/workflow/migrations/"]
+                                                    :tenant-paths ["wagoe/workflow/migrations/"]})
+                              (manifest "acme-billing" {:tenant-paths ["acme/billing/tenant/"]})])]
+          (is (= ["acme/billing/tenant/"] (migrations/discover-tenant-migration-dirs #{"tenant"}))
+              "workflow is off; a library that is not a framework module always runs")
+          (is (= ["wagoe/workflow/migrations/" "acme/billing/tenant/"]
+                 (migrations/discover-tenant-migration-dirs #{"tenant" "workflow"})))
+          (is (= ["wagoe/workflow/migrations/" "acme/billing/tenant/"]
+                 (migrations/discover-tenant-migration-dirs))
+              "nothing known about the modules: everything"))))))
+
 (deftest ^:unit the-shipped-manifests-name-their-modules
   ;; The manifest's file name is what ties a directory to a module; one that
   ;; drifted from the library name would be migrated whatever the config says.

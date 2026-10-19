@@ -178,3 +178,13 @@
                           [:components :wagoe/tenant-db-schema :allow-h2?])))
       (is (not (get-in (wagoe.tenant.shell.module-wiring/ig-config {:enabled? true} {})
                        [:components :wagoe/tenant-db-schema :allow-h2?]))))))
+
+(deftest ^:unit tenant-schemas-migrate-only-enabled-modules
+  (let [config (wagoe.tenant.shell.module-wiring/ig-config
+                {} {:config {:active {:wagoe/tenant {} :wagoe/geo {:enabled? false}}}
+                    :enabled #{:wagoe/tenant :wagoe/workflow}})
+        libs   (get-in config [:components :wagoe/tenant-db-schema :enabled-libraries])]
+    (is (contains? libs "workflow"))
+    (is (not (contains? libs "geo")))
+    (is (= libs (get-in config [:components :wagoe/tenant-repository :enabled-libraries])
+           (get-in config [:components :wagoe/tenant-routes :enabled-libraries])))))

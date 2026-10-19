@@ -2,6 +2,7 @@
   "Tests for tenant-aware background job processing."
   (:require [wagoe.jobs.ports :as ports]
             [wagoe.jobs.shell.tenant-context :as tenant-jobs]
+            [wagoe.platform.database :as db]
             [wagoe.platform.ports.database :as db-ports]
             [wagoe.platform.shell.adapters.database.postgresql.core :as postgresql]
             [wagoe.platform.shell.adapters.database.sqlite.core :as sqlite]
@@ -406,3 +407,14 @@
 
       ;; Verify queue is empty
       (is (= 0 (ports/queue-size job-queue :default))))))
+
+(deftest ^:unit tenant-runner-runs-in-the-tenants-schema
+  (let [schemas (atom [])
+        provider (reify wagoe.tenant.ports/ITenantSchemaProvider
+                   (with-tenant-schema [_ _ schema f] (swap! schemas conj schema) (f nil))
+                   (tenant-provisioned? [_ _ _] true)
+                   (list-tenant-schemas [_ _] []))
+        run (tenant-jobs/tenant-runner (create-mock-db-context) (create-mock-tenant-service) provider)]
+    (is (= "tenant-1" (run "tenant-1" (fn [] db/*tenant-id*))) "with the tenant bound")
+    (is (= ["tenant_acme_corp"] @schemas))
+    (is (thrown? clojure.lang.ExceptionInfo (run "no-such-tenant" (fn [] :ran))))))
