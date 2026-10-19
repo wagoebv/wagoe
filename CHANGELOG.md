@@ -160,8 +160,6 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Deprecated
 
-- **pico, open-props, `tokens-openprops.css` and the `:base` CSS bundle (`base-css`)** (BOU-457): daisyUI/Tailwind on `wagoe-tokens.css`
-  is the one CSS system. `:base` still works when selected; it goes in 2.0.
 - **Kebab-case keys in the login response's `user` and `session`** (BOU-737): each now has a camelCase twin with the same
   value, and goes in 2.0. Read `session.sessionToken`, `session.expiresAt` and so on.
 - **`/swagger.json` and `:swagger` route docs** (BOU-462): the path serves the 3.1 document and `:swagger` is
@@ -172,6 +170,11 @@ for what is public API, what is internal, and how deprecations are announced.
   anything. Pass a mode and the raw value instead; the 3-arity goes in 2.0.
 - **`jwt-authentication-middleware` and `protect-with-jwt` without a user service** (BOU-682): they trust the token, so a
   deactivated user passes. Pass the user service first; the 1-arity warns once and goes in 2.0.
+
+### Removed
+
+- **The `:base` CSS bundle: pico, open-props, `tokens-openprops.css`, `base-css`** (BOU-458): `(bundle :base)` serves `:pilot` and warns.
+  Use `pilot-css` and restyle pages that relied on pico with daisy classes.
 
 ### Fixed
 

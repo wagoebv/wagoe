@@ -8,14 +8,12 @@ All modules must consume style bundles from `wagoe.ui-style`.
 Do not hardcode CSS file lists inside module/page namespaces.
 
 Namespace/API:
-- `wagoe.ui-style/base-css` (deprecated)
 - `wagoe.ui-style/pilot-css`
 - `wagoe.ui-style/admin-pilot-css`
-- `wagoe.ui-style/base-js`
 - `wagoe.ui-style/pilot-js`
 - `wagoe.ui-style/admin-pilot-js`
-- `(wagoe.ui-style/bundle :base|:pilot|:admin-pilot)`
-- `(wagoe.ui-style/js-bundle :base|:pilot|:admin-pilot)`
+- `(wagoe.ui-style/bundle :pilot|:admin-pilot)`
+- `(wagoe.ui-style/js-bundle :pilot|:admin-pilot)`
 
 Rules:
 1. Forms are rendered with the same form classes and token variables across modules.
@@ -27,7 +25,7 @@ Rules:
 Recommended bundle usage:
 - Everything but admin: `:pilot`, the default
 - Admin CRUD pages: `:admin-pilot`
-- `:base` (pico + open-props) is deprecated and goes in 2.0
+- `:base` (pico + open-props) was removed; selecting it serves `:pilot` and warns
 
 Example:
 ```clojure
@@ -48,7 +46,6 @@ Contains:
   - `resources/public/css/wagoe-tokens.css`
   - `resources/public/css/app.css`
   - `resources/public/css/admin.css`
-  - deprecated: `pico.min.css`, `tokens-openprops.css`, `vendor/open-props/*`
 - Shared JavaScript assets:
   - `resources/public/js/theme.js`
   - `resources/public/js/alpine.min.js`

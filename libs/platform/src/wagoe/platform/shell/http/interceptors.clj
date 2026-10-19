@@ -1035,7 +1035,7 @@
      Current policy:
        * default-src 'self' - Only load resources from same origin by default
        * script-src - Allow scripts from self + HTMX from CDN
-       * style-src - Allow styles from self + Pico CSS from CDN
+       * style-src - Allow styles from self and inline
        * img-src - Allow images from self, data URLs, and HTTPS
        * frame-ancestors 'none' - Prevent embedding in iframes (clickjacking)
 
