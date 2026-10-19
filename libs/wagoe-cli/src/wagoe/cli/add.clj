@@ -168,10 +168,13 @@
 (defn- snippet-entries
   "The snippet's entries as {:k key :text text}. Read by the config editor, so
    reports' opening comment, which names `(ig/ref :wagoe/reports)`, is not
-   taken for a key."
+   taken for a key. One it cannot read is a single entry with no key, which is
+   never found under :active, so it is refused rather than reported present."
   [snippet]
-  (for [{:keys [key text]} (config-edn/snippet-entries snippet)]
-    {:k (keyword (subs key 1)) :text text}))
+  (if-let [es (config-edn/snippet-entries snippet)]
+    (for [{:keys [key text]} es]
+      {:k (keyword (subs key 1)) :text text})
+    [{:k nil :text snippet}]))
 
 (defn- active-keys
   "The keys of the :active map in config `text`, or nil when it does not read.
@@ -189,9 +192,10 @@
   [text entries]
   (let [ks (active-keys text)]
     (remove (fn [{:keys [k]}]
-              (if ks
-                (contains? ks k)
-                (= :already-present (config-edn/key-status text (str k)))))
+              (and k
+                   (if ks
+                     (contains? ks k)
+                     (= :already-present (config-edn/key-status text (str k))))))
             entries)))
 
 (defn patch-config!
@@ -211,16 +215,20 @@
                          :present (mapv :k (remove (set missing) entries))})]
     (if (empty? missing)
       (result :present)
-      (let [out (reduce #(config-edn/append-entry %1 ":active" (:text %2)) content missing)]
+      (let [out    (reduce #(config-edn/append-entry %1 ":active" (:text %2)) content missing)
+            out-ks (active-keys out)]
         (cond
           ;; append-entry returns the text unchanged when there is no :active map.
           (= out content) (result :no-active)
           ;; Checked by reading, not trusted: a key written into the wrong map
           ;; boots nothing, and the next run writes it again. Text that stopped
-          ;; reading as EDN is refused; text that never did gets the editor's
-          ;; reading.
-          (and (or (active-keys out) (nil? (active-keys content)))
-               (empty? (absent out entries)))
+          ;; reading as EDN is refused; text that never did must show every key
+          ;; among the editor's entries, not merely somewhere in :active's text.
+          (if out-ks
+            (every? #(contains? out-ks (:k %)) entries)
+            (and (nil? (active-keys content))
+                 (let [written (set (map :key (config-edn/entries out ":active")))]
+                   (every? #(written (str (:k %))) entries))))
           (do (spit f out) (result :added))
           :else (result :not-written))))))
 

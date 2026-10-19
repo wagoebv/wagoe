@@ -262,6 +262,14 @@
           (is (= :not-written (:result (add/patch-config! dir path "  :wagoe/jobs\n  {:workers 1}\n"))))
           (is (not (str/includes? (slurp f) ":wagoe/jobs"))))))))
 
+(deftest ^:integration a-snippet-that-does-not-read-is-refused
+  ;; Its keys cannot be named, so it was reported present and nothing written.
+  (with-config "{:active\n {:wagoe/a 1}\n\n :inactive\n {}}\n"
+    (fn [dir path f]
+      (let [before (slurp f)]
+        (is (= :not-written (:result (add/patch-config! dir path "  :wagoe/jobs\n  {:workers"))))
+        (is (= before (slurp f)))))))
+
 (deftest ^:integration a-snippet-opening-with-a-comment-is-written
   ;; reports' snippet names `(ig/ref :wagoe/reports).` in its comment, which was
   ;; taken for its key: every write was refused as :not-written.
