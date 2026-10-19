@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **Permission registry and code roles** (BOU-770): modules declare permissions and roles under `:authorization`;
+  boot fails on an unknown one. Nothing is enforced yet; `bb scaffold` adds viewer, editor and manager roles.
 - **Admin and tenant data exports as background jobs** (BOU-759): `POST /api/v1/users/:id/export-jobs` and
   `/tenants/:id/export-jobs`, audited when asked for. Needs the storage and jobs modules.
 - **`shared-ui` data table with sortable headers, filter inputs and infinite scroll** (BOU-756): `data-table`,

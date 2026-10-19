@@ -44,6 +44,13 @@
              (set (keys (:components graph)))))
       (is (= 1 (count (:routes graph)))))))
 
+(deftest ^:unit every-admin-entity-has-read-and-write-permissions
+  (is (= #{:admin.users/read :admin.users/write :admin.orders/read :admin.orders/write}
+         (-> (wiring/ig-config {:entity-discovery {:mode :allowlist :allowlist #{:users :orders}}} {})
+             (get-in [:authorization :permissions])
+             keys
+             set))))
+
 (deftest ^:unit settings-without-defaults-still-list-entities
   ;; `wagoe add admin` writes three keys and no `:entity-discovery`; the nil
   ;; mode threw and every admin page answered 500 (BOU-637).

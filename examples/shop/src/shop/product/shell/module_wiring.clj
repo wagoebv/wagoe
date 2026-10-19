@@ -16,6 +16,24 @@
             [integrant.core :as ig]))
 
 ;; =============================================================================
+;; Authorization
+;; =============================================================================
+
+;; Read into the permission registry at boot. :product/read and :product/write
+;; exist without declaring them. An action they do not cover goes under
+;; :permissions, {:product/refund {:label "Refund"}}, and into the manager role.
+
+(def authorization
+  {:permissions {}
+   :roles
+   {:product/viewer
+    {:description "Reads product" :permissions #{:product/read}}
+    :product/editor
+    {:description "Reads and changes product" :permissions #{:product/read :product/write}}
+    :product/manager
+    {:description "Everything in product" :permissions #{:product/read :product/write}}}})
+
+;; =============================================================================
 ;; Repository
 ;; =============================================================================
 

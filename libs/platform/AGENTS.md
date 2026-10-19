@@ -267,6 +267,36 @@ Mark a route public only when something else is its credential: a login form,
 a signed webhook, a token in the path. Roles are still the module's to check;
 `wagoe.platform.core.http.access` has `admin?` and the 403 shape.
 
+### Permission registry
+
+ADR-041 §1–2. At boot the platform collects one registry,
+`:wagoe/permission-registry` (`wagoe.platform.ports.authorization`), from what
+each module declares under `:authorization` in its `ig-config` (a scaffolded
+module: a `def authorization` in its wiring namespace):
+
+```clojure
+{:permissions {:orders/refund {:label "Refund orders"}}
+ :roles       {:orders/manager {:description "Everything in orders"
+                                :permissions #{:orders/read :orders/write :orders/refund}}}
+ :scopes      {:domain-id {:label "Domain" :entity :domains}}}
+```
+
+- Derived, never declared: `<module>/read` and `<module>/write` for every enabled
+  module, and `admin.<entity>/read|write` for every admin entity.
+- The `:wagoe/user :groups :permissions` enum is read in too, until 2.0.
+- Two modules declaring one permission, role or differing scope key fail boot.
+  So do a role or a route `:permission` naming something outside the registry,
+  and a code role outside the admin module holding an `admin.*` permission.
+- Every route carries `:wagoe/module` in its route data: the module key whose
+  contribution it came from.
+- `bb scaffold` writes `<module>/viewer`, `/editor` and `/manager`.
+- Nothing is enforced yet: authorization behaves as before.
+
+```clojure
+(require '[wagoe.platform.ports.authorization :as authz])
+(authz/roles (:wagoe/permission-registry (wagoe.platform.shell.system.wiring/system)))
+```
+
 ### Per-Route Interceptors
 
 ```clojure

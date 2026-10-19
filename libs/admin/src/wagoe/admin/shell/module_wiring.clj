@@ -17,7 +17,8 @@
    [wagoe.admin.shell.service :as service]
    [wagoe.admin.shell.user-writer :as user-writer]
    [wagoe.admin.shell.http :as http]
-   [wagoe.admin.shell.http.support :as support]))
+   [wagoe.admin.shell.http.support :as support]
+   [wagoe.platform.core.authorization :as authorization]))
 
 ;; =============================================================================
 ;; Admin Config Component (pass-through holder referenced by other components)
@@ -175,4 +176,7 @@
                                      workflows? (assoc :workflows (ig/ref :wagoe/workflow-admin)))}
      ;; A ref in a collection, not a named slot on the handler: platform holds
      ;; no list of which modules may contribute routes (BOU-330).
-     :routes [(ig/ref :wagoe/admin-routes)]}))
+     :routes [(ig/ref :wagoe/admin-routes)]
+     ;; admin.<entity>/read and /write for every entity the admin manages.
+     :authorization {:permissions (into {} (map authorization/entity-permissions)
+                                        (get-in settings [:entity-discovery :allowlist]))}}))

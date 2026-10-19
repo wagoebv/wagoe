@@ -156,7 +156,7 @@
 
     (testing "and its routes reach the handler, without a slot of their own"
       (is (some #{(integrant.core/ref :wagoe/widgets-routes)}
-                (get-in m [:wagoe/http-handler :module-routes]))))
+                (map :contribution (get-in m [:wagoe/http-handler :module-routes])))))
 
     (testing "with no mention of it anywhere in platform"
       ;; The whole claim. If this fails, the coupling came back.
@@ -180,7 +180,7 @@
 
     (testing "and nothing refers to routes it does not have"
       (is (not (some #{(integrant.core/ref :wagoe/gadgets-routes)}
-                     (get-in m [:wagoe/http-handler :module-routes])))
+                     (map :contribution (get-in m [:wagoe/http-handler :module-routes]))))
           "the handler would fail to build: no such key in the config")
       (is (not (contains? m :wagoe/gadgets-routes))))))
 
@@ -194,3 +194,24 @@
                                        :wagoe/gadgets  {:enabled? true}}})]
     (is (some #{(integrant.core/ref :wagoe/gadgets-job-handlers)}
               (get-in m [:wagoe/job-registry :handler-maps])))))
+
+;; =============================================================================
+;; Module tags (ADR-041)
+;; =============================================================================
+
+(deftest ^:unit routes-carry-the-module-that-contributed-them
+  (let [{:keys [web api static]}
+        (#'wiring/module-route-contributions
+         [{:wagoe/module :wagoe/orders
+           :contribution {:api    [["/orders" {:get {:handler identity}}]]
+                          :web    [["/orders" ["/new" {}]]]
+                          :static [["/orders.css" {}]]}}
+          {:api [["/untagged" {}]]}
+          {:wagoe/module :wagoe/gone}])]
+    (is (= [:wagoe/orders] (keep (comp :wagoe/module second) api)))
+    (is (= {:wagoe/module :wagoe/orders :no-doc true} (second (first web)))
+        "a route without data gets a data map")
+    (is (= ["/new" {}] (nth (first web) 2)) "and keeps its children")
+    (is (= :wagoe/orders (:wagoe/module (second (first static)))))
+    (is (= ["/orders" "/untagged"] (mapv first api))
+        "a plain contribution is still read, and one whose routes were dropped adds none")))

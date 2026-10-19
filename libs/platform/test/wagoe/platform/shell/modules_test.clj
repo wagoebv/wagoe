@@ -143,7 +143,7 @@
                     (fn [sym] (get graphs (namespace sym)))))
         found    (discover {:wagoe/visits {:enabled? true}}
                            {"acme.visits.shell.module-wiring" (constantly graph)})]
-    (is (= (:routes graph) (:routes found)))
+    (is (= [{:wagoe/module :wagoe/visits :contribution (ig/ref :wagoe/visits-api)}] (:routes found)))
     (is (= (:job-handlers graph) (:job-handlers found)))
     (is (contains? (:components found) :wagoe/visits-job-handlers))
 
@@ -191,7 +191,7 @@
   ;; module initialised and served nothing until its routes arrived as a
   ;; collection on :module-routes.
   (testing "a ref per discovered module"
-    (is (= [(ig/ref :wagoe/tasks-routes)]
+    (is (= [{:wagoe/module :wagoe/tasks :contribution (ig/ref :wagoe/tasks-routes)}]
            (sut/discovered-route-refs {:wagoe/tasks {:enabled? true}} #{}))))
 
   (testing "framework modules are not double-wired"
@@ -301,6 +301,27 @@
            (:data-export (sut/discover-module-config
                           {:wagoe/visits {:enabled? true}} #{} "acme" (constantly true)
                           (constantly (constantly {:data-export {:visits :v}}))))))))
+
+(def ^:private visits-authorization
+  {:roles {:visits/viewer {:permissions #{:visits/read}}}})
+
+(deftest ^:unit every-module-gets-an-authorization-entry
+  ;; Every module has <module>/read and /write, so one that declares nothing
+  ;; still needs its key in the registry's input.
+  (is (= {:wagoe/tenant {:permissions {:tenant/switch {:label "Switch"}}} :wagoe/search nil}
+         (:authorization (assemble {:wagoe/tenant {} :wagoe/search {}}
+                                   {'wagoe.tenant.shell.module-wiring
+                                    {:authorization {:permissions {:tenant/switch {:label "Switch"}}}}
+                                    'wagoe.search.shell.module-wiring {}}))))
+  (testing "and a discovered module's comes from its graph, or its `authorization` var"
+    (let [declared visits-authorization
+          discover #(:authorization (sut/discover-module-config
+                                     {:wagoe/visits {:enabled? true}} #{} "acme" (constantly true) %))]
+      (is (= {:wagoe/visits declared}
+             (discover (constantly (constantly {:authorization declared})))))
+      (is (= {:wagoe/visits declared}
+             (discover (fn [sym] (when (= "authorization" (name sym)) #'visits-authorization)))))
+      (is (= {:wagoe/visits nil} (discover (constantly nil)))))))
 
 (deftest ^:unit a-module-sees-which-of-its-peers-are-on
   ;; audience takes a cache ref only when there is a cache to ref; without
