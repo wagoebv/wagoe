@@ -434,3 +434,11 @@ ADR-040-admin-overview-contract.adoc
 Every field gets a display role, derived from its type, name and relations and
 overridable. The shell enriches a list page in a bounded number of queries
 (titles, counts, facets, summaries); the core renders and the CSS styles by role.
+
+==== ADR-041: Authorization Through Roles on Groups [Proposed]
+ADR-041-authorization-roles-groups.adoc
+
+Permissions follow from module and HTTP method, with declared exceptions; roles
+bundle them, modules ship roles and administrators add their own. Roles go to
+groups with an optional scope, which the admin and routes enforce behind an
+`:off`/`:report`/`:enforce` mode. The platform admin stays superuser.
