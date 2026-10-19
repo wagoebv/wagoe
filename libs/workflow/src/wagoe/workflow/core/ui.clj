@@ -16,8 +16,8 @@
             [wagoe.shared.ui.core.layout :as layout]
             [wagoe.shared.ui.core.icons :as icons]
             [wagoe.shared.ui.core.components :as ui]
-            [clojure.string :as str]
-            [wagoe.core.utils.text :as text]))
+            [wagoe.shared.ui.core.form :as form]
+            [clojure.string :as str]))
 
 ;; =============================================================================
 ;; State Badge
@@ -29,7 +29,7 @@
 
    Args:
      state-kw - keyword (e.g. :pending, :paid)
-     variant  - :current (success) | :reachable (info) | :visited | :default (neutral)
+     variant  - :current (success), :reachable (info), else neutral
 
    Returns:
      Hiccup span element"
@@ -40,7 +40,7 @@
                 :current :success
                 :reachable :info
                 :neutral)]
-     (ui/badge (text/capitalize (str/replace (name state-kw) "-" " "))
+     (ui/badge (form/label-text state-kw)
                {:variant tone
                 :class (str "c-badge tone-" (name tone))}))))
 

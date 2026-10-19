@@ -36,3 +36,11 @@
     (is (= 1 (- (.indexOf ^java.util.List js "/js/htmx-ext-sse.min.js")
                 (.indexOf ^java.util.List js "/js/htmx.min.js")))
         (str k))))
+
+(deftest ^:unit data-table-column-widths-follow-the-column-not-its-position
+  ;; Sized by :first-child/:last-child, every table without a checkbox or
+  ;; actions column squeezed its first and last columns (the workflow list).
+  (let [css (slurp (io/resource "public/css/app.css"))]
+    (is (not (re-find #"table\.data-table t[hd]:(first|last)-child" css)))
+    (is (re-find #"table\.data-table th\.checkbox-header" css))
+    (is (re-find #"table\.data-table th\.actions-header" css))))
