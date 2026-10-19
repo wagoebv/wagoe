@@ -1,9 +1,9 @@
 (ns wagoe.admin.core.ui.layout
-  "Admin shell/layout, error pages, confirmation dialog, and URL utilities.
+  "Admin shell/layout, error pages, and URL utilities.
 
    Pure Hiccup generators for the admin chrome: sidebar navigation, the
-   collapsible shell + topbar, the dashboard home, 403/404 error pages, the
-   delete-confirmation modal, and the `build-table-url` helper."
+   collapsible shell + topbar, the dashboard home, 403/404 error pages and the
+   `build-table-url` helper."
   (:require [wagoe.core.utils.text :as text]
             [wagoe.shared.ui.core.home :as home]
             [wagoe.shared.ui.core.icons :as icons]
@@ -218,33 +218,6 @@
         [:div.entity-card-icon (icons/icon icon {:size 20})]
         [:div.entity-card-title title]
         [:div.entity-card-description description]]])]])
-
-;; =============================================================================
-;; Confirmation Dialog
-;; =============================================================================
-
-(defn confirm-delete-dialog
-  "Confirmation dialog for delete operations.
-
-   Args:
-     entity-name: Keyword entity name
-     record-id: ID of record to delete
-
-   Returns:
-     Hiccup modal structure"
-  [entity-name record-id]
-  [:div.modal#confirm-delete-modal
-   [:div.modal-content
-    [:h3 [:t :admin/modal-confirm-delete-title]]
-    [:p [:t :admin/modal-confirm-delete-message]]
-    [:div.modal-actions
-     [:button.button.danger
-      {:hx-delete (str "/web/admin/" (name entity-name) "/" record-id)
-       :hx-target "#entity-table-container"}
-      [:t :common/button-delete]]
-     [:button.button.secondary
-      {:onclick "closeModal('confirm-delete-modal')"}
-      [:t :common/button-cancel]]]]])
 
 ;; =============================================================================
 ;; Error Pages

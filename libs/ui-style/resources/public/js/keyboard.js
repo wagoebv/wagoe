@@ -212,16 +212,6 @@
       return true;
     }
 
-    // Close confirm modal (styled delete dialog)
-    const confirmBackdrop = document.querySelector('.confirm-modal-backdrop');
-    if (confirmBackdrop) {
-      const cancelBtn = confirmBackdrop.querySelector('.confirm-cancel');
-      if (cancelBtn) {
-        cancelBtn.click();
-        return true;
-      }
-    }
-
     // Close any open modals
     const modal = document.querySelector('.modal[open], .modal.active, .modal-backdrop');
     if (modal) {
@@ -275,6 +265,9 @@
    * Main keyboard handler
    */
   function handleKeydown(event) {
+    // A modal <dialog> owns the keyboard, Esc included
+    if (document.querySelector('dialog:modal')) return;
+
     const key = event.key.toLowerCase();
 
     // Debug logging (remove in production)

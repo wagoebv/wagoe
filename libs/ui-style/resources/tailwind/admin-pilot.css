@@ -72,6 +72,12 @@ body .main-content {
   @apply w-full;
 }
 
+/* Modal: app.css transitions every button property, visibility too, which
+   leaves a just-opened dialog's buttons unfocusable for a moment. */
+.modal button {
+  transition-property: color, background-color, border-color, box-shadow;
+}
+
 .button,
 .icon-button {
   color: var(--color-base-content);

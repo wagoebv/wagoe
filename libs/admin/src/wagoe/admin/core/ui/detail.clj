@@ -11,6 +11,7 @@
             [wagoe.shared.ui.core.components :as ui]
             [wagoe.shared.ui.core.form :as form]
             [wagoe.shared.ui.core.icons :as icons]
+            [wagoe.shared.ui.core.modal :as modal]
             [clojure.string :as str]))
 
 ;; =============================================================================
@@ -774,18 +775,23 @@
           ;; original list state when redirecting back.
           (let [delete-url (cond-> (str "/web/admin/" (name entity-name) "/" (get record (:primary-key entity-config :id)))
                              return-to (str "?return_to=" (base/url-encode return-to)))]
-            [:button.button.ghost
-             {:type "button"
-              :class "gap-2 button-danger-text"
-              :hx-delete delete-url
-              :hx-target "body"
-              :hx-swap "outerHTML"
-              :hx-confirm [:t :admin/confirm-delete-record]
-              :data-confirm-title [:t :admin/modal-confirm-delete-title]
-              :data-confirm-cancel [:t :admin/modal-button-cancel]
-              :data-confirm-label [:t :admin/modal-button-delete]}
-             (icons/icon :trash {:size 14})
-             [:t :common/button-delete]]))]]
+            (list
+             [:button.button.ghost
+              (merge (modal/confirm-attrs "delete-record-confirm")
+                     {:type "button"
+                      :class "gap-2 button-danger-text"
+                      :hx-delete delete-url
+                      :hx-target "body"
+                      :hx-swap "outerHTML"})
+              (icons/icon :trash {:size 14})
+              [:t :common/button-delete]]
+             (modal/confirm-modal
+              {:id            "delete-record-confirm"
+               :title         [:t :admin/modal-confirm-delete-title]
+               :message       [:t :admin/confirm-delete-record]
+               :confirm-label [:t :admin/modal-button-delete]
+               :cancel-label  [:t :admin/modal-button-cancel]
+               :danger?       true}))))]]
       ;; Edit: the record's name, with what this page is above it.
       ;; New: what this page is.
       (if is-edit?
