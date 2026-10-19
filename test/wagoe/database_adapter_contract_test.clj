@@ -111,9 +111,9 @@
 (def ^:private round-trips
   {:uuid      [:uuid (UUID/randomUUID) identity tc/string->uuid]
    :instant   [:instant (Instant/ofEpochMilli 1767225600123) identity tc/string->instant]
-   ;; Microseconds, and the ISO string the user and admin modules write.
    :instant-us  [:instant (Instant/parse "2026-10-15T14:16:48.890413Z") identity tc/string->instant]
-   :instant-iso [:instant (Instant/parse "2026-10-15T14:16:48.890413Z") tc/instant->string tc/string->instant]
+   ;; Text that reads as an instant stays text: MySQL rewrote it (BOU-655).
+   :iso-text  [:string "2026-10-15T14:16:48.890413Z" identity identity]
    :true      [:boolean true ::adapter-boolean ::adapter-boolean]
    :false     [:boolean false ::adapter-boolean ::adapter-boolean]
    :unicode   [:text "Zoë — 東京 🚀" identity identity]
@@ -145,6 +145,20 @@
     (db/execute-update! ctx {:insert-into :by_uuid :values [{:id (str id)}]})
     (when (empty? (db/execute-query! ctx {:select [:id] :from [:by_uuid] :where [:= :id id]}))
       "no row for the UUID it was written with")))
+
+(defn- found-by-instant
+  "A WHERE on an Instant compares it as a moment, on every engine (BOU-655)."
+  [ctx]
+  (let [t (Instant/parse "2026-10-15T14:16:48.890413Z")]
+    (ddl! ctx "DROP TABLE IF EXISTS by_instant")
+    (ddl! ctx (str "CREATE TABLE by_instant (k INTEGER NOT NULL PRIMARY KEY, at "
+                   (protocols/column-type (adapter ctx) :instant) ")"))
+    (db/execute-update! ctx {:insert-into :by_instant
+                             :values [{:k 1 :at (.minusSeconds t 60)} {:k 2 :at t} {:k 3 :at (.plusMillis t 1)}]})
+    (let [ks (fn [where] (set (map :k (db/execute-query! ctx {:select [:k] :from [:by_instant] :where where}))))
+          got {:= (ks [:= :at t]) :> (ks [:> :at t])}]
+      (when-not (= {:= #{2} :> #{3}} got)
+        (str "matched " (pr-str got))))))
 
 (defn- strings-ignore-case [ctx]
   (ddl! ctx "DROP TABLE IF EXISTS people")
@@ -477,6 +491,7 @@
   (merge
    (into {} (for [k (keys round-trips)] [(keyword "round-trip" (name k)) (round-trip-case k)]))
    {:lookup/uuid               found-by-uuid
+    :lookup/instant            found-by-instant
     :clock/now-ms              clock-in-epoch-millis
     :strings/ignore-case       strings-ignore-case
     :strings/any-locale        strings-ignore-case-in-any-locale

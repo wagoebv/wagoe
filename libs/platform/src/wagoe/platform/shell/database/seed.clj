@@ -48,12 +48,23 @@
 
 (defn- insert-table!
   "Inserts one table's rows inside the caller's transaction, each value encoded
-   as `adapter`'s engine takes it: MySQL refuses an ISO instant string. Returns
-   the count."
+   as `adapter`'s engine takes it. Returns the count."
   [tx adapter {:keys [table rows]}]
   (jdbc/execute! tx (execution/encode-params adapter (sql/format {:insert-into (keyword table)
                                                                   :values      rows})))
   (count rows))
+
+(defn- timestamps-as-instants
+  "`rows` with an ISO string in a timestamp column as the Instant it names,
+   which the adapter encodes: MySQL refuses the string (BOU-657)."
+  [rows timestamp-columns]
+  (mapv (fn [row]
+          (reduce-kv (fn [m k v]
+                       (if (and (string? v) (timestamp-columns (name k)))
+                         (assoc m k (or (type-conversion/string->instant v) v))
+                         m))
+                     row row))
+        rows))
 
 (defn hook-summary
   "The lines the seeder prints for what hook `k` returned: a string or strings
@@ -118,8 +129,9 @@
     (when t
       (let [pk (set (metadata-rows (.getPrimaryKeys md catalog schema t)
                                    #(lc (.getString ^ResultSet % "COLUMN_NAME"))))]
-        {:columns  (set (keys columns))
-         :uuid-id? (boolean (and (= #{"id"} pk) (some->> (get columns "id") (re-find #"uuid"))))}))))
+        {:columns           (set (keys columns))
+         :timestamp-columns (into #{} (keep (fn [[n t]] (when (re-find #"timestamp|datetime" (str t)) n))) columns)
+         :uuid-id?          (boolean (and (= #{"id"} pk) (some->> (get columns "id") (re-find #"uuid"))))}))))
 
 (defn admin-missing?
   "Whether an application with the user module has no admin: its users table
@@ -151,11 +163,14 @@
                                           (some->> (table-info tx adapter n) (vector n)))))
                              (core-seed/entries data))
               resolved (core-seed/resolve-seed data {:tables tables
-                                                     :now    (type-conversion/instant->string (Instant/now))
+                                                     :now    (Instant/now)
                                                      :new-id #(str (UUID/randomUUID))})]
           (if-let [err (:error resolved)]
             {:error err}
-            (let [plan    (core-seed/seed-plan (:ok resolved))
+            (let [plan    (mapv (fn [{:keys [table] :as entry}]
+                                  (update entry :rows timestamps-as-instants
+                                          (get-in tables [table :timestamp-columns] #{})))
+                                (core-seed/seed-plan (:ok resolved)))
                   detail  (mapv (fn [{:keys [table] :as entry}]
                                   {:table table
                                    :rows  (insert-table! tx adapter entry)})

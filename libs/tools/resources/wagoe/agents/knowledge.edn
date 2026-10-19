@@ -75,7 +75,7 @@
    :symptom "500 errors with cryptic messages, nil values for expected fields, SQL errors about missing columns."
    :cause   "Adding logic that uses new fields without adding them to the Malli schema, the database columns, and the persistence transformations."
    :fix     "When adding a field, synchronize all three: Malli schema, database column (migration), and persistence layer transformations."
-   :example ";; ALWAYS follow this checklist when adding new fields:\n\n;; 1. Add to Malli schema (src/{module}/schema.clj)\n[:failed-login-count {:optional true} :int]\n[:lockout-until {:optional true} [:maybe inst?]]\n\n;; 2. Add to persistence layer transformations (src/{module}/shell/persistence.clj)\n;; In entity->db:\n(update :lockout-until type-conversion/instant->string)\n;; In db->entity:\n(update :lockout-until type-conversion/string->instant)\n\n;; 3. Verify database has columns (or add migration)\nALTER TABLE users ADD COLUMN failed_login_count INTEGER DEFAULT 0;\nALTER TABLE users ADD COLUMN lockout_until TEXT;"}
+   :example ";; ALWAYS follow this checklist when adding new fields:\n\n;; 1. Add to Malli schema (src/{module}/schema.clj)\n[:failed-login-count {:optional true} :int]\n[:lockout-until {:optional true} [:maybe inst?]]\n\n;; 2. Add to persistence layer transformations (src/{module}/shell/persistence.clj)\n;; In entity->db: nothing, the Instant goes to the database as it is\n;; In db->entity:\n(update :lockout-until type-conversion/string->instant)\n\n;; 3. Verify database has columns (or add migration)\nALTER TABLE users ADD COLUMN failed_login_count INTEGER DEFAULT 0;\nALTER TABLE users ADD COLUMN lockout_until TIMESTAMP WITH TIME ZONE;"}
 
   {:id "P07"
    :title "exception handling - missing :type in ex-data"
