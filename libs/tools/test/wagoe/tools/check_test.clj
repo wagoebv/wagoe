@@ -64,30 +64,27 @@
 ;; only in `bb check`. A gate missing from `all-checks` means `bb check --ci`
 ;; passes locally without it; missing from CI means nothing enforces it on a PR.
 
-(defn- ci-workflow
-  "The CI workflow source. `bb test:tools` runs from the repo root; a standalone
-   run inside libs/tools does not — try both, then give up loudly.
+(defn- repo-root
+  "The repository root: the cwd under `bb test:tools`, ../.. inside libs/tools.
 
    Deliberately throws rather than returning nil: a lockstep test that quietly
    passes when it cannot find the file it compares against is the same
    stopped-checking failure it exists to prevent (BOU-250)."
   []
-  (let [cwd        (System/getProperty "user.dir")
-        candidates [(io/file cwd ".github" "workflows" "ci.yml")
-                    (io/file cwd ".." ".." ".github" "workflows" "ci.yml")]]
-    (or (some (fn [f] (when (.exists ^java.io.File f) (slurp f))) candidates)
-        (throw (ex-info "ci.yml not found — cannot verify all-checks/CI lockstep"
-                        {:cwd cwd :tried (mapv str candidates)})))))
+  (let [cwd (System/getProperty "user.dir")]
+    (or (some #(when (.exists (io/file % "tests.edn")) %)
+              [(io/file cwd) (io/file cwd ".." "..")])
+        (throw (ex-info "repo root (tests.edn) not found — cannot verify the CI lockstep" {:cwd cwd})))))
+
+(defn- ci-workflow
+  "The CI workflow source."
+  []
+  (slurp (io/file (repo-root) ".github" "workflows" "ci.yml")))
 
 (defn- workflows-dir
-  "The .github/workflows directory, wherever the test is run from."
+  "The .github/workflows directory."
   []
-  (let [cwd (System/getProperty "user.dir")]
-    (or (some (fn [f] (when (.isDirectory ^java.io.File f) f))
-              [(io/file cwd ".github" "workflows")
-               (io/file cwd ".." ".." ".github" "workflows")])
-        (throw (ex-info "no .github/workflows — cannot verify the CI lockstep"
-                        {:cwd cwd})))))
+  (io/file (repo-root) ".github" "workflows"))
 
 (defn- all-workflow-sources
   "Every workflow file's source, concatenated.
@@ -395,14 +392,6 @@
       (is (some? doctor) "the registry no longer has a :doctor check")
       (is (= ["bb" "doctor" "--ci"] (:cmd doctor))))))
 
-(defn- repo-root
-  "The repository root: the cwd under `bb test:tools`, ../.. inside libs/tools."
-  []
-  (let [cwd (System/getProperty "user.dir")]
-    (or (some #(when (.exists (io/file % "tests.edn")) %)
-              [(io/file cwd) (io/file cwd ".." "..")])
-        (throw (ex-info "tests.edn not found — cannot verify the suite/CI lockstep" {:cwd cwd})))))
-
 (defn- tests-edn
   "The kaocha suite registry."
   []
@@ -441,25 +430,42 @@
                (pr-str (sort (remove declared (keys in-ci)))))))))
 
 (defn- suite-nss
-  "The test namespaces `suite` picks up."
-  [{:keys [test-paths ns-patterns]}]
+  "The test namespaces `suite` picks up. Kaocha's default pattern is -test$."
+  [{:keys [test-paths ns-patterns] :or {ns-patterns ["-test$"]}}]
   (let [patterns (map re-pattern ns-patterns)]
     (set (for [dir test-paths
                ns  (isolation/namespaces-under (io/file (repo-root) dir))
                :when (some #(re-find % ns) patterns)]
            ns))))
 
+(defn- test-roots
+  "test/ and each library's test roots. The standalone libs run under their own
+   deps.edn (bb test:all), e2e under tests.e2e.edn."
+  []
+  (let [standalone #{"config" "tools" "wagoe-cli" "wagoe-mcp" "e2e"}]
+    (cons "test"
+          (for [^java.io.File lib (.listFiles (io/file (repo-root) "libs"))
+                :when (not (standalone (.getName lib)))
+                ^java.io.File dir (or (.listFiles lib) [])
+                :when (and (.isDirectory dir) (str/starts-with? (.getName dir) "test"))]
+            (str "libs/" (.getName lib) "/" (.getName dir))))))
+
 (deftest ^:unit every-test-namespace-is-in-exactly-one-suite
   ;; Kaocha runs every suite by default, so a namespace two suites pick up runs
   ;; twice in one JVM and can collide with its own first run: op-metrics-test
   ;; registered the same user twice while an aggregate :unit suite overlapped
-  ;; :app and every library suite (BOU-758).
+  ;; :app and every library suite (BOU-758). One in no suite never runs.
   (let [owners (->> (:tests (tests-edn))
                     (mapcat (fn [suite] (map #(vector % (:id suite)) (suite-nss suite))))
                     (reduce (fn [m [ns id]] (update m ns (fnil conj []) id)) {}))]
     (is (< 500 (count owners)) "found few test namespaces; the assertion below would pass vacuously")
     (is (empty? (into (sorted-map) (filter #(< 1 (count (val %)))) owners))
-        "namespaces more than one suite runs")))
+        "namespaces more than one suite runs")
+    (is (empty? (sort (for [dir (test-roots)
+                            ns  (isolation/namespaces-under (io/file (repo-root) dir))
+                            :when (and (str/ends-with? ns "-test") (not (owners ns)))]
+                        ns)))
+        "test namespaces no suite runs")))
 
 (deftest ^:unit suites-needing-heavy-deps-request-them
   ;; The heavy test dependencies moved out of the shared :test alias so 25
