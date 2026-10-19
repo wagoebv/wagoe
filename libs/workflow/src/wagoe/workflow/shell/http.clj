@@ -15,8 +15,9 @@
      GET  /workflows        — list all workflow instances
      GET  /workflows/:id    — instance detail with state viz + audit trail
 
-   Every route requires authentication and answers 401 without it. The admin
-   pages also require the admin module's access rule, and answer 403 without it."
+   Every route requires authentication: the API answers 401 without it, the
+   admin pages send to the login form. The admin pages also require a platform
+   admin, and answer 403 to anyone else."
   (:require [clojure.string :as str]
             [wagoe.admin.core.permissions :as admin-permissions]
             [wagoe.admin.core.ui.layout :as admin-layout]
@@ -25,6 +26,7 @@
             [wagoe.shared.ui.core.form :as form]
             [wagoe.i18n.shell.middleware :as i18n-middleware]
             [wagoe.i18n.shell.render :as i18n]
+            [wagoe.platform.core.http.access :as access]
             [wagoe.platform.core.http.errors :as errors]
             [wagoe.workflow.ports :as ports]
             [wagoe.workflow.core.transitions :as transitions]
@@ -372,12 +374,14 @@
 ;; =============================================================================
 
 (defn- admin-only
-  "Admit only the users the admin module admits; the pages list every
-   instance and its audit trail."
+  "Admit only a platform admin the admin module admits. The pages list every
+   instance and its audit trail, and the store has no tenant column, so a
+   tenant admin would see other tenants' instances."
   [handler]
   (fn [request]
     (let [user (:user request)]
-      (if (admin-permissions/can-access-admin? user)
+      (if (and (admin-permissions/can-access-admin? user)
+               (access/platform-admin? user))
         (handler request)
         (html-response request (admin-layout/admin-forbidden-page nil user) 403)))))
 

@@ -525,9 +525,9 @@
                                             nil)]]
     {})))
 
-(deftest ^:unit the-admin-pages-require-the-admin-modules-access
-  ;; Any signed-in user could list every instance and its audit trail.
-  ;; A tenant admin is admitted, as the admin module admits one.
+(deftest ^:unit the-admin-pages-require-a-platform-admin
+  ;; Any signed-in user could list every instance and its audit trail. The
+  ;; store has no tenant column, so a tenant admin would see every tenant's.
   (let [handler (served-web-pages)
         get-as  (fn [uri user]
                   (handler (cond-> {:request-method :get :uri uri :headers {}}
@@ -536,13 +536,13 @@
         uris    ["/web/admin/workflows" (str "/web/admin/workflows/" (UUID/randomUUID))]]
     (doseq [uri uris]
       (testing uri
-        (testing "a plain user is refused"
-          (let [response (get-as uri {:email "u@example.com" :role :user})]
-            (is (= 403 (:status response)))
-            (is (str/includes? (:body response) "403"))))
-        (testing "a tenant admin is admitted"
-          (is (not= 403 (:status (get-as uri {:email "t@example.com" :role :admin
-                                              :tenant-id (UUID/randomUUID)})))))
+        (doseq [[who user] {"a plain user"   {:email "u@example.com" :role :user}
+                            "a tenant admin" {:email "t@example.com" :role :admin
+                                              :tenant-id (UUID/randomUUID)}}]
+          (testing (str who " is refused")
+            (let [response (get-as uri user)]
+              (is (= 403 (:status response)))
+              (is (str/includes? (:body response) "403")))))
         (testing "a platform admin is admitted"
           ;; The detail id is unknown: 404, past the guard.
           (is (= (if (str/ends-with? uri "workflows") 200 404)
