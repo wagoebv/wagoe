@@ -51,7 +51,7 @@
           "the widget mount points are there")))
 
   (testing "edit mode fills in the segment, escaped"
-    (let [out (html (ui/builder-layout {:segment {:label "<b>VIP</b>" :description "Top & loyal"}}))]
+    (let [out (html (ui/builder-layout {:segment {:label "<b>VIP</b>" :description "Top & loyal"} :edit? true}))]
       (is (str/includes? out "Edit Audience"))
       (is (str/includes? out "value=\"&lt;b&gt;VIP&lt;/b&gt;\""))
       (is (str/includes? out "Top &amp; loyal"))

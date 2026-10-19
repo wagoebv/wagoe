@@ -51,6 +51,24 @@
      Returns:
        saved definition map")
 
+  (create-audience [this definition]
+    "Persist a new audience definition.
+
+     Returns:
+       saved definition map
+
+     Throws:
+       ex-info {:type :audience-exists} when its id is taken")
+
+  (update-audience [this definition]
+    "Replace a stored audience definition.
+
+     Returns:
+       saved definition map
+
+     Throws:
+       ex-info {:type :audience-not-found} when its id is not stored")
+
   (find-audience [this audience-id]
     "Retrieve an audience definition by id.
 
