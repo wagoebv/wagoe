@@ -218,6 +218,8 @@ for what is public API, what is internal, and how deprecations are announced.
   admin of the request's tenant. Upgrade if you run workflow.
 - **Any signed-in user could read every workflow instance via the API, across tenants** (BOU-748); reads and starts need
   `:admin` or a `:workflow/read` grant, and each tenant's instances live in its schema. Grant it to readers.
+- **Tenant workflow work could reach `public`, and other tenants' admins and grants applied** (BOU-751): it now fails
+  closed, jobs carry the tenant. In a tenant, scope `:workflow/read` grants `{:tenant-id <id>}`.
 - **`bb ai sql` invented table and column names** (BOU-513): it now sees the tables your migrations create, and
   refuses an answer naming anything else. Nothing to do.
 - **Workflow admin pages use the admin sidebar shell** (BOU-743); every audit row read as the current state, and the

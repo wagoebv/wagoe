@@ -118,6 +118,32 @@
       {:success? false
        :error    (failure e)})))
 
+(defn- run-handler
+  "Run `handler-fn` on `job`'s args. A job that carries a tenant runs inside
+   that tenant's schema through `:tenant-runner` (fn [tenant-id f]), and fails
+   when there is none rather than running against public."
+  [config handler-fn job]
+  (if-let [tenant-id (get-in job [:metadata :tenant-id])]
+    (if-let [in-tenant (:tenant-runner config)]
+      ;; A failed handler throws its result out, so the tenant transaction
+      ;; rolls back rather than commit half a job that will be retried. Typed,
+      ;; so `with-tenant-schema` rethrows it unwrapped.
+      (try
+        (in-tenant tenant-id
+                   #(let [result (execute-job-handler handler-fn (:args job))]
+                      (if (:success? result)
+                        result
+                        (throw (ex-info "Tenant job failed"
+                                        {:type :job-failed ::failed result})))))
+        (catch Exception e
+          (or (::failed (ex-data e))
+              {:success? false :error (failure e)})))
+      {:success? false
+       :error    {:type    :configuration-error
+                  :message (str "Job " (:id job) " belongs to tenant " tenant-id
+                                ", and this worker has no tenant runner; enable :wagoe/tenant")}})
+    (execute-job-handler handler-fn (:args job))))
+
 (defn- handle-missing-handler!
   "Handle a dequeued job whose type has no handler registered on THIS instance.
 
@@ -250,7 +276,7 @@
                 (do
                   (log/info "Processing job" {:job-id job-id :job-type job-type})
                   (ports/update-job-status! store job-id :running nil)
-                  (let [result (execute-job-handler handler-fn (:args job))]
+                  (let [result (run-handler config handler-fn job)]
                     (if (:success? result)
                       (do
                         (ports/update-job-status! store job-id :completed (:result result))
@@ -429,7 +455,7 @@
     (let [_job-id (:id job)
           job-type (:job-type job)]
       (if-let [handler-fn (ports/get-handler registry job-type)]
-        (execute-job-handler handler-fn (:args job))
+        (run-handler config handler-fn job)
         {:success? false
          :error {:message (str "No handler registered for job type: " job-type)
                  :type :no-handler}})))
@@ -466,6 +492,9 @@
               :poll-interval-ms - Milliseconds between polls (default 1000)
               :scheduled-interval-ms - Check scheduled jobs interval (default 5000)
               :virtual-threads? - Run the loop on a virtual thread (default false)
+              :tenant-runner - (fn [tenant-id f]) that calls f in the tenant's
+                               schema; a job with :metadata :tenant-id fails
+                               without one
      queue - IJobQueue implementation
      store - IJobStore implementation
      registry - IJobRegistry implementation
