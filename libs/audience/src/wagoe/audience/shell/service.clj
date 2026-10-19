@@ -149,7 +149,8 @@
                                (when-let [d (load-definition id repository)]
                                  (if (:compose d)
                                    {:compose (:compose d)}
-                                   {:user-ids (:user-ids (ports/resolve-audience this id))}))))
+                                   {:user-ids (:user-ids (ports/resolve-audience
+                                                          this id (select-keys opts [:as-of :force-refresh?])))}))))
                     ;; Validate the composition tree (structure + refs) before
                     ;; evaluating it, so bad trees raise instead of failing safe.
                     _ (unwrap! (composition/explain-composition compose lookup))

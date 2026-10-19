@@ -323,3 +323,15 @@
              (try (ports/resolve-audience svc id) nil
                   (catch clojure.lang.ExceptionInfo e (:type (ex-data e)))))
           (name id)))))
+
+(deftest ^:unit a-composed-ref-is-evaluated-as-of-the-callers-date
+  ;; Refs were resolved without the caller's opts, so a leaf's date filter
+  ;; used today rather than :as-of.
+  (let [used (java.util.Date/from (java.time.Instant/parse "2026-01-05T12:00:00Z"))
+        user {:id (uuid) :feature-usage {:export used}}
+        svc  (make-service [user])]
+    (registry/register-audience! {:id :exporters :label "E"
+                                  :filters [{:type :feature-usage :field :export :op :used-within :value 14}]})
+    (registry/register-audience! {:id :all-exporters :label "A" :filters [] :compose {:or [{:ref :exporters}]}})
+    (is (= #{(:id user)}
+           (:user-ids (ports/resolve-audience svc :all-exporters {:as-of (java.time.LocalDate/of 2026 1 10)}))))))

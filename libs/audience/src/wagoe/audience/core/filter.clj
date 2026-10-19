@@ -115,20 +115,20 @@
   (field-clause filt))
 
 (defmethod filter->predicate :demographics [{:keys [field op value]}]
-  ;; A missing value matches no ordering, as NULL does in SQL: compare sorts
+  ;; A missing value matches no comparison, as NULL does in SQL: compare sorts
   ;; nil below everything, so :lt matched every user without the field.
   (let [[honey-op honey-val] (sql-op op value)
         ord        (fn [p] #(and (some? %) (p (compare % honey-val))))
         compare-fn (case honey-op
                      :=    #(= % honey-val)
-                     :<>   #(not= % honey-val)
+                     :<>   #(and (some? %) (not= % honey-val))
                      :>    (ord pos?)
                      :>=   (ord (complement neg?))
                      :<    (ord neg?)
                      :<=   (ord (complement pos?))
                      :in   #(contains? (set honey-val) %)
                      :like (let [pat (re-pattern (str "(?i).*" (Pattern/quote (str value)) ".*"))]
-                             #(boolean (re-find pat (str %))))
+                             #(and (some? %) (boolean (re-find pat (str %)))))
                      ;; validated up front; unreachable, matches nobody
                      (constantly false))]
     (fn [user] (compare-fn (get user field)))))

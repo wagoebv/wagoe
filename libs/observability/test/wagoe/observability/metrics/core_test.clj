@@ -158,7 +158,8 @@
     (is (= 0.5 (status-gauge :degraded)))
     (is (= 0 (status-gauge :unhealthy)))
     (testing "a status outside the three reads as unhealthy instead of throwing"
-      (is (= 0 (status-gauge :unknown))))
+      (is (= 0 (status-gauge :unknown)))
+      (is (= 0 (status-gauge nil))))
     (testing "a string status is read like its keyword"
       (is (= 1 (status-gauge "healthy"))))))
 

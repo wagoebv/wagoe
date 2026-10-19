@@ -146,10 +146,11 @@
       (is (= [{:age 17}] (ages :lt 18)))
       (is (= [{:age 17} {:age 18}] (ages :lte 18)))))
 
-  (testing "a user without the field matches no ordering, as NULL does in SQL"
-    (doseq [op [:gt :gte :lt :lte]]
+  (testing "a user without the field matches no comparison, as NULL does in SQL"
+    (doseq [op [:gt :gte :lt :lte :neq]]
       (is (false? ((f/filter->predicate {:type :demographics :field :age :op op :value 18}) {}))
-          (name op))))
+          (name op)))
+    (is (false? ((f/filter->predicate {:type :demographics :field :city :op :contains :value ""}) {}))))
 
   (testing ":in and :contains"
     (let [in       (f/filter->predicate {:type :role :field :role :op :in :value ["admin" "owner"]})

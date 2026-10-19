@@ -410,7 +410,7 @@
    Returns:
      nil"
   [emitter component status duration]
-  (let [status    (keyword status)
+  (let [status    (or (some-> status keyword) :unknown)
         base-tags {:component (str component)
                    :status (name status)}]
     ;; Count health checks
