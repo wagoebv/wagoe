@@ -208,8 +208,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
-- **A column with a digit in its name read back empty** (BOU-760): `e2e_id` came back as `:e-2e-id`. Query results
-  now key it `:e2e-id`; rename any `:x-2y`-style key you read.
+- **A column with a digit in its name read back empty** (BOU-760): `e2e_id` came back as `:e-2e-id`. Results now
+  key it `:e2e-id`, and a camelCase `userId` `:userid`; rename keys you read.
 - **Admin foreign-key cells showed no label when the parent's name differs from the key** (BOU-760). The parent a
   `:has-many` declares is used.
 - **Export jobs: racing requests opened duplicates, archives were built in memory** (BOU-752). One open job per

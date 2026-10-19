@@ -871,4 +871,17 @@
                  :tickets        tickets}]
     (is (= {:customer-id :customers :user-id :users} (parents tickets)) "detection guesses from the key")
     (is (= {:customer-id :shop-customers :user-id :users}
-           (parents (:tickets (introspection/with-declared-parents configs)))))))
+           (parents (:tickets (introspection/with-declared-parents configs)))))
+    (testing "a key detection does not guess is added"
+      (let [notes (introspection/detect-relationships {:fields {:owner {}}})]
+        (is (= {:owner :people}
+               (parents (:notes (introspection/with-declared-parents
+                                  {:people {:has-many [{:entity :notes :foreign-key :owner}]}
+                                   :notes  notes})))))))
+    (testing "a key two parents declare names neither"
+      (let [notes (introspection/detect-relationships {:fields {:owner-id {}}})]
+        (is (= {:owner-id :owners}
+               (parents (:notes (introspection/with-declared-parents
+                                  {:people    {:has-many [{:entity :notes :foreign-key :owner_id}]}
+                                   :companies {:has-many [{:entity :notes :foreign-key :owner-id}]}
+                                   :notes     notes})))))))))
