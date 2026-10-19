@@ -146,7 +146,17 @@
       (is (= :configuration-error
              (:type (refusal #(binding [db/*tenant-id* (random-uuid)]
                                 (db/with-transaction* ctx (fn [_] (ports/list-instances store {})))))))
-          "on a transaction in public"))))
+          "on a transaction in public"))
+
+    (testing "in a tenant, a caller's own transaction on another connection is refused"
+      (let [schema (str "tenant_wfown" (System/nanoTime))]
+        (tenant-schema! schema)
+        (is (= :configuration-error
+               (:type (refusal #(in-tenant schema
+                                           (fn []
+                                             (with-open [^java.sql.Connection own (jdbc/get-connection (:datasource ctx))]
+                                               (.setAutoCommit own false)
+                                               (ports/list-instances (ports/store-in-tx store own) {}))))))))))))
 
 (deftest ^:integration hooks-and-jobs-run-in-the-tenant
   (let [ctx      @db-ctx

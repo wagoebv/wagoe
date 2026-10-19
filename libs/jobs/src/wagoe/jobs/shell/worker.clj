@@ -125,10 +125,19 @@
   [config handler-fn job]
   (if-let [tenant-id (get-in job [:metadata :tenant-id])]
     (if-let [in-tenant (:tenant-runner config)]
+      ;; A failed handler throws its result out, so the tenant transaction
+      ;; rolls back rather than commit half a job that will be retried. Typed,
+      ;; so `with-tenant-schema` rethrows it unwrapped.
       (try
-        (in-tenant tenant-id #(execute-job-handler handler-fn (:args job)))
+        (in-tenant tenant-id
+                   #(let [result (execute-job-handler handler-fn (:args job))]
+                      (if (:success? result)
+                        result
+                        (throw (ex-info "Tenant job failed"
+                                        {:type :job-failed ::failed result})))))
         (catch Exception e
-          {:success? false :error (failure e)}))
+          (or (::failed (ex-data e))
+              {:success? false :error (failure e)})))
       {:success? false
        :error    {:type    :configuration-error
                   :message (str "Job " (:id job) " belongs to tenant " tenant-id

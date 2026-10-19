@@ -103,7 +103,7 @@
     (cond
       (not scoped?)                                own
       (and tenant-id (access/in-tenant-scope? request)) (assoc own :tenant-id tenant-id)
-      (and (nil? tenant-id) (access/admin? request)) (or caller-filters {})
+      (and (nil? tenant-id) (access/platform-admin? (:user request))) (or caller-filters {})
       :else                                        ::refused)))
 
 (defn- refused [request]

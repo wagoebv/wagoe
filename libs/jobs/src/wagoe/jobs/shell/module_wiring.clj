@@ -59,6 +59,7 @@
             [wagoe.jobs.shell.adapters.redis :as redis]
             [wagoe.jobs.shell.recurring :as recurring]
             [wagoe.jobs.shell.tenant-context :as tenant-context]
+            [wagoe.tenant.shell.provisioning :as provisioning]
             [wagoe.jobs.shell.worker :as worker]))
 
 (defmethod ig/init-key :wagoe/jobs [_ config] config)
@@ -192,9 +193,7 @@
 
 (defmethod ig/init-key :wagoe/job-tenant-runner
   [_ {:keys [db-ctx tenant-service]}]
-  ;; Resolved here: the tenant module is optional, and only this key needs it.
-  (tenant-context/tenant-runner db-ctx tenant-service
-                                ((requiring-resolve 'wagoe.tenant.shell.provisioning/create-tenant-schema-provider))))
+  (tenant-context/tenant-runner db-ctx tenant-service (provisioning/create-tenant-schema-provider)))
 
 (defmethod ig/halt-key! :wagoe/job-tenant-runner [_ _] nil)
 

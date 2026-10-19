@@ -380,7 +380,18 @@
         (is (= [{:value "x"}] @seen))))
     (testing "a runner that refuses fails the job"
       (let [result (run {:tenant-runner (fn [_ _] (throw (ex-info "gone" {:type :tenant-not-found})))})]
-        (is (false? (:success? result)))))))
+        (is (false? (:success? result)))))
+    (testing "a failing handler throws out of the runner, so its transaction rolls back"
+      (ports/register-handler! *registry* :test-job (fn [_] {:success? false :error {:message "no"}}))
+      (let [rolled-back? (atom false)
+            result       (run {:tenant-runner (fn [_ f]
+                                                (try (f)
+                                                     (catch Exception e
+                                                       (reset! rolled-back? true)
+                                                       (throw e))))})]
+        (is @rolled-back?)
+        (is (false? (:success? result)))
+        (is (= "no" (get-in result [:error :message])))))))
 
 (deftest ^:unit worker-processes-scheduled-jobs-test
   (testing "Worker processes scheduled jobs when due"
