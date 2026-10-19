@@ -221,6 +221,18 @@
         (sign-url signing-secret storage-key base nil)
         base))))
 
+(defn- stored
+  "Log a stored file and return `store-file`'s result for it."
+  [logger url-base signing-secret storage-key size content-type]
+  (when logger
+    (logging/info logger "File stored"
+                  {:event ::file-stored :key storage-key :size size :content-type content-type}))
+  {:key          storage-key
+   :url          (file-url url-base signing-secret storage-key)
+   :size         size
+   :content-type content-type
+   :stored-at    (java.util.Date.)})
+
 ;; ============================================================================
 ;; Local Storage Adapter
 ;; ============================================================================
@@ -235,19 +247,7 @@
                             (generate-storage-key bytes (:filename metadata)))
             file-path   (target-path base-path storage-key)]
         (Files/write file-path ^bytes bytes (make-array java.nio.file.OpenOption 0))
-
-        (when logger
-          (logging/info logger "File stored"
-                        {:event ::file-stored
-                         :key storage-key
-                         :size (alength ^bytes bytes)
-                         :content-type content-type}))
-
-        {:key storage-key
-         :url (file-url url-base signing-secret storage-key)
-         :size (alength ^bytes bytes)
-         :content-type content-type
-         :stored-at (java.util.Date.)})
+        (stored logger url-base signing-secret storage-key (alength ^bytes bytes) content-type))
 
       (catch Exception e
         (when logger
@@ -353,23 +353,11 @@
     ;; Written beside its target and moved into place, so a reader never
     ;; sees half a file and a failed writer leaves none.
     (let [storage-key (or (named-storage-key metadata) (streamed-storage-key (:filename metadata)))
-          file-path   (target-path base-path storage-key)
-          spooled     (spool/spool! write! (.getParent file-path))
-          _           (try (Files/move spooled file-path
-                                       (into-array CopyOption [StandardCopyOption/REPLACE_EXISTING
-                                                               StandardCopyOption/ATOMIC_MOVE]))
-                           (catch Exception e
-                             (Files/deleteIfExists spooled)
-                             (throw e)))
-          size        (Files/size file-path)]
-      (when logger
-        (logging/info logger "File stored"
-                      {:event ::file-stored :key storage-key :size size :content-type content-type}))
-      {:key          storage-key
-       :url          (file-url url-base signing-secret storage-key)
-       :size         size
-       :content-type content-type
-       :stored-at    (java.util.Date.)})))
+          file-path   (target-path base-path storage-key)]
+      (spool/with-spooled write! (.getParent file-path)
+        #(Files/move ^Path % file-path (into-array CopyOption [StandardCopyOption/REPLACE_EXISTING
+                                                                StandardCopyOption/ATOMIC_MOVE])))
+      (stored logger url-base signing-secret storage-key (Files/size file-path) content-type))))
 
 ;; ============================================================================
 ;; Factory

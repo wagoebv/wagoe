@@ -168,9 +168,7 @@
   "Whether the engine rolled `e`'s statement back as a deadlock or
    serialization failure (SQLSTATE 40001, MySQL's 1213 among them; 40P01)."
   [e]
-  (some #(and (instance? java.sql.SQLException %)
-              (contains? #{"40001" "40P01"} (.getSQLState ^java.sql.SQLException %)))
-        (take-while some? (iterate ex-cause e))))
+  (contains? #{"40001" "40P01"} (:sql-state (redaction/reported e))))
 
 (def ^:private upsert-attempts 3)
 

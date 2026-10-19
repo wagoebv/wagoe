@@ -105,8 +105,7 @@
    :data-export       data-export
    :job-queue         job-queue
    :queue             queue
-   ;; A string through #env.
-   :requests-per-hour (cond-> requests-per-hour (string? requests-per-hour) parse-long)})
+   :requests-per-hour requests-per-hour})
 
 (defmethod ig/init-key :wagoe.storage/export-job-handlers [_ {:keys [export-jobs]}]
   {export-jobs/job-type (partial export-jobs/run-export-job export-jobs)})

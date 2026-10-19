@@ -6,7 +6,7 @@
            [java.nio.file Files OpenOption Path]
            [java.nio.file.attribute FileAttribute]))
 
-(defn spool!
+(defn- spool!
   "Call `(write! out)` on a new temporary file in directory `dir`, the
    system's when nil, and return its Path. On failure the file is deleted."
   ^Path [write! ^Path dir]
@@ -23,9 +23,11 @@
         (throw t)))))
 
 (defn with-spooled
-  "Call `(f path)` on what `write!` wrote, spooled to the system's temporary
-   directory, and delete the file afterwards."
-  [write! f]
-  (let [path (spool! write! nil)]
-    (try (f path)
-         (finally (Files/deleteIfExists path)))))
+  "Call `(f path)` on what `write!` wrote, spooled to directory `dir`, the
+   system's temporary one when nil, and delete the file afterwards unless `f`
+   moved it."
+  ([write! f] (with-spooled write! nil f))
+  ([write! dir f]
+   (let [path (spool! write! dir)]
+     (try (f path)
+          (finally (Files/deleteIfExists path))))))

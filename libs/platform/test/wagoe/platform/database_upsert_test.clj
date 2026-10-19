@@ -41,12 +41,11 @@
   (with-table
     (fn [ctx]
       (let [update! db/execute-update!
-            fails   (atom 1)]
+            fails   (atom 2)]
         (with-redefs [db/execute-update! (fn [c q]
                                            (when (and (:insert-into q) (pos? (swap! fails dec)))
                                              (throw deadlock))
                                            (update! c q))]
-          (reset! fails 2)
           (is (= :inserted (db/upsert! ctx :kv {:k "a" :v "1"} [:k])))
           (testing "in a transaction the engine rolled all of it back, so it is the caller's to retry"
             (reset! fails 2)

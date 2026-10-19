@@ -45,6 +45,18 @@
     (throw (ex-info "Too many data exports requested in the last hour. Try again later."
                     {:type :rate-limit-exceeded}))))
 
+(defn- create-and-enqueue!
+  "A new job for `subject`, queued; nil when another request opened one first."
+  [store job-queue queue subject requested-by now]
+  (when-let [job (ports/create-export-job! store (core/new-job (str (random-uuid)) subject requested-by now))]
+    (try
+      (enqueue! job-queue (or queue :default) (:id job))
+      (catch Exception e
+        ;; Left behind, it would be the open job every later request returns.
+        (ports/remove-export-job! store (:id job))
+        (throw e)))
+    job))
+
 (defn request-export!
   "Queue an export of `subject` for `requested-by`; the job already open for
    it, if there is one. At most `:requests-per-hour` new jobs per requester."
@@ -52,18 +64,10 @@
   (let [now (Instant/now)]
     (or (open-job store subject now)
         (do (refuse-over-limit! store requested-by (or requests-per-hour core/requests-per-hour) now)
-            (if-let [job (ports/create-export-job! store (core/new-job (str (random-uuid)) subject requested-by now))]
-              (do (try
-                    (enqueue! job-queue (or queue :default) (:id job))
-                    (catch Exception e
-                      ;; Left behind, it would be the open job every later request returns.
-                      (ports/remove-export-job! store (:id job))
-                      (throw e)))
-                  job)
-              ;; A concurrent request opened one first.
-              (or (ports/open-export-job store subject)
-                  (throw (ex-info "Another export of this subject was just requested. Try again."
-                                  {:type :conflict}))))))))
+            (or (create-and-enqueue! store job-queue queue subject requested-by now)
+                (ports/open-export-job store subject)
+                (throw (ex-info "Another export of this subject was just requested. Try again."
+                                {:type :conflict})))))))
 
 (defn- store-archive!
   "The archive of `subject` in file storage, streamed where the adapter can;
