@@ -143,16 +143,24 @@ document.addEventListener('alpine:init', function () {
  *
  * The server renders the options into the listbox; this sends the typed text
  * as the query, moves through the options with the arrow keys, picks one into
- * the hidden value input on Enter or click, and closes on Escape.
+ * the hidden value input on Enter or click, and closes on Escape. A multiple
+ * one (data-multiple) adds a chip per pick instead, from its chip template,
+ * and leaves out the options already chosen; Backspace in the empty input
+ * removes the last chip.
  */
 document.addEventListener('alpine:init', function () {
   window.Alpine.data('combobox', function () {
     return {
       open: false,
       active: -1,
+      // Declared, so init sets them here: an undeclared property lands on the
+      // enclosing form's scope, which every combobox in it shares.
+      multiple: false,
+      chosen: null,
       init: function () {
         var self = this;
-        this.chosen = { value: this.$refs.value.value, label: this.$refs.input.value };
+        this.multiple = this.$el.dataset.multiple === 'true';
+        this.chosen = this.multiple ? null : { value: this.$refs.value.value, label: this.$refs.input.value };
         // The text input has no name, so htmx would send nothing. Only its
         // request: the hidden input posts the field's live validation.
         this.$el.addEventListener('htmx:configRequest', function (e) {
@@ -160,6 +168,12 @@ document.addEventListener('alpine:init', function () {
           e.detail.parameters[self.$el.dataset.queryParam] = self.$refs.input.value;
         });
         this.$el.addEventListener('htmx:afterSwap', function () {
+          if (self.multiple) {
+            var picked = self.values();
+            self.$refs.listbox.querySelectorAll('[role="option"][data-value]').forEach(function (el) {
+              if (picked.indexOf(el.dataset.value) >= 0) el.remove();
+            });
+          }
           self.active = -1;
           self.open = document.activeElement === self.$refs.input;
           self.highlight();
@@ -169,9 +183,21 @@ document.addEventListener('alpine:init', function () {
         return Array.prototype.slice.call(
           this.$refs.listbox.querySelectorAll('[role="option"][data-value]'));
       },
+      values: function () {
+        return Array.prototype.map.call(
+          this.$refs.chips.querySelectorAll('.link-chip'), function (el) { return el.dataset.value; });
+      },
       // Typed text no longer names the chosen row.
       typed: function () {
-        this.$refs.value.value = '';
+        if (!this.multiple) this.$refs.value.value = '';
+      },
+      changed: function () {
+        this.$el.dispatchEvent(new Event('change', { bubbles: true }));
+      },
+      remove: function (e) {
+        e.target.closest('.link-chip').remove();
+        this.changed();
+        this.$refs.input.focus();
       },
       keydown: function (e) {
         var items = this.items();
@@ -208,6 +234,15 @@ document.addEventListener('alpine:init', function () {
           case 'Tab':
             this.close();
             break;
+          case 'Backspace':
+            if (this.multiple && !this.$refs.input.value) {
+              var chips = this.$refs.chips.querySelectorAll('.link-chip');
+              if (chips.length) {
+                chips[chips.length - 1].remove();
+                this.changed();
+              }
+            }
+            break;
         }
       },
       highlight: function () {
@@ -235,6 +270,19 @@ document.addEventListener('alpine:init', function () {
         if (el) this.pick(el);
       },
       pick: function (el) {
+        if (this.multiple) {
+          if (this.values().indexOf(el.dataset.value) < 0) {
+            var chip = this.$refs.chip.content.firstElementChild.cloneNode(true);
+            chip.dataset.value = el.dataset.value;
+            chip.querySelector('.link-chip-label').textContent = el.dataset.label;
+            chip.querySelector('input').value = el.dataset.value;
+            this.$refs.chips.appendChild(chip);
+          }
+          this.$refs.input.value = '';
+          this.close();
+          this.changed();
+          return;
+        }
         this.chosen = { value: el.dataset.value, label: el.dataset.label };
         this.$refs.value.value = el.dataset.value;
         this.$refs.input.value = el.dataset.label;
@@ -244,6 +292,11 @@ document.addEventListener('alpine:init', function () {
       // Left without a pick: back to the chosen row, so the text shown is what
       // the form submits. Emptied text clears the value.
       settle: function () {
+        // Text typed into a multiple one is a query only
+        if (this.multiple) {
+          this.$refs.input.value = '';
+          return;
+        }
         if (!this.$refs.value.value && this.$refs.input.value.trim()) {
           this.$refs.value.value = this.chosen.value;
           this.$refs.input.value = this.chosen.label;

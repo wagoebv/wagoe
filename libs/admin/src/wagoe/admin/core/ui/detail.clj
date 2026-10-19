@@ -386,13 +386,44 @@
       (icons/icon :plus {:size 16})
       [:t :admin/button-add-row {:entity (or (get-in rel [:entity-config :label]) (:label rel))}]]]))
 
+(defn- link-field
+  "A many-to-many relation on the form: checkboxes over its few records, or
+   a multiple combobox. `forms/links-param` names it, so unticking every box
+   still empties it."
+  [k {:keys [rel chosen options url]} errors]
+  (let [picked (set (map first chosen))]
+    [:div.form-field {:class (str "full-width" (when (seq errors) " has-errors"))}
+     (if options
+       [:fieldset {:class "link-checkboxes" :id (name k)}
+        [:legend (:label rel)]
+        (for [[v l] options]
+          [:label [:input {:type "checkbox" :name (name k) :value v :checked (contains? picked v)}] [:span l]])]
+       (list
+        [:label {:for (name k)} (:label rel)]
+        (combobox/combobox k {:url          url
+                              :multiple     true
+                              :chosen       chosen
+                              :placeholder  [:t :admin/combobox-placeholder]
+                              :remove-label [:t :admin/link-remove]})))
+     [:input {:type "hidden" :name forms/links-param :value (name k)}]
+     (ui/field-errors (ui/field-error-id k) errors)]))
+
+(defn- links-section
+  "The many-to-many relations of the form, under their own heading."
+  [links errors]
+  (when (seq links)
+    [:div {:class "form-section form-links"}
+     [:div.form-section-header [:h3.form-section-title [:t :admin/form-section-links]]]
+     [:div.form-fields {:class "form-fields"}
+      (for [[k lf] links] (link-field k lf (get errors k)))]]))
+
 (defn- record-summary
   "The read-only side of a record — its id, timestamps and other read-only
-   fields, rendered by display role — and, filled in by the form as you type,
-   what this edit changes. Blank fields show as a dash: that a user has no
-   tenant is worth seeing too. Order: the key, the other values, then the
-   timestamps."
-  [entity-config record display]
+   fields, rendered by display role, and the records it links — and, filled
+   in by the form as you type, what this edit changes. Blank fields show as
+   a dash: that a user has no tenant is worth seeing too. Order: the key,
+   the other values, then the timestamps."
+  [entity-config record display & [links]]
   (let [pk       (:primary-key entity-config :id)
         hidden   (set (:hide-fields entity-config))
         order    (or (seq (:field-order entity-config)) (sort (keys (:fields entity-config))))
@@ -414,7 +445,14 @@
            (if (or (nil? v) (and (string? v) (str/blank? v)))
              [:dd {:class "record-summary-blank"} "—"]
              [:dd {:class (:class column)}
-              (cells/cell field record (assoc ctx :role role :field-config config :relation relation))])))])
+              (cells/cell field record (assoc ctx :role role :field-config config :relation relation))])))
+        (for [[_ {:keys [rel chosen]}] links]
+          (list
+           [:dt (:label rel)]
+           (if (seq chosen)
+             [:dd {:class "c-links"}
+              (cells/link-chips (:entity rel) (map (fn [[id title]] {:id id :title title}) chosen) (count chosen))]
+             [:dd {:class "record-summary-blank"} "—"])))])
      [:div {:class "record-summary-changes" :x-show "dirty > 0" :x-cloak true}
       [:h3 [:t :admin/changed-in-this-edit]]
       [:p {:x-text "changedText"}]]]))
@@ -469,7 +507,7 @@
    Notes:
      If :field-groups is configured, renders fields in grouped sections.
      Otherwise, renders flat list of editable fields."
-  [entity-name entity-config record errors _permissions & [cancel-url display prefill nested]]
+  [entity-name entity-config record errors _permissions & [cancel-url display prefill nested links]]
   (let [primary-key (:primary-key entity-config :id)
         record-id (get record primary-key)
         entity-config (-> (cond-> entity-config (nil? record) introspection/for-create)
@@ -576,11 +614,12 @@
                   field-value (get values field-name)
                   field-errors (get errors field-name)]
               (render-field-widget field-name field-value field-config field-errors display)))])
+       (links-section links errors)
        (when-not is-edit?
          (for [section nested]
            (child-rows-section entity-name section display)))]]
      ;; Beside the fields: what the record is, that the form cannot change
-     (when is-edit? (record-summary entity-config record display))
+     (when is-edit? (record-summary entity-config record display links))
      ;; Outside the card: its overflow-hidden would stop the bar sticking
      (save-bar entity-name is-edit? cancel-url)]))
 
@@ -730,7 +769,8 @@
            text input into a select (a foreign key's parent rows, BOU-563),
            and on a create form :nested [{:rel :rows [[index values]]
            :row-errors {index errors} :too-few {...}}], the child rows the
-           parent is created with (BOU-570)
+           parent is created with (BOU-570), and :links, the many-to-many
+           relations as `link-fields` in the shell describes them (BOU-778)
 
    Returns:
      Hiccup page structure"
@@ -827,7 +867,7 @@
        (parent-context-banner ctx))
      (error-summary entity-config errors)
      (entity-form entity-name entity-config record errors permissions list-url (:display opts) (:prefill opts)
-                  (:nested opts))
+                  (:nested opts) (:links opts))
      (when-let [related-records (:related-records opts)]
        (for [[rel records] related-records]
          (related-records-table rel records (:display opts))))]))

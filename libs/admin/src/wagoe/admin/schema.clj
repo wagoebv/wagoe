@@ -335,6 +335,8 @@
               :hide-fields :readonly-fields :field-order :default-sort
               :default-sort-dir :soft-delete :create-redirect-url
               [:writer :keyword]
+              ;; true: a join table whatever its keys and columns; false: never
+              [:join-table :boolean]
               [:fields [:map-of :keyword FieldOverride]]
               [:field-groups [:sequential (closed-map :id :label :fields)]]
               [:has-many [:sequential HasManyEntry]]
