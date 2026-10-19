@@ -25,7 +25,7 @@ Rules:
 Recommended bundle usage:
 - Everything but admin: `:pilot`, the default
 - Admin CRUD pages: `:admin-pilot`
-- `:base` (pico + open-props) was removed; selecting it serves `:pilot` and warns
+- Any other key, including the removed `:base`, serves `:pilot` and warns once
 
 Example:
 ```clojure
