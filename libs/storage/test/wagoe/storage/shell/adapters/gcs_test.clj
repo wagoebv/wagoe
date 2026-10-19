@@ -42,3 +42,11 @@
         res (ports/store-file a {:bytes (.getBytes "x") :content-type "text/plain"}
                               {:filename "p.txt"})]
     (is (nil? (:url res)) "private objects expose no direct public URL")))
+
+(deftest ^:integration gcs-stores-a-streamed-file
+  (let [a   (adapter)
+        res (ports/store-stream a {:write!       (fn [^java.io.OutputStream out] (.write out (.getBytes "streamed")))
+                                   :content-type "application/zip"}
+                                {:filename "e.zip" :path "data-exports"})]
+    (is (= 8 (:size res)))
+    (is (= "streamed" (String. ^bytes (:bytes (ports/retrieve-file a (:key res))))))))

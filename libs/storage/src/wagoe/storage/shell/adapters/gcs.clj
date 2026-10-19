@@ -6,14 +6,16 @@
   object storage."
   (:require [wagoe.storage.ports :as ports]
             [wagoe.storage.core.validation :as validation]
+            [wagoe.storage.shell.adapters.spool :as spool]
             [wagoe.observability.logging.ports :as logging]
             [clojure.java.io :as io]
             [clojure.string :as str])
   (:import [com.google.cloud.storage
             StorageOptions Storage BlobId BlobInfo Blob
-            Storage$BlobTargetOption Storage$BlobGetOption
+            Storage$BlobTargetOption Storage$BlobWriteOption Storage$BlobGetOption
             Storage$SignUrlOption Blob$BlobSourceOption]
            [com.google.auth.oauth2 GoogleCredentials]
+           [java.nio.file Files Path]
            [java.util UUID]
            [java.util.concurrent TimeUnit]))
 
@@ -53,65 +55,71 @@
 ;; GCS Storage Adapter
 ;; ============================================================================
 
+(defn- put-blob!
+  "`(upload! storage blob-info)` a blob of `size` bytes under a new key;
+   `store-file`'s result."
+  [{:keys [bucket prefix public-read? storage logger]} upload! size content-type metadata]
+  (try
+    (let [{:keys [filename path visibility]} metadata
+
+          ;; Determine object key
+          object-path (or path prefix)
+          object-key  (generate-gcs-key filename object-path)
+
+          ;; Determine visibility
+          is-public   (case visibility :public true :private false public-read?)
+
+          ;; Build blob info
+          blob-id     (BlobId/of bucket object-key)
+          blob-info   (-> (BlobInfo/newBuilder blob-id)
+                          (.setContentType content-type)
+                          (.build))
+
+          _ (upload! storage blob-info)
+
+          ;; Generate URL
+          url (when is-public
+                (format "https://storage.googleapis.com/%s/%s" bucket object-key))]
+
+      (when logger
+        (logging/info logger "GCS file stored"
+                      {:event ::gcs-file-stored
+                       :bucket bucket
+                       :key object-key
+                       :size size
+                       :content-type content-type
+                       :public is-public}))
+
+      {:key object-key
+       :url url
+       :size size
+       :content-type content-type
+       :stored-at (java.util.Date.)})
+
+    (catch Exception e
+      (when logger
+        (logging/error logger "Failed to store file in GCS"
+                       {:event ::gcs-store-failed
+                        :bucket bucket
+                        :filename (:filename metadata)
+                        :error (.getMessage e)}))
+      (throw (ex-info "Failed to store file in GCS"
+                      {:type :storage-error
+                       :bucket bucket
+                       :filename (:filename metadata)
+                       :error (.getMessage e)}
+                      e)))))
+
 (defrecord GCSFileStorage [bucket prefix public-read? storage logger]
   ports/IFileStorage
 
-  (store-file [_ file-data metadata]
-    (try
-      (let [{:keys [bytes content-type]} file-data
-            {:keys [filename path visibility]} metadata
-
-            ;; Determine object key
-            object-path (or path prefix)
-            object-key  (generate-gcs-key filename object-path)
-
-            ;; Determine visibility
-            is-public   (case visibility :public true :private false public-read?)
-
-            ;; Build blob info
-            blob-id     (BlobId/of bucket object-key)
-            blob-info   (-> (BlobInfo/newBuilder blob-id)
-                            (.setContentType content-type)
-                            (.build))
-
-            ;; Upload to GCS
-            ^Storage storage storage
-            _ (.create storage blob-info ^bytes bytes
-                       ^"[Lcom.google.cloud.storage.Storage$BlobTargetOption;"
-                       (into-array Storage$BlobTargetOption []))
-
-            ;; Generate URL
-            url (when is-public
-                  (format "https://storage.googleapis.com/%s/%s" bucket object-key))]
-
-        (when logger
-          (logging/info logger "GCS file stored"
-                        {:event ::gcs-file-stored
-                         :bucket bucket
-                         :key object-key
-                         :size (alength ^bytes bytes)
-                         :content-type content-type
-                         :public is-public}))
-
-        {:key object-key
-         :url url
-         :size (alength ^bytes bytes)
-         :content-type content-type
-         :stored-at (java.util.Date.)})
-
-      (catch Exception e
-        (when logger
-          (logging/error logger "Failed to store file in GCS"
-                         {:event ::gcs-store-failed
-                          :bucket bucket
-                          :filename (:filename metadata)
-                          :error (.getMessage e)}))
-        (throw (ex-info "Failed to store file in GCS"
-                        {:type :storage-error
-                         :bucket bucket
-                         :filename (:filename metadata)
-                         :error (.getMessage e)}
-                        e)))))
+  (store-file [this {:keys [bytes content-type]} metadata]
+    (put-blob! this
+               (fn [^Storage storage ^BlobInfo blob-info]
+                 (.create storage blob-info ^bytes bytes
+                          ^"[Lcom.google.cloud.storage.Storage$BlobTargetOption;"
+                          (into-array Storage$BlobTargetOption [])))
+               (alength ^bytes bytes) content-type metadata))
 
   (retrieve-file [_ file-key]
     (try
@@ -228,7 +236,18 @@
                           :bucket bucket
                           :key file-key
                           :error (.getMessage e)}))
-        nil))))
+        nil)))
+
+  ports/IStreamingFileStorage
+
+  (store-stream [this {:keys [write! content-type]} metadata]
+    ;; Spooled to disk first: a failed writer must not leave a partial object.
+    (spool/with-spooled write!
+      (fn [^Path path]
+        (put-blob! this
+                   (fn [^Storage storage ^BlobInfo blob-info]
+                     (.createFrom storage blob-info path (make-array Storage$BlobWriteOption 0)))
+                   (Files/size path) content-type metadata)))))
 
 ;; ============================================================================
 ;; Factory

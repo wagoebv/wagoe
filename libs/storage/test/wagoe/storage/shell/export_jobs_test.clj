@@ -157,7 +157,49 @@
         (ports/save-export-job! st (assoc (ports/find-export-job st id)
                                           :status :running
                                           :created-at (.minus (Instant/now) (Duration/ofDays 2))))
-        (is (not= id (request! app user)))))))
+        (is (not= id (request! app user)))
+        (is (= :failed (:status (ports/find-export-job st id))))))))
+
+(deftest ^:integration concurrent-requests-open-one-job
+  (with-export-jobs
+    (fn [{:keys [ctx]}]
+      (let [subject {:type :user :id (str (random-uuid))}
+            go      (promise)
+            ids     (mapv (fn [_] (future @go (:id (sut/request-export! ctx subject (:id subject)))))
+                          (range 8))]
+        (deliver go true)
+        (is (= 1 (count (set (map deref ids)))))
+        (testing "the store refuses a second open job for a subject"
+          (is (nil? (ports/create-export-job! (:store ctx) {:id (str (random-uuid)) :subject subject
+                                                            :requested-by (:id subject) :status :pending
+                                                            :created-at (Instant/now)}))))))))
+
+(deftest ^:integration a-requester-may-open-only-so-many-jobs-an-hour
+  (with-export-jobs
+    (fn [{:keys [ctx]}]
+      (let [ctx     (assoc ctx :requests-per-hour 2)
+            subject {:type :user :id (str (random-uuid))}]
+        (dotimes [_ 2]
+          (sut/request-export! ctx subject (:id subject))
+          (run-queued-job! ctx))
+        (is (= :rate-limit-exceeded
+               (:type (ex-data (is (thrown? clojure.lang.ExceptionInfo
+                                            (sut/request-export! ctx subject (:id subject))))))))))))
+
+(deftest ^:integration an-adapter-that-cannot-stream-gets-the-archive-in-memory
+  (with-export-jobs
+    (fn [{:keys [ctx app]}]
+      (let [stored  (atom nil)
+            storage (reify ports/IFileStorage
+                      (store-file [_ data meta] (reset! stored [data meta]) {:key "data-exports/x.zip"})
+                      (retrieve-file [_ _] nil)
+                      (delete-file [_ _] false)
+                      (file-exists? [_ _] false)
+                      (generate-signed-url [_ _ _] nil))
+            ctx     (assoc ctx :file-storage storage)]
+        (request! app {:id (random-uuid)})
+        (is (:success? (run-queued-job! ctx)))
+        (is (contains? (zip-entries (:bytes (first @stored))) "data-export.json"))))))
 
 (deftest ^:integration retention-deletes-old-archives-and-their-jobs
   (with-export-jobs

@@ -5,9 +5,10 @@
   Suitable for production deployments requiring scalable object storage."
   (:require [wagoe.storage.ports :as ports]
             [wagoe.storage.core.validation :as validation]
+            [wagoe.storage.shell.adapters.spool :as spool]
             [wagoe.observability.logging.ports :as logging]
             [clojure.string :as str])
-(:import [software.amazon.awssdk.core.sync RequestBody]
+  (:import [software.amazon.awssdk.core.sync RequestBody]
            [software.amazon.awssdk.regions Region]
            [software.amazon.awssdk.services.s3 S3Client S3Configuration]
            [software.amazon.awssdk.services.s3.model
@@ -18,8 +19,9 @@
             GetObjectPresignRequest]
            [software.amazon.awssdk.auth.credentials
             AwsBasicCredentials StaticCredentialsProvider
-           DefaultCredentialsProvider]
+            DefaultCredentialsProvider]
            [java.net URI]
+           [java.nio.file Files Path]
            [java.time Duration]
            [java.util UUID]))
 
@@ -98,70 +100,73 @@
                   {:type :storage-error :bucket bucket :key file-key}
                   e)))
 
+(defn- put-object!
+  "Upload `request-body`, `size` bytes, under a new key; `store-file`'s result."
+  [{:keys [bucket prefix public-read? s3-client logger]} ^RequestBody request-body size content-type metadata]
+  (try
+    (let [{:keys [filename path visibility]} metadata
+
+          ;; Determine object key
+          object-path (or path prefix)
+          object-key (generate-s3-key filename object-path)
+
+          ;; Determine ACL based on visibility
+          is-public (case visibility :public true :private false public-read?)
+          acl (if is-public
+                ObjectCannedACL/PUBLIC_READ
+                ObjectCannedACL/PRIVATE)
+
+          ;; Build put request
+          put-request (-> (PutObjectRequest/builder)
+                          (.bucket bucket)
+                          (.key object-key)
+                          (.contentType content-type)
+                          (.contentLength (long size))
+                          (.acl acl)
+                          .build)
+
+          ;; Upload to S3
+          _ (.putObject ^S3Client s3-client ^PutObjectRequest put-request request-body)
+
+          ;; Generate URL
+          url (if is-public
+                (format "https://%s.s3.amazonaws.com/%s" bucket object-key)
+                nil)]
+
+      (when logger
+        (logging/info logger "S3 file stored"
+                      {:event ::s3-file-stored
+                       :bucket bucket
+                       :key object-key
+                       :size size
+                       :content-type content-type
+                       :public is-public}))
+
+      {:key object-key
+       :url url
+       :size size
+       :content-type content-type
+       :stored-at (java.util.Date.)})
+
+    (catch Exception e
+      (when logger
+        (logging/error logger "Failed to store file in S3"
+                       {:event ::s3-store-failed
+                        :bucket bucket
+                        :filename (:filename metadata)
+                        :error (.getMessage e)}))
+      (throw (ex-info "Failed to store file in S3"
+                      {:type :storage-error
+                       :bucket bucket
+                       :filename (:filename metadata)
+                       :error (.getMessage e)}
+                      e)))))
+
 (defrecord S3FileStorage [bucket prefix public-read? s3-client presigner logger]
   ports/IFileStorage
 
-  (store-file [_ file-data metadata]
-    (try
-      (let [{:keys [bytes content-type]} file-data
-            {:keys [filename path visibility]} metadata
-
-            ;; Determine object key
-            object-path (or path prefix)
-            object-key (generate-s3-key filename object-path)
-
-            ;; Determine ACL based on visibility
-            is-public (case visibility :public true :private false public-read?)
-            acl (if is-public
-                  ObjectCannedACL/PUBLIC_READ
-                  ObjectCannedACL/PRIVATE)
-
-            ;; Build put request
-            put-request (-> (PutObjectRequest/builder)
-                            (.bucket bucket)
-                            (.key object-key)
-                            (.contentType content-type)
-                            (.contentLength (long (alength bytes)))
-                            (.acl acl)
-                            .build)
-
-            ;; Upload to S3
-            request-body (RequestBody/fromBytes bytes)
-            _ (.putObject s3-client put-request request-body)
-
-            ;; Generate URL
-            url (if is-public
-                  (format "https://%s.s3.amazonaws.com/%s" bucket object-key)
-                  nil)]
-
-        (when logger
-          (logging/info logger "S3 file stored"
-                        {:event ::s3-file-stored
-                         :bucket bucket
-                         :key object-key
-                         :size (alength bytes)
-                         :content-type content-type
-                         :public is-public}))
-
-        {:key object-key
-         :url url
-         :size (alength bytes)
-         :content-type content-type
-         :stored-at (java.util.Date.)})
-
-      (catch Exception e
-        (when logger
-          (logging/error logger "Failed to store file in S3"
-                         {:event ::s3-store-failed
-                          :bucket bucket
-                          :filename (:filename metadata)
-                          :error (.getMessage e)}))
-        (throw (ex-info "Failed to store file in S3"
-                        {:type :storage-error
-                         :bucket bucket
-                         :filename (:filename metadata)
-                         :error (.getMessage e)}
-                        e)))))
+  (store-file [this {:keys [bytes content-type]} metadata]
+    (put-object! this (RequestBody/fromBytes bytes) (alength ^bytes bytes) content-type metadata))
 
   (retrieve-file [_ file-key]
     (try
@@ -274,7 +279,15 @@
                           :bucket bucket
                           :key file-key
                           :error (.getMessage e)}))
-        nil))))
+        nil)))
+
+  ports/IStreamingFileStorage
+
+  (store-stream [this {:keys [write! content-type]} metadata]
+    ;; The sync client needs the length up front; spooled to disk it stays off the heap.
+    (spool/with-spooled write!
+      (fn [^Path path]
+        (put-object! this (RequestBody/fromFile path) (Files/size path) content-type metadata)))))
 
 ;; ============================================================================
 ;; Factory

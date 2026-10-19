@@ -27,6 +27,7 @@
    :conflict                  [409 "Conflict"]
    :user-exists               [409 "User Already Exists"]
    :resource-exists           [409 "Resource Already Exists"]
+   :rate-limit-exceeded       [429 "Too Many Requests"]
    :business-rule-violation   [400 "Business Rule Violation"]
    :deletion-not-allowed      [403 "Deletion Not Allowed"]
    :hard-deletion-not-allowed [403 "Hard Deletion Not Allowed"]})
