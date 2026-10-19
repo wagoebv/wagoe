@@ -5,6 +5,7 @@
    error mappings, query/form parsing, and handler helpers used by the handler
    namespaces and the route definitions in `wagoe.admin.shell.http`."
   (:require
+   [wagoe.admin.core.display :as display]
    [wagoe.admin.core.forms :as forms]
    [wagoe.admin.core.schema-introspection :as introspection]
    [wagoe.admin.core.ui :as admin-ui]
@@ -656,11 +657,6 @@
   "The most options a foreign key's combobox lists for one query."
   20)
 
-(defn- link-rel
-  "The many-to-many relation `k` of `entity-config`, or nil."
-  [entity-config k]
-  (some #(when (= k (:key %)) %) (:many-to-many entity-config)))
-
 (defn search-foreign-key-options
   "What the combobox of foreign key `field` of `entity-name` offers for the
    typed `q`: {:parent :parent-cfg :options}, where the options are the first
@@ -670,7 +666,7 @@
   [admin-service schema-provider entity-name field q]
   (let [entity-configs (all-entity-configs schema-provider)]
     (when-let [parent (some-> (or (get (introspection/declared-parents entity-name entity-configs) field)
-                                  (:entity (link-rel (get entity-configs entity-name) field)))
+                                  (:entity (display/link-rel (get entity-configs entity-name) field)))
                               (#(when (text-label? (get entity-configs %)) %)))]
       (let [parent-cfg (get entity-configs parent)
             label      (label-field parent-cfg)
@@ -699,6 +695,15 @@
                                                             :filters {pk {:op :in :values (vec ids)}}}))))]
       (into [] (keep by-id) ids))))
 
+(defn- all-options
+  "Every record of `parent` as [id label], by label, or nil when there are
+   more than `limit`."
+  [admin-service parent parent-cfg limit]
+  (let [page (ports/list-entities admin-service parent
+                                  {:limit limit :sort (label-field parent-cfg) :sort-dir :asc})]
+    (when (<= (:total-count page 0) limit)
+      (mapv #(row->option parent-cfg %) (:records page)))))
+
 (defn link-fields
   "How each many-to-many relation of `entity-name` is edited:
    {key {:rel :chosen [[id label] ...] :options [[id label] ...] | :url}}.
@@ -722,27 +727,25 @@
                                                        (str record-id))))
 
                                     :else [])
-                       page       (ports/list-entities admin-service parent
-                                                       {:limit    (inc checkbox-limit)
-                                                        :sort     (label-field parent-cfg)
-                                                        :sort-dir :asc})]]
-             [k (if (<= (:total-count page 0) checkbox-limit)
-                  {:rel rel :chosen chosen :options (mapv #(row->option parent-cfg %) (:records page))}
+                       options    (all-options admin-service parent parent-cfg checkbox-limit)]]
+             [k (if options
+                  {:rel rel :chosen chosen :options options}
                   {:rel rel :chosen chosen :url (options-url entity-name k)})])))))
 
-(defn link-filter-options
-  "{key [[id label] ...]} for each many-to-many filter of `entity-config`:
-   the records it can link, while they fit in the maximum page size. Past
+(defn with-link-options
+  "`entity-config` with, on each many-to-many relation `keep?` accepts, the
+   records its filter offers, while they fit in the maximum page size. Past
    it the filter takes an id."
-  [admin-service config entity-configs entity-config]
-  (into {}
-        (for [{k :key parent :entity} (:many-to-many entity-config)
-              :let [parent-cfg (get entity-configs parent)
-                    page-size  (get-in config [:pagination :max-page-size] 200)
-                    page       (ports/list-entities admin-service parent
-                                                    {:limit page-size :sort (label-field parent-cfg) :sort-dir :asc})]
-              :when (<= (:total-count page 0) (count (:records page)))]
-          [k (mapv #(row->option parent-cfg %) (:records page))])))
+  [admin-service schema-provider config entity-config keep?]
+  (update entity-config :many-to-many
+          (fn [rels]
+            (mapv (fn [{parent :entity :as rel}]
+                    (cond-> rel
+                      (keep? rel)
+                      (assoc :options (all-options admin-service parent
+                                                   (ports/get-entity-config schema-provider parent)
+                                                   (get-in config [:pagination :max-page-size] 200)))))
+                  rels))))
 
 (defn nested-relationships
   "The has-many entries `entity-config` is created with, as

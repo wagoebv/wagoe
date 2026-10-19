@@ -191,9 +191,12 @@ document.addEventListener('alpine:init', function () {
       typed: function () {
         if (!this.multiple) this.$refs.value.value = '';
       },
+      changed: function () {
+        this.$el.dispatchEvent(new Event('change', { bubbles: true }));
+      },
       remove: function (e) {
         e.target.closest('.link-chip').remove();
-        this.$el.dispatchEvent(new Event('change', { bubbles: true }));
+        this.changed();
         this.$refs.input.focus();
       },
       keydown: function (e) {
@@ -236,7 +239,7 @@ document.addEventListener('alpine:init', function () {
               var chips = this.$refs.chips.querySelectorAll('.link-chip');
               if (chips.length) {
                 chips[chips.length - 1].remove();
-                this.$el.dispatchEvent(new Event('change', { bubbles: true }));
+                this.changed();
               }
             }
             break;
@@ -277,7 +280,7 @@ document.addEventListener('alpine:init', function () {
           }
           this.$refs.input.value = '';
           this.close();
-          this.$el.dispatchEvent(new Event('change', { bubbles: true }));
+          this.changed();
           return;
         }
         this.chosen = { value: el.dataset.value, label: el.dataset.label };

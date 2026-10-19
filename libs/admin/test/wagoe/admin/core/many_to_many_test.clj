@@ -72,7 +72,7 @@
 (deftest ^:unit the-form-names-its-links
   (let [config {:many-to-many [{:key :tags} {:key :authors}]}]
     (testing "ticked boxes, and one named with nothing ticked"
-      (is (= [{"title" "x"} {:tags ["1" "2"] :authors []}]
+      (is (= [{"title" "x"} {:tags ["1" "" "2"] :authors []}]
              (forms/split-link-params config {"title" "x" "tags" ["1" "" "2"] "__links" ["tags" "authors"]}))))
     (testing "a key sent without __links, as JSON does"
       (is (= [{:title "x"} {:tags ["1"]}] (forms/split-link-params config {:title "x" :tags "1"}))))

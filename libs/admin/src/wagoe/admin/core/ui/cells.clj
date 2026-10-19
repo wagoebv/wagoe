@@ -118,7 +118,7 @@
    config built without it."
   [entity-config fields]
   (let [belongs-to (display/belongs-to-fields entity-config)
-        has-many   (merge (display/has-many-columns entity-config) (display/link-columns entity-config))]
+        computed   (merge (display/has-many-columns entity-config) (display/link-columns entity-config))]
     (mapv (fn [field]
             (let [config (get-in entity-config [:fields field])
                   role   (or (get-in entity-config [:display-roles field])
@@ -128,9 +128,9 @@
                :role     role
                :class    (cell-class role)
                :label    (or (:label config)
-                             (:label (get has-many field))
+                             (:label (get computed field))
                              (humanize-column field (contains? belongs-to field)))
-               :relation (or (get belongs-to field) (get has-many field))
+               :relation (or (get belongs-to field) (get computed field))
                :data?    (contains? (:fields entity-config) field)}))
           fields)))
 

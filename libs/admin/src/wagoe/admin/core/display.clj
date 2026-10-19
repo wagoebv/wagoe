@@ -123,6 +123,11 @@
   [entity-config]
   (into {} (map (juxt :key identity)) (:many-to-many entity-config)))
 
+(defn link-rel
+  "The many-to-many relation of `entity-config` named `k`, or nil."
+  [entity-config k]
+  (get (link-columns entity-config) k))
+
 (defn has-many-columns
   "List column key → the has-many relationship it counts. A has-many is a list
    column when `:list-fields` names its key: its child entity, or

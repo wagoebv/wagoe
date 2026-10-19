@@ -132,7 +132,9 @@
         ;; Logged by get-entity-config; the create form refuses on it (BOU-494).
         create-errors (introspection/create-form-column-errors entity-name merged-config table-metadata)]
     (cond-> (introspection/detect-relationships ordered-config)
-      (nil? (:join-table manual-config)) (assoc :unique-keys (unique-keys repo effective-table-name))
+      ;; Two keys, a primary key and two timestamps at most: a join table
+      (and (nil? (:join-table manual-config)) (<= (count table-metadata) 5))
+      (assoc :unique-keys (unique-keys repo effective-table-name))
       (seq create-errors) (assoc :create-config-errors create-errors))))
 
 (defn- base-entity-config

@@ -139,12 +139,10 @@
 (defn split-link-params
   "`params` as [params links]: the params without the many-to-many keys of
    `entity-config`, and {key [id ...]} for each key submitted or named in
-   `links-param`, empty when nothing is chosen."
+   `links-param`, empty when nothing is chosen. The service cleans the ids."
   [entity-config params]
   (let [named (set (map str (as-values (param params links-param))))
         keys  (map (comp name :key) (:many-to-many entity-config))
         sent  (filter #(or (named %) (some? (param params %))) keys)]
     [(apply dissoc params links-param (keyword links-param) (mapcat (juxt identity keyword) keys))
-     (into {} (map (fn [k] [(keyword k) (into [] (comp (map str) (remove str/blank?))
-                                               (as-values (param params k)))]))
-           sent)]))
+     (into {} (map (fn [k] [(keyword k) (as-values (param params k))])) sent)]))

@@ -3,7 +3,8 @@
 
    Pure Hiccup generators for the filter UI: operator selection per field
    type, value inputs, filter rows, and the overall filter builder."
-  (:require [wagoe.admin.core.ui.base :as base]
+  (:require [wagoe.admin.core.display :as display]
+            [wagoe.admin.core.ui.base :as base]
             [wagoe.core.utils.text :as text]
             [wagoe.shared.ui.core.icons :as icons]
             [wagoe.shared.ui.core.table :as table-ui]
@@ -332,7 +333,7 @@
    the relation (else an id is typed)."
   [entity-config field]
   (or (get-in entity-config [:fields field])
-      (when-let [rel (some #(when (= field (:key %)) %) (:many-to-many entity-config))]
+      (when-let [rel (display/link-rel entity-config field)]
         {:type :link :label (:label rel) :options (:options rel)})))
 
 (def ^:private op-symbols
