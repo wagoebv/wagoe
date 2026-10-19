@@ -86,3 +86,9 @@
       (is (not (str/includes? (config-page/render-preview-fragment
                                :wagoe/db (:wagoe/db cfg) "{:url \"<secret test:dsn>\" :host \"other\"}")
                               "dashb0ard-pw"))))))
+
+(deftest ^:unit the-textarea-holds-pretty-printed-edn
+  (let [html (config-page/render {:config {:wagoe/db {:url (apply str "jdbc:h2:mem:" (repeat 100 "x"))
+                                                     :aliases ["a" "b"]}}
+                                  :config-editable? true})]
+    (is (str/includes? html "{:aliases [&quot;a&quot; &quot;b&quot;]\n :url"))))

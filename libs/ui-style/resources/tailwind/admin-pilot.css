@@ -1727,8 +1727,8 @@ input[type="number"] {
   }
 }
 
-/* Element styles for pages on the default layout (body.wagoe-default), which
-   used to get them from pico. Layered base, so any class wins over them. */
+/* Element styles for pages on the default layout (body.wagoe-default).
+   Layered base, so any class wins over them. */
 @layer base {
   :where(.wagoe-default) {
     h1, h2, h3, h4 { @apply font-semibold leading-tight text-base-content; }
@@ -1756,7 +1756,7 @@ input[type="number"] {
     th, td { @apply border-b border-base-300 px-4 py-3; }
     th { @apply font-semibold; }
 
-    /* app.css shapes bare buttons; this adds pico's primary colour. */
+    /* app.css shapes bare buttons; this adds the primary colour. */
     button:not([class]), input[type="submit"] {
       background-color: var(--color-primary);
       color: var(--color-primary-content);
