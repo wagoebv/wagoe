@@ -106,6 +106,20 @@
 ;; Namespaces, for the isolated-build matrix
 ;; =============================================================================
 
+(defn namespaces-under
+  "Every namespace under source root `dir`, named from its path, sorted."
+  [dir]
+  (if-not (fs/exists? dir)
+    []
+    (->> (fs/glob dir "**/*.clj{,c}")
+         (filter fs/regular-file?)
+         (map #(-> (str (fs/relativize dir %))
+                   (str/replace #"\.cljc?$" "")
+                   (str/replace "_" "-")
+                   (str/replace fs/file-separator ".")))
+         sort
+         vec)))
+
 (defn namespaces-of
   "Every namespace `lib` ships under src/, sorted.
 
@@ -116,17 +130,7 @@
    failed for anyone reproducing the job on a Mac, which is the same portability
    trap `bb bump` removed from the release procedure (BOU-316)."
   [lib]
-  (let [src (fs/file root-dir "libs" lib "src")]
-    (if-not (fs/exists? src)
-      []
-      (->> (fs/glob src "**/*.clj{,c}")
-           (filter fs/regular-file?)
-           (map #(-> (str (fs/relativize src %))
-                     (str/replace #"\.cljc?$" "")
-                     (str/replace "_" "-")
-                     (str/replace fs/file-separator ".")))
-           sort
-           vec))))
+  (namespaces-under (fs/file root-dir "libs" lib "src")))
 
 (defn source-classpath
   "`lib`'s :paths and those of every library it declares by `:local/root`,

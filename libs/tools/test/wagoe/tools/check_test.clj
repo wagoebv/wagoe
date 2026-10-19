@@ -6,6 +6,7 @@
             [clojure.java.io :as io]
             [clojure.string :as str]
             [wagoe.tools.check :as check]
+            [wagoe.tools.check-isolation :as isolation]
             [wagoe.tools.test-all :as test-all]))
 
 ;; =============================================================================
@@ -394,14 +395,18 @@
       (is (some? doctor) "the registry no longer has a :doctor check")
       (is (= ["bb" "doctor" "--ci"] (:cmd doctor))))))
 
+(defn- repo-root
+  "The repository root: the cwd under `bb test:tools`, ../.. inside libs/tools."
+  []
+  (let [cwd (System/getProperty "user.dir")]
+    (or (some #(when (.exists (io/file % "tests.edn")) %)
+              [(io/file cwd) (io/file cwd ".." "..")])
+        (throw (ex-info "tests.edn not found — cannot verify the suite/CI lockstep" {:cwd cwd})))))
+
 (defn- tests-edn
   "The kaocha suite registry."
   []
-  (let [cwd (System/getProperty "user.dir")]
-    (if-let [f (some (fn [^java.io.File f] (when (.exists f) f))
-                     [(io/file cwd "tests.edn") (io/file cwd ".." ".." "tests.edn")])]
-      (edn/read-string {:readers {'kaocha/v1 identity}} (slurp f))
-      (throw (ex-info "tests.edn not found — cannot verify the suite/CI lockstep" {:cwd cwd})))))
+  (edn/read-string {:readers {'kaocha/v1 identity}} (slurp (io/file (repo-root) "tests.edn"))))
 
 (defn- declared-suites
   "Suite ids in tests.edn."
@@ -436,27 +441,21 @@
                (pr-str (sort (remove declared (keys in-ci)))))))))
 
 (defn- suite-nss
-  "The test namespaces `suite` picks up, named from their paths as kaocha
-   names them."
-  [root {:keys [test-paths ns-patterns]}]
-  (set (for [dir   test-paths
-             :let  [base (.toPath (io/file root dir))]
-             ^java.io.File f (file-seq (.toFile base))
-             :let  [rel (str (.relativize base (.toPath f)))]
-             :when (re-find #"\.cljc?$" rel)
-             :let  [ns (-> rel (str/replace #"\.cljc?$" "") (str/replace "_" "-") (str/replace "/" "."))]
-             :when (some #(re-find (re-pattern %) ns) ns-patterns)]
-         ns)))
+  "The test namespaces `suite` picks up."
+  [{:keys [test-paths ns-patterns]}]
+  (let [patterns (map re-pattern ns-patterns)]
+    (set (for [dir test-paths
+               ns  (isolation/namespaces-under (io/file (repo-root) dir))
+               :when (some #(re-find % ns) patterns)]
+           ns))))
 
 (deftest ^:unit every-test-namespace-is-in-exactly-one-suite
   ;; Kaocha runs every suite by default, so a namespace two suites pick up runs
   ;; twice in one JVM and can collide with its own first run: op-metrics-test
   ;; registered the same user twice while an aggregate :unit suite overlapped
   ;; :app and every library suite (BOU-758).
-  (let [cwd    (System/getProperty "user.dir")
-        root   (if (.exists (io/file cwd "tests.edn")) (io/file cwd) (io/file cwd ".." ".."))
-        owners (->> (:tests (tests-edn))
-                    (mapcat (fn [suite] (map #(vector % (:id suite)) (suite-nss root suite))))
+  (let [owners (->> (:tests (tests-edn))
+                    (mapcat (fn [suite] (map #(vector % (:id suite)) (suite-nss suite))))
                     (reduce (fn [m [ns id]] (update m ns (fnil conj []) id)) {}))]
     (is (< 500 (count owners)) "found few test namespaces; the assertion below would pass vacuously")
     (is (empty? (into (sorted-map) (filter #(< 1 (count (val %)))) owners))
