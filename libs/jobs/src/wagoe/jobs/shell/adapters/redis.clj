@@ -532,14 +532,17 @@
   (purge-dead-letters-before! [{:keys [pool]} cutoff]
     (with-redis pool
       (fn [^Jedis redis]
-        (let [ids        (vec (distinct (.lrange redis (dead-letter-key) 0 -1)))
-              raws       (into [] (mapcat #(.mget redis ^"[Ljava.lang.String;" (into-array String (map job-key %))))
-                               (partition-all 1000 ids))
-              candidates (for [[id raw] (map vector ids raws)
-                               :let [at (some-> raw codec/decode-job :completed-at)]
-                               ;; A job whose key expired leaves its id behind; it goes too.
-                               :when (or (nil? raw) (and at (.isBefore ^Instant at cutoff)))]
-                           [id (if raw (sha1-hex raw) "")])]
+        (let [ids        (distinct (.lrange redis (dead-letter-key) 0 -1))
+              ;; A page of jobs at a time: only the candidates' ids and hashes are kept.
+              candidates (into []
+                               (mapcat (fn [page]
+                                         (let [raws (.mget redis ^"[Ljava.lang.String;" (into-array String (map job-key page)))]
+                                           (for [[id raw] (map vector page raws)
+                                                 :let [at (some-> raw codec/decode-job :completed-at)]
+                                                 ;; A job whose key expired leaves its id behind; it goes too.
+                                                 :when (or (nil? raw) (and at (.isBefore ^Instant at cutoff)))]
+                                             [id (if raw (sha1-hex raw) "")]))))
+                               (partition-all 1000 ids))]
           (if (empty? candidates)
             0
             (long (.eval redis ^String purge-dead-letters-script

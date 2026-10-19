@@ -33,24 +33,38 @@
         :when entry]
     (assoc file :entry entry)))
 
+(defn- unique-entry
+  "`entry`, suffixed when `seen` holds it already: two paths can clean to one
+   entry, and a zip refuses a duplicate."
+  [seen entry]
+  (if (seen entry)
+    (some #(let [e (str entry "~" %)] (when-not (seen e) e)) (iterate inc 2))
+    entry))
+
 (defn- write-archive!
   "Write `doc` and `files` to `out` as a zip: the files, then
-   data-export.json, which lists a file that was gone under :missing-files."
+   data-export.json, which lists a file that was gone under :missing-files.
+   The zip is finished only when all of it was written: closed early, it
+   would be a valid archive that passes for a complete one."
   [doc files ^OutputStream out]
-  (with-open [zip (ZipOutputStream. out)]
-    (let [missing (reduce (fn [missing {:keys [entry content]}]
-                            (if-let [^bytes bytes (content)]
-                              (do (.putNextEntry zip (ZipEntry. ^String entry))
-                                  (.write zip bytes)
-                                  (.closeEntry zip)
-                                  missing)
-                              (conj missing entry)))
-                          []
-                          files)]
-      (.putNextEntry zip (ZipEntry. "data-export.json"))
-      (.write zip (.getBytes ^String (privacy/export-json (cond-> doc (seq missing) (assoc :missing-files missing)))
-                             StandardCharsets/UTF_8))
-      (.closeEntry zip))))
+  (let [zip     (ZipOutputStream. out)
+        missing (:missing
+                 (reduce (fn [{:keys [seen] :as acc} {:keys [entry content]}]
+                           (let [entry (unique-entry seen entry)]
+                             (if-let [^bytes bytes (content)]
+                               (do (.putNextEntry zip (ZipEntry. ^String entry))
+                                   (.write zip bytes)
+                                   (.closeEntry zip)
+                                   (update acc :seen conj entry))
+                               (update acc :missing conj entry))))
+                         {:missing [] :seen #{}}
+                         files))
+        json    (.getBytes ^String (privacy/export-json (cond-> doc (seq missing) (assoc :missing-files missing)))
+                           StandardCharsets/UTF_8)]
+    (.putNextEntry zip (ZipEntry. "data-export.json"))
+    (.write zip json)
+    (.closeEntry zip)
+    (.close zip)))
 
 (defn- archive-response
   "A zip download, written as it streams: the files are read from storage
@@ -65,8 +79,8 @@
                 (try
                   (write-archive! doc files out)
                   (catch Exception e
-                    ;; The status has gone; a cut-off zip does not open, so
-                    ;; it cannot pass for a complete one.
+                    ;; The status has gone; a zip left unfinished does not
+                    ;; open, so it cannot pass for a complete one.
                     (log/error e "Data export zip failed" {:subject (:subject doc)})
                     (throw e)))))})
 

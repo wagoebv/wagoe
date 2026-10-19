@@ -132,3 +132,15 @@
   (is (some? (ig/init-key :wagoe/retention {:policies    {}
                                             :contributed {:jobs/dead-letter nil}}))
       "unconfigured, it does not matter"))
+
+(deftest ^:unit two-paths-that-clean-to-one-entry-both-reach-the-zip
+  (let [files (reify
+                ports/IDataExporter
+                (export-data [_ _] {:keys ["a/b.txt" "a//b.txt"]})
+                ports/IFileExporter
+                (export-files [_ _ section]
+                  (for [k (:keys section)] {:path k :content #(.getBytes ^String k)})))
+        svc   (sut/create-data-export {:storage files})
+        doc   (ports/export-subject svc {:type :user :id 7})]
+    (is (= #{"data-export.json" "storage/a/b.txt" "storage/a/b.txt~2"}
+           (set (keys (unzip (ports/export-response svc doc {:query-params {"format" "zip"}}))))))))

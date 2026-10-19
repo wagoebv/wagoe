@@ -96,3 +96,23 @@
                      (privacy/purge-before! (data-export/->UploadRetention index stuck)
                                             (.plusSeconds (Instant/now) 60))))
         (is (= [k] (map :key (ports/find-uploads index {:user-id user-id} {}))))))))
+
+(deftest ^:integration one-file-that-will-not-delete-does-not-hold-back-the-rest
+  (with-storage
+    (fn [{:keys [service storage index]}]
+      (let [user-id (random-uuid)
+            stuck-k (upload! service "stuck" {:user-id user-id})
+            other   (upload! service "other" {:user-id user-id})
+            stuck   (reify ports/IFileStorage
+                      (delete-file [_ key] (when-not (= key stuck-k) (ports/delete-file storage key)))
+                      (file-exists? [_ key] (ports/file-exists? storage key))
+                      (store-file [_ _ _] nil)
+                      (retrieve-file [_ _] nil)
+                      (generate-signed-url [_ _ _] nil))]
+        (is (= {:keys [stuck-k] :deleted 1}
+               (select-keys (ex-data (is (thrown? clojure.lang.ExceptionInfo
+                                                  (privacy/purge-before! (data-export/->UploadRetention index stuck)
+                                                                         (.plusSeconds (Instant/now) 60)))))
+                            [:keys :deleted])))
+        (is (false? (ports/file-exists? storage other)))
+        (is (= [stuck-k] (map :key (ports/find-uploads index {:user-id user-id} {}))))))))

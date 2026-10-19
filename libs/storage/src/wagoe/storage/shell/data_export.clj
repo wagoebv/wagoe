@@ -28,7 +28,11 @@
   (export-files [_ _subject section]
     (for [{:keys [key]} (:uploads section)]
       {:path    key
-       :content #(:bytes (ports/retrieve-file storage key))})))
+       ;; The adapters read any failure as nil; a file still there is not
+       ;; gone, and must not be listed as missing.
+       :content #(or (:bytes (ports/retrieve-file storage key))
+                     (when (ports/file-exists? storage key)
+                       (throw (ex-info (str "Could not read upload " key) {:type :internal-error :key key}))))})))
 
 (defn- delete-upload!
   "Delete the file at `key`, then its record. A file storage cannot delete
@@ -39,12 +43,23 @@
     (throw (ex-info (str "Could not delete upload " key) {:type :internal-error :key key})))
   (ports/remove-upload! upload-index key))
 
+;; One file that will not delete must not hold back the rest: the oldest come
+;; first, so it would fail every run before anything newer was reached.
 (defrecord UploadRetention [upload-index storage]
   privacy/IRetentionPolicy
   (purge-before! [_ cutoff]
-    (loop [n 0]
-      (let [batch (ports/uploads-stored-before upload-index cutoff page-size)]
-        (doseq [{:keys [key]} batch]
-          (delete-upload! upload-index storage key))
-        (let [n (+ n (count batch))]
-          (if (< (count batch) page-size) n (recur n)))))))
+    (loop [n 0 failed #{}]
+      (let [batch   (ports/uploads-stored-before upload-index cutoff page-size)
+            stuck   (into #{} (keep (fn [{:keys [key]}]
+                                      (try (delete-upload! upload-index storage key) nil
+                                           (catch Exception _ key))))
+                          (remove (comp failed :key) batch))
+            failed  (into failed stuck)
+            deleted (count (remove (comp failed :key) batch))
+            n       (+ n deleted)]
+        (if (and (= (count batch) page-size) (pos? deleted))
+          (recur n failed)
+          (if (seq failed)
+            (throw (ex-info (str "Could not delete " (count failed) " uploads; " n " deleted")
+                            {:type :internal-error :keys (vec (sort failed)) :deleted n}))
+            n))))))

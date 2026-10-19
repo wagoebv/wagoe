@@ -238,7 +238,8 @@
 
     (try
       (let [success (ports/delete-file storage file-key)]
-        (when (and success upload-index)
+        ;; A file already gone deletes as false; its record goes all the same.
+        (when (and upload-index (or success (not (ports/file-exists? storage file-key))))
           (ports/remove-upload! upload-index file-key))
         (when logger
           (logging/info logger (if success
