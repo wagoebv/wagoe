@@ -534,8 +534,6 @@
  :admin/pagination-next-page       "Volgende pagina"
  :admin/pagination-last-page       "Laatste pagina"
  :admin/pagination-page            "Pagina {page}"
- :admin/modal-button-cancel        "Annuleren"
- :admin/modal-button-delete        "Verwijderen"
 
  ;; Overzicht (ADR-040)
  :admin/relative-today             "vandaag"

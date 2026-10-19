@@ -429,8 +429,7 @@
     {:id            "bulk-delete-confirm"
      :title         [:t :admin/modal-confirm-delete-title]
      :message       [:t :admin/confirm-delete-selected]
-     :confirm-label [:t :admin/modal-button-delete]
-     :cancel-label  [:t :admin/modal-button-cancel]
+     :confirm-label [:t :common/button-delete]
      :danger?       true})
    [:button {:type         "button"
              :class        "button bulk-clear"

@@ -212,20 +212,6 @@
       return true;
     }
 
-    // Close any open modals
-    const modal = document.querySelector('.modal[open], .modal.active, .modal-backdrop');
-    if (modal) {
-      // Try clicking close button first
-      const closeBtn = modal.querySelector('.modal-close, [data-action="close"], button[type="button"]');
-      if (closeBtn) {
-        closeBtn.click();
-        return true;
-      }
-      // Or trigger close event
-      modal.dispatchEvent(new CustomEvent('close'));
-      return true;
-    }
-
     // Close the record drawer, then clear a row selection — unless the
     // browser is full screen, where Esc already leaves full screen and doing
     // both at once surprises (q does it there)

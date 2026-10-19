@@ -534,8 +534,6 @@
  :admin/pagination-next-page       "Next page"
  :admin/pagination-last-page       "Last page"
  :admin/pagination-page            "Page {page}"
- :admin/modal-button-cancel        "Cancel"
- :admin/modal-button-delete        "Delete"
 
  ;; Overview (ADR-040)
  :admin/relative-today             "today"

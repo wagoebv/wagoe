@@ -789,8 +789,7 @@
               {:id            "delete-record-confirm"
                :title         [:t :admin/modal-confirm-delete-title]
                :message       [:t :admin/confirm-delete-record]
-               :confirm-label [:t :admin/modal-button-delete]
-               :cancel-label  [:t :admin/modal-button-cancel]
+               :confirm-label [:t :common/button-delete]
                :danger?       true}))))]]
       ;; Edit: the record's name, with what this page is above it.
       ;; New: what this page is.

@@ -1163,7 +1163,8 @@ input[data-loading-text].htmx-request > * {
   border: 1px solid transparent;
   border-radius: var(--radius-md);
   cursor: pointer;
-  transition: all var(--transition-normal);
+  /* Visibility switches at once: a button that just appeared is focusable */
+  transition: all var(--transition-normal), visibility 0s;
   position: relative;
   margin-bottom: 0;
   white-space: nowrap;
