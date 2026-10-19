@@ -272,24 +272,48 @@
 ;; IAudienceRepository implementation
 ;; =============================================================================
 
+(defn- delete-row!
+  "Delete the segment row for `audience-id` (a string); the number deleted."
+  [tx audience-id]
+  (::jdbc/update-count
+   (jdbc/execute-one! tx (sql/format {:delete-from :audience_segments
+                                      :where       [:= :audience_id audience-id]}))))
+
+(defn- insert-row! [tx row]
+  (jdbc/execute-one! tx (sql/format {:insert-into :audience_segments :values [row]})))
+
 (defrecord AudienceStore [datasource dialect]
   ports/IAudienceRepository
 
   (save-audience [_ definition]
     (log/debug "Saving audience" {:audience-id (:id definition)})
     (let [row (definition->db dialect definition)]
+      ;; Delete-then-insert for H2/PostgreSQL compatibility (simple upsert)
       (jdbc/with-transaction [tx datasource]
-        ;; Delete-then-insert for H2/PostgreSQL compatibility (simple upsert)
-        (jdbc/execute-one!
-         tx
-         (sql/format {:delete-from :audience_segments
-                      :where       [:= :audience_id (:audience_id row)]})
-         {:builder-fn rs/as-unqualified-lower-maps})
-        (jdbc/execute-one!
-         tx
-         (sql/format {:insert-into :audience_segments
-                      :values      [row]})
-         {:builder-fn rs/as-unqualified-lower-maps})))
+        (delete-row! tx (:audience_id row))
+        (insert-row! tx row)))
+    definition)
+
+  (create-audience [_ definition]
+    (log/debug "Creating audience" {:audience-id (:id definition)})
+    (let [row (definition->db dialect definition)]
+      ;; A concurrent create of the same id fails on the UNIQUE audience_id.
+      (jdbc/with-transaction [tx datasource]
+        (when (jdbc/execute-one! tx (sql/format {:select [:id] :from [:audience_segments]
+                                                 :where  [:= :audience_id (:audience_id row)]}))
+          (throw (ex-info "Audience already exists"
+                          {:type :audience-exists :audience-id (:id definition)})))
+        (insert-row! tx row)))
+    definition)
+
+  (update-audience [_ definition]
+    (log/debug "Updating audience" {:audience-id (:id definition)})
+    (let [row (definition->db dialect definition)]
+      (jdbc/with-transaction [tx datasource]
+        (when (zero? (delete-row! tx (:audience_id row)))
+          (throw (ex-info "Audience not found"
+                          {:type :audience-not-found :audience-id (:id definition)})))
+        (insert-row! tx row)))
     definition)
 
   (find-audience [_ audience-id]

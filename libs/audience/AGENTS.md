@@ -196,16 +196,20 @@ The builder UI is served by `wagoe.audience.shell.http`.
 | GET | `/web/audiences` | List all segments |
 | GET | `/web/audiences/builder` | New segment form |
 | GET | `/web/audiences/builder/:id` | Edit existing segment |
-| POST | `/api/audiences` | Create audience |
-| PUT | `/api/audiences/:id` | Update audience |
-| DELETE | `/api/audiences/:id` | Delete audience |
-| POST | `/api/audiences/preview` | Evaluate filters, return count + sample |
-| POST | `/api/audiences/:id/evaluate` | Trigger full evaluation and cache |
-| GET | `/api/audiences/:id/members` | List member user-ids |
+| POST | `/web/audiences` | Create from the builder form |
+| POST | `/web/audiences/builder/:id` | Update from the builder form |
+| POST | `/api/v1/audiences` | Create audience (409 if the id is taken) |
+| PUT | `/api/v1/audiences/:id` | Update audience (404 if it is not stored) |
+| DELETE | `/api/v1/audiences/:id` | Delete audience |
+| POST | `/api/v1/audiences/preview` | Resolve a saved audience, return count + sample |
+| POST | `/api/v1/audiences/:id/evaluate` | Trigger full evaluation and cache |
+| GET | `/api/v1/audiences/:id/members` | List member user-ids |
 
-Create, update and preview take a JSON body, coerced by the route's `:parameters` schema: create
-and update a `DynamicAudienceDefinition` (update takes `:id` from the path), preview
-`{"audienceId": "..."}`. A body that does not match is a 400 `validation-error` naming the fields.
+Create, update and preview take a JSON body with camelCase keys, coerced by the route's
+`:parameters` schema: create and update a `DynamicAudienceDefinition` with `cacheConfig`
+(`ttlMinutes`, `refreshSchedule`) for `:cache-config` (update takes `:id` from the path), preview
+`{"audienceId": "..."}`, which is required. A body that does not match is a 400 `validation-error`
+naming the fields; kebab-case keys are dropped by coercion.
 
 ### HTMX endpoints + Replicant widget mount points
 
@@ -214,7 +218,7 @@ The builder page renders two placeholder `div`s for Replicant widgets:
 - `#audience-filter-panel` — filter panel widget mount point
 - `#audience-composition-builder` — composition builder widget mount point
 
-A hidden input `#audience-filters-data` carries the serialized filter state to the form POST. The preview section `#audience-preview` is updated via HTMX swap from `POST /api/audiences/preview`.
+Hidden inputs `#audience-filters-data` and `#audience-compose-data` carry the filters and composition as JSON to the form POST, pre-filled when editing. An update from the form keeps the segment's cache config and tags. The preview section `#audience-preview` is updated via HTMX swap from `POST /api/v1/audiences/preview`.
 
 ---
 
