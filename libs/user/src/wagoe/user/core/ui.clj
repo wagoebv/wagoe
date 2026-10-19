@@ -1101,7 +1101,7 @@
      [:td (or (:ip-address session) [:t :common/unknown])]
      [:td (format-relative-time* (:last-accessed-at session) current-time zone-id)]
      [:td (format-relative-time* (:created-at session) current-time zone-id)]
-     [:td
+     [:td.actions-cell
       (when-not is-current?
         [:form {:method "post"
                 :action (str "/web/users/" user-id "/sessions/" (:id session) "/revoke")
@@ -1136,7 +1136,7 @@
          [:th [:t :common/column-ip-address]]
          [:th [:t :user/column-last-active]]
          [:th [:t :common/column-created]]
-         [:th [:t :common/column-actions]]]]
+         [:th.actions-header [:t :common/column-actions]]]]
        [:tbody
         (for [session sessions]
           (session-row session current-session-id user-id current-time zone-id))]])]))
@@ -1271,7 +1271,7 @@
      [:td (or (:target-user-email audit-log) "-")]
      [:td (result-badge result)]
      [:td (or (:ip-address audit-log) "-")]
-     [:td
+     [:td.actions-cell
       [:button.button.small.secondary.audit-detail-trigger
        {:type "button"
         :title [:t :user/audit-view-details]
@@ -1406,7 +1406,7 @@
             [:th [:t :user/audit-column-target]]
             [:th [:t :user/audit-column-result]]
             [:th [:t :common/column-ip-address]]
-            [:th [:t :common/column-actions]]]]
+            [:th.actions-header [:t :common/column-actions]]]]
           [:tbody
            (for [audit-log audit-logs]
              (audit-log-row audit-log))]]
