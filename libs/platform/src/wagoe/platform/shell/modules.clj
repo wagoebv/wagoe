@@ -288,20 +288,25 @@
    and `:retention` hold refs to a module's `wagoe.platform.ports.privacy`
    implementations, by id. `:authorization` is what the module declares for
    the permission registry; every module gets an entry, as every module has
-   `<module>/read` and `<module>/write`."
-  [acc k {:keys [components http auth search data-export retention authorization routes job-handlers]}]
-  (-> acc
-      (update :components #(merge-slots "the system config" % k components))
-      (update :http merge-http k (dissoc http :extra-middleware))
-      (update :auth merge-auth k auth)
-      (update :search merge-search k search)
-      (update :data-export merge-data-export k data-export)
-      (update :retention merge-retention k retention)
-      (update :authorization assoc k authorization)
-      (cond-> (contains? http :extra-middleware)
-        (update :middleware conj (:extra-middleware http)))
-      (update :routes into (map #(module-routes-ref k %)) routes)
-      (update :job-handlers into job-handlers)))
+   `<module>/read` and `<module>/write`.
+
+   `module` names the module in the registry and on its routes: the library,
+   `:wagoe/payments` for `:wagoe/payment-provider`, so keys one library owns
+   are one module."
+  ([acc k graph] (add-graph acc k k graph))
+  ([acc k module {:keys [components http auth search data-export retention authorization routes job-handlers]}]
+   (-> acc
+       (update :components #(merge-slots "the system config" % k components))
+       (update :http merge-http k (dissoc http :extra-middleware))
+       (update :auth merge-auth k auth)
+       (update :search merge-search k search)
+       (update :data-export merge-data-export k data-export)
+       (update :retention merge-retention k retention)
+       (update-in [:authorization module] #(merge-with merge % authorization))
+       (cond-> (contains? http :extra-middleware)
+         (update :middleware conj (:extra-middleware http)))
+       (update :routes into (map #(module-routes-ref module %)) routes)
+       (update :job-handlers into job-handlers))))
 
 (defn- scaffold-components
   "The four keys a scaffolded module `k` gets: what `module_wiring.clj`
@@ -629,7 +634,7 @@
          (assert-redis-host! k (get active k) (:wagoe/profile (:config ctx)))
          (cond
            (load-wiring! wiring)
-           (add-graph acc k (module-graph resolve-var k lib (get active k) ctx))
+           (add-graph acc k (keyword "wagoe" lib) (module-graph resolve-var k lib (get active k) ctx))
 
            (contains? optional-modules k)
            (do (log/info (str "Skipping " k ": " wiring " is not on this classpath.")

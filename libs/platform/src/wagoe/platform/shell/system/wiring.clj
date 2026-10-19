@@ -249,16 +249,18 @@
   [module routes]
   (mapv (fn [[path & more]]
           (let [data (first more)]
-            (if (map? data)
-              (into [path (assoc data :wagoe/module module)] (rest more))
-              (into [path {:wagoe/module module}] more))))
+            (if (or (nil? data) (sequential? data))
+              (into [path {:wagoe/module module}] more)
+              ;; A handler fn or a route name is data too; expanded, or it
+              ;; would be read as a child route.
+              (into [path (assoc (reitit.core/expand data nil) :wagoe/module module)] (rest more)))))
         routes))
 
 (defn- tagged-contribution
   "`entry` as a contribution, its routes tagged with their module when it
-   came as `modules/module-routes-ref`."
+   came as `modules/module-routes-ref`. Nil when a service dropped its ref."
   [entry]
-  (if-let [module (and (contains? entry :contribution) (:wagoe/module entry))]
+  (if-let [module (:wagoe/module entry)]
     (let [c (:contribution entry)]
       (if (map? c)
         (update-vals c #(if (sequential? %) (tag-routes module %) %))
@@ -681,7 +683,7 @@
               {;; Counts rather than six named modules: this line named the
                ;; same six the destructuring did, so a seventh library's routes
                ;; were invisible in the boot log as well as unwireable.
-               :module-contributions (count (remove nil? module-routes))
+               :module-contributions (count (keep tagged-contribution module-routes))
                :module-routes {:static (count module-static)
                                :web    (count module-web)
                                :api    (count module-api)}

@@ -252,7 +252,7 @@ The `:permissions` enum under `:wagoe/user :groups` is read in as well, until
 The boot fails when two modules declare the same permission or role, or one
 scope key differently, when a role or a route's `:permission` names something
 outside the registry, and when a code role outside the admin module holds an
-`admin.*` permission. Every route carries the module it came from as
+`admin.*` permission. Every route a module contributes carries its module as
 `:wagoe/module` in its route data.
 
 Read the registry through `wagoe.platform.ports.authorization`:

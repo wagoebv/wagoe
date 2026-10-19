@@ -287,7 +287,7 @@ module: a `def authorization` in its wiring namespace):
 - Two modules declaring one permission, role or differing scope key fail boot.
   So do a role or a route `:permission` naming something outside the registry,
   and a code role outside the admin module holding an `admin.*` permission.
-- Every route carries `:wagoe/module` in its route data: the module key whose
+- Every route a module contributes carries `:wagoe/module` in its route data: the module key whose
   contribution it came from.
 - `bb scaffold` writes `<module>/viewer`, `/editor` and `/manager`.
 - Nothing is enforced yet: authorization behaves as before.

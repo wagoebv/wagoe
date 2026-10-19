@@ -214,4 +214,9 @@
     (is (= ["/new" {}] (nth (first web) 2)) "and keeps its children")
     (is (= :wagoe/orders (:wagoe/module (second (first static)))))
     (is (= ["/orders" "/untagged"] (mapv first api))
-        "a plain contribution is still read, and one whose routes were dropped adds none")))
+        "a plain contribution is still read, and one whose routes were dropped adds none"))
+  (testing "a handler fn as route data stays data, not a child route"
+    (let [h identity]
+      (is (= [["/ping" {:handler h :wagoe/module :wagoe/orders}]]
+             (:api (#'wiring/module-route-contributions
+                    [{:wagoe/module :wagoe/orders :contribution {:api [["/ping" h]]}}])))))))

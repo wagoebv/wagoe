@@ -109,9 +109,11 @@
   (or (invalid-declaration declarations)
       (let [acc (reduce (fn [acc [k {:keys [permissions roles scopes]}]]
                           (let [acc (-> acc
+                                        ;; Apart, so a module's own groups schema yields
+                                        ;; to its derived read/write too.
+                                        (add-entries :permissions by-rank k (read-write-permissions (name k) (name k)))
                                         (add-entries :permissions by-rank k
-                                                     (merge (read-write-permissions (name k) (name k))
-                                                            (update-vals permissions #(merge {:source :declared} %))))
+                                                     (update-vals permissions #(merge {:source :declared} %)))
                                         (add-entries :roles if-equal k roles)
                                         (add-entries :scopes if-equal k scopes))]
                             (cond-> acc (:error acc) reduced)))

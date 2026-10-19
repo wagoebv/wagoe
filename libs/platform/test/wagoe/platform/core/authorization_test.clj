@@ -35,7 +35,12 @@
            (get-in (sut/build-registry {:wagoe/orders {:permissions {:orders/refund {:label "Refund"}}}
                                         :wagoe/user   {:permissions {:orders/refund {:label "orders/refund"
                                                                                      :source :groups-schema}}}})
-                   [:permissions :orders/refund :module])))))
+                   [:permissions :orders/refund :module]))))
+  (testing "including the user module's own derived ones"
+    (is (= :derived
+           (get-in (sut/build-registry {:wagoe/user {:permissions {:user/read {:label "user/read"
+                                                                               :source :groups-schema}}}})
+                   [:permissions :user/read :source])))))
 
 (deftest ^:unit a-role-naming-an-unknown-permission-is-refused
   (let [{:keys [error]} (sut/build-registry

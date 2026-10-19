@@ -313,6 +313,16 @@
                                    {'wagoe.tenant.shell.module-wiring
                                     {:authorization {:permissions {:tenant/switch {:label "Switch"}}}}
                                     'wagoe.search.shell.module-wiring {}}))))
+  (testing "under the library's name, so the keys one library owns are one module"
+    (is (= {:wagoe/payments nil :wagoe/external {:roles {:external/x {:permissions #{}}}}}
+           (:authorization (assemble {:wagoe/payment-provider {} :wagoe.external/smtp {} :wagoe.external/imap {}}
+                                     {'wagoe.payments.shell.module-wiring {}
+                                      'wagoe.external.shell.module-wiring
+                                      {:authorization {:roles {:external/x {:permissions #{}}}}}}))))
+    (is (= [:wagoe/payments]
+           (map :wagoe/module (:routes (assemble {:wagoe/payment-provider {}}
+                                                 {'wagoe.payments.shell.module-wiring
+                                                  {:routes [(ig/ref :wagoe/payments-routes)]}}))))))
   (testing "and a discovered module's comes from its graph, or its `authorization` var"
     (let [declared visits-authorization
           discover #(:authorization (sut/discover-module-config
