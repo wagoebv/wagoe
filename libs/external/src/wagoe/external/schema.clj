@@ -8,9 +8,13 @@
 ;; =============================================================================
 
 (def ^:private mail-tls-entries
-  ;; :ssl-trust is "*" or hosts, as a space-separated string or a vector. nil
-  ;; is allowed so an unset #env reads as absent.
-  [[:ssl-trust {:optional true} [:maybe [:or [:string {:min 1}] [:vector {:min 1} [:string {:min 1}]]]]]
+  ;; :ssl-trust is "*" alone, or hosts as a space-separated string or a vector:
+  ;; Angus reads a "*" among hosts, or a comma, as part of a host name. nil is
+  ;; allowed so an unset #env reads as absent.
+  [[:ssl-trust {:optional true}
+    [:maybe [:or [:= "*"]
+             [:re #"^[^,*\s]+(\s+[^,*\s]+)*$"]
+             [:vector {:min 1} [:re #"^[^,*\s]+$"]]]]]
    [:check-server-identity? {:optional true} [:maybe :boolean]]])
 
 (def MailTls

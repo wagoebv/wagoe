@@ -219,7 +219,9 @@
     :as   config}]
   {:pre [(string? host) (some? port) (string? from)]}
   (schema/assert-mail-tls! config)
-  (log/info "Creating SMTP provider adapter" {:host host :port port :tls? tls? :ssl? ssl?})
+  (log/info "Creating SMTP provider adapter"
+            (merge {:host host :port port :tls? tls? :ssl? ssl?}
+                   (select-keys config [:ssl-trust :check-server-identity?])))
   (-> (->SmtpProviderAdapter host port username password tls? ssl? from)
       (merge (select-keys config [:ssl-trust :check-server-identity?]))
       (assoc :resilience (resilience/settings config (str "smtp:" host ":" port) nil))))

@@ -119,9 +119,10 @@
   {:pre [(string? host) (some? port)]}
   (external-schema/assert-mail-tls! config)
   (log/info "Creating SMTP email sender"
-            {:host  host
-             :port  port
-             :tls?  tls?
-             :ssl?  ssl?
-             :auth? (boolean (and username password))})
+            (merge {:host  host
+                    :port  port
+                    :tls?  tls?
+                    :ssl?  ssl?
+                    :auth? (boolean (and username password))}
+                   (select-keys config [:ssl-trust :check-server-identity?])))
   (->SmtpEmailSender host port username password tls? ssl? ssl-trust check-server-identity?))

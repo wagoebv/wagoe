@@ -305,7 +305,9 @@
     :as   config}]
   {:pre [(string? host) (some? port) (string? username) (string? password)]}
   (schema/assert-mail-tls! config)
-  (log/info "Creating IMAP mailbox adapter" {:host host :port port :ssl? ssl? :folder folder})
+  (log/info "Creating IMAP mailbox adapter"
+            (merge {:host host :port port :ssl? ssl? :folder folder}
+                   (select-keys config [:ssl-trust :check-server-identity?])))
   (-> (->ImapMailboxAdapter host port username password ssl? folder)
       (merge (select-keys config [:ssl-trust :check-server-identity?]))
       (assoc :resilience (resilience/settings config (str "imap:" host ":" port) nil))))
