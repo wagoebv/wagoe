@@ -188,6 +188,8 @@ for what is public API, what is internal, and how deprecations are announced.
 - **The SLF4J logger cleared the caller's MDC after each call** (BOU-463). It now restores it.
 - **Smaller observability and audience fixes** (BOU-463): `track-health-check` no longer throws on an unknown status,
   `merge-error-configs` lets later values win, and audience predicates treat a missing field as SQL treats NULL.
+- **Tables without a checkbox column squeezed their first and last columns** (BOU-595). Your own `data-table`
+  with a checkbox or actions column: add `checkbox-header`/`checkbox-cell` or `actions-header`/`actions-cell`.
 - **`wagoe add reports` wrote no config, and a key named only in another value read as installed** (BOU-584):
   `wagoe add` and `bb scaffold integrate` now match keys of `:active` itself. Re-run `wagoe add reports`.
 - **`bb setup` switching back to a database added a fresh one** (BOU-560): it now restores the one in `:inactive`.
