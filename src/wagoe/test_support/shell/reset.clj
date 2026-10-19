@@ -2,6 +2,7 @@
   "Side-effecting reset of the H2 test database.
    Safe to call only in the :test profile."
   (:require [next.jdbc :as jdbc]
+            [next.jdbc.sql :as sql]
             [clojure.tools.logging :as log]
             [wagoe.test-support.core :as core]
             [wagoe.tenant.ports :as tenant-ports]
@@ -24,7 +25,9 @@
    "auth_users"
    "tenants"
    "e2e_order_lines"
-   "e2e_orders"])
+   "e2e_orders"
+   "e2e_tickets"
+   "e2e_customers"])
 
 (def ^:private fixture-tables
   "Tables no module owns, for admin e2e tests: an order whose lines have a
@@ -37,7 +40,20 @@
       id UUID PRIMARY KEY,
       e2e_order_id UUID NOT NULL REFERENCES e2e_orders(id),
       description VARCHAR(255) NOT NULL,
-      qty INT DEFAULT 1 NOT NULL)"])
+      qty INT DEFAULT 1 NOT NULL)"
+   ;; More customers than a select holds, so a ticket's customer is a
+   ;; combobox (BOU-754).
+   "CREATE TABLE IF NOT EXISTS e2e_customers (
+      id UUID PRIMARY KEY,
+      name VARCHAR(100) NOT NULL)"
+   "CREATE TABLE IF NOT EXISTS e2e_tickets (
+      id UUID PRIMARY KEY,
+      customer_id UUID NOT NULL REFERENCES e2e_customers(id),
+      subject VARCHAR(255) NOT NULL)"])
+
+(defn- seed-fixture-rows! [ds]
+  (sql/insert-multi! ds :e2e_customers [:id :name]
+                     (for [i (range 1 202)] [(random-uuid) (format "Customer %03d" i)])))
 
 (defn create-fixture-tables!
   "Create the e2e fixture tables if they are missing. Called when the reset
@@ -47,7 +63,8 @@
     (jdbc/execute! ds [ddl])))
 
 (defn truncate-all!
-  "Truncates every table the e2e suite might touch. Uses H2's
+  "Truncates every table the e2e suite might touch, then refills the
+   fixture rows tests only read. Uses H2's
    SET REFERENTIAL_INTEGRITY FALSE because H2 does not support
    TRUNCATE ... CASCADE."
   [ds]
@@ -59,6 +76,7 @@
         (jdbc/execute! tx [(str "TRUNCATE TABLE " t)]))
       (finally
         (jdbc/execute! tx ["SET REFERENTIAL_INTEGRITY TRUE"]))))
+  (seed-fixture-rows! ds)
   (log/debug "test-support: truncated all tables"))
 
 (defn seed-baseline!

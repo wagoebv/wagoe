@@ -74,3 +74,110 @@ document.addEventListener('alpine:init', function () {
     }, 0);
   });
 })();
+
+/**
+ * Combobox (typeahead), rendered by wagoe.shared.ui.core.combobox.
+ *
+ * The server renders the options into the listbox; this sends the typed text
+ * as the query, moves through the options with the arrow keys, picks one into
+ * the hidden value input on Enter or click, and closes on Escape.
+ */
+document.addEventListener('alpine:init', function () {
+  window.Alpine.data('combobox', function () {
+    return {
+      open: false,
+      active: -1,
+      init: function () {
+        var self = this;
+        // The text input has no name, so htmx would send nothing.
+        this.$el.addEventListener('htmx:configRequest', function (e) {
+          e.detail.parameters[self.$el.dataset.queryParam || 'q'] = self.$refs.input.value;
+        });
+        this.$el.addEventListener('htmx:afterSwap', function () {
+          self.active = -1;
+          self.open = document.activeElement === self.$refs.input;
+          self.highlight();
+        });
+      },
+      items: function () {
+        return Array.prototype.slice.call(
+          this.$refs.listbox.querySelectorAll('[role="option"][data-value]'));
+      },
+      // Typed text no longer names the chosen row.
+      typed: function () {
+        this.$refs.value.value = '';
+      },
+      keydown: function (e) {
+        var items = this.items();
+        switch (e.key) {
+          case 'ArrowDown':
+          case 'ArrowUp':
+            e.preventDefault();
+            if (!items.length) {
+              this.$refs.input.dispatchEvent(new CustomEvent('combobox:open'));
+              return;
+            }
+            this.open = true;
+            if (e.key === 'ArrowDown') {
+              this.active = (this.active + 1) % items.length;
+            } else {
+              this.active = this.active <= 0 ? items.length - 1 : this.active - 1;
+            }
+            this.highlight();
+            break;
+          case 'Enter':
+            if (this.open && this.active >= 0) {
+              e.preventDefault();
+              this.pick(items[this.active]);
+            }
+            break;
+          case 'Escape':
+            if (this.open) {
+              e.preventDefault();
+              e.stopPropagation();
+              this.close();
+            }
+            break;
+          case 'Tab':
+            this.close();
+            break;
+        }
+      },
+      highlight: function () {
+        var active = this.active;
+        var items = this.items();
+        items.forEach(function (el, i) {
+          el.setAttribute('aria-selected', i === active ? 'true' : 'false');
+        });
+        if (items[active]) {
+          var el = items[active];
+          var list = this.$refs.listbox;
+          this.$refs.input.setAttribute('aria-activedescendant', el.id);
+          // Scroll the list only: scrollIntoView would scroll every ancestor.
+          if (el.offsetTop < list.scrollTop) {
+            list.scrollTop = el.offsetTop;
+          } else if (el.offsetTop + el.offsetHeight > list.scrollTop + list.clientHeight) {
+            list.scrollTop = el.offsetTop + el.offsetHeight - list.clientHeight;
+          }
+        } else {
+          this.$refs.input.removeAttribute('aria-activedescendant');
+        }
+      },
+      choose: function (e) {
+        var el = e.target.closest('[role="option"][data-value]');
+        if (el) this.pick(el);
+      },
+      pick: function (el) {
+        this.$refs.value.value = el.dataset.value;
+        this.$refs.input.value = el.dataset.label;
+        this.close();
+        this.$refs.value.dispatchEvent(new Event('change', { bubbles: true }));
+      },
+      close: function () {
+        this.open = false;
+        this.active = -1;
+        this.highlight();
+      }
+    };
+  });
+});

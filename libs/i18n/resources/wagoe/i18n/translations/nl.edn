@@ -457,6 +457,8 @@
  :admin/button-create              "Aanmaken"
  :admin/relationship-empty-state   "Geen {label} gevonden."
  :admin/relationship-view-all      "Alle {label} bekijken"
+ :admin/combobox-placeholder       "Typ om te zoeken…"
+ :admin/combobox-no-matches        "Geen resultaten"
  :admin/page-edit-title            "{label} bewerken"
  :admin/page-create-title          "{label} aanmaken"
  :admin/button-back-to-list        "Terug naar lijst"

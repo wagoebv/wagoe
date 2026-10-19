@@ -247,22 +247,58 @@
                                       order-id "\"[^>]*selected)"))
                      body))))))
 
+(defn- create-named-order! [order-name]
+  (let [id (random-uuid)]
+    (db/execute-update! (:db @sys) {:insert-into :hm_orders :values [{:id id :name order-name}]})
+    id))
+
 (deftest ^:contract the-picker-is-a-select-only-while-every-parent-fits
   ;; A select capped at the page size silently dropped every parent past it
-  ;; (BOU-563 review): past the limit the field stays a text input.
+  ;; (BOU-563 review): past the limit the field is a combobox (BOU-754).
   (create-order!)
-  (create-order!)
-  (let [total  (:n (db/execute-one! (:db @sys) {:select [[:%count.* :n]] :from [:hm_orders]}))
-        page   (fn [max-size]
-                 (:body ((detail/new-entity-handler (:svc @sys) (:sp @sys)
-                                                    (assoc-in config [:pagination :max-page-size] max-size))
-                         (request :get "hm-items"))))]
+  (let [current (create-named-order! "Current order")
+        item-id (random-uuid)
+        _       (db/execute-update! (:db @sys) {:raw (str "INSERT INTO hm_items (id, hm_order_id, sku) VALUES ('"
+                                                          item-id "', '" current "', 'CUR')")})
+        total   (:n (db/execute-one! (:db @sys) {:select [[:%count.* :n]] :from [:hm_orders]}))
+        page    (fn [max-size make & [id]]
+                  (:body ((make (:svc @sys) (:sp @sys)
+                                (assoc-in config [:pagination :max-page-size] max-size))
+                          (request :get "hm-items" :id id))))]
     (testing "every parent fits: a select"
-      (is (re-find #"<select[^>]*name=\"hm-order-id\"" (page total))))
-    (testing "one parent more than fits: a text input"
-      (let [body (page (dec total))]
+      (is (re-find #"<select[^>]*name=\"hm-order-id\"" (page total detail/new-entity-handler))))
+    (testing "one parent more than fits: a combobox reading the options endpoint"
+      (let [body (page (dec total) detail/new-entity-handler)]
         (is (not (re-find #"<select[^>]*name=\"hm-order-id\"" body)))
-        (is (re-find #"<input[^>]*name=\"hm-order-id\"" body))))))
+        (is (re-find #"<input[^>]*name=\"hm-order-id\"[^>]*type=\"hidden\"" body))
+        (is (re-find #"<input[^>]*hx-get=\"/web/admin/hm-items/options/hm-order-id\"[^>]*role=\"combobox\"" body))))
+    (testing "the edit form shows the current parent by its label"
+      (let [body (page (dec total) detail/entity-detail-handler item-id)]
+        (is (re-find (re-pattern (str "<input[^>]*name=\"hm-order-id\"[^>]*value=\"" current "\"")) body))
+        (is (re-find #"<input[^>]*role=\"combobox\"[^>]*value=\"Current order\"" body))))))
+
+(deftest ^:contract the-combobox-options-are-the-parents-matching-the-typed-text
+  (let [acme (create-named-order! "Acme combobox")
+        _    (create-named-order! "Beta combobox")
+        opts (fn [entity field q]
+               ((handler crud/field-options-handler)
+                (-> (request :get entity :query (when q {"q" q}))
+                    (assoc-in [:path-params :field] field))))]
+    (testing "a match by label, as an option holding the id"
+      (let [body (:body (opts "hm-items" "hm-order-id" "acme COMBO"))]
+        (is (re-find (re-pattern (str "<li[^>]*data-label=\"Acme combobox\"[^>]*data-value=\"" acme "\"")) body))
+        (is (not (str/includes? body "Beta combobox")))))
+    (testing "no match: an option saying so"
+      (is (str/includes? (:body (opts "hm-items" "hm-order-id" "zzz-no-such")) "aria-disabled=\"true\"")))
+    (testing "a field that is no foreign key is not found"
+      (is (= :not-found (:type (ex-data (try (opts "hm-items" "sku" "a") (catch Exception e e)))))))
+    (testing "a user who is no admin is refused"
+      (let [e (try ((handler crud/field-options-handler)
+                    (-> (request :get "hm-items" :query {"q" "a"})
+                        (assoc :user {:id (random-uuid) :role :user :active true})
+                        (assoc-in [:path-params :field] "hm-order-id")))
+                   (catch Exception e e))]
+        (is (= :forbidden (:type (ex-data e))))))))
 
 (deftest ^:contract ^:security detail-page-ignores-an-off-site-return-to
   ;; return_to became the breadcrumb, "Back to list", create and delete links
