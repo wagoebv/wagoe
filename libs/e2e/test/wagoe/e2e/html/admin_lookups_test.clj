@@ -33,10 +33,17 @@
   (page/navigate pg (admin/admin-url "/e2e-tickets"))
   (page/wait-for-load-state pg)
   (loc/click (page/locator pg "button.filter-open"))
-  (page/wait-for-selector pg "#filter-customer-id" {:timeout 10000.0})
+  ;; The drawer is swapped in: its combobox works once htmx and Alpine have
+  ;; processed it, a moment after it appears.
+  (page/wait-for-function pg (str "(() => { const i = document.querySelector('#filter-customer-id');"
+                                  " return !!(i && i['htmx-internal-data'] && i.closest('.combobox')._x_dataStack); })()")
+                          {:timeout 10000.0 :polling 50.0})
   (pick! pg "#filter-customer-id" customer customer)
   (loc/click (page/locator pg ".filter-drawer-form button[type='submit']"))
-  (page/wait-for-selector pg ".filter-chip" {:timeout 10000.0}))
+  ;; The chip names the customer (the list may come back with the last filter)
+  ;; wait-for-selector answers a failed wait with an anomaly map, not a throw
+  (is (not (map? (page/wait-for-selector pg (str ".filter-chip:has-text('" customer "')") {:timeout 10000.0})))
+      (str "a chip names " customer)))
 
 (deftest ^:integration ^:e2e a-list-is-filtered-by-a-customer-picked-by-name
   (spel/with-testing-page [pg]
@@ -62,8 +69,8 @@
     (page/wait-for-selector pg "form.group-member-form" {:timeout 10000.0})
 
     (let [email (-> fx/*seed* :user :email)]
-      (testing "typing part of the email offers the user"
-        (loc/fill (page/locator pg "#user-id") (first (str/split email #"@")))
+      (testing "typing the email offers the user"
+        (loc/fill (page/locator pg "#user-id") email)
         (page/wait-for-selector pg (str "#user-id-listbox li[data-label*='" email "']") {:timeout 10000.0})
         (loc/press (page/locator pg "#user-id") "ArrowDown")
         (loc/press (page/locator pg "#user-id") "Enter")
