@@ -193,14 +193,15 @@
      computation may run more than once; last write wins, results are
      identical. See `reset-cache!` to invalidate (e.g. after a migration)."
     (or (get @config-cache entity-name)
-        (let [own           (compute-entity-config this entity-name)
-              all           (into {entity-name own}
-                                  (keep (fn [e] (some->> (base-entity-config this e) (vector e))))
-                                  ;; Only :allowlist discovery lists entities; the other
-                                  ;; modes throw, and must not take this entity down.
-                                  (remove #{entity-name}
-                                          (try (ports/list-available-entities this)
-                                               (catch clojure.lang.ExceptionInfo _ []))))
+        (let [all           (introspection/with-declared-parents
+                             (into {entity-name (compute-entity-config this entity-name)}
+                                   (keep (fn [e] (some->> (base-entity-config this e) (vector e))))
+                                   ;; Only :allowlist discovery lists entities; the other
+                                   ;; modes throw, and must not take this entity down.
+                                   (remove #{entity-name}
+                                           (try (ports/list-available-entities this)
+                                                (catch clojure.lang.ExceptionInfo _ [])))))
+              own           (get all entity-name)
               ;; Roles last: a has-many column needs the inverse relations, and
               ;; the default columns need the roles (ADR-040).
               entity-config (-> (introspection/with-inverse-relationships entity-name own all)

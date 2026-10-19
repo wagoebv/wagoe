@@ -1660,5 +1660,7 @@
   ([db-ctx schema-provider logger error-reporter config event-publisher workflows]
    (create-admin-service db-ctx schema-provider logger error-reporter config event-publisher workflows nil))
   ([db-ctx schema-provider logger error-reporter config event-publisher workflows writers]
-   (cond-> (->AdminService db-ctx schema-provider logger error-reporter config workflows writers)
-     event-publisher (->PublishingAdminService db-ctx schema-provider event-publisher))))
+   ;; Rows keyed as the schema repository keys columns: `x2y_id` is :x2y-id
+   (let [db-ctx (assoc db-ctx :builder-fn db/as-kebab-maps)]
+     (cond-> (->AdminService db-ctx schema-provider logger error-reporter config workflows writers)
+       event-publisher (->PublishingAdminService db-ctx schema-provider event-publisher)))))

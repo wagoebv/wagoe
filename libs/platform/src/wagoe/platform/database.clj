@@ -49,6 +49,11 @@
   "Run one statement over many parameter sets."
   execution/execute-batch!)
 
+(def as-kebab-maps
+  "A builder-fn keying `x2y_id` as :x2y-id, where the default gives :x-2y-id.
+   Opt in with `:builder-fn` on the db context."
+  execution/as-kebab-maps)
+
 ;; Retention purges call this: one DELETE of a year's rows holds its locks and
 ;; undo for all of them at once, and blocks writers until it finishes.
 (defn delete-in-batches!

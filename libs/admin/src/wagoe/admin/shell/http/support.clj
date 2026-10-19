@@ -6,6 +6,7 @@
    namespaces and the route definitions in `wagoe.admin.shell.http`."
   (:require
    [wagoe.admin.core.forms :as forms]
+   [wagoe.admin.core.schema-introspection :as introspection]
    [wagoe.admin.core.ui :as admin-ui]
    [wagoe.admin.core.ui.base :as ui-base]
    [wagoe.admin.core.ui.filters :as ui-filters]
@@ -558,16 +559,6 @@
 ;; Foreign-key pickers and workflow state (BOU-563)
 ;; =============================================================================
 
-(defn- parent-entities
-  "{foreign-key-field parent-entity} for each has-many naming `entity-name`,
-   detected or configured."
-  [entity-name entity-configs]
-  (into {}
-        (for [[parent cfg] entity-configs
-              rel          (:has-many cfg)
-              :when        (= entity-name (:entity rel))]
-          [(keyword (str/replace (name (:foreign-key rel)) "_" "-")) parent])))
-
 (defn- label-field
   "The field a parent row is named by in a picker: its `:title-field`, what
    its relation cells show."
@@ -617,7 +608,7 @@
   (let [entity-config (get entity-configs entity-name)
         page-size     (get-in config [:pagination :max-page-size] 200)]
     (into {}
-          (for [[field parent] (parent-entities entity-name entity-configs)
+          (for [[field parent] (introspection/declared-parents entity-name entity-configs)
                 :when (some #{field} (:editable-fields entity-config))
                 :let  [parent-cfg (get entity-configs parent)
                        label      (label-field parent-cfg)
@@ -653,7 +644,7 @@
    only the parent of that field."
   [admin-service schema-provider config entity-name field values]
   (let [entity-configs (all-entity-configs schema-provider)]
-    (when-let [parent (get (parent-entities entity-name entity-configs) field)]
+    (when-let [parent (get (introspection/declared-parents entity-name entity-configs) field)]
       ;; Only `field` editable, so a second key to the same parent is not read
       (get (foreign-key-options admin-service config
                                 (-> (select-keys entity-configs [entity-name parent])
@@ -678,7 +669,7 @@
    is neither, or its parent's label is not text."
   [admin-service schema-provider entity-name field q]
   (let [entity-configs (all-entity-configs schema-provider)]
-    (when-let [parent (some-> (or (get (parent-entities entity-name entity-configs) field)
+    (when-let [parent (some-> (or (get (introspection/declared-parents entity-name entity-configs) field)
                                   (:entity (link-rel (get entity-configs entity-name) field)))
                               (#(when (text-label? (get entity-configs %)) %)))]
       (let [parent-cfg (get entity-configs parent)
