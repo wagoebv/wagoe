@@ -31,6 +31,13 @@
     (is (re-find #"<ul[^>]*id=\"parent-id-listbox\"[^>]*role=\"listbox\"" page))
     (is (str/includes? page "x-data=\"combobox\""))))
 
+(deftest ^:unit the-hidden-input-takes-value-attrs
+  ;; Live validation posts from it: the text input has no name.
+  (let [hidden (input-tag (html (combobox/combobox :p {:url "/opts" :value-attrs {:hx-post "/validate"}}))
+                          "type=\"hidden\"")]
+    (is (str/includes? hidden "hx-post=\"/validate\""))
+    (is (str/includes? hidden "name=\"p\""))))
+
 (deftest ^:unit a-readonly-combobox-asks-nothing
   (let [text (input-tag (html (combobox/combobox :p {:url "/opts" :readonly true})) "role=\"combobox\"")]
     (is (str/includes? text "readonly"))

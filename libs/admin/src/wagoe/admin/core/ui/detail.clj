@@ -135,7 +135,10 @@
                                  :placeholder [:t :admin/combobox-placeholder]
                                  :required    required?
                                  :readonly    readonly?
-                                 ;; describe-input finds no named visible control here.
+                                 ;; with-live-validation and describe-input find no
+                                 ;; named visible control here.
+                                 :value-attrs (when-let [{:keys [url vals]} (:validate field-config)]
+                                                (form/live-attrs url field-name vals))
                                  :attrs       (when has-errors?
                                                 {:aria-invalid     "true"
                                                  :aria-describedby (ui/field-error-id field-name)})))

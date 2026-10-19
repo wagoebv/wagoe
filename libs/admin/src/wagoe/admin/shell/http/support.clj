@@ -671,6 +671,12 @@
       (first (:search-fields parent-cfg))
       (:primary-key parent-cfg :id)))
 
+(defn- text-label?
+  "Whether a parent's label can be searched as text: a combobox filters it
+   with LIKE, which an integer column refuses on PostgreSQL."
+  [parent-cfg]
+  (contains? #{:string :text} (get-in parent-cfg [:fields (label-field parent-cfg) :type])))
+
 (defn- row-label [parent-cfg row]
   (let [pk (:primary-key parent-cfg :id)]
     (str (or (get row (label-field parent-cfg)) (get row pk)))))
@@ -700,7 +706,7 @@
    its relation cells show. Only when every parent fits in the maximum page
    size: a select capped there would silently offer a subset, so past it the
    key is a combobox, {:url :label}, searching the label — or a text input
-   when the parent has no label but its key. An optional key can be left
+   when the label is not text. An optional key can be left
    empty."
   [admin-service config entity-configs entity-name values]
   (let [entity-config (get entity-configs entity-name)
@@ -709,7 +715,6 @@
           (for [[field parent] (parent-entities entity-name entity-configs)
                 :when (some #{field} (:editable-fields entity-config))
                 :let  [parent-cfg (get entity-configs parent)
-                       pk         (:primary-key parent-cfg :id)
                        label      (label-field parent-cfg)
                        page       (try (ports/list-entities admin-service parent
                                                             {:limit page-size :sort label :sort-dir :asc})
@@ -721,7 +726,7 @@
                        current    (some-> (get values field) str)
                        readable?  (not= ::unreadable page)
                        fits?      (and readable? (<= (:total-count page 0) (count rows)))]
-                :when (and readable? (or fits? (not= label pk)))]
+                :when (and readable? (or fits? (text-label? parent-cfg)))]
             (if-not fits?
               [field {:url   (options-url entity-name field)
                       :label (when current (current-label admin-service parent parent-cfg rows current))}]
@@ -757,11 +762,13 @@
 
 (defn search-foreign-key-options
   "What the combobox of foreign key `field` of `entity-name` offers for the
-   typed `q`: {:parent :parent-cfg :options}, the options the first parent rows by label
-   whose label contains `q`, as [id label]. Nil when `field` is no foreign key."
+   typed `q`: {:parent :parent-cfg :options}, where the options are the first
+   parent rows, by label, whose label contains `q`, as [id label]. Nil when
+   `field` is no foreign key, or its parent's label is not text."
   [admin-service schema-provider entity-name field q]
   (let [entity-configs (all-entity-configs schema-provider)]
-    (when-let [parent (get (parent-entities entity-name entity-configs) field)]
+    (when-let [parent (some-> (get (parent-entities entity-name entity-configs) field)
+                              (#(when (text-label? (get entity-configs %)) %)))]
       (let [parent-cfg (get entity-configs parent)
             label      (label-field parent-cfg)
             page       (ports/list-entities admin-service parent

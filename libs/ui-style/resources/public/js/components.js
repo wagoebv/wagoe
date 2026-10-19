@@ -89,8 +89,11 @@ document.addEventListener('alpine:init', function () {
       active: -1,
       init: function () {
         var self = this;
-        // The text input has no name, so htmx would send nothing.
+        this.chosen = { value: this.$refs.value.value, label: this.$refs.input.value };
+        // The text input has no name, so htmx would send nothing. Only its
+        // request: the hidden input posts the field's live validation.
         this.$el.addEventListener('htmx:configRequest', function (e) {
+          if (e.detail.elt !== self.$refs.input) return;
           e.detail.parameters[self.$el.dataset.queryParam] = self.$refs.input.value;
         });
         this.$el.addEventListener('htmx:afterSwap', function () {
@@ -128,6 +131,8 @@ document.addEventListener('alpine:init', function () {
             if (this.open && this.active >= 0) {
               e.preventDefault();
               this.pick(items[this.active]);
+            } else {
+              this.settle();
             }
             break;
           case 'Escape':
@@ -167,15 +172,25 @@ document.addEventListener('alpine:init', function () {
         if (el) this.pick(el);
       },
       pick: function (el) {
+        this.chosen = { value: el.dataset.value, label: el.dataset.label };
         this.$refs.value.value = el.dataset.value;
         this.$refs.input.value = el.dataset.label;
         this.close();
         this.$refs.value.dispatchEvent(new Event('change', { bubbles: true }));
       },
+      // Left without a pick: back to the chosen row, so the text shown is what
+      // the form submits. Emptied text clears the value.
+      settle: function () {
+        if (!this.$refs.value.value && this.$refs.input.value.trim()) {
+          this.$refs.value.value = this.chosen.value;
+          this.$refs.input.value = this.chosen.label;
+        }
+      },
       close: function () {
         this.open = false;
         this.active = -1;
         this.highlight();
+        this.settle();
       }
     };
   });

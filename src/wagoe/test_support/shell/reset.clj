@@ -31,7 +31,8 @@
 
 (def ^:private fixture-tables
   "Tables no module owns, for admin e2e tests: an order whose lines have a
-   has-many :min (:e2e-orders in resources/conf/test/config.edn, BOU-570)."
+   has-many :min (:e2e-orders in resources/conf/test/config.edn, BOU-570), and
+   tickets whose customer is a combobox (BOU-754)."
   ["CREATE TABLE IF NOT EXISTS e2e_orders (
       id UUID PRIMARY KEY,
       number VARCHAR(50) NOT NULL,

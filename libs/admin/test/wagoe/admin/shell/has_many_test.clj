@@ -271,11 +271,30 @@
       (let [body (page (dec total) detail/new-entity-handler)]
         (is (not (re-find #"<select[^>]*name=\"hm-order-id\"" body)))
         (is (re-find #"<input[^>]*name=\"hm-order-id\"[^>]*type=\"hidden\"" body))
+        (is (re-find #"<input[^>]*hx-post=\"/web/admin/hm-items/validate-field\"[^>]*name=\"hm-order-id\"" body)
+            "picking an option is checked like any other field")
         (is (re-find #"<input[^>]*hx-get=\"/web/admin/hm-items/options/hm-order-id\"[^>]*role=\"combobox\"" body))))
     (testing "the edit form shows the current parent by its label"
       (let [body (page (dec total) detail/entity-detail-handler item-id)]
         (is (re-find (re-pattern (str "<input[^>]*name=\"hm-order-id\"[^>]*value=\"" current "\"")) body))
         (is (re-find #"<input[^>]*role=\"combobox\"[^>]*value=\"Current order\"" body))))))
+
+(deftest ^:contract a-parent-labelled-by-a-non-text-field-stays-a-text-input
+  ;; The combobox searches the label with LIKE, which PostgreSQL refuses on a
+  ;; uuid or integer column.
+  (create-order!)
+  (create-order!)
+  (let [cfg   (-> config
+                  (assoc-in [:entities :hm-orders :title-field] :id)
+                  (assoc-in [:pagination :max-page-size] 1))
+        sp    (schema-repo/create-schema-repository (:db @sys) cfg)
+        svc   (service/create-admin-service (:db @sys) sp
+                                            (logging-no-op/create-logging-component {})
+                                            (error-reporting-no-op/create-error-reporting-component {})
+                                            cfg)
+        body  (:body ((detail/new-entity-handler svc sp cfg) (request :get "hm-items")))]
+    (is (not (str/includes? body "role=\"combobox\"")))
+    (is (re-find #"<input[^>]*name=\"hm-order-id\"[^>]*type=\"text\"" body))))
 
 (deftest ^:contract the-combobox-options-are-the-parents-matching-the-typed-text
   (let [acme (create-named-order! "Acme combobox")
