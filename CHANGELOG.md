@@ -33,6 +33,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **Streamed storage and `db/upsert!`** (BOU-752): `IStreamingFileStorage` stores what a writer streams (local, S3,
   GCS); `db/upsert!` and `db/ensure-binary-collation!` serve any keyed table. Nothing to do.
+- **`wagoe.shared.ui.core.modal`: modal and confirm on native `<dialog>`** (BOU-753); admin deletes confirm with it, bulk
+  delete now too. The broken `layout/modal` is removed: use `modal/modal`.
 - **A user's data export as a background job** (BOU-749): with the jobs module, `POST /api/v1/me/export-jobs`
   builds the zip in file storage and the user downloads it for a day. Run `migrate up`.
 - **Tenant exports are audited** (BOU-749): each download of `GET /api/v1/tenants/:id/export` is recorded in a new

@@ -7,7 +7,6 @@
  * 2. Toast notification system (triggered via HTMX HX-Trigger or JS API)
  * 3. Clickable table rows
  * 4. Skeleton loading for tables
- * 5. Styled delete confirmation modal (replaces hx-confirm)
  */
 
 // =========================================================================
@@ -772,76 +771,6 @@ document.addEventListener('alpine:init', function () {
   }
 
   // =========================================================================
-  // 5. Delete Confirmation Modal
-  // =========================================================================
-
-  function showConfirmModal(opts) {
-    var title = opts.title || 'Confirm Delete';
-    var message = opts.message || 'Are you sure you want to delete this item? This action cannot be undone.';
-    var detail = opts.detail || '';
-    var cancelLabel = opts.cancelLabel || 'Cancel';
-    var confirmLabel = opts.confirmLabel || 'Delete';
-    var onConfirm = opts.onConfirm || null;
-
-    var backdrop = document.createElement('div');
-    backdrop.className = 'confirm-modal-backdrop';
-    backdrop.setAttribute('role', 'dialog');
-    backdrop.setAttribute('aria-modal', 'true');
-
-    backdrop.innerHTML =
-      '<div class="confirm-modal">' +
-        '<div class="confirm-modal-header">' +
-          '<div class="confirm-modal-icon danger">' +
-            '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>' +
-          '</div>' +
-          '<div class="confirm-modal-title">' + escapeHtml(title) + '</div>' +
-        '</div>' +
-        '<div class="confirm-modal-body">' +
-          '<p>' + escapeHtml(message) + '</p>' +
-          (detail ? '<div class="confirm-detail">' + escapeHtml(detail) + '</div>' : '') +
-        '</div>' +
-        '<div class="confirm-modal-footer">' +
-          '<button class="button secondary confirm-cancel">' + escapeHtml(cancelLabel) + '</button>' +
-          '<button class="button danger confirm-delete">' + escapeHtml(confirmLabel) + '</button>' +
-        '</div>' +
-      '</div>';
-
-    // Focus trap — focus the cancel button first
-    document.body.appendChild(backdrop);
-    var cancelBtn = backdrop.querySelector('.confirm-cancel');
-    var deleteBtn = backdrop.querySelector('.confirm-delete');
-    cancelBtn.focus();
-
-    // Close on Escape
-    function onEsc(e) {
-      if (e.key === 'Escape') {
-        close(false);
-      }
-    }
-    document.addEventListener('keydown', onEsc);
-
-    function close(confirmed) {
-      // Always clean up the Escape handler
-      document.removeEventListener('keydown', onEsc);
-
-      backdrop.classList.add('closing');
-      removeAfterAnimation(backdrop);
-
-      if (confirmed && onConfirm) {
-        onConfirm();
-      }
-    }
-
-    cancelBtn.addEventListener('click', function () { close(false); });
-    deleteBtn.addEventListener('click', function () { close(true); });
-
-    // Close on backdrop click
-    backdrop.addEventListener('click', function (e) {
-      if (e.target === backdrop) close(false);
-    });
-  }
-
-  // =========================================================================
   // Initialization
   // =========================================================================
 
@@ -906,38 +835,6 @@ document.addEventListener('alpine:init', function () {
 
     // XHR interception + pendingToast pickup handled by components.js
     // (loaded in every bundle). No duplication needed here.
-
-    // Intercept hx-confirm on delete buttons with styled modal
-    document.addEventListener('htmx:confirm', function (event) {
-      var elt = event.detail.elt;
-      if (!elt) return;
-
-      // Only intercept for delete operations (has hx-delete or is a danger button)
-      var isDelete = elt.hasAttribute('hx-delete') ||
-                     elt.classList.contains('danger') ||
-                     (elt.getAttribute('value') === 'delete');
-
-      if (!isDelete) return;
-
-      // Prevent the default browser confirm and the HTMX request
-      event.preventDefault();
-
-      var message = event.detail.question || 'Are you sure?';
-      var title = elt.getAttribute('data-confirm-title') || 'Confirm Delete';
-      var cancelLabel = elt.getAttribute('data-confirm-cancel') || 'Cancel';
-      var confirmLabel = elt.getAttribute('data-confirm-label') || 'Delete';
-
-      showConfirmModal({
-        title: title,
-        message: message,
-        cancelLabel: cancelLabel,
-        confirmLabel: confirmLabel,
-        onConfirm: function () {
-          // issueRequest() is HTMX's built-in way to proceed after htmx:confirm
-          event.detail.issueRequest(true);
-        }
-      });
-    });
 
     // Convert server-rendered flash messages into toasts. This must run
     // both on initial page load and after any HTMX body swap, because the
@@ -1011,7 +908,6 @@ document.addEventListener('alpine:init', function () {
       openFilters: openFilters,
       toggleCursorRow: toggleCursorRow,
       showToast: showToast,
-      showConfirmModal: showConfirmModal,
       createSkeletonRows: createSkeletonRows
     };
   }

@@ -212,30 +212,6 @@
       return true;
     }
 
-    // Close confirm modal (styled delete dialog)
-    const confirmBackdrop = document.querySelector('.confirm-modal-backdrop');
-    if (confirmBackdrop) {
-      const cancelBtn = confirmBackdrop.querySelector('.confirm-cancel');
-      if (cancelBtn) {
-        cancelBtn.click();
-        return true;
-      }
-    }
-
-    // Close any open modals
-    const modal = document.querySelector('.modal[open], .modal.active, .modal-backdrop');
-    if (modal) {
-      // Try clicking close button first
-      const closeBtn = modal.querySelector('.modal-close, [data-action="close"], button[type="button"]');
-      if (closeBtn) {
-        closeBtn.click();
-        return true;
-      }
-      // Or trigger close event
-      modal.dispatchEvent(new CustomEvent('close'));
-      return true;
-    }
-
     // Close the record drawer, then clear a row selection — unless the
     // browser is full screen, where Esc already leaves full screen and doing
     // both at once surprises (q does it there)
@@ -275,6 +251,9 @@
    * Main keyboard handler
    */
   function handleKeydown(event) {
+    // A modal <dialog> owns the keyboard, Esc included
+    if (document.querySelector('dialog:modal')) return;
+
     const key = event.key.toLowerCase();
 
     // Debug logging (remove in production)
