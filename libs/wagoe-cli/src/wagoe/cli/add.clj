@@ -179,12 +179,12 @@
 
 (defn- in-active?
   "Whether `config-key` (\"wagoe/jobs\") is a key of :active in `text`. A key
-   parked under :inactive does not count. Text that does not read falls back
-   to a search, so a key is never written twice into a file we cannot parse."
+   parked under :inactive does not count. Text that does not read as EDN
+   falls back to the text editor's reading of :active."
   [text config-key]
   (if-let [ks (active-keys text)]
     (contains? ks (keyword config-key))
-    (str/includes? text (str ":" config-key))))
+    (= :already-present (config-edn/key-status text (str ":" config-key)))))
 
 (defn patch-config!
   "Inject snippet into the :active map of a config file unless its key is there.
