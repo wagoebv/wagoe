@@ -14,6 +14,7 @@
             [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing use-fixtures]]
+            [wagoe.admin.ports :as admin-ports]
             [wagoe.platform.shell.http.reitit-router :as reitit]
             [wagoe.user.ports :as user-ports]
             [wagoe.user.shell.auth :as auth-shell]
@@ -413,19 +414,24 @@
                                           :reason :insufficient-permissions})]
            (get-in entity [:workflow :available-transitions])))))
 
+(defn- listing-store
+  "A store whose list-instances is `f`; nothing else answers."
+  [f]
+  (reify ports/IWorkflowStore
+    (save-instance! [_ _] nil)
+    (find-instance [_ _] nil)
+    (find-instance-by-entity [_ _ _] nil)
+    (update-instance-state! [_ _ _] nil)
+    (save-audit-entry! [_ _] nil)
+    (find-audit-log [_ _] nil)
+    (delete-instance! [_ _] nil)
+    (list-instances [_ opts] (f opts))))
+
 (deftest ^:unit the-admin-list-page-hides-the-exception
   ;; The message can carry driver or config detail (BOU-555).
-  (let [store    (reify ports/IWorkflowStore
-                   (save-instance! [_ _] nil)
-                   (find-instance [_ _] nil)
-                   (find-instance-by-entity [_ _ _] nil)
-                   (update-instance-state! [_ _ _] nil)
-                   (save-audit-entry! [_ _] nil)
-                   (find-audit-log [_ _] nil)
-                   (delete-instance! [_ _] nil)
-                   (list-instances [_ _]
-                     (throw (RuntimeException. "jdbc:postgresql://db password=hunter2"))))
-        response (sut/handle-list-instances-web store {})]
+  (let [store    (listing-store
+                  (fn [_] (throw (RuntimeException. "jdbc:postgresql://db password=hunter2"))))
+        response (sut/handle-list-instances-web store (registry/create-workflow-registry) nil {})]
     (is (= 500 (:status response)))
     (is (not (re-find #"hunter2" (:body response))))
     (is (re-find #"error-generic" (:body response)))))
@@ -436,6 +442,70 @@
   (let [store    (service-test/create-memory-store)
         registry (registry/create-workflow-registry)]
     (doseq [id ["not-a-uuid" (str (UUID/randomUUID))]]
-      (let [response (sut/handle-get-instance-web store registry {:path-params {:id id}})]
+      (let [response (sut/handle-get-instance-web store registry nil {:path-params {:id id}})]
         (is (= 404 (:status response)) id)
         (is (re-find #"not found" (:body response)) id)))))
+
+(def ^:private schema-provider
+  (reify admin-ports/ISchemaProvider
+    (fetch-table-metadata [_ _] nil)
+    (get-entity-config [_ e] {:label (str "Label " (name e))})
+    (list-available-entities [_] [:invoices])
+    (get-entity-label [_ _] nil)
+    (validate-entity-exists [_ _] true)))
+
+(deftest ^:unit the-admin-pages-sit-in-the-admin-shell
+  ;; With the sidebar listing the admin's entities, like every other admin page.
+  (let [store (service-test/create-memory-store)
+        reg   (registry/create-workflow-registry)
+        admin {:schema-provider schema-provider :logo-url "/logo.png"}
+        req   {:user {:role :admin}}
+        body  (:body (sut/handle-list-instances-web store reg admin req))]
+    (is (str/includes? body "admin-sidebar"))
+    (is (str/includes? body "href=\"/web/admin/invoices\""))
+    (is (str/includes? body "Label invoices"))
+    (is (str/includes? body "/logo.png"))
+    (testing "without the admin the shell lists no entities"
+      (let [body (:body (sut/handle-list-instances-web store reg nil req))]
+        (is (str/includes? body "admin-sidebar"))
+        (is (not (str/includes? body "/web/admin/invoices")))))
+    (testing "nor to a user the admin would not admit"
+      (let [body (:body (sut/handle-list-instances-web store reg admin {:user {:role :user}}))]
+        (is (not (str/includes? body "/web/admin/invoices")))))))
+
+(deftest ^:unit the-state-filter-takes-the-badge-label
+  ;; The badge shows :on-hold as "On hold"; the filter took only the id.
+  (let [seen  (atom nil)
+        store (listing-store (fn [opts] (reset! seen opts) []))
+        reg   (registry/create-workflow-registry)]
+    (doseq [[typed expected] [["On hold" :on-hold] ["on-hold" :on-hold] ["  Paid " :paid]]]
+      (sut/handle-list-instances-web store reg nil {:query-params {"state" typed}})
+      (is (= expected (:current-state @seen)) typed))
+    (sut/handle-list-instances-web store reg nil {:query-params {"state" "  "}})
+    (is (not (contains? @seen :current-state)))))
+
+(deftest ^:unit the-state-filter-offers-the-registered-states
+  (let [reg (registry/create-workflow-registry)]
+    (ports/register-workflow! reg {:id :state-filter-test :initial-state :pending
+                                   :states #{:pending :on-hold}
+                                   :transitions [{:from :pending :to :on-hold}]})
+    (let [body (:body (sut/handle-list-instances-web (listing-store (constantly [])) reg nil
+                                                     {:query-params {"state" "on-hold"}}))]
+      (is (str/includes? body "<option selected=\"selected\" value=\"on-hold\">On hold</option>"))
+      (is (str/includes? body "<option value=\"pending\">Pending</option>")))
+    (testing "a filter typed as the label selects that state"
+      (let [body (:body (sut/handle-list-instances-web (listing-store (constantly [])) reg nil
+                                                       {:query-params {"state" "On hold"}}))]
+        (is (str/includes? body "<option selected=\"selected\" value=\"on-hold\">On hold</option>"))))))
+
+(deftest ^:unit the-state-filter-keeps-a-registered-id-as-it-is
+  ;; Lower-casing every value turned :inReview into :inreview, which matches nothing.
+  (let [seen  (atom nil)
+        store (listing-store (fn [opts] (reset! seen opts) []))
+        reg   (registry/create-workflow-registry)]
+    (ports/register-workflow! reg {:id :state-case-test :initial-state :draft
+                                   :states #{:draft :inReview}
+                                   :transitions [{:from :draft :to :inReview}]})
+    (doseq [typed ["inReview" "Inreview" " inreview "]]
+      (sut/handle-list-instances-web store reg nil {:query-params {"state" typed}})
+      (is (= :inReview (:current-state @seen)) typed))))

@@ -53,9 +53,7 @@
     (if (display/tones tone) tone :neutral)))
 
 (defn- enum-badge [field-config value]
-  (let [tone (enum-tone field-config value)]
-    (ui/badge (enum-label field-config value)
-              {:variant tone :class (str "c-badge tone-" (name tone))})))
+  (ui/tone-badge (enum-label field-config value) (enum-tone field-config value)))
 
 (defn- matches-value? [record [field values]]
   (let [v (get record field)]

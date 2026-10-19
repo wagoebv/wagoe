@@ -4,6 +4,7 @@
             [clojure.test :refer [deftest is testing]]
             [hiccup2.core :as h]
             [wagoe.admin.core.display :as display]
+            [wagoe.admin.core.ui.base :as base]
             [wagoe.admin.core.ui.cells :as cells])
   (:import (java.time Instant ZoneId)
            (java.util Locale)))
@@ -126,3 +127,10 @@
 (deftest ^:unit page-totals-sum-what-is-a-number
   (is (= 30.50M (cells/page-total [{:a 10} {:a "20.50"} {:a nil} {:a "x"}] :a)))
   (is (nil? (cells/page-total [{:a nil}] :a))))
+
+(deftest ^:unit a-workflow-state-is-a-current-state-badge
+  ;; As the workflow pages show it, not an outline badge with the raw id.
+  (let [html (str (h/html (base/workflow-state-link {:instance-id "i1" :state :on-hold})))]
+    (is (str/includes? html "href=\"/web/admin/workflows/i1\""))
+    (is (str/includes? html "c-badge tone-success"))
+    (is (str/includes? html ">On hold<"))))
