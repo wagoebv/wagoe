@@ -546,7 +546,7 @@ jobs:
     #
     # `:app` is the root tree only. `:unit` added every library's tests again,
     # which the per-library jobs already run, and made this the job the whole
-    # run waited on (BOU-615). `bb test:all` still runs `:unit` locally.
+    # run waited on (BOU-615). It is gone now: it ran every test twice locally.
     steps:
       - uses: actions/checkout@v6
 
@@ -555,7 +555,7 @@ jobs:
         with:
           aliases: -M:test:test/all
 
-      - name: Run app + unit suite
+      - name: Run app suite
         env:
           JWT_SECRET: "ci-test-secret-minimum-32-characters"
           WAG_ENV: test

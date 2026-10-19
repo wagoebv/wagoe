@@ -28,7 +28,9 @@
       (let [emitter (:wagoe/metrics system)
             handler (route-handler (:api (:wagoe/user-routes system)) "/users/:id" :get)
             user    (user-ports/register-user (:wagoe/user-service system)
-                                              {:email "op-metrics@example.com" :name "Op" :role :user
+                                              ;; Unique: test systems share one in-memory DB.
+                                              {:email (str "op-metrics-" (random-uuid) "@example.com")
+                                               :name "Op" :role :user
                                                :password "Kit-Passw0rd-469!"})]
         (is (some? handler) "GET /users/:id is not in the user module's routes")
         (is (= 200 (:status (handler {:request-method :get

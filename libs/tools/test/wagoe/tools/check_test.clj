@@ -404,20 +404,9 @@
       (throw (ex-info "tests.edn not found — cannot verify the suite/CI lockstep" {:cwd cwd})))))
 
 (defn- declared-suites
-  "Suite ids in tests.edn.
-
-   `:unit` used to be excluded here as \"the aggregate\". It is also the suite
-   that holds the root `test/` tree — the BOU-326 wiring gate and the BOU-91
-   service-catalogue gate — and excluding it meant the lockstep below could not
-   notice that no CI job ran it. It did not, for as long as anyone had looked,
-   and a pull request merged green while the service-catalogue gate was failing
-   (BOU-422).
-
-   It is excluded again now that CI runs the root tree as `:app` and each
-   library in its own job (BOU-615); `unit-is-covered-piecewise-by-ci` keeps
-   the lockstep for it."
+  "Suite ids in tests.edn."
   []
-  (->> (:tests (tests-edn)) (map :id) (map name) (remove #{"unit"}) set))
+  (->> (:tests (tests-edn)) (map :id) (map name) set))
 
 (defn- ci-run-suites
   "{suite-name alias-string} for each `clojure -M:test… :<suite>` CI runs."
@@ -446,19 +435,32 @@
           (str "CI runs suites absent from tests.edn: "
                (pr-str (sort (remove declared (keys in-ci)))))))))
 
-(deftest ^:unit unit-is-covered-piecewise-by-ci
-  ;; CI runs the root tree as :app and each library as its own suite, not the
-  ;; :unit aggregate (BOU-615). So every :unit test path must belong to a suite
-  ;; CI runs; libs/config is a standalone lib with its own job.
-  (let [suites (:tests (tests-edn))
-        in-ci  (set (keys (ci-run-suites (ci-workflow))))
-        run    (into #{"libs/config/test"}
-                     (comp (filter #(in-ci (name (:id %)))) (mapcat :test-paths))
-                     suites)
-        unit   (:test-paths (first (filter #(= :unit (:id %)) suites)))]
-    (is (seq unit) "found no :unit suite; the assertion below would pass vacuously")
-    (is (empty? (remove run unit))
-        (str ":unit test paths no CI suite runs: " (pr-str (remove run unit))))))
+(defn- suite-nss
+  "The test namespaces `suite` picks up, named from their paths as kaocha
+   names them."
+  [root {:keys [test-paths ns-patterns]}]
+  (set (for [dir   test-paths
+             :let  [base (.toPath (io/file root dir))]
+             ^java.io.File f (file-seq (.toFile base))
+             :let  [rel (str (.relativize base (.toPath f)))]
+             :when (re-find #"\.cljc?$" rel)
+             :let  [ns (-> rel (str/replace #"\.cljc?$" "") (str/replace "_" "-") (str/replace "/" "."))]
+             :when (some #(re-find (re-pattern %) ns) ns-patterns)]
+         ns)))
+
+(deftest ^:unit every-test-namespace-is-in-exactly-one-suite
+  ;; Kaocha runs every suite by default, so a namespace two suites pick up runs
+  ;; twice in one JVM and can collide with its own first run: op-metrics-test
+  ;; registered the same user twice while an aggregate :unit suite overlapped
+  ;; :app and every library suite (BOU-758).
+  (let [cwd    (System/getProperty "user.dir")
+        root   (if (.exists (io/file cwd "tests.edn")) (io/file cwd) (io/file cwd ".." ".."))
+        owners (->> (:tests (tests-edn))
+                    (mapcat (fn [suite] (map #(vector % (:id suite)) (suite-nss root suite))))
+                    (reduce (fn [m [ns id]] (update m ns (fnil conj []) id)) {}))]
+    (is (< 500 (count owners)) "found few test namespaces; the assertion below would pass vacuously")
+    (is (empty? (into (sorted-map) (filter #(< 1 (count (val %)))) owners))
+        "namespaces more than one suite runs")))
 
 (deftest ^:unit suites-needing-heavy-deps-request-them
   ;; The heavy test dependencies moved out of the shared :test alias so 25

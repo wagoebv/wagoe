@@ -30,42 +30,10 @@
                         "libs/test/src"
                         "libs/webhooks/src"]
 
-  :tests [{:id :unit
-           :test-paths ["test"
-                        "libs/config/test"
-                        "libs/core/test"
-                        "libs/observability/test"
-                        "libs/platform/test"
-                        "libs/user/test"
-                        "libs/admin/test"
-                        "libs/storage/test"
-                        "libs/scaffolder/test"
-                        "libs/cache/test"
-                        "libs/jobs/test"
-                        "libs/email/test"
-                        "libs/tenant/test"
-                        "libs/realtime/test"
-                        "libs/payments/test"
-                        "libs/external/test"
-                        "libs/workflow/test"
-                        "libs/search/test"
-                        "libs/reports/test"
-                        "libs/calendar/test"
-                        "libs/geo/test"
-                        "libs/ai/test"
-                        "libs/ui-style/test"
-                        "libs/shared-ui/test"
-                        "libs/i18n/test"
-                        "libs/devtools/test"
-                        "libs/push/test"
-                        "libs/audience/test"
-                        "libs/test/test"
-                        "libs/webhooks/test"]
-           :ns-patterns ["wagoe.*-test"]
-           :randomize? true}
-
-         ;; The root test/ tree alone: what :unit adds over the per-library
-         ;; suites. CI runs this, since each library has its own job (BOU-615).
+  ;; Each test namespace belongs to exactly one suite, so a full run executes
+  ;; it once (check_test.clj pins this). Kaocha runs every suite by default.
+  :tests [
+         ;; The root test/ tree. Each library has its own suite below.
           {:id :app
            :test-paths ["test"]
            :ns-patterns ["wagoe.*-test"]
