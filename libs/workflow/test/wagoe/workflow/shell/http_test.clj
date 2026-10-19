@@ -252,16 +252,15 @@
     (into {} (for [route (keys route-success)] [route (:status (call-route route token))]))))
 
 (deftest ^:unit the-reads-need-the-read-permission
-  (testing "a plain user is refused the reads, and may still start and transition"
+  (testing "a plain user is refused the reads and the start, and may still transition"
     (let [seen (statuses {:role :user})]
-      (is (= {:get 403 :lookup 403 :audit 403} (select-keys seen reads)))
-      (is (= 201 (:start seen)))
+      (is (= {:get 403 :lookup 403 :audit 403 :start 403} (select-keys seen (conj reads :start))))
       (is (= 422 (:transition seen)) "refused by the transition's own permission")))
   (testing "a user whose group grants :workflow/read reads"
     (let [id (UUID/randomUUID)]
       (swap! readers conj id)
-      (is (= {:get 200 :lookup 200 :audit 200}
-             (select-keys (statuses {:id id :role :user}) reads)))))
+      (is (= {:get 200 :lookup 200 :audit 200 :start 201}
+             (select-keys (statuses {:id id :role :user}) (conj reads :start))))))
   (testing "a platform admin reads"
     (is (= route-success (statuses {:role :admin}))))
   (testing "the refusal names the permission"

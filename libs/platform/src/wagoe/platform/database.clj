@@ -298,6 +298,10 @@
   "The libraries' migration directories that run inside every tenant schema."
   migrations/discover-tenant-migration-dirs)
 
+(def refuse-duplicate-migration-ids!
+  "Throw when two migrations in the directories share an id, naming both."
+  migrations/refuse-duplicate-migration-ids!)
+
 (def create-destination
   "The directory migratus actually reads `project-migration-dir` from, as a path."
   migrations/create-destination)

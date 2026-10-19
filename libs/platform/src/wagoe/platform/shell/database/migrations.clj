@@ -111,7 +111,9 @@
          tenant?       (= :tenant-paths k)
          paths         (cond
                          (vector? manifest-data) (if tenant? [] manifest-data)
-                         (map? manifest-data)    (get manifest-data k (when tenant? []))
+                         ;; Either key may be left out when the other is there.
+                         (map? manifest-data)    (get manifest-data k
+                                                      (when (or tenant? (contains? manifest-data :tenant-paths)) []))
                          :else nil)]
      (when-not (sequential? paths)
        (throw (ex-info "Invalid migration manifest"

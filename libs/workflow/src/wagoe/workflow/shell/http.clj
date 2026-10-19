@@ -18,9 +18,9 @@
    Every route requires authentication: the API answers 401 without it, the
    admin pages send to the login form. Instances live in the tenant's schema,
    read through the request's tenant-bound transaction, so every route also
-   refuses a caller outside the request's tenant with 403. The API's reads
-   need the :admin role or a :workflow/read grant; the admin pages need an
-   admin."
+   refuses a caller outside the request's tenant with 403. The API's reads,
+   and starting an instance, need the :admin role or a :workflow/read grant;
+   the admin pages need an admin."
   (:require [clojure.string :as str]
             [wagoe.admin.core.permissions :as admin-permissions]
             [wagoe.admin.core.ui.layout :as admin-layout]
@@ -125,8 +125,8 @@
       (and group-service
            (group/holds? (user-ports/user-grants group-service (:user request)) read-permission))))
 
-(defn- forbidden [message]
-  (errors/response 403 :forbidden message))
+(defn- forbidden [message request]
+  (access/forbidden-response message request (access/correlation-id request (str (random-uuid)))))
 
 (defn- scoped
   "`handler` for a caller in the request's tenant; 403 for anyone else."
@@ -134,7 +134,7 @@
   (fn [request]
     (if (in-tenant-scope? request)
       (handler request)
-      (forbidden "Not a member of this tenant"))))
+      (forbidden "Not a member of this tenant" request))))
 
 (defn- readable
   "`scoped` `handler` for a caller who may read instances; 403 for anyone else."
@@ -143,7 +143,8 @@
             (if (may-read? group-service request)
               (handler request)
               (forbidden (str "Reading workflow instances needs the "
-                              (group/permission-str read-permission) " permission"))))))
+                              (group/permission-str read-permission) " permission")
+                         request)))))
 
 ;; =============================================================================
 ;; Handlers
@@ -268,7 +269,8 @@
                :parameters {:query [:map
                                     [:entity-type :string]
                                     [:entity-id :uuid]]}}
-        :post {:handler (scoped (fn [req] (handle-start-workflow engine req)))
+        ;; A reader's too: a start for an entity that has one answers it.
+        :post {:handler (readers-only (fn [req] (handle-start-workflow engine req)))
                :summary "Start a new workflow instance"
                :interceptors signed-in
                :parameters {:body [:map {:closed true}

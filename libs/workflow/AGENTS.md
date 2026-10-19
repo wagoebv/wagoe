@@ -316,7 +316,7 @@ Routes are defined in `shell/http.clj` as Reitit route data (no `/api` prefix) a
 
 Who may call them:
 
-- The three `GET`s need the `:admin` role or a `:workflow/read` grant
+- The three `GET`s and the start need the `:admin` role or a `:workflow/read` grant
   (`wagoe.user.core.group/holds?` over `user-grants`), else 403. An application
   that declares its group permissions must declare `:workflow/read`.
 - Every route, and the admin pages under `/web/admin/workflows`, answers 403 to a
@@ -354,7 +354,8 @@ runs it when it provisions a tenant and in every tenant schema at boot
 tenant-bound transaction (`db/connectable-for` its datasource), so a
 tenant reads and writes only its own instances. Isolation therefore needs
 PostgreSQL; on the H2 test profile all tenants share one table. Instances a
-tenant started before this live in `public`.
+tenant started before this live in `public`. Side-effect jobs carry no tenant,
+so a handler that reads the instance must run in its tenant's schema.
 
 ## Gotchas
 

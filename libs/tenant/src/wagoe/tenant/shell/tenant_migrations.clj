@@ -26,9 +26,11 @@
 
 (defn tenant-migration-dirs
   "What a tenant schema runs: the application's `migrations-tenant/`, then the
-   tenant directories the libraries on the classpath ship."
+   tenant directories the libraries on the classpath ship. They share one
+   ledger per schema, so two migrations with one id are refused."
   []
-  (into [default-tenant-migration-dir] (db/discover-tenant-migration-dirs)))
+  (doto (into [default-tenant-migration-dir] (db/discover-tenant-migration-dirs))
+    db/refuse-duplicate-migration-ids!))
 
 (defn migrate-tenant!
   "Run all pending tenant-scoped migrations inside one tenant schema of the

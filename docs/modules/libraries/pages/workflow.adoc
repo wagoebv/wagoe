@@ -124,9 +124,9 @@ GET  /api/v1/workflow/instances/:id/audit      # Get audit trail
 ----
 
 Every route requires authentication (session or bearer token) and answers 401 without it.
-The three reads also need the `:admin` role or a `:workflow/read` grant from one of the caller's groups, and answer 403 without either.
+The three reads and the start also need the `:admin` role or a `:workflow/read` grant from one of the caller's groups, and answer 403 without either.
 If your application declares the permissions a group may grant, declare `:workflow/read` among them.
-Starting and transitioning need no grant: a transition's `:required-permissions` decide.
+A transition needs no grant: its `:required-permissions` decide.
 
 In a multi-tenant application every route answers 403 to a caller outside the request's tenant: not a member of it, not one of its users and not a platform admin.
 Without a tenant, only a user of no tenant is served.
