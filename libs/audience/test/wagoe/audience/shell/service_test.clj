@@ -292,3 +292,46 @@
             "Only the user matching both segments should be in the intersection")
         (is (= 1 (:count result)))
         (is (false? (:cached? result)))))))
+
+(deftest ^:unit nested-composition-or-and-not
+  (let [paid    {:id (uuid) :plan "paid"}
+        trial   {:id (uuid) :plan "trial"}
+        churned {:id (uuid) :plan "paid" :churned "yes"}
+        svc     (make-service [paid trial churned])]
+    (registry/register-audience! {:id :paid :label "P" :filters [{:type :demographics :field :plan :op :eq :value "paid"}]})
+    (registry/register-audience! {:id :trial :label "T" :filters [{:type :demographics :field :plan :op :eq :value "trial"}]})
+    (registry/register-audience! {:id :churned :label "C" :filters [{:type :demographics :field :churned :op :eq :value "yes"}]})
+    (registry/register-audience! {:id :paying :label "Paying" :filters []
+                                  :compose {:and [{:ref :paid} {:not {:ref :churned}}]}})
+    (registry/register-audience! {:id :engaged :label "Engaged" :filters []
+                                  :compose {:or [{:ref :paying} {:ref :trial}]}})
+    (is (= #{(:id paid) (:id trial)} (:user-ids (ports/resolve-audience svc :engaged)))
+        "a composed ref inside a composition resolves through its own tree")))
+
+(deftest ^:unit a-composition-that-cannot-resolve-is-a-typed-error
+  ;; A -> B -> A recursed through resolve-audience until StackOverflowError,
+  ;; which no handler catches: the core's cycle guard never saw the refs.
+  (let [svc (make-service [])]
+    (registry/register-audience! {:id :cyc-a :label "A" :filters [] :compose {:and [{:ref :cyc-b}]}})
+    (registry/register-audience! {:id :cyc-b :label "B" :filters [] :compose {:and [{:ref :cyc-a}]}})
+    (registry/register-audience! {:id :self :label "S" :filters [] :compose {:or [{:ref :self}]}})
+    (registry/register-audience! {:id :dangling :label "D" :filters [] :compose {:and [{:ref :nowhere}]}})
+    (doseq [[id expected] [[:cyc-a :circular-reference]
+                           [:self :circular-reference]
+                           [:dangling :unknown-segment-ref]]]
+      (is (= expected
+             (try (ports/resolve-audience svc id) nil
+                  (catch clojure.lang.ExceptionInfo e (:type (ex-data e)))))
+          (name id)))))
+
+(deftest ^:unit a-composed-ref-is-evaluated-as-of-the-callers-date
+  ;; Refs were resolved without the caller's opts, so a leaf's date filter
+  ;; used today rather than :as-of.
+  (let [used (java.util.Date/from (java.time.Instant/parse "2026-01-05T12:00:00Z"))
+        user {:id (uuid) :feature-usage {:export used}}
+        svc  (make-service [user])]
+    (registry/register-audience! {:id :exporters :label "E"
+                                  :filters [{:type :feature-usage :field :export :op :used-within :value 14}]})
+    (registry/register-audience! {:id :all-exporters :label "A" :filters [] :compose {:or [{:ref :exporters}]}})
+    (is (= #{(:id user)}
+           (:user-ids (ports/resolve-audience svc :all-exporters {:as-of (java.time.LocalDate/of 2026 1 10)}))))))

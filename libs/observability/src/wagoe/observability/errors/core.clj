@@ -110,7 +110,8 @@
      Classification map with :type, :category, :severity"
   [exception]
   (let [ex-type (-> exception class .getSimpleName)
-        ex-message (.getMessage exception)]
+        ;; str: an NPE has no message, and re-find on nil throws.
+        ex-message (str (.getMessage exception))]
     {:type ex-type
      :category (cond
                  (re-find #"(?i)validation|invalid|malformed" ex-message) :validation
@@ -572,13 +573,14 @@
     :client-secret :private-key :credential :auth-token})
 
 (defn merge-error-configs
-  "Merges multiple error reporting configurations.
-   
+  "Merges multiple error reporting configurations. A later value wins unless
+   it is nil.
+
    Args:
      configs - Variable number of configuration maps
-   
+
    Returns:
      Merged configuration map"
   [& configs]
-  (apply merge-with (fn [a b] (if (coll? b) b a)) configs))
+  (apply merge-with (fn [a b] (if (nil? b) a b)) configs))
 

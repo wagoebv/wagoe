@@ -253,7 +253,7 @@ which is a user-module component that service selection drops. Run `service audi
 Refusing is deliberate — segment management served without authorization is worse than a
 service that does not come up (BOU-419).
 
-**Date filters.** `:account-tenure` and `:last-active` need `:now`. `compile-segment`'s
+**Date filters.** `:account-tenure`, `:last-active` and `:feature-usage` need `:now`. `compile-segment`'s
 two-argument arity supplies it, and a filter may carry its own. Without one they are neither
 SQL nor a predicate, and `compile-segment` lists them under `:unsupported` — the service
 refuses to resolve an audience that has any, because a definition whose only filter is

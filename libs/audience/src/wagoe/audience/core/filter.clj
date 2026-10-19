@@ -115,17 +115,20 @@
   (field-clause filt))
 
 (defmethod filter->predicate :demographics [{:keys [field op value]}]
+  ;; A missing value matches no comparison, as NULL does in SQL: compare sorts
+  ;; nil below everything, so :lt matched every user without the field.
   (let [[honey-op honey-val] (sql-op op value)
+        ord        (fn [p] #(and (some? %) (p (compare % honey-val))))
         compare-fn (case honey-op
                      :=    #(= % honey-val)
-                     :<>   #(not= % honey-val)
-                     :>    #(pos? (compare % honey-val))
-                     :>=   #(>= (compare % honey-val) 0)
-                     :<    #(neg? (compare % honey-val))
-                     :<=   #(<= (compare % honey-val) 0)
+                     :<>   #(and (some? %) (not= % honey-val))
+                     :>    (ord pos?)
+                     :>=   (ord (complement neg?))
+                     :<    (ord neg?)
+                     :<=   (ord (complement pos?))
                      :in   #(contains? (set honey-val) %)
                      :like (let [pat (re-pattern (str "(?i).*" (Pattern/quote (str value)) ".*"))]
-                             #(boolean (re-find pat (str %))))
+                             #(and (some? %) (boolean (re-find pat (str %)))))
                      ;; validated up front; unreachable, matches nobody
                      (constantly false))]
     (fn [user] (compare-fn (get user field)))))
@@ -232,13 +235,14 @@
   nil)
 
 (defmethod filter->predicate :feature-usage [{:keys [field op value now]}]
-  (let [today now]
+  ;; nil without a date — see :account-tenure above.
+  (when now
     (case op
       :used-within
       (fn [user]
         (let [usage (get-in user [:feature-usage field])]
           (when usage
-            (let [cutoff    (.minusDays today value)
+            (let [cutoff    (.minusDays now value)
                   last-used (.toLocalDate (.atZone (.toInstant usage)
                                                    java.time.ZoneOffset/UTC))]
               (not (.isBefore last-used cutoff))))))

@@ -410,7 +410,8 @@
    Returns:
      nil"
   [emitter component status duration]
-  (let [base-tags {:component (str component)
+  (let [status    (or (some-> status keyword) :unknown)
+        base-tags {:component (str component)
                    :status (name status)}]
     ;; Count health checks
     (count-events emitter "health-check" base-tags)
@@ -421,10 +422,11 @@
 
     ;; Set health status gauge
     (let [gauge-name (build-metric-name "health" "status" (str component))
+          ;; Any other status reads as unhealthy rather than throwing.
           status-value (case status
                          :healthy 1
                          :degraded 0.5
-                         :unhealthy 0)]
+                         0)]
       (set-gauge-value emitter gauge-name status-value {:component (str component)}))))
 
 ;; =============================================================================

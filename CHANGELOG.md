@@ -183,6 +183,13 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Error reporting failed on exceptions without a message** (BOU-463), so a `NullPointerException` never reached
+  Sentry. Upgrade if you report errors.
+- **A circular audience composition overflowed the stack** (BOU-463); it now answers 422, as does an unknown ref.
+  Create and update also return the audience id without a leading colon.
+- **The SLF4J logger cleared the caller's MDC after each call** (BOU-463). It now restores it.
+- **Smaller observability and audience fixes** (BOU-463): `track-health-check` no longer throws on an unknown status,
+  `merge-error-configs` lets later values win, and audience predicates treat a missing field as SQL treats NULL.
 - **`bb ai explain` quotes a Wagoe error's own fix first, code or not, and tells the model to keep it** (BOU-512).
   The unclaimed `:active` key error is now WGE-106.
 - **Tables without a checkbox column squeezed their first and last columns** (BOU-595). Your own `data-table`
