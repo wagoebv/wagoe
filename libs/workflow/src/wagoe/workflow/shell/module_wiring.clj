@@ -20,6 +20,7 @@
    :wagoe/workflow-routes
      {:workflow-service (ig/ref :wagoe/workflow)
       :user-service     (ig/ref :wagoe/user-service)
+      :group-service    (ig/ref :wagoe/user-group-service)   ; for the :workflow/read grant
       ;; With the admin on, for the admin shell's sidebar:
       :admin            {:schema-provider (ig/ref :wagoe/admin-schema-provider)
                          :logo-url        <the admin's :logo-url>}}
@@ -31,28 +32,15 @@
             [wagoe.workflow.shell.registry :as registry]
             [wagoe.workflow.shell.persistence :as persistence]
             [wagoe.workflow.shell.service :as service]
-            [wagoe.workflow.shell.unique-instances :as unique-instances]
-            [wagoe.workflow.shell.entity-uuid :as entity-uuid]
+            [wagoe.workflow.shell.tables :as tables]
             [wagoe.workflow.shell.http :as workflow-http]
             [wagoe.workflow.shell.admin-adapter :as admin-adapter]
             [clojure.tools.logging :as log]))
-
-(def ^:private migration-resource "wagoe/workflow/migrations/20260926100000-workflow-tables.up.sql")
 
 (def ^:private altering-profiles
   "Where the boot may change an existing table: the profiles `db:reset` may
    reset. Anywhere else it changes only through `migrate up`."
   #{:dev :test :acc})
-
-(def ^:private boot-changes
-  "What the boot adds to workflow_instances when the profile allows, and how
-   it tells the change is there."
-  [{:what     "the unique index on (workflow_id, entity_type, entity_id) (BOU-581)"
-    :present? unique-instances/present?
-    :ensure!  unique-instances/ensure-unique!}
-   {:what     "the entity_uuid column (BOU-589)"
-    :present? entity-uuid/present?
-    :ensure!  entity-uuid/ensure-entity-uuid!}])
 
 (defn- initialize-workflow-schema!
   "Create workflow's tables at boot, for installations that never ran
@@ -61,9 +49,9 @@
    through a migration. There the boot warns about what is missing and goes on."
   [ctx profile]
   (log/info "Initializing workflow schema")
-  (db/execute-migration-ddl! ctx migration-resource)
+  (db/execute-migration-ddl! ctx tables/migration-resource)
   (let [ds (:datasource ctx)]
-    (doseq [{:keys [what present? ensure!]} boot-changes]
+    (doseq [{:keys [what present? ensure!]} tables/boot-changes]
       (cond
         (contains? altering-profiles profile) (ensure! ds)
         (present? ds)                         nil
@@ -105,10 +93,10 @@
 ;; =============================================================================
 
 (defmethod ig/init-key :wagoe/workflow-routes
-  [_ {:keys [workflow-service user-service admin]}]
+  [_ {:keys [workflow-service user-service group-service admin]}]
   (log/info "Initializing workflow routes")
   {:api    (workflow-http/workflow-routes
-            (:engine workflow-service))
+            (:engine workflow-service) group-service)
    :web    (workflow-http/workflow-web-routes
             (:store workflow-service)
             (:registry workflow-service)
@@ -159,7 +147,8 @@
                                  (contains? (or enabled #{}) :wagoe/jobs)
                                  (assoc :job-queue (ig/ref :wagoe/job-queue)))
      :wagoe/workflow-routes    {:workflow-service (ig/ref :wagoe/workflow)
-                                :user-service     (ig/ref :wagoe/user-service)}}
+                                :user-service     (ig/ref :wagoe/user-service)
+                                :group-service    (ig/ref :wagoe/user-group-service)}}
     :routes [(ig/ref :wagoe/workflow-routes)]}
     ;; What the admin reads an entity's workflow state through and removes its
     ;; instances with (BOU-563); the admin's wiring refs it when workflow is on.
