@@ -31,6 +31,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **Storage records every upload's owner, and exports and expires uploads** (BOU-738): a `storage_uploads` table
+  feeds a `:storage` export section and the `:storage/uploads` retention policy. Run `migrate up`.
+- **Data export as a zip with the files** (BOU-738): `?format=zip` or `Accept: application/zip` on any export
+  route. JSON stays the default.
 - **`bb scaffold entity` gives the entity web pages** (BOU-542): a list and a create form, as the first entity has,
   with a select for its `--belongs-to` parent. Nothing to do; a module generated with `--no-web` gets none.
 - **`:wagoe/user :login-layout` lets an app lay out the sign-in pages** (BOU-740): login, MFA and registration.
@@ -183,6 +187,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Redis dead-letter retention could delete a job `retry-job!` had just retried** (BOU-738). It now purges in
+  one atomic pass. Upgrade if you retain `:jobs/dead-letter` on Redis.
+- **A job store without `IDeadLetterRetention` failed every retention run** (BOU-738); configuring
+  `:jobs/dead-letter` over one now fails the boot instead.
 - **Error reporting failed on exceptions without a message** (BOU-463), so a `NullPointerException` never reached
   Sentry. Upgrade if you report errors.
 - **A circular audience composition overflowed the stack** (BOU-463); it now answers 422, as does an unknown ref.

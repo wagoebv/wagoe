@@ -4,7 +4,15 @@
    blocks does not mean remembering which one wanted which word (BOU-436)."
   (:require [clojure.test :refer [deftest is testing]]
             [integrant.core :as ig]
-            [wagoe.jobs.shell.module-wiring :as wiring]))
+            [wagoe.jobs.shell.adapters.in-memory :as mem]
+            [wagoe.jobs.shell.module-wiring :as wiring]
+            [wagoe.platform.ports.privacy :as privacy]))
+
+(deftest ^:unit dead-letter-retention-needs-a-store-that-implements-it
+  (is (satisfies? privacy/IRetentionPolicy
+                  (ig/init-key :wagoe/job-dead-letter-retention {:store (mem/create-in-memory-job-store)})))
+  (is (nil? (ig/init-key :wagoe/job-dead-letter-retention {:store (reify Object)}))
+      "nil, which :wagoe/retention refuses when the policy is configured"))
 
 (deftest ^:unit the-provider-vocabulary-is-shared
   (testing "the canonical spellings pass through untouched"

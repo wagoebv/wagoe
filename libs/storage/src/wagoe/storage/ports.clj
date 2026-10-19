@@ -63,6 +63,30 @@
     String containing the signed URL, or nil if not supported"))
 
 ;; ============================================================================
+;; Upload Index Port
+;; ============================================================================
+
+(defprotocol IUploadIndex
+  "Who stored which file, and when. `IFileStorage` cannot list files, so data
+  export and upload retention read this instead.
+
+  An upload is {:key :user-id :tenant-id :size :content-type :stored-at};
+  either owner may be nil."
+
+  (record-upload! [this upload]
+    "Record `upload`, replacing any record with the same key.")
+
+  (remove-upload! [this file-key]
+    "Forget the upload at `file-key`. Returns true when there was one.")
+
+  (find-uploads [this owner opts]
+    "Uploads of `owner`, {:user-id id} or {:tenant-id id}, in key order.
+    `opts`: :limit, and :after-key to read the page after that key.")
+
+  (uploads-stored-before [this cutoff limit]
+    "At most `limit` uploads stored before `cutoff`, an Instant."))
+
+;; ============================================================================
 ;; Image Processing Port
 ;; ============================================================================
 

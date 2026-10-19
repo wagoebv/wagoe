@@ -46,7 +46,7 @@ Enabling `:wagoe/jobs` builds the runtime. Nothing else to assemble.
 | `:wagoe/job-workers` | One pool of `:count` workers per queue in `:queues` |
 | `:wagoe/job-scheduler` | The recurring-job ticker; `recurring/schedule-recurring!` takes it |
 | `:wagoe/idempotency-store` | `IIdempotencyStore` on the provider's backend, for any module |
-| `:wagoe/job-dead-letter-retention` | The `:jobs/dead-letter` retention policy over the store's `IDeadLetterRetention` |
+| `:wagoe/job-dead-letter-retention` | The `:jobs/dead-letter` retention policy over the store's `IDeadLetterRetention`; nil for a store without it, so configuring the policy fails the boot |
 
 Set `:workers {:count 0}` on a web node in the web/worker split — it enqueues
 and processes nothing. The default of 1 is a single process that does both,

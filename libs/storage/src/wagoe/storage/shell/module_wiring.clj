@@ -11,6 +11,10 @@
      Returns {:provider <kw> :storage <IFileStorage> :service <IStorageService>}.
      Consumers (e.g. :wagoe/storage-routes) use :service.
 
+   The module also records every upload in `storage_uploads`
+   (:wagoe.storage/upload-index), and contributes a subject's uploads to data
+   export and the `:storage/uploads` retention policy.
+
    The `:local` provider accepts the catalogue's `:root` as an alias for the
    local adapter's `:base-path`."
   (:require [integrant.core :as ig]
@@ -19,7 +23,9 @@
             [wagoe.storage.shell.adapters.gcs :as gcs]
             [wagoe.storage.shell.adapters.image-processor :as image-processor]
             [wagoe.storage.shell.service :as service]
+            [wagoe.storage.shell.data-export :as data-export]
             [wagoe.storage.shell.http-handlers :as http-handlers]
+            [wagoe.storage.shell.upload-index :as upload-index]
             [clojure.tools.logging :as log]))
 
 (defn- build-file-storage
@@ -37,16 +43,18 @@
                     {:type :unknown-provider :provider provider}))))
 
 (defmethod ig/init-key :wagoe/storage
-  [_ {:keys [provider logger] :or {provider :local} :as config}]
+  [_ {:keys [provider logger upload-index] :or {provider :local} :as config}]
   (log/info "Initializing storage component" {:provider provider})
   (let [file-storage (build-file-storage (assoc config :provider provider) logger)
         processor    (image-processor/create-image-processor {:logger logger})
         svc          (service/create-storage-service
-                      {:storage file-storage :image-processor processor :logger logger})]
+                      {:storage file-storage :image-processor processor :logger logger
+                       :upload-index upload-index})]
     (log/info "Storage component initialized" {:provider provider})
     {:provider       provider
      :storage        file-storage
      :service        svc
+     :upload-index   upload-index
      ;; Where the routes sit, when they are mounted. Configurable because a
      ;; signed URL has to arrive at the route that verifies it: the adapter
      ;; emits `<url-base>/<key>?expires&signature`, so `:url-base` must be
@@ -62,6 +70,23 @@
     :gcs (gcs/close-gcs-storage storage)
     nil)
   nil)
+
+;; =============================================================================
+;; Upload index, data export and retention
+;; =============================================================================
+
+(defmethod ig/init-key :wagoe.storage/db-schema [_ {:keys [ctx]}]
+  (upload-index/create-tables! ctx)
+  {:status :initialized})
+
+(defmethod ig/init-key :wagoe.storage/upload-index [_ {:keys [ctx]}]
+  (upload-index/create-upload-index ctx))
+
+(defmethod ig/init-key :wagoe.storage/data-exporter [_ {:keys [storage]}]
+  (data-export/->UploadDataExporter (:upload-index storage) (:storage storage)))
+
+(defmethod ig/init-key :wagoe.storage/upload-retention [_ {:keys [storage]}]
+  (data-export/->UploadRetention (:upload-index storage) (:storage storage)))
 
 ;; =============================================================================
 ;; Storage Routes Component
@@ -118,7 +143,14 @@
         ;; closed on anything it does not recognise.
         expose?  (contains? #{true "true"} (:expose-http? settings))]
     (cond-> {:components
-             {:wagoe/storage        settings
-              :wagoe/storage-routes {:storage (ig/ref :wagoe/storage)}}}
+             {:wagoe.storage/db-schema        {:ctx (ig/ref :wagoe/db-context)}
+              :wagoe.storage/upload-index     {:ctx    (ig/ref :wagoe/db-context)
+                                               :schema (ig/ref :wagoe.storage/db-schema)}
+              :wagoe/storage                  (assoc settings :upload-index (ig/ref :wagoe.storage/upload-index))
+              :wagoe/storage-routes           {:storage (ig/ref :wagoe/storage)}
+              :wagoe.storage/data-exporter    {:storage (ig/ref :wagoe/storage)}
+              :wagoe.storage/upload-retention {:storage (ig/ref :wagoe/storage)}}
+             :data-export {:storage (ig/ref :wagoe.storage/data-exporter)}
+             :retention   {:storage/uploads (ig/ref :wagoe.storage/upload-retention)}}
       expose?
       (assoc :routes [(ig/ref :wagoe/storage-routes)]))))

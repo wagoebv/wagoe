@@ -10,7 +10,6 @@
   (:require [wagoe.platform.core.http.access :as access]
             [wagoe.platform.core.http.errors :as errors]
             [wagoe.platform.ports.privacy :as privacy]
-            [wagoe.platform.core.privacy :as platform-privacy]
             [wagoe.tenant.ports :as tenant-ports]
             [wagoe.tenant.schema :as tenant-schema]
             [wagoe.tenant.shell.provisioning :as provisioning]
@@ -313,7 +312,7 @@
         (let [doc (privacy/export-subject data-export {:type :tenant :id tenant-id})]
           (if (get-in doc [:sections :tenant])
             (do (log/info "Tenant data export" {:tenant-id tenant-id :actor-id (get-in request [:user :id])})
-                (platform-privacy/export-response doc))
+                (privacy/export-response data-export doc request))
             (error-response 404 :not-found "Tenant not found")))))))
 
 (defn export-routes

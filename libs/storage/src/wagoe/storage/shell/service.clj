@@ -6,8 +6,10 @@
   represents the imperative shell that coordinates pure validation logic
   with side-effectful storage operations."
   (:require [wagoe.storage.ports :as ports]
+            [wagoe.storage.core.uploads :as uploads]
             [wagoe.storage.core.validation :as validation]
-            [wagoe.observability.logging.ports :as logging]))
+            [wagoe.observability.logging.ports :as logging])
+  (:import [java.time Instant]))
 
 ;; ============================================================================
 ;; Service Protocol
@@ -21,7 +23,8 @@
 
     Parameters:
     - file-data: Map with :bytes and :content-type
-    - metadata: Map with :filename and optional :path, :visibility
+    - metadata: Map with :filename and optional :path, :visibility, and
+      :owner {:user-id :tenant-id}, which the upload index records
     - options: Map with optional :max-size, :allowed-types, :allowed-extensions
 
     Returns:
@@ -63,7 +66,19 @@
 ;; Service Implementation
 ;; ============================================================================
 
-(defrecord StorageService [storage image-processor logger]
+(defn- index-upload!
+  "Record `stored` in the upload index. A file the index does not know is
+   invisible to data export and retention, so when recording fails the file
+   is deleted again and the upload fails."
+  [storage upload-index stored owner]
+  (when upload-index
+    (try
+      (ports/record-upload! upload-index (uploads/upload-record stored owner (Instant/now)))
+      (catch Exception e
+        (try (ports/delete-file storage (:key stored)) (catch Exception _ nil))
+        (throw e)))))
+
+(defrecord StorageService [storage image-processor logger upload-index]
   IStorageService
 
   (upload-file [_ file-data metadata options]
@@ -84,7 +99,8 @@
 
         (if (:valid? validation-result)
           ;; Store file
-          (let [result (ports/store-file storage file-data sanitized-metadata)]
+          (let [result (ports/store-file storage file-data (dissoc sanitized-metadata :owner))]
+            (index-upload! storage upload-index result (:owner metadata))
             (when logger
               (logging/info logger "Upload file completed"
                             {:event ::upload-file-completed
@@ -222,6 +238,8 @@
 
     (try
       (let [success (ports/delete-file storage file-key)]
+        (when (and success upload-index)
+          (ports/remove-upload! upload-index file-key))
         (when logger
           (logging/info logger (if success
                                  "Remove file completed"
@@ -271,8 +289,9 @@
   Parameters:
   - storage: Implementation of IFileStorage
   - image-processor: Implementation of IImageProcessor (optional)
-  - logger: Logger instance (optional)"
-  [{:keys [storage image-processor logger]}]
+  - logger: Logger instance (optional)
+  - upload-index: Implementation of IUploadIndex (optional); records every upload"
+  [{:keys [storage image-processor logger upload-index]}]
   (when-not storage
     (throw (ex-info "storage adapter is required"
                     {:type :configuration-error
@@ -283,4 +302,4 @@
                   {:event ::storage-service-created
                    :has-image-processor (boolean image-processor)}))
 
-  (->StorageService storage image-processor logger))
+  (->StorageService storage image-processor logger upload-index))

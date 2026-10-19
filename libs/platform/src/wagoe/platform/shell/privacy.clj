@@ -8,13 +8,65 @@
      :wagoe/privacy {:retention          {:user/audit-log {:retain \"P2Y\"}}
                      :retention-schedule {:cron \"0 3 * * *\" :zone \"UTC\"}}"
   (:require [clojure.tools.logging :as log]
+            [ring.core.protocols :as ring-protocols]
             [wagoe.platform.core.privacy :as privacy]
             [wagoe.platform.ports.privacy :as ports])
-  (:import [java.time Instant]))
+  (:import [java.io OutputStream]
+           [java.nio.charset StandardCharsets]
+           [java.time Instant]
+           [java.util.zip ZipEntry ZipOutputStream]))
 
 (def retention-job-type :wagoe/retention)
 
 (def default-retention-schedule {:cron "0 3 * * *"})
+
+(defn- export-files
+  "The files `exporters` hold behind their sections of `doc`, each with its
+   `:entry` in the zip."
+  [exporters doc]
+  (for [[id exporter] exporters
+        :when (satisfies? ports/IFileExporter exporter)
+        :let  [section (get-in doc [:sections id])]
+        :when (some? section)
+        file  (ports/export-files exporter (:subject doc) section)
+        :let  [entry (privacy/archive-entry id (:path file))]
+        :when entry]
+    (assoc file :entry entry)))
+
+(defn write-archive!
+  "Write `doc` and `files` to `out` as a zip: the files, then
+   data-export.json, which lists a file that was gone under :missing-files."
+  [doc files ^OutputStream out]
+  (with-open [zip (ZipOutputStream. out)]
+    (let [missing (reduce (fn [missing {:keys [entry content]}]
+                            (if-let [^bytes bytes (content)]
+                              (do (.putNextEntry zip (ZipEntry. ^String entry))
+                                  (.write zip bytes)
+                                  (.closeEntry zip)
+                                  missing)
+                              (conj missing entry)))
+                          []
+                          files)]
+      (.putNextEntry zip (ZipEntry. "data-export.json"))
+      (.write zip (.getBytes ^String (privacy/export-json (cond-> doc (seq missing) (assoc :missing-files missing)))
+                             StandardCharsets/UTF_8))
+      (.closeEntry zip))))
+
+(defn- archive-response
+  "A zip download, written as it streams: the files are read from storage
+   one at a time rather than held in memory together."
+  [doc files]
+  {:status  200
+   :headers privacy/archive-headers
+   :body    (reify ring-protocols/StreamableResponseBody
+              (write-body-to-stream [_ _ out]
+                (try
+                  (write-archive! doc files out)
+                  (catch Exception e
+                    ;; The status has gone; a cut-off zip does not open, so
+                    ;; it cannot pass for a complete one.
+                    (log/error e "Data export zip failed" {:subject (:subject doc)})
+                    (throw e)))))})
 
 (defn create-data-export
   "An `IDataExport` over `exporters`, {exporter-id IDataExporter}."
@@ -26,7 +78,12 @@
       (privacy/export-document
        subject
        (into {} (map (fn [[id exporter]] [id (ports/export-data exporter subject)])) exporters)
-       (Instant/now)))))
+       (Instant/now)))
+
+    (export-response [_ doc request]
+      (if (privacy/zip-requested? request)
+        (archive-response doc (export-files exporters doc))
+        (privacy/export-response doc)))))
 
 (defn retention-plan!
   "The policies `configured` names, each with its period. Throws
@@ -36,6 +93,16 @@
     (when error
       (throw (ex-info (:message error) error)))
     plan))
+
+(defn assert-runnable!
+  "Throws :configuration-error when a policy in `plan` is not an
+   `IRetentionPolicy`: its module could not provide it, and every run would
+   fail."
+  [plan policies]
+  (when-let [broken (seq (sort (remove #(satisfies? ports/IRetentionPolicy (get policies %)) (keys plan))))]
+    (throw (ex-info (str "Retention policies " (vec broken) " are configured, but their modules cannot run them;"
+                         " the log says why.")
+                    {:type :configuration-error :policies (vec broken)}))))
 
 (defn run-retention!
   "Run each policy in `plan` against `policies` at `now`. One failing policy
