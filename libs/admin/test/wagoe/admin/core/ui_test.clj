@@ -1139,25 +1139,28 @@
       (is (str/includes? (str page) ":admin/page-create-title")))))
 
 ;; =============================================================================
-;; Dialog Component Tests
+;; Delete Confirmation
 ;; =============================================================================
 
-(deftest ^:unit confirm-delete-dialog-test
-  (testing "Confirmation dialog for delete operations"
-    (let [dialog (ui/confirm-delete-dialog :users "123")]
-      (is (vector? dialog))
-      (is (= :div.modal#confirm-delete-modal (first dialog)))
+(defn- confirm-wiring
+  "The id the element issuing `request-attr` waits on, and whether the page
+   renders a confirm dialog of that id."
+  [page request-attr]
+  (let [attrs (filter map? (tree-seq coll? seq page))
+        id    (some #(when (contains? % request-attr) (:data-confirm-modal %)) attrs)]
+    [id (boolean (some #(and (= id (:id %)) (= "alertdialog" (:role %))) attrs))]))
 
-      ;; Should have warning message (i18n keys)
-      (is (str/includes? (str dialog) ":admin/modal-confirm-delete-title"))
-      (is (str/includes? (str dialog) ":admin/modal-confirm-delete-message"))
+(deftest ^:unit delete-confirmation-test
+  (testing "the edit page's delete waits on its confirm dialog"
+    (let [page (ui/entity-detail-page :users sample-entity-config sample-record
+                                      nil sample-permissions nil)]
+      (is (= ["delete-record-confirm" true] (confirm-wiring page :hx-delete)))
+      (is (not (str/includes? (str page) "hx-confirm")))))
 
-      ;; Should have HTMX delete button
-      (is (str/includes? (str dialog) "hx-delete"))
-      (is (str/includes? (str dialog) "/web/admin/users/123"))
-
-      ;; Should have cancel button (i18n key)
-      (is (str/includes? (str dialog) ":common/button-cancel")))))
+  (testing "bulk delete: htmx asks the form, so the form waits"
+    (let [page (ui/entity-list-page :users [sample-record] sample-entity-config
+                                    {:page 1 :page-size 20} 1 sample-permissions {})]
+      (is (= ["bulk-delete-confirm" true] (confirm-wiring page :hx-post))))))
 
 ;; =============================================================================
 ;; Error Page Tests
@@ -1685,7 +1688,7 @@
 (deftest ^:unit parse-datetime-input-writes-the-instant-with-the-server-offset-test
   (testing "wall time in the input zone becomes the instant, carrying the server's offset"
     (is (= "2026-09-01T12:00:50.000+02:00" (ui/parse-datetime-input "2026-09-01T06:00:50" nyc ams)))
-    (is (= "2026-09-01T10:00:50.000Z"      (ui/parse-datetime-input "2026-09-01T12:00:50" ams utc))))
+    (is (= "2026-09-01T10:00:50.000+00:00" (ui/parse-datetime-input "2026-09-01T12:00:50" ams utc))))
   (testing "a value that names its own zone is taken exactly, whatever the input zone"
     (is (= "2026-09-01T12:00:50.000+02:00" (ui/parse-datetime-input "2026-09-01T10:00:50Z" nyc ams)))
     (is (= "2026-09-01T12:00:50.000+02:00" (ui/parse-datetime-input "2026-09-01T15:00:50+05:00" nyc ams))))
@@ -1698,11 +1701,11 @@
     (is (= "-05:00" (ui/datetime-input-offset "2026-11-01T06:30:00Z" nyc utc)))
     (is (= "-04:00" (ui/datetime-input-offset "2026-11-01T05:30:00Z" nyc utc))))
   (testing "01:30 in New York on 2026-11-01 happens twice; the offset picks one"
-    (is (= "2026-11-01T06:30:00.000Z" (ui/parse-datetime-input "2026-11-01T01:30" nyc utc "-05:00")))
-    (is (= "2026-11-01T05:30:00.000Z" (ui/parse-datetime-input "2026-11-01T01:30" nyc utc "-04:00"))))
+    (is (= "2026-11-01T06:30:00.000+00:00" (ui/parse-datetime-input "2026-11-01T01:30" nyc utc "-05:00")))
+    (is (= "2026-11-01T05:30:00.000+00:00" (ui/parse-datetime-input "2026-11-01T01:30" nyc utc "-04:00"))))
   (testing "outside an overlap the offset changes nothing, and a bad one is ignored"
-    (is (= "2026-09-01T10:00:50.000Z" (ui/parse-datetime-input "2026-09-01T12:00:50" ams utc "-05:00")))
-    (is (= "2026-09-01T10:00:50.000Z" (ui/parse-datetime-input "2026-09-01T12:00:50" ams utc "nonsense")))))
+    (is (= "2026-09-01T10:00:50.000+00:00" (ui/parse-datetime-input "2026-09-01T12:00:50" ams utc "-05:00")))
+    (is (= "2026-09-01T10:00:50.000+00:00" (ui/parse-datetime-input "2026-09-01T12:00:50" ams utc "nonsense")))))
 
 (deftest ^:unit rendering-and-parsing-in-one-zone-round-trip-test
   ;; The invariant BOU-519 broke: render a stored value, submit it untouched,

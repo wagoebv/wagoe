@@ -179,7 +179,7 @@
             "Name should be preserved as 'Changed Name' after form submission")))))
 
 (deftest ^:integration ^:e2e edit-success-shows-notification
-  (testing "Successful edit shows a success notification"
+  (testing "Successful edit shows a success toast"
     (spel/with-testing-page [pg]
       (admin/login-as-admin! pg fx/*seed*)
       (page/navigate pg (admin/admin-url (str "/users/" (-> fx/*seed* :user :id))))
@@ -187,11 +187,15 @@
       ;; Make a valid change — update the name
       (loc/fill (page/locator pg "input[name='name']") "Updated Test User")
       ;; Submit — the form uses hx-target="body" hx-swap="outerHTML" which
-      ;; replaces the entire body, so wait for the flash element to appear
+      ;; replaces the entire body, so wait for the toast to appear
       (loc/click (page/locator pg "form.entity-form button[type='submit']"))
-      (page/wait-for-selector pg ".alert.alert-success" {:timeout 10000.0})
+      (page/wait-for-selector pg "#toasts .alert.alert-success" {:timeout 10000.0})
       (is (admin/flash-visible? pg :success)
-          "Success notification should be visible after saving"))))
+          "Success toast should be visible after saving")
+      (is (= "polite" (loc/get-attribute (page/locator pg "#toasts") "aria-live")))
+      ;; It dismisses itself
+      (page/wait-for-selector pg "#toasts .alert" {:state :detached :timeout 10000.0})
+      (is (zero? (loc/count-elements (page/locator pg "#toasts .alert")))))))
 
 ;; ---------------------------------------------------------------------------
 ;; Validation feedback

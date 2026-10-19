@@ -66,20 +66,20 @@
          :user {:id session-user-id :email "session@example.com" :role :admin :active true}}))))
 
 (def ^:private readers
-  "The users whose groups grant :workflow/read, by id."
-  (atom #{}))
+  "The scope each user's :workflow/read grant has, by id."
+  (atom {}))
 
 (def ^:private group-service
   #_{:clj-kondo/ignore [:missing-protocol-method]}
   (reify user-ports/IUserGroupService
     (user-grants [_ user]
-      (if (@readers (:id user)) [{:permission :workflow/read :scope {}}] []))))
+      (if-let [scope (@readers (:id user))] [{:permission :workflow/read :scope scope}] []))))
 
 (defn- with-served-api
   "Compile the workflow API routes through the platform router and put the
    authentication middleware outermost, where `:auth-middleware` puts it."
   [f]
-  (reset! readers #{})
+  (reset! readers {})
   (registry/clear-registry!)
   (registry/register-workflow! invoice-def)
   (let [store    (service-test/create-memory-store)
@@ -167,7 +167,7 @@
     (testing (name role)
       (let [id       (UUID/randomUUID)
             ;; A reader, so the user may GET what the transition answered.
-            token    (do (swap! readers conj id)
+            token    (do (swap! readers assoc id {})
                          (token-for {:id id :email "c@example.com" :role role}))
             instance (ports/start-workflow! *service* {:workflow-id :gated :entity-type :x
                                                        :entity-id   (UUID/randomUUID)})
@@ -258,7 +258,7 @@
       (is (= 422 (:transition seen)) "refused by the transition's own permission")))
   (testing "a user whose group grants :workflow/read reads"
     (let [id (UUID/randomUUID)]
-      (swap! readers conj id)
+      (swap! readers assoc id {})
       (is (= {:get 200 :lookup 200 :audit 200 :start 201}
              (select-keys (statuses {:id id :role :user}) (conj reads :start))))))
   (testing "a platform admin reads"
@@ -287,6 +287,27 @@
     (testing "a platform admin in any tenant"
       (binding [*tenancy* {:tenant {:id tenant-b}}]
         (is (= route-success (statuses {:role :admin})))))))
+
+(deftest ^:unit in-a-tenant-the-tenants-admins-and-grants-decide
+  (let [tenant-a (UUID/randomUUID)
+        tenant-b (UUID/randomUUID)
+        reads-of #(select-keys % reads)
+        refused  (zipmap reads (repeat 403))
+        allowed  {:get 200 :lookup 200 :audit 200}
+        reader   (fn [scope] (let [id (UUID/randomUUID)]
+                               (swap! readers assoc id scope)
+                               {:id id :role :user :tenant-id tenant-b}))]
+    (binding [*tenancy* {:tenant {:id tenant-a} :tenant-membership {:status :active :role :member}}]
+      (testing "another tenant's admin, a plain member here, may not read"
+        (is (= refused (reads-of (statuses {:role :admin :tenant-id tenant-b})))))
+      (testing "nor may a grant scoped to no tenant or another one"
+        (is (= refused (reads-of (statuses (reader {})))))
+        (is (= refused (reads-of (statuses (reader {:tenant-id (str tenant-b)}))))))
+      (testing "a grant scoped to this tenant reads"
+        (is (= allowed (reads-of (statuses (reader {:tenant-id (str tenant-a)})))))))
+    (binding [*tenancy* {:tenant {:id tenant-a} :tenant-membership {:status :active :role :admin}}]
+      (testing "an admin by membership reads"
+        (is (= allowed (reads-of (statuses {:role :user :tenant-id tenant-b}))))))))
 
 ;; =============================================================================
 ;; The body

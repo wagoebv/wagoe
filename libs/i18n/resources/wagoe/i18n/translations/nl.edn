@@ -25,6 +25,7 @@
  :common/button-edit        "Bewerken"
  :common/button-delete      "Verwijderen"
  :common/button-copy        "Kopiëren"
+ :common/button-confirm     "Bevestigen"
  :common/button-print       "Afdrukken"
  :common/button-search      "Zoeken"
 
@@ -457,6 +458,8 @@
  :admin/button-create              "Aanmaken"
  :admin/relationship-empty-state   "Geen {label} gevonden."
  :admin/relationship-view-all      "Alle {label} bekijken"
+ :admin/combobox-placeholder       "Typ om te zoeken…"
+ :admin/combobox-no-matches        "Geen resultaten"
  :admin/page-edit-title            "{label} bewerken"
  :admin/page-create-title          "{label} aanmaken"
  :admin/button-back-to-list        "Terug naar lijst"
@@ -465,7 +468,6 @@
  :admin/form-create-heading        "Nieuwe {label}"
  :admin/confirm-delete-record      "Dit record verwijderen? Deze actie kan niet ongedaan worden gemaakt."
  :admin/modal-confirm-delete-title   "Verwijdering bevestigen"
- :admin/modal-confirm-delete-message "Weet u zeker dat u dit record wilt verwijderen? Deze actie kan niet ongedaan worden gemaakt."
  :admin/page-access-denied-title   "Toegang geweigerd"
  :admin/page-access-denied-message "U heeft geen toestemming om toegang te krijgen tot de admin interface."
  :admin/button-go-dashboard        "Naar dashboard"
@@ -534,8 +536,6 @@
  :admin/pagination-next-page       "Volgende pagina"
  :admin/pagination-last-page       "Laatste pagina"
  :admin/pagination-page            "Pagina {page}"
- :admin/modal-button-cancel        "Annuleren"
- :admin/modal-button-delete        "Verwijderen"
 
  ;; Overzicht (ADR-040)
  :admin/relative-today             "vandaag"

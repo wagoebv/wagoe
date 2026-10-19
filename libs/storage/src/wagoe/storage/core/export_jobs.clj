@@ -5,6 +5,10 @@
   "How long a finished archive can be downloaded."
   (java.time.Duration/ofHours 24))
 
+(def requests-per-hour
+  "How many export jobs one requester may open an hour, by default."
+  5)
+
 (defn new-job
   [id subject requested-by now]
   {:id id :subject subject :requested-by (str requested-by) :status :pending :created-at now})

@@ -98,13 +98,14 @@
 ;; =============================================================================
 
 (defmethod ig/init-key :wagoe.storage/export-jobs
-  [_ {:keys [ctx storage data-export job-queue queue]}]
-  {:store        (export-job-store/create-export-job-store ctx)
-   :file-storage (:storage storage)
-   :provider     (:provider storage)
-   :data-export  data-export
-   :job-queue    job-queue
-   :queue        queue})
+  [_ {:keys [ctx storage data-export job-queue queue requests-per-hour]}]
+  {:store             (export-job-store/create-export-job-store ctx)
+   :file-storage      (:storage storage)
+   :provider          (:provider storage)
+   :data-export       data-export
+   :job-queue         job-queue
+   :queue             queue
+   :requests-per-hour requests-per-hour})
 
 (defmethod ig/init-key :wagoe.storage/export-job-handlers [_ {:keys [export-jobs]}]
   {export-jobs/job-type (partial export-jobs/run-export-job export-jobs)})
@@ -186,12 +187,13 @@
 
       (contains? enabled :wagoe/jobs)
       (-> (update :components merge
-                  {:wagoe.storage/export-jobs              {:ctx         (ig/ref :wagoe/db-context)
-                                                            :schema      (ig/ref :wagoe.storage/db-schema)
-                                                            :storage     (ig/ref :wagoe/storage)
-                                                            :data-export (ig/ref :wagoe/data-export)
-                                                            :job-queue   (ig/ref :wagoe/job-queue)
-                                                            :queue       (:export-queue settings :default)}
+                  {:wagoe.storage/export-jobs              {:ctx               (ig/ref :wagoe/db-context)
+                                                            :schema            (ig/ref :wagoe.storage/db-schema)
+                                                            :storage           (ig/ref :wagoe/storage)
+                                                            :data-export       (ig/ref :wagoe/data-export)
+                                                            :job-queue         (ig/ref :wagoe/job-queue)
+                                                            :queue             (:export-queue settings :default)
+                                                            :requests-per-hour (:export-requests-per-hour settings)}
                    :wagoe.storage/export-job-handlers      {:export-jobs (ig/ref :wagoe.storage/export-jobs)}
                    :wagoe.storage/export-job-routes        {:export-jobs (ig/ref :wagoe.storage/export-jobs)}
                    :wagoe.storage/export-archive-retention {:export-jobs (ig/ref :wagoe.storage/export-jobs)}})

@@ -120,6 +120,18 @@
                (not (.getAutoCommit ^java.sql.Connection conn)))
       conn)))
 
+(def ^:dynamic *tenant-id*
+  "The tenant whose schema this thread's work runs in, or nil. The tenant
+   module binds it around a tenant request and a tenant job, so code deeper in
+   the call can refuse to fall back to public and can pass the tenant on."
+  nil)
+
+(def ^:dynamic *tenant-schema*
+  "The schema the transaction open on this thread is bound to, or nil. The
+   tenant module binds it with the transaction, so a store can check its
+   tables are there without asking the database for its search_path."
+  nil)
+
 (defn connectable-for
   "What code holding `datasource` runs a statement on: `datasource` when it is
    an open transaction already, else the platform transaction open on this
@@ -158,6 +170,51 @@
   `(with-transaction* ~(second binding)
      (fn [~(first binding)]
        ~@body)))
+
+(defn unique-conflict?
+  "Whether `e` is a write a unique key refused."
+  [e]
+  (= {:type :conflict :constraint :unique} (select-keys (ex-data e) [:type :constraint])))
+
+(defn- rolled-back?
+  "Whether the engine rolled `e`'s statement back as a deadlock or
+   serialization failure (SQLSTATE 40001, MySQL's 1213 among them; 40P01)."
+  [e]
+  (contains? #{"40001" "40P01"} (:sql-state (redaction/reported e))))
+
+(def ^:private upsert-attempts 3)
+
+(defn upsert!
+  "Write `row` to `table`: update the row its `key-columns` match, or insert
+   it. Returns :updated or :inserted. `:update-columns` are what an update
+   sets, every other column by default.
+
+   No engine shares an ON CONFLICT syntax, so a writer racing to insert the
+   same key loses with a unique conflict and tries again, finding the row.
+   Outside a transaction a deadlock is retried too: InnoDB picks a victim
+   among racing inserts, and inside one it has rolled back the caller's
+   whole transaction."
+  ([ctx table row key-columns] (upsert! ctx table row key-columns {}))
+  ([ctx table row key-columns {:keys [update-columns]}]
+   (let [where   (into [:and] (map (fn [k] [:= k (get row k)])) key-columns)
+         set-map (if update-columns (select-keys row update-columns) (apply dissoc row key-columns))
+         tx      (current-transaction)
+         ;; Only the insert's conflict is the race: an update refused by
+         ;; another unique key would be refused again, and on PostgreSQL
+         ;; outside a savepoint it has aborted the caller's transaction.
+         insert! #(try (in-savepoint tx (fn [] (execute-update! ctx {:insert-into table :values [row]})))
+                       :inserted
+                       (catch clojure.lang.ExceptionInfo e
+                         (if (unique-conflict? e) e (throw e))))]
+     (loop [n 1]
+       (let [result (try (if (pos? (execute-update! ctx {:update table :set set-map :where where}))
+                           :updated
+                           (insert!))
+                         (catch clojure.lang.ExceptionInfo e
+                           (if (and (nil? tx) (rolled-back? e)) e (throw e))))]
+         (cond (keyword? result)      result
+               (< n upsert-attempts) (recur (inc n))
+               :else                 (throw result)))))))
 
 ;; =============================================================================
 ;; Schema
@@ -221,6 +278,20 @@
 (def drop-column-if-exists!
   "Drop a column if it is there."
   schema/drop-column-if-exists!)
+
+(defn ensure-binary-collation!
+  "On MySQL, give `column` of `table` a binary collation, keeping its
+   `column-type` (\"VARCHAR(512)\") and NOT NULL when `not-null?`. MySQL's
+   default collation is case-insensitive, so a key compared there merges `A`
+   and `a`; the other engines compare case-sensitively already. Idempotent."
+  [ctx table column column-type not-null?]
+  (when (= :mysql (db-ports/engine (:adapter ctx)))
+    (let [collation (:collation (execute-one! ctx ["SELECT collation_name AS collation FROM information_schema.columns
+                                                     WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?"
+                                                   (name table) (name column)]))]
+      (when-not (some-> collation (str/ends-with? "_bin"))
+        (execute-ddl! ctx (str "ALTER TABLE " (name table) " MODIFY " (name column) " " column-type
+                               " CHARACTER SET utf8mb4 COLLATE utf8mb4_bin" (when not-null? " NOT NULL")))))))
 
 ;; =============================================================================
 ;; Query building
@@ -295,7 +366,8 @@
   migrations/discover-migration-dirs)
 
 (def discover-tenant-migration-dirs
-  "The libraries' migration directories that run inside every tenant schema."
+  "The libraries' migration directories that run inside every tenant schema;
+   given the enabled libraries, only theirs."
   migrations/discover-tenant-migration-dirs)
 
 (def refuse-duplicate-migration-ids!

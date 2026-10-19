@@ -33,6 +33,14 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **`shared-ui` data table with sortable headers, filter inputs and infinite scroll** (BOU-756): `data-table`,
   `filter-input`, `parse-table-params`. Admin lists now push their own URL; nothing to do.
+- **Combobox in `shared-ui`** (BOU-754): `wagoe.shared.ui.core.combobox`, a server-searched typeahead. The admin uses it
+  for a foreign key whose parent has more rows than `:max-page-size`, which was a text input.
+- **Streamed storage and `db/upsert!`** (BOU-752): `IStreamingFileStorage` stores what a writer streams (local, S3,
+  GCS); `db/upsert!` and `db/ensure-binary-collation!` serve any keyed table. Nothing to do.
+- **`wagoe.shared.ui.core.modal`: modal and confirm on native `<dialog>`** (BOU-753); admin deletes confirm with it, bulk
+  delete now too. The broken `layout/modal` is removed: use `modal/modal`.
+- **Toasts in every page layout** (BOU-755): a flash shows as a toast, and `toast/oob-toast` / `toast/with-toast`
+  add one to any htmx response.
 - **A user's data export as a background job** (BOU-749): with the jobs module, `POST /api/v1/me/export-jobs`
   builds the zip in file storage and the user downloads it for a day. Run `migrate up`.
 - **Tenant exports are audited** (BOU-749): each download of `GET /api/v1/tenants/:id/export` is recorded in a new
@@ -193,13 +201,21 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Removed
 
+- **`window.AdminUX.showToast` and the `.flash-messages` banner** (BOU-755): send `HX-Trigger: {"showToast": {"type": ..., "message": ...}}`
+  or a toast out of band instead; `title` is no longer shown.
 - **The `:base` CSS bundle: pico, open-props, `tokens-openprops.css`, `base-css`** (BOU-458): `(bundle :base)` serves `:pilot` and warns.
   Use `pilot-css` and restyle pages that relied on pico with daisy classes.
 
 ### Fixed
 
+- **Export jobs: racing requests opened duplicates, archives were built in memory** (BOU-752). One open job per
+  subject, five requests an hour per user (`:export-requests-per-hour`). Run `migrate up`.
+- **Push tokens differing only in case were one device on MySQL** (BOU-752); racing uploads could deadlock there.
+  Run `migrate up`.
 - **Storage `file-exists?` answered false when it could not check** (BOU-749), so retention could forget a file
   still stored. It throws now; catch it if you call it directly.
+- **MySQL rewrote text that looked like a timestamp into a DATETIME** (BOU-655): persistence now passes Instants and
+  each adapter encodes them. Pass an `Instant`, not an ISO string, to a timestamp column.
 - **The audience API ignored the request body** (BOU-744): create and update always answered 422. An audience with
   both `:filters` and `:compose` is now refused rather than its filters dropped; give it `:filters []`.
 - **The audience API: create overwrote a taken id, update created an unknown one** (BOU-746): now 409 and 404. Keys are
@@ -214,6 +230,8 @@ for what is public API, what is internal, and how deprecations are announced.
   admin of the request's tenant. Upgrade if you run workflow.
 - **Any signed-in user could read every workflow instance via the API, across tenants** (BOU-748); reads and starts need
   `:admin` or a `:workflow/read` grant, and each tenant's instances live in its schema. Grant it to readers.
+- **Tenant workflow work could reach `public`, and other tenants' admins and grants applied** (BOU-751): it now fails
+  closed, jobs carry the tenant. In a tenant, scope `:workflow/read` grants `{:tenant-id <id>}`.
 - **`bb ai sql` invented table and column names** (BOU-513): it now sees the tables your migrations create, and
   refuses an answer naming anything else. Nothing to do.
 - **Workflow admin pages use the admin sidebar shell** (BOU-743); every audit row read as the current state, and the

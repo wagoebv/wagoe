@@ -66,6 +66,11 @@
        :post {:handler (crud/validate-field-handler admin-service schema-provider config)
               :summary "One field's errors, on leaving it"}}]
 
+     ["/:entity/options/:field"
+      {:middleware [auth-middleware]
+       :get {:handler (crud/field-options-handler admin-service schema-provider config)
+             :summary "HTMX options of a foreign key's combobox"}}]
+
      ["/:entity/filters"
       {:middleware [auth-middleware]
        :get {:handler (list-handlers/filter-drawer-handler admin-service schema-provider config)

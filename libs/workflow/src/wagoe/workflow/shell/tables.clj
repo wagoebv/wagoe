@@ -1,8 +1,10 @@
 (ns wagoe.workflow.shell.tables
-  "Workflow's tables in a tenant schema. The tenant module runs this as a
-   tenant migration, with search_path on the tenant schema alone, so each
-   tenant's instances and audit live in its own schema."
-  (:require [wagoe.platform.database :as db]
+  "Workflow's tables: their one definition, and where a tenant's are. A tenant
+   schema gets them from the same migrations public does, which the tenant
+   module runs in each tenant schema."
+  (:require [next.jdbc :as jdbc]
+            [next.jdbc.result-set :as rs]
+            [wagoe.platform.database :as db]
             [wagoe.workflow.shell.entity-uuid :as entity-uuid]
             [wagoe.workflow.shell.unique-instances :as unique-instances]))
 
@@ -11,8 +13,8 @@
   "wagoe/workflow/migrations/20260926100000-workflow-tables.up.sql")
 
 (def boot-changes
-  "What later migrations add to workflow_instances, which the boot and a tenant
-   schema add too, and how to tell each is there."
+  "What later migrations add to workflow_instances, which the boot adds too,
+   and how to tell each is there."
   [{:what     "the unique index on (workflow_id, entity_type, entity_id) (BOU-581)"
     :present? unique-instances/present?
     :ensure!  unique-instances/ensure-unique!}
@@ -20,17 +22,42 @@
     :present? entity-uuid/present?
     :ensure!  entity-uuid/ensure-entity-uuid!}])
 
-(defn ensure-tables!
-  "Create the tables in the connection's schema, with `boot-changes`."
+(def ^:private schemas-with-tables
+  "Tenant schemas seen to hold workflow's tables, so each is asked once."
+  (atom #{}))
+
+(defn- tables-in?
+  "Whether `schema` holds workflow_instances, on `conn`."
+  [conn schema]
+  (or (contains? @schemas-with-tables schema)
+      (when (:present (jdbc/execute-one! conn ["SELECT to_regclass(?) IS NOT NULL AS present"
+                                               (str schema ".workflow_instances")]
+                                         {:builder-fn rs/as-unqualified-lower-maps}))
+        (swap! schemas-with-tables conj schema)
+        true)))
+
+(defn- refusal [message data]
+  (ex-info message (merge {:type :configuration-error :message message} data)))
+
+(defn refuse-shared-tables!
+  "Throw a :configuration-error rather than let tenant work reach public's
+   tables: work in a tenant (`db/*tenant-id*`, `db/*tenant-schema*`) that is
+   not on that tenant's transaction (another database's, none, or H2 under
+   :allow-h2?, which has no schemas), and a tenant schema without workflow's
+   tables (a failed tenant migration)."
   [connectable]
-  (db/execute-migration-ddl! (db/context-of connectable) migration-resource)
-  (run! #((:ensure! %) connectable) boot-changes))
+  (let [conn   (db/tx-connection connectable)
+        schema db/*tenant-schema*
+        tenant db/*tenant-id*]
+    (cond
+      ;; The thread's transaction is the one bound to `schema`; a caller's own
+      ;; transaction on another connection is on public's search_path.
+      (and (or schema tenant)
+           (not (and conn schema (identical? conn (db/current-transaction)))))
+      (throw (refusal (str "Tenant " (or tenant schema) " work is not running on its tenant's"
+                           " transaction, and workflow will not use the shared tables")
+                      {:tenant-id (some-> tenant str) :schema schema}))
 
-(defn up
-  "Migratus entry point."
-  [config]
-  (ensure-tables! (db/migration-connectable config)))
-
-(defn down
-  "Nothing: dropping a tenant's tables would drop its instances."
-  [_config])
+      (and schema (not (tables-in? conn schema)))
+      (throw (refusal (str "Schema " schema " has no workflow tables; run the tenant migrations")
+                      {:schema schema})))))

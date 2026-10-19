@@ -806,11 +806,20 @@
                     "X-Toast")))))
   (testing "bulk delete: the plural, and the singular for one"
     (let [ids (mapv #(str (:id (create-test-user! (str "b" % "@example.com") (str "B" %) true))) (range 3))
-          bulk #(toast (*handler* (translated :post "/web/admin/test-users/bulk-delete"
-                                              {:path {:entity "test-users"} :form {"ids[]" %}}))
-                       "HX-Trigger")]
+          ;; An out-of-band toast beside the table
+          bulk #(some->> (*handler* (translated :post "/web/admin/test-users/bulk-delete"
+                                                {:path {:entity "test-users"} :form {"ids[]" %}}))
+                         :body
+                         (re-find #"hx-swap-oob=\"beforeend:#toasts\"><div class=\"alert alert-success[^>]*><span>([^<]*)</span>")
+                         second)]
       (is (= "Successfully deleted 2 Test Users" (bulk (subvec ids 0 2))))
-      (is (= "Successfully deleted 1 Test User" (bulk [(peek ids)]))))))
+      (is (= "Successfully deleted 1 Test User" (bulk [(peek ids)])))))
+  (testing "bulk delete carries the toolbar count out of band too"
+    (let [id   (str (:id (create-test-user! "count@example.com" "Count" true)))
+          body (:body (*handler* (translated :post "/web/admin/test-users/bulk-delete"
+                                             {:path {:entity "test-users"} :form {"ids[]" [id]}})))]
+      (is (re-find #"hx-swap-oob=\"beforeend:#toasts\"" body))
+      (is (re-find #"<span (?=[^>]*hx-swap-oob=\"true\")(?=[^>]*id=\"record-count-badge\")" body)))))
 
 ;; =============================================================================
 ;; Error Response Tests

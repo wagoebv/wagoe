@@ -8,6 +8,7 @@
    [wagoe.admin.core.permissions :as permissions]
    [wagoe.admin.shell.permissions :as shell-permissions]
    [wagoe.admin.shell.http.support :as support]
+   [wagoe.shared.ui.core.combobox :as combobox]
    [clojure.tools.logging :as log]
    [ring.util.response :as ring-response]))
 
@@ -355,7 +356,7 @@
           conflict (when-not rejected refusal)]
 
       (if (and valid? (not refusal))
-        ; Update entity and re-render detail page with success flash
+        ; Update entity and re-render detail page with a success toast
         (let [permissions    (permissions/get-entity-permissions user entity-name entity-config)
               ctx             (when-not then-list?
                                 (support/build-entity-detail-opts admin-service schema-provider config entity-name entity-config updated-record request))]
@@ -370,14 +371,15 @@
           (support/html-response request
                                  (admin-ui/admin-layout
                                   (admin-ui/entity-detail-page entity-name entity-config updated-record {} permissions
-                                                               (assoc (:page-opts ctx) :flash
-                                                                      {:type :success
-                                                                       :message [:t :admin/flash-updated {:label (introspection/singular-label entity-config entity-name)}]}))
+                                                               (:page-opts ctx))
                                   {:user user
                                    :current-entity entity-name
                                    :entities (:entities ctx)
                                    :entity-configs (:entity-configs ctx)
-                                   :logo-url (:logo-url config)}))))
+                                   :logo-url (:logo-url config)
+                                   ;; A toast in the new page's region: out of band it would go with the body
+                                   :flash {:type :success
+                                           :message [:t :admin/flash-updated {:label (introspection/singular-label entity-config entity-name)}]}}))))
 
         ; Validation errors - re-render form with flash inside page content
         (let [permissions (permissions/get-entity-permissions user entity-name entity-config)
@@ -439,3 +441,24 @@
       (support/html-response request
                              (admin-ui/render-field-widget field value (get-in cfg [:fields field]) errors
                                                            (support/display-options config request))))))
+
+(defn field-options-handler
+  "GET /:entity/options/:field?q= — the options of a foreign key's combobox:
+   the parent rows whose label contains the typed text. The user has to be
+   able to view the entity and the parent whose labels this lists."
+  [admin-service schema-provider _config]
+  (fn [request]
+    (let [user        (support/require-admin-user! request)
+          entity-name (support/get-entity-name request)
+          _           (when-not (ports/validate-entity-exists schema-provider entity-name)
+                        (throw (ex-info "Unknown entity" {:type :not-found :entity-name entity-name})))
+          _           (shell-permissions/assert-can-view-entity!
+                       user entity-name (ports/get-entity-config schema-provider entity-name))
+          field       (keyword (get-in request [:path-params :field]))
+          found       (support/search-foreign-key-options admin-service schema-provider entity-name field
+                                                          (combobox/query request))
+          _           (when-not found
+                        (throw (ex-info "No such foreign key" {:type :not-found :entity-name entity-name :field field})))]
+      (shell-permissions/assert-can-view-entity! user (:parent found) (:parent-cfg found))
+      (support/html-response request
+                             (combobox/options field (:options found) [:t :admin/combobox-no-matches])))))

@@ -7,6 +7,7 @@
             [wagoe.shared.ui.core.components :as components]
             [wagoe.shared.ui.core.home :as home]
             [wagoe.shared.ui.core.icons :as icons]
+            [wagoe.shared.ui.core.toast :as toast]
             [wagoe.platform.core.csrf :as csrf]
             [wagoe.platform.core.http.access :as access]
             [wagoe.platform.core.http.pages :as pages]
@@ -141,16 +142,9 @@
          (main-navigation {:user user
                            :brand brand
                            :brand-href brand-href})])
-      (let [children (cond-> []
-                       flash (conj [:div.flash-messages
-                                    (let [flash-type (or (:type flash)
-                                                         (first (keys flash)))
-                                          flash-msg  (or (:message flash)
-                                                         (first (vals flash)))]
-                                      [:div {:class (str "alert alert-" (name flash-type))}
-                                       flash-msg])])
-                       true (conj content))]
-        (into [:main.main-content] children))
+      [:main.main-content content]
+      (toast/toast-region)
+      (toast/flash-toasts flash)
       (for [js-file js]
         [:script {:src js-file :defer true}])]]))
 
@@ -229,29 +223,6 @@
   ([message status]
    (components/render-html
     (error-layout status "Error" message))))
-
-(defn modal
-  "Generic modal dialog component.
-   
-   Args:
-     id: Modal ID for targeting
-     title: Modal title
-     content: Modal content (Hiccup structure)
-     opts: Optional map with :closable, :size, etc.
-     
-   Returns:
-     Hiccup modal structure"
-  [id title content & [opts]]
-  (let [{:keys [closable size]
-         :or   {closable true size "medium"}} opts]
-    [:div.modal {:id id :class (str "modal-" size)}
-     [:div.modal-backdrop]
-     [:div.modal-content
-      [:div.modal-header
-       [:h3 title]
-       (when closable
-         [:button.modal-close {:onclick (str "closeModal('" id "')")} "×"])]
-      [:div.modal-body content]]]))
 
 (defn sidebar
   "Sidebar component for layouts that need side navigation.

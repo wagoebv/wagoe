@@ -7,6 +7,7 @@
    [wagoe.admin.core.schema-introspection :as introspection]
    [wagoe.admin.shell.permissions :as shell-permissions]
    [wagoe.admin.shell.http.support :as support]
+   [wagoe.shared.ui.core.toast :as toast]
    [clojure.string :as str]
    [ring.util.response :as ring-response])
   (:import [java.util UUID]))
@@ -98,20 +99,16 @@
         label (if (= 1 success-count)
                 (introspection/singular-label entity-config entity-name)
                 (introspection/plural-label entity-config entity-name))
-        t (support/t-fn request)
-        toast-msg (if (zero? failed-count)
-                    (t :admin/flash-bulk-deleted {:count success-count :label label})
-                    (t :admin/flash-bulk-deleted-partial {:count success-count :failed failed-count}))
-        toast-json (str "{\"type\":\""
-                        (if (zero? failed-count) "success" "warning")
-                        "\",\"message\":\"" (escape-json-string toast-msg) "\"}")]
-
-    ; Return table HTML fragment with toast via showToast event
-    (-> (support/htmx-fragment-response request
-                                        (admin-ui/entity-table entity-name records entity-config table-query total-count permissions {}
-                                                               (support/display-options config request))
-                                        [(admin-ui/record-count-badge total-count)])
-        (ring-response/header "HX-Trigger" (str "{\"showToast\":" toast-json ",\"entityListUpdated\":{}}")))))
+        all? (zero? failed-count)]
+    (support/htmx-fragment-response request
+                                    (admin-ui/entity-table entity-name records entity-config table-query total-count permissions {}
+                                                           (support/display-options config request))
+                                    [(toast/oob-toast
+                                      {:type    (if all? :success :warning)
+                                       :message (if all?
+                                                  [:t :admin/flash-bulk-deleted {:count success-count :label label}]
+                                                  [:t :admin/flash-bulk-deleted-partial {:count success-count :failed failed-count}])})
+                                     (admin-ui/record-count-badge total-count)])))
 
 (defn bulk-delete-handler
   "Handler for bulk deleting multiple entities.

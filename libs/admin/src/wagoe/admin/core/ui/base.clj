@@ -310,7 +310,9 @@
                  ldt)))
 
 (def ^:private storage-formatter
-  (DateTimeFormatter/ofPattern "uuuu-MM-dd'T'HH:mm:ss.SSSXXX"))
+  ;; +00:00, not Z, at UTC: MySQL takes an offset in a DATETIME literal but
+  ;; refuses Z (BOU-655).
+  (DateTimeFormatter/ofPattern "uuuu-MM-dd'T'HH:mm:ss.SSSxxx"))
 
 (defn parse-datetime-input
   "Read what a datetime-local submitted — wall time in `input-zone` — and return

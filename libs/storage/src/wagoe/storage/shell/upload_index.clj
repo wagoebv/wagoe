@@ -1,33 +1,20 @@
 (ns wagoe.storage.shell.upload-index
   "`IUploadIndex` on the application database, and the boot step that creates
    its table."
-  (:require [clojure.string :as str]
-            [clojure.tools.logging :as log]
+  (:require [clojure.tools.logging :as log]
             [wagoe.core.utils.type-conversion :as tc]
             [wagoe.platform.database :as db]
-            [wagoe.platform.ports.database :as db-ports]
             [wagoe.storage.ports :as ports])
   (:import (java.sql Timestamp)
            (java.time Instant)))
 
 (def migration-resource "wagoe/storage/migrations/20261021100001-storage-uploads.up.sql")
 
-(defn- key-collation
-  "The collation of `storage_uploads.file_key` on MySQL."
-  [ctx]
-  (:key-collation
-   (db/execute-one! ctx ["SELECT collation_name AS key_collation FROM information_schema.columns
-                          WHERE table_schema = DATABASE() AND table_name = 'storage_uploads'
-                            AND column_name = 'file_key'"])))
-
 (defn ensure-case-sensitive-keys!
-  "On MySQL, give `file_key` a binary collation. Its default is
-   case-insensitive, which merges `A.png` and `a.png` into one record. The
-   other engines compare keys case-sensitively already."
+  "On MySQL, give `file_key` a binary collation: its default merges `A.png`
+   and `a.png` into one record."
   [ctx]
-  (when (and (= :mysql (db-ports/engine (:adapter ctx)))
-             (not (some-> (key-collation ctx) (str/ends-with? "_bin"))))
-    (db/execute-ddl! ctx "ALTER TABLE storage_uploads MODIFY file_key VARCHAR(512) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL")))
+  (db/ensure-binary-collation! ctx :storage_uploads :file_key "VARCHAR(512)" true))
 
 (defn create-tables!
   "Create the upload index table when absent, for installations that boot
@@ -48,9 +35,6 @@
 
 (defn- ->ts [^Instant i] (Timestamp/from i))
 
-(defn- unique-conflict? [e]
-  (= {:type :conflict :constraint :unique} (select-keys (ex-data e) [:type :constraint])))
-
 (defn- upload->row [u]
   {:file_key     (:key u)
    :user_id      (:user-id u)
@@ -70,18 +54,9 @@
 (defrecord JdbcUploadIndex [ctx]
   ports/IUploadIndex
   (record-upload! [_ upload]
-    (let [row    (upload->row upload)
-          write! #(db/with-transaction [tx ctx]
-                    (when (zero? (db/execute-update! tx {:update :storage_uploads
-                                                         :set    (dissoc row :file_key)
-                                                         :where  [:= :file_key (:file_key row)]}))
-                      (db/execute-update! tx {:insert-into :storage_uploads :values [row]})))]
-      ;; No portable upsert; a key is re-stored only when a caller names its
-      ;; path. Two uploads to one path race to insert, and the loser updates
-      ;; instead: failing, it would delete the file both wrote to.
-      (try (write!)
-           (catch clojure.lang.ExceptionInfo e
-             (if (unique-conflict? e) (write!) (throw e)))))
+    ;; Two uploads to one path race to insert; the loser updates instead.
+    ;; Failing, it would delete the file both wrote to.
+    (db/upsert! ctx :storage_uploads (upload->row upload) [:file_key])
     upload)
 
   (remove-upload! [_ file-key]

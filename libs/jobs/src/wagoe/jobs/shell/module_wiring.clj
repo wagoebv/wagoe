@@ -40,6 +40,10 @@
      web/worker split; the default of 1 is a single process that both enqueues
      and runs, which is what an application without a deployment topology has.
 
+   :wagoe/job-tenant-runner
+     With the tenant module on: what runs a job that carries a tenant in that
+     tenant's schema. The workers take it; without it such a job fails.
+
    :wagoe/job-dead-letter-retention
      The `:jobs/dead-letter` retention policy, contributed under `:retention`.
      Runs only when `:wagoe/privacy :retention` names it.
@@ -54,6 +58,8 @@
             [wagoe.jobs.shell.adapters.in-memory :as mem]
             [wagoe.jobs.shell.adapters.redis :as redis]
             [wagoe.jobs.shell.recurring :as recurring]
+            [wagoe.jobs.shell.tenant-context :as tenant-context]
+            [wagoe.tenant.shell.provisioning :as provisioning]
             [wagoe.jobs.shell.worker :as worker]))
 
 (defmethod ig/init-key :wagoe/jobs [_ config] config)
@@ -185,8 +191,14 @@
 
 (defmethod ig/halt-key! :wagoe/job-registry [_ _] nil)
 
+(defmethod ig/init-key :wagoe/job-tenant-runner
+  [_ {:keys [db-ctx tenant-service]}]
+  (tenant-context/tenant-runner db-ctx tenant-service (provisioning/create-tenant-schema-provider)))
+
+(defmethod ig/halt-key! :wagoe/job-tenant-runner [_ _] nil)
+
 (defmethod ig/init-key :wagoe/job-workers
-  [_ {:keys [queue store registry workers]}]
+  [_ {:keys [queue store registry workers tenant-runner]}]
   (let [count*  (:count workers 1)
         ;; One pool per queue. A worker polls a single queue, so a module that
         ;; enqueues elsewhere is only served if a pool names that queue — push
@@ -199,7 +211,7 @@
       (into []
             (mapcat (fn [q]
                       (worker/create-worker-pool
-                       (merge workers {:queue-name q :worker-count count*})
+                       (merge workers {:queue-name q :worker-count count* :tenant-runner tenant-runner})
                        queue store registry)))
             queues)
       (do (log/info "Jobs: no workers started (:count 0) — this node enqueues only")
@@ -235,26 +247,34 @@
    enabled modules contributed, the way `:module-routes` is — jobs cannot name
    the modules that have handlers any more than the HTTP handler can name the
    modules that have routes."
-  [settings _ctx]
-  (let [settings (or settings {})]
-    {:components
-     {:wagoe/jobs         settings
-      :wagoe/jobs-runtime {:provider (:provider settings :memory)
-                           :lease-ms (:lease-ms settings)
-                           :redis    (:redis settings)
-                           :db-ctx   (ig/ref :wagoe/db-context)}
-      :wagoe/job-queue    {:runtime (ig/ref :wagoe/jobs-runtime)}
-      :wagoe/job-store    {:runtime (ig/ref :wagoe/jobs-runtime)}
-      :wagoe/job-stats    {:runtime (ig/ref :wagoe/jobs-runtime)}
-      :wagoe/idempotency-store {:runtime (ig/ref :wagoe/jobs-runtime)}
-      :wagoe/job-scheduler {:runtime   (ig/ref :wagoe/jobs-runtime)
-                            :registry  (ig/ref :wagoe/job-registry)
-                            :recurring (:recurring settings)
-                            :scheduler (:scheduler settings)}
-      :wagoe/job-registry {:handler-maps []}
-      :wagoe/job-workers  {:queue    (ig/ref :wagoe/job-queue)
-                           :store    (ig/ref :wagoe/job-store)
-                           :registry (ig/ref :wagoe/job-registry)
-                           :workers  (:workers settings)}
-      :wagoe/job-dead-letter-retention {:store (ig/ref :wagoe/job-store)}}
-     :retention {:jobs/dead-letter (ig/ref :wagoe/job-dead-letter-retention)}}))
+  [settings {:keys [enabled]}]
+  (let [settings (or settings {})
+        tenancy? (contains? (or enabled #{}) :wagoe/tenant)]
+    (cond->
+     {:components
+      {:wagoe/jobs         settings
+       :wagoe/jobs-runtime {:provider (:provider settings :memory)
+                            :lease-ms (:lease-ms settings)
+                            :redis    (:redis settings)
+                            :db-ctx   (ig/ref :wagoe/db-context)}
+       :wagoe/job-queue    {:runtime (ig/ref :wagoe/jobs-runtime)}
+       :wagoe/job-store    {:runtime (ig/ref :wagoe/jobs-runtime)}
+       :wagoe/job-stats    {:runtime (ig/ref :wagoe/jobs-runtime)}
+       :wagoe/idempotency-store {:runtime (ig/ref :wagoe/jobs-runtime)}
+       :wagoe/job-scheduler {:runtime   (ig/ref :wagoe/jobs-runtime)
+                             :registry  (ig/ref :wagoe/job-registry)
+                             :recurring (:recurring settings)
+                             :scheduler (:scheduler settings)}
+       :wagoe/job-registry {:handler-maps []}
+       :wagoe/job-workers  {:queue    (ig/ref :wagoe/job-queue)
+                            :store    (ig/ref :wagoe/job-store)
+                            :registry (ig/ref :wagoe/job-registry)
+                            :workers  (:workers settings)}
+       :wagoe/job-dead-letter-retention {:store (ig/ref :wagoe/job-store)}}
+      :retention {:jobs/dead-letter (ig/ref :wagoe/job-dead-letter-retention)}}
+      tenancy?
+      (-> (assoc-in [:components :wagoe/job-tenant-runner]
+                    {:db-ctx         (ig/ref :wagoe/db-context)
+                     :tenant-service (ig/ref :wagoe/tenant-service)})
+          (assoc-in [:components :wagoe/job-workers :tenant-runner]
+                    (ig/ref :wagoe/job-tenant-runner))))))

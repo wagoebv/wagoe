@@ -8,9 +8,11 @@
             [wagoe.admin.core.ui.cells :as cells]
             [wagoe.admin.core.forms :as forms]
             [wagoe.admin.core.schema-introspection :as introspection]
+            [wagoe.shared.ui.core.combobox :as combobox]
             [wagoe.shared.ui.core.components :as ui]
             [wagoe.shared.ui.core.form :as form]
             [wagoe.shared.ui.core.icons :as icons]
+            [wagoe.shared.ui.core.modal :as modal]
             [clojure.string :as str]))
 
 ;; =============================================================================
@@ -125,6 +127,22 @@
                         {:required required?
                          :disabled readonly?
                          :class "form-control"})
+
+       ;; A foreign key with too many parents for a select
+       (= widget-type :combobox)
+       (combobox/combobox field-name
+                          (assoc (:combobox field-config)
+                                 :value       value
+                                 :placeholder [:t :admin/combobox-placeholder]
+                                 :required    required?
+                                 :readonly    readonly?
+                                 ;; with-live-validation and describe-input find no
+                                 ;; named visible control here.
+                                 :value-attrs (when-let [{:keys [url vals]} (:validate field-config)]
+                                                (form/live-attrs url field-name vals))
+                                 :attrs       (when has-errors?
+                                                {:aria-invalid     "true"
+                                                 :aria-describedby (ui/field-error-id field-name)})))
 
        ;; Textarea
        (= widget-type :textarea)
@@ -668,12 +686,16 @@
 
 (defn with-field-options
   "`entity-config` with each field in `field-options` rendered as a select
-   over them, unless the config chose a widget other than a text input."
+   over them — or, given {:url :label}, as a combobox reading its options
+   there — unless the config chose a widget other than a text input."
   [entity-config field-options]
   (reduce-kv (fn [cfg field options]
                (cond-> cfg
                  (#{nil :text-input} (get-in cfg [:fields field :widget]))
-                 (update-in [:fields field] assoc :widget :select :options options)))
+                 (update-in [:fields field] merge
+                            (if (map? options)
+                              {:widget :combobox :combobox options}
+                              {:widget :select :options options}))))
              entity-config
              (or field-options {})))
 
@@ -774,18 +796,22 @@
           ;; original list state when redirecting back.
           (let [delete-url (cond-> (str "/web/admin/" (name entity-name) "/" (get record (:primary-key entity-config :id)))
                              return-to (str "?return_to=" (base/url-encode return-to)))]
-            [:button.button.ghost
-             {:type "button"
-              :class "gap-2 button-danger-text"
-              :hx-delete delete-url
-              :hx-target "body"
-              :hx-swap "outerHTML"
-              :hx-confirm [:t :admin/confirm-delete-record]
-              :data-confirm-title [:t :admin/modal-confirm-delete-title]
-              :data-confirm-cancel [:t :admin/modal-button-cancel]
-              :data-confirm-label [:t :admin/modal-button-delete]}
-             (icons/icon :trash {:size 14})
-             [:t :common/button-delete]]))]]
+            (list
+             [:button.button.ghost
+              (merge (modal/confirm-attrs "delete-record-confirm")
+                     {:type "button"
+                      :class "gap-2 button-danger-text"
+                      :hx-delete delete-url
+                      :hx-target "body"
+                      :hx-swap "outerHTML"})
+              (icons/icon :trash {:size 14})
+              [:t :common/button-delete]]
+             (modal/confirm-modal
+              {:id            "delete-record-confirm"
+               :title         [:t :admin/modal-confirm-delete-title]
+               :message       [:t :admin/confirm-delete-record]
+               :confirm-label [:t :common/button-delete]
+               :danger?       true}))))]]
       ;; Edit: the record's name, with what this page is above it.
       ;; New: what this page is.
       (if is-edit?

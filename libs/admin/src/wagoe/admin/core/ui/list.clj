@@ -10,6 +10,7 @@
             [wagoe.admin.core.ui.drawer :as drawer]
             [wagoe.admin.core.ui.filters :as filters]
             [wagoe.shared.ui.core.icons :as icons]
+            [wagoe.shared.ui.core.modal :as modal]
             [wagoe.shared.ui.core.table :as table-ui]
             [wagoe.shared.ui.core.alpine :as alpine]
             [clojure.string :as str]))
@@ -394,11 +395,13 @@
          :x-cloak    true}
    [:span {:class "bulk-count"}
     [:span {:x-text "selectedIds.length"}] " " [:t :admin/bulk-selected]]
+   ;; htmx asks the form, not the button, to confirm a submit
    [:form#bulk-action-form
-    {:hx-post    (str "/web/admin/" (name entity-name) "/bulk-delete")
-     :hx-target  "#entity-table-container"
-     :hx-swap    "outerHTML"
-     :hx-include "[name='ids[]']"}
+    (merge (modal/confirm-attrs "bulk-delete-confirm")
+           {:hx-post    (str "/web/admin/" (name entity-name) "/bulk-delete")
+            :hx-target  "#entity-table-container"
+            :hx-swap    "outerHTML"
+            :hx-include "[name='ids[]']"})
     [:button.button
      (merge (alpine/delete-button-attrs)
             {:type                "submit"
@@ -406,13 +409,15 @@
              :name                "action"
              :value               "delete"
              :id                  "bulk-delete-btn"
-             :form                "bulk-action-form"
-             :hx-confirm          [:t :admin/confirm-delete-selected]
-             :data-confirm-title  [:t :admin/modal-confirm-delete-title]
-             :data-confirm-cancel [:t :admin/modal-button-cancel]
-             :data-confirm-label  [:t :admin/modal-button-delete]})
+             :form                "bulk-action-form"})
      (icons/icon :trash {:size 14})
      [:t :admin/button-delete-selected]]]
+   (modal/confirm-modal
+    {:id            "bulk-delete-confirm"
+     :title         [:t :admin/modal-confirm-delete-title]
+     :message       [:t :admin/confirm-delete-selected]
+     :confirm-label [:t :common/button-delete]
+     :danger?       true})
    [:button {:type         "button"
              :class        "button bulk-clear"
              :x-on:click   "clearSelection()"}

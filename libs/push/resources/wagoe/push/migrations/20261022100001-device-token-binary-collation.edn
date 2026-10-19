@@ -1,0 +1,5 @@
+;; push_device_tokens.token in a binary collation on MySQL, whose default
+;; merges tokens differing only in case. Nothing to do on the other engines.
+{:ns      wagoe.push.shell.token-collation
+ :up-fn   "up"
+ :down-fn "down"}

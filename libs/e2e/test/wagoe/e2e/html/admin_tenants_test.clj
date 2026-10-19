@@ -143,21 +143,52 @@
         (is (nil? (loc/get-attribute (page/locator pg field) "aria-invalid")))
         (is (= "Acme again" (loc/input-value (page/locator pg field))))))))
 
+(defn- dialog-open? [pg id]
+  (page/evaluate pg (str "document.getElementById('" id "').open")))
+
+(defn- focused-value [pg]
+  (page/evaluate pg "document.activeElement.value || document.activeElement.getAttribute('data-confirm-modal')"))
+
 (deftest ^:integration ^:e2e soft-delete-removes-from-list
-  (testing "Soft-deleting a tenant via the detail page delete button removes it from the list"
+  (testing "Delete on the detail page asks in a modal; Esc keeps the tenant, confirm deletes it"
     (spel/with-testing-page [pg]
       (admin/login-as-admin! pg fx/*seed*)
-      ;; Navigate to the tenant detail page
       (page/navigate pg (admin/admin-url (str "/tenants/" (-> fx/*seed* :tenant :id))))
       (page/wait-for-load-state pg)
-      ;; Auto-accept any confirm dialog (native browser or HTMX)
-      (page/on-dialog pg (fn [dialog] (.accept dialog)))
-      ;; Click the Delete button on the detail page
-      (loc/click (page/locator pg "button:has-text('Delete')"))
-      ;; Should redirect to the list page after deletion
-      (page/wait-for-url pg #".*/web/admin/tenants.*" {:timeout 10000.0})
-      (page/wait-for-load-state pg)
-      ;; The deleted tenant should no longer appear in the list
-      (let [rows (admin/table-row-count pg)]
-        (is (zero? rows)
+      (let [delete (page/locator pg "button[data-confirm-modal='delete-record-confirm']")
+            url    (page/url pg)]
+        (loc/click delete)
+        (page/wait-for-selector pg "#delete-record-confirm[open]" {:timeout 5000.0})
+        (is (= "cancel" (focused-value pg)) "focus starts on cancel")
+        (loc/press (page/locator pg "#delete-record-confirm button[value='cancel']") "Escape")
+        (page/wait-for-function pg "!document.getElementById('delete-record-confirm').open"
+                                {:timeout 5000.0 :polling 50.0})
+        (is (= url (page/url pg)) "Esc sends no request")
+        (is (= "delete-record-confirm" (focused-value pg)) "focus returns to the trigger")
+        (loc/click delete)
+        (page/wait-for-selector pg "#delete-record-confirm[open]" {:timeout 5000.0})
+        (loc/click (page/locator pg "#delete-record-confirm button[value='confirm']"))
+        (page/wait-for-url pg #".*/web/admin/tenants(\?.*)?$" {:timeout 10000.0})
+        (page/wait-for-load-state pg)
+        (is (zero? (admin/table-row-count pg))
             "Soft-deleted tenant should not appear in the list")))))
+
+(deftest ^:integration ^:e2e bulk-delete-asks-first
+  (testing "Bulk delete waits for its modal: cancel keeps the rows, confirm deletes"
+    (spel/with-testing-page [pg]
+      (admin/login-as-admin! pg fx/*seed*)
+      (page/navigate pg (admin/admin-url "/tenants"))
+      (page/wait-for-load-state pg)
+      (loc/check (page/locator pg "table.data-table tbody input[name='ids[]']"))
+      (loc/click (page/locator pg "#bulk-delete-btn"))
+      (page/wait-for-selector pg "#bulk-delete-confirm[open]" {:timeout 5000.0})
+      (loc/click (page/locator pg "#bulk-delete-confirm button[value='cancel']"))
+      (is (not (dialog-open? pg "bulk-delete-confirm")))
+      (is (= 1 (admin/table-row-count pg)) "cancel deletes nothing")
+      (loc/click (page/locator pg "#bulk-delete-btn"))
+      (page/wait-for-selector pg "#bulk-delete-confirm[open]" {:timeout 5000.0})
+      (loc/click (page/locator pg "#bulk-delete-confirm button[value='confirm']"))
+      ;; Skeleton rows stand in while the request runs
+      (page/wait-for-function pg "!document.querySelector(\"table.data-table tbody input[name='ids[]'], tr.skeleton-row\")"
+                              {:timeout 10000.0 :polling 50.0})
+      (is (zero? (admin/table-row-count pg))))))
