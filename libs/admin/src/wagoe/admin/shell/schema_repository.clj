@@ -189,10 +189,13 @@
                                                (catch clojure.lang.ExceptionInfo _ []))))
               ;; Roles last: a has-many column needs the inverse relations, and
               ;; the default columns need the roles (ADR-040).
-              entity-config (-> (introspection/with-inverse-relationships entity-name own all)
-                                (display/with-display
-                                  {:derive-list-fields?
-                                   (not (contains? (get-in config [:entities entity-name]) :list-fields))}))]
+              entity-config (as-> own cfg
+                              (introspection/with-declared-parents entity-name cfg all)
+                              (introspection/with-inverse-relationships entity-name cfg all)
+                              (display/with-display
+                                cfg
+                                {:derive-list-fields?
+                                 (not (contains? (get-in config [:entities entity-name]) :list-fields))}))]
           ;; Here and not in compute-entity-config, which also runs for each
           ;; entity as another's possible child.
           (doseq [{:keys [message]} (:create-config-errors own)]

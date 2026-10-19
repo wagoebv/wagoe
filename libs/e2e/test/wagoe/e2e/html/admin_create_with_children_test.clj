@@ -57,7 +57,10 @@
       (is (= 2 (admin/table-row-count pg)))
       (let [shown (text pg)]
         (is (str/includes? shown "Hours"))
-        (is (str/includes? shown "Travel"))))))
+        (is (str/includes? shown "Travel")))
+      (is (= ["ORD-1" "ORD-1"]
+             (page/evaluate pg "() => [...document.querySelectorAll('table tbody td.c-relation a')].map(a => a.textContent)"))
+          "each line names its order, read through the e2e_order_id column"))))
 
 (deftest ^:integration ^:e2e an-order-without-lines-is-refused
   (spel/with-testing-page [pg]

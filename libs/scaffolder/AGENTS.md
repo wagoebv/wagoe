@@ -119,7 +119,10 @@ bb scaffold entity \
   (`shell/web_handlers.clj` exists) it gets the first entity's list and create
   form under `/web/<entities>`, from `core/<entity>_ui.clj` and
   `shell/<entity>_web_handlers.clj`; a `--belongs-to` entity picks its parent
-  from a select, which the routes init-key feeds with the parent's service. A
+  from a select of the parent's first 500 rows, which the routes init-key feeds
+  with the parent's service. Not a combobox: that needs a search method on the
+  parent's port, persistence and service, files the project owns and `entity`
+  does not edit. Past 500 parents, use `wagoe.shared.ui.core.combobox` by hand. A
   wiring from before that is brought up to date, unless hand-edited, when the
   command warns that the pages are not mounted. `--no-http` (or `:http false`
   in `:interfaces`) leaves out the API routes;

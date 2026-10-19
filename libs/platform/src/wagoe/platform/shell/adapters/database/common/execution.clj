@@ -3,7 +3,8 @@
    
    This is part of the imperative shell - it performs database I/O,
    manages transactions, and handles side effects like logging."
-  (:require [wagoe.core.utils.text :as text]
+  (:require [wagoe.core.utils.case-conversion :as case-conversion]
+            [wagoe.core.utils.text :as text]
             [wagoe.platform.core.database.constraint :as constraint]
             [wagoe.platform.core.http.problem-details :as problem]
             [wagoe.platform.core.database.query :as core-query]
@@ -89,16 +90,28 @@
                common-adapter/instant->iso))
         params))
 
+(defn- column->key-name
+  "A column label as the key name the rest of Wagoe uses for it. next.jdbc's
+   kebab builder splits digits off (`e2e_id` becomes `e-2e-id`), where
+   `snake-case->kebab-case-string` does not."
+  [label]
+  (case-conversion/snake-case->kebab-case-string (text/lower-case label)))
+
+(defn as-kebab-maps
+  "next.jdbc builder-fn: unqualified maps keyed by `column->key-name`."
+  [rs opts]
+  (rs/as-unqualified-modified-maps rs (assoc opts :label-fn column->key-name)))
+
 (defn- row-builder
   "Kebab-case maps, each value decoded as the engine's adapter reads it, where
    it does: while the row is built, not in a second pass over every row."
   [adapter]
   (if-let [decode (and (instance? wagoe.platform.ports.database.ResultDecoder adapter)
                        (protocols/value-decoder adapter))]
-    (rs/builder-adapter rs/as-unqualified-kebab-maps
+    (rs/builder-adapter as-kebab-maps
                         (fn [builder ^java.sql.ResultSet rs ^Integer i]
                           (decode (rs/read-column-by-index (.getObject rs i) (:rsmeta builder) i))))
-    rs/as-unqualified-kebab-maps))
+    as-kebab-maps))
 
 (defn- prepare-sql-query
   "Normalize supported query inputs into a JDBC-ready `[sql & params]` vector."

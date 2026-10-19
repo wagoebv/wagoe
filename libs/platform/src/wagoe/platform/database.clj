@@ -49,6 +49,11 @@
   "Run one statement over many parameter sets."
   execution/execute-batch!)
 
+(def as-kebab-maps
+  "The builder-fn queries here read rows with: for a module calling next.jdbc
+   itself, so its keys match."
+  execution/as-kebab-maps)
+
 ;; Retention purges call this: one DELETE of a year's rows holds its locks and
 ;; undo for all of them at once, and blocks writers until it finishes.
 (defn delete-in-batches!

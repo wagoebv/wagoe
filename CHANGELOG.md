@@ -208,6 +208,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **A column with a digit in its name read back empty** (BOU-760): `e2e_id` came back as `:e-2e-id`. Query results
+  now key it `:e2e-id`; rename any `:x-2y`-style key you read.
+- **Admin foreign-key cells showed no label when the parent's name differs from the key** (BOU-760). The parent a
+  `:has-many` declares is used.
 - **Export jobs: racing requests opened duplicates, archives were built in memory** (BOU-752). One open job per
   subject, five requests an hour per user (`:export-requests-per-hour`). Run `migrate up`.
 - **Push tokens differing only in case were one device on MySQL** (BOU-752); racing uploads could deadlock there.

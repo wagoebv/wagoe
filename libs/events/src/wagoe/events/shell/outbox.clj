@@ -120,7 +120,7 @@
 (defn- pending [ds limit]
   (jdbc/execute! ds ["SELECT id, envelope, attempts, first_failed_ms FROM event_outbox
                        WHERE delivered_ms IS NULL AND dead_ms IS NULL ORDER BY seq LIMIT ?" limit]
-                 {:builder-fn rs/as-unqualified-kebab-maps}))
+                 {:builder-fn db/as-kebab-maps}))
 
 (defn- publish-row
   "The bus's answer for `row`, or an error. An undecodable envelope is
@@ -217,7 +217,7 @@
   [{:keys [ds]}]
   (jdbc/execute! ds ["SELECT id, topic, attempts, last_error, dead_ms FROM event_outbox
                        WHERE dead_ms IS NOT NULL ORDER BY seq"]
-                 {:builder-fn rs/as-unqualified-kebab-maps}))
+                 {:builder-fn db/as-kebab-maps}))
 
 (defn requeue!
   "Make dead-lettered rows `ids` pending again, failures forgotten. They

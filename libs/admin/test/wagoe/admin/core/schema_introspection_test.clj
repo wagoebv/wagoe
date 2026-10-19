@@ -863,3 +863,14 @@
   (testing "the plural is :label, else the entity name"
     (is (= "Invoices" (introspection/plural-label {:label "Invoices"} :x)))
     (is (= "Line items" (introspection/plural-label {} :line-items)))))
+
+(deftest ^:unit a-parents-has-many-names-the-parent-of-a-foreign-key
+  (let [tickets (introspection/detect-relationships {:fields {:customer-id {} :user-id {}}})
+        configs {:shop-customers {:has-many [{:entity :tickets :foreign-key :customer_id}]}
+                 :tickets        tickets}
+        parents (into {} (map (juxt :field :entity))
+                      (get-in (introspection/with-declared-parents :tickets tickets configs)
+                              [:relationships :belongs-to]))]
+    (is (= :customers (:entity (first (get-in tickets [:relationships :belongs-to]))))
+        "detection guesses from the key")
+    (is (= {:customer-id :shop-customers :user-id :users} parents))))

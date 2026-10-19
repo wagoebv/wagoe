@@ -994,6 +994,21 @@
                            :has-many []   ; filled by with-inverse-relationships
                            :has-one []})))  ; Week 3+: One-to-one relationships
 
+(defn with-declared-parents
+  "`entity-config` with each belongs-to pointed at the parent whose explicit
+   `:has-many` names this entity under that key. Detection guesses the parent
+   from the key's name, so `customer-id` guessed `:customers` when the parent
+   is `:shop-customers`."
+  [entity-name entity-config entity-configs]
+  (let [declared (into {}
+                       (for [[parent cfg] entity-configs
+                             rel          (:has-many cfg)
+                             :when        (and (= entity-name (:entity rel)) (:foreign-key rel))]
+                         [(keyword (str/replace (name (:foreign-key rel)) "_" "-")) parent]))]
+    (update-in entity-config [:relationships :belongs-to]
+               (fn [bts]
+                 (mapv #(if-let [parent (declared (:field %))] (assoc % :entity parent) %) bts)))))
+
 (defn inverse-has-many
   "The has-many entries on `entity-name` implied by other entities'
    belongs-to, in the shape an explicit `:has-many` config takes. Read-only:

@@ -144,6 +144,11 @@
           result (db/execute-query! ctx ["SELECT 42 AS answer"])]
       (is (= [{:answer 42}] result)))))
 
+(deftest ^:integration a-column-with-digits-keeps-them-in-its-key
+  ;; next.jdbc's kebab builder split them off: e2e_id was :e-2e-id
+  (is (= [{:x2y-ref-id 1 :address-line1 2 :e2e-id 3}]
+         (db/execute-query! @test-ctx ["SELECT 1 AS x2y_ref_id, 2 AS address_line1, 3 AS \"E2E_ID\""]))))
+
 (deftest ^:integration test-execute-update
   (testing "Execute-update returns affected row count"
     (let [ctx @test-ctx
