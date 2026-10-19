@@ -34,32 +34,11 @@
 ;; =============================================================================
 
 (defn prepare-values-for-db
-  "Convert all typed values (UUID, Instant) to strings for database storage.
-   
-   This ensures that at the database boundary, all complex types are converted
-   to their string representations. This is critical for database compatibility
-   and follows the principle that type conversions happen at system edges.
-   
-   Args:
-     m: Map with potentially typed values
-     
-   Returns:
-     Map with all UUIDs and Instants converted to strings
-     
-   Example:
-     (prepare-values-for-db {:id (UUID/randomUUID) 
-                             :created-at (Instant/now)
-                             :name \"John\"})
-     ;=> {:id \"123e4567-...\" :created-at \"2024-01-10T...\" :name \"John\"}"
+  "`m` with its UUIDs as strings. An Instant is left for the adapter to encode
+   (BOU-655)."
   [m]
   (when m
-    (reduce-kv (fn [acc k v]
-                 (let [converted-value (cond
-                                         (instance? UUID v) (type-conversion/uuid->string v)
-                                         (instance? Instant v) (type-conversion/instant->string v)
-                                         :else v)]
-                   (assoc acc k converted-value)))
-               {} m)))
+    (update-vals m #(if (instance? UUID %) (type-conversion/uuid->string %) %))))
 
 ;; =============================================================================
 ;; Query Building Helpers
@@ -296,13 +275,13 @@
   "Partition prepared-data into primary-table and secondary-table maps.
    Each half gets an updated-at timestamp when the entity config declares one.
    Halves with no fields are returned as empty maps (callers should skip empty UPDATEs)."
-  [prepared-data secondary-fields entity-fields now-str]
+  [prepared-data secondary-fields entity-fields now]
   (let [secondary-data (select-keys prepared-data secondary-fields)
         primary-data   (apply dissoc prepared-data secondary-fields)
         add-ts         (fn [m]
                          (cond-> m
                            (and (seq m) (contains? entity-fields :updated-at))
-                           (assoc :updated-at now-str)))]
+                           (assoc :updated-at now)))]
     {:primary-data   (add-ts primary-data)
      :secondary-data (add-ts secondary-data)}))
 
@@ -526,7 +505,7 @@
 
 (defn- delete-row!
   "Delete one record, soft or hard. Returns true when a row changed."
-  [tx entity-config id-str soft? now-str]
+  [tx entity-config id-str soft? now]
   (let [table-name  (:table-name entity-config)
         primary-key (:primary-key entity-config :id)
         {:keys [soft-delete-table]} (resolve-query-config entity-config)
@@ -544,16 +523,16 @@
 
       ;; Split-table: active lives on the secondary table, deleted_at on both.
       (and split-cfg (contains? secondary :active) has-active?)
-      (do (update! (:secondary-table split-cfg) {:deleted-at now-str :active false})
-          (pos? (update! table-name {:deleted-at now-str})))
+      (do (update! (:secondary-table split-cfg) {:deleted-at now :active false})
+          (pos? (update! table-name {:deleted-at now})))
 
       :else
-      (pos? (update! soft-delete-table (cond-> {:deleted-at now-str} has-active? (assoc :active false)))))))
+      (pos? (update! soft-delete-table (cond-> {:deleted-at now} has-active? (assoc :active false)))))))
 
 ;; One delete as it runs: the transaction, whether it is soft, the time it
 ;; stamps, whether to read each row before deleting it (for the events), and
 ;; the rows already visited.
-(defrecord ^:private Deletion [tx soft? now-str priors? seen])
+(defrecord ^:private Deletion [tx soft? now priors? seen])
 
 (defn- delete-tree!
   "Delete `id` of `entity-name` and, first, its cascading has-many children,
@@ -562,7 +541,7 @@
    transaction rolls back what was already deleted. A soft delete leaves a
    child with no deleted_at column as it is, since its parent row stays.
    Returns {:entity :id :prior} per row removed; :prior only with priors?."
-  [{:keys [tx soft? now-str priors? seen] :as deletion} schema-provider entity-name id]
+  [{:keys [tx soft? now priors? seen] :as deletion} schema-provider entity-name id]
   (let [cfg    (ports/get-entity-config schema-provider entity-name)
         id-str (str id)]
     (if (or (@seen [entity-name id-str]) (and soft? (not (soft-deletable? cfg))))
@@ -588,7 +567,7 @@
               ;; Read in the transaction, just before the row goes: exactly
               ;; the row that is deleted, which a read before it cannot promise.
               prior    (when priors? (first (live-records tx schema-provider entity-name [id-str])))]
-          (if (delete-row! tx cfg id-str soft? now-str)
+          (if (delete-row! tx cfg id-str soft? now)
             (conj (vec children) {:entity entity-name :id id-str :prior prior})
             children))))))
 
@@ -612,7 +591,7 @@
   (let [soft? (:soft-delete (ports/get-entity-config schema-provider entity-name) false)]
     (db/with-transaction* db-ctx
       (fn [tx]
-        (let [deletion (->Deletion tx soft? (type-conversion/instant->string (Instant/now))
+        (let [deletion (->Deletion tx soft? (Instant/now)
                                    priors? (volatile! #{}))
               removed  (vec (mapcat #(delete-tree! deletion schema-provider entity-name %) ids))]
           (when (and workflows (not soft?))
@@ -710,11 +689,11 @@
                             (remove (fn [[k v]]
                                       (and (nil? v) (some? (get-in entity-fields [k :default-value])))))
                             (apply dissoc data (:readonly-fields entity-config #{})))
-        now-str       (type-conversion/instant->string (Instant/now))
+        now           (Instant/now)
         id-str        (type-conversion/uuid->string (UUID/randomUUID))
         prepared      (cond-> (assoc sanitized :id id-str)
-                        (contains? entity-fields :created-at) (assoc :created-at now-str)
-                        (contains? entity-fields :updated-at) (assoc :updated-at now-str))
+                        (contains? entity-fields :created-at) (assoc :created-at now)
+                        (contains? entity-fields :updated-at) (assoc :updated-at now))
         db-data       (case-conversion/kebab-case->snake-case-map (prepare-values-for-db prepared))]
     ;; Without RETURNING, for H2.
     (try
@@ -1072,12 +1051,11 @@
                  sanitized-data (writable-data entity-config data)
 
                    ; Only set timestamp columns that exist in the table
-                 now-str (type-conversion/instant->string (Instant/now))
+                 now (Instant/now)
                  entity-fields (:fields entity-config)
                  prepared-data (cond-> sanitized-data
-                                 (contains? entity-fields :updated-at) (assoc :updated-at now-str))
+                                 (contains? entity-fields :updated-at) (assoc :updated-at now))
 
-                  ; Convert all typed values (UUID, Instant) to strings for database
                  db-ready-data (prepare-values-for-db prepared-data)
 
                   ; Convert kebab-case keys to snake_case for database
@@ -1092,7 +1070,7 @@
                      (if split-cfg
                        (let [{:keys [secondary-table secondary-fields]} split-cfg
                              {:keys [primary-data secondary-data]}
-                             (split-update-data sanitized-data secondary-fields entity-fields now-str)
+                             (split-update-data sanitized-data secondary-fields entity-fields now)
                              primary-db   (-> primary-data
                                               prepare-values-for-db
                                               case-conversion/kebab-case->snake-case-map)
@@ -1164,10 +1142,9 @@
            (let [table-name (:table-name entity-config)
                  primary-key (:primary-key entity-config :id)
                  ; Prepare single field update with updated-at timestamp
-                 now-str (type-conversion/instant->string (Instant/now))
-               update-data {field value :updated-at now-str}
+                 now (Instant/now)
+               update-data {field value :updated-at now}
 
-               ; Convert typed values to database format
                db-ready-data (prepare-values-for-db update-data)
 
                ; Convert to snake_case for database
