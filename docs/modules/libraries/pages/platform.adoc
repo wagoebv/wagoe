@@ -228,6 +228,46 @@ Discovery builds a scaffolded module's four keys (`:wagoe/<name>`, `-repository`
   sorted by module key, then the handler's own `:extra-middleware`.
 * Any other `:http` key is a single slot; two modules setting it fail the boot.
 
+== Permission registry
+
+Every permission a group can hold is in one registry, built at boot from what
+the enabled modules declare. A module declares under `:authorization` in its
+`ig-config`; a scaffolded module does so with a `def authorization` in its
+wiring namespace:
+
+[source,clojure]
+----
+{:permissions {:orders/refund {:label "Refund orders"}}
+ :roles       {:orders/manager {:description "Everything in orders"
+                                :permissions #{:orders/read :orders/write :orders/refund}}}
+ :scopes      {:domain-id {:label "Domain" :entity :domains}}}
+----
+
+A module never declares `<module>/read` and `<module>/write`: every module has
+them. Every admin entity has `admin.<entity>/read` and `admin.<entity>/write`.
+The `:permissions` enum under `:wagoe/user :groups` is read in as well, until
+2.0. `bb scaffold` gives a new module three code roles: `<module>/viewer`,
+`<module>/editor` and `<module>/manager`.
+
+The boot fails when two modules declare the same permission or role, or one
+scope key differently, when a role or a route's `:permission` names something
+outside the registry, and when a code role outside the admin module holds an
+`admin.*` permission. Every route a module contributes carries its module as
+`:wagoe/module` in its route data.
+
+Read the registry through `wagoe.platform.ports.authorization`:
+
+[source,clojure]
+----
+(require '[wagoe.platform.ports.authorization :as authz])
+(def registry (:wagoe/permission-registry (wagoe.platform.shell.system.wiring/system)))
+(authz/permissions registry) ; {:orders/read {:label "Read orders" :module :wagoe/orders :source :derived} …}
+(authz/roles registry)
+(authz/permission? registry :orders/refund)
+----
+
+The registry does not yet change who may do what.
+
 == Data export and retention
 
 A module exports the data it holds about a person, and expires what it keeps,

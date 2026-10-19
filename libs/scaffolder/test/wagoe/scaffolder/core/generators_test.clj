@@ -4,7 +4,8 @@
   (:require [clojure.test :refer [deftest testing is]]
             [clojure.string :as str]
             [wagoe.scaffolder.core.template :as template]
-            [wagoe.scaffolder.core.generators :as gen]))
+            [wagoe.scaffolder.core.generators :as gen]
+            [wagoe.platform.core.authorization :as authz]))
 
 ;; =============================================================================
 ;; Test context helpers
@@ -853,3 +854,14 @@
     (is (< 8 (count forms)) "ns form plus four init-keys and four halt-keys")
     (is (= 'ns (ffirst forms)))
     (is (= 'wagoe.product.shell.module-wiring (second (first forms))))))
+
+(deftest ^:unit generated-wiring-declares-viewer-editor-and-manager
+  (let [output   (gen/generate-module-wiring-file (assoc base-ctx :module-name "inventory"))
+        declared (some (fn [[op sym v]] (when (and (= 'def op) (= 'authorization sym)) v))
+                       (read-string (str "[" output "]")))
+        registry (authz/build-registry {:wagoe/inventory declared})]
+    (is (= {:inventory/viewer  #{:inventory/read}
+            :inventory/editor  #{:inventory/read :inventory/write}
+            :inventory/manager #{:inventory/read :inventory/write}}
+           (update-vals (:roles declared) :permissions)))
+    (is (nil? (:error registry)) "and the platform's registry takes it")))

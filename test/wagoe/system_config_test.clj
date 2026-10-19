@@ -115,9 +115,9 @@
       ;; In the module-routes collection, not a :membership-routes slot of its
       ;; own: platform keeps no list of which modules may serve HTTP (BOU-330).
       (is (some #{(ig/ref :wagoe/membership-routes)}
-                (get-in ig-config [:wagoe/http-handler :module-routes])))
+                (map :contribution (get-in ig-config [:wagoe/http-handler :module-routes]))))
       (is (some #{(ig/ref :wagoe/tenant-routes)}
-                (get-in ig-config [:wagoe/http-handler :module-routes])))
+                (map :contribution (get-in ig-config [:wagoe/http-handler :module-routes]))))
       ;; Tenant/membership middleware is no longer built inside http-handler; the
       ;; tenant lib's component arrives with every module's middleware.
       (is (= [(ig/ref :wagoe/tenant-http-middleware) (ig/ref :wagoe/user-home-middleware)]

@@ -17,7 +17,8 @@
    [wagoe.admin.shell.service :as service]
    [wagoe.admin.shell.user-writer :as user-writer]
    [wagoe.admin.shell.http :as http]
-   [wagoe.admin.shell.http.support :as support]))
+   [wagoe.admin.shell.http.support :as support]
+   [wagoe.platform.core.authorization :as authorization]))
 
 ;; =============================================================================
 ;; Admin Config Component (pass-through holder referenced by other components)
@@ -60,7 +61,7 @@
 
 (defmethod ig/init-key :wagoe/admin-service
   [_ {:keys [db-ctx schema-provider logger error-reporter config event-publisher workflows]
-       users :user-service}]
+      users :user-service}]
   (service/create-admin-service db-ctx schema-provider logger error-reporter config
                                 event-publisher workflows
                                 ;; An entity config says `:writer :user` to be written
@@ -130,6 +131,12 @@
               admin-schema/default-admin-config
               settings))
 
+(defn- entity-permissions
+  "`admin.<entity>/read` and `admin.<entity>/write`."
+  [entity]
+  (authorization/read-write-permissions (str "admin." (name entity))
+                                        (str (name entity) " in the admin")))
+
 (defn ig-config
   "This module's Integrant entries, for `wagoe.platform.shell.system.config`.
 
@@ -175,4 +182,7 @@
                                      workflows? (assoc :workflows (ig/ref :wagoe/workflow-admin)))}
      ;; A ref in a collection, not a named slot on the handler: platform holds
      ;; no list of which modules may contribute routes (BOU-330).
-     :routes [(ig/ref :wagoe/admin-routes)]}))
+     :routes [(ig/ref :wagoe/admin-routes)]
+     ;; admin.<entity>/read and /write for every entity the admin manages.
+     :authorization {:permissions (into {} (map entity-permissions)
+                                        (get-in settings [:entity-discovery :allowlist]))}}))
