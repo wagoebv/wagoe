@@ -58,11 +58,15 @@
                                     :order-by [[:created_at :desc]]
                                     :limit    1})))
 
-  (export-jobs-created-before [_ cutoff limit]
+  (export-jobs-created-before [_ cutoff open-before limit]
     (mapv row->job
           (db/execute-query! ctx {:select   [:*]
                                   :from     [:storage_export_jobs]
-                                  :where    [:< :created_at (->ts cutoff)]
+                                  :where    [:and
+                                             [:< :created_at (->ts cutoff)]
+                                             [:or
+                                              [:not [:in :status ["pending" "running"]]]
+                                              [:< :created_at (->ts open-before)]]]
                                   :order-by [[:created_at :asc] [:id :asc]]
                                   :limit    limit})))
 

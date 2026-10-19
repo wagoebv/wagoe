@@ -63,21 +63,36 @@
   "The handler of `job-type`. The archive is private and kept out of the
    upload index, so it is in no later export."
   [{:keys [store file-storage data-export]} {:keys [export-id]}]
-  (if-let [job (ports/find-export-job store export-id)]
-    (try
-      (ports/save-export-job! store (assoc job :status :running))
-      (let [stored (ports/store-file file-storage
-                                     {:bytes (archive-bytes data-export (:subject job)) :content-type "application/zip"}
-                                     {:filename (str export-id ".zip") :path "data-exports" :visibility :private})]
-        (ports/save-export-job! store (core/finished job (:key stored) (Instant/now)))
-        {:success? true :result {:export-id export-id}})
-      (catch Exception e
-        (log/error e "Data export job failed" {:export-id export-id :subject (:subject job)})
-        (ports/save-export-job! store (core/failed job (ex-message e) (Instant/now)))
-        {:success? false
-         :error    {:type :data-export-failed :message (str "Data export " export-id " failed")}}))
-    ;; Purged before it ran: nothing is waiting for it.
-    {:success? true :result {:export-id export-id :skipped :gone}}))
+  (let [job (ports/find-export-job store export-id)]
+    (cond
+      ;; Purged before it ran: nothing is waiting for it.
+      (nil? job)
+      {:success? true :result {:export-id export-id :skipped :gone}}
+
+      ;; Delivered again after it finished: a second archive would replace the
+      ;; first's key, and no retention run would find the first. A failed one
+      ;; told its user to ask again; retried, it would flip back to running.
+      (#{:done :failed} (:status job))
+      {:success? true :result {:export-id export-id :skipped (:status job)}}
+
+      :else
+      (let [stored (volatile! nil)]
+        (try
+          (ports/save-export-job! store (assoc job :status :running))
+          (vreset! stored (ports/store-file file-storage
+                                            {:bytes (archive-bytes data-export (:subject job)) :content-type "application/zip"}
+                                            {:filename (str export-id ".zip") :path "data-exports" :visibility :private}))
+          (ports/save-export-job! store (core/finished job (:key @stored) (Instant/now)))
+          {:success? true :result {:export-id export-id}}
+          (catch Exception e
+            (log/error e "Data export job failed" {:export-id export-id :subject (:subject job)})
+            ;; An archive no job points at is personal data nothing deletes.
+            (when-let [k (:key @stored)]
+              (try (ports/delete-file file-storage k)
+                   (catch Exception de (log/error de "Could not delete an unrecorded export archive" {:key k}))))
+            (ports/save-export-job! store (core/failed job (ex-message e) (Instant/now)))
+            {:success? false
+             :error    {:type :data-export-failed :message (str "Data export " export-id " failed")}}))))))
 
 (defn download-response
   "The archive of `job`: a redirect to a short-lived signed URL where the
@@ -98,7 +113,8 @@
 (defrecord ExportArchiveRetention [store file-storage]
   privacy/IRetentionPolicy
   (purge-before! [_ cutoff]
-    (data-export/purge-in-pages! #(ports/export-jobs-created-before store cutoff %)
+    (data-export/purge-in-pages! #(ports/export-jobs-created-before
+                                   store cutoff (.minus (Instant/now) ^java.time.Duration core/download-window) %)
                                  :id
                                  (fn [{:keys [id file-key]}]
                                    (when file-key (data-export/delete-or-confirm-gone! file-storage file-key))

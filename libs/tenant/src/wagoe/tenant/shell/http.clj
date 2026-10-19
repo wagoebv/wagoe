@@ -306,12 +306,18 @@
 ;; Data export
 ;; =============================================================================
 
-(defn- audit-context [request]
+(defn- at-most [n s]
+  (some-> s (subs 0 (min n (count s)))))
+
+(defn- audit-context
+  "Cut to the audit columns' lengths: a header too long to store would fail
+   the insert, and with it the export."
+  [request]
   (let [actor (or (:user request) (get-in request [:session :user]))]
     {:actor-id    (:id actor)
-     :actor-email (:email actor)
-     :ip-address  (client-ip/request-ip request)
-     :user-agent  (get-in request [:headers "user-agent"])}))
+     :actor-email (at-most 255 (:email actor))
+     :ip-address  (at-most 64 (client-ip/request-ip request))
+     :user-agent  (at-most 512 (get-in request [:headers "user-agent"]))}))
 
 (defn export-tenant-handler
   "A tenant's data export: what every module holds about it. Recorded in the
@@ -322,12 +328,13 @@
       (fn [tenant-id]
         (let [doc (privacy/export-subject data-export {:type :tenant :id tenant-id})]
           (if (get-in doc [:sections :tenant])
-            (do (log/info "Tenant data export" {:tenant-id tenant-id :actor-id (get-in request [:user :id])})
-                ;; Before the response, and not caught: an export nobody can trace is not served.
-                (tenant-ports/record-tenant-audit!
-                 audit-repository
-                 (audit/data-export-entry (random-uuid) tenant-id (audit-context request) (Instant/now)))
-                (privacy/export-response data-export doc request))
+            (let [context (audit-context request)]
+              (log/info "Tenant data export" {:tenant-id tenant-id :actor-id (:actor-id context)})
+              ;; Before the response, and not caught: an export nobody can trace is not served.
+              (tenant-ports/record-tenant-audit!
+               audit-repository
+               (audit/data-export-entry (random-uuid) tenant-id context (Instant/now)))
+              (privacy/export-response data-export doc request))
             (error-response 404 :not-found "Tenant not found")))))))
 
 (defn export-routes

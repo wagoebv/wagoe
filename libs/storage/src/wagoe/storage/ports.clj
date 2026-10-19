@@ -106,8 +106,10 @@
   (open-export-job [this subject]
     "A :pending or :running job for `subject`, or nil.")
 
-  (export-jobs-created-before [this cutoff limit]
-    "At most `limit` jobs created before `cutoff`, an Instant, oldest first.")
+  (export-jobs-created-before [this cutoff open-before limit]
+    "At most `limit` jobs created before `cutoff`, an Instant, oldest first.
+    A :pending or :running job only when also created before `open-before`:
+    a worker may still be building it.")
 
   (remove-export-job! [this id]
     "Forget the job with `id`."))

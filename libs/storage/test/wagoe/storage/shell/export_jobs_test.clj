@@ -135,6 +135,9 @@
                                                      (export-data [_ _] (throw (ex-info "down" {:type :database-error}))))}))]
         (is (false? (:success? (run-queued-job! broken))))
         (is (= :failed (get-in (call app :get (str "/api/v1/me/export-jobs/" id) user) [:body :status])))
+        (testing "a retry of the failed job leaves it failed"
+          (is (= :failed (get-in (sut/run-export-job ctx {:export-id id}) [:result :skipped])))
+          (is (= :failed (:status (ports/find-export-job (:store ctx) id)))))
         (is (not= id (request! app user)))))))
 
 (deftest ^:integration a-job-that-could-not-be-queued-is-not-left-open
@@ -168,7 +171,12 @@
         (is (zero? (privacy/purge-before! policy (.minusSeconds (Instant/now) 3600))))
         (is (= 1 (privacy/purge-before! policy (.plusSeconds (Instant/now) 60))))
         (is (false? (ports/file-exists? file-storage k)))
-        (is (nil? (ports/find-export-job store id)))))))
+        (is (nil? (ports/find-export-job store id)))
+
+        (testing "a job a worker may still be building is spared"
+          (let [open (request! app {:id (random-uuid)})]
+            (is (zero? (privacy/purge-before! policy (.plusSeconds (Instant/now) 60))))
+            (is (some? (ports/find-export-job store open)))))))))
 
 (deftest ^:unit s3-and-gcs-redirect-to-a-short-lived-signed-url
   (let [signed (atom nil)
