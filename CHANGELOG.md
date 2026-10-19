@@ -174,6 +174,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **`bb ai gen-tests` grounds fixtures in the entity's Malli schema and refuses ones that break it** (BOU-511).
+  Add `--run` to also run the generated tests before writing; that runs model code, unsandboxed.
 - **The login response's `user` carried the hashes of spent MFA backup codes** (BOU-737). Upgrade if you use MFA.
 - **Generated projects printed JDK restricted-method warnings on every SQLite task** (BOU-593). New projects pass
   `--enable-native-access=ALL-UNNAMED`; add it to your aliases' `:jvm-opts`, and `:manifest {"Enable-Native-Access" "ALL-UNNAMED"}` to `b/uber`.
