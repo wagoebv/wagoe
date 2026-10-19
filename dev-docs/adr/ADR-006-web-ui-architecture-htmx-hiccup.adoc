@@ -9,6 +9,9 @@
 
 Accepted — `libs/shared-ui/`.
 
+NOTE: Pico CSS, chosen below, was later replaced by daisyUI/Tailwind on
+`wagoe-tokens.css` and removed in 1.x. See the stability page.
+
 == Context
 
 The Wagoe Framework supports three interaction modes as specified in the PRD: REST API, CLI, and Web Frontend. While REST API and CLI interfaces are well-established, the web frontend requires architectural decisions that align with the framework's core principles.
