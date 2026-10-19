@@ -39,11 +39,9 @@
 ;; =============================================================================
 
 (defn instant->iso
-  "An Instant parameter as its ISO string, anything else as it is. PostgreSQL
-   (stringtype=unspecified) and H2 parse it into a timestamp column and keep it
-   verbatim in a text one; bound as a timestamp, a text column held
-   `2026-03-24 10:15:30+00`, which nothing reads back (BOU-655). SQLite stores
-   an :instant as TEXT."
+  "An Instant parameter as its ISO string, anything else as it is: PostgreSQL
+   and H2 parse that into a timestamp column and keep it verbatim in a text
+   one, where a bound timestamp became unreadable text (BOU-655)."
   [value]
   (if (instance? java.time.Instant value) (tc/instant->string value) value))
 

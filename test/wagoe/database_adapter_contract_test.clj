@@ -21,7 +21,7 @@
             [wagoe.platform.ports.database :as protocols]
             [wagoe.platform.shell.adapters.database.common.schema]
             [wagoe.platform.shell.adapters.database.factory :as factory])
-  (:import [java.time Instant]
+  (:import [java.time Instant ZoneOffset]
            [java.util Locale UUID]))
 
 ;; =============================================================================
@@ -112,6 +112,9 @@
   {:uuid      [:uuid (UUID/randomUUID) identity tc/string->uuid]
    :instant   [:instant (Instant/ofEpochMilli 1767225600123) identity tc/string->instant]
    :instant-us  [:instant (Instant/parse "2026-10-15T14:16:48.890413Z") identity tc/string->instant]
+   ;; What admin's datetime form writes: ISO text with the server's offset.
+   :instant-offset [:instant (Instant/parse "2026-10-15T14:16:48.890413Z")
+                    #(str (.atOffset ^Instant % (ZoneOffset/ofHours 2))) tc/string->instant]
    ;; Text that reads as an instant stays text: MySQL rewrote it (BOU-655).
    :iso-text  [:string "2026-10-15T14:16:48.890413Z" identity identity]
    :true      [:boolean true ::adapter-boolean ::adapter-boolean]

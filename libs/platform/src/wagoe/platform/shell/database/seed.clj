@@ -48,15 +48,19 @@
 
 (defn- insert-table!
   "Inserts one table's rows inside the caller's transaction, each value encoded
-   as `adapter`'s engine takes it. An ISO string in one of `timestamp-columns`
-   goes as the Instant it names: MySQL refuses the string (BOU-657). Returns
-   the count."
+   as `adapter`'s engine takes it. A `…Z` string in one of `timestamp-columns`
+   goes as the Instant it names: MySQL refuses the Z (BOU-657). One with an
+   offset stays text, so a zone-less column keeps its wall time. Returns the
+   count."
   [tx adapter timestamp-columns {:keys [table rows]}]
-  (let [rows (mapv (fn [row]
-                     (into row (for [[k v] row
-                                     :when (and (string? v) (timestamp-columns (name k)))]
-                                 [k (or (type-conversion/string->instant v) v)])))
-                   rows)]
+  (let [rows (cond->> rows
+               (seq timestamp-columns)
+               (mapv (fn [row]
+                       (into row (for [[k v] row
+                                       :when (timestamp-columns (name k))
+                                       :let  [t (type-conversion/iso-instant v)]
+                                       :when t]
+                                   [k t])))))]
     (jdbc/execute! tx (execution/encode-params adapter (sql/format {:insert-into (keyword table)
                                                                     :values      rows})))
     (count rows)))
@@ -105,9 +109,9 @@
       (if (.next rs) (recur (conj out (f rs))) out))))
 
 (defn- table-info
-  "{:columns #{name} :uuid-id? bool} of `table`, or nil when the database does
-   not know it. H2 keeps unquoted names upper-case, so that spelling is asked
-   for too."
+  "{:columns #{name} :timestamp-columns #{name} :uuid-id? bool} of `table`, or
+   nil when the database does not know it. H2 keeps unquoted names upper-case,
+   so that spelling is asked for too."
   [^Connection c adapter table]
   (let [md     (.getMetaData c)
         catalog (try (.getCatalog c) (catch Exception _ nil))
