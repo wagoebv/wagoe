@@ -131,5 +131,7 @@
   (binding [pp/*print-right-margin* 100
             pp/*print-pprint-dispatch* edn-dispatch
             *print-length* nil
-            *print-level* nil]
+            *print-level* nil
+            *print-readably* true
+            *print-dup* false]
     (str/trimr (with-out-str (pp/pprint x)))))

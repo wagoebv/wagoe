@@ -106,7 +106,7 @@
                  [:p [:strong "Affected components: "]
                   (str/join ", " (map pr-str (cfg-edit/affected-components diff)))]
                  [:pre.code-block
-                  (str "Current: " (cfg-edit/format-edn (secrets/redact old-val)) "\n\nProposed: " new-val-str)]])))))))
+                  (str "Current:\n" (cfg-edit/format-edn (secrets/redact old-val)) "\n\nProposed:\n" new-val-str)]])))))))
 
 (defn render-apply-result
   "Render the result of a config apply operation as an HTML fragment."
