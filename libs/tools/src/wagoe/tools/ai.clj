@@ -15,6 +15,7 @@
   (:require [wagoe.tools.ansi :refer [bold red yellow]]
             [wagoe.tools.text :as text]
             [wagoe.tools.help :as help]
+            [clojure.edn :as edn]
             [clojure.java.io :as io]
             [clojure.string :as str]
             [babashka.process :refer [shell]]))
@@ -167,24 +168,45 @@
   (some f (take-while seq (iterate rest lines))))
 
 (defn- cli-message
-  "The message under a Clojure CLI report header thrown in a wagoe namespace."
+  "The message under a Clojure CLI report header thrown in a wagoe namespace.
+   It ends at `Full report at:`; a REPL prints none, so there it ends at the
+   first blank line rather than taking whatever was pasted after it."
   [lines]
   (some-tail (fn [[line & more]]
                (when (some->> (re-find cli-header line) second (re-find #"^wagoe\."))
-                 {:message (take-while #(not (str/starts-with? (str/trim %) "Full report at:"))
-                                       more)}))
+                 (let [[msg tail] (split-with #(not (str/starts-with? (str/trim %) "Full report at:"))
+                                              more)]
+                   {:message (if (seq tail) msg (take-while (complement str/blank?) msg))})))
              lines))
+
+(defn- whole-map?
+  "Whether `s` reads as one EDN map and nothing after it."
+  [s]
+  (try
+    (let [r (java.io.PushbackReader. (java.io.StringReader. s))]
+      (and (map? (edn/read {:default (fn [_ v] v)} r))
+           (str/blank? (slurp r))))
+    (catch Exception _ false)))
 
 (defn- split-data
   "The lines of a printed `ExceptionInfo: msg {data}` as message and data,
-   which follows the message's last line."
+   which follows the message's last line. The message may hold a map itself,
+   so the data is the first ` {:` whose rest reads as one whole map."
   [lines]
   (let [last-line (str (last lines))
-        i         (str/index-of last-line " {:")]
+        starts    (take-while some? (iterate #(str/index-of last-line " {:" (inc %))
+                                             (str/index-of last-line " {:")))
+        i         (or (some #(when (whole-map? (subs last-line (inc %))) %) starts)
+                      (first starts))]
     (if i
       {:message (concat (butlast lines) [(subs last-line 0 i)])
        :data    (subs last-line i)}
       {:message lines})))
+
+(defn- unescape
+  "A printed string's body without its escapes, or as-is when it does not read."
+  [s]
+  (try (edn/read-string (str "\"" s "\"")) (catch Exception _ s)))
 
 (defn- trace-message
   "The message and data of a printed `ExceptionInfo: msg {data}` whose first
@@ -213,7 +235,7 @@
       (concat ["The error says:"]
               (map #(if (str/blank? %) "" (str "  " %)) (str/split-lines body))
               (for [[_ k v] (re-seq #":(fix|hint) \"((?:[^\"\\]|\\.)*)\"" (str data))]
-                (str (text/capitalize k) ": " v))))))
+                (str (text/capitalize k) ": " (unescape v)))))))
 
 (defn known-remedy
   "What the error already says about fixing itself, or nil.
@@ -265,9 +287,11 @@
       (println)
       (println (yellow "The explanation below is AI-generated and experimental.")))
     ;; The model is told this is the answer, so it explains it rather than
-    ;; inventing another.
-    (run-clojure! (cond-> (into ["explain"] args)
-                    remedy (into ["--known-fix" remedy]))
+    ;; inventing another. Ahead of the user's args, so a `--` or a dangling
+    ;; `--file` there cannot swallow it.
+    (run-clojure! (-> ["explain"]
+                      (cond-> remedy (into ["--known-fix" remedy]))
+                      (into args))
                   (when-not file {:in input}))))
 
 ;; =============================================================================

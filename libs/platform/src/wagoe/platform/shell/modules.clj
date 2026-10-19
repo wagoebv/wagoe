@@ -201,7 +201,7 @@
   [active known-keys]
   (when-let [orphans (seq (unclaimed-keys active known-keys))]
     (throw (ex-info
-            (str "WGE-106: :active names " (count orphans) " key(s) nothing will assemble:\n"
+            (str ":active names " (count orphans) " key(s) nothing will assemble (WGE-106):\n"
                  (str/join "\n" (map #(str "  " %) orphans))
                  "\n\n  A module?   Give it :enabled? true — bb scaffold integrate"
                  " writes that.\n"

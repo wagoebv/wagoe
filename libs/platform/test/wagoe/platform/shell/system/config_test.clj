@@ -96,7 +96,7 @@
       ;; The code is in the message so `bb ai explain` finds its catalogue fix
       ;; in a pasted trace (BOU-512).
       (is (= "WGE-106" (:wagoe/error-code (ex-data e))))
-      (is (str/starts-with? (ex-message e) "WGE-106: "))))
+      (is (str/includes? (ex-message e) "(WGE-106):"))))
 
   (testing "a module says so with :enabled?, and is looked for by name"
     ;; Not this check's error any more: it reaches module discovery, which
