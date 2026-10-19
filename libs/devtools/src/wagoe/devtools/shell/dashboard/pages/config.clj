@@ -5,8 +5,46 @@
             [wagoe.devtools.core.config-editor :as cfg-edit]
             [wagoe.config.secrets :as secrets]
             [clojure.edn :as edn]
+            [clojure.pprint :as pp]
             [clojure.string :as str]
             [hiccup2.core :as h]))
+
+(defn- pprint-map
+  "clojure.pprint's map printer without the commas, keyword keys sorted."
+  [m]
+  (let [entries (cond->> (seq m) (every? keyword? (keys m)) (sort-by key))]
+    (pp/pprint-logical-block :prefix "{" :suffix "}"
+      (loop [[[k v :as entry] & more] entries]
+        (when entry
+          (pp/pprint-logical-block
+           (pp/write-out k)
+           (.write ^java.io.Writer *out* " ")
+           (pp/pprint-newline :linear)
+           (pp/write-out v))
+          (when more
+            (.write ^java.io.Writer *out* " ")
+            (pp/pprint-newline :linear)
+            (recur more)))))))
+
+(defn- edn-dispatch
+  "simple-dispatch prints a record as a plain map; keep its tag, as pr-str does."
+  [x]
+  (cond
+    (record? x) (do (.write ^java.io.Writer *out* (str "#" (.getName (class x))))
+                    (pprint-map x))
+    (map? x)    (pprint-map x)
+    :else       (pp/simple-dispatch x)))
+
+(defn format-edn
+  "`x` pretty-printed for the editor. Anything that is not a collection
+   (#inst, #uuid, a tagged literal) prints as pr-str prints it."
+  [x]
+  (binding [pp/*print-right-margin* 100
+            pp/*print-pprint-dispatch* edn-dispatch
+            *print-length* nil
+            *print-level* nil
+            *print-namespace-maps* false]
+    (str/trimr (with-out-str (pp/pprint x)))))
 
 (defn- config-section
   "Render a single top-level config section as a card — editable with Preview
@@ -15,12 +53,12 @@
    contains valid EDN that can round-trip through edn/read-string."
   [section-key section-val editable?]
   (let [key-str (pr-str section-key)
-        val-str (pr-str (secrets/redact (cfg-edit/strip-refs section-val)))]
+        val-str (format-edn (secrets/redact (cfg-edit/strip-refs section-val)))]
     (c/card {:title key-str}
             [:div
              [:textarea.code-block
               {:name        (str "config-" key-str)
-               :rows        (min 15 (max 3 (count (str/split-lines val-str))))
+               :rows        (min 30 (max 3 (count (str/split-lines val-str))))
                :style       "width:100%;font-family:var(--font-mono);font-size:12px;background:var(--bg-inset);color:var(--fg-base);border:1px solid var(--border);padding:8px;resize:vertical"
                :data-original val-str
                :readonly    (not editable?)}
@@ -106,7 +144,7 @@
                  [:p [:strong "Affected components: "]
                   (str/join ", " (map pr-str (cfg-edit/affected-components diff)))]
                  [:pre.code-block
-                  (str "Current: " (pr-str (secrets/redact old-val)) "\n\nProposed: " new-val-str)]])))))))
+                  (str "Current: " (format-edn (secrets/redact old-val)) "\n\nProposed: " new-val-str)]])))))))
 
 (defn render-apply-result
   "Render the result of a config apply operation as an HTML fragment."
