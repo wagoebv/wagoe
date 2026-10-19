@@ -234,6 +234,25 @@ Each transition out of the current state comes back with `:enabled?`, and a `:re
 ;;     {:id :cancelled :to :cancelled :enabled? true}]
 ----
 
+== In the caller's transaction
+
+`start-workflow!` and `transition!` take an optional transaction before their input, so an entity and its workflow commit or roll back together.
+Pass an open transaction on the workflow store's datasource: a next.jdbc connection or a platform `with-transaction` context.
+
+[source,clojure]
+----
+(jdbc/with-transaction [tx ds]
+  (orders/create! tx order)
+  (ports/start-workflow! engine tx {:workflow-id :order-workflow
+                                    :entity-type :order
+                                    :entity-id   (:id order)}))
+----
+
+A datasource is refused, since it would autocommit, and a nil transaction writes on the store's own connection.
+Hooks run before the caller commits; side-effect jobs join the transaction only on the database job queue.
+Code inside a platform `with-transaction` without a handle on it can pass `(wagoe.platform.database/current-transaction)`.
+Scaffolded entities do: a create and its workflow instance are written in one transaction.
+
 == Joining an entity to its instance
 
 `workflow_instances.entity_id` is text, because an entity need not be keyed by a UUID.

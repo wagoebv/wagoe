@@ -11,40 +11,32 @@
 (defn- generate-product-id []
   (UUID/randomUUID))
 
-(defn- create-with-children
-  "Create `prepared` and each child `data` carries under a key of `children`,
-   in one transaction: all of them or none. The product comes back with them."
-  [repository children prepared data]
-  (ports/transact repository
-                  (fn []
-                    (reduce-kv (fn [created k {:keys [foreign-key create]}]
-                                 (cond-> created
-                                   (contains? data k)
-                                   (assoc k (mapv #(create (assoc % foreign-key (:id created))) (get data k)))))
-                               (ports/create repository prepared)
-                               children))))
-
 (defn- start-workflows!
   "Start the workflows of the children created with `created`, then its own
-   (`start`, when it has one), after the commit: the workflow store writes on
-   a connection of its own. No row without its workflow: on a failure the ones
-   started are removed, the row deleted with its children, and the error
-   rethrown."
-  [repository children created start]
-  (let [steps   (concat (for [[k {start-child :start undo :remove}] children
-                              :when start-child
-                              {:keys [id]} (get created k)]
-                          [#(start-child id) #(undo id)])
-                        (when start [[#(start (:id created)) (constantly nil)]]))
-        started (volatile! [])]
-    (try
-      (doseq [[run undo] steps]
-        (run)
-        (vswap! started conj undo))
-      (catch Exception e
-        (run! #(%) @started)
-        (ports/delete repository (:id created))
-        (throw e)))))
+   (`start`, when it has one). In the create's transaction, which each
+   workflow joins: no row without its workflow."
+  [children created start]
+  (doseq [[k {start-child :start}] children
+          :when start-child
+          {:keys [id]} (get created k)]
+    (start-child id))
+  (when start (start (:id created))))
+
+(defn- create-with-children
+  "Create `prepared` and each child `data` carries under a key of `children`,
+   with their workflows, in one transaction: all of them or none. The
+   product comes back with its children."
+  [repository children prepared data start]
+  (ports/transact repository
+                  (fn []
+                    (let [created (reduce-kv (fn [created k {:keys [foreign-key create]}]
+                                               (cond-> created
+                                                 (contains? data k)
+                                                 (assoc k (mapv #(create (assoc % foreign-key (:id created))) (get data k)))))
+                                             (ports/create repository prepared)
+                                             children)]
+                      (start-workflows! children created start)
+                      created))))
 
 (defn- with-children
   "`rows` with their children under each key of `ks` that `children` can read,
@@ -62,10 +54,8 @@
 (defrecord ProductService [repository children]
   ports/IProductService
   (create-product [_this data]
-    (let [prepared (core/prepare-new-product (apply dissoc data (keys children)) (generate-product-id) (current-time))
-          created  (create-with-children repository children prepared data)]
-      (start-workflows! repository children created nil)
-      created))
+    (let [prepared (core/prepare-new-product (apply dissoc data (keys children)) (generate-product-id) (current-time))]
+      (create-with-children repository children prepared data nil)))
   (get-product [_this id]
     (some->> (ports/find-by-id repository id)
              vector

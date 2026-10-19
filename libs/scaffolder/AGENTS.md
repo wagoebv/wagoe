@@ -131,8 +131,8 @@ first is generated as above and each further one as `entity` would add it.
 An entity that belongs to the module's first entity is created with it:
 `POST /api/v1/invoices {"number": "A-1", "invoice-line-items": [{...}]}`
 writes the invoice and its line items in one transaction, at most 500 of
-each, as the admin takes; their workflows start after the commit, and a
-failure to start one removes the invoice again. `--min 1` (`:min`,
+each, as the admin takes; their workflows start in the same transaction, so
+a failure to start one rolls the invoice back. `--min 1` (`:min`,
 `"min"` in the AI spec) makes them required: fewer is a 400 naming
 `invoice-line-items`, the API refuses the delete or move that would leave
 fewer with a 409 `conflict`, as the admin does (counted and written in one transaction holding the parent's row, so
