@@ -36,16 +36,20 @@
   ([entities entity-configs current-entity opts]
    (shell/sidebar (entity-nav entities entity-configs current-entity) opts)))
 
+(defn- with-nav
+  "`opts` with the shell's :nav built from its :entities."
+  [{:keys [entities entity-configs current-entity] :as opts}]
+  (assoc opts :nav (entity-nav entities entity-configs current-entity)))
+
 (defn admin-shell
   "`content` in the shell, its sidebar listing the admin's entities.
    `opts`: :user, :current-entity, :entities, :entity-configs, :page-title,
    :logo-url."
-  [content {:keys [entities entity-configs current-entity] :as opts}]
-  (shell/admin-shell content
-                     (assoc opts :nav (entity-nav entities entity-configs current-entity))))
+  [content opts]
+  (shell/admin-shell content (with-nav opts)))
 
 (defn admin-layout
-  "Main admin layout with new shell structure (Phase 2).
+  "A complete admin page: `content` in the shell.
 
    Args:
      content: Main content (Hiccup structure)
@@ -54,16 +58,14 @@
    Returns:
      Complete HTML page structure with new admin shell"
   [content opts]
-  (let [{:keys [current-entity entities entity-configs]} opts
+  (let [{:keys [current-entity entity-configs]} opts
         title (if current-entity
                 [:t :admin/page-title {:label (:label (get entity-configs current-entity))}]
                 [:t :admin/page-title-dashboard])
         page-title (when current-entity
                      (:label (get entity-configs current-entity)))]
     (shell/shell-page title content
-                      (assoc opts
-                             :page-title page-title
-                             :nav (entity-nav entities entity-configs current-entity)))))
+                      (assoc (with-nav opts) :page-title page-title))))
 
 (def page-cards
   "Dashboard cards for pages other modules serve; a card is shown only when its

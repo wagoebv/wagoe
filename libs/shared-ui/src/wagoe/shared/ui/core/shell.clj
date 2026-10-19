@@ -19,8 +19,16 @@
 
 (defn- nav-link [attrs icon label]
   [:a (merge attrs (alpine/sidebar-nav-link-attrs))
-   (icons/icon icon {:size 20})
+   (when icon (icons/icon icon {:size 20}))
    [:span.nav-text label]])
+
+(defn- nav-group [{:keys [label items]}]
+  (list
+   (when label [:h3 label])
+   [:ul.entity-list
+    (for [{:keys [href label icon active?]} items]
+      [:li {:class (when active? "active")}
+       (nav-link {:href href :data-label label} icon label)])]))
 
 (defn sidebar
   "The sidebar for `nav` (see the ns docstring). `opts` supports :logo-url for
@@ -52,15 +60,7 @@
                                (keyword "@click") "$store.sidebar.toggle()"}
        (icons/icon :panel-left-close {:size 16})]]]
     [:nav.admin-sidebar-nav
-     (for [{:keys [label items]} nav]
-       (list
-        (when label [:h3 label])
-        [:ul.entity-list
-         (for [item items]
-           [:li {:class (when (:active? item) "active")}
-            (nav-link {:href (:href item) :data-label (:label item)}
-                      (or (:icon item) :database)
-                      (:label item))])]))]
+     (map nav-group nav)]
     [:div.admin-sidebar-footer
      (nav-link {:href home/*path*} :home [:t :admin/sidebar-dashboard])
      (nav-link {:href "/web"} :external-link [:t :admin/sidebar-main-site])]]))
