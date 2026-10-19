@@ -80,10 +80,21 @@
     (is (nil? (f/filter->sql {:type :feature-usage :field :feature-id :op :used-within :value 14})))))
 
 (deftest ^:unit feature-usage-filter-predicate
-  (testing ":feature-usage builds predicate from declarative params"
-    (let [pred (f/filter->predicate {:type :feature-usage :field :feature-id :op :used-within :value 14
-                                     :now (LocalDate/now)})]
-      (is (fn? pred)))))
+  (let [today (LocalDate/of 2026 6 15)
+        at    #(Timestamp/from (.toInstant (.atStartOfDay (.minusDays today %) ZoneOffset/UTC)))
+        pred  (f/filter->predicate {:type :feature-usage :field :export :op :used-within :value 14
+                                    :now today})]
+    (testing "used inside the window, on its first day, or not at all"
+      (is (true? (pred {:feature-usage {:export (at 3)}})))
+      (is (true? (pred {:feature-usage {:export (at 14)}})) "the boundary day is inclusive")
+      (is (false? (pred {:feature-usage {:export (at 15)}})))
+      (is (not (pred {:feature-usage {:import (at 1)}})) "another feature does not count")
+      (is (not (pred {}))))
+
+    (testing "without a date there is no predicate, so compile-segment reports it"
+      ;; It built one closing over nil, which threw on the first user who had
+      ;; used the feature.
+      (is (nil? (f/filter->predicate {:type :feature-usage :field :export :op :used-within :value 14}))))))
 
 (deftest ^:unit custom-filter-type-registration
   (testing "apps can register custom filter types via defmethod"
@@ -125,7 +136,34 @@
   (testing "inequality predicate rejects matching value"
     (let [pred (f/filter->predicate {:type :demographics :field :plan :op :neq :value "free"})]
       (is (true? (pred {:plan "premium"})))
-      (is (false? (pred {:plan "free"}))))))
+      (is (false? (pred {:plan "free"})))))
+
+  (testing "ordering operators"
+    (let [ages (fn [op v] (filterv (f/filter->predicate {:type :demographics :field :age :op op :value v})
+                                   (map #(hash-map :age %) [17 18 19])))]
+      (is (= [{:age 19}] (ages :gt 18)))
+      (is (= [{:age 18} {:age 19}] (ages :gte 18)))
+      (is (= [{:age 17}] (ages :lt 18)))
+      (is (= [{:age 17} {:age 18}] (ages :lte 18)))))
+
+  (testing "a user without the field matches no ordering, as NULL does in SQL"
+    (doseq [op [:gt :gte :lt :lte]]
+      (is (false? ((f/filter->predicate {:type :demographics :field :age :op op :value 18}) {}))
+          (name op))))
+
+  (testing ":in and :contains"
+    (let [in       (f/filter->predicate {:type :role :field :role :op :in :value ["admin" "owner"]})
+          contains (f/filter->predicate {:type :location :field :city :op :contains :value "dam"})]
+      (is (true? (in {:role "owner"})))
+      (is (false? (in {:role "guest"})))
+      (is (true? (contains {:city "Rotterdam"})))
+      (is (true? (contains {:city "DAMASCUS"})) "case-insensitive")
+      (is (false? (contains {:city "Utrecht"})))))
+
+  (testing ":contains treats regex characters literally"
+    (let [pred (f/filter->predicate {:type :demographics :field :email :op :contains :value "a.b"})]
+      (is (true? (pred {:email "x-a.b@y"})))
+      (is (false? (pred {:email "axb@y"}))))))
 
 (deftest ^:unit account-tenure-predicate
   (testing "gte predicate correctly computes days since creation"

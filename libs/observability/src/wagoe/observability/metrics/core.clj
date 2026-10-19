@@ -421,10 +421,11 @@
 
     ;; Set health status gauge
     (let [gauge-name (build-metric-name "health" "status" (str component))
-          status-value (case status
+          ;; Any other status reads as unhealthy rather than throwing.
+          status-value (case (keyword status)
                          :healthy 1
                          :degraded 0.5
-                         :unhealthy 0)]
+                         0)]
       (set-gauge-value emitter gauge-name status-value {:component (str component)}))))
 
 ;; =============================================================================

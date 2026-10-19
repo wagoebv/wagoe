@@ -86,34 +86,26 @@
   (when (:security context)
     (MDC/put "security" "true")))
 
-(defn- clear-mdc!
-  "Clear all MDC values to prevent context leakage.
-   
-   Returns:
-     nil (side effect only)
-   
-   Pure: No (mutates MDC thread-local state)"
-  []
-  (MDC/clear))
-
 (defn- with-mdc
-  "Execute function with MDC context populated.
-   
+  "Execute function with MDC context populated, then put back the MDC the
+   caller had: clearing it dropped values the application had set.
+
    Args:
      context - Context map
      f - Zero-argument function to execute
-   
+
    Returns:
      Result of calling (f)
-   
+
    Pure: No (manages MDC state)"
   [context f]
   (if (seq context)
-    (try
-      (populate-mdc! context)
-      (f)
-      (finally
-        (clear-mdc!)))
+    (let [previous (MDC/getCopyOfContextMap)]
+      (try
+        (populate-mdc! context)
+        (f)
+        (finally
+          (if previous (MDC/setContextMap previous) (MDC/clear)))))
     (f)))
 
 ;; =============================================================================

@@ -86,6 +86,9 @@
       :circular-reference
       (unprocessable-response "Circular segment reference detected" {:id (:id data)})
 
+      (:unknown-segment-ref :invalid-segment :composition-error)
+      (unprocessable-response (ex-message e) (select-keys data [:id]))
+
       :unsupported-filter-op
       (unprocessable-response (ex-message e) (select-keys data [:op :filter-type]))
 
@@ -161,7 +164,7 @@
       (try
         (log/info "Creating audience" {:label (:label definition)})
         (let [saved (ports/save-audience store definition)]
-          (json-response {:id    (str (:id saved))
+          (json-response {:id    (name (:id saved))
                           :label (:label saved)}
                          201))
         (catch clojure.lang.ExceptionInfo e
@@ -184,7 +187,7 @@
           (try
             (log/info "Updating audience" {:id id})
             (let [updated (ports/save-audience store definition)]
-              (json-response {:id    (str (:id updated))
+              (json-response {:id    (name (:id updated))
                               :label (:label updated)}))
             (catch clojure.lang.ExceptionInfo e
               (handle-audience-error e id))

@@ -69,3 +69,42 @@
       (is (thrown? clojure.lang.ExceptionInfo (ports/export-metrics c :prometheus)))
       (is (nil? (ports/get-metric-values c :c1)))
       (is (nil? (ports/flush! c))))))
+
+(defn- point-attributes [reader metric-name]
+  (let [m (get (by-name reader) metric-name)]
+    (into {} (map (fn [[k v]] [(.getKey k) v]))
+          (.asMap (.getAttributes (first (.getPoints (.getLongSumData m))))))))
+
+(deftest ^:unit otlp-tags-layer-default-metric-then-call
+  (let [[c reader] (component)]
+    (ports/set-default-tags! c {:env "test" :region "eu"})
+    (ports/register-counter! c :jobs "jobs" {:region "us" :queue "mail"})
+    (ports/inc-counter! c :jobs 1 {:queue "sms" :attempt 2 :retry? true :ignored nil})
+    (is (= {"env" "test" "region" "us" "queue" "sms" "attempt" 2 "retry?" true}
+           (point-attributes reader "jobs"))
+        "the call's tags win over the metric's, which win over the defaults; nil is dropped")))
+
+(deftest ^:unit otlp-drops-what-it-should-not-record
+  (let [[c reader] (component)]
+    (ports/register-counter! c :c "c" {})
+    (ports/register-gauge! c :g "g" {})
+    (ports/disable-metric! c :c)
+    (ports/inc-counter! c :c 5 {})
+    (ports/set-gauge! c :c 1.0 {})
+    (ports/inc-counter! c :g 1 {})
+    (ports/inc-counter! c :unregistered 1 {})
+    (is (empty? (by-name reader)) "disabled, mistyped and unregistered emissions record nothing")
+    (testing "re-enabling resumes recording"
+      (is (true? (ports/enable-metric! c :c)))
+      (ports/inc-counter! c :c 2 {})
+      (is (contains? (by-name reader) "c")))
+    (testing "unregister forgets the metric"
+      (is (true? (ports/unregister! c :c)))
+      (is (nil? (ports/get-metric c :c)))
+      (is (false? (ports/unregister! c :c))))))
+
+(deftest ^:unit otlp-time-histogram-returns-the-result
+  (let [[c reader] (component)]
+    (ports/register-histogram! c :t "t" nil {})
+    (is (= :ok (ports/time-histogram! c :t (constantly :ok))))
+    (is (= 1 (.getCount (first (.getPoints (.getHistogramData (get (by-name reader) "t")))))))))
