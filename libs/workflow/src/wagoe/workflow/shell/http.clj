@@ -15,14 +15,18 @@
      GET  /workflows        — list all workflow instances
      GET  /workflows/:id    — instance detail with state viz + audit trail
 
-   Every route requires authentication and answers 401 without it."
+   Every route requires authentication: the API answers 401 without it, the
+   admin pages send to the login form. The admin pages also require a platform
+   admin, and answer 403 to anyone else."
   (:require [clojure.string :as str]
             [wagoe.admin.core.permissions :as admin-permissions]
+            [wagoe.admin.core.ui.layout :as admin-layout]
             [wagoe.admin.ports :as admin-ports]
             [wagoe.core.utils.text :as text]
             [wagoe.shared.ui.core.form :as form]
             [wagoe.i18n.shell.middleware :as i18n-middleware]
             [wagoe.i18n.shell.render :as i18n]
+            [wagoe.platform.core.http.access :as access]
             [wagoe.platform.core.http.errors :as errors]
             [wagoe.workflow.ports :as ports]
             [wagoe.workflow.core.transitions :as transitions]
@@ -369,6 +373,18 @@
 ;; Web route definitions
 ;; =============================================================================
 
+(defn- admin-only
+  "Admit only a platform admin the admin module admits. The pages list every
+   instance and its audit trail, and the store has no tenant column, so a
+   tenant admin would see other tenants' instances."
+  [handler]
+  (fn [request]
+    (let [user (:user request)]
+      (if (and (admin-permissions/can-access-admin? user)
+               (access/platform-admin? user))
+        (handler request)
+        (html-response request (admin-layout/admin-forbidden-page nil user) 403)))))
+
 (defn workflow-web-routes
   "Web routes for the workflow admin UI, as Reitit data.
 
@@ -385,12 +401,12 @@
      user-service - IUserService (for authentication middleware)
      admin        - {:schema-provider :logo-url} for the admin sidebar, or nil"
   [store registry user-service admin]
-  (let [auth-mw (user-middleware/flexible-authentication-middleware user-service)]
+  (let [middleware [(user-middleware/flexible-authentication-middleware user-service) admin-only]]
     [["/workflows"
-      {:middleware [auth-mw]
+      {:middleware middleware
        :get {:handler (fn [req] (handle-list-instances-web store registry admin req))
              :summary "Workflow instances list"}}]
      ["/workflows/:id"
-      {:middleware [auth-mw]
+      {:middleware middleware
        :get {:handler (fn [req] (handle-get-instance-web store registry admin req))
              :summary "Workflow instance detail"}}]]))
