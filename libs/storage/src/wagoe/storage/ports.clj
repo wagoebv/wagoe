@@ -50,7 +50,8 @@
     - file-key: Unique identifier for the stored file
 
     Returns:
-    Boolean indicating existence")
+    Boolean indicating existence. Throws when it cannot tell: a caller that
+    deletes a record for a file that is gone must not read an outage as gone.")
 
   (generate-signed-url [this file-key expiration-seconds]
     "Generate a time-limited signed URL for secure file access.
@@ -85,6 +86,33 @@
 
   (uploads-stored-before [this cutoff limit]
     "At most `limit` uploads stored before `cutoff`, an Instant."))
+
+;; ============================================================================
+;; Export Job Store Port
+;; ============================================================================
+
+(defprotocol IExportJobStore
+  "Data exports produced by a background job. A job is {:id :subject
+  :requested-by :status :file-key :error :created-at :finished-at :expires-at},
+  `:subject` {:type :user|:tenant :id}, `:status` :pending, :running, :done or
+  :failed."
+
+  (save-export-job! [this job]
+    "Store `job`, replacing the one with its id. Returns it.")
+
+  (find-export-job [this id]
+    "The job with `id`, or nil.")
+
+  (open-export-job [this subject]
+    "A :pending or :running job for `subject`, or nil.")
+
+  (export-jobs-created-before [this cutoff open-before limit]
+    "At most `limit` jobs created before `cutoff`, an Instant, oldest first.
+    A :pending or :running job only when also created before `open-before`:
+    a worker may still be building it.")
+
+  (remove-export-job! [this id]
+    "Forget the job with `id`."))
 
 ;; ============================================================================
 ;; Image Processing Port

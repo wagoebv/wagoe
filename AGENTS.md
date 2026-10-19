@@ -226,7 +226,7 @@ clj-paren-repair --help
 | ├── workflow/      # State machine workflows with audit trails
 | ├── search/        # Full-text search (PostgreSQL FTS / H2 LIKE)
 | ├── payments/      # PSP abstraction: Mollie, Stripe, Mock (checkout-session flow)
-| ├── external/      # External communication adapters: SMTP, IMAP, Twilio, FTPS
+| ├── external/      # External communication adapters: SMTP, IMAP, Twilio, FTPS, SOAP
 | ├── reports/       # Report definitions, PDF/CSV export, scheduling (defreport macro)
 | ├── calendar/      # Calendar events, RRULE recurrence, iCal export/import, conflict detection
 | ├── geo/           # Geocoding (OSM/Google/Mapbox), DB-backed cache, Haversine distance
@@ -1045,7 +1045,7 @@ Automated safeguards run in CI (and `check:fcis` + `check:ports` in pre-commit) 
 | [devtools](https://github.com/wagoebv/wagoe/blob/main/libs/devtools/AGENTS.md)           | Dev-only: error pipeline with WGE codes, REPL helpers, dashboard component                          |
 | [email](https://github.com/wagoebv/wagoe/blob/main/libs/email/AGENTS.md)                 | SMTP email sending, async and queued modes                                                          |
 | [events](https://github.com/wagoebv/wagoe/blob/main/libs/events/AGENTS.md)               | Event bus for cross-process, asynchronous module communication — in-memory and Redis Streams        |
-| [external](https://github.com/wagoebv/wagoe/blob/main/libs/external/AGENTS.md)           | External service adapters — Twilio, SMTP, IMAP, FTPS                                                |
+| [external](https://github.com/wagoebv/wagoe/blob/main/libs/external/AGENTS.md)           | External service adapters — Twilio, SMTP, IMAP, FTPS, SOAP                                          |
 | [geo](https://github.com/wagoebv/wagoe/blob/main/libs/geo/AGENTS.md)                     | Multi-provider geocoding (OSM/Google/Mapbox), Haversine distance                                    |
 | [i18n](https://github.com/wagoebv/wagoe/blob/main/libs/i18n/AGENTS.md)                   | Marker-based i18n, translation catalogues, locale chains                                            |
 | [jobs](https://github.com/wagoebv/wagoe/blob/main/libs/jobs/AGENTS.md)                   | Background job processing with retry logic                                                          |

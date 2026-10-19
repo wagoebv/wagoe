@@ -195,6 +195,23 @@
   (tenant-explainer tenant-data))
 
 ;; =============================================================================
+;; Audit
+;; =============================================================================
+
+(def TenantAuditEntry
+  "Something done to a tenant that has to be traceable: today, who downloaded
+   its data export."
+  [:map {:title "TenantAuditEntry"}
+   [:id :uuid]
+   [:tenant-id :uuid]
+   [:action [:enum :data-export]]
+   [:actor-id {:optional true} [:maybe :uuid]]
+   [:actor-email {:optional true} [:maybe [:string {:max 255}]]]
+   [:ip-address {:optional true} [:maybe [:string {:max 64}]]]
+   [:user-agent {:optional true} [:maybe [:string {:max 512}]]]
+   [:created-at inst?]])
+
+;; =============================================================================
 ;; Membership Schemas
 ;; =============================================================================
 

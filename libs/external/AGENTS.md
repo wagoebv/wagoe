@@ -5,7 +5,7 @@
 ## Purpose
 
 External third-party communication adapters following the FC/IS pattern.
-Covers outbound email (SMTP), inbound email (IMAP), SMS/WhatsApp (Twilio), and file imports from an FTPS server.
+Covers outbound email (SMTP), inbound email (IMAP), SMS/WhatsApp (Twilio), file imports from an FTPS server, and SOAP 1.1 calls to WCF services.
 
 For payment processing (Mollie, Stripe), see [`libs/payments/AGENTS.md`](../payments/AGENTS.md).
 
@@ -25,6 +25,8 @@ wagoe.external.shell.adapters.imap    — ImapMailboxAdapter (Jakarta Mail, UIDF
 wagoe.external.shell.adapters.twilio  — TwilioAdapter (clj-http, Basic auth)
 wagoe.external.core.ftps        — Pure FTPS helpers (select-files, retryable?, ftps-error)
 wagoe.external.shell.adapters.ftps    — FtpsFileSource implementing IFileSource (Commons Net)
+wagoe.external.core.soap        — Pure SOAP helpers (operation-spec, envelope, read-envelope, retryable?)
+wagoe.external.shell.adapters.soap    — SoapClient implementing ISoapClient (java.net.http, JDK DOM)
 wagoe.external.shell.resilience      — Retry + circuit breaker for SMTP/IMAP/Twilio
                                          (wagoe.platform.resilience, shared with the RPC client)
 wagoe.external.shell.module-wiring    — Integrant init/halt for :wagoe.external/* keys
@@ -50,7 +52,7 @@ libs/external/src/wagoe/external/
 
 ## Integrant Keys
 
-All four keys are opt-in — add to `:active` in `config.edn` to enable:
+All five keys are opt-in — add to `:active` in `config.edn` to enable:
 
 ```clojure
 :wagoe.external/smtp
@@ -83,6 +85,15 @@ All four keys are opt-in — add to `:active` in `config.edn` to enable:
  :backoff-ms   1000                 ; doubled per retry
  ;; Only when the JVM's cacerts does not cover the server:
  :trust-store  "certs/ftps-trust.p12" :trust-store-password #env FTPS_TRUST_PASSWORD}
+
+:wagoe.external/soap
+{:endpoint       #env IBABS_ENDPOINT    ; e.g. https://…/api/v2/List.svc
+ :contract       "IList"                ; SOAPAction = namespace + contract + "/" + operation
+ :data-namespace "http://schemas.datacontract.org/2004/07/…"
+ :username       #env IBABS_USERNAME    ; HTTP Basic by default
+ :password       #env IBABS_PASSWORD
+ :retry-faults   ["Unknown fault occured"]  ; iBABS's throttling fault
+ :operations     {:GetListEntries {:timeout-ms 60000 :arrays #{:list-entries}}}}
 ```
 
 ## TLS trust and certificate names
@@ -115,9 +126,9 @@ are off by default:
  :circuit-breaker {:failure-threshold 5 :open-ms 30000}}
 ```
 
-FTPS keeps `:max-attempts` / `:backoff-ms` and takes the same `:cache` and
+FTPS and SOAP keep `:max-attempts` / `:backoff-ms` and take the same `:cache` and
 `:circuit-breaker`. The breaker counts calls that got no answer (FTPS: transient
-failures), once per call after its retries. While open, calls return
+failures; SOAP: also faults named in `:retry-faults`), once per call after its retries. While open, calls return
 `{:success? false :error {:type :circuit-open ...}}` without connecting.
 
 ## Dependencies
@@ -171,6 +182,31 @@ server that requires it (vsftpd `require_ssl_reuse=YES`) refuses every transfer.
 
 Remembering which files were processed is the caller's job: pass their names as `:skip`.
 `ftps_server_test.clj` runs against MINA FtpServer and needs `:test/ftp`.
+
+### SOAP: operations by hand, element order, arrays
+There is no WSDL fetch: WCF's defaults (namespace `http://tempuri.org/`, request element named after the
+operation, SOAPAction namespace + `:contract` + `/` + operation) cover most operations, and `:operations` sets
+`:action`, `:element`, `:namespace`, `:timeout-ms`, `:idempotent?`, `:arrays` and `:retry-faults` for the rest.
+
+- Request element names are sent as written (`:Sitename`, `:filterRequest`); the contract is case-sensitive.
+  Nested members go in `:data-namespace`. A map is written ordinally by name, DataContract's default order;
+  pass `[[name value] ...]` pairs where the contract declares another. A vector of scalars is a WCF array.
+- Responses come back with kebab-case keys and string leaves; `xsi:nil` is nil, `KeyValueOf…` a map with string
+  keys, `ArrayOf…` / Serialization-Arrays items / repeated names a vector. An array that can hold one item or
+  none reads as a map or `""` unless named in `:arrays`.
+- A fault is `{:type :fault :code :message :detail}`; no usable answer is `:external-error`. Faults named in
+  `:retry-faults`, refused connections and 429s are retried; timeouts, I/O errors and 5xx only while the
+  operation is `:idempotent?` (default true).
+- Credentials go as HTTP Basic, or as leading parameters with `:credential-elements ["username" "password"]`
+  (set `:basic-auth? false` if the service wants only those). Nothing logs a request body.
+
+```clojure
+(ports/call! ibabs :GetListEntries [[:Sitename "town"]
+                                    [:filterRequest {:Sitename "town" :ListId id :SinceDate "2026-10-01T00:00:00"}]])
+;=> {:success? true :result {:list-entries [{:entry-id "42" :values {"Titel" "Raad"}}] ...} :body {...}}
+```
+
+`soap_server_test.clj` runs against an in-process `com.sun.net.httpserver` stub; it needs no alias.
 
 ### Twilio WhatsApp Sandbox
 In dev, Twilio sandbox requires the sandbox number (`whatsapp:+14155238886`) as the From number. The adapter is config-agnostic — set `:from-number` accordingly.

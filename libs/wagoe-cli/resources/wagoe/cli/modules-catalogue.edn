@@ -184,7 +184,7 @@
    :docs-url            "https://github.com/wagoebv/wagoe/blob/main/libs/ai/AGENTS.md"}
 
   {:name                "external"
-   :description         "External service adapters — Twilio, SMTP, IMAP, FTPS"
+   :description         "External service adapters — Twilio, SMTP, IMAP, FTPS, SOAP"
    :clojars             com.wagoe/wagoe-external
    :version             "1.0.1"
    :category            :optional

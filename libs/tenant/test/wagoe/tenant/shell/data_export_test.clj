@@ -8,6 +8,7 @@
             [wagoe.platform.shell.adapters.database.factory :as factory]
             [wagoe.platform.shell.privacy :as platform-privacy]
             [wagoe.tenant.ports :as ports]
+            [wagoe.tenant.shell.audit-persistence :as audit-persistence]
             [wagoe.tenant.shell.data-export :as sut]
             [wagoe.tenant.shell.http :as http]
             [wagoe.tenant.shell.invite-persistence :as invite-persistence]
@@ -34,7 +35,8 @@
       (let [[ctx close!] (open)]
         (try
           (tenant-persistence/initialize-tenant-schema! ctx)
-          (f {:tenants     (tenant-persistence/create-tenant-repository ctx nil nil)
+          (f {:audit       (audit-persistence/create-tenant-audit-repository ctx)
+              :tenants     (tenant-persistence/create-tenant-repository ctx nil nil)
               :memberships (membership-persistence/create-membership-repository ctx nil nil)
               :invites     (invite-persistence/create-invite-repository ctx nil nil)})
           (finally (close!)))))))
@@ -88,16 +90,34 @@
    (fn [repos]
      (let [{:keys [tenant]} (seed! repos)
            data-export (platform-privacy/create-data-export {:tenant (exporter repos)})
-           app   (ring/ring-handler (ring/router ["/api/v1" (:api (http/export-routes data-export))]))
+           app   (ring/ring-handler (ring/router ["/api/v1" (:api (http/export-routes data-export (:audit repos)))]))
            fetch (fn [user id] (app {:request-method :get :uri (str "/api/v1/tenants/" id "/export")
-                                     :user user :headers {}}))
-           admin {:id (random-uuid) :role :admin}]
+                                     :user user :headers {"user-agent" "curl"}}))
+           admin {:id (random-uuid) :email "root@example.com" :role :admin}]
        (let [r (fetch admin (:id tenant))]
          (is (= 200 (:status r)))
          (is (re-find #"attachment" (get-in r [:headers "Content-Disposition"])))
          (is (= "Acme" (get-in (json/parse-string (:body r)) ["sections" "tenant" "tenant" "name"]))))
+       (testing "the export is in the tenant's audit log"
+         (is (= [{:tenant-id (:id tenant) :action :data-export :actor-id (:id admin)
+                  :actor-email "root@example.com" :user-agent "curl"}]
+                (map #(select-keys % [:tenant-id :action :actor-id :actor-email :user-agent])
+                     (ports/find-tenant-audit (:audit repos) (:id tenant) {})))))
        (is (= 403 (:status (fetch (assoc admin :tenant-id (:id tenant)) (:id tenant))))
            "a tenant's own admin is not a platform admin")
        (is (= 403 (:status (fetch {:id (random-uuid) :role :user} (:id tenant)))))
        (is (= 404 (:status (fetch admin (random-uuid)))))
        (is (= 400 (:status (fetch admin "acme"))))))))
+
+(deftest ^:integration an-export-that-cannot-be-audited-is-not-served
+  (each-backend
+   (fn [repos]
+     (let [{:keys [tenant]} (seed! repos)
+           broken (reify ports/ITenantAuditRepository
+                    (record-tenant-audit! [_ _] (throw (ex-info "down" {:type :database-error})))
+                    (find-tenant-audit [_ _ _] []))
+           routes (:api (http/export-routes (platform-privacy/create-data-export {:tenant (exporter repos)}) broken))
+           app    (ring/ring-handler (ring/router ["/api/v1" routes]))]
+       (is (thrown? clojure.lang.ExceptionInfo
+                    (app {:request-method :get :uri (str "/api/v1/tenants/" (:id tenant) "/export")
+                          :user {:id (random-uuid) :role :admin} :headers {}})))))))

@@ -66,7 +66,7 @@
             object-key  (generate-gcs-key filename object-path)
 
             ;; Determine visibility
-            is-public   (or (= visibility :public) public-read?)
+            is-public   (case visibility :public true :private false public-read?)
 
             ;; Build blob info
             blob-id     (BlobId/of bucket object-key)
@@ -187,6 +187,8 @@
         (boolean (and blob
                       (.exists blob (into-array Blob$BlobSourceOption [])))))
 
+      ;; A missing blob is nil; an exception is a check that could not tell,
+      ;; which read as false would let retention drop a record of a live file.
       (catch Exception e
         (when logger
           (logging/error logger "GCS file exists check failed"
@@ -194,7 +196,9 @@
                           :bucket bucket
                           :key file-key
                           :error (.getMessage e)}))
-        false)))
+        (throw (ex-info "Could not check whether the file exists in GCS"
+                        {:type :storage-error :bucket bucket :key file-key}
+                        e)))))
 
   (generate-signed-url [_ file-key expiration-seconds]
     (try

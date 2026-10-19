@@ -1,8 +1,8 @@
 = external
-:description: External service adapters: Twilio, SMTP, IMAP, and FTPS.
+:description: External service adapters: Twilio, SMTP, IMAP, FTPS, and SOAP.
 
 External third-party service adapters following the FC/IS pattern.
-Four adapters: SMTP, IMAP, Twilio, and an FTPS file source.
+Five adapters: SMTP, IMAP, Twilio, an FTPS file source, and a SOAP 1.1 client.
 
 NOTE: Stripe payments have moved to xref:payments.adoc[payments] library.
 
@@ -20,11 +20,12 @@ wagoe.external.shell.adapters.smtp — SmtpProviderAdapter (Jakarta Mail)
 wagoe.external.shell.adapters.imap — ImapMailboxAdapter (Jakarta Mail, UIDFolder)
 wagoe.external.shell.adapters.twilio  — TwilioAdapter (clj-http, Basic auth)
 wagoe.external.shell.adapters.ftps — FtpsFileSource (Commons Net, explicit TLS)
+wagoe.external.shell.adapters.soap — SoapClient (java.net.http, SOAP 1.1)
 ----
 
 == Enabling adapters
 
-All four adapters ship as `:inactive` in `config.edn`. Move to `:active` to enable:
+All five adapters ship as `:inactive` in `config.edn`. Move to `:active` to enable:
 
 [source,clojure]
 ----
@@ -53,6 +54,12 @@ All four adapters ship as `:inactive` in `config.edn`. Move to `:active` to enab
 {:host     #env FTPS_HOST
  :username #env FTPS_USERNAME
  :password #env FTPS_PASSWORD}
+
+:wagoe.external/soap
+{:endpoint     #env SOAP_ENDPOINT
+ :contract     "IList"
+ :username     #env SOAP_USERNAME
+ :password     #env SOAP_PASSWORD}
 ----
 
 == TLS trust and certificate names
@@ -107,6 +114,35 @@ Transient failures (DNS, refused connection, timeouts, 4xx replies) are retried
 with backoff, `:max-attempts` times in all. A 5xx reply such as a rejected login
 fails at once. A failure returns `{:success? false :error {:type :external-error ...}}`,
 with `:host`, `:attempts` and `:cause`.
+
+== SOAP services
+
+`ISoapClient` calls an operation on a SOAP 1.1 service such as WCF. Operations are
+described in config, not read from a WSDL: the SOAPAction defaults to
+namespace + `:contract` + `/` + operation, and `:operations` overrides it, the
+timeout and more per operation.
+
+[source,clojure]
+----
+(ports/call! client :GetListEntries
+             [[:Sitename "town"]
+              [:filterRequest {:Sitename "town" :ListId list-id :SinceDate "2026-10-01T00:00:00"}]])
+;; => {:success? true :result {:list-entries [...] :status "0"} :body {...}}
+----
+
+Element names are sent as written. A map is written in DataContract's default
+order, ordinal by name; pass `[name value]` pairs where the contract declares
+another order. Nested members use `:data-namespace`. The response has kebab-case
+keys and string values: `xsi:nil` is nil, WCF dictionaries are maps and arrays
+vectors. Name an array that may hold one item in the operation's `:arrays`, or it
+reads as a map.
+
+A SOAP fault returns `{:success? false :error {:type :fault :code ... :message ...}}`;
+no usable answer returns `:type :external-error`. Faults listed in `:retry-faults`
+(a throttling message, say), refused connections and 429s are retried with
+backoff; timeouts and 5xx are retried only for operations that are
+`:idempotent?`, the default. Credentials go as HTTP Basic or, with
+`:credential-elements`, as leading parameters, and are never logged.
 
 == Testing
 

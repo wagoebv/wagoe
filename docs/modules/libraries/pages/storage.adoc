@@ -113,6 +113,31 @@ The index feeds two privacy contributions:
 :wagoe/privacy {:retention {:storage/uploads {:retain "P1Y"}}}
 ----
 
+== Data export as a background job
+
+With the jobs module enabled, a signed-in user can have their export built in
+the background rather than during the request, for a subject whose zip takes
+too long to stream:
+
+* `POST /api/v1/me/export-jobs` queues it (202). While one is open, asking
+  again returns the same job.
+* `GET /api/v1/me/export-jobs/:id` reports `pending`, `running`, `done` or
+  `failed`, and when done a `download-path`.
+* `GET /api/v1/me/export-jobs/:id/download` serves the zip for 24 hours. On S3
+  and GCS it redirects to a signed URL that lives five minutes; on local
+  storage the route sends the file.
+
+Only the user who asked sees a job; to anyone else it does not exist. The
+archive is stored private under `data-exports/`, is not an upload, and is
+held in memory once while stored. Jobs run on the `:default` queue, or
+`:export-queue` in `:wagoe/storage`. The `:storage/export-archives` retention
+policy deletes old archives and their jobs:
+
+[source,clojure]
+----
+:wagoe/privacy {:retention {:storage/export-archives {:retain "P2D"}}}
+----
+
 == Testing
 
 [source,bash]

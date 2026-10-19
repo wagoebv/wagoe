@@ -2,6 +2,7 @@
   "The upload index on the engine WAGOE_TEST_DB names: h2 (default), pg or mysql."
   (:require [clojure.test :refer [deftest is testing]]
             [support.test-db :as test-db]
+            [wagoe.platform.database :as db]
             [wagoe.storage.ports :as ports]
             [wagoe.storage.shell.upload-index :as upload-index])
   (:import [java.time Instant]
@@ -55,3 +56,28 @@
              (map :key (ports/uploads-stored-before index (.minus now 1 ChronoUnit/HOURS) 10))))
       (is (= ["old-2"]
              (map :key (ports/uploads-stored-before index (.minus now 1 ChronoUnit/HOURS) 1)))))))
+
+(deftest ^:integration keys-differing-only-in-case-are-two-uploads
+  (with-index
+    (fn [index]
+      (ports/record-upload! index (upload "A.png" :user "u1"))
+      (ports/record-upload! index (upload "a.png" :user "u2"))
+      (is (= ["A.png"] (map :key (ports/find-uploads index {:user-id "u1"} {}))))
+      (is (= ["a.png"] (map :key (ports/find-uploads index {:user-id "u2"} {})))))))
+
+(deftest ^:integration two-uploads-racing-to-insert-one-key-both-succeed
+  (with-index
+    (fn [index]
+      (let [update! db/execute-update!
+            rival   (promise)]
+        ;; A rival records the same key between our update finding no row
+        ;; and our insert. On MySQL our update's gap lock makes it wait instead.
+        (with-redefs [db/execute-update! (fn [ctx q]
+                                           (when (and (:insert-into q) (not (realized? rival)))
+                                             (deliver rival (future (ports/record-upload! index (upload "same.png" :user "rival"))))
+                                             (Thread/sleep 300))
+                                           (update! ctx q))]
+          (ports/record-upload! index (upload "same.png" :user "me"))
+          (is (some? (deref @rival 10000 nil)) "the rival's upload failed"))
+        (is (= 1 (+ (count (ports/find-uploads index {:user-id "me"} {}))
+                    (count (ports/find-uploads index {:user-id "rival"} {})))))))))

@@ -5,7 +5,8 @@
    - ISmtpProvider    — outbound email via SMTP
    - IImapMailbox     — inbound email via IMAP
    - ITwilioMessaging — Twilio SMS and WhatsApp messaging
-   - IFileSource      — remote files to import (FTPS)")
+   - IFileSource      — remote files to import (FTPS)
+   - ISoapClient      — SOAP 1.1 operations (WCF services)")
 
 ;; =============================================================================
 ;; SMTP Protocol
@@ -151,3 +152,28 @@
         :success? - boolean
         :content  - bytes
         :error    - map, as for list-files! (if failed)"))
+
+;; =============================================================================
+;; SOAP Protocol
+;; =============================================================================
+
+(defprotocol ISoapClient
+  "Protocol for calling operations on a SOAP 1.1 service."
+
+  (call! [this operation request] [this operation request opts]
+    "Call operation (keyword or string, e.g. :GetListEntries) with request.
+
+    Args:
+      request - map, or [name value] pairs where member order matters; names
+                are the contract's element names, as written
+      opts    - per-call overrides of the operation's settings (:timeout-ms,
+                :arrays, :retry-faults ...)
+
+    Returns:
+      Map with:
+        :success? - boolean
+        :body     - the response element as data, kebab-case keys
+        :result   - its <Operation>Result
+        :error    - {:type :fault :code :message :detail} for a SOAP fault,
+                    {:type :external-error :message :endpoint :attempts :cause}
+                    when there was no usable answer, or :circuit-open"))

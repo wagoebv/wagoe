@@ -84,6 +84,16 @@
     (is (= {:storage (ig/ref :wagoe.storage/data-exporter)} data-export))
     (is (= {:storage/uploads (ig/ref :wagoe.storage/upload-retention)} retention))))
 
+(deftest ^:unit export-jobs-come-with-the-jobs-module
+  (let [ig-config #(wagoe.storage.shell.module-wiring/ig-config {:provider :local} {:enabled %})
+        without   (ig-config #{})
+        with      (ig-config #{:wagoe/jobs})]
+    (is (not (contains? (:components without) :wagoe.storage/export-jobs)))
+    (is (nil? (:routes without)))
+    (is (= [(ig/ref :wagoe.storage/export-job-routes)] (:routes with)))
+    (is (= [(ig/ref :wagoe.storage/export-job-handlers)] (:job-handlers with)))
+    (is (= (ig/ref :wagoe.storage/export-archive-retention) (get-in with [:retention :storage/export-archives])))))
+
 (deftest ^:unit routes-address-the-sharded-keys-the-adapter-returns
   ;; The local adapter shards every key it hands back — `2a/photo.jpg` — so a
   ;; single-segment :file-key could never match the key it had just returned.
