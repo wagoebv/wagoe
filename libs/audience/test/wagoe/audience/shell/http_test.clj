@@ -72,10 +72,10 @@
 
 (deftest ^:unit crud-api-test
   (let [s (store)]
-    (testing "create stores the definition, filtersData standing in for filters"
+    (testing "create stores the definition"
       (let [res (sut/create-audience-handler nil s {:parameters {:body {:id :vip :label "VIP"
-                                                                        :filtersData [{:type :role :field :plan
-                                                                                       :op :eq :value "gold"}]}}})]
+                                                                        :filters [{:type :role :field :plan
+                                                                                   :op :eq :value "gold"}]}}})]
         ;; The id came back as ":vip", which no /audiences/:id path accepts.
         (is (= {:status 201 :body {:id "vip" :label "VIP"}} res))
         (is (= :role (get-in (ports/find-audience s :vip) [:filters 0 :type])))))

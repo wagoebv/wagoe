@@ -127,6 +127,7 @@
                 ;; Validate filters up front (pure core check); raise a typed
                 ;; error before compiling if any filter is unknown/unsupported.
                 _ (unwrap! (filter/explain-filters (:filters definition)))
+                _ (unwrap! (composition/explain-filters-beside-compose definition))
                 {:keys [sql-clauses predicates unsupported]}
                 (compiler/compile-segment definition {:now eval-date})
                 ;; A filter the compiler could express neither way. Refusing

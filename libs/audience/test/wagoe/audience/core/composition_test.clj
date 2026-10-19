@@ -72,3 +72,11 @@
     (testing "segment with neither :user-ids nor :compose"
       (is (= :invalid-segment
              (get-in (comp/explain-composition {:and [{:ref :bad-seg}]} lookup) [:error :type]))))))
+
+(deftest ^:unit filters-beside-compose
+  (let [f [{:type :role :op :eq :value "x"}]
+        c {:or [{:ref :a}]}]
+    (is (= :validation-error (get-in (comp/explain-filters-beside-compose {:filters f :compose c})
+                                     [:error :type])))
+    (is (nil? (comp/explain-filters-beside-compose {:filters [] :compose c})))
+    (is (nil? (comp/explain-filters-beside-compose {:filters f})))))

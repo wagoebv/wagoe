@@ -202,6 +202,10 @@ The builder UI is served by `wagoe.audience.shell.http`.
 | POST | `/api/audiences/:id/evaluate` | Trigger full evaluation and cache |
 | GET | `/api/audiences/:id/members` | List member user-ids |
 
+Create, update and preview take a JSON body, coerced by the route's `:parameters` schema: create
+and update a `DynamicAudienceDefinition` (update takes `:id` from the path), preview
+`{"audienceId": "..."}`. A body that does not match is a 400 `validation-error` naming the fields.
+
 ### HTMX endpoints + Replicant widget mount points
 
 The builder page renders two placeholder `div`s for Replicant widgets:
@@ -352,8 +356,11 @@ Code segments use keyword IDs (`:active-users`). DB-persisted segments use UUIDs
 ### 4. H2 vs PostgreSQL JSON handling
 The cache reads `cache_config` from the DB as either a `PGobject` (PostgreSQL) or a plain string (H2). The cache layer handles both with `cheshire/parse-string`. If you write custom queries against `cache_config`, always parse the column before accessing keys.
 
-### 5. `compose` vs `filters` — mutually exclusive evaluation paths
-If a segment has a `:compose` key, the service takes the composition path and ignores `:filters` on the top-level definition. Compose leaves should be other resolved segments, not raw filter maps.
+### 5. `compose` vs `filters` — pick one
+A segment is either filters or a composition. One with `:compose` and non-empty `:filters` is
+refused: create and update answer 422 `validation-error`, and resolving a stored or registered one
+throws `:validation-error`. Give a composed segment `:filters []`, and put the filters in a segment
+it refers to.
 
 ### 6. Member count vs user-id set
 `SegmentResult` always carries both `:count` (integer) and `:user-ids` (set of UUIDs). The `:count` in the DB row (`member_count`) is a cached integer for display. Always use `:user-ids` for actual membership decisions.

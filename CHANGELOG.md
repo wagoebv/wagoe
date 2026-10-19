@@ -183,6 +183,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **The audience API ignored the request body** (BOU-744): create and update always answered 422. An audience with
+  both `:filters` and `:compose` is now refused rather than its filters dropped; give it `:filters []`.
 - **Error reporting failed on exceptions without a message** (BOU-463), so a `NullPointerException` never reached
   Sentry. Upgrade if you report errors.
 - **A circular audience composition overflowed the stack** (BOU-463); it now answers 422, as does an unknown ref.
