@@ -130,6 +130,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Changed
 
+- **The devtools config editor shows pretty-printed EDN** (BOU-21): one key per line, keys sorted.
+  Nothing to do; edits are read back as before.
 - **Pages on the default layout load daisyUI, not pico** (BOU-457): `page-layout` and `error-layout` use the `:pilot`
   stack; bare elements are styled under `body.wagoe-default`. Pass `:css (ui-style/bundle :base)` to keep pico until 2.0.
 - **Mail moves to Jakarta Mail 2 (Angus Mail)** (BOU-457): `wagoe-external` drops `com.sun.mail/javax.mail`, and TLS to
