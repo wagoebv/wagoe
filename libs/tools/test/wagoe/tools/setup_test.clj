@@ -976,6 +976,100 @@
         (is (str/includes? (slurp shared) ":wagoe/cache") "the link's target is what changes")))))
 
 ;; -----------------------------------------------------------------------------
+;; Merge edge cases left from #592 (BOU-560)
+;; -----------------------------------------------------------------------------
+
+(deftest ^:unit switching-back-reactivates-the-database-moved-aside
+  (with-project
+    (fn [dir]
+      (let [original (get-in (conf dir "dev") [:active :wagoe/sqlite])]
+        (run-setup dir "" "--database" "postgresql")
+        (let [[exit out] (run-setup dir "" "--database" "sqlite")
+              {:keys [active inactive]} (conf dir "dev")]
+          (is (nil? exit) out)
+          (is (str/includes? out "move :wagoe/sqlite from :inactive back to :active") out)
+          (is (= original (:wagoe/sqlite active)) "the entry it was, not a fresh template")
+          (is (not (contains? inactive :wagoe/sqlite)))
+          (is (contains? inactive :wagoe/postgresql))
+          (is (not (contains? active :wagoe/postgresql))))
+        (let [before (snapshot dir)]
+          (run-setup dir "" "--database" "sqlite")
+          (is (= before (snapshot dir)) "and once back, a second run changes nothing"))))))
+
+(defn- summary-line [out label]
+  (some #(when (str/includes? % label) %) (str/split-lines out)))
+
+(deftest ^:unit none-says-it-keeps-what-a-merge-cannot-remove
+  (with-project
+    (fn [dir]
+      (spit (conf-file dir "dev")
+            (config-edn/insert-into (slurp (conf-file dir "dev")) ":active"
+                                    "\n   :wagoe/cache {:provider :redis}"))
+      (let [before     (snapshot dir)
+            [exit out] (run-setup dir "" "--cache" "none" "--email" "none"
+                                  "--ai-provider" "none" "--admin-ui" "false")]
+        (is (nil? exit) out)
+        (doseq [label ["AI:" "Cache:" "Email:" "Admin UI:"]]
+          (is (str/includes? (summary-line out label) "keep (setup never removes one)") out))
+        (is (str/includes? out "Nothing to change."))
+        (is (= before (snapshot dir))))))
+  (testing "a new project gets none, and is told so"
+    (let [dir (fs/create-temp-dir)]
+      (try
+        (let [[_ out] (run-setup dir "" "--cache" "none")]
+          (is (re-find #"Cache:\s+\S*none" (summary-line out "Cache:")) out))
+        (finally (fs/delete-tree dir))))))
+
+(deftest ^:unit none-for-a-prod-made-from-dev-says-keep
+  (with-project
+    (fn [dir]
+      (spit (conf-file dir "dev")
+            (config-edn/insert-into (slurp (conf-file dir "dev")) ":active"
+                                    "\n   :wagoe/cache {:provider :redis}"))
+      (let [[exit out] (run-setup dir "" "--prod" "true" "--cache" "none")]
+        (is (nil? exit) out)
+        (is (= :redis (get-in (conf dir "prod") [:active :wagoe/cache :provider])) "carried over from dev")
+        (is (str/includes? (summary-line out "Cache:") "keep (setup never removes one)") out)))))
+
+(deftest ^:unit a-comment-after-the-key-survives-a-replace
+  (with-project
+    (fn [dir]
+      (spit (conf-file dir "dev")
+            (config-edn/insert-into (slurp (conf-file dir "dev")) ":active"
+                                    "\n   :wagoe/cache ; the cache\n   {:provider :memory}"))
+      (let [[exit out] (run-setup dir "" "--cache" "redis")
+            text       (slurp (conf-file dir "dev"))]
+        (is (nil? exit) out)
+        (is (str/includes? text ":wagoe/cache ; the cache\n"))
+        (is (= :redis (get-in (read-config text) [:active :wagoe/cache :provider])))))))
+
+(deftest ^:unit a-non-literal-inactive-is-refused-for-what-it-is
+  (with-project
+    (fn [dir]
+      (spit (conf-file dir "dev") "{:active {:wagoe/sqlite {:db \"x.db\"}}\n :inactive #include \"inactive.edn\"}\n")
+      (let [before     (snapshot dir)
+            [exit out] (run-setup dir "" "--database" "postgresql")]
+        (is (= 1 exit))
+        (is (str/includes? out ":inactive is not a literal map") out)
+        (is (not (str/includes? out "would not read as EDN")) out)
+        (is (= before (snapshot dir)))))))
+
+(deftest ^:unit every-write-is-synced-before-and-after-its-rename
+  (with-project
+    (fn [dir]
+      (let [synced (atom [])
+            real   @#'setup/fsync!]
+        (with-redefs [setup/fsync! (fn [p]
+                                     (swap! synced conj (str (.getFileName ^java.nio.file.Path p)))
+                                     (real p))]
+          (let [[exit out] (run-setup dir "" "--cache" "redis")]
+            (is (nil? exit) out)))
+        (let [[temps dirs] (split-with #(str/ends-with? % ".setup-tmp") @synced)]
+          (is (= #{".config.edn.setup-tmp" "..env.example.setup-tmp"} (set temps))
+              "every file, before any rename")
+          (is (= #{"dev" "test" (str (fs/file-name dir))} (set dirs)) "then their directories"))))))
+
+;; -----------------------------------------------------------------------------
 ;; A prod profile made later is the project's, not a new one's (BOU-564)
 ;; -----------------------------------------------------------------------------
 
