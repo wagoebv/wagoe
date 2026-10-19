@@ -22,9 +22,10 @@
             [wagoe.external.ports :as ports]
             [wagoe.external.schema :as schema]
             [wagoe.external.shell.resilience :as resilience]
+            [wagoe.platform.core.rpc :as rpc]
             [wagoe.platform.resilience :as platform-resilience])
   (:import [java.io ByteArrayInputStream IOException]
-           [java.net ConnectException NoRouteToHostException URI UnknownHostException]
+           [java.net URI]
            [java.net.http HttpClient HttpConnectTimeoutException HttpRequest
             HttpRequest$BodyPublishers HttpResponse HttpResponse$BodyHandlers HttpTimeoutException]
            [java.nio.channels UnresolvedAddressException]
@@ -33,7 +34,7 @@
            [java.util Base64]
            [java.util.concurrent ExecutionException TimeUnit TimeoutException]
            [javax.xml.parsers DocumentBuilderFactory]
-           [org.w3c.dom Element Node]))
+           [org.w3c.dom Element]))
 
 (set! *warn-on-reflection* true)
 
@@ -50,15 +51,15 @@
     (.setExpandEntityReferences false)))
 
 (defn- dom->element [^Element el]
-  (let [nodes (.getChildNodes el)
-        kids  (map #(.item nodes (int %)) (range (.getLength nodes)))]
+  (let [nodes    (.getChildNodes el)
+        kids     (map #(.item nodes (int %)) (range (.getLength nodes)))
+        children (into [] (comp (filter #(instance? Element %)) (map dom->element)) kids)]
     {:name     (.getLocalName el)
      :ns       (.getNamespaceURI el)
      :nil?     (= "true" (.getAttributeNS el soap-core/xsi-ns "nil"))
-     :text     (apply str (keep #(when (#{Node/TEXT_NODE Node/CDATA_SECTION_NODE} (.getNodeType ^Node %))
-                                   (.getNodeValue ^Node %))
-                                kids))
-     :children (into [] (comp (filter #(instance? Element %)) (map dom->element)) kids)}))
+     ;; Between child elements there is only whitespace, which nothing reads.
+     :text     (if (seq children) "" (.getTextContent el))
+     :children children}))
 
 (defn- parse-xml [^bytes body]
   (-> (.newDocumentBuilder (document-builder-factory))
@@ -70,24 +71,21 @@
 ;; HTTP
 ;; =============================================================================
 
-(defn- caused-by? [^Throwable e classes]
-  (some (fn [t] (some #(instance? % t) classes))
-        (take-while some? (iterate #(.getCause ^Throwable %) e))))
+(defn- cause-kind
+  "java.net.http's own exceptions first (a connect timeout is an
+   HttpTimeoutException too), then the RPC client's classification."
+  [^Throwable t]
+  (cond
+    (instance? HttpConnectTimeoutException t)                     :unconnected
+    (instance? UnresolvedAddressException t)                      :unconnected
+    (or (instance? HttpTimeoutException t) (instance? TimeoutException t)) :timeout
+    (instance? Exception t) ({:rpc/unavailable :unconnected :rpc/timeout :timeout}
+                             (rpc/classify-exception t))))
 
 (defn- transport-failure
-  "A failure without an answer, classified for the retry rule. A connect
-   timeout is an HttpTimeoutException too, so it is tested first."
+  "A failure without an answer, classified for the retry rule."
   [^Throwable e]
-  {:kind  (cond
-            (caused-by? e [HttpConnectTimeoutException ConnectException UnknownHostException
-                           NoRouteToHostException UnresolvedAddressException])
-            :unconnected
-
-            (caused-by? e [HttpTimeoutException TimeoutException])
-            :timeout
-
-            :else
-            :io)
+  {:kind  (or (some cause-kind (take-while some? (iterate ex-cause e))) :io)
    :cause (or (ex-message e) (str e))})
 
 (defn- send-request
@@ -109,17 +107,10 @@
       (catch ExecutionException e
         (throw (or (.getCause e) e))))))
 
-(defn- read-response
-  "An attempt's outcome from the HTTP response: {:value ..} or {:failure ..}."
-  [^HttpResponse response spec]
-  (let [status (.statusCode response)
-        read   (try (soap-core/read-envelope (parse-xml (.body response)) spec)
-                    (catch Exception e {:malformed (str "unreadable XML: " (ex-message e))}))]
-    (cond
-      (:fault read)        {:failure {:kind :fault :fault (:fault read)}}
-      (not (<= 200 status 299)) {:failure {:kind :status :status status :cause (str "HTTP " status)}}
-      (:malformed read)    {:failure {:kind :malformed :cause (:malformed read)}}
-      :else                {:value (select-keys read [:body :result])})))
+(defn- read-response [^HttpResponse response spec]
+  (soap-core/outcome (.statusCode response)
+                     (try (soap-core/read-envelope (parse-xml (.body response)) spec)
+                          (catch Exception e {:malformed (str "unreadable XML: " (ex-message e))}))))
 
 (defn- attempt [client spec envelope]
   (try
@@ -137,13 +128,12 @@
 (defn- call-operation
   [{:keys [endpoint-name resilience] :as client} spec request]
   (let [operation (:operation spec)
-        envelope  (soap-core/envelope spec (soap-core/with-credentials request client))
-        failure   #(some-> (:failure %) (soap-core/unavailable? spec))
+        envelope  (soap-core/envelope spec (soap-core/with-credentials request (:config client)))
         outcome
         (platform-resilience/call
          resilience
          {:retryable? #(boolean (some-> (:failure %) (soap-core/retryable? spec)))
-          :failure?   #(boolean (failure %))
+          :failure?   #(boolean (some-> (:failure %) (soap-core/unavailable? spec)))
           :on-open    (fn [retry-after-ms]
                         (log/warn "SOAP circuit open; not attempting" {:endpoint endpoint-name :operation operation})
                         {:error (resilience/open-error (:circuit resilience) retry-after-ms)})
@@ -170,7 +160,7 @@
 ;; Adapter Record
 ;; =============================================================================
 
-(defrecord SoapClient [endpoint-name username password config]
+(defrecord SoapClient [endpoint-name config]
   ports/ISoapClient
   (call! [this operation request]
     (ports/call! this operation request {}))
@@ -183,7 +173,7 @@
 
 ;; Keep the password out of logs and REPL output.
 (defmethod print-method SoapClient [^SoapClient c ^java.io.Writer w]
-  (.write w (str "#SoapClient" (pr-str (select-keys c [:endpoint-name :username])))))
+  (.write w (str "#SoapClient" (pr-str {:endpoint-name (:endpoint-name c) :username (get-in c [:config :username])}))))
 
 ;; pprint dispatches records as maps and would bypass print-method.
 (defmethod pprint/simple-dispatch SoapClient [c] (pr c))
@@ -232,10 +222,8 @@
         basic-auth?  (if (some? basic-auth?) basic-auth? (some? username))
         longest-wait (apply max (:timeout-ms config 30000) (keep :timeout-ms (vals operations)))]
     (log/info "Creating SOAP client" {:endpoint ep-name})
-    (assoc (->SoapClient ep-name username password
-                         (dissoc config :cache :circuit-breaker :password))
+    (assoc (->SoapClient ep-name (dissoc config :cache :circuit-breaker))
            :uri uri
-           :credential-elements (:credential-elements config)
            :authorization (when basic-auth?
                             (str "Basic " (.encodeToString (Base64/getEncoder)
                                                            (.getBytes (str username ":" password)

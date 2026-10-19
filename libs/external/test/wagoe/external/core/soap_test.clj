@@ -181,6 +181,13 @@
   (is (:malformed (read-xml :GetLists "<html><body>Service Unavailable</body></html>")))
   (is (:malformed (read-xml :GetLists "<s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\"><s:Body/></s:Envelope>"))))
 
+(deftest ^:unit outcome-test
+  (testing "a fault wins over the status, then the status, then an unreadable body"
+    (is (= :fault (get-in (soap/outcome 500 {:fault {:message "x"}}) [:failure :kind])))
+    (is (= 503 (get-in (soap/outcome 503 {:malformed "html"}) [:failure :status])))
+    (is (= :malformed (get-in (soap/outcome 200 {:malformed "html"}) [:failure :kind])))
+    (is (= {:value {:body {} :result nil}} (soap/outcome 200 {:body {} :result nil})))))
+
 (deftest ^:unit retry-rule-test
   (let [spec      (soap/operation-spec config :GetLists {})
         writes    (assoc spec :idempotent? false)

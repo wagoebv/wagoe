@@ -32,8 +32,7 @@
                        (get (:operations config) (keyword op-name))
                        opts)
         ns-uri  (:namespace spec)]
-    (merge {:operation op-name
-            :element   op-name
+    (merge {:element   op-name
             :action    (str ns-uri
                             (when (and (:contract spec) (not (str/ends-with? ns-uri "/"))) "/")
                             (some-> (:contract spec) (str "/"))
@@ -41,15 +40,6 @@
             :data-namespace ns-uri}
            spec
            {:operation op-name})))
-
-(defn with-credentials
-  "Request with the credentials prepended as the parameters named by
-   :credential-elements, e.g. [\"username\" \"password\"]."
-  [request {:keys [credential-elements username password]}]
-  (if-let [[user-el pass-el] credential-elements]
-    (into [[user-el username] [pass-el password]]
-          (if (map? request) (sort-by (comp name key) request) request))
-    request))
 
 ;; =============================================================================
 ;; Envelope
@@ -76,6 +66,14 @@
   [v]
   (if (map? v) (sort-by (comp name key) v) v))
 
+(defn with-credentials
+  "Request with the credentials prepended as the parameters named by
+   :credential-elements, e.g. [\"username\" \"password\"]."
+  [request {:keys [credential-elements username password]}]
+  (if-let [[user-el pass-el] credential-elements]
+    (into [[user-el username] [pass-el password]] (members request))
+    request))
+
 (defn- scalar [v]
   (cond
     (keyword? v)                  (name v)
@@ -84,7 +82,6 @@
 
 (defn- array-item-name [v]
   (cond
-    (string? v)  "string"
     (int? v)     "int"
     (boolean? v) "boolean"
     :else        "string"))
@@ -210,6 +207,16 @@
         {:body   data
          :result (when (map? data) (get data (element-key (str operation "Result"))))}))))
 
+(defn outcome
+  "An attempt's outcome from the HTTP status and the read envelope: a fault
+   whatever the status, then a non-2xx status, then an unreadable body."
+  [status {:keys [fault malformed] :as read}]
+  (cond
+    fault                     {:failure {:kind :fault :fault fault}}
+    (not (<= 200 status 299)) {:failure {:kind :status :status status :cause (str "HTTP " status)}}
+    malformed                 {:failure {:kind :malformed :cause malformed}}
+    :else                     {:value (select-keys read [:body :result])}))
+
 ;; =============================================================================
 ;; Retry policy
 ;; =============================================================================
@@ -241,10 +248,8 @@
    I/O error or a 5xx may have been, so they are retried only for an
    :idempotent? operation, the default."
   [{:keys [kind status] :as failure} {:keys [idempotent?] :as spec}]
-  (cond
-    (#{:unconnected :fault} kind) (unavailable? failure spec)
-    (= :status kind)              (or (= 429 status) (and idempotent? (>= status 500)))
-    :else                         (and idempotent? (unavailable? failure spec))))
+  (and (unavailable? failure spec)
+       (or idempotent? (#{:unconnected :fault} kind) (= 429 status))))
 
 ;; =============================================================================
 ;; Error values

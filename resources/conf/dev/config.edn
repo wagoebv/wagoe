@@ -328,8 +328,7 @@
   :wagoe.external/soap
   {:endpoint     #or [#env SOAP_ENDPOINT "http://localhost:8080/Service.svc"]
    :username     #env SOAP_USERNAME
-   :password     #env SOAP_PASSWORD
-   :retry-faults ["Unknown fault occured"]}
+   :password     #env SOAP_PASSWORD}
 
   ;; Stripe payments now handled by :wagoe/payment-provider (libs/payments).
   ;; Configure with {:provider :stripe :api-key ... :webhook-secret ...} in :active.
