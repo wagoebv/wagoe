@@ -402,9 +402,9 @@ the xref:roadmap.adoc#_after_1_0_0[roadmap].
 | Their camelCase twins (`sessionToken`, `expiresAt`), sent beside them with
   the same value.
 
-| `wagoe.shared.ui.core.alpine/x-persist` and `sidebar-store-init`
+| `wagoe.shared.ui.core.alpine/sidebar-store-init`
 | The `:admin-pilot` bundle, whose `admin-ux.js` registers the sidebar store and
-  keeps it in `localStorage`. Both vars need Alpine's Persist plugin, which is
+  keeps it in `localStorage`. The var needs Alpine's Persist plugin, which is
   not bundled.
 |===
 

@@ -50,10 +50,20 @@
       (leave-sidebar! pg)
       (is (= {:pinned "true" :state "expanded"} (sidebar pg))))
 
-    (testing "unpinned, leaving collapses it, and that survives a reload"
-      (loc/click (page/locator pg pin))
-      (leave-sidebar! pg)
+    (testing "pinned and collapsed survives a reload"
+      (loc/click (page/locator pg "button.sidebar-toggle"))
       (await-state! pg "collapsed")
       (page/reload pg)
       (await-state! pg "collapsed")
-      (is (= {:pinned "false" :state "collapsed"} (sidebar pg))))))
+      (is (= {:pinned "true" :state "collapsed"} (sidebar pg))))
+
+    (testing "unpinned, the next page starts expanded and follows the mouse"
+      ;; A collapsed sidebar hides the pin, so expand it first.
+      (loc/click (page/locator pg "button.sidebar-toggle"))
+      (await-state! pg "expanded")
+      (loc/click (page/locator pg pin))
+      (page/reload pg)
+      (await-state! pg "expanded")
+      (is (= {:pinned "false" :state "expanded"} (sidebar pg)))
+      (leave-sidebar! pg)
+      (await-state! pg "collapsed"))))

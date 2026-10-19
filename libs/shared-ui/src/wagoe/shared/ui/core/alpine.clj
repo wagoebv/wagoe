@@ -14,6 +14,7 @@
    - x-on/@: Event handlers
    - x-show: Conditional visibility with transitions
    - x-model: Two-way data binding
+   - $persist: LocalStorage persistence (needs the Persist plugin)
    - $store: Global reactive stores"
   (:require [clojure.string :as str]
             [hiccup2.core :as h]))
@@ -172,11 +173,9 @@
 ;; Persistence Helpers
 ;; =============================================================================
 
-(defn ^:deprecated x-persist
-  "DEPRECATED: Alpine's Persist plugin is not bundled, so this expression fails.
-   Read and write localStorage directly, as the sidebar store in admin-ux.js does.
-
-   Generate Alpine $persist expression for localStorage.
+(defn x-persist
+  "Generate Alpine $persist expression for localStorage. Needs Alpine's Persist
+   plugin, which ui-style does not bundle.
 
    Args:
      key: Storage key string
@@ -298,7 +297,6 @@
    Generate Alpine store initialization script for sidebar state.
 
    This creates a global Alpine store that:
-   - Persists sidebar state to localStorage
    - Handles collapse/expand on hover
    - Manages mobile drawer open/close
    - Supports keyboard shortcuts (Ctrl+B)
