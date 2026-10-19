@@ -325,9 +325,9 @@
     :wagoe/mfa-service        {:user-repository (ig/ref :wagoe/user-repository)
                                :mfa-config      {}}
     ;; Platform adds the modules' :auth part as :contributed.
-    :wagoe/auth-hooks         {:configured {:mfa-required?  (:mfa-required? auth-config)
-                                            :login-redirect (get-in config [:active :wagoe/user :login-redirect])
-                                            :login-layout   (get-in config [:active :wagoe/user :login-layout])}}
+    :wagoe/auth-hooks         {:configured (assoc (select-keys (get-in config [:active :wagoe/user])
+                                                               hooks/config-hooks)
+                                                  :mfa-required? (:mfa-required? auth-config))}
     :wagoe/auth-service       {:user-repository    (ig/ref :wagoe/user-repository)
                                :session-repository (ig/ref :wagoe/session-repository)
                                :mfa-service        (ig/ref :wagoe/mfa-service)

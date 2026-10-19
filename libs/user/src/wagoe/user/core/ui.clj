@@ -47,6 +47,15 @@
    content
    opts))
 
+(defn- auth-header
+  "Wagoe's logo, app name and `subtitle` above a sign-in form."
+  [opts subtitle]
+  [:div.page-header.auth-header
+   (when-let [logo-url (:logo-url opts)]
+     [:img.auth-logo {:src logo-url :alt "" :style "height:48px; width:auto; display:block; margin:0 auto 12px;"}])
+   [:h1 [:t :wagoe/app-name]]
+   [:p [:t subtitle]]])
+
 (defn- auth-page
   "A sign-in page: Wagoe's `header` above `content` in the pilot layout, or,
    when opts carry the app's `:login-layout`, `content` alone handed to it.
@@ -802,11 +811,7 @@
      [:t :user/link-signin]
      :login
      :div.login-page.auth-page
-     [:div.page-header.auth-header
-      (when-let [logo-url (:logo-url opts)]
-        [:img.auth-logo {:src logo-url :alt "" :style "height:48px; width:auto; display:block; margin:0 auto 12px;"}])
-      [:h1 [:t :wagoe/app-name]]
-      [:p [:t :user/login-subtitle]]]
+     (auth-header opts :user/login-subtitle)
      [(when-let [message (:error opts)]
         (ui/error-message message))
       (login-form data-with-return errors)]
@@ -840,15 +845,14 @@
 (defn oidc-continue-page
   "Body of the answer to a provider callback that signed someone in; the
    handler's Refresh header moves the browser on."
-  ([location] (oidc-continue-page location {}))
-  ([location opts]
-   (auth-page
-    [:t :user/link-signin]
-    :oidc-continue
-    :div.auth-page
-    nil
-    [[:p [:a {:href location} [:t :user/oidc-continue]]]]
-    opts)))
+  [location opts]
+  (auth-page
+   [:t :user/link-signin]
+   :oidc-continue
+   :div.auth-page
+   nil
+   [[:p [:a {:href location} [:t :user/oidc-continue]]]]
+   opts))
 
 ;; =============================================================================
 ;; MFA Login Form & Page
@@ -922,11 +926,7 @@
      [:t :user/mfa-title]
      :mfa
      :div.mfa-login-page.auth-page
-     [:div.page-header.auth-header
-      (when-let [logo-url (:logo-url opts)]
-        [:img.auth-logo {:src logo-url :alt "" :style "height:48px; width:auto; display:block; margin:0 auto 12px;"}])
-      [:h1 [:t :wagoe/app-name]]
-      [:p [:t :user/mfa-subtitle]]]
+     (auth-header opts :user/mfa-subtitle)
      [(mfa-login-form data-with-return errors)]
      opts)))
 
@@ -1206,7 +1206,7 @@
                   (:group-leave :grant-remove) :warning
                   :neutral)]
     (ui/badge (text/capitalize (str/replace action-name "-" " ")) {:variant variant
-                                                                   :class "audit-action-badge"})))
+                                            :class "audit-action-badge"})))
 
 (defn result-badge
   "Display result status with appropriate styling.

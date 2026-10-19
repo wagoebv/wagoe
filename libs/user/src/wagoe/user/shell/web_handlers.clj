@@ -439,18 +439,22 @@
 ;; Authentication Handlers (Login / Logout)
 ;; =============================================================================
 
-(defn- auth-chrome
-  "Options every sign-in page takes: the logo, and the app's `:login-layout`
+(defn- sign-in-opts
+  "Page options every sign-in page takes, the app's `:login-layout` among them
    with the request it may want to read."
-  [config request]
-  (let [app-layout (get-in config [:active :wagoe/user :login-layout])]
-    (cond-> {:logo-url (get-in config [:wagoe/settings :logo-url])}
-      app-layout (assoc :login-layout app-layout :request request))))
+  ([config request] (sign-in-opts config request nil))
+  ([config request return-to]
+   (let [app-layout (get-in config [:active :wagoe/user :login-layout])]
+     (cond-> {:user      (get request :user)
+              :flash     (get request :flash)
+              :return-to return-to
+              :logo-url  (get-in config [:wagoe/settings :logo-url])}
+       app-layout (assoc :login-layout app-layout :request request)))))
 
 (defn- login-branding
   "Login page options every rendering of it shares."
-  [config request]
-  (assoc (auth-chrome config request)
+  [config request return-to]
+  (assoc (sign-in-opts config request return-to)
          :oidc-providers (oidc-core/login-buttons (get-in config [:active :wagoe/user :oidc :providers]))))
 
 (defn- session-cookie [config session-token]
@@ -467,10 +471,7 @@
                          {:email remembered-email
                           :remember true}
                          {})
-          page-opts (merge {:user (get request :user)
-                            :flash (get request :flash)
-                            :return-to return-to}
-                           (login-branding config request))]
+          page-opts (login-branding config request return-to)]
       (html-response request (user-ui/login-page initial-data {} page-opts)))))
 
 (defn login-submit-handler
@@ -487,10 +488,7 @@
           prepared-data (merge prepared-data (login-context request))
           [valid? validation-errors validated-data]
           (validate-request-data user-schema/LoginRequest prepared-data)
-          page-opts (merge {:user (get request :user)
-                            :flash (get request :flash)
-                            :return-to raw-return-to}
-                           (auth-chrome config request))]
+          page-opts (sign-in-opts config request raw-return-to)]
       (if-not valid?
         ;; Re-render login page with validation errors, preserving return-to
         (html-response request
@@ -635,7 +633,7 @@
                            [502 [:t :user/oidc-failed]]
                            [400 [:t :user/oidc-failed]])]
     (-> (html-response request
-                       (user-ui/login-page {} {} (assoc (login-branding config request) :error message))
+                       (user-ui/login-page {} {} (assoc (login-branding config request nil) :error message))
                        status)
         clear-oidc-cookies)))
 
@@ -643,7 +641,7 @@
   "Set the session cookie exactly as password login does, and move on."
   [request config {:keys [user session return-to]}]
   (let [location (safe-return-url return-to (landing-path config user request))]
-    (-> (html-response request (user-ui/oidc-continue-page location (auth-chrome config request)) 200
+    (-> (html-response request (user-ui/oidc-continue-page location (sign-in-opts config request)) 200
                        {"Refresh" (str "0;url=" location)})
         (assoc-in [:cookies "session-token"] (session-cookie config (:session-token session)))
         clear-oidc-cookies)))
@@ -654,7 +652,7 @@
     (oidc-failure request config (:error result))
 
     (= :mfa-required (get-in result [:ok :outcome]))
-    (-> (html-response request (user-ui/oidc-mfa-page {} (auth-chrome config request)))
+    (-> (html-response request (user-ui/oidc-mfa-page {} (sign-in-opts config request)))
         clear-oidc-cookies
         ;; Strict: only the same-site MFA form posts it back.
         (assoc-in [:cookies oidc-mfa-cookie]
@@ -701,7 +699,7 @@
         (if (= :oidc/mfa-failed (get-in result [:error :type]))
           (html-response request
                          (user-ui/oidc-mfa-page {:mfa-code [[:t :user/oidc-mfa-invalid]]}
-                                               (auth-chrome config request))
+                                               (sign-in-opts config request))
                          401)
           (oidc-outcome request config result)))
       (catch Exception e
@@ -711,10 +709,7 @@
   "GET /web/register - render self-service registration page."
   [config]
   (fn [request]
-    (let [page-opts (merge {:user (get request :user)
-                            :flash (get request :flash)
-                            :return-to (get-in request [:query-params "return-to"])}
-                           (auth-chrome config request))]
+    (let [page-opts (sign-in-opts config request (get-in request [:query-params "return-to"]))]
       (html-response request (user-ui/register-page {} {} page-opts)))))
 
 (defn- error-field-key
@@ -784,10 +779,7 @@
           rerender (fn [errors status]
                      (html-response request
                                     (user-ui/register-page prepared-data errors
-                                                           (merge {:user (get request :user)
-                                                                   :flash (get request :flash)
-                                                                   :return-to raw-return-to}
-                                                                  (auth-chrome config request)))
+                                                           (sign-in-opts config request raw-return-to))
                                     status))
           ;; The exception message can carry driver or config detail; it goes
           ;; to the log, not the page (BOU-552).
