@@ -696,14 +696,13 @@ When encountering 500 errors or unexpected behavior:
 [:lockout-until {:optional true} [:maybe inst?]]
 
 ;; 2. Add to persistence layer transformations (src/{module}/shell/persistence.clj)
-;; In entity->db:
-(update :lockout-until type-conversion/instant->string)
+;; In entity->db: nothing, the Instant goes to the database as it is
 ;; In db->entity:
 (update :lockout-until type-conversion/string->instant)
 
 ;; 3. Verify database has columns (or add migration)
 ALTER TABLE users ADD COLUMN failed_login_count INTEGER DEFAULT 0;
-ALTER TABLE users ADD COLUMN lockout_until TEXT;
+ALTER TABLE users ADD COLUMN lockout_until TIMESTAMP WITH TIME ZONE;
 ```
 
 ### 7. exception handling - missing :type in ex-data

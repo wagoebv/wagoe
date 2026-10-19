@@ -14,8 +14,8 @@
    :issuer        (:issuer identity)
    :subject       (:subject identity)
    :email         (:email identity)
-   :created_at    (type-conversion/instant->string (:created-at identity))
-   :last_login_at (type-conversion/instant->string (:last-login-at identity))})
+   :created_at    (:created-at identity)
+   :last_login_at (:last-login-at identity)})
 
 (defn- db-> [row]
   (when row
@@ -50,7 +50,7 @@
 
   (touch-identity [_ issuer subject at]
     (pos? (db/execute-update! ctx {:update :user_identities
-                                   :set    {:last_login_at (type-conversion/instant->string at)}
+                                   :set    {:last_login_at at}
                                    :where  [:and [:= :issuer issuer] [:= :subject subject]]})))
 
   (unlink-identity [_ issuer subject]

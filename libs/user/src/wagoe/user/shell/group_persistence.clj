@@ -84,13 +84,13 @@
                                              :values      [{:id          (tc/uuid->string (:id stored))
                                                             :name        (:name stored)
                                                             :description (:description stored)
-                                                            :created_at  (tc/instant->string (:created-at stored))}]}))
+                                                            :created_at  (:created-at stored)}]}))
       stored))
 
   (modify-group [this group]
     (when (pos? (name-taken! #(db/execute-update! ctx {:update :user_groups
                                                        :set    (cond-> {:name       (:name group)
-                                                                        :updated_at (tc/instant->string (Instant/now))}
+                                                                        :updated_at (Instant/now)}
                                                                  (contains? group :description)
                                                                  (assoc :description (:description group)))
                                                        :where  [:= :id (id-str (:id group))]})))
@@ -120,7 +120,7 @@
                                :values      [{:id         (tc/uuid->string (UUID/randomUUID))
                                               :group_id   (id-str group-id)
                                               :user_id    (id-str user-id)
-                                              :created_at (tc/instant->string (Instant/now))}]})
+                                              :created_at (Instant/now)}]})
       true
       ;; Read nothing after: in a PostgreSQL transaction the refusal aborts it.
       (catch clojure.lang.ExceptionInfo e
@@ -149,7 +149,7 @@
                                               :group_id   (id-str (:group-id stored))
                                               :permission (group/permission-str (:permission stored))
                                               :scope      (pr-str (:scope stored))
-                                              :created_at (tc/instant->string (:created-at stored))}]})
+                                              :created_at (:created-at stored)}]})
       stored))
 
   (remove-grant [_ group-id grant-id]
