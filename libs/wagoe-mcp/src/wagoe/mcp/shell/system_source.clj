@@ -86,9 +86,7 @@
    text is worse: `\"jdbc:h2:mem:app;DB_CLOSE_DELAY=-1\"` contains a `;`, so
    stripping comments by regex swallowed the rest of that line.
 
-   wagoe.tools.config-edn has the same lexer, and this does not call it: that
-   namespace requires babashka.process for its paren-repair safety net, a
-   dependency this JVM-side server has no reason to carry."
+   wagoe.cli.config-edn has the same lexer."
   [text]
   (let [n (count text)]
     (loop [i 0, state :code, out (transient [])]

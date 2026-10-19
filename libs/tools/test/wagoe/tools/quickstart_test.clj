@@ -1,5 +1,5 @@
 (ns wagoe.tools.quickstart-test
-  (:require [wagoe.tools.config-edn :as config-edn]
+  (:require [wagoe.cli.config-edn :as config-edn]
             [babashka.process :as process]
             [clojure.java.io :as io]
             [clojure.string :as str]
