@@ -10,7 +10,7 @@
 
 `ui-style` is the single source of truth for **which** stylesheet and script
 files a page loads and **in what order**. Layout namespaces pick a bundle key
-(`:pilot`, the default, or `:admin-pilot`; `:base` is deprecated); feature namespaces never hardcode CSS/JS
+(`:pilot`, the default, or `:admin-pilot`); feature namespaces never hardcode CSS/JS
 lists. The library also ships the actual asset files (CSS, JS, fonts, icons)
 under `resources/public/`, which the platform serves from the classpath.
 
@@ -30,10 +30,9 @@ Bundle vars — each a vector of `/`-rooted asset paths, in load order:
 
 | Var | Bundle | Contents (load order) |
 |-----|--------|-----------------------|
-| `base-css` | `:base` | deprecated: pico → wagoe-tokens → tokens-openprops → app |
 | `pilot-css` | `:pilot` | wagoe-tokens → app → daisy-admin |
 | `admin-pilot-css` | `:admin-pilot` | fonts → wagoe-tokens → admin → app → daisy-admin → wagoe-admin |
-| `base-js` / `pilot-js` | `:base` / `:pilot` | theme → components → alpine → htmx → htmx-ext-sse → forms (`base-js` aliases `pilot-js`) |
+| `pilot-js` | `:pilot` | theme → components → alpine → htmx → htmx-ext-sse → forms |
 | `admin-pilot-js` | `:admin-pilot` | theme → components → admin-ux → alpine → htmx → htmx-ext-sse → forms → keyboard |
 
 Lookup functions:
@@ -47,13 +46,13 @@ Lookup functions:
 ;; Unknown keys fall back to the :pilot stack (never nil):
 (ui-style/bundle :nope)           ;; => pilot-css
 (ui-style/js-bundle :nope)        ;; => pilot-js
+;; :base (pico + open-props) was removed: it gets pilot-css and warns once.
 ```
 
 Recommended bundle per page type:
 
 - `:pilot` — the default; what `page-layout` loads
 - `:admin-pilot` — admin CRUD pages
-- `:base` — deprecated (pico + open-props), removed in 2.0
 
 daisyUI/Tailwind on `wagoe-tokens.css` is the one CSS system. Pages on the
 default layout carry `body.wagoe-default`, which gives bare headings, lists,
@@ -63,8 +62,7 @@ tables and buttons the styling pico used to (`resources/tailwind/admin-pilot.css
 
 - **CSS** (`css/`): `wagoe-tokens.css` (design tokens), `app.css`, `admin.css`,
   `daisy-admin.css` (Tailwind/daisyUI compiled output), `wagoe-admin.css`
-  (wagoe.org tokens and the admin display-role styles, ADR-040), `fonts.css`, and
-  the deprecated `pico.min.css`, `tokens-openprops.css` and `vendor/open-props/*`.
+  (wagoe.org tokens and the admin display-role styles, ADR-040) and `fonts.css`.
 - **JS** (`js/`): `theme.js`, `components.js`, `admin-ux.js`, `forms.js`,
   `keyboard.js`, `init.js`, plus vendored `alpine.min.js`, `htmx.min.js` and
   `htmx-ext-sse.min.js` (htmx's `sse` extension, 2.2.4; must load after htmx).

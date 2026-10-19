@@ -5,15 +5,15 @@
 
 (deftest ^:unit css-bundle-selection-test
   (testing "known bundle keys return configured stacks"
-    (is (= sut/base-css (sut/bundle :base)))
     (is (= sut/pilot-css (sut/bundle :pilot)))
     (is (= sut/admin-pilot-css (sut/bundle :admin-pilot))))
   (testing "unknown bundle key falls back to pilot, the default"
-    (is (= sut/pilot-css (sut/bundle :unknown)))))
+    (is (= sut/pilot-css (sut/bundle :unknown))))
+  (testing "the removed :base bundle serves pilot"
+    (is (= sut/pilot-css (sut/bundle :base)))))
 
 (deftest ^:unit js-bundle-selection-test
   (testing "known bundle keys return configured stacks"
-    (is (= sut/base-js (sut/js-bundle :base)))
     (is (= sut/pilot-js (sut/js-bundle :pilot)))
     (is (= sut/admin-pilot-js (sut/js-bundle :admin-pilot))))
   (testing "unknown bundle key falls back to pilot, the default"

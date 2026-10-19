@@ -1,5 +1,5 @@
 /* Application-wide reusable layout utilities for Wagoe Web UI.
-   Uses design tokens from wagoe-tokens.css / tokens-openprops.css for consistency and dark mode support.
+   Uses design tokens from wagoe-tokens.css for consistency and dark mode support.
    
    Mobile-First Responsive Design:
    - Base styles: < 640px (mobile)

@@ -4,14 +4,6 @@
    Keep CSS/JS asset ordering centralized here so modules can reuse the same
    rendering contract without hardcoding per-page lists.")
 
-(def ^:deprecated base-css
-  "DEPRECATED: pico and open-props; use `pilot-css`, the default. Kept for apps
-   that select `:base` explicitly; removed in 2.0."
-  ["/css/pico.min.css"
-   "/css/wagoe-tokens.css"
-   "/css/tokens-openprops.css"
-   "/css/app.css"])
-
 (def pilot-css
   "The default stack: daisyUI/Tailwind on wagoe-tokens."
   ["/css/wagoe-tokens.css"
@@ -31,8 +23,7 @@
 
 (def css-bundles
   "Registry of known stylesheet bundles."
-  {:base        base-css
-   :pilot       pilot-css
+  {:pilot       pilot-css
    :admin-pilot admin-pilot-css})
 
 (def pilot-js
@@ -51,10 +42,6 @@
    "/js/htmx-ext-sse.min.js"
    "/js/forms.js"])
 
-(def base-js
-  "Same as `pilot-js`; the `:base` key's JavaScript."
-  pilot-js)
-
 (def admin-pilot-js
   "Admin pilot JavaScript stack.
    components.js and admin-ux.js must load before alpine.min.js because they
@@ -70,14 +57,18 @@
 
 (def js-bundles
   "Registry of known JavaScript bundles."
-  {:base        base-js
-   :pilot       pilot-js
+  {:pilot       pilot-js
    :admin-pilot admin-pilot-js})
+
+(def ^:private warn-removed-base
+  (delay (binding [*out* *err*]
+           (println "WARN wagoe.ui-style: the :base CSS bundle (pico, open-props) was removed; serving :pilot."))))
 
 (defn bundle
   "Return stylesheet list for `k` bundle key.
-   Falls back to `:pilot`."
+   Falls back to `:pilot`; `:base` was removed and warns once."
   [k]
+  (when (= :base k) @warn-removed-base)
   (get css-bundles k pilot-css))
 
 (defn js-bundle

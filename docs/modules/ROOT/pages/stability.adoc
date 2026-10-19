@@ -18,7 +18,8 @@ at `1.0.0`, and the surface below is the one it promises.
 | Stable. Semantic Versioning applies to the public surface — see
   <<_from_1_0_0,From 1.0.0>>. The breaking changes made during the release
   candidates are listed in <<_before_1_0_0_release_candidates,Before 1.0.0>>.
-  Everything deprecated is deferred to `2.0` — see <<_deferred_to_2_0,Deferred to 2.0>>.
+  Everything deprecated is deferred to `2.0`, except the `:base` CSS bundle — see
+  <<_deferred_to_2_0,Deferred to 2.0>>.
 
 | Artifacts
 | 33 libraries on Clojars, all in the `com.wagoe` group. Artifact ids are
@@ -370,7 +371,7 @@ major version; see xref:libraries:cli.adoc#_upgrade_past_deprecations[the CLI].
 === Deferred to 2.0
 
 Everything currently deprecated, and what replaces it. None of these is removed
-in a `1.x` release. What `2.0` and the `1.x` releases before it will build is on
+in a `1.x` release; the one exception is <<_removed_in_1_x,below>>. What `2.0` and the `1.x` releases before it will build is on
 the xref:roadmap.adoc#_after_1_0_0[roadmap].
 
 [cols="2,3",options="header"]
@@ -396,15 +397,20 @@ the xref:roadmap.adoc#_after_1_0_0[roadmap].
 | `/openapi.json` and `:openapi` (OpenAPI 3.1). The old path serves the 3.1
   document; `:swagger` is translated and warns at boot.
 
-| The `:base` CSS bundle: `pico.min.css`, `tokens-openprops.css` and the
-  vendored open-props files
-| The `:pilot` bundle, daisyUI/Tailwind on `wagoe-tokens.css`, which the
-  default layout loads. `:base` still works when a page selects it.
 | Kebab-case keys in the `user` and `session` maps of the login response
   (`session-token`, `expires-at`, ...)
 | Their camelCase twins (`sessionToken`, `expiresAt`), sent beside them with
   the same value.
 |===
+
+=== Removed in 1.x
+
+The `:base` CSS bundle was deprecated and removed before `2.0`, so Wagoe ships
+one CSS system rather than two. Gone: `pico.min.css`, `tokens-openprops.css`,
+the vendored open-props files, and the `base-css` and `base-js` vars.
+`(bundle :base)` serves `:pilot`, daisyUI/Tailwind on `wagoe-tokens.css`, and
+warns once, so a page that selects it still renders. Code naming `base-css`
+does not compile; use `pilot-css`.
 
 == HTTP API versioning is a separate thing
 
