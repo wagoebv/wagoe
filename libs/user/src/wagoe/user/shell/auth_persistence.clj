@@ -287,7 +287,7 @@
              now (java.time.Instant/now)
              query {:update :auth_users
                     :set {:password_hash password-hash
-                          :updated_at (type-conversion/instant->string now)}
+                          :updated_at now}
                     :where [:and
                             [:= :id (type-conversion/uuid->string user-id)]
                             [:is :deleted_at nil]]}
@@ -304,7 +304,7 @@
              now (java.time.Instant/now)
              query {:update :auth_users
                     :set {:failed_login_count 0
-                          :updated_at (type-conversion/instant->string now)}
+                          :updated_at now}
                     :where [:= :id (type-conversion/uuid->string user-id)]}
              affected-rows (db/execute-update! ctx query)]
          (> affected-rows 0)))
@@ -319,8 +319,8 @@
              lockout-until (:lockout-until params)
              now (java.time.Instant/now)
              query {:update :auth_users
-                    :set {:lockout_until (type-conversion/instant->string lockout-until)
-                          :updated_at (type-conversion/instant->string now)}
+                    :set {:lockout_until lockout-until
+                          :updated_at now}
                     :where [:= :id (type-conversion/uuid->string user-id)]}
              affected-rows (db/execute-update! ctx query)]
          (> affected-rows 0)))
@@ -336,7 +336,7 @@
              query {:update :auth_users
                     :set {:lockout_until nil
                           :failed_login_count 0
-                          :updated_at (type-conversion/instant->string now)}
+                          :updated_at now}
                     :where [:= :id (type-conversion/uuid->string user-id)]}
              affected-rows (db/execute-update! ctx query)]
          (> affected-rows 0)))
@@ -360,8 +360,8 @@
                           :mfa_backup_codes (cheshire.core/generate-string
                                              (mapv mfa-crypto/hash-backup-code mfa-backup-codes))
                           :mfa_backup_codes_used (cheshire.core/generate-string [])
-                          :mfa_enabled_at (type-conversion/instant->string now)
-                          :updated_at (type-conversion/instant->string now)}
+                          :mfa_enabled_at now
+                          :updated_at now}
                     :where [:= :id (type-conversion/uuid->string user-id)]}
              affected-rows (db/execute-update! ctx query)]
          (> affected-rows 0)))
@@ -381,7 +381,7 @@
                           :mfa_backup_codes nil
                           :mfa_backup_codes_used nil
                           :mfa_enabled_at nil
-                          :updated_at (type-conversion/instant->string now)}
+                          :updated_at now}
                     :where [:= :id (type-conversion/uuid->string user-id)]}
              affected-rows (db/execute-update! ctx query)]
          (> affected-rows 0)))
@@ -400,7 +400,7 @@
              now (java.time.Instant/now)
              query {:update :auth_users
                     :set {:mfa_backup_codes_used (cheshire.core/generate-string updated-used-codes)
-                          :updated_at (type-conversion/instant->string now)}
+                          :updated_at now}
                     :where [:= :id (type-conversion/uuid->string user-id)]}
              affected-rows (db/execute-update! ctx query)]
          (> affected-rows 0)))
@@ -415,8 +415,8 @@
              now (java.time.Instant/now)
              adapter (:adapter ctx)
              query {:update :auth_users
-                    :set {:deleted_at (type-conversion/instant->string now)
-                          :updated_at (type-conversion/instant->string now)
+                    :set {:deleted_at now
+                          :updated_at now
                           :active (protocols/boolean->db adapter false)}
                     :where [:and
                             [:= :id (type-conversion/uuid->string user-id)]
