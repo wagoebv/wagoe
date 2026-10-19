@@ -47,6 +47,9 @@
       (page/navigate pg (admin/admin-url "/e2e-tickets"))
       (page/wait-for-load-state pg)
       (is (= 1 (admin/table-row-count pg)))
+      (is (= "Customer 142"
+             (page/evaluate pg "() => document.querySelector('table tbody td.c-relation a').textContent"))
+          "the list names the customer")
       (page/navigate pg (str (admin/app-url "")
                              (page/evaluate pg "() => document.querySelector('table tbody td.c-title a').getAttribute('href')")))
       (page/wait-for-selector pg "form.entity-form" {:timeout 10000.0})

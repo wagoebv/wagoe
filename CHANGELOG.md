@@ -212,6 +212,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Admin showed a column with a digit in its name as empty** (BOU-760), e.g. `e2e_customer_id` in lists and forms.
+  Other query results are keyed as before; `db/as-kebab-maps` is the opt-in builder that keys it `:e2e-customer-id`.
+- **Admin foreign-key cells showed no label when the parent's name differs from the key** (BOU-760). The parent a
+  `:has-many` declares is used.
 - **Workflow auto-transitions skipped tenant instances; side-effect jobs could run before the transition committed**
   (BOU-757). Both fixed; `db/after-commit!` defers work to a commit. Nothing to do.
 - **Tenant schemas migrated modules enabled only in code** (BOU-757): they now migrate what `:active` names, as public
