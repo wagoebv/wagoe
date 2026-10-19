@@ -124,6 +124,13 @@ GET  /api/v1/workflow/instances/:id/audit      # Get audit trail
 ----
 
 Every route requires authentication (session or bearer token) and answers 401 without it.
+The three reads also need the `:admin` role or a `:workflow/read` grant from one of the caller's groups, and answer 403 without either.
+If your application declares the permissions a group may grant, declare `:workflow/read` among them.
+Starting and transitioning need no grant: a transition's `:required-permissions` decide.
+
+In a multi-tenant application every route answers 403 to a caller outside the request's tenant: not a member of it, not one of its users and not a platform admin.
+Without a tenant, only a user of no tenant is served.
+The admin pages under `/web/admin/workflows` admit an admin on the same terms, so a tenant admin sees their own tenant's instances.
 
 Bodies are kebab-case JSON, as in a scaffolded module's API. Start an instance with:
 
@@ -248,10 +255,22 @@ Pass an open transaction on the workflow store's datasource: a next.jdbc connect
                                     :entity-id   (:id order)}))
 ----
 
-A datasource is refused, since it would autocommit, and a nil transaction writes on the store's own connection.
+A datasource is refused, since it would autocommit. A nil transaction writes on the platform transaction open on this thread on the store's datasource, when there is one, else on the store's own connection.
 Hooks run before the caller commits; side-effect jobs join the transaction only on the database job queue.
 Code inside a platform `with-transaction` without a handle on it can pass `(wagoe.platform.database/current-transaction)`.
 Scaffolded entities do: a create and its workflow instance are written in one transaction.
+
+== Tenancy
+
+With the tenant module on, each tenant schema has its own `workflow_instances` and `workflow_audit`.
+The tenant module creates them when it provisions a tenant, and in every existing tenant schema at boot.
+A tenant request runs in a transaction bound to its schema, and the store reads and writes through that transaction, so a tenant reaches only its own instances.
+Outside a tenant, and in a single-tenant application, the tables in `public` are used as before.
+
+Instances a tenant started before workflow was tenant-scoped are in `public`.
+Move each tenant's rows into its schema, or they stay visible only outside any tenant.
+
+A library ships tables of its own for tenant schemas by naming their migrations under `:tenant-paths` in its `wagoe/migration-paths/<lib>.edn` manifest.
 
 == Joining an entity to its instance
 

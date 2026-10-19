@@ -117,6 +117,19 @@
              (migrations/migration-dirs nil))
           "nothing known about the modules: everything, as before"))))
 
+(deftest ^:unit tenant-paths-are-the-tenant-schemas-not-publics
+  (with-temp-dir
+    (fn [dir]
+      (let [manifest (fn [lib m]
+                       (io/as-url (doto (io/file dir (str lib ".edn")) (spit (pr-str m)))))]
+        (with-redefs [migrations/manifest-urls
+                      (fn [] [(manifest "workflow" {:paths        ["wagoe/workflow/migrations/"]
+                                                    :tenant-paths ["wagoe/workflow/migrations-tenant/"]})
+                              (manifest "geo" {:paths ["wagoe/geo/migrations/"]})
+                              (manifest "legacy" ["acme/migrations/"])])]
+          (is (= ["wagoe/workflow/migrations-tenant/"] (migrations/discover-tenant-migration-dirs)))
+          (is (not-any? #{"wagoe/workflow/migrations-tenant/"} (migrations/discover-migration-dirs))))))))
+
 (deftest ^:unit the-shipped-manifests-name-their-modules
   ;; The manifest's file name is what ties a directory to a module; one that
   ;; drifted from the library name would be migrated whatever the config says.
@@ -859,14 +872,21 @@
           (when (.isFile f) (io/copy f zos))
           (.closeEntry zos))))))
 
-(defn- discover-with [urls]
+(defn- all-dirs
+  "The directories migrate up runs and the ones run in tenant schemas."
+  []
+  (into (set (migrations/discover-migration-dirs)) (migrations/discover-tenant-migration-dirs)))
+
+(defn- discover-with
+  "`(discover)`, by default the public directories, on a classpath of `urls`."
+  [urls & [discover]]
   (let [cl     (java.net.URLClassLoader. (into-array java.net.URL urls)
                                          (ClassLoader/getPlatformClassLoader))
         thread (Thread/currentThread)
         prev   (.getContextClassLoader thread)]
     (try
       (.setContextClassLoader thread cl)
-      (set (migrations/discover-migration-dirs))
+      (set ((or discover migrations/discover-migration-dirs)))
       (finally
         (.setContextClassLoader thread prev)
         (.close cl)))))
@@ -878,7 +898,7 @@
       (is (<= 4 (count libs)) (pr-str (keys libs))))
 
     (testing "from a classpath of separate resource directories"
-      (let [found (discover-with (map #(io/as-url %) (keys libs)))]
+      (let [found (discover-with (map #(io/as-url %) (keys libs)) all-dirs)]
         (is (empty? (remove found expected)) (pr-str found))))
 
     (testing "from one flat jar, as the uberjar ships them"
@@ -888,7 +908,7 @@
                 jar  (io/file dir "app.jar")]
             (flatten-like-an-uberjar! (keys libs) tree)
             (jar-dir! tree jar)
-            (let [found (discover-with [(io/as-url jar)])]
+            (let [found (discover-with [(io/as-url jar)] all-dirs)]
               (is (empty? (remove found expected))
                   (str "missing " (pr-str (sort (remove found expected))))))))))))
 

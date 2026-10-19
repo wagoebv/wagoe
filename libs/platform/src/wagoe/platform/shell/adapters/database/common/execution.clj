@@ -184,6 +184,14 @@
    transaction a refused write aborted."
   nil)
 
+(defn transaction-on
+  "The connection of the transaction bound on this thread when it was opened
+   on `datasource`, else nil: a component holding another database's
+   datasource must not write into it."
+  [datasource]
+  (when (and *transaction-datasource* (identical? datasource *outside-datasource*))
+    *transaction-datasource*))
+
 (def ^:private key-columns-cache
   "Per database, key columns by [table key], so a refusal looks them up once.
    Weak on the datasource, so a closed pool's entries go with it."

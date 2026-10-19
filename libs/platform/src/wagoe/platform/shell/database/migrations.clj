@@ -336,6 +336,18 @@
                      " to a separate classpath resource.")))
     migration-dirs))
 
+(defn discover-tenant-migration-dirs
+  "The `:tenant-paths` the library manifests name: migrations the tenant
+   module runs inside every tenant schema, for a library whose tables belong
+   to each tenant."
+  []
+  (->> (manifest-urls)
+       (mapcat #(let [m (-> % slurp edn/read-string)]
+                  (when (map? m) (:tenant-paths m))))
+       (filter string?)
+       distinct
+       vec))
+
 (defn- files-in
   "Paths of the files under `dir`, relative to it, found where migratus finds
    it. Paths only: migratus's reader slurps every file and leaves the jar open."

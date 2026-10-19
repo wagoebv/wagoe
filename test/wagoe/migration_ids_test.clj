@@ -14,9 +14,14 @@
             [clojure.test :refer [deftest is testing]]
             [wagoe.platform.shell.database.migrations :as mig]))
 
+(def ^:private library-dirs
+  "Every framework migration directory, the ones run in tenant schemas too."
+  (delay (concat (remove #{mig/project-migration-dir} (mig/discover-migration-dirs))
+                 (mig/discover-tenant-migration-dirs))))
+
 (def ^:private library-ids
   "Every framework migration id, one per migration."
-  (delay (->> (remove #{mig/project-migration-dir} (mig/discover-migration-dirs))
+  (delay (->> @library-dirs
               (mapcat #'mig/migrations-in)
               (map first))))
 
@@ -26,7 +31,7 @@
         "no migrations discovered at all — this test would pass vacuously"))
 
   (testing "and none of them collide"
-    (let [clashes (mig/duplicate-migration-ids (mig/discover-migration-dirs))]
+    (let [clashes (mig/duplicate-migration-ids (cons mig/project-migration-dir @library-dirs))]
       (is (empty? clashes)
           (str "these ids are claimed twice, so one of each pair silently never runs: "
                (str/join "; " (for [[id files] clashes]

@@ -40,6 +40,9 @@
 
 (def ^:dynamic *handler* nil)
 (def ^:dynamic *service* nil)
+(def ^:dynamic *tenancy*
+  "What the tenant middleware would add to each request: :tenant, :tenant-membership."
+  {})
 
 (def ^:private session-token "a-valid-session")
 (def ^:private session-user-id (UUID/randomUUID))
@@ -62,6 +65,16 @@
         {:user-id session-user-id :session-token token
          :user {:id session-user-id :email "session@example.com" :role :admin :active true}}))))
 
+(def ^:private readers
+  "The users whose groups grant :workflow/read, by id."
+  (atom #{}))
+
+(def ^:private group-service
+  #_{:clj-kondo/ignore [:missing-protocol-method]}
+  (reify user-ports/IUserGroupService
+    (user-grants [_ user]
+      (if (@readers (:id user)) [{:permission :workflow/read :scope {}}] []))))
+
 (defn- with-served-api
   "Compile the workflow API routes through the platform router and put the
    authentication middleware outermost, where `:auth-middleware` puts it."
@@ -73,7 +86,7 @@
         svc      (service/create-workflow-service store registry)
         handler  ((user-middleware/authenticate-if-present user-service)
                   (reitit/compile-routes
-                   (sut/workflow-routes svc) {}))]
+                   (sut/workflow-routes svc group-service) {}))]
     (binding [*handler* handler *service* svc]
       (f)))
   (registry/clear-registry!))
@@ -99,10 +112,11 @@
   "POST `uri` with `body-params`, optionally bearing `token`."
   ([uri body-params] (post uri body-params nil))
   ([uri body-params token]
-   (*handler* (cond-> {:request-method :post
-                       :uri            uri
-                       :headers        {}
-                       :body-params    body-params}
+   (*handler* (cond-> (merge {:request-method :post
+                              :uri            uri
+                              :headers        {}
+                              :body-params    body-params}
+                             *tenancy*)
                 token (assoc-in [:headers "authorization"] (str "Bearer " token))))))
 
 (defn- new-instance []
@@ -150,7 +164,10 @@
                            [:user  [{:id "c" :to "c" :enabled false :reason "insufficient-permissions"}
                                     {:id "d" :to "d" :enabled false :reason "guard-rejected"}]]]]
     (testing (name role)
-      (let [token    (token-for {:id (UUID/randomUUID) :email "c@example.com" :role role})
+      (let [id       (UUID/randomUUID)
+            ;; A reader, so the user may GET what the transition answered.
+            token    (do (swap! readers conj id)
+                         (token-for {:id id :email "c@example.com" :role role}))
             instance (ports/start-workflow! *service* {:workflow-id :gated :entity-type :x
                                                        :entity-id   (UUID/randomUUID)})
             uri      (str "/workflow/instances/" (:id instance))
@@ -165,7 +182,7 @@
   ([uri] (get-uri uri nil))
   ([uri token]
    (let [[path query] (str/split uri #"\?" 2)]
-     (*handler* (cond-> {:request-method :get :uri path :headers {}}
+     (*handler* (cond-> (merge {:request-method :get :uri path :headers {}} *tenancy*)
                   query (assoc :query-string query)
                   token (assoc-in [:headers "authorization"] (str "Bearer " token)))))))
 
@@ -220,6 +237,56 @@
                        token)]
     (is (= 422 (:status response)))
     (is (= "insufficient-permissions" (get-in (body-data response) [:error :type])))))
+
+;; =============================================================================
+;; Who may read, and in which tenant
+;; =============================================================================
+
+(def ^:private reads #{:get :lookup :audit})
+
+(defn- statuses
+  "Each route's status for `user`, signed in with a token."
+  [user]
+  (let [token (token-for (merge {:id (UUID/randomUUID) :email "x@example.com"} user))]
+    (into {} (for [route (keys route-success)] [route (:status (call-route route token))]))))
+
+(deftest ^:unit the-reads-need-the-read-permission
+  (testing "a plain user is refused the reads, and may still start and transition"
+    (let [seen (statuses {:role :user})]
+      (is (= {:get 403 :lookup 403 :audit 403} (select-keys seen reads)))
+      (is (= 201 (:start seen)))
+      (is (= 422 (:transition seen)) "refused by the transition's own permission")))
+  (testing "a user whose group grants :workflow/read reads"
+    (let [id (UUID/randomUUID)]
+      (swap! readers conj id)
+      (is (= {:get 200 :lookup 200 :audit 200}
+             (select-keys (statuses {:id id :role :user}) reads)))))
+  (testing "a platform admin reads"
+    (is (= route-success (statuses {:role :admin}))))
+  (testing "the refusal names the permission"
+    (let [response (get-uri (str "/workflow/instances/" (:id (new-instance)))
+                            (token-for {:id (UUID/randomUUID) :email "u@example.com" :role :user}))]
+      (is (= {:type "forbidden" :message "Reading workflow instances needs the workflow/read permission"}
+             (select-keys (:error (body-data response)) [:type :message]))))))
+
+(deftest ^:unit every-api-route-refuses-a-caller-outside-the-tenant
+  (let [tenant-a (UUID/randomUUID)
+        tenant-b (UUID/randomUUID)
+        refused  (zipmap (keys route-success) (repeat 403))]
+    (testing "another tenant's admin, the request resolved to this tenant"
+      (binding [*tenancy* {:tenant {:id tenant-a}}]
+        (is (= refused (statuses {:role :admin :tenant-id tenant-b})))))
+    (testing "a tenant's admin on a request with no tenant, which runs in public"
+      (is (= refused (statuses {:role :admin :tenant-id tenant-a}))))
+    (testing "the tenant's own admin"
+      (binding [*tenancy* {:tenant {:id tenant-a}}]
+        (is (= route-success (statuses {:role :admin :tenant-id tenant-a})))))
+    (testing "an active member, whatever tenant the user record names"
+      (binding [*tenancy* {:tenant {:id tenant-a} :tenant-membership {:status :active}}]
+        (is (= route-success (statuses {:role :admin})))))
+    (testing "a platform admin in any tenant"
+      (binding [*tenancy* {:tenant {:id tenant-b}}]
+        (is (= route-success (statuses {:role :admin})))))))
 
 ;; =============================================================================
 ;; The body
@@ -525,29 +592,36 @@
                                             nil)]]
     {})))
 
-(deftest ^:unit the-admin-pages-require-a-platform-admin
-  ;; Any signed-in user could list every instance and its audit trail. The
-  ;; store has no tenant column, so a tenant admin would see every tenant's.
-  (let [handler (served-web-pages)
-        get-as  (fn [uri user]
-                  (handler (cond-> {:request-method :get :uri uri :headers {}}
-                             user (assoc-in [:headers "authorization"]
-                                            (str "Bearer " (token-for (assoc user :id (UUID/randomUUID))))))))
-        uris    ["/web/admin/workflows" (str "/web/admin/workflows/" (UUID/randomUUID))]]
-    (doseq [uri uris]
+(deftest ^:unit the-admin-pages-admit-an-admin-in-the-requests-tenant
+  ;; The pages list the instances of the schema the request runs in, so an
+  ;; admin is admitted only to their own tenant's.
+  (let [handler      (served-web-pages)
+        tenant-a     (UUID/randomUUID)
+        tenant-admin {:email "t@example.com" :role :admin :tenant-id tenant-a}
+        get-as       (fn [uri user tenancy]
+                       (handler (cond-> (merge {:request-method :get :uri uri :headers {}} tenancy)
+                                  user (assoc-in [:headers "authorization"]
+                                                 (str "Bearer " (token-for (assoc user :id (UUID/randomUUID))))))))
+        uris         ["/web/admin/workflows" (str "/web/admin/workflows/" (UUID/randomUUID))]]
+    (doseq [uri uris
+            ;; The detail id is unknown: 404, past the guard.
+            :let [admitted (if (str/ends-with? uri "workflows") 200 404)]]
       (testing uri
-        (doseq [[who user] {"a plain user"   {:email "u@example.com" :role :user}
-                            "a tenant admin" {:email "t@example.com" :role :admin
-                                              :tenant-id (UUID/randomUUID)}}]
+        (doseq [[who user tenancy] [["a plain user" {:email "u@example.com" :role :user} {}]
+                                    ["a plain user of the tenant"
+                                     {:email "u@example.com" :role :user :tenant-id tenant-a}
+                                     {:tenant {:id tenant-a}}]
+                                    ["another tenant's admin" tenant-admin {:tenant {:id (UUID/randomUUID)}}]
+                                    ["a tenant admin with no tenant resolved" tenant-admin {}]]]
           (testing (str who " is refused")
-            (let [response (get-as uri user)]
+            (let [response (get-as uri user tenancy)]
               (is (= 403 (:status response)))
               (is (str/includes? (:body response) "403")))))
+        (testing "a tenant admin in their own tenant is admitted"
+          (is (= admitted (:status (get-as uri tenant-admin {:tenant {:id tenant-a}})))))
         (testing "a platform admin is admitted"
-          ;; The detail id is unknown: 404, past the guard.
-          (is (= (if (str/ends-with? uri "workflows") 200 404)
-                 (:status (get-as uri {:email "a@example.com" :role :admin})))))
+          (is (= admitted (:status (get-as uri {:email "a@example.com" :role :admin} {})))))
         (testing "a signed-out caller is still sent to the login form"
-          (let [response (get-as uri nil)]
+          (let [response (get-as uri nil {})]
             (is (= 302 (:status response)))
             (is (str/starts-with? (get-in response [:headers "Location"]) "/web/login"))))))))

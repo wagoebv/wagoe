@@ -16,8 +16,11 @@
      GET  /workflows/:id    — instance detail with state viz + audit trail
 
    Every route requires authentication: the API answers 401 without it, the
-   admin pages send to the login form. The admin pages also require a platform
-   admin, and answer 403 to anyone else."
+   admin pages send to the login form. Instances live in the tenant's schema,
+   read through the request's tenant-bound transaction, so every route also
+   refuses a caller outside the request's tenant with 403. The API's reads
+   need the :admin role or a :workflow/read grant; the admin pages need an
+   admin."
   (:require [clojure.string :as str]
             [wagoe.admin.core.permissions :as admin-permissions]
             [wagoe.admin.core.ui.layout :as admin-layout]
@@ -31,6 +34,8 @@
             [wagoe.workflow.ports :as ports]
             [wagoe.workflow.core.transitions :as transitions]
             [wagoe.workflow.core.ui :as workflow-ui]
+            [wagoe.user.core.group :as group]
+            [wagoe.user.ports :as user-ports]
             [wagoe.user.shell.middleware :as user-middleware]
             [clojure.tools.logging :as log])
   (:import [java.util UUID]))
@@ -91,6 +96,54 @@
    :actor-id    (some-> (:actor-id entry) str)
    :actor-roles (mapv name (or (:actor-roles entry) []))
    :occurred-at (str (:occurred-at entry))})
+
+;; =============================================================================
+;; Access
+;; =============================================================================
+
+(def read-permission
+  "The grant that lets a non-admin read instances and their audit through the API."
+  :workflow/read)
+
+(defn in-tenant-scope?
+  "Whether the caller may use the schema this request runs in. With a tenant
+   resolved: a member of it, a user of it, or a platform admin. Without one,
+   the public schema: only a user of no tenant."
+  [request]
+  (let [user      (:user request)
+        tenant-id (get-in request [:tenant :id])]
+    (if tenant-id
+      (boolean (or (:tenant-membership request)
+                   (= (str tenant-id) (some-> (:tenant-id user) str))
+                   (access/platform-admin? user)))
+      (nil? (:tenant-id user)))))
+
+(defn- may-read?
+  "An admin, or a user whose groups grant `read-permission`."
+  [group-service user]
+  (or (= :admin (some-> (:role user) keyword))
+      (boolean (and group-service
+                    (group/holds? (user-ports/user-grants group-service user) read-permission)))))
+
+(defn- forbidden [message]
+  {:status 403 :body (errors/body :forbidden message)})
+
+(defn- scoped
+  "`handler` for a caller in the request's tenant; 403 for anyone else."
+  [handler]
+  (fn [request]
+    (if (in-tenant-scope? request)
+      (handler request)
+      (forbidden "Not a member of this tenant"))))
+
+(defn- readable
+  "`scoped` `handler` for a caller who may read instances; 403 for anyone else."
+  [group-service handler]
+  (scoped (fn [request]
+            (if (may-read? group-service (:user request))
+              (handler request)
+              (forbidden (str "Reading workflow instances needs the "
+                              (group/permission-str read-permission) " permission"))))))
 
 ;; =============================================================================
 ;; Handlers
@@ -202,44 +255,48 @@
    request without one, with the same 401 the scaffolded APIs give.
 
    Args:
-     engine - WorkflowService (IWorkflowEngine)"
-  [engine]
-  [["/workflow/instances"
-    {:get  {:handler (fn [req] (handle-find-instances engine req))
-            :summary "Find an entity's workflow instances"
-            :interceptors signed-in
-            :parameters {:query [:map
-                                 [:entity-type :string]
-                                 [:entity-id :uuid]]}}
-     :post {:handler (fn [req] (handle-start-workflow engine req))
-            :summary "Start a new workflow instance"
-            :interceptors signed-in
-            :parameters {:body [:map {:closed true}
-                                [:workflow-id :string]
-                                [:entity-type :string]
-                                [:entity-id :string]
-                                ;; map-of, not :map: the metadata is the
-                                ;; caller's own and has no schema here, and a
-                                ;; closed :map would reject all of it.
-                                [:metadata {:optional true} [:map-of :keyword :any]]]}}}]
-   ["/workflow/instances/:id"
-    {:get {:handler (fn [req] (handle-get-instance engine req))
-           :summary "Get current workflow state"
-           :interceptors signed-in
-           :parameters {:path instance-id-path}}}]
-   ["/workflow/instances/:id/audit"
-    {:get {:handler (fn [req] (handle-get-audit-log engine req))
-           :summary "Get workflow audit log"
-           :interceptors signed-in
-           :parameters {:path instance-id-path}}}]
-   ["/workflow/instances/:id/transition"
-    {:post {:handler (fn [req] (handle-transition engine req))
-            :summary "Execute a workflow transition"
-            :interceptors signed-in
-            :parameters {:path instance-id-path
-                         :body [:map {:closed true}
-                                [:transition :string]
-                                [:context {:optional true} [:map-of :keyword :any]]]}}}]])
+     engine        - WorkflowService (IWorkflowEngine)
+     group-service - IUserGroupService, for the :workflow/read grant; nil
+                     admits only admins to the reads"
+  ([engine] (workflow-routes engine nil))
+  ([engine group-service]
+   (let [readers-only (partial readable group-service)]
+     [["/workflow/instances"
+       {:get  {:handler (readers-only (fn [req] (handle-find-instances engine req)))
+               :summary "Find an entity's workflow instances"
+               :interceptors signed-in
+               :parameters {:query [:map
+                                    [:entity-type :string]
+                                    [:entity-id :uuid]]}}
+        :post {:handler (scoped (fn [req] (handle-start-workflow engine req)))
+               :summary "Start a new workflow instance"
+               :interceptors signed-in
+               :parameters {:body [:map {:closed true}
+                                   [:workflow-id :string]
+                                   [:entity-type :string]
+                                   [:entity-id :string]
+                                   ;; map-of, not :map: the metadata is the
+                                   ;; caller's own and has no schema here, and a
+                                   ;; closed :map would reject all of it.
+                                   [:metadata {:optional true} [:map-of :keyword :any]]]}}}]
+      ["/workflow/instances/:id"
+       {:get {:handler (readers-only (fn [req] (handle-get-instance engine req)))
+              :summary "Get current workflow state"
+              :interceptors signed-in
+              :parameters {:path instance-id-path}}}]
+      ["/workflow/instances/:id/audit"
+       {:get {:handler (readers-only (fn [req] (handle-get-audit-log engine req)))
+              :summary "Get workflow audit log"
+              :interceptors signed-in
+              :parameters {:path instance-id-path}}}]
+      ["/workflow/instances/:id/transition"
+       {:post {:handler (scoped (fn [req] (handle-transition engine req)))
+               :summary "Execute a workflow transition"
+               :interceptors signed-in
+               :parameters {:path instance-id-path
+                            :body [:map {:closed true}
+                                   [:transition :string]
+                                   [:context {:optional true} [:map-of :keyword :any]]]}}}]])))
 
 ;; =============================================================================
 ;; Admin web UI helpers
@@ -374,14 +431,14 @@
 ;; =============================================================================
 
 (defn- admin-only
-  "Admit only a platform admin the admin module admits. The pages list every
-   instance and its audit trail, and the store has no tenant column, so a
-   tenant admin would see other tenants' instances."
+  "Admit an admin the admin module admits, in the request's tenant. The pages
+   list the instances of the schema the request runs in: its tenant's, or
+   without a tenant the public one."
   [handler]
   (fn [request]
     (let [user (:user request)]
       (if (and (admin-permissions/can-access-admin? user)
-               (access/platform-admin? user))
+               (in-tenant-scope? request))
         (handler request)
         (html-response request (admin-layout/admin-forbidden-page nil user) 403)))))
 

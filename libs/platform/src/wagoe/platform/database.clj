@@ -109,6 +109,10 @@
   []
   execution/*transaction-datasource*)
 
+(def current-transaction-on
+  "`current-transaction`, when it was opened on `datasource`; else nil."
+  execution/transaction-on)
+
 (defn tx-connection
   "The connection behind `tx` when it is an open transaction: a next.jdbc
    connection, or a platform transaction context. nil for anything else, a
@@ -282,6 +286,10 @@
 (def discover-migration-dirs
   "Every migration directory: the project's first, then each library's."
   migrations/discover-migration-dirs)
+
+(def discover-tenant-migration-dirs
+  "The libraries' migration directories that run inside every tenant schema."
+  migrations/discover-tenant-migration-dirs)
 
 (def create-destination
   "The directory migratus actually reads `project-migration-dir` from, as a path."
