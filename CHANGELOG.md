@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **SMTP and IMAP take `:ssl-trust` and `:check-server-identity?`** (BOU-741): for a server whose certificate is
+  self-signed or names another host, which Angus Mail now refuses. Both weaken TLS; see the external docs.
 - **Self-registration can be switched off** (BOU-739): `:wagoe/user {:registration false}` drops `/web/register`
   and the login page's "Create Account" link. On by default; set it in apps where only admins add users.
 

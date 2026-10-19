@@ -125,6 +125,9 @@ You can also construct a sender directly (no Integrant) and pass it where needed
 ;;   :password (optional)  auth password
 ;;   :tls?     (default true)   STARTTLS
 ;;   :ssl?     (default false)  implicit SSL
+;;   :ssl-trust              (optional) "*" or hosts whose certificate is accepted as-is
+;;   :check-server-identity? (default true) false accepts a certificate for another name
+;;   Both weaken TLS — see libs/external/AGENTS.md "TLS trust and certificate names".
 (def sender
   (smtp/create-smtp-sender
     {:host "smtp.gmail.com" :port 587
