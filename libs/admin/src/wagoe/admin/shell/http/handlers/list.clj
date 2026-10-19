@@ -67,12 +67,11 @@
                      :entity-name entity-name})))
   (let [options (list-options request)
         entity-config (ports/get-entity-config schema-provider entity-name)
-        ;; Only what renders the filter chips reads their labels
-        entity-config (if (or (not (get-in request [:headers "hx-request"]))
-                              (= "filter-table-container" (get-in request [:headers "hx-target"])))
+        ;; The bare table is the one response without the filter chips
+        entity-config (if (htmx/fragment-request? (:headers request) ["entity-table-container"])
+                        entity-config
                         (support/with-filter-value-labels admin-service schema-provider user entity-name
-                          entity-config (:filters options))
-                        entity-config)
+                          entity-config (:filters options)))
         result (ports/list-entities admin-service entity-name options)
         records (support/with-workflow-states config entity-config (:records result))]
     {:entity-config entity-config

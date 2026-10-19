@@ -356,6 +356,10 @@
     (let [body (:body (lookup admin "acme LOOK"))]
       (is (re-find (re-pattern (str "<li[^>]*data-label=\"Acme lookup\"[^>]*data-value=\"" acme "\"")) body))
       (is (not (str/includes? body "Beta lookup"))))
+    (testing "option ids follow the asking field"
+      (is (str/includes? (:body ((handler crud/lookup-handler)
+                                 (request :get "hm-orders" :query {"q" "acme look" "field" "scope-order-id"})))
+                         "id=\"scope-order-id-option-0\"")))
     (testing "a user who may not view the entity is refused"
       (is (= :forbidden (:type (ex-data (try (lookup {:id (random-uuid) :role :user :active true} "a")
                                              (catch Exception e e)))))))))

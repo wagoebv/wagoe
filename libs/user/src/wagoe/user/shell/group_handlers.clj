@@ -194,7 +194,8 @@
                                       not-empty
                                       (vector key))))
                      (scope-lookups group-service))]
-    (if (and (seq chosen) (map? scope))
+    ;; `nil` typed is no scope: a key picked beside it is still the scope
+    (if (and (seq chosen) (or (nil? scope) (map? scope)))
       (merge scope (m/decode (get-in group-service [:settings :scope-schema]) chosen (mt/string-transformer)))
       scope)))
 

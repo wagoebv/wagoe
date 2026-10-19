@@ -89,7 +89,7 @@
 (defn- scope-lookup-input [{:keys [key url]}]
   (let [field (scope-lookup-field key)]
     (list [:label {:for (name field)} (name key)]
-          (combobox/combobox field {:url url :placeholder [:t :user.groups/scope-placeholder]}))))
+          (combobox/combobox field {:url (str url "?field=" (name field)) :placeholder [:t :user.groups/scope-placeholder]}))))
 
 (defn group-page
   "One group: its name, members and grants, with the forms that change them.

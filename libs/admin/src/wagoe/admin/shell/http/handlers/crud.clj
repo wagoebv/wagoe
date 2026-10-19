@@ -469,4 +469,6 @@
       (when-not options
         (throw (ex-info "No text label to search" {:type :not-found :entity-name entity-name})))
       (support/html-response request
-                             (combobox/options entity-name options [:t :admin/combobox-no-matches])))))
+                             ;; Option ids follow the asking combobox, so two on one page differ
+                             (combobox/options (or (not-empty (get-in request [:query-params "field"])) entity-name)
+                                               options [:t :admin/combobox-no-matches])))))

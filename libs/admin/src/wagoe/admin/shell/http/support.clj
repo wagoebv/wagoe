@@ -673,8 +673,10 @@
         parents        (viewable-parents entity-configs user entity-name)
         fields         (filter parents (ui-filters/filterable-fields (get entity-configs entity-name)))]
     (when (seq fields)
+      ;; Blank ones are kept for the drawer; they name no parent to look up
       (foreign-key-options admin-service config entity-configs entity-name fields
-                           (update-vals (or filters {}) :value)))))
+                           (into {} (keep (fn [[k spec]] (some->> (:value spec) str not-empty (vector k))))
+                                 filters)))))
 
 (defn with-filter-value-labels
   "`entity-config` with each active foreign-key filter's parent label under
@@ -704,21 +706,17 @@
       (shell-permissions/assert-can-view-entity! user entity-name entity-config)
       [user entity-name entity-config])))
 
-(defn- search-rows
-  "The first rows of `entity` by label whose label contains `q`, as [id label]."
-  [admin-service entity entity-cfg q]
-  (let [label (label-field entity-cfg)]
-    (mapv #(row->option entity-cfg %)
-          (:records (ports/list-entities admin-service entity
-                                         (cond-> {:limit combobox/limit :sort label :sort-dir :asc}
-                                           q (assoc :filters {label {:op :contains :value q}})))))))
-
 (defn search-entity-options
-  "The rows of `entity-name` whose label contains the typed `q`, as [id label],
-   for a combobox choosing one of them. Nil when its label is not text."
+  "The first rows of `entity-name` by label whose label contains the typed
+   `q`, as [id label], for a combobox choosing one of them. Nil when its label
+   is not text."
   [admin-service entity-cfg entity-name q]
   (when (text-label? entity-cfg)
-    (search-rows admin-service entity-name entity-cfg q)))
+    (let [label (label-field entity-cfg)]
+      (mapv #(row->option entity-cfg %)
+            (:records (ports/list-entities admin-service entity-name
+                                           (cond-> {:limit combobox/limit :sort label :sort-dir :asc}
+                                             q (assoc :filters {label {:op :contains :value q}}))))))))
 
 (defn search-foreign-key-options
   "What the combobox of foreign key `field` of `entity-name` offers for the

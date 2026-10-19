@@ -537,7 +537,7 @@
                         (:exclude-group-members options)
                         (conj [:not [:in :a.id {:select [:user_id]
                                                 :from   [:user_group_members]
-                                                :where  [:= :group_id (:exclude-group-members options)]}]]))
+                                                :where  [:= :group_id (type-conversion/uuid->string (:exclude-group-members options))]}]]))
 
           where-clause (when (seq where-parts)
                          (if (= 1 (count where-parts))

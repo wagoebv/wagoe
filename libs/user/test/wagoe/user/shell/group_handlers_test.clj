@@ -117,7 +117,7 @@
             gid  (parse-uuid (last (str/split path #"/")))
             page (:body (app (req admin :get path)))]
         (testing "the declared key reads its options from the entity's admin lookup; the other stays EDN"
-          (is (str/includes? page "hx-get=\"/web/admin/domains/lookup\""))
+          (is (str/includes? page "hx-get=\"/web/admin/domains/lookup?field=scope-domain-id\""))
           (is (str/includes? page "name=\"scope-domain-id\""))
           (is (not (str/includes? page "scope-region"))))
         (testing "the chosen value is read as the schema says, beside the typed EDN"
