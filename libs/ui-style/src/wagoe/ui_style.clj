@@ -4,14 +4,6 @@
    Keep CSS/JS asset ordering centralized here so modules can reuse the same
    rendering contract without hardcoding per-page lists.")
 
-(def ^:deprecated base-css
-  "DEPRECATED: pico and open-props; use `pilot-css`, the default. Kept for apps
-   that select `:base` explicitly; removed in 2.0."
-  ["/css/pico.min.css"
-   "/css/wagoe-tokens.css"
-   "/css/tokens-openprops.css"
-   "/css/app.css"])
-
 (def pilot-css
   "The default stack: daisyUI/Tailwind on wagoe-tokens."
   ["/css/wagoe-tokens.css"
@@ -31,8 +23,7 @@
 
 (def css-bundles
   "Registry of known stylesheet bundles."
-  {:base        base-css
-   :pilot       pilot-css
+  {:pilot       pilot-css
    :admin-pilot admin-pilot-css})
 
 (def pilot-js
@@ -51,10 +42,6 @@
    "/js/htmx-ext-sse.min.js"
    "/js/forms.js"])
 
-(def base-js
-  "Same as `pilot-js`; the `:base` key's JavaScript."
-  pilot-js)
-
 (def admin-pilot-js
   "Admin pilot JavaScript stack.
    components.js and admin-ux.js must load before alpine.min.js because they
@@ -70,18 +57,30 @@
 
 (def js-bundles
   "Registry of known JavaScript bundles."
-  {:base        base-js
-   :pilot       pilot-js
+  {:pilot       pilot-js
    :admin-pilot admin-pilot-js})
+
+(defonce ^:private warned-keys (atom #{}))
+
+(defn- lookup
+  "`k`'s bundle in `registry`, else `fallback`, warning once per unknown key —
+   a typo, or `:base`, which was removed. nil asks for the default and does not warn."
+  [registry k fallback]
+  (or (get registry k)
+      (let [[before] (swap-vals! warned-keys conj k)]
+        (when-not (or (nil? k) (contains? before k))
+          (binding [*out* *err*]
+            (println (str "WARN wagoe.ui-style: unknown bundle " (pr-str k) ", serving :pilot"))))
+        fallback)))
 
 (defn bundle
   "Return stylesheet list for `k` bundle key.
-   Falls back to `:pilot`."
+   An unknown key, `:base` included, warns once and gets `:pilot`."
   [k]
-  (get css-bundles k pilot-css))
+  (lookup css-bundles k pilot-css))
 
 (defn js-bundle
   "Return JavaScript list for `k` bundle key.
-   Falls back to `:pilot`."
+   An unknown key warns once and gets `:pilot`."
   [k]
-  (get js-bundles k pilot-js))
+  (lookup js-bundles k pilot-js))

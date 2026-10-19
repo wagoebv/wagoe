@@ -388,17 +388,13 @@ css/
 ├── app.css              # component styles (uses tokens only)
 ├── admin.css            # admin interface styles (uses tokens only)
 ├── daisy-admin.css      # compiled daisyUI/Tailwind, from resources/tailwind/admin-pilot.css
-├── wagoe-admin.css      # wagoe.org tokens and admin display roles (ADR-040)
-├── pico.min.css         # deprecated, :base bundle only
-├── tokens-openprops.css # deprecated, :base bundle only
-└── vendor/open-props/   # deprecated, imported by tokens-openprops.css
+└── wagoe-admin.css      # wagoe.org tokens and admin display roles (ADR-040)
 ```
 
 daisyUI/Tailwind on `wagoe-tokens.css` is the one CSS system. Use central
 bundle keys from `wagoe.ui-style`:
 - `:pilot` — the default for `page-layout`; user/profile/audit pages
 - `:admin-pilot` — admin CRUD pages
-- `:base` — deprecated (pico + open-props), still served when a page selects it
 
 **CSS Organisation Rules**:
 1. Component CSS (`app.css`, `admin.css`) must only reference token variables — never hardcode values
