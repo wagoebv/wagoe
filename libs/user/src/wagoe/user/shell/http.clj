@@ -492,7 +492,8 @@
   [user-service mfa-service config]
   (let [auth-middleware (user-middleware/flexible-authentication-middleware user-service)
         email-sender    (:email-sender config)]
-    ;; filterv: the dashboard route is nil under `:dashboard false`.
+    ;; filterv: the dashboard route is nil under `:dashboard false`, and
+    ;; registration under `:registration false`.
     (filterv some?
      [;; Public: the landing page, registration and sign-in come before a
       ;; session exists (BOU-568).
@@ -501,13 +502,14 @@
         :public true
         :get {:handler (web-handlers/web-root-page-handler user-service config)
               :summary "Web root landing page"}}]
-      ["/register"
-       {:no-doc true
-        :public true
-        :get  {:handler (web-handlers/register-page-handler config)
-               :summary "Self-service registration page"}
-        :post {:handler (web-handlers/register-submit-handler user-service config)
-               :summary "Submit registration form"}}]
+      (when (landing/registration? config)
+        ["/register"
+         {:no-doc true
+          :public true
+          :get  {:handler (web-handlers/register-page-handler config)
+                 :summary "Self-service registration page"}
+          :post {:handler (web-handlers/register-submit-handler user-service config)
+                 :summary "Submit registration form"}}])
       ["/login"
        {:no-doc true
         :public true
