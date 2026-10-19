@@ -35,6 +35,9 @@ for what is public API, what is internal, and how deprecations are announced.
   feeds a `:storage` export section and the `:storage/uploads` retention policy. Run `migrate up`.
 - **Data export as a zip with the files** (BOU-738): `?format=zip` or `Accept: application/zip` on any export
   route. JSON stays the default.
+- **`start-workflow!` and `transition!` take the caller's transaction** (BOU-575): `(start-workflow! engine tx input)`.
+  Scaffolded creates write the entity and its workflow instance atomically; regenerate ports, persistence, service and workflow files together.
+
 - **`bb scaffold entity` gives the entity web pages** (BOU-542): a list and a create form, as the first entity has,
   with a select for its `--belongs-to` parent. Nothing to do; a module generated with `--no-web` gets none.
 - **`:wagoe/user :login-layout` lets an app lay out the sign-in pages** (BOU-740): login, MFA and registration.
@@ -191,6 +194,8 @@ for what is public API, what is internal, and how deprecations are announced.
   one atomic pass. Upgrade if you retain `:jobs/dead-letter` on Redis.
 - **A job store without `IDeadLetterRetention` failed every retention run** (BOU-738); configuring
   `:jobs/dead-letter` over one now fails the boot instead.
+- **`bb ai sql` invented table and column names** (BOU-513): it now sees the tables your migrations create, and
+  refuses an answer naming anything else. Nothing to do.
 - **Workflow admin pages use the admin sidebar shell** (BOU-743); every audit row read as the current state, and the
   state filter is now a select of the registered states. Nothing to do.
 - **`wagoe add` checked only the first config key of a module** (BOU-742), so observability or platform could be

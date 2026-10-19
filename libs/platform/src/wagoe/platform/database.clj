@@ -103,6 +103,40 @@
   "Call `f` with a transaction context, committing or rolling back around it."
   execution/with-transaction*)
 
+(defn current-transaction
+  "The connection of the transaction `with-transaction` holds open on this
+   thread, or nil. For a port that takes a caller's transaction explicitly."
+  []
+  execution/*transaction-datasource*)
+
+(defn tx-connection
+  "The connection behind `tx` when it is an open transaction: a next.jdbc
+   connection, or a platform transaction context. nil for anything else, a
+   datasource included, so a port that joins a caller's transaction can
+   refuse what would autocommit."
+  [tx]
+  (let [conn (if (map? tx) (or (:datasource tx) (:connectable tx)) tx)]
+    (when (and (instance? java.sql.Connection conn)
+               (not (.getAutoCommit ^java.sql.Connection conn)))
+      conn)))
+
+(defn in-savepoint
+  "Call `f`, and on failure roll back only what it did on `conn`: PostgreSQL
+   refuses every later statement of a transaction after a failed one. A nil
+   `conn` just calls `f`."
+  [^java.sql.Connection conn f]
+  (if-not conn
+    (f)
+    (let [sp (.setSavepoint conn)]
+      (try
+        (let [result (f)]
+          (.releaseSavepoint conn sp)
+          result)
+        (catch Exception e
+          (try (.rollback conn sp)
+               (catch java.sql.SQLException re (.addSuppressed e re)))
+          (throw e))))))
+
 (defmacro with-transaction
   "Run `body` in a transaction, bound to the first name in `binding`.
 
