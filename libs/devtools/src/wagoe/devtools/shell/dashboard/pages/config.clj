@@ -15,12 +15,12 @@
    contains valid EDN that can round-trip through edn/read-string."
   [section-key section-val editable?]
   (let [key-str (pr-str section-key)
-        val-str (pr-str (secrets/redact (cfg-edit/strip-refs section-val)))]
+        val-str (cfg-edit/format-edn (secrets/redact (cfg-edit/strip-refs section-val)))]
     (c/card {:title key-str}
             [:div
              [:textarea.code-block
               {:name        (str "config-" key-str)
-               :rows        (min 15 (max 3 (count (str/split-lines val-str))))
+               :rows        (min 30 (max 3 (count (str/split-lines val-str))))
                :style       "width:100%;font-family:var(--font-mono);font-size:12px;background:var(--bg-inset);color:var(--fg-base);border:1px solid var(--border);padding:8px;resize:vertical"
                :data-original val-str
                :readonly    (not editable?)}
@@ -106,7 +106,7 @@
                  [:p [:strong "Affected components: "]
                   (str/join ", " (map pr-str (cfg-edit/affected-components diff)))]
                  [:pre.code-block
-                  (str "Current: " (pr-str (secrets/redact old-val)) "\n\nProposed: " new-val-str)]])))))))
+                  (str "Current:\n" (cfg-edit/format-edn (secrets/redact old-val)) "\n\nProposed:\n" new-val-str)]])))))))
 
 (defn render-apply-result
   "Render the result of a config apply operation as an HTML fragment."
