@@ -183,6 +183,45 @@
    [:modified-at {:optional true} inst?]])
 
 ;; =============================================================================
+;; SOAP Schemas
+;; =============================================================================
+
+(def ^:private retry-faults
+  [:vector [:or [:string {:min 1}] [:fn {:error/message "should be a regex"} #(instance? java.util.regex.Pattern %)]]])
+
+(def SoapOperation
+  "How to call one operation, where WCF's defaults do not fit. :arrays names
+   the response elements to read as vectors even with one item or none."
+  [:map
+   [:action {:optional true} [:string {:min 1}]]
+   [:element {:optional true} [:string {:min 1}]]
+   [:namespace {:optional true} [:string {:min 1}]]
+   [:data-namespace {:optional true} [:string {:min 1}]]
+   [:timeout-ms {:optional true} [:int {:min 1}]]
+   [:idempotent? {:optional true} :boolean]
+   [:arrays {:optional true} [:set :keyword]]
+   [:retry-faults {:optional true} retry-faults]])
+
+(def SoapConfig
+  "SOAP 1.1 client configuration. :operations is keyed by operation name, e.g.
+   :GetListEntries."
+  [:map
+   [:endpoint [:re #"^https?://\S+$"]]
+   [:namespace {:optional true} [:string {:min 1}]]
+   [:contract {:optional true} [:string {:min 1}]]
+   [:data-namespace {:optional true} [:string {:min 1}]]
+   [:username {:optional true} [:maybe [:string {:min 1}]]]
+   [:password {:optional true} [:maybe :string]]
+   [:basic-auth? {:optional true} :boolean]
+   [:credential-elements {:optional true} [:tuple [:string {:min 1}] [:string {:min 1}]]]
+   [:timeout-ms {:optional true} [:int {:min 1}]]
+   [:connect-timeout-ms {:optional true} [:int {:min 1}]]
+   [:max-attempts {:optional true} [:int {:min 1 :max 10}]]
+   [:backoff-ms {:optional true} [:int {:min 0}]]
+   [:retry-faults {:optional true} retry-faults]
+   [:operations {:optional true} [:map-of :keyword SoapOperation]]])
+
+;; =============================================================================
 ;; Validation Functions
 ;; =============================================================================
 

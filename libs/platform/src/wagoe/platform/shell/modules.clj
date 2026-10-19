@@ -451,6 +451,7 @@
          :wagoe.external/imap       "external"
          :wagoe.external/twilio     "external"
          :wagoe.external/ftps       "external"
+         :wagoe.external/soap       "external"
          :wagoe/dev-error-enricher  "devtools"
          :wagoe/dashboard           "devtools"}
         (map (juxt #(keyword "wagoe" %) identity))

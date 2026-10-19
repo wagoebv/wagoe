@@ -304,7 +304,7 @@
   {:provider :no-op}
 
   ;; External service adapters — move to :active to enable.
-  ;; All four are opt-in; none are enabled in dev by default.
+  ;; All are opt-in; none are enabled in dev by default.
 
   :wagoe.external/smtp
   {:host #or [#env SMTP_HOST "localhost"]
@@ -324,6 +324,11 @@
    :port     #or [#long #or [#env FTPS_PORT 21] 21]
    :username #or [#env FTPS_USERNAME "import"]
    :password #env FTPS_PASSWORD}
+
+  :wagoe.external/soap
+  {:endpoint     #or [#env SOAP_ENDPOINT "http://localhost:8080/Service.svc"]
+   :username     #env SOAP_USERNAME
+   :password     #env SOAP_PASSWORD}
 
   ;; Stripe payments now handled by :wagoe/payment-provider (libs/payments).
   ;; Configure with {:provider :stripe :api-key ... :webhook-secret ...} in :active.
