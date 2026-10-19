@@ -18,8 +18,8 @@ at `1.0.0`, and the surface below is the one it promises.
 | Stable. Semantic Versioning applies to the public surface — see
   <<_from_1_0_0,From 1.0.0>>. The breaking changes made during the release
   candidates are listed in <<_before_1_0_0_release_candidates,Before 1.0.0>>.
-  Everything deprecated is deferred to `2.0`, except the `:base` CSS bundle — see
-  <<_deferred_to_2_0,Deferred to 2.0>>.
+  Everything deprecated is deferred to `2.0` — see <<_deferred_to_2_0,Deferred to 2.0>>.
+  The `:base` CSS bundle is the exception; see <<_removed_in_1_x,Removed in 1.x>>.
 
 | Artifacts
 | 33 libraries on Clojars, all in the `com.wagoe` group. Artifact ids are

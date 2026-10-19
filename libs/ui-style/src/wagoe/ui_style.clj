@@ -64,13 +64,13 @@
 
 (defn- lookup
   "`k`'s bundle in `registry`, else `fallback`, warning once per unknown key —
-   a typo, or `:base`, which was removed."
+   a typo, or `:base`, which was removed. nil asks for the default and does not warn."
   [registry k fallback]
   (or (get registry k)
       (let [[before] (swap-vals! warned-keys conj k)]
-        (when-not (contains? before k)
+        (when-not (or (nil? k) (contains? before k))
           (binding [*out* *err*]
-            (println "WARN wagoe.ui-style: unknown bundle" k "; serving :pilot")))
+            (println (str "WARN wagoe.ui-style: unknown bundle " (pr-str k) ", serving :pilot"))))
         fallback)))
 
 (defn bundle
