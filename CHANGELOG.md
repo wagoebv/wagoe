@@ -179,6 +179,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **`bb ai explain` quotes a Wagoe error's own fix first, code or not, and tells the model to keep it** (BOU-512).
+  The unclaimed `:active` key error is now WGE-106.
 - **`bb setup` switching back to a database added a fresh one** (BOU-560): it now restores the one in `:inactive`.
   It also keeps comments after a key, syncs what it writes to disk, and no longer reports a no-op `none` as written.
 - **`bb ai gen-tests` grounds fixtures in the entity's Malli schema and refuses ones that break it** (BOU-511).

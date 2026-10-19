@@ -69,7 +69,21 @@
   (testing "user message contains the stack trace"
     (let [trace "clojure.lang.ExceptionInfo: validation failed"
           msgs  (prompts/error-explainer-messages trace {})]
-      (is (str/includes? (:content (second msgs)) trace)))))
+      (is (str/includes? (:content (second msgs)) trace))))
+
+  (testing "BOU-512: the error's own fix goes in as the answer"
+    (let [user (:content (second (prompts/error-explainer-messages
+                                  "ExceptionInfo: boom" {} "Fix: Start the database.")))]
+      (is (str/includes? user "Fix: Start the database."))
+      (is (str/includes? user "authoritative")))
+    (is (not (str/includes? (:content (second (prompts/error-explainer-messages "boom" {})))
+                            "authoritative"))
+        "no fix, no claim of one"))
+
+  (testing "BOU-512: the model may not name an API it was not shown"
+    (let [system (prompts/build-error-explainer-system-prompt)]
+      (is (str/includes? system "Do not invent"))
+      (is (str/includes? system "never replace")))))
 
 (deftest ^:unit test-generator-messages-test
   (testing "includes source file path in user message"

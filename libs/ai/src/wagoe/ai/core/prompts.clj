@@ -135,8 +135,13 @@ Your task: explain a Clojure/Wagoe stack trace and suggest a fix.
 Structure your response as:
 1. Root cause (1-2 sentences)
 2. Affected code (reference the file:line from the trace)
-3. Fix suggestion (concrete code change)
-4. FC/IS relevance (only if the error relates to a boundary violation)
+3. Fix: when the error states its own fix, that fix is the answer. Restate it;
+   never replace or contradict it. Otherwise, a concrete code change.
+4. FC/IS relevance (only if the error relates to a boundary violation; omit otherwise)
+
+Name only functions, namespaces, multimethods, config keys and file paths that
+appear in the error, the referenced source files or this prompt. Do not invent
+an API. If you do not know how to fix it, say so.
 
 Known common error patterns in Wagoe:
 - Malli validation failures: ExceptionInfo with :type :malli/validation
@@ -151,11 +156,16 @@ Known common error patterns in Wagoe:
    Args:
      stacktrace   - stack trace string
      source-files - map of {file-path content-str} for referenced files
+     known-fix    - what the error says about fixing itself, or nil
 
    Returns a string."
-  [stacktrace source-files]
+  [stacktrace source-files known-fix]
   (str "Explain this Clojure/Wagoe error and suggest a fix:\n\n"
        "```\n" stacktrace "\n```"
+       (when-not (str/blank? known-fix)
+         (str "\n\nThe framework's own fix for this error. It is authoritative:"
+              " lead with it, and do not replace it with another.\n"
+              "```\n" known-fix "\n```"))
        (when (seq source-files)
          (str "\n\nReferenced source files:\n"
               (str/join "\n\n"
@@ -169,12 +179,15 @@ Known common error patterns in Wagoe:
    Args:
      stacktrace   - stack trace string
      source-files - map of {file-path content-str}
+     known-fix    - what the error says about fixing itself, or nil
 
    Returns:
      [{:role :system :content str} {:role :user :content str}]"
-  [stacktrace source-files]
-  [{:role :system :content (build-error-explainer-system-prompt)}
-   {:role :user   :content (build-error-explainer-user-prompt stacktrace source-files)}])
+  ([stacktrace source-files]
+   (error-explainer-messages stacktrace source-files nil))
+  ([stacktrace source-files known-fix]
+   [{:role :system :content (build-error-explainer-system-prompt)}
+    {:role :user   :content (build-error-explainer-user-prompt stacktrace source-files known-fix)}]))
 
 ;; =============================================================================
 ;; Feature 3: Test Generator

@@ -151,15 +151,73 @@
                   {:in-block? false :fixes []}
                   lines)))
 
+(def ^:private cli-header
+  "Clojure CLI's report header: `Execution error (ExceptionInfo) at ns/fn (f.clj:1).`"
+  #"^Execution error(?: \(\w+\))? at ([^/\s]+)/\S+ \(.*\)\.$")
+
+(defn- frame-ns
+  "The namespace of a stack frame line, `at wagoe.a.b$f.invoke(b.clj:1)`."
+  [line]
+  (second (re-find #"^at ([^$\s(]+)\$" (str/trim line))))
+
+(defn- cli-message
+  "The message under a Clojure CLI report header thrown in a wagoe namespace."
+  [lines]
+  (some (fn [[line & more]]
+          (when (some->> (re-find cli-header line) second (re-find #"^wagoe\."))
+            {:message (take-while #(not (str/starts-with? (str/trim %) "Full report at:"))
+                                  more)}))
+        (take-while seq (iterate rest lines))))
+
+(defn- split-data
+  "The lines of a printed `ExceptionInfo: msg {data}` as message and data,
+   which follows the message's last line."
+  [lines]
+  (let [last-line (str (last lines))
+        i         (str/index-of last-line " {:")]
+    (if i
+      {:message (concat (butlast lines) [(subs last-line 0 i)])
+       :data    (subs last-line i)}
+      {:message lines})))
+
+(defn- trace-message
+  "The message and data of a printed `ExceptionInfo: msg {data}` whose first
+   frame outside clojure.* and java.* is in a wagoe namespace."
+  [lines]
+  (some (fn [[line & more]]
+          (when-let [[_ first-line] (re-find #"ExceptionInfo: (.*)$" line)]
+            (let [[msg frames] (split-with #(not (frame-ns %)) more)
+                  thrower      (->> (keep frame-ns frames)
+                                    (remove #(re-find #"^(?:clojure|java|jdk|sun)\." %))
+                                    first)]
+              (when (some->> thrower (re-find #"^wagoe\."))
+                (split-data (cons first-line msg))))))
+        (take-while seq (iterate rest lines))))
+
+(defn- own-words
+  "What a Wagoe-thrown error says, verbatim: its message, then any `:fix` or
+   `:hint` its printed ex-data carries. Nil for anyone else's error — that text
+   is not ours to vouch for."
+  [raw-lines]
+  (let [{:keys [message data]} (or (cli-message raw-lines) (trace-message raw-lines))
+        body (str/trimr (str/join "\n" message))]
+    (when-not (str/blank? body)
+      (concat ["The error says:"]
+              (map #(if (str/blank? %) "" (str "  " %)) (str/split-lines body))
+              (for [[_ k v] (re-seq #":(fix|hint) \"((?:[^\"\\]|\\.)*)\"" (str data))]
+                (str ({"fix" "Fix" "hint" "Hint"} k) ": " v))))))
+
 (defn known-remedy
   "What the error already says about fixing itself, or nil.
 
    The catalogue title and fix for each WGE code in `input`, then the `Fix:`
-   lines inside its WGE blocks. Other `Fix:` lines are pasted text, not ours,
-   and are not printed under our header. The model's summary is printed after
-   this, never instead of it: it has been confidently wrong (BOU-512)."
+   lines inside its WGE blocks, then the message of an error a wagoe namespace
+   threw. Other `Fix:` lines are pasted text, not ours, and are not printed
+   under our header. The model's summary is printed after this, never instead
+   of it: it has been confidently wrong (BOU-512)."
   [input catalog]
-  (let [lines     (map str/trim (str/split-lines (strip-control input)))
+  (let [raw-lines (str/split-lines (strip-control input))
+        lines     (map str/trim raw-lines)
         codes     (->> lines
                        (mapcat #(re-seq #"(?:WGE|BND)-\d{3}" %))
                        ;; Output from before 1.0.1 says BND-; same codes.
@@ -171,9 +229,10 @@
                                 fix (conj (str "Fix: " fix)))))
                           codes)
         own-fixes (wge-fix-lines lines)
-        out       (distinct (concat from-code own-fixes))]
-    (when (seq out)
-      (str/join "\n" out))))
+        fixes     (distinct (concat from-code own-fixes))
+        words     (own-words raw-lines)]
+    (when (or (seq fixes) words)
+      (str/join "\n" (concat fixes (when (and (seq fixes) words) [""]) words)))))
 
 (defn- file-arg
   "The value of -f/--file in `args`, or nil."
@@ -190,14 +249,18 @@
   (let [file  (file-arg args)
         input (if file
                 (when (.exists (io/file file)) (slurp file))
-                (slurp *in*))]
-    (when-let [remedy (known-remedy input @help/error-catalog)]
+                (slurp *in*))
+        remedy (known-remedy input @help/error-catalog)]
+    (when remedy
       (println)
-      (println (bold "=== Known fix (from the error itself) ==="))
+      (println (bold "=== From the error itself ==="))
       (println remedy)
       (println)
       (println (yellow "The explanation below is AI-generated and experimental.")))
-    (run-clojure! (into ["explain"] args)
+    ;; The model is told this is the answer, so it explains it rather than
+    ;; inventing another.
+    (run-clojure! (cond-> (into ["explain"] args)
+                    remedy (into ["--known-fix" remedy]))
                   (when-not file {:in input}))))
 
 ;; =============================================================================
