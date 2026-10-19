@@ -314,6 +314,11 @@ The `db-context` map is injected into services via Integrant:
 (next.jdbc/execute! (:datasource db-context) ["SELECT * FROM my_table"])
 ```
 
+Writing a row by its key: `(db/upsert! ctx :table row [:key-col] {:update-columns [...]})`
+updates or inserts, retrying a lost insert race and, outside a transaction, a
+deadlock (MySQL 1213). A case-sensitive key on MySQL needs
+`(db/ensure-binary-collation! ctx :table :col "VARCHAR(512)" not-null?)`.
+
 ---
 
 ## CLI Wiring

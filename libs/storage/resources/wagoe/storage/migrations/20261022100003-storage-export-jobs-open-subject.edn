@@ -1,0 +1,5 @@
+;; storage_export_jobs.open_subject: unique, so two concurrent requests cannot
+;; both open an export job for one subject.
+{:ns      wagoe.storage.shell.export-job-store
+ :up-fn   "up"
+ :down-fn "down"}

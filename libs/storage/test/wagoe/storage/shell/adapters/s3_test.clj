@@ -223,3 +223,13 @@
        (swap! *stored-keys* conj (:key result))
        (is (string? (:url result)))
        (is (.startsWith (:url result) "https://"))))))
+
+(deftest ^:integration s3-stores-a-streamed-file
+  (when-s3
+   (let [result (ports/store-stream *storage*
+                                    {:write!       (fn [^java.io.OutputStream out] (.write out (.getBytes "streamed")))
+                                     :content-type "application/zip"}
+                                    {:filename "e.zip" :path "data-exports" :visibility :private})]
+     (swap! *stored-keys* conj (:key result))
+     (is (= 8 (:size result)))
+     (is (= "streamed" (String. ^bytes (:bytes (ports/retrieve-file *storage* (:key result)))))))))
