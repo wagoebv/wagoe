@@ -231,7 +231,7 @@
       (is (nil? (f/explain-filter-fields (by :plan) allowed)))
       (is (nil? (f/explain-filter-fields (by :plan) (f/allowed-filter-fields [:PLAN])))))
     (testing "anything else is a validation error, in any spelling"
-      (doseq [field [:email :password-hash :PASSWORD_HASH :auth_users.password_hash]]
+      (doseq [field [:email :password-hash :PASSWORD_HASH :passwordHash :auth_users.password_hash :auth-users/role]]
         (is (= :validation-error (get-in (f/explain-filter-fields (by field) allowed) [:error :type]))
             (str field))))
     (testing "a credential is refused even when allowed"

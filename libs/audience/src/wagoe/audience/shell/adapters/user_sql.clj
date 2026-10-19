@@ -14,6 +14,7 @@
             [honey.sql :as sql]
             [next.jdbc :as jdbc]
             [next.jdbc.result-set :as rs]
+            [wagoe.audience.core.filter :as filter]
             [wagoe.audience.ports :as ports]
             [wagoe.audience.shell.persistence :as persistence])
   (:import [java.util UUID]))
@@ -133,7 +134,12 @@
                                        :from   [table]
                                        :where  [:in :id (mapv ->uuid user-ids)]})
                           opts)
-           (mapv (fn [row] (update (kebab-row row) :id ->uuid)))))))
+           ;; Credentials stay out of the rows a predicate sees, whatever its
+           ;; filter names as its field.
+           (mapv (fn [row]
+                   (into {:id (->uuid (:id row))}
+                         (remove (comp filter/secret-field? key))
+                         (dissoc (kebab-row row) :id))))))))
 
 (defn create-sql-user-data-source
   "An IUserDataSource reading `table` (default `:users`) from `datasource`.

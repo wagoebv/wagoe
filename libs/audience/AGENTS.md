@@ -260,7 +260,9 @@ secret, token, mfa, lockout, failed-login, …) are refused even when configured
 on them. Create and update answer 422 `validation-error` for any other field, and resolving a
 stored audience that names one throws `:validation-error`. `defaudience` refuses credentials at
 load time; the configured allowlist is not known until boot, so other fields are checked at
-resolve. `:feature-usage` fields name a feature, not a column, and are not checked.
+resolve. `:feature-usage` fields name a feature, not a column, and are not checked. A custom filter
+type is covered only if it names its column in `:field`; the shipped SQL source also drops
+credential-like columns from the rows `load-users` hands to predicates.
 
 **As a service.** `service audience` refuses to start: its routes need the admin-only guard,
 which is a user-module component that service selection drops. Run `service audience user`.
