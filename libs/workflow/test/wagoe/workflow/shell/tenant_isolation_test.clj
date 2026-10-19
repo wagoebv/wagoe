@@ -70,7 +70,9 @@
 
     (let [mine (in-tenant a start!)]
       (testing "the tenant that started it reads and moves it"
-        (in-tenant a #(do (is (= mine (ports/find-instance store (:id mine))))
+        ;; By id and state: PostgreSQL keeps microseconds, the JVM may have nanos.
+        (in-tenant a #(do (is (= (select-keys mine [:id :current-state])
+                                 (select-keys (ports/find-instance store (:id mine)) [:id :current-state])))
                           (is (:success? (ports/transition! svc {:instance-id (:id mine)
                                                                  :transition  :paid
                                                                  :actor-roles [:admin]})))
