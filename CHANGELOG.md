@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **`wagoe.shared.ui.core.modal`: modal and confirm on native `<dialog>`** (BOU-753); admin deletes confirm with it, bulk
+  delete now too. The broken `layout/modal` is removed: use `modal/modal`.
 - **Toasts in every page layout** (BOU-755): a flash shows as a toast, and `toast/oob-toast` / `toast/with-toast`
   add one to any htmx response.
 - **A user's data export as a background job** (BOU-749): with the jobs module, `POST /api/v1/me/export-jobs`
@@ -202,6 +204,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **Storage `file-exists?` answered false when it could not check** (BOU-749), so retention could forget a file
   still stored. It throws now; catch it if you call it directly.
+- **MySQL rewrote text that looked like a timestamp into a DATETIME** (BOU-655): persistence now passes Instants and
+  each adapter encodes them. Pass an `Instant`, not an ISO string, to a timestamp column.
 - **The audience API ignored the request body** (BOU-744): create and update always answered 422. An audience with
   both `:filters` and `:compose` is now refused rather than its filters dropped; give it `:filters []`.
 - **The audience API: create overwrote a taken id, update created an unknown one** (BOU-746): now 409 and 404. Keys are
@@ -216,6 +220,8 @@ for what is public API, what is internal, and how deprecations are announced.
   admin of the request's tenant. Upgrade if you run workflow.
 - **Any signed-in user could read every workflow instance via the API, across tenants** (BOU-748); reads and starts need
   `:admin` or a `:workflow/read` grant, and each tenant's instances live in its schema. Grant it to readers.
+- **Tenant workflow work could reach `public`, and other tenants' admins and grants applied** (BOU-751): it now fails
+  closed, jobs carry the tenant. In a tenant, scope `:workflow/read` grants `{:tenant-id <id>}`.
 - **`bb ai sql` invented table and column names** (BOU-513): it now sees the tables your migrations create, and
   refuses an answer naming anything else. Nothing to do.
 - **Workflow admin pages use the admin sidebar shell** (BOU-743); every audit row read as the current state, and the

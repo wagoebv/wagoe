@@ -85,11 +85,11 @@ keep everything internal kebab-case.
       (update :id         tc/string->uuid)
       (update :created-at tc/string->instant)))
 
-;; internal entity -> DB row (kebab-case -> snake_case)
+;; internal entity -> DB row (kebab-case -> snake_case). An Instant goes as it
+;; is: each database adapter encodes it.
 (defn entity->db [entity]
   (-> entity
-      (update :id         tc/uuid->string)
-      (update :created-at tc/instant->string)
+      (update :id tc/uuid->string)
       cc/kebab-case->snake-case-map))
 
 ;; internal entity -> JSON API (kebab-case -> camelCase)

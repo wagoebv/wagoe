@@ -224,29 +224,6 @@
    (components/render-html
     (error-layout status "Error" message))))
 
-(defn modal
-  "Generic modal dialog component.
-   
-   Args:
-     id: Modal ID for targeting
-     title: Modal title
-     content: Modal content (Hiccup structure)
-     opts: Optional map with :closable, :size, etc.
-     
-   Returns:
-     Hiccup modal structure"
-  [id title content & [opts]]
-  (let [{:keys [closable size]
-         :or   {closable true size "medium"}} opts]
-    [:div.modal {:id id :class (str "modal-" size)}
-     [:div.modal-backdrop]
-     [:div.modal-content
-      [:div.modal-header
-       [:h3 title]
-       (when closable
-         [:button.modal-close {:onclick (str "closeModal('" id "')")} "×"])]
-      [:div.modal-body content]]]))
-
 (defn sidebar
   "Sidebar component for layouts that need side navigation.
    

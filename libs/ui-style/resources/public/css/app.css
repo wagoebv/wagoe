@@ -1155,7 +1155,8 @@ input[data-loading-text].htmx-request > * {
   border: 1px solid transparent;
   border-radius: var(--radius-md);
   cursor: pointer;
-  transition: all var(--transition-normal);
+  /* Visibility switches at once: a button that just appeared is focusable */
+  transition: all var(--transition-normal), visibility 0s;
   position: relative;
   margin-bottom: 0;
   white-space: nowrap;
@@ -1408,218 +1409,16 @@ button.full-width {
   }
 }
 
-/* =============================================================================
-   Modals & Dialogs (Mobile-First)
-   ============================================================================= */
-
-/* Modal backdrop */
-.modal-backdrop {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  z-index: var(--z-overlay);
-  animation: fadeIn var(--transition-normal) ease;
-  backdrop-filter: blur(4px);
+/* daisyUI is layered, so unlayered rules like the bare button one above
+   outrank it: the modal's corner close button and action row stay daisy's */
+dialog.modal .btn-circle {
+  position: revert-layer;
+  padding: revert-layer;
+  min-height: revert-layer;
 }
 
-/* Modal container - bottom sheet on mobile, centered on desktop */
-.modal {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: var(--bg-primary);
-  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
-  box-shadow: var(--shadow-2xl);
-  z-index: var(--z-modal);
-  max-height: 90vh;
-  display: flex;
-  flex-direction: column;
-  animation: slideUpMobile var(--transition-slow) ease-out;
-}
-
-@keyframes slideUpMobile {
-  from {
-    transform: translateY(100%);
-    opacity: 0;
-  }
-  to {
-    transform: translateY(0);
-    opacity: 1;
-  }
-}
-
-/* Modal handle (mobile affordance) */
-.modal::before {
-  content: "";
-  width: 40px;
-  height: 4px;
-  background: var(--border-strong);
-  border-radius: var(--radius-full);
-  margin: var(--space-3) auto var(--space-2);
-  flex-shrink: 0;
-}
-
-/* Modal header */
-.modal-header {
-  padding: var(--space-4) var(--space-5) var(--space-3);
-  border-bottom: 1px solid var(--border-default);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-shrink: 0;
-}
-
-.modal-title {
-  font-size: var(--text-lg);
-  font-weight: var(--font-semibold);
-  color: var(--text-primary);
-  margin: 0;
-}
-
-.modal-close {
-  width: var(--space-8);
-  height: var(--space-8);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  background: none;
-  color: var(--text-secondary);
-  cursor: pointer;
-  border-radius: var(--radius-md);
-  transition: all var(--transition-fast);
-  padding: 0;
-  margin: 0;
-}
-
-.modal-close:hover {
-  background: var(--bg-secondary);
-  color: var(--text-primary);
-}
-
-/* Modal body */
-.modal-body {
-  padding: var(--space-5);
-  overflow-y: auto;
-  flex: 1;
-  -webkit-overflow-scrolling: touch;
-}
-
-/* Modal footer */
-.modal-footer {
-  padding: var(--space-4) var(--space-5);
-  border-top: 1px solid var(--border-default);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  flex-shrink: 0;
-}
-
-.modal-footer .button,
-.modal-footer button {
-  width: 100%;
-}
-
-/* Tablet: Centered modal */
-@media (min-width: 768px) {
-  .modal {
-    top: 50%;
-    left: 50%;
-    right: auto;
-    bottom: auto;
-    transform: translate(-50%, -50%);
-    width: 90%;
-    max-width: 600px;
-    max-height: 85vh;
-    border-radius: var(--radius-xl);
-    animation: scaleIn var(--transition-slow) ease-out;
-  }
-  
-  @keyframes scaleIn {
-    from {
-      transform: translate(-50%, -50%) scale(0.95);
-      opacity: 0;
-    }
-    to {
-      transform: translate(-50%, -50%) scale(1);
-      opacity: 1;
-    }
-  }
-  
-  /* Hide mobile handle on desktop */
-  .modal::before {
-    display: none;
-  }
-  
-  .modal-header {
-    padding: var(--space-6) var(--space-6) var(--space-4);
-  }
-  
-  .modal-title {
-    font-size: var(--text-xl);
-  }
-  
-  .modal-body {
-    padding: var(--space-6);
-  }
-  
-  .modal-footer {
-    padding: var(--space-4) var(--space-6) var(--space-6);
-    flex-direction: row;
-    justify-content: flex-end;
-  }
-  
-  .modal-footer .button,
-  .modal-footer button {
-    width: auto;
-    min-width: 100px;
-  }
-}
-
-/* Desktop: Larger modal option */
-@media (min-width: 1024px) {
-  .modal.modal-large {
-    max-width: 800px;
-  }
-  
-  .modal.modal-xlarge {
-    max-width: 1000px;
-  }
-}
-
-/* Confirmation dialog - smaller, centered */
-.modal.modal-confirm {
-  max-width: 400px;
-}
-
-.modal-confirm .modal-body {
-  text-align: center;
-  padding: var(--space-8) var(--space-6);
-}
-
-.modal-confirm .modal-icon {
-  width: var(--space-16);
-  height: var(--space-16);
-  margin: 0 auto var(--space-4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-full);
-  background: var(--bg-secondary);
-}
-
-.modal-confirm.modal-danger .modal-icon {
-  background: var(--status-error-bg);
-  color: var(--status-error);
-}
-
-.modal-confirm.modal-warning .modal-icon {
-  background: var(--status-warning-bg);
-  color: var(--status-warning);
+dialog.modal .modal-action {
+  margin: revert-layer;
 }
 
 /* =============================================================================

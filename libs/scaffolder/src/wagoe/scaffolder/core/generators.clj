@@ -938,9 +938,10 @@ DROP TABLE IF EXISTS %s;
          table-name (:entity-table entity)
          {:keys [find-by-id find-all create update delete]} (repo-fns entity)]
      ;; HoneySQL maps, not `sql/format` output: the platform formats a map for
-     ;; the adapter's dialect and converts Instants, and a pre-formatted vector
-     ;; skips both. No RETURNING either — H2, the test profile's database,
-     ;; rejects it, so every create answered 500 (BOU-497).
+     ;; the adapter's dialect, which a pre-formatted vector skips. Instants go
+     ;; as they are; the adapter encodes them. No RETURNING either — H2, the
+     ;; test profile's database, rejects it, so every create answered 500
+     ;; (BOU-497).
      (str "(ns " base-ns "." module-name "." (shell-ns entity :persistence-ns) "\n"
           "  \"Persistence layer for " module-name " module.\"\n"
           "  (:require [" base-ns "." module-name ".ports :as ports]\n"

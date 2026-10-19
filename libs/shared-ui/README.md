@@ -26,6 +26,7 @@ Pure functions from data to Hiccup. No I/O, no state, no HTTP.
 | `core.table` | Sortable headers, pagination, and the query-param plumbing behind them |
 | `core.layout` | Page scaffolding shared by the module UIs |
 | `core.icons` | The icon set those components reference |
+| `core.modal` | Modal and confirm on native `<dialog>`, opened by a trigger, an htmx swap, or an htmx request awaiting confirmation |
 | `core.alpine` | Alpine.js attribute helpers, for the interactions HTMX does not cover |
 | `core.validation` | Rendering of field errors, so every module reports them the same way |
 | `core.form` | Fields from a malli map schema: HTML validation attributes, errors, and a wrapper that htmx re-validates on the server when the field changes |

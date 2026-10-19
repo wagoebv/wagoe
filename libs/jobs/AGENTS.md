@@ -305,7 +305,9 @@ Jobs dequeued by priority: critical > high > normal > low.
 
 1. **Register handlers BEFORE starting workers** - late registration doesn't affect running workers
 2. **Handlers are NOT transactional** - use `process-tenant-job!` for tenant-scoped DB operations
-3. **Tenant jobs fail explicitly** if tenant not found (safety-first, not silent fallback)
+3. **Tenant jobs fail explicitly** if tenant not found (safety-first, not silent fallback). A job with
+   `:metadata {:tenant-id ...}` runs through the worker's `:tenant-runner`, which the wiring adds when
+   `:wagoe/tenant` is on; without one it fails rather than run against public
 4. **Scheduled jobs** are stored separately and periodically moved to execution queues (default every 5s)
 5. **In-memory adapter** is single-process only - NOT for production
 6. **Redis key patterns**: `job:{id}`, `queue:{name}:{priority}`, `jobs:scheduled`, `jobs:failed`,
