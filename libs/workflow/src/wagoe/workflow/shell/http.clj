@@ -344,11 +344,13 @@
         entities        (when (and schema-provider
                                    (admin-permissions/can-access-admin? (:user request)))
                           (admin-ports/list-available-entities schema-provider))]
-    {:user           (:user request)
-     :flash          (:flash request)
-     :entities       entities
-     :entity-configs (into {} (map (juxt identity #(admin-ports/get-entity-config schema-provider %))) entities)
-     :logo-url       (:logo-url admin)}))
+    {:user     (:user request)
+     :flash    (:flash request)
+     :nav      (admin-layout/entity-nav
+                entities
+                (into {} (map (juxt identity #(admin-ports/get-entity-config schema-provider %))) entities)
+                nil)
+     :logo-url (:logo-url admin)}))
 
 (defn- parse-list-opts
   "Extract list-instances filter options from query-params."

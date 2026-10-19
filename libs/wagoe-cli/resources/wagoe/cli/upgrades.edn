@@ -55,4 +55,9 @@
  {:ticket "BOU-737"
   :since  "1.0.2"
   :note   "Kebab-case keys in the user and session maps of the POST /auth/login and POST /sessions response."
-  :manual "Read the camelCase twin instead: session.sessionToken, not session.session-token. The readers are API clients, outside the project."}]
+  :manual "Read the camelCase twin instead: session.sessionToken, not session.session-token. The readers are API clients, outside the project."}
+
+ {:ticket "BOU-761"
+  :since  "1.0.2"
+  :note   "wagoe.shared.ui.core.alpine/sidebar-store-init, a second sidebar store that needs the unbundled Alpine Persist plugin."
+  :manual "Drop sidebar-store-init and load (ui-style/bundle :admin-pilot), whose admin-ux.js registers the store. A rewrite cannot see the page's scripts."}]
