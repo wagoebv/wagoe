@@ -546,7 +546,7 @@ DROP TABLE IF EXISTS %s;
                      (str/join " "))
         cells (->> field-names
                    (map #(if (= parent %)
-                           (str "[:td (let [v (" parent-key " item)] (get parents v (str v)))]")
+                           (str "[:td (let [v (" parent-key " item)] (get labels v (str v)))]")
                            (str "[:td (str (:" % " item))]")))
                    (str/join "\n        "))
         title (str "New " (str/replace e "-" " "))
@@ -560,7 +560,7 @@ DROP TABLE IF EXISTS %s;
          "\n"
          "(defn " e "-list-page\n"
          "  \"Generate " e " listing page.\"\n"
-         "  [" plural (if parent " {:keys [parents]}]\n" " _opts]\n")
+         "  [" plural (if parent " {labels :parents}]\n" " _opts]\n")
          "  [:div.page\n"
          "   [:h1 \"" (text/capitalize (str/replace plural "-" " ")) "\"]\n"
          "   [:p [:a {:href \"/web/" plural "/new\"} \"" title "\"]]\n"
@@ -1050,8 +1050,8 @@ DROP TABLE IF EXISTS %s;
    for a further one. One that belongs to another entity reads that entity's
    rows from config's :parent-service, which the module's routes pass.
 
-   `parent-label`: the parent's field that names a row in the select, or nil
-   for its id.
+   The entity's :parent-label is the parent's field that names a row in the
+   select; without one, its id.
 
    Pure: true"
   [ctx entity]
@@ -1062,7 +1062,7 @@ DROP TABLE IF EXISTS %s;
         parent-name (:belongs-to entity)
         label (or (some->> (:parent-label entity) name (str ":")) ":id")
         config (if parent "config" "_config")
-        parents-arg (when parent " (parents config)")]
+        parents-arg (when parent " (parent-options config)")]
     (str "(ns " base-ns "." module-name "." handlers "\n"
          "  \"Web UI handlers for " (if primary? (str module-name " module") entity-name) ".\"\n"
          "  (:require [" base-ns "." module-name "." ui " :as ui]\n"
@@ -1087,7 +1087,7 @@ DROP TABLE IF EXISTS %s;
          "   :body    (components/render-html page)})\n"
          "\n"
          (when parent
-           (str "(defn- parents\n"
+           (str "(defn- parent-options\n"
                 "  \"[id label] for each " parent-name " the form may choose, or nil without the\n"
                 "   " parent-name " service. The first 500: a select of more is no use to anyone.\"\n"
                 "  [config]\n"
@@ -1098,7 +1098,7 @@ DROP TABLE IF EXISTS %s;
          "(defn " e "-list-handler [service " config "]\n"
          "  (fn [_request]\n"
          "    (let [items (ports/list-" e "s service {})]\n"
-         "      (html 200 (ui/" e "-list-page items " (if parent "{:parents (into {} (parents config))}" "{}") ")))))\n"
+         "      (html 200 (ui/" e "-list-page items " (if parent "{:parents (into {} (parent-options config))}" "{}") ")))))\n"
          "\n"
          "(defn " e "-new-handler [_service " config "]\n"
          "  (fn [request]\n"
@@ -1124,7 +1124,7 @@ DROP TABLE IF EXISTS %s;
          "      (if-let [field (form/field-key schema/Create" entity-name "Request (get params \"__field\"))]\n"
          "        (let [{:keys [errors]} (form/validate schema/Create" entity-name "Request params)]\n"
          "          (html 200 (ui/" e "-field field params errors"
-         (when parent (str " (when (= :" parent " field) (parents config))")) ")))\n"
+         (when parent (str " (when (= :" parent " field) (parent-options config))")) ")))\n"
          "        {:status 400 :headers {\"Content-Type\" \"text/plain\"} :body \"No such field\"}))))\n")))
 
 (defn generate-web-handlers-file
@@ -1866,7 +1866,6 @@ DROP TABLE IF EXISTS %s;
          "   :web    " (if web "(web-routes service config)" "[]") "\n"
          "   :static []})\n"
          "\n")))
-
 
 (defn entity-files
   "The files a further entity adds, as [{:path :content}]: core, service,

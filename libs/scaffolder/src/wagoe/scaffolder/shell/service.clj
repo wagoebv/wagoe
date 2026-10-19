@@ -948,8 +948,10 @@
                                      (str/join ", " (map str clashes))
                                      " — is " (:entity-name entity) " already in it?")
                                 {:type :validation-error})))
+            parent-shown (when parent
+                           (generators/admin-display-fields (generators/schema-field-names schema-src parent)))
             entity      (cond-> entity
-                          parent (assoc :parent-label (parent-label (generators/schema-field-names schema-src parent))))
+                          parent (assoc :parent-label (first parent-shown)))
             admin?      (admin-on? output-dir)
             parent-plural (some-> parent template/pascal->kebab template/pluralize)
             admin-out   (when admin?
@@ -957,8 +959,7 @@
                            output-dir
                            [[entity {:parent (when parent
                                                {:name   parent
-                                                :fields (generators/admin-display-fields
-                                                         (generators/schema-field-names schema-src parent))})}]]))
+                                                :fields parent-shown})}]]))
             new-files   (into (generators/entity-files ctx entity (get-next-migration-number output-dir))
                               (:new admin-out))
             admin-edits (when admin? (admin-config-edits output-dir [(:entity-plural entity)]))
@@ -1017,7 +1018,7 @@
                                                 dry-run))
                             (into (seed-edits output-dir [entity] dry-run)))
             warnings    (cond-> (vec (concat (:warnings admin-edits) (keep :warning parent-edits)
-                                         (some-> (:warning wiring) vector)))
+                                             (some-> (:warning wiring) vector)))
                           (and parent-first? (not nested?))
                           (conj (str parent "'s create does not take " (:entity-plural entity)
                                      ": its service.clj predates that. Create them through /api/v1/"
@@ -1033,7 +1034,7 @@
          :next-steps  (into (filterv some?
                                      ["Run the migration: clojure -M:migrate up"
                                       (when http? (str "Restart the system; the API is at " uri " and " uri "/:id"))
-                                      (when (get-in ctx [:interfaces :web])
+                                      (when (and (get-in ctx [:interfaces :web]) (not (:warning wiring)))
                                         (str "Its pages are at /web/" (:entity-plural entity)))
                                       (str "Run the tests: clojure -M:test --focus " service-ns "-test")])
                             (workflow-steps output-dir [entity]))
