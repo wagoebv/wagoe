@@ -3,8 +3,8 @@
 
 The `ui-style` library centralizes app-wide UI assets and conventions:
 
-* CSS bundles (`:base`, `:pilot`, `:admin-pilot`)
-* JavaScript bundles (`:base`, `:pilot`, `:admin-pilot`)
+* CSS bundles (`:pilot`, the default, and `:admin-pilot`)
+* JavaScript bundles (`:pilot`, `:admin-pilot`)
 * Shared design tokens and reusable UI primitives
 
 It prevents per-library style drift by making layout namespaces consume the same bundle API.
@@ -20,9 +20,10 @@ It prevents per-library style drift by making layout namespaces consume the same
 
 Namespace: `wagoe.ui-style`
 
-* `base-css`, `pilot-css`, `admin-pilot-css`
-* `base-js`, `pilot-js`, `admin-pilot-js`
-* `(bundle k)` for CSS bundle selection
+* `pilot-css`, `admin-pilot-css`
+* `pilot-js`, `admin-pilot-js`
+* `(bundle k)` for CSS bundle selection. An unknown key, including the removed
+  `:base` (pico and open-props), warns once and gets `:pilot`
 * `(js-bundle k)` for JS bundle selection
 
 For implementation details and migration notes, see `libs/ui-style/README.md` in the repository.
