@@ -1685,7 +1685,7 @@
 (deftest ^:unit parse-datetime-input-writes-the-instant-with-the-server-offset-test
   (testing "wall time in the input zone becomes the instant, carrying the server's offset"
     (is (= "2026-09-01T12:00:50.000+02:00" (ui/parse-datetime-input "2026-09-01T06:00:50" nyc ams)))
-    (is (= "2026-09-01T10:00:50.000Z"      (ui/parse-datetime-input "2026-09-01T12:00:50" ams utc))))
+    (is (= "2026-09-01T10:00:50.000+00:00" (ui/parse-datetime-input "2026-09-01T12:00:50" ams utc))))
   (testing "a value that names its own zone is taken exactly, whatever the input zone"
     (is (= "2026-09-01T12:00:50.000+02:00" (ui/parse-datetime-input "2026-09-01T10:00:50Z" nyc ams)))
     (is (= "2026-09-01T12:00:50.000+02:00" (ui/parse-datetime-input "2026-09-01T15:00:50+05:00" nyc ams))))
@@ -1698,11 +1698,11 @@
     (is (= "-05:00" (ui/datetime-input-offset "2026-11-01T06:30:00Z" nyc utc)))
     (is (= "-04:00" (ui/datetime-input-offset "2026-11-01T05:30:00Z" nyc utc))))
   (testing "01:30 in New York on 2026-11-01 happens twice; the offset picks one"
-    (is (= "2026-11-01T06:30:00.000Z" (ui/parse-datetime-input "2026-11-01T01:30" nyc utc "-05:00")))
-    (is (= "2026-11-01T05:30:00.000Z" (ui/parse-datetime-input "2026-11-01T01:30" nyc utc "-04:00"))))
+    (is (= "2026-11-01T06:30:00.000+00:00" (ui/parse-datetime-input "2026-11-01T01:30" nyc utc "-05:00")))
+    (is (= "2026-11-01T05:30:00.000+00:00" (ui/parse-datetime-input "2026-11-01T01:30" nyc utc "-04:00"))))
   (testing "outside an overlap the offset changes nothing, and a bad one is ignored"
-    (is (= "2026-09-01T10:00:50.000Z" (ui/parse-datetime-input "2026-09-01T12:00:50" ams utc "-05:00")))
-    (is (= "2026-09-01T10:00:50.000Z" (ui/parse-datetime-input "2026-09-01T12:00:50" ams utc "nonsense")))))
+    (is (= "2026-09-01T10:00:50.000+00:00" (ui/parse-datetime-input "2026-09-01T12:00:50" ams utc "-05:00")))
+    (is (= "2026-09-01T10:00:50.000+00:00" (ui/parse-datetime-input "2026-09-01T12:00:50" ams utc "nonsense")))))
 
 (deftest ^:unit rendering-and-parsing-in-one-zone-round-trip-test
   ;; The invariant BOU-519 broke: render a stored value, submit it untouched,
