@@ -30,10 +30,11 @@
                                          (random-uuid) (Instant/now)))))
 
 (defn- open-job
-  "The open job for `subject`. One older than a download window is a worker
-   that died mid-export: it is failed, so it blocks no later request."
-  [store subject ^Instant now]
-  (when-let [job (ports/open-export-job store subject)]
+  "`requested-by`'s open job for `subject`. One older than a download window
+   is a worker that died mid-export: it is failed, so it blocks no later
+   request."
+  [store subject requested-by ^Instant now]
+  (when-let [job (ports/open-export-job store subject requested-by)]
     (if (.isAfter ^Instant (:created-at job) (.minus now ^Duration core/download-window))
       job
       (do (ports/save-export-job! store (core/failed job "No worker finished it" now))
@@ -41,7 +42,8 @@
 
 (defn- refuse-over-limit!
   [store requested-by limit ^Instant now]
-  (when (>= (ports/count-export-jobs-requested-since store requested-by (.minus now (Duration/ofHours 1))) limit)
+  (when (and (pos? limit)
+             (>= (ports/count-export-jobs-requested-since store requested-by (.minus now (Duration/ofHours 1))) limit))
     (throw (ex-info "Too many data exports requested in the last hour. Try again later."
                     {:type :rate-limit-exceeded}))))
 
@@ -58,14 +60,15 @@
     job))
 
 (defn request-export!
-  "Queue an export of `subject` for `requested-by`; the job already open for
-   it, if there is one. At most `:requests-per-hour` new jobs per requester."
+  "Queue an export of `subject` for `requested-by`; their job already open
+   for it, if there is one. At most `:requests-per-hour` new jobs per
+   requester, 0 for no limit."
   [{:keys [store job-queue queue requests-per-hour]} subject requested-by]
   (let [now (Instant/now)]
-    (or (open-job store subject now)
+    (or (open-job store subject requested-by now)
         (do (refuse-over-limit! store requested-by (or requests-per-hour core/requests-per-hour) now)
             (or (create-and-enqueue! store job-queue queue subject requested-by now)
-                (ports/open-export-job store subject)
+                (ports/open-export-job store subject requested-by)
                 (throw (ex-info "Another export of this subject was just requested. Try again."
                                 {:type :conflict})))))))
 

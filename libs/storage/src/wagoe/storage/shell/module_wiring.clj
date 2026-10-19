@@ -14,7 +14,8 @@
    The module also records every upload in `storage_uploads`
    (:wagoe.storage/upload-index), and contributes a subject's uploads to data
    export and the `:storage/uploads` retention policy. With the jobs module it
-   also serves a user's export as a background job (`export-jobs`), and
+   also serves a user's export as a background job (`export-jobs`), offers
+   other modules the same as `:wagoe/export-jobs` (privacy/IExportJobs), and
    contributes the `:storage/export-archives` retention policy.
 
    The `:local` provider accepts the catalogue's `:root` as an alias for the
@@ -99,6 +100,9 @@
 
 (defmethod ig/init-key :wagoe.storage/export-jobs
   [_ {:keys [ctx storage data-export job-queue queue requests-per-hour]}]
+  (when-not ((some-fn nil? nat-int?) requests-per-hour)
+    (throw (ex-info ":export-requests-per-hour must be a whole number, 0 for no limit"
+                    {:type :configuration-error :value requests-per-hour})))
   {:store             (export-job-store/create-export-job-store ctx)
    :file-storage      (:storage storage)
    :provider          (:provider storage)
@@ -109,6 +113,9 @@
 
 (defmethod ig/init-key :wagoe.storage/export-job-handlers [_ {:keys [export-jobs]}]
   {export-jobs/job-type (partial export-jobs/run-export-job export-jobs)})
+
+(defmethod ig/init-key :wagoe/export-jobs [_ {:keys [export-jobs]}]
+  (export-job-http/->ExportJobs export-jobs))
 
 (defmethod ig/init-key :wagoe.storage/export-job-routes [_ {:keys [export-jobs]}]
   {:api (export-job-http/routes export-jobs) :web [] :static []})
@@ -194,6 +201,8 @@
                                                             :job-queue         (ig/ref :wagoe/job-queue)
                                                             :queue             (:export-queue settings :default)
                                                             :requests-per-hour (:export-requests-per-hour settings)}
+                   ;; The port another module's admin export asks.
+                   :wagoe/export-jobs                      {:export-jobs (ig/ref :wagoe.storage/export-jobs)}
                    :wagoe.storage/export-job-handlers      {:export-jobs (ig/ref :wagoe.storage/export-jobs)}
                    :wagoe.storage/export-job-routes        {:export-jobs (ig/ref :wagoe.storage/export-jobs)}
                    :wagoe.storage/export-archive-retention {:export-jobs (ig/ref :wagoe.storage/export-jobs)}})

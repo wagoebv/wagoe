@@ -389,3 +389,12 @@
                                                    :content-type "text/plain"}
                                                   {:filename "f.txt" :path "exports"})))
         (is (= before (files)))))))
+
+(deftest ^:integration the-boot-clears-spools-a-crash-left
+  (let [spools  (io/file test-dir ".spool")
+        _       (.mkdirs spools)
+        stale   (doto (io/file spools ".spool-1.tmp") (spit "x") (.setLastModified (- (System/currentTimeMillis) (* 2 3600 1000))))
+        writing (doto (io/file spools ".spool-2.tmp") (spit "x"))]
+    (sut/create-local-storage {:base-path test-dir})
+    (is (not (.exists stale)))
+    (is (.exists writing) "one still being written is spared")))

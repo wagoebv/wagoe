@@ -146,7 +146,7 @@
       (let [user {:id (random-uuid)}]
         (with-redefs [job-ports/enqueue-job! (fn [& _] (throw (ex-info "queue down" {:type :internal-error})))]
           (is (thrown? clojure.lang.ExceptionInfo (request! app user))))
-        (is (nil? (ports/open-export-job (:store ctx) {:type :user :id (:id user)})))))))
+        (is (nil? (ports/open-export-job (:store ctx) {:type :user :id (:id user)} (:id user))))))))
 
 (deftest ^:integration a-stale-open-job-does-not-block-a-new-request
   (with-export-jobs
@@ -185,6 +185,42 @@
         (is (= :rate-limit-exceeded
                (:type (ex-data (is (thrown? clojure.lang.ExceptionInfo
                                             (sut/request-export! ctx subject (:id subject))))))))))))
+
+(deftest ^:integration a-zero-limit-is-no-limit
+  (with-export-jobs
+    (fn [{:keys [ctx]}]
+      (let [ctx     (assoc ctx :requests-per-hour 0)
+            subject {:type :user :id (str (random-uuid))}]
+        (dotimes [_ 6]
+          (sut/request-export! ctx subject (:id subject))
+          (run-queued-job! ctx))
+        (is (= 6 (ports/count-export-jobs-requested-since (:store ctx) (:id subject) (.minusSeconds (Instant/now) 60))))))))
+
+(deftest ^:integration ^:security an-admin-follows-their-export-of-someone-else-while-a-platform-admin
+  (with-export-jobs
+    (fn [{:keys [ctx app]}]
+      (let [admin   {:id (random-uuid) :role :admin}
+            subject {:type :tenant :id (str (random-uuid))}
+            r       (privacy/request-export-job! (http/->ExportJobs ctx) subject (:id admin))
+            path    (get-in r [:headers "Location"])]
+        (is (= 202 (:status r)))
+        (is (= (str "/api/v1/me/export-jobs/" (get-in r [:body :id])) path))
+        (run-queued-job! ctx)
+        (let [status (call app :get path admin)]
+          (is (= :done (get-in status [:body :status])))
+          (is (= 200 (:status (call app :get (get-in status [:body :download-path]) admin)))))
+        (testing "not once they are no platform admin"
+          (doseq [user [(assoc admin :role :user) (assoc admin :tenant-id "acme")]]
+            (is (= :not-found (:type (ex-data (is (thrown? clojure.lang.ExceptionInfo (call app :get path user)))))))))))))
+
+(deftest ^:integration a-users-own-export-and-an-admins-of-them-are-separate-jobs
+  (with-export-jobs
+    (fn [{:keys [ctx]}]
+      (let [subject {:type :user :id (str (random-uuid))}
+            own     (:id (sut/request-export! ctx subject (:id subject)))
+            admins  (:id (sut/request-export! ctx subject (str (random-uuid))))]
+        (is (not= own admins))
+        (is (= own (:id (sut/request-export! ctx subject (:id subject)))))))))
 
 (deftest ^:integration an-adapter-that-cannot-stream-gets-the-archive-in-memory
   (with-export-jobs

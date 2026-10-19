@@ -127,12 +127,21 @@ too long to stream:
   and GCS it redirects to a signed URL that lives five minutes; on local
   storage the route sends the file.
 
-Only the user who asked sees a job; to anyone else it does not exist. A
-subject has at most one open job, even when requests race, and a user may
-open five an hour (`:export-requests-per-hour` in `:wagoe/storage`); more
-answer 429. The archive is streamed to a temporary file and stored private
-under `data-exports/`; it is not an upload. Jobs run on the `:default` queue,
-or `:export-queue` in `:wagoe/storage`.
+Platform admins ask for someone else's export the same way, at
+`POST /api/v1/users/:id/export-jobs` and `POST /api/v1/tenants/:id/export-jobs`,
+and follow it at the `Location` they get back, under `/api/v1/me/export-jobs`.
+The export is written to the audit log (the user's, or `tenant_audit_log`) when
+it is asked for, because that is where the admin and their request are known.
+The admin can follow the job and download it only while they are a platform admin.
+
+Only the user who asked sees a job; to anyone else it does not exist. A user
+has at most one open job per subject, even when requests race. A user may
+open five an hour
+(`:export-requests-per-hour` in `:wagoe/storage`, `0` for no limit); more
+answer 429. The archive is streamed to a temporary file under the storage
+root's `.spool/` and stored private under `data-exports/`; it is not an upload.
+A spool left by a crash is deleted at the next boot. Jobs run on the
+`:default` queue, or `:export-queue` in `:wagoe/storage`.
 
 Nothing deletes old archives until you configure the
 `:storage/export-archives` retention policy. There is no default because
