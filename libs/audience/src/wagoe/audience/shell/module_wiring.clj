@@ -13,9 +13,11 @@
    :wagoe/audience
      {:db-ctx           (ig/ref :wagoe/db-context)
       :cache-service    (ig/ref :wagoe/cache)
-      :user-data-source (ig/ref :wagoe/audience-user-source)}
+      :user-data-source (ig/ref :wagoe/audience-user-source)
+      :filter-fields    #{:plan}}         ; columns a filter may name, beyond the defaults
 
-     Returns {:store <IAudienceRepository> :resolver <IAudienceResolver> :cache <IAudienceCache>}
+     Returns {:store <IAudienceRepository> :resolver <IAudienceResolver> :cache <IAudienceCache>
+              :filter-fields <the effective allowlist>}
 
    :wagoe/audience-routes
      {:audience-service (ig/ref :wagoe/audience)
@@ -24,6 +26,7 @@
      Returns {:api [...] :web [...]} for composition
      by the HTTP handler."
   (:require [integrant.core :as ig]
+            [wagoe.audience.core.filter :as filter]
             [wagoe.audience.shell.adapters.user-sql :as user-sql]
             [wagoe.audience.shell.persistence :as persistence]
             [wagoe.audience.shell.cache :as cache]
@@ -49,24 +52,38 @@
   [_ _source]
   nil)
 
+(defn- checked-filter-fields
+  "The allowlist for `configured`, refusing a malformed or credential-like entry."
+  [configured]
+  (when-not (or (nil? configured) (and (coll? configured) (every? keyword? configured)))
+    (throw (ex-info ":wagoe/audience :filter-fields must be a set of keywords"
+                    {:type :configuration-error :key :filter-fields :value configured})))
+  (when-let [secret (seq (filter filter/secret-field? configured))]
+    (throw (ex-info (str ":wagoe/audience :filter-fields may not name credentials: " (vec secret))
+                    {:type :configuration-error :key :filter-fields :fields (vec secret)})))
+  (filter/allowed-filter-fields configured))
+
 (defmethod ig/init-key :wagoe/audience
-  [_ {:keys [db-ctx cache-service user-data-source db-schema]}]
+  [_ {:keys [db-ctx cache-service user-data-source db-schema filter-fields]}]
   (log/info "Initializing audience component")
   (when-not db-schema
     (log/warn "Audience component started without :db-schema — its tables may not exist"))
-  (let [datasource (:datasource db-ctx)
+  (let [allowed    (checked-filter-fields filter-fields)
+        datasource (:datasource db-ctx)
         store      (persistence/create-audience-store datasource)
         acache     (cache/create-audience-cache datasource cache-service)
         resolver   (service/create-audience-service
                     {:repository       store
                      :cache            acache
-                     :user-data-source user-data-source})]
+                     :user-data-source user-data-source
+                     :filter-fields    allowed})]
     (when-not user-data-source
       (throw (ex-info "Audience component requires :user-data-source. Wire an IUserDataSource implementation via Integrant config."
                       {:type :configuration-error :missing-key :user-data-source})))
-    {:store    store
-     :resolver resolver
-     :cache    acache}))
+    {:store         store
+     :resolver      resolver
+     :cache         acache
+     :filter-fields allowed}))
 
 (defmethod ig/halt-key! :wagoe/audience
   [_ _component]
@@ -101,7 +118,8 @@
   (log/info "Initializing audience routes" {:guards (count middleware)})
   {:api (audience-http/audience-api-routes (:resolver audience-service)
                                            (:store audience-service)
-                                           middleware)
+                                           middleware
+                                           (select-keys audience-service [:filter-fields]))
    :web (audience-http/audience-web-routes (:resolver audience-service)
                                            (:store audience-service)
                                            middleware)})
@@ -140,7 +158,8 @@
                                            :field-mapping (:users-field-mapping settings)}
               :wagoe/audience             (cond-> {:db-ctx           (ig/ref :wagoe/db-context)
                                                    :db-schema        (ig/ref :wagoe/audience-db-schema)
-                                                   :user-data-source (ig/ref :wagoe/audience-user-source)}
+                                                   :user-data-source (ig/ref :wagoe/audience-user-source)
+                                                   :filter-fields    (:filter-fields settings)}
                                             (contains? enabled :wagoe/cache)
                                             (assoc :cache-service (ig/ref :wagoe/cache)))}}
 

@@ -4,6 +4,7 @@
    Uses mocked dependencies so no real DB is required, except for the
    cache-miss-then-hit test which uses an atom-backed mock cache."
   (:require [clojure.test :refer [deftest testing is use-fixtures]]
+            [wagoe.audience.core.filter :as filter]
             [wagoe.audience.shell.registry :as registry]
             [wagoe.audience.ports :as ports]
             [wagoe.audience.shell.service :as service])
@@ -99,7 +100,8 @@
    (service/create-audience-service
     {:user-data-source (mock-user-data-source users)
      :cache            cache
-     :repository       repository})))
+     :repository       repository
+     :filter-fields    (filter/allowed-filter-fields #{:plan :churned :region})})))
 
 ;; =============================================================================
 ;; Simple segment resolution — demographics only (SQL path)
@@ -335,3 +337,34 @@
     (registry/register-audience! {:id :all-exporters :label "A" :filters [] :compose {:or [{:ref :exporters}]}})
     (is (= #{(:id user)}
            (:user-ids (ports/resolve-audience svc :all-exporters {:as-of (java.time.LocalDate/of 2026 1 10)}))))))
+
+(deftest ^:unit filters-beside-compose-are-refused
+  ;; Resolving took the :compose path and dropped the filters, so the audience
+  ;; was larger than its definition.
+  (let [both {:id :both :label "B" :compose {:or [{:ref :paid}]}
+              :filters [{:type :demographics :field :plan :op :eq :value "free"}]}
+        type-of (fn [f] (try (f) nil (catch clojure.lang.ExceptionInfo e (:type (ex-data e)))))]
+    (testing "registering one throws"
+      (is (= :validation-error (type-of #(registry/register-audience! both)))))
+    (testing "resolving one stored before the rule throws"
+      (let [repo (mock-repository)
+            svc  (make-service [{:id (uuid) :plan "paid"}] nil repo)]
+        (registry/register-audience! {:id :paid :label "P" :filters []})
+        (ports/save-audience repo both)
+        (is (= :validation-error (type-of #(ports/resolve-audience svc :both))))
+        (testing "and so does composing it"
+          (registry/register-audience! {:id :outer :label "O" :filters [] :compose {:or [{:ref :both}]}})
+          (is (= :validation-error (type-of #(ports/resolve-audience svc :outer)))))))))
+
+(deftest ^:unit ^:security a-cached-result-does-not-outlive-the-allowlist
+  ;; Evaluated and cached before the allowlist existed; a cache hit skipped
+  ;; the field check.
+  (let [c    (mock-cache)
+        repo (mock-repository)
+        svc  (make-service [] c repo)]
+    (ports/save-audience repo {:id :old :label "Old"
+                               :filters [{:type :demographics :field :password-hash
+                                          :op :contains :value "$2a$"}]})
+    (ports/put-cached c :old {:user-ids #{(uuid)} :count 1} 60)
+    (is (thrown-with-msg? clojure.lang.ExceptionInfo #"not allowed"
+                          (ports/resolve-audience svc :old)))))

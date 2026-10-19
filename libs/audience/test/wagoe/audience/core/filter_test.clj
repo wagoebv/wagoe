@@ -222,3 +222,24 @@
     (is (= :unknown-filter-type
            (get-in (f/explain-filters [{:type :demographics :op :eq :value 1}
                                        {:type :bogus :op :eq}]) [:error :type])))))
+
+(deftest ^:unit ^:security filter-field-allowlist
+  (let [allowed (f/allowed-filter-fields #{:plan})
+        by      (fn [field & [type]] [{:type (or type :demographics) :field field :op :eq :value 1}])]
+    (testing "default and configured fields pass"
+      (is (nil? (f/explain-filter-fields (by :role) allowed)))
+      (is (nil? (f/explain-filter-fields (by :plan) allowed)))
+      (is (nil? (f/explain-filter-fields (by :plan) (f/allowed-filter-fields [:PLAN])))))
+    (testing "anything else is a validation error, in any spelling"
+      (doseq [field [:email :password-hash :PASSWORD_HASH :passwordHash :auth_users.password_hash :auth-users/role]]
+        (is (= :validation-error (get-in (f/explain-filter-fields (by field) allowed) [:error :type]))
+            (str field))))
+    (testing "a credential is refused even when allowed"
+      (is (some? (f/explain-filter-fields (by :mfa-secret) #{:mfa-secret}))))
+    (testing "a :feature-usage field names a feature, not a column"
+      (is (nil? (f/explain-filter-fields (by :export :feature-usage) allowed))))
+    (testing "secret-field? catches the user tables' credentials"
+      (is (every? f/secret-field? [:password-hash :mfa-secret :mfa-backup-codes :session-token
+                                   :failed-login-count :lockout-until :api-key
+                                   :apikey :backupcodes :passWord]))
+      (is (not-any? f/secret-field? f/default-filter-fields)))))

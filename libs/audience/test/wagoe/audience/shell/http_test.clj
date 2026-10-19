@@ -1,22 +1,12 @@
 (ns wagoe.audience.shell.http-test
-  (:require [clojure.string :as str]
+  (:require [cheshire.core :as json]
+            [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
+            [wagoe.audience.core.filter :as filter]
             [wagoe.audience.ports :as ports]
-            [wagoe.audience.shell.http :as sut]))
-
-(deftest ^:unit ^:security an-invalid-definition-names-its-fields-not-the-schema
-  ;; `details` was the Malli explanation as a string: the whole schema, fn
-  ;; objects included (BOU-586).
-  (doseq [[label response]
-          [["create" (sut/create-audience-handler nil nil {:parameters {:body {:id :x}}})]
-           ["update" (sut/update-audience-handler nil nil {:path-params {:id "x"}
-                                                           :parameters  {:body {}}})]]]
-    (testing label
-      (let [err (get-in response [:body :error])]
-        (is (= 422 (:status response)))
-        (is (= "unprocessable" (:type err)))
-        (is (= ["missing required key"] (get-in err [:details :errors :label])))
-        (is (not (str/includes? (pr-str err) ":map")) "the schema leaked")))))
+            [wagoe.audience.shell.http :as sut]
+            [wagoe.audience.shell.service :as service]
+            [wagoe.platform.shell.http.reitit-router :as reitit-router]))
 
 (defn- store
   "An in-memory IAudienceRepository, or one whose every call throws `ex`."
@@ -44,6 +34,7 @@
       {:calls calls})))
 
 (def ^:private u1 #uuid "00000000-0000-0000-0000-000000000001")
+(def ^:private u2 #uuid "00000000-0000-0000-0000-000000000002")
 
 (deftest ^:unit web-pages-test
   (testing "the list page shows each stored segment"
@@ -72,10 +63,10 @@
 
 (deftest ^:unit crud-api-test
   (let [s (store)]
-    (testing "create stores the definition, filtersData standing in for filters"
+    (testing "create stores the definition"
       (let [res (sut/create-audience-handler nil s {:parameters {:body {:id :vip :label "VIP"
-                                                                        :filtersData [{:type :role :field :plan
-                                                                                       :op :eq :value "gold"}]}}})]
+                                                                        :filters [{:type :role :field :role
+                                                                                   :op :eq :value "gold"}]}}})]
         ;; The id came back as ":vip", which no /audiences/:id path accepts.
         (is (= {:status 201 :body {:id "vip" :label "VIP"}} res))
         (is (= :role (get-in (ports/find-audience s :vip) [:filters 0 :type])))))
@@ -139,3 +130,115 @@
         "every route is guarded, so a new one cannot ship open")
     (is (every? (fn [[_ data]] (nil? (:middleware data))) (sut/audience-api-routes nil nil))
         "no middleware given, none attached")))
+
+;; =============================================================================
+;; As served: the platform's router, body decoding and coercion in front of
+;; the real handlers and service
+;; =============================================================================
+
+(def ^:private users
+  "Two users; a SQL filter narrows them to the first."
+  (reify ports/IUserDataSource
+    (query-users-sql [_ clause] (if clause [u1] [u1 u2]))
+    (load-users [_ ids] (mapv (fn [id] {:id id}) ids))))
+
+(defn- served [s & [filter-fields]]
+  (let [resolver (service/create-audience-service {:repository s :user-data-source users
+                                                   :filter-fields filter-fields})
+        handler  (reitit-router/compile-routes (sut/audience-api-routes resolver s [] {:filter-fields filter-fields})
+                                               {:swagger-enabled false})]
+    (fn [method uri body]
+      (let [r (handler {:request-method method :uri uri
+                        :headers {"content-type" "application/json" "accept" "application/json"}
+                        :body (java.io.ByteArrayInputStream. (.getBytes (json/generate-string body)))})]
+        (update r :body #(some-> % slurp (json/parse-string true)))))))
+
+(deftest ^:unit ^:security create-update-and-preview-read-the-body
+  ;; No route declared :parameters, so [:parameters :body] was empty and every
+  ;; create and update answered 422 whatever was sent.
+  (let [s    (store)
+        call (served s)]
+    (testing "create stores the definition sent, its values coerced"
+      (let [r (call :post "/audiences" {:id "gold" :label "Gold"
+                                        :filters [{:type "role" :field "role" :op "eq" :value "gold"}]})]
+        (is (= 201 (:status r)))
+        (is (= {:id "gold" :label "Gold"} (:body r))))
+      (is (= {:id :gold :label "Gold"
+              :filters [{:type :role :field :role :op :eq :value "gold"}]}
+             (ports/find-audience s :gold))))
+
+    (testing "an id no /audiences/:id path accepts is refused"
+      (doseq [id ["Gold Plan" "" "a/b" "preview"]]
+        (is (= 400 (:status (call :post "/audiences" {:id id :label "X" :filters []}))) id))
+      (is (= [:gold] (mapv :id (ports/list-audiences s)))))
+
+    (testing "preview resolves the audience named in the body"
+      (let [r (call :post "/audiences/preview" {:audienceId "gold"})]
+        (is (= 200 (:status r)))
+        (is (= {:count 1 :sample [(str u1)]} (:body r)))))
+
+    (testing "update replaces the definition under the path id"
+      (let [r (call :put "/audiences/gold" {:label "Everyone" :filters []})]
+        (is (= 200 (:status r)))
+        (is (= {:id "gold" :label "Everyone"} (:body r))))
+      (is (= {:id :gold :label "Everyone" :filters []} (ports/find-audience s :gold)))
+      (is (= 2 (get-in (call :post "/audiences/preview" {:audienceId "gold"}) [:body :count]))))
+
+    (testing "a body missing required keys is a validation error naming them, not the schema"
+      (doseq [[method uri] [[:post "/audiences"] [:put "/audiences/gold"]]]
+        (let [r (call method uri {})]
+          (is (= 400 (:status r)) uri)
+          (is (= "validation-error" (get-in r [:body :error :type])) uri)
+          (is (contains? (get-in r [:body :error :details]) :label) uri)
+          (is (not (str/includes? (pr-str (:body r)) ":map")) "the schema leaked"))))))
+
+(deftest ^:unit filters-beside-compose-are-refused
+  ;; The service evaluates :compose and ignored :filters next to it, so the
+  ;; audience was larger than its definition said.
+  (let [s    (store)
+        call (served s)
+        both {:label   "Both"
+              :filters [{:type "role" :field "role" :op "eq" :value "gold"}]
+              :compose {:or [{:ref "a"} {:ref "b"}]}}]
+    (doseq [[method uri body] [[:post "/audiences" (assoc both :id "both")]
+                               [:put "/audiences/both" both]]]
+      (let [r (call method uri body)]
+        (is (= 422 (:status r)) uri)
+        (is (= "validation-error" (get-in r [:body :error :type])) uri)
+        (is (str/includes? (get-in r [:body :error :message]) "either") uri)))
+    (is (empty? (ports/list-audiences s)))
+    (testing "compose with empty filters is accepted"
+      (is (= 201 (:status (call :post "/audiences" (assoc both :id "both" :filters [])))))
+      (is (= {:or [{:ref :a} {:ref :b}]} (:compose (ports/find-audience s :both)))))))
+
+(deftest ^:unit ^:security filters-name-only-allowed-fields
+  ;; A filter's field is a SQL column and preview answers a count, so naming
+  ;; password_hash made the API an oracle over credentials.
+  (let [s      (store)
+        call   (served s)
+        secret {:type "demographics" :field "password-hash" :op "contains" :value "$2a$"}]
+    (testing "create refuses a credential column, in any spelling"
+      (doseq [field ["password-hash" "PASSWORD_HASH" "mfa-secret"]]
+        (let [r (call :post "/audiences" {:id "x" :label "X" :filters [(assoc secret :field field)]})]
+          (is (= 422 (:status r)) field)
+          (is (= "validation-error" (get-in r [:body :error :type])) field)))
+      (is (empty? (ports/list-audiences s))))
+    (testing "so does update"
+      (is (= 422 (:status (call :put "/audiences/x" {:label "X" :filters [secret]}))))
+      (is (empty? (ports/list-audiences s))))
+    (testing "and a column nobody allowed"
+      (is (= 422 (:status (call :post "/audiences" {:id "x" :label "X"
+                                                    :filters [(assoc secret :field "plan")]})))))
+    (testing "preview refuses one stored before the allowlist"
+      (ports/save-audience s {:id :old :label "Old"
+                              :filters [{:type :demographics :field :password-hash :op :contains :value "$2a$"}]})
+      (let [r (call :post "/audiences/preview" {:audienceId "old"})]
+        (is (= 422 (:status r)))
+        (is (= "validation-error" (get-in r [:body :error :type])))
+        (is (nil? (get-in r [:body :count])))))
+    (testing "a field the app configures is allowed"
+      (let [s    (store)
+            call (served s (filter/allowed-filter-fields #{:plan}))]
+        (is (= 201 (:status (call :post "/audiences" {:id "paid" :label "Paid"
+                                                      :filters [(assoc secret :field "plan" :value "paid")]}))))
+        (is (= 1 (get-in (call :post "/audiences/preview" {:audienceId "paid"}) [:body :count])))))))

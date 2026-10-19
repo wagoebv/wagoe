@@ -99,7 +99,7 @@
 ;; IAudienceResolver implementation
 ;; =============================================================================
 
-(defrecord AudienceService [repository cache user-data-source]
+(defrecord AudienceService [repository cache user-data-source filter-fields]
   ports/IAudienceResolver
 
   (resolve-audience [this audience-id]
@@ -109,6 +109,12 @@
     (log/debug "Resolving audience" {:audience-id audience-id :opts opts})
     (let [force-refresh? (:force-refresh? opts false)
           definition     (load-definition audience-id repository)]
+
+      ;; Before the cache: a result cached before the allowlist existed would
+      ;; otherwise keep answering for a definition that is now refused.
+      (when definition
+        (unwrap! (composition/explain-filters-beside-compose definition))
+        (unwrap! (filter/explain-filter-fields (:filters definition) filter-fields)))
 
       ;; Cache check (skip when force-refresh? is true)
       (if-let [cached (when-not force-refresh?
@@ -147,6 +153,9 @@
               (let [lookup  (memoize
                              (fn [id]
                                (when-let [d (load-definition id repository)]
+                                 ;; A composed ref is read here, not resolved,
+                                 ;; so the check above never sees it.
+                                 (unwrap! (composition/explain-filters-beside-compose d))
                                  (if (:compose d)
                                    {:compose (:compose d)}
                                    {:user-ids (:user-ids (ports/resolve-audience
@@ -188,8 +197,10 @@
        :repository       - IAudienceRepository (optional, for DB-stored definitions)
        :cache            - AudienceCache (optional)
        :user-data-source - IUserDataSource (required)
+       :filter-fields    - fields a filter may name (default `filter/default-filter-fields`)
 
    Returns:
      AudienceService implementing IAudienceResolver"
-  [{:keys [repository cache user-data-source]}]
-  (->AudienceService repository cache user-data-source))
+  [{:keys [repository cache user-data-source filter-fields]}]
+  (->AudienceService repository cache user-data-source
+                     (or filter-fields filter/default-filter-fields)))

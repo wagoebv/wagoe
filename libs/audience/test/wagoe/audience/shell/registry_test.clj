@@ -29,3 +29,14 @@
     (registry/register-audience! {:id :seg-c :label "C" :filters []})
     (registry/clear-registry!)
     (is (empty? (registry/list-audiences)))))
+
+(deftest ^:unit ^:security defaudience-refuses-a-credential-field
+  ;; The app's :filter-fields are not known yet, so only credentials are
+  ;; refused here; the full allowlist is checked at resolve.
+  (let [e (try (registry/defaudience leaky
+                 {:id :leaky :label "L"
+                  :filters [{:type :demographics :field :password_hash :op :contains :value "x"}]})
+               nil
+               (catch clojure.lang.ExceptionInfo e e))]
+    (is (= :validation-error (:type (ex-data e))))
+    (is (nil? (registry/get-audience :leaky)))))

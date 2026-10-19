@@ -32,6 +32,7 @@ The library saves boilerplate around:
    :filters [{:type :role   :field :plan   :op :eq          :value "free"}
              {:type :last-active            :op :within-days :value 30}]
    :cache   {:ttl-minutes 60}})
+;; :plan is not a default filter field: add it with :wagoe/audience {:filter-fields #{:plan}}
 
 ;; Registry operations
 (audience/get-audience :active-free-users)   ;; => {:id :active-free-users ...}
@@ -160,7 +161,7 @@ Results are persisted to `audience_memberships` with a timestamp in `audience_se
 (defaudience weekly-digest-targets
   {:id    :weekly-digest-targets
    :label "Weekly digest recipients"
-   :filters [{:type :demographics :field :email-opt-in :op :eq :value true}]
+   :filters [{:type :demographics :field :notifications-email :op :eq :value true}]
    :cache {:ttl-minutes 1440}})   ;; 24 hours
 ```
 
@@ -201,6 +202,10 @@ The builder UI is served by `wagoe.audience.shell.http`.
 | POST | `/api/audiences/preview` | Evaluate filters, return count + sample |
 | POST | `/api/audiences/:id/evaluate` | Trigger full evaluation and cache |
 | GET | `/api/audiences/:id/members` | List member user-ids |
+
+Create, update and preview take a JSON body, coerced by the route's `:parameters` schema: create
+and update a `DynamicAudienceDefinition` (update takes `:id` from the path), preview
+`{"audienceId": "..."}`. A body that does not match is a 400 `validation-error` naming the fields.
 
 ### HTMX endpoints + Replicant widget mount points
 
@@ -247,6 +252,18 @@ The `:wagoe/audience` component returns `{:store <IAudienceRepository> :resolver
 **Filter columns.** `:last-active` compiles to `last_active_at`; Wagoe's users table records
 `last_login`, so the shipped source translates it. Override with
 `:wagoe/audience {:users-field-mapping {…}}` for a schema that spells it differently again.
+
+**Filter fields.** A filter's `:field` becomes a SQL column and preview answers a count, so a
+filter may name only allowlisted fields: `filter/default-filter-fields`, the non-secret profile
+columns of Wagoe's `users` table (`:role`, `:name`, `:language`, `:last-login`, …). Add your own
+with `:wagoe/audience {:filter-fields #{:plan :country}}`. Credential-like names (password, hash,
+secret, token, mfa, lockout, failed-login, …) are refused even when configured, and the boot fails
+on them. Create and update answer 422 `validation-error` for any other field, and resolving a
+stored audience that names one throws `:validation-error`. `defaudience` refuses credentials at
+load time; the configured allowlist is not known until boot, so other fields are checked at
+resolve. `:feature-usage` fields name a feature, not a column, and are not checked. A custom filter
+type is covered only if it names its column in `:field`; the shipped SQL source also drops
+credential-like columns from the rows `load-users` hands to predicates.
 
 **As a service.** `service audience` refuses to start: its routes need the admin-only guard,
 which is a user-module component that service selection drops. Run `service audience user`.
@@ -352,8 +369,11 @@ Code segments use keyword IDs (`:active-users`). DB-persisted segments use UUIDs
 ### 4. H2 vs PostgreSQL JSON handling
 The cache reads `cache_config` from the DB as either a `PGobject` (PostgreSQL) or a plain string (H2). The cache layer handles both with `cheshire/parse-string`. If you write custom queries against `cache_config`, always parse the column before accessing keys.
 
-### 5. `compose` vs `filters` — mutually exclusive evaluation paths
-If a segment has a `:compose` key, the service takes the composition path and ignores `:filters` on the top-level definition. Compose leaves should be other resolved segments, not raw filter maps.
+### 5. `compose` vs `filters` — pick one
+A segment is either filters or a composition. One with `:compose` and non-empty `:filters` is
+refused: create and update answer 422 `validation-error`, and `defaudience` and resolving a stored
+one throw `:validation-error`. Give a composed segment `:filters []`, and put the filters in a segment
+it refers to.
 
 ### 6. Member count vs user-id set
 `SegmentResult` always carries both `:count` (integer) and `:user-ids` (set of UUIDs). The `:count` in the DB row (`member_count`) is a cached integer for display. Always use `:user-ids` for actual membership decisions.
