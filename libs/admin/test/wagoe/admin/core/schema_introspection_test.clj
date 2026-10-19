@@ -865,12 +865,10 @@
     (is (= "Line items" (introspection/plural-label {} :line-items)))))
 
 (deftest ^:unit a-parents-has-many-names-the-parent-of-a-foreign-key
-  (let [tickets (introspection/detect-relationships {:fields {:customer-id {} :user-id {}}})
+  (let [parents (fn [cfg] (into {} (map (juxt :field :entity)) (get-in cfg [:relationships :belongs-to])))
+        tickets (introspection/detect-relationships {:fields {:customer-id {} :user-id {}}})
         configs {:shop-customers {:has-many [{:entity :tickets :foreign-key :customer_id}]}
-                 :tickets        tickets}
-        parents (into {} (map (juxt :field :entity))
-                      (get-in (introspection/with-declared-parents :tickets tickets configs)
-                              [:relationships :belongs-to]))]
-    (is (= :customers (:entity (first (get-in tickets [:relationships :belongs-to]))))
-        "detection guesses from the key")
-    (is (= {:customer-id :shop-customers :user-id :users} parents))))
+                 :tickets        tickets}]
+    (is (= {:customer-id :customers :user-id :users} (parents tickets)) "detection guesses from the key")
+    (is (= {:customer-id :shop-customers :user-id :users}
+           (parents (:tickets (introspection/with-declared-parents configs)))))))

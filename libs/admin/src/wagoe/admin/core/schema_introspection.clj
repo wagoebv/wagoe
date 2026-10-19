@@ -994,20 +994,30 @@
                            :has-many []   ; filled by with-inverse-relationships
                            :has-one []})))  ; Week 3+: One-to-one relationships
 
+(defn declared-parents
+  "{foreign-key-field parent} for each `:has-many` in `entity-configs` naming
+   `entity-name`."
+  [entity-name entity-configs]
+  (into {}
+        (for [[parent cfg] entity-configs
+              rel          (:has-many cfg)
+              :when        (and (= entity-name (:entity rel)) (:foreign-key rel))]
+          [(keyword (case-conversion/snake-case->kebab-case-string (name (:foreign-key rel)))) parent])))
+
 (defn with-declared-parents
-  "`entity-config` with each belongs-to pointed at the parent whose explicit
-   `:has-many` names this entity under that key. Detection guesses the parent
+  "`entity-configs` with each belongs-to pointed at the parent whose explicit
+   `:has-many` names that entity under that key. Detection guesses the parent
    from the key's name, so `customer-id` guessed `:customers` when the parent
    is `:shop-customers`."
-  [entity-name entity-config entity-configs]
-  (let [declared (into {}
-                       (for [[parent cfg] entity-configs
-                             rel          (:has-many cfg)
-                             :when        (and (= entity-name (:entity rel)) (:foreign-key rel))]
-                         [(keyword (str/replace (name (:foreign-key rel)) "_" "-")) parent]))]
-    (update-in entity-config [:relationships :belongs-to]
-               (fn [bts]
-                 (mapv #(if-let [parent (declared (:field %))] (assoc % :entity parent) %) bts)))))
+  [entity-configs]
+  (into {}
+        (map (fn [[entity cfg]]
+               (let [declared (declared-parents entity entity-configs)]
+                 [entity (update-in cfg [:relationships :belongs-to]
+                                    (fn [bts]
+                                      (mapv #(if-let [parent (declared (:field %))] (assoc % :entity parent) %)
+                                            bts)))])))
+        entity-configs))
 
 (defn inverse-has-many
   "The has-many entries on `entity-name` implied by other entities'

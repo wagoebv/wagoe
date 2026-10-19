@@ -90,17 +90,13 @@
                common-adapter/instant->iso))
         params))
 
-(defn- column->key-name
-  "A column label as the key name the rest of Wagoe uses for it. next.jdbc's
-   kebab builder splits digits off (`e2e_id` becomes `e-2e-id`), where
-   `snake-case->kebab-case-string` does not."
-  [label]
-  (case-conversion/snake-case->kebab-case-string (text/lower-case label)))
-
 (defn as-kebab-maps
-  "next.jdbc builder-fn: unqualified maps keyed by `column->key-name`."
+  "next.jdbc builder-fn: unqualified maps keyed as `snake-case->kebab-case-string`
+   names a column. next.jdbc's kebab builder splits digits off (`e2e_id`
+   becomes `e-2e-id`)."
   [rs opts]
-  (rs/as-unqualified-modified-maps rs (assoc opts :label-fn column->key-name)))
+  (rs/as-unqualified-modified-maps
+   rs (assoc opts :label-fn (comp case-conversion/snake-case->kebab-case-string text/lower-case))))
 
 (defn- row-builder
   "Kebab-case maps, each value decoded as the engine's adapter reads it, where

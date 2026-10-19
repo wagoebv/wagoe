@@ -179,23 +179,21 @@
      computation may run more than once; last write wins, results are
      identical. See `reset-cache!` to invalidate (e.g. after a migration)."
     (or (get @config-cache entity-name)
-        (let [own           (compute-entity-config this entity-name)
-              all           (into {entity-name own}
-                                  (keep (fn [e] (some->> (base-entity-config this e) (vector e))))
-                                  ;; Only :allowlist discovery lists entities; the other
-                                  ;; modes throw, and must not take this entity down.
-                                  (remove #{entity-name}
-                                          (try (ports/list-available-entities this)
-                                               (catch clojure.lang.ExceptionInfo _ []))))
+        (let [all           (introspection/with-declared-parents
+                             (into {entity-name (compute-entity-config this entity-name)}
+                                   (keep (fn [e] (some->> (base-entity-config this e) (vector e))))
+                                   ;; Only :allowlist discovery lists entities; the other
+                                   ;; modes throw, and must not take this entity down.
+                                   (remove #{entity-name}
+                                           (try (ports/list-available-entities this)
+                                                (catch clojure.lang.ExceptionInfo _ [])))))
+              own           (get all entity-name)
               ;; Roles last: a has-many column needs the inverse relations, and
               ;; the default columns need the roles (ADR-040).
-              entity-config (as-> own cfg
-                              (introspection/with-declared-parents entity-name cfg all)
-                              (introspection/with-inverse-relationships entity-name cfg all)
-                              (display/with-display
-                                cfg
-                                {:derive-list-fields?
-                                 (not (contains? (get-in config [:entities entity-name]) :list-fields))}))]
+              entity-config (-> (introspection/with-inverse-relationships entity-name own all)
+                                (display/with-display
+                                  {:derive-list-fields?
+                                   (not (contains? (get-in config [:entities entity-name]) :list-fields))}))]
           ;; Here and not in compute-entity-config, which also runs for each
           ;; entity as another's possible child.
           (doseq [{:keys [message]} (:create-config-errors own)]

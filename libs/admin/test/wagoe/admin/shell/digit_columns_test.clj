@@ -47,7 +47,7 @@
                   x2y_ref_id VARCHAR(36) REFERENCES dg_owners(id))"]]
     (db/execute-update! db-ctx {:raw sql})))
 
-(defonce ^:private backends (atom {}))
+(def ^:private backends (atom {}))
 
 (defn- with-backends [f]
   (let [sqlite-file (File/createTempFile "digit-columns" ".db")
