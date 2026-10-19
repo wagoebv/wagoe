@@ -230,3 +230,14 @@
       (is (= "r1" (get-in (table-ui/infinite-rows [[:tr {:id "r1"}]] "/n") [0 1 :id]))))
     (testing "no next page, rows unchanged"
       (is (= rows (table-ui/infinite-rows rows nil))))))
+
+(deftest ^:unit hidden-inputs-test
+  (is (= [[:input {:type "hidden" :name "sort" :value "id"}]
+          [:input {:type "hidden" :name "v[]" :value "a"}]
+          [:input {:type "hidden" :name "v[]" :value "b"}]]
+         (table-ui/hidden-inputs {"sort" "id" "page" nil "v[]" ["a" "b"]}))))
+
+(deftest ^:unit parse-table-params-keeps-blank-filters-on-request-test
+  (is (= {:filters {:name {:op :contains :value ""}}}
+         (table-ui/parse-table-params {"filters[name][op]" "contains" "filters[name][value]" ""}
+                                      {:keep-blank-filters? true}))))

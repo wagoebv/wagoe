@@ -8,6 +8,7 @@
    [wagoe.admin.core.ui.filters :as filters]
    [wagoe.admin.core.permissions :as permissions]
    [wagoe.admin.shell.http.support :as support]
+   [wagoe.shared.ui.core.htmx :as htmx]
    [ring.util.response :as ring-response]))
 
 (defn- list-options
@@ -81,15 +82,6 @@
      :permissions (permissions/get-entity-permissions user entity-name entity-config)
      :display (display-with-overview admin-service config request entity-name options records)}))
 
-(defn- table-request?
-  "An htmx request from one of the list's controls, aimed at its table. A
-   history restore asks for the page."
-  [request]
-  (let [headers (:headers request)]
-    (boolean (and (get headers "hx-request")
-                  (not (get headers "hx-history-restore-request"))
-                  (#{"entity-table-container" "filter-table-container"} (get headers "hx-target"))))))
-
 (defn- table-fragment-response
   "The table, or with the filter summary when that is the target, plus the
    toolbar count out of band."
@@ -107,7 +99,7 @@
 (defn entity-list-handler
   "The entity list page: table, search, sorting, paging, filters. Its own
    controls request this URL and push it, so the address bar holds the list's
-   state; they get the table fragment back (`table-request?`)."
+   state; they get the table fragment back."
   [admin-service schema-provider config]
   (fn [request]
     (let [user (support/require-admin-user! request)
@@ -115,7 +107,7 @@
           state (list-state admin-service schema-provider config request user entity-name)]
       ;; One URL, two bodies: a cache must not answer one with the other
       (ring-response/header
-       (if (table-request? request)
+       (if (htmx/fragment-request? (:headers request) ["entity-table-container" "filter-table-container"])
          (table-fragment-response request entity-name state)
          (let [{:keys [entity-config options records total-count table-query permissions display]} state
                entities (ports/list-available-entities schema-provider)

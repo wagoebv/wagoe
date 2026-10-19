@@ -1,6 +1,8 @@
 (ns wagoe.shared.ui.core.table
   "Shared table UI helpers (sorting, paging) for Hiccup-based web UIs."
-  (:require [clojure.string :as str]))
+  (:require [wagoe.core.utils.type-conversion :as tc]
+            [wagoe.shared.ui.core.htmx :as htmx]
+            [clojure.string :as str]))
 
 ;; ---------------------------------------------------------------------------
 ;; Query-param helpers (pure, inlined to avoid core→shell dependency)
@@ -283,10 +285,6 @@
   (and (str/blank? value) (str/blank? min) (str/blank? max)
        (not-any? (complement str/blank?) values)))
 
-(defn- positive-long [s]
-  (let [n (some-> s str parse-long)]
-    (when (and n (pos? n)) n)))
-
 (defn parse-table-params
   "The table state in a Ring query-params map: {:sort :dir :page :page-size
    :search :filters}, each key only when present and valid.
@@ -294,19 +292,21 @@
    opts:
    - :sortable       set of sortable field keywords; any other :sort is dropped
    - :max-page-size  upper bound for :page-size
+   - :keep-blank-filters?  keep filters with no value, which a filter form
+                     sends for its untouched inputs; dropped by default
 
-   :dir is :asc or :desc (`sort-dir` is accepted too). Filters with no value
-   are dropped: a filter form sends its untouched inputs blank."
+   :dir is :asc or :desc (`sort-dir` is accepted too)."
   ([params] (parse-table-params params {}))
-  ([params {:keys [sortable max-page-size]}]
+  ([params {:keys [sortable max-page-size keep-blank-filters?]}]
    (let [params    (update-keys params param-name)
          sort      (let [s (get params "sort")] (when (and (string? s) (seq s)) (keyword s)))
          dir       (#{:asc :desc} (some-> (or (get params "dir") (get params "sort-dir")) str keyword))
-         page      (positive-long (get params "page"))
-         page-size (cond-> (positive-long (get params "page-size"))
+         page      (tc/parse-int (get params "page"))
+         page-size (cond-> (tc/parse-int (get params "page-size"))
                      max-page-size (some-> (min max-page-size)))
          search    (let [s (get params "search")] (when (and (string? s) (not (str/blank? s))) s))
-         filters   (into {} (remove (comp blank-spec? val)) (parse-filter-params params))]
+         filters   (cond->> (parse-filter-params params)
+                     (not keep-blank-filters?) (into {} (remove (comp blank-spec? val))))]
      (cond-> {}
        (and sort (or (nil? sortable) (contains? sortable sort))) (assoc :sort sort)
        dir             (assoc :dir dir)
@@ -375,17 +375,23 @@
   (let [rows (vec rows)]
     (if (and next-url (seq rows))
       (update rows (dec (count rows))
-              (fn [[tag & more]]
-                (let [[attrs children] (if (map? (first more)) [(first more) (rest more)] [{} more])]
-                  (into [tag (merge attrs {:hx-get     next-url
-                                           :hx-trigger "revealed"
-                                           :hx-swap    "afterend"
-                                           :hx-target  "this"})]
-                        children))))
+              htmx/merge-attrs {:hx-get     next-url
+                                :hx-trigger "revealed"
+                                :hx-swap    "afterend"
+                                :hx-target  "this"})
       rows)))
 
+(defn hidden-inputs
+  "A hidden input per value of a string-keyed param map, a sequential value
+   repeating its key: the table state a form or `hx-include` sends along."
+  [params]
+  (for [[k v] params
+        v     (if (sequential? v) v [v])
+        :when (some? v)]
+    [:input {:type "hidden" :name k :value v}]))
+
 (defn- filter-cell
-  [{:keys [field filter label]} {:keys [url table-query hx-target hx-swap filters]}]
+  [{:keys [field filter label]} {:keys [filter-url hx-target hx-swap filters]}]
   [:th {:class (str "filter-cell field-" (name field))}
    (when filter
      (filter-input {:name        (str "filters[" (name field) "][value]")
@@ -393,8 +399,7 @@
                     :label       label
                     :placeholder (:placeholder filter)
                     :options     (:options filter)
-                    ;; Page one, sorted as now; the filter values come from the row
-                    :url         (list-url url (dissoc table-query :page) nil)
+                    :url         filter-url
                     :hx-target   hx-target
                     :hx-swap     hx-swap
                     :hx-include  "closest tr"}))])
@@ -423,8 +428,9 @@
   (let [{:keys [sort dir page page-size]} table-query
         head-before (keep identity head-before)
         head-after  (keep identity head-after)
-        ctx  {:url url :table-query table-query :hx-target hx-target :hx-swap hx-swap
-              :filters filters}
+        ;; Page one, sorted as now; the filter values come from the row
+        ctx  {:filter-url (list-url url (dissoc table-query :page) nil)
+              :hx-target hx-target :hx-swap hx-swap :filters filters}
         rows (cond-> rows
                infinite? (infinite-rows (next-page-url (or rows-url url) table-query filters total-count)))]
     [:table.data-table {:class (str "table" (when class (str " " class)))}

@@ -252,10 +252,7 @@
      ;; The sort and filters the toolbar search sends along: it sits outside
      ;; this swap, so its own URL would go stale
      [:div {:class "table-state" :hidden true}
-      (for [[k v] (merge (dissoc table-params "page" "search") filter-params)
-            v     (if (sequential? v) v [v])
-            :when (some? v)]
-        [:input {:type "hidden" :name k :value v}])]
+      (table-ui/hidden-inputs (merge (dissoc table-params "page" "search") filter-params))]
      ;; Inside the swap target, so search, sort and paging keep them current
      (overview-strip entity-name entity-config table-query filters display)
      (cond
@@ -308,11 +305,7 @@
              :hx-target hx-target
              :hx-swap "outerHTML"}
             ;; Preserve table state
-            (for [[k v] table-params :when (some? v)]
-              [:input {:type "hidden" :name k :value v}])
-            (for [[k v] filter-params
-                  v (if (sequential? v) v [v])]
-              [:input {:type "hidden" :name k :value v}])
+            (table-ui/hidden-inputs (merge table-params filter-params))
 
             (table-ui/data-table
              {:url         list-path

@@ -184,7 +184,7 @@
       ;; Operator selector
      [:select.filter-operator-select
       {:name (str "filters[" (name field-name) "][op]")
-       :hx-get (str "/web/admin/" (name entity-name) "/table")
+       :hx-get (base/list-path entity-name)
        :hx-target "#filter-table-container"
        :hx-swap "outerHTML"
        :hx-trigger "change"
@@ -201,11 +201,12 @@
      [:button.icon-button.secondary
       {:type "button"
        :aria-label [:t :admin/button-remove-filter]
-       :hx-get (str "/web/admin/" (name entity-name) "/table")
+       :hx-get (base/list-path entity-name)
        :hx-target "#filter-table-container"
        :hx-swap "outerHTML"
        :hx-trigger "click"
        :hx-vals (str "{\"remove_filter\": \"" (name field-name) "\"}")
+       :hx-push-url "false"
        :hx-include "closest form"}
       (icons/icon :x {:size 16})]]))
 
@@ -238,7 +239,7 @@
         (when has-active-filters?
           [:button.text-button
            {:type "button"
-            :hx-get (str "/web/admin/" (name entity-name) "/table")
+            :hx-get (base/list-path entity-name)
             :hx-target "#filter-table-container"
             :hx-swap "outerHTML"
             :hx-trigger "click"}
@@ -265,7 +266,9 @@
           [:div.filter-add-row
            [:select.filter-field-select
             {:name "add_filter_field"
-             :hx-get (str "/web/admin/" (name entity-name) "/table")
+             ;; A one-shot param: not for the address bar
+             :hx-push-url "false"
+             :hx-get (base/list-path entity-name)
              :hx-target "#filter-table-container"
              :hx-swap "outerHTML"
              :hx-trigger "change"

@@ -44,7 +44,7 @@
    `add_filter_field` / `remove_filter` add or drop one."
   [params]
   (let [params   (update-keys params #(if (keyword? %) (name %) (str %)))
-        {:keys [dir] :as tq} (table-ui/parse-table-params params)
+        {:keys [dir] :as tq} (table-ui/parse-table-params params {:keep-blank-filters? true})
         limit    (some-> (get params "limit") parse-long)
         offset   (some-> (get params "offset") parse-long)
         add-f    (get params "add_filter_field")
@@ -56,7 +56,7 @@
                                (when-not (or (reserved k) (str/starts-with? k "filters["))
                                  [(keyword k) {:op :eq :value v}])))
                        params)
-        filters  (cond-> (merge simple (table-ui/parse-filter-params params))
+        filters  (cond-> (merge simple (:filters tq))
                    (not (str/blank? add-f))    (assoc (keyword add-f) {:op :eq :value ""})
                    (not (str/blank? remove-f)) (dissoc (keyword remove-f)))]
     (cond-> (dissoc tq :dir :filters)
