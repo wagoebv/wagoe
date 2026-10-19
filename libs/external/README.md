@@ -8,7 +8,7 @@
 **Status:** Active (not production-ready)  
 **Version:** 1.0.1
 
-Adapters for external services: Twilio SMS/WhatsApp, SMTP transport, IMAP mailbox, and FTPS file source.
+Adapters for external services: Twilio SMS/WhatsApp, SMTP transport, IMAP mailbox, FTPS file source, and SOAP 1.1 client.
 
 ## Installation
 
@@ -22,6 +22,7 @@ Adapters for external services: Twilio SMS/WhatsApp, SMTP transport, IMAP mailbo
 - **IMAP**: Mailbox adapter for reading emails
 - **Twilio**: SMS and WhatsApp messaging adapter
 - **FTPS**: List and download files from an FTP-over-TLS server
+- **SOAP**: Call SOAP 1.1 operations on a WCF service
 
 ## Quick Start
 

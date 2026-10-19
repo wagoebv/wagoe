@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **SOAP 1.1 client for WCF services in `external`** (BOU-750): `ISoapClient` calls an operation with a map, reading
+  faults, WCF arrays and dictionaries; retries and breaker included. Enable `:wagoe.external/soap`.
 - **Storage records every upload's owner, and exports and expires uploads** (BOU-738): a `storage_uploads` table
   feeds a `:storage` export section and the `:storage/uploads` retention policy. Run `migrate up`.
 - **Data export as a zip with the files** (BOU-738): `?format=zip` or `Accept: application/zip` on any export
