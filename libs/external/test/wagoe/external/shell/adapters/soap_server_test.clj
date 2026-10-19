@@ -185,7 +185,8 @@
         (is (not (str/includes? (with-out-str (pprint/pprint {:client c})) password)))))))
 
 (deftest ^:unit invalid-request-is-refused-test
-  (is (= :validation-error (get-in (ports/call! (client) :GetLists "Sitename=town") [:error :type]))))
+  (is (= :validation-error (get-in (ports/call! (client) :GetLists "Sitename=town") [:error :type])))
+  (is (= :validation-error (get-in (ports/call! (client) :GetLists {} {:timeout-ms nil}) [:error :type]))))
 
 (deftest ^:unit invalid-config-is-refused-test
   (let [e (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Invalid SOAP configuration"

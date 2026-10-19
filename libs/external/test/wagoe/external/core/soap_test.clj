@@ -103,7 +103,10 @@
     (is (= 20000 (:timeout-ms (soap/operation-spec config :GetListEntries {}))))
     (is (= 5000 (:timeout-ms (soap/operation-spec config "GetListEntries" {:timeout-ms 5000}))))
     (is (= "urn:x" (:action (soap/operation-spec (assoc-in config [:operations :GetLists :action] "urn:x")
-                                                 :GetLists {}))))))
+                                                 :GetLists {})))))
+
+  (testing "a namespace without a trailing slash is separated from the operation"
+    (is (= "urn:x/GetLists" (:action (soap/operation-spec {:namespace "urn:x"} :GetLists {}))))))
 
 (deftest ^:unit envelope-test
   (let [spec (soap/operation-spec config :GetListEntries {})]
@@ -131,7 +134,19 @@
         (is (str/includes? xml "<t:B>a&lt;b &amp; &quot;c&quot;</t:B>"))
         (is (str/includes? xml "<t:C>2026-10-01T00:00:00Z</t:C>"))
         (is (str/includes? xml "<t:D><arr:string>x</arr:string><arr:string>y</arr:string></t:D>"))
-        (is (str/includes? xml "<t:E><arr:int>1</arr:int></t:E>"))))))
+        (is (str/includes? xml "<t:E><arr:int>1</arr:int></t:E>"))))
+
+    (testing "a CR survives, and an integer past int range is a long"
+      (let [xml (soap/envelope spec {:A "a\r\nb" :B [3000000000]})]
+        (is (str/includes? xml "<t:A>a&#13;\nb</t:A>"))
+        (is (str/includes? xml "<t:B><arr:long>3000000000</arr:long></t:B>"))))))
+
+(deftest ^:unit repeated-members-test
+  (let [item (fn [n s] {:name n :children [{:name "string" :ns soap/arrays-ns :text s :children []}]})]
+    (is (= {:items [["a"] ["b"]] :other "x"}
+           (soap/element-value {:name "R" :children [(item "Items" "a") (item "Items" "b")
+                                                     {:name "Other" :text "x" :children []}]}
+                               #{})))))
 
 (deftest ^:unit with-credentials-test
   (is (= [["username" "u"] ["password" "p"] [:Sitename "t"]]
@@ -175,7 +190,12 @@
     (is (= {:code "s:Client" :message "Bad" :detail {:reason "no list"}}
            (:fault (read-xml :GetLists (str "<s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\"><s:Body>"
                                             "<s:Fault><faultcode>s:Client</faultcode><faultstring>Bad</faultstring>"
-                                            "<detail><Reason>no list</Reason></detail></s:Fault></s:Body></s:Envelope>")))))))
+                                            "<detail><Reason>no list</Reason></detail></s:Fault></s:Body></s:Envelope>"))))))
+  (testing "an empty faultstring falls back"
+    (is (= "SOAP fault"
+           (get-in (read-xml :GetLists (str "<s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\"><s:Body>"
+                                            "<s:Fault><faultcode>s:Server</faultcode><faultstring/></s:Fault></s:Body></s:Envelope>"))
+                   [:fault :message])))))
 
 (deftest ^:unit read-malformed-test
   (is (:malformed (read-xml :GetLists "<html><body>Service Unavailable</body></html>")))
@@ -207,7 +227,8 @@
       (is (not (soap/retryable? {:kind :status :status 503} writes)))
       (is (soap/retryable? {:kind :status :status 429} writes))
       (is (not (soap/retryable? {:kind :status :status 404} spec)))
-      (is (not (soap/retryable? {:kind :malformed} spec))))
+      (is (not (soap/retryable? {:kind :malformed} spec)))
+      (is (not (soap/retryable? {:kind :interrupted} spec))))
 
     (testing "what counts against the circuit"
       (is (soap/unavailable? throttled spec))

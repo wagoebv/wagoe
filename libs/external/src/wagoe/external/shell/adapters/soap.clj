@@ -26,7 +26,7 @@
             [wagoe.platform.resilience :as platform-resilience])
   (:import [java.io ByteArrayInputStream IOException]
            [java.net URI]
-           [java.net.http HttpClient HttpConnectTimeoutException HttpRequest
+           [java.net.http HttpClient HttpClient$Version HttpConnectTimeoutException HttpRequest
             HttpRequest$BodyPublishers HttpResponse HttpResponse$BodyHandlers HttpTimeoutException]
            [java.nio.channels UnresolvedAddressException]
            [java.nio.charset StandardCharsets]
@@ -104,6 +104,9 @@
       (catch TimeoutException e
         (.cancel future true)
         (throw e))
+      (catch InterruptedException e
+        (.cancel future true)
+        (throw e))
       (catch ExecutionException e
         (throw (or (.getCause e) e))))))
 
@@ -115,9 +118,10 @@
 (defn- attempt [client spec envelope]
   (try
     (read-response (send-request client spec envelope) spec)
-    (catch InterruptedException e
+    (catch InterruptedException _
+      ;; Our caller gave up, not the service: neither retried nor counted.
       (.interrupt (Thread/currentThread))
-      {:failure (transport-failure e)})
+      {:failure {:kind :interrupted :cause "interrupted"}})
     (catch IOException e {:failure (transport-failure e)})
     (catch TimeoutException e {:failure (transport-failure e)})))
 
@@ -160,16 +164,26 @@
 ;; Adapter Record
 ;; =============================================================================
 
+(def ^:private explain-opts (m/explainer schema/SoapOperation))
+
 (defrecord SoapClient [endpoint-name config]
   ports/ISoapClient
   (call! [this operation request]
     (ports/call! this operation request {}))
   (call! [this operation request opts]
-    (if (soap-core/valid-request? request)
-      (call-operation this (soap-core/operation-spec config operation opts) request)
-      {:success? false
-       :error    {:type    :validation-error
-                  :message "A SOAP request is a map or [name value] pairs"}})))
+    (let [opts-errors (some-> (explain-opts opts) me/humanize)]
+      (cond
+        (not (soap-core/valid-request? request))
+        {:success? false
+         :error    {:type    :validation-error
+                    :message "A SOAP request is a map or [name value] pairs"}}
+
+        opts-errors
+        {:success? false
+         :error    {:type :validation-error :message "Invalid SOAP call options" :errors opts-errors}}
+
+        :else
+        (call-operation this (soap-core/operation-spec config operation opts) request)))))
 
 ;; Keep the password out of logs and REPL output.
 (defmethod print-method SoapClient [^SoapClient c ^java.io.Writer w]
@@ -229,6 +243,8 @@
                                                            (.getBytes (str username ":" password)
                                                                       StandardCharsets/UTF_8))))
            :client (-> (HttpClient/newBuilder)
+                       ;; WCF speaks HTTP/1.1; no h2c upgrade attempt on http://.
+                       (.version HttpClient$Version/HTTP_1_1)
                        (.connectTimeout (Duration/ofMillis connect-timeout-ms))
                        .build)
            :resilience (platform-resilience/settings

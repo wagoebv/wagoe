@@ -34,7 +34,7 @@
         ns-uri  (:namespace spec)]
     (merge {:element   op-name
             :action    (str ns-uri
-                            (when (and (:contract spec) (not (str/ends-with? ns-uri "/"))) "/")
+                            (when-not (str/ends-with? ns-uri "/") "/")
                             (some-> (:contract spec) (str "/"))
                             op-name)
             :data-namespace ns-uri}
@@ -46,7 +46,8 @@
 ;; =============================================================================
 
 (defn- escape [s]
-  (str/escape (str s) {\& "&amp;" \< "&lt;" \> "&gt;" \" "&quot;" \' "&apos;"}))
+  ;; A raw CR would reach the service as LF: XML parsers normalise line ends.
+  (str/escape (str s) {\& "&amp;" \< "&lt;" \> "&gt;" \" "&quot;" \' "&apos;" \return "&#13;"}))
 
 (defn pairs?
   "Whether v is an ordered request: a sequence of [name value] pairs."
@@ -82,7 +83,8 @@
 
 (defn- array-item-name [v]
   (cond
-    (int? v)     "int"
+    (and (int? v) (<= Integer/MIN_VALUE v Integer/MAX_VALUE)) "int"
+    (int? v)     "long"
     (boolean? v) "boolean"
     :else        "string"))
 
@@ -104,7 +106,7 @@
   "The SOAP 1.1 envelope for a call. Parameters are in the operation's
    namespace; members of nested values in :data-namespace (WCF's
    http://schemas.datacontract.org/2004/07/<CLR namespace>); a vector of
-   scalars is a WCF array (string, int, boolean items).
+   scalars is a WCF array (string, int, long, boolean items).
 
    Element names are written as given: the contract is case-sensitive and its
    parameters are often camelCase (filterRequest) where members are PascalCase.
@@ -163,21 +165,17 @@
       (mapv #(element-value % arrays) kids)
 
       (seq kids)
-      (reduce (fn [m kid]
-                (let [k (element-key (:name kid))
-                      v (element-value kid arrays)]
-                  ;; A repeated name among other members keeps every value.
-                  (cond
-                    (not (contains? m k)) (assoc m k v)
-                    (vector? (get m k))   (update m k conj v)
-                    :else                 (update m k vector v))))
-              {} kids)
+      ;; A repeated name among other members keeps every value.
+      (update-vals (reduce (fn [m kid]
+                             (update m (element-key (:name kid)) (fnil conj []) (element-value kid arrays)))
+                           {} kids)
+                   #(if (next %) % (first %)))
 
       :else
       (:text el ""))))
 
 (defn- fault [fault-el arrays]
-  (let [text #(some-> (child fault-el %) :text str/trim)]
+  (let [text #(some-> (child fault-el %) :text str/trim not-empty)]
     (cond-> {:code    (text "faultcode")
              :message (or (text "faultstring") "SOAP fault")}
       (child fault-el "faultactor") (assoc :actor (text "faultactor"))
