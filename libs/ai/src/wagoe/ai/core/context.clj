@@ -135,27 +135,6 @@
         (str/replace #"\.clj$" "_test.clj"))))
 
 ;; =============================================================================
-;; Schema context — table/field discovery
-;; =============================================================================
-
-(defn extract-schema-context
-  "Build a schema context string from a map of schema file contents.
-
-   Args:
-     schema-files - map of {relative-path source-str} for schema.clj files
-
-   Returns:
-     A human-readable summary string of table names and fields found."
-  [schema-files]
-  (when (seq schema-files)
-    (->> schema-files
-         (map (fn [[path content]]
-                (let [defs (->> (re-seq #"\(def ([A-Z][A-Za-z0-9]+)" content)
-                                (map second))]
-                  (str path ": " (str/join ", " defs)))))
-         (str/join "\n"))))
-
-;; =============================================================================
 ;; Module context — source file discovery
 ;; =============================================================================
 
