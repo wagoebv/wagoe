@@ -18,6 +18,8 @@
 
 (def ^:private billing {:billing {:label "Billing"}})
 
+(def ^:private all (constantly true))
+
 (defn- shape [groups]
   (mapv (fn [g] [(:id g) (mapv :href (:items g))]) groups))
 
@@ -26,54 +28,54 @@
           [:tenant ["/web/admin/tenants"]]
           [:billing ["/web/admin/notes"]]
           [:other ["/web/admin/invoices" "/web/admin/tags"]]]
-         (shape (nav/collect [admin user tenant billing] nil))))
+         (shape (nav/collect [admin user tenant billing] nil all))))
   (testing "an entity config's :module overrides the claim; an unknown one is ignored"
-    (is (= ["/web/admin/notes"] (->> (nav/collect [admin billing] nil) first :items (mapv :href))))))
+    (is (= ["/web/admin/notes"] (->> (nav/collect [admin billing] nil all) first :items (mapv :href))))))
 
 (deftest ^:unit groups-follow-the-configured-order-then-module-order
   (is (= [:tenant :user :billing :other]
-         (map :id (nav/collect [admin user tenant billing] [:tenant :unknown]))))
+         (map :id (nav/collect [admin user tenant billing] [:tenant :unknown] all))))
   (testing ":other may be placed too"
     (is (= [:other :user :tenant :billing]
-           (map :id (nav/collect [admin user tenant billing] [:other]))))))
+           (map :id (nav/collect [admin user tenant billing] [:other] all))))))
 
 (deftest ^:unit contributions-under-one-id-add-up
-  (let [[group] (nav/collect [user {:user {:label "Ignored" :items [{:href "/web/x"}]}}] nil)]
+  (let [[group] (nav/collect [user {:user {:label "Ignored" :items [{:href "/web/x"}]}}] nil all)]
     (is (= "Users" (:label group)))
     (is (= ["/web/admin/groups" "/web/audit" "/web/x"] (mapv :href (:items group))))))
 
 (deftest ^:unit empty-groups-are-dropped
-  (is (= [:user] (map :id (nav/collect [{:admin {:label "Admin" :items [(entity :users)]}} user] nil)))
+  (is (= [:user] (map :id (nav/collect [{:admin {:label "Admin" :items [(entity :users)]}} user] nil all)))
       "the admin's own group, and no :other without leftovers")
-  (is (= [] (nav/collect [tenant] nil))))
+  (is (= [] (nav/collect [tenant] nil all))))
 
-(def ^:private groups (nav/collect [admin user tenant] nil))
+(def ^:private groups (nav/collect [admin user tenant] nil all))
 
 (deftest ^:unit items-are-filtered-by-access-and-mounting
   (testing "a platform admin sees everything that is mounted"
     (is (= [[:user ["/web/admin/users" "/web/admin/groups" "/web/audit"]]
             [:tenant ["/web/admin/tenants"]]
             [:other ["/web/admin/invoices" "/web/admin/notes" "/web/admin/tags"]]]
-           (shape (nav/for-user groups "/web/admin/" {:role :admin} (constantly true))))))
+           (shape (nav/for-user groups "/web/admin/" {:role :admin})))))
   (testing "a tenant admin does not see the platform's audit trail"
     (is (= ["/web/admin/users" "/web/admin/groups"]
-           (->> (nav/for-user groups "/" {:role "admin" :tenant-id 1} (constantly true)) first :items (mapv :href)))))
+           (->> (nav/for-user groups "/" {:role "admin" :tenant-id 1}) first :items (mapv :href)))))
   (testing "a user sees no admin pages, so no groups"
-    (is (= [] (nav/for-user groups "/" {:role :user} (constantly true)))))
+    (is (= [] (nav/for-user groups "/" {:role :user}))))
   (testing "an entity is linked though /web/admin/:entity, not its path, is the route"
     (is (= [:user :tenant :other]
-           (map :id (nav/for-user groups "/" {:role :admin} #{"/web/admin/groups" "/web/audit"})))))
+           (map :id (nav/collect [admin user tenant] nil #{"/web/admin/groups" "/web/audit"})))))
   (testing "an unmounted page is not linked"
     (is (= ["/web/admin/users" "/web/audit"]
-           (->> (nav/for-user groups "/" {:role :admin} #(not= % "/web/admin/groups")) first :items (mapv :href))))))
+           (->> (nav/collect [admin user tenant] nil #(not= % "/web/admin/groups")) first :items (mapv :href))))))
 
 (deftest ^:unit the-current-page-is-active-and-its-group-open
-  (let [result (nav/for-user groups "/web/admin/tenants/42" {:role :admin} (constantly true))]
+  (let [result (nav/for-user groups "/web/admin/tenants/42" {:role :admin})]
     (is (= [[:user false] [:tenant true] [:other false]] (mapv (juxt :id :open?) result)))
     (is (= ["/web/admin/tenants"] (->> result (mapcat :items) (filter :active?) (map :href)))))
   (testing "the longest matching href wins, and a shared prefix is not a match"
     (let [result (nav/for-user [{:id :a :items [{:href "/web/a"} {:href "/web/a/b"} {:href "/web/ab"}]}]
-                               "/web/a/b/c" {:role :user} (constantly true))]
+                               "/web/a/b/c" {:role :user})]
       (is (= ["/web/a/b"] (->> result (mapcat :items) (filter :active?) (map :href)))))))
 
 (deftest ^:unit access-is-decided-in-one-place

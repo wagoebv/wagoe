@@ -543,7 +543,7 @@
                              {:workflow {:label "Workflows"
                                          :items [{:href "/web/admin/workflows" :label "Instances"
                                                   :access :admin}]}}]
-                            nil)
+                            nil (constantly true))
         page   (fn [admin user]
                  (binding [nav/*nav* {:groups groups :uri "/web/admin/workflows"}]
                    (:body (sut/handle-list-instances-web store reg admin {:user user}))))

@@ -412,7 +412,7 @@
  :admin/sidebar-toggle-button      "Zijbalk in-/uitschakelen"
  :admin/sidebar-pin-button         "Zijbalk vastzetten"
  :admin/nav-title                  "Beheer"
- :admin/nav-other                  "Overig"
+ :common/nav-other                 "Overig"
  :user/nav-title                   "Gebruikers"
  :tenant/nav-title                 "Tenants"
  :workflow/nav-title               "Workflows"

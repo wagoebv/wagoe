@@ -50,7 +50,6 @@
                               (admin-ui/admin-home entities entity-configs stats user)
                               {:user user
                                :current-entity nil
-                               :entities entities
                                :entity-configs entity-configs
                                :logo-url (:logo-url config)})))))
 
@@ -119,7 +118,6 @@
                                                              (assoc options :display display))
                                    {:user user
                                     :current-entity entity-name
-                                    :entities entities
                                     :entity-configs entity-configs
                                     :flash (:flash request)
                                     :logo-url (:logo-url config)}))))

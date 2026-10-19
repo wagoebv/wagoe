@@ -26,7 +26,7 @@
 
 (def other-group
   "Where an entity no module claims goes."
-  {:id :other :label [:t :admin/nav-other] :icon :folder})
+  {:id :other :label [:t :common/nav-other] :icon :folder})
 
 (defn- merge-group
   "Two contributions under one id: the first label and icon win, items and
@@ -44,31 +44,27 @@
 (defn collect
   "One ordered vector of groups from `contributions`, each a module's `:nav`
    map, in module order. `order` lists group ids that come first; the rest
-   keep contribution order, and `:other` comes last. Empty groups are dropped."
-  [contributions order]
-  (let [declared (reduce (fn [acc nav]
-                           (reduce-kv (fn [acc id group]
-                                        (if (contains? (:groups acc) id)
-                                          (update-in acc [:groups id] merge-group group)
-                                          (-> acc
-                                              (update :ids conj id)
-                                              (assoc-in [:groups id] group))))
-                                      acc nav))
-                         {:ids [] :groups {}}
-                         contributions)
-        groups   (:groups declared)
+   keep contribution order, and `:other` comes last. Items whose page
+   `mounted?` denies are dropped, and then empty groups. An entity item is not
+   asked: its page is a parameter of the admin's route, and the admin
+   contributes it only when mounted."
+  [contributions order mounted?]
+  (let [declared (distinct (mapcat keys contributions))
+        groups   (apply merge-with merge-group contributions)
         claims   (into {} (for [[id group] groups, e (:entities group)] [e id]))
         entity?  (comp some? :entity)
         placed   (group-by #(group-of groups claims %) (filter entity? (mapcat :items (vals groups))))
-        ids      (distinct (concat (filter (conj (set (:ids declared)) :other) order)
-                                   (remove #{:other} (:ids declared))
+        ids      (distinct (concat (filter (conj (set declared) :other) order)
+                                   (remove #{:other} declared)
                                    [:other]))]
     (into []
           (keep (fn [id]
                   (let [group (merge (when (= :other id) other-group)
                                      (dissoc (get groups id) :entities)
                                      {:id id})
-                        items (into (vec (get placed id)) (remove entity? (:items group)))]
+                        items (into (vec (get placed id))
+                                    (filter #(and (not (entity? %)) (mounted? (:href %))))
+                                    (:items group))]
                     (when (seq items)
                       (assoc group :items items)))))
           ids)))
@@ -80,7 +76,7 @@
   [access user]
   (case access
     :platform-admin (access/platform-admin? user)
-    :admin          (= :admin (some-> (:role user) keyword))
+    :admin          (access/admin? {:user user})
     nil             (some? user)
     false))
 
@@ -88,16 +84,12 @@
   (or (= href uri) (str/starts-with? (str uri) (str href "/"))))
 
 (defn for-user
-  "`groups` with only the items `user` may open and `mounted?` says exist. An
-   entity item is not asked: its page is a parameter of the admin's route, and
-   the admin contributes it only when mounted. The item whose href is the
+  "`groups` with only the items `user` may open. The item whose href is the
    longest prefix of `uri` is `:active?`, and its group `:open?`."
-  [groups uri user mounted?]
+  [groups uri user]
   (let [groups (into []
                      (keep (fn [group]
-                             (when-let [items (seq (filter #(and (allowed? (:access %) user)
-                                                                 (or (:entity %) (mounted? (:href %))))
-                                                           (:items group)))]
+                             (when-let [items (seq (filter #(allowed? (:access %) user) (:items group)))]
                                (assoc group :items (vec items)))))
                      groups)
         active (->> (mapcat :items groups)

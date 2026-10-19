@@ -412,7 +412,7 @@
  :admin/sidebar-toggle-button      "Toggle sidebar"
  :admin/sidebar-pin-button         "Pin sidebar"
  :admin/nav-title                  "Admin"
- :admin/nav-other                  "Other"
+ :common/nav-other                 "Other"
  :user/nav-title                   "Users"
  :tenant/nav-title                 "Tenants"
  :workflow/nav-title               "Workflows"

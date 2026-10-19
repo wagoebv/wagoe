@@ -178,7 +178,8 @@
   margin: var(--space-1) 0;
 }
 
-.entity-list a {
+.entity-list a,
+.nav-module-toggle {
   display: flex;
   align-items: center;
   gap: var(--space-2);
@@ -220,7 +221,8 @@
   z-index: -1;
 }
 
-.entity-list a:hover {
+.entity-list a:hover,
+.nav-module-toggle:hover {
   color: var(--text-primary);
 }
 
@@ -244,7 +246,8 @@
 }
 
 /* Icon styling in nav links */
-.entity-list a svg {
+.entity-list a svg,
+.nav-module-toggle svg {
   width: 16px;
   height: 16px;
   flex-shrink: 0;
@@ -261,44 +264,31 @@
   transition: opacity var(--transition-fast);
 }
 
-.admin-shell[data-sidebar-state="collapsed"] .entity-list a {
+.admin-shell[data-sidebar-state="collapsed"] .entity-list a,
+.admin-shell[data-sidebar-state="collapsed"] .nav-module-toggle {
   justify-content: center;
   padding: var(--space-2);
   margin: 2px var(--space-1);
 }
 
-.admin-shell[data-sidebar-state="collapsed"] .entity-list a svg {
+.admin-shell[data-sidebar-state="collapsed"] .entity-list a svg,
+.admin-shell[data-sidebar-state="collapsed"] .nav-module-toggle svg {
   width: 20px;
   height: 20px;
 }
 
-/* Module groups: a toggle button, its items indented beneath it */
+/* Module groups: a toggle button styled as a link, its items indented */
 .nav-module-toggle {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
   width: calc(100% - 2 * var(--space-2));
-  padding: var(--space-2) var(--space-3);
-  margin: 2px var(--space-2);
   border: none;
-  border-radius: var(--radius-md);
   background: transparent;
-  color: var(--text-muted);
-  font: inherit;
-  font-size: var(--text-sm);
+  font-family: inherit;
   text-align: left;
   cursor: pointer;
 }
 
 .nav-module-toggle:hover {
   background: var(--surface-2);
-  color: var(--text-primary);
-}
-
-.nav-module-toggle svg {
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
 }
 
 .nav-module-toggle .nav-chevron {
@@ -324,15 +314,7 @@
 
 /* Collapsed: the module's icon; its items in a flyout on hover or focus */
 .admin-shell[data-sidebar-state="collapsed"] .nav-module-toggle {
-  justify-content: center;
-  padding: var(--space-2);
-  margin: 2px var(--space-1);
   width: calc(100% - 2 * var(--space-1));
-}
-
-.admin-shell[data-sidebar-state="collapsed"] .nav-module-toggle svg {
-  width: 20px;
-  height: 20px;
 }
 
 .admin-shell[data-sidebar-state="collapsed"] .nav-chevron {

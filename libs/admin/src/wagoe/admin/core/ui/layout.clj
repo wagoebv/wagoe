@@ -1,5 +1,5 @@
 (ns wagoe.admin.core.ui.layout
-  "Admin sidebar nav, error pages, and URL utilities.
+  "Admin nav contribution, page layout, error pages, and URL utilities.
 
    Pure Hiccup generators for the admin chrome: the admin's contribution to
    the sidebar of the shell in `wagoe.shared.ui.core.shell`, the dashboard
@@ -32,10 +32,9 @@
                           :icon   (keyword (or (:icon entity-config) "database"))
                           :access :admin}))}})
 
-(defn admin-shell
+(def admin-shell
   "`content` in the shell. `opts`: :user, :page-title, :logo-url."
-  [content opts]
-  (shell/admin-shell content opts))
+  shell/admin-shell)
 
 (defn admin-layout
   "A complete admin page: `content` in the shell.
