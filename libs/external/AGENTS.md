@@ -85,6 +85,22 @@ All four keys are opt-in — add to `:active` in `config.edn` to enable:
  :trust-store  "certs/ftps-trust.p12" :trust-store-password #env FTPS_TRUST_PASSWORD}
 ```
 
+## TLS trust and certificate names
+
+SMTP and IMAP refuse a certificate the JVM does not trust or that does not name
+`:host` (Angus Mail checks the name by default; javax.mail 1.6 did not).
+
+- `:ssl-trust` — `"*"` or hosts (string, space-separated, or vector) whose
+  certificate is accepted whatever it is.
+- `:check-server-identity?` — `false` accepts a certificate for another name.
+  Default `true`.
+
+Both let a man in the middle read credentials and mail. Prefer the server's CA in
+the JVM trust store and connecting by the certificate's name. Trusting a host
+does not skip the name check; a self-signed certificate for another name needs
+both. Invalid values throw `:validation-error` from the constructor; from an
+environment variable, read the flag with `#boolean #env`.
+
 ## Retry and circuit breaker
 
 The adapters use the RPC client's resilience layer (`wagoe.platform.resilience`).

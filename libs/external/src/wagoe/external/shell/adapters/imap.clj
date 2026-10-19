@@ -14,7 +14,9 @@
                      :ssl? true}))
      (fetch-unread! mailbox)"
   (:require [wagoe.external.core.imap :as imap-core]
+            [wagoe.external.core.mail-tls :as mail-tls]
             [wagoe.external.ports :as ports]
+            [wagoe.external.schema :as schema]
             [wagoe.external.shell.resilience :as resilience]
             [clojure.tools.logging :as log])
   (:import [org.eclipse.angus.mail.imap IMAPFolder IMAPFolder$FetchProfileItem IMAPStore]
@@ -32,14 +34,16 @@
 ;; =============================================================================
 
 (defn- imap-properties
-  [{:keys [host port ssl?]}]
-  (let [prefix (if ssl? "mail.imaps." "mail.imap.")
+  [{:keys [host port ssl?] :as config}]
+  (let [prefix (if ssl? "mail.imaps" "mail.imap")
         props  (doto (Properties.)
-                 (.put (str prefix "host") (str host))
-                 (.put (str prefix "port") (str port))
+                 (.put (str prefix ".host") (str host))
+                 (.put (str prefix ".port") (str port))
                  ;; BODY.PEEK, so fetching never sets \Seen; only mark-read! does.
-                 (.put (str prefix "peek") "true"))]
+                 (.put (str prefix ".peek") "true"))]
     (when ssl? (.put props "mail.imaps.ssl.enable" "true"))
+    (doseq [[k v] (mail-tls/tls-properties prefix config)]
+      (.put props k v))
     props))
 
 (defn- open-store
@@ -289,6 +293,8 @@
     :password - IMAP auth password (required)
     :ssl?     - Enable SSL/TLS (default true)
     :folder   - Default folder name (default \"INBOX\")
+    :ssl-trust, :check-server-identity?
+              - TLS trust; see wagoe.external.schema/MailTls
     :retries, :retry-delay-ms, :cache, :circuit-breaker
               - see wagoe.external.shell.resilience/settings
 
@@ -298,6 +304,10 @@
     :or   {ssl? true folder "INBOX"}
     :as   config}]
   {:pre [(string? host) (some? port) (string? username) (string? password)]}
-  (log/info "Creating IMAP mailbox adapter" {:host host :port port :ssl? ssl? :folder folder})
-  (assoc (->ImapMailboxAdapter host port username password ssl? folder)
-         :resilience (resilience/settings config (str "imap:" host ":" port) nil)))
+  (schema/assert-mail-tls! config)
+  (log/info "Creating IMAP mailbox adapter"
+            (merge {:host host :port port :ssl? ssl? :folder folder}
+                   (select-keys config [:ssl-trust :check-server-identity?])))
+  (-> (->ImapMailboxAdapter host port username password ssl? folder)
+      (merge (select-keys config [:ssl-trust :check-server-identity?]))
+      (assoc :resilience (resilience/settings config (str "imap:" host ":" port) nil))))
