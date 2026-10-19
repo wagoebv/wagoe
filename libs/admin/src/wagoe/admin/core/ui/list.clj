@@ -31,7 +31,7 @@
         has-search? (seq search-fields)]
     (when has-search?
       [:div.entity-search-form
-       [:form {:hx-get (str "/web/admin/" (name entity-name) "/table")
+       [:form {:hx-get (base/list-path entity-name)
                :hx-target "#entity-table-container"
                :hx-swap "outerHTML"
                :hx-push-url "true"
@@ -50,6 +50,12 @@
                                            :aria-label [:t :admin/button-clear-search]
                                            :onclick (str "window.location.href='/web/admin/" (name entity-name) "';")}
             (icons/icon :x {:size 20})])]]])))
+
+(defn record-count-badge
+  "The toolbar's record count. A table fragment carries it out of band, so
+   it follows search and filters."
+  [total-count]
+  [:span {:id "record-count-badge" :class "record-count-badge"} (str total-count)])
 
 (defn- workflow-column?
   "An entity with a workflow gets a column for its state (BOU-563)."
@@ -173,19 +179,18 @@
             values   (distinct (concat known (sort (remove nil? (keys counts)))))
             tab      (fn [v label n]
                        (let [active?   (= v current)
-                             page-url  (href v)
-                             list-path (str "/web/admin/" (name entity-name))]
+                             page-url  (href v)]
                          [:a {:href         page-url
                               :class        (str "facet-tab"
                                                  (when v (str " tone-" (name (cells/enum-tone fc v))))
                                                  (when active? " active"))
                               :aria-current (when active? "page")
-                              ;; Through the fragment, into the filter container:
-                              ;; the filter builder then shows the facet's filter too
-                              :hx-get       (str list-path "/table" (subs page-url (count list-path)))
+                              ;; Into the filter container: the filter
+                              ;; summary then shows the facet's filter too
+                              :hx-get       page-url
                               :hx-target    "#filter-table-container"
                               :hx-swap      "outerHTML"
-                              :hx-push-url  page-url}
+                              :hx-push-url  "true"}
                           label
                           [:span {:class "facet-count"} (str n)]]))]
         [:nav {:class "facet-tabs" :aria-label (:label (first (cells/columns entity-config [facet])))}
@@ -232,24 +237,26 @@
    Returns:
      Hiccup table structure"
   [entity-name records entity-config table-query total-count permissions & [filters display]]
-  (let [{:keys [sort dir page page-size]} table-query
-        base-url (str "/web/admin/" (name entity-name) "/table")
+  (let [list-path (base/list-path entity-name)
         hx-target "#entity-table-container"
         table-params (table-ui/table-query->params table-query)
         filter-params (table-ui/search-filters->params (or filters {}))
-        qs-map (merge table-params filter-params)
-        hx-url (str base-url "?" (table-ui/encode-query-params qs-map))
         list-fields (:list-fields entity-config)
         cols (cells/columns entity-config list-fields)]
     ;; Table container - Alpine.js scope is at parent entity-list-page level
     ;; MutationObserver automatically handles HTMX DOM updates (no afterSwap needed)
     [:div#entity-table-container
-     {:hx-get hx-url
-      ;; The toolbar count sits outside this swap; admin-ux.js copies it over
-      :data-total-count total-count
+     {:hx-get (table-ui/list-url list-path table-query filters)
       :hx-trigger "entityCreated from:body, entityUpdated from:body, entityDeleted from:body"
       :hx-target hx-target
       :hx-swap "outerHTML"}
+     ;; The sort and filters the toolbar search sends along: it sits outside
+     ;; this swap, so its own URL would go stale
+     [:div {:class "table-state" :hidden true}
+      ;; The filter drawer sends its own filters, so it takes only these
+      [:div {:class "table-sort"}
+       (table-ui/hidden-inputs (dissoc table-params "page" "search"))]
+      (table-ui/hidden-inputs filter-params)]
      ;; Inside the swap target, so search, sort and paging keep them current
      (overview-strip entity-name entity-config table-query filters display)
      (cond
@@ -261,9 +268,7 @@
         [:p [:t :admin/empty-state-no-matches {:label (:label entity-config)}]]
         [:button {:type        "button"
                   :class       "button secondary"
-                  :hx-get      (str "/web/admin/" (name entity-name) "/table?"
-                                    (table-ui/encode-query-params
-                                     (table-ui/table-query->params (assoc table-query :page 1 :search nil))))
+                  :hx-get      (table-ui/list-url list-path (assoc table-query :page 1 :search nil) nil)
                   :hx-target   "#filter-table-container"
                   :hx-swap     "outerHTML"
                   :hx-push-url "true"
@@ -291,8 +296,7 @@
        :else
        (let [pagination (table-ui/pagination {:table-query table-query
                                               :total-count total-count
-                                              :base-url base-url
-                                              :push-url-base (str "/web/admin/" (name entity-name))
+                                              :base-url list-path
                                               :hx-target hx-target
                                               :extra-params filters})
              has-pagination? (some? pagination)
@@ -305,55 +309,38 @@
              :hx-target hx-target
              :hx-swap "outerHTML"}
             ;; Preserve table state
-            (for [[k v] table-params :when (some? v)]
-              [:input {:type "hidden" :name k :value v}])
-            (for [[k v] filter-params
-                  v (if (sequential? v) v [v])]
-              [:input {:type "hidden" :name k :value v}])
+            (table-ui/hidden-inputs (merge table-params filter-params))
 
-            [:table.data-table {:class "data-table table"}
+            (table-ui/data-table
+             {:url         list-path
+              :hx-target   hx-target
+              :table-query table-query
+              :filters     filters
+              ;; The role aligns a header with its cells; the field class
+              ;; lets the column menu hide it
+              :columns     (for [{:keys [field config label data?] role-class :class} cols]
+                             {:field     field
+                              :label     label
+                              :class     role-class
+                              :sortable? (boolean (and data? (:sortable config true)))})
               ;; Column sizing for table-layout: fixed — framing columns via CSS
-              ;; classes, data columns via proportional inline widths.
-             [:colgroup
-              [:col {:class "col-select"}]  ; Checkbox
-              ;; Proportional widths derived from field type + name heuristic
+              ;; classes, data columns via proportional inline widths
               ;; (overridable via :width in the field config).
-              (base/list-column-styles (cond-> (vec list-fields)
-                                         (workflow-column? entity-config) (conj :workflow))
-                                       entity-config)
-              [:col {:class "col-actions"}]]  ; Actions
-             [:thead
-              [:tr
-               [:th {:class "checkbox-header"}
-                ;; Alpine.js select-all checkbox with reactive binding
-                [:input (alpine/select-all-checkbox-attrs)]]
-               (for [{:keys [field config label data?] role-class :class} cols]
-                 (let [sortable? (and data? (:sortable config true))]
-                   (if sortable?
-                     (update-in
-                      (table-ui/sortable-th {:label label
-                                             :field field
-                                             :current-sort sort
-                                             :current-dir dir
-                                             :base-url base-url
-                                             :push-url-base (str "/web/admin/" (name entity-name))
-                                             :page page
-                                             :page-size page-size
-                                             :hx-target hx-target
-                                             :hx-push-url? true
-                                             :extra-params filters})
-                      ;; The role aligns the header with its cells; the field
-                      ;; class lets the column menu hide it
-                      [1 :class] str " " role-class " field-" (name field))
-                     [:th {:class (str role-class " field-" (name field))} label])))
-               (when (workflow-column? entity-config)
-                 [:th [:t :admin/column-workflow]])
-               [:th {:class "actions-header"} [:span.sr-only [:t :admin/column-actions]]]]]
-             [:tbody
-              (let [return-to (base/current-list-url entity-name table-query filters)]
-                (for [record records]
-                  (entity-table-row entity-name record entity-config permissions display cols return-to)))]
-             (totals-row records cols entity-config display)]]]
+              :colgroup    [:colgroup
+                            [:col {:class "col-select"}]
+                            (base/list-column-styles (cond-> (vec list-fields)
+                                                       (workflow-column? entity-config) (conj :workflow))
+                                                     entity-config)
+                            [:col {:class "col-actions"}]]
+              :head-before [[:th {:class "checkbox-header"}
+                             [:input (alpine/select-all-checkbox-attrs)]]]
+              :head-after  [(when (workflow-column? entity-config)
+                              [:th [:t :admin/column-workflow]])
+                            [:th {:class "actions-header"} [:span.sr-only [:t :admin/column-actions]]]]
+              :rows        (let [return-to (base/current-list-url entity-name table-query filters)]
+                             (for [record records]
+                               (entity-table-row entity-name record entity-config permissions display cols return-to)))
+              :tfoot       (totals-row records cols entity-config display)})]]
           pagination]))]))
 
 (defn filter-table-container
@@ -471,21 +458,19 @@
       [:div.toolbar-row-actions
        ;; The topbar names the page; here only the count
        [:div.record-meta
-        [:span.record-count-badge (str total-count)]]
+        (record-count-badge total-count)]
 
        (when has-search?
          [:div.toolbar-search
-          [:input.search-input {:type "text"
-                                :name "search"
-                                :class "search-input"
-                                :placeholder [:t :admin/filter-placeholder-search {:fields (str/join ", " (map name search-fields))}]
-                                :value (or search-value "")
-                                :hx-get (str "/web/admin/" (name entity-name) "/table")
-                                :hx-target "#entity-table-container"
-                                :hx-swap "outerHTML"
-                                :hx-push-url "true"
-                                :hx-trigger "keyup changed delay:300ms, search"
-                                :hx-include "this"}]
+          (table-ui/filter-input
+           {:name        "search"
+            :value       search-value
+            :placeholder [:t :admin/filter-placeholder-search {:fields (str/join ", " (map name search-fields))}]
+            :url         (base/list-path entity-name)
+            :hx-target   "#entity-table-container"
+            ;; Page one, sorted and filtered as the table is now
+            :hx-include  "#entity-table-container .table-state input"
+            :attrs       {:type "text" :class "search-input"}})
           ;; Typing searches; the icon only says what the field is
           [:span {:class "search-icon" :aria-hidden "true"} (icons/icon :search {:size 15})]
           (when (seq search-value)
@@ -498,7 +483,7 @@
         (view-menu entity-name entity-config)
         [:button.icon-button.ghost {:type "button"
                                     :aria-label [:t :admin/button-refresh]
-                                    :hx-get (str "/web/admin/" (name entity-name) "/table")
+                                    :hx-get (base/list-path entity-name)
                                     :hx-target "#entity-table-container"
                                     :hx-swap "outerHTML"
                                     :hx-push-url "true"}

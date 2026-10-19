@@ -16,6 +16,7 @@
    [wagoe.i18n.shell.render :as i18n]
    [wagoe.platform.core.http.problem-details :as problem-details]
    [wagoe.shared.ui.core.htmx :as htmx]
+   [wagoe.shared.ui.core.table :as table-ui]
    [clojure.string :as str]
    [clojure.tools.logging :as log]
    [ring.util.codec :as codec]
@@ -35,129 +36,33 @@
 ;; Query Parameter Parsing
 ;; =============================================================================
 
-(defn parse-advanced-filters
-  "Parse nested filter parameters from query string (Week 2).
-
-   Expected formats:
-   - filters[field][op]=operator
-   - filters[field][value]=single-value
-   - filters[field][values][]=multi-value-1
-   - filters[field][values][]=multi-value-2
-   - filters[field][min]=min-value
-   - filters[field][max]=max-value
-
-   Args:
-     params: Ring query-params map
-
-   Returns:
-     Map of field-name -> filter-spec
-     {:field-name {:op :operator :value val}
-      :other-field {:op :between :min 10 :max 100}}
-
-   Example:
-     (parse-advanced-filters {\"filters[created-at][op]\" \"gte\"
-                              \"filters[created-at][value]\" \"2024-01-01\"})
-     => {:created-at {:op :gte :value \"2024-01-01\"}}"
-  [params]
-  (let [;; Find all params that start with "filters["
-        filter-param-pattern #"^filters\[([^\]]+)\]\[([^\]]+)\](?:\[\])?$"
-        filter-entries (for [[k v] params
-                             :let [match (re-matches filter-param-pattern k)]
-                             :when match]
-                         (let [[_ field-name filter-key] match]
-                           [(keyword field-name) (keyword filter-key) v]))]
-
-    ;; Group by field name and build filter specs
-    (reduce
-     (fn [acc [field-name filter-key value]]
-       (update acc field-name
-               (fn [existing]
-                 (let [current (or existing {})]
-                   (case filter-key
-                     :op (assoc current :op (keyword value))
-                     :value (assoc current :value value)
-                     :values (update current :values (fnil conj []) value)
-                     :min (assoc current :min value)
-                     :max (assoc current :max value)
-                     current)))))
-     {}
-     filter-entries)))
-
 (defn parse-query-params
-  "Parse query parameters into admin service options.
-
-   Extracts and normalizes:
-   - Pagination: page, page-size, limit, offset
-   - Sorting: sort, sort-dir
-   - Search: search (text search across search-fields)
-   - Filters: Any other params become field filters
-
-   Args:
-     params: Ring query-params map (all string values)
-
-   Returns:
-     Options map with normalized keys and parsed values
-
-   Examples:
-     (parse-query-params {page 2 page-size 25 search john})
-     => {:page 2 :page-size 25 :search john}
-
-     (parse-query-params {sort email sort-dir desc role admin})
-     => {:sort :email :sort-dir :desc :filters {:role admin}}"
+  "Admin service options from a Ring query-params map: the table state
+   (`table-ui/parse-table-params`, :dir as :sort-dir), :limit/:offset, and
+   filters in both the `filters[f][op]` and the plain `role=admin` format.
+   Blank filters are kept, so the filter drawer can re-render them.
+   `add_filter_field` / `remove_filter` add or drop one."
   [params]
-  (let [params (into {}
-                     (for [[k v] params]
-                       [(if (keyword? k) (name k) (str k))
-                        v]))
-        page (when-let [p (get params "page")] (parse-long p))
-        page-size (when-let [ps (get params "page-size")] (parse-long ps))
-        limit (when-let [l (get params "limit")] (parse-long l))
-        offset (when-let [o (get params "offset")] (parse-long o))
-        sort (when-let [s (get params "sort")]
-               (keyword (if (keyword? s) (name s) (str s))))
-        ; Accept both "dir" and "sort-dir" for backward compatibility
-        sort-dir (when-let [sd (or (get params "dir") (get params "sort-dir"))]
-                   (keyword (if (keyword? sd) (name sd) (str sd))))
-        search (get params "search")
-        add-filter-field (get params "add_filter_field")
-        remove-filter-field (get params "remove_filter")
-
-        ; Check for advanced filters (Week 2 format: filters[field][op]=...)
-        advanced-filters (parse-advanced-filters params)
-
-        ; Backward compatibility: Simple filters (Week 1 format: role=admin)
-        ; Any params not in reserved keys and not part of advanced filters become simple filters
-        reserved-keys #{"page" "page-size" "limit" "offset" "sort" "sort-dir" "dir" "search" "add_filter_field" "remove_filter"}
-        advanced-filter-keys (set (filter #(str/starts-with? % "filters[") (keys params)))
-        simple-filter-params (apply dissoc params (concat reserved-keys advanced-filter-keys))
-        simple-filters (when (seq simple-filter-params)
-                         (into {} (map (fn [[k v]] [(keyword k) {:op :eq :value v}])) simple-filter-params))
-
-        ; Merge advanced and simple filters (advanced takes precedence)
-        all-filters (merge simple-filters advanced-filters)
-
-        ; Handle add/remove filter actions
-        filters (cond
-                  ; Adding a new filter - initialize with default operator
-                  (and add-filter-field (not (str/blank? add-filter-field)))
-                  (assoc all-filters (keyword add-filter-field) {:op :eq :value ""})
-
-                  ; Removing a filter
-                  (and remove-filter-field (not (str/blank? remove-filter-field)))
-                  (dissoc all-filters (keyword remove-filter-field))
-
-                  ; Default: use parsed filters
-                  :else
-                  all-filters)]
-
-    (cond-> {}
-      page (assoc :page page)
-      page-size (assoc :page-size page-size)
-      limit (assoc :limit limit)
-      offset (assoc :offset offset)
-      sort (assoc :sort sort)
-      sort-dir (assoc :sort-dir sort-dir)
-      search (assoc :search search)
+  (let [params   (update-keys params #(if (keyword? %) (name %) (str %)))
+        {:keys [dir] :as tq} (table-ui/parse-table-params params {:keep-blank-filters? true})
+        limit    (some-> (get params "limit") parse-long)
+        offset   (some-> (get params "offset") parse-long)
+        add-f    (get params "add_filter_field")
+        remove-f (get params "remove_filter")
+        reserved #{"page" "page-size" "limit" "offset" "sort" "sort-dir" "dir" "search"
+                   "add_filter_field" "remove_filter"}
+        simple   (into {}
+                       (keep (fn [[k v]]
+                               (when-not (or (reserved k) (str/starts-with? k "filters["))
+                                 [(keyword k) {:op :eq :value v}])))
+                       params)
+        filters  (cond-> (merge simple (:filters tq))
+                   (not (str/blank? add-f))    (assoc (keyword add-f) {:op :eq :value ""})
+                   (not (str/blank? remove-f)) (dissoc (keyword remove-f)))]
+    (cond-> (dissoc tq :dir :filters)
+      dir           (assoc :sort-dir dir)
+      limit         (assoc :limit limit)
+      offset        (assoc :offset offset)
       (seq filters) (assoc :filters filters))))
 
 ;; =============================================================================

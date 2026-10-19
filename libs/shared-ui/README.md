@@ -23,7 +23,7 @@ Pure functions from data to Hiccup. No I/O, no state, no HTTP.
 | Namespace | What it holds |
 |-----------|---------------|
 | `core.components` | Form controls — text, email, password, textarea, select, checkbox, button |
-| `core.table` | Sortable headers, pagination, and the query-param plumbing behind them |
+| `core.table` | `data-table` with sortable headers, filter inputs, pagination or infinite scroll; `parse-table-params` reads the state back from the URL |
 | `core.layout` | Page scaffolding shared by the module UIs |
 | `core.icons` | The icon set those components reference |
 | `core.modal` | Modal and confirm on native `<dialog>`, opened by a trigger, an htmx swap, or an htmx request awaiting confirmation |

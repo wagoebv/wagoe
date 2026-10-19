@@ -107,7 +107,8 @@
                                       {:type    (if all? :success :warning)
                                        :message (if all?
                                                   [:t :admin/flash-bulk-deleted {:count success-count :label label}]
-                                                  [:t :admin/flash-bulk-deleted-partial {:count success-count :failed failed-count}])})])))
+                                                  [:t :admin/flash-bulk-deleted-partial {:count success-count :failed failed-count}])})
+                                     (admin-ui/record-count-badge total-count)])))
 
 (defn bulk-delete-handler
   "Handler for bulk deleting multiple entities.

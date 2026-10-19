@@ -60,6 +60,7 @@
 (def entity-table list/entity-table)
 (def entity-list-page list/entity-list-page)
 (def filter-table-container list/filter-table-container)
+(def record-count-badge list/record-count-badge)
 
 ;; --- filters: advanced filter builder ---
 (def get-operators-for-field-type filters/get-operators-for-field-type)

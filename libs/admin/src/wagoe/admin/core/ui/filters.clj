@@ -3,7 +3,8 @@
 
    Pure Hiccup generators for the filter UI: operator selection per field
    type, value inputs, filter rows, and the overall filter builder."
-  (:require [wagoe.core.utils.text :as text]
+  (:require [wagoe.admin.core.ui.base :as base]
+            [wagoe.core.utils.text :as text]
             [wagoe.shared.ui.core.icons :as icons]
             [wagoe.shared.ui.core.table :as table-ui]
             [clojure.string :as str]))
@@ -183,7 +184,7 @@
       ;; Operator selector
      [:select.filter-operator-select
       {:name (str "filters[" (name field-name) "][op]")
-       :hx-get (str "/web/admin/" (name entity-name) "/table")
+       :hx-get (base/list-path entity-name)
        :hx-target "#filter-table-container"
        :hx-swap "outerHTML"
        :hx-trigger "change"
@@ -200,11 +201,12 @@
      [:button.icon-button.secondary
       {:type "button"
        :aria-label [:t :admin/button-remove-filter]
-       :hx-get (str "/web/admin/" (name entity-name) "/table")
+       :hx-get (base/list-path entity-name)
        :hx-target "#filter-table-container"
        :hx-swap "outerHTML"
        :hx-trigger "click"
        :hx-vals (str "{\"remove_filter\": \"" (name field-name) "\"}")
+       :hx-push-url "false"
        :hx-include "closest form"}
       (icons/icon :x {:size 16})]]))
 
@@ -237,7 +239,7 @@
         (when has-active-filters?
           [:button.text-button
            {:type "button"
-            :hx-get (str "/web/admin/" (name entity-name) "/table")
+            :hx-get (base/list-path entity-name)
             :hx-target "#filter-table-container"
             :hx-swap "outerHTML"
             :hx-trigger "click"}
@@ -246,7 +248,7 @@
 
       ;; Form wrapper for all filters
        [:form.filter-form
-        {:hx-get (str "/web/admin/" (name entity-name) "/table")
+        {:hx-get (base/list-path entity-name)
          :hx-target "#filter-table-container"
          :hx-swap "outerHTML"
          :hx-trigger "submit, change delay:500ms from:find input, change from:find select"
@@ -264,7 +266,9 @@
           [:div.filter-add-row
            [:select.filter-field-select
             {:name "add_filter_field"
-             :hx-get (str "/web/admin/" (name entity-name) "/table")
+             ;; A one-shot param: not for the address bar
+             :hx-push-url "false"
+             :hx-get (base/list-path entity-name)
              :hx-target "#filter-table-container"
              :hx-swap "outerHTML"
              :hx-trigger "change"
@@ -341,13 +345,11 @@
       (list label " " (get op-symbols op (ops op)) " " (value-label field-config value)))))
 
 (defn- table-url
-  "The table fragment for `filters`, from page one, sorted as now. The search
-   box is included by the caller (hx-include), so a chip keeps the search."
+  "The list for `filters`, from page one, sorted as now. The search box is
+   included by the caller (hx-include), so a chip keeps the search."
   [entity-name table-query filters]
-  (str "/web/admin/" (name entity-name) "/table?"
-       (table-ui/encode-query-params
-        (merge (table-ui/table-query->params (assoc table-query :page 1 :search nil))
-               (table-ui/search-filters->params filters)))))
+  (table-ui/list-url (base/list-path entity-name)
+                     (assoc table-query :page 1 :search nil) filters))
 
 (defn filter-summary
   "The line above the table: Filter (n), a chip per active filter, Clear all."
@@ -436,11 +438,11 @@
                  :aria-label [:t :admin/drawer-close] :title "q"}
         (icons/icon :x {:size 16})]]]
      [:form {:class      "filter-drawer-form"
-             :hx-get     (str "/web/admin/" (name entity-name) "/table")
+             :hx-get     (base/list-path entity-name)
              :hx-target  "#filter-table-container"
              :hx-swap    "outerHTML"
              :hx-push-url "true"
-             :hx-include ".toolbar-search .search-input"
+             :hx-include ".toolbar-search .search-input, #entity-table-container .table-sort input"
              "hx-on::after-request" "if (event.detail.successful && event.detail.elt === this) window.AdminUX.closeDrawer()"}
       [:div {:class "filter-fields"}
        (for [field ordered]
@@ -449,10 +451,10 @@
        [:button {:type "submit" :class "button primary"} [:t :admin/button-apply-filters] [:kbd "↵"]]
        [:button {:type      "button"
                  :class     "button ghost"
-                 :hx-get    (str "/web/admin/" (name entity-name) "/table")
+                 :hx-get    (base/list-path entity-name)
                  :hx-target "#filter-table-container"
                  :hx-swap   "outerHTML"
                  :hx-push-url "true"
-                 :hx-include ".toolbar-search .search-input"
+                 :hx-include ".toolbar-search .search-input, #entity-table-container .table-sort input"
                  "hx-on::after-request" "if (event.detail.successful) window.AdminUX.closeDrawer()"}
         [:t :admin/button-clear-all-filters]]]]]))

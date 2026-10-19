@@ -61,6 +61,12 @@
          (str base separator "return-to=" (url-encode caller-url)))
        base))))
 
+(defn list-path
+  "The entity's list page. Its controls request it too: an htmx request
+   aimed at the table gets the table back, and the pushed URL is the page."
+  [entity-name]
+  (str "/web/admin/" (name entity-name)))
+
 (defn current-list-url
   "Build the current admin list URL with filters/pagination applied.
 
@@ -69,17 +75,7 @@
    same filtered/paginated page after cancel or success. Returns the
    plain `/web/admin/<entity>` when no meaningful query params exist."
   [entity-name table-query filters]
-  (let [base (str "/web/admin/" (name entity-name))
-        ;; Drop empty values so the default list view produces the bare
-        ;; `/web/admin/<entity>` rather than `?page=&page-size=`.
-        params (into {}
-                     (remove (fn [[_ v]] (= "" v)))
-                     (merge (table-ui/table-query->params table-query)
-                            (table-ui/search-filters->params filters)))
-        qs (table-ui/encode-query-params params)]
-    (if (str/blank? qs)
-      base
-      (str base "?" qs))))
+  (table-ui/list-url (list-path entity-name) table-query filters))
 
 ;; =============================================================================
 ;; Field Value Rendering
