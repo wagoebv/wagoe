@@ -5,6 +5,8 @@
      GET    /audiences               — list all segments
      GET    /audiences/builder       — new segment form
      GET    /audiences/builder/:id   — edit existing segment
+     POST   /audiences               — create from the builder form
+     POST   /audiences/builder/:id   — update from the builder form
 
    API Endpoints (mounted under /api/audiences):
      POST   /audiences               — create audience
@@ -12,23 +14,47 @@
      DELETE /audiences/:id           — delete audience
      POST   /audiences/preview       — returns count + sample
      POST   /audiences/:id/evaluate  — trigger evaluation
-     GET    /audiences/:id/members   — list members"
+     GET    /audiences/:id/members   — list members
+
+   JSON keys are camelCase (`cacheConfig`), converted to kebab-case here."
   (:require [wagoe.audience.core.composition :as composition]
             [wagoe.audience.core.filter :as filter]
             [wagoe.audience.core.ui :as ui]
             [wagoe.audience.ports :as ports]
             [wagoe.audience.schema :as schema]
+            [wagoe.core.utils.case-conversion :as cc]
+            [cheshire.core :as json]
+            [clojure.string :as str]
             [clojure.tools.logging :as log]
             [hiccup2.core :as h]
+            [malli.core :as m]
+            [malli.transform :as mt]
             [malli.util :as mu]))
 
 ;; =============================================================================
 ;; Helpers
 ;; =============================================================================
 
+(defn- camel-entry [[k props child]]
+  [(keyword (cc/kebab-case->camel-case-string (name k))) props child])
+
+(def ^:private create-body
+  "A definition as JSON carries it: camelCase keys. `cacheConfig` is derived
+   from `schema/CacheConfig`, so a key added there is not stripped here."
+  (-> schema/DynamicAudienceDefinition
+      (mu/dissoc :cache-config)
+      (mu/assoc :cacheConfig (mu/transform-entries schema/CacheConfig (partial mapv camel-entry)))
+      (mu/optional-keys [:cacheConfig])))
+
 (def ^:private update-body
   "An update takes its id from the path."
-  (mu/dissoc schema/DynamicAudienceDefinition :id))
+  (mu/dissoc create-body :id))
+
+(defn- body->definition
+  "The kebab-case definition for a coerced camelCase body."
+  [body]
+  (cond-> (cc/camel-case->kebab-case-map body)
+    (:cacheConfig body) (update :cache-config cc/camel-case->kebab-case-map)))
 
 (defn- parse-audience-id
   "Parse a path-param string into a keyword, or nil if it fails validation.
@@ -91,6 +117,9 @@
       :audience-not-found
       (not-found-response (str "Audience not found: " (name audience-id)))
 
+      :audience-exists
+      (error-response 409 "conflict" (str "Audience already exists: " (name audience-id)))
+
       :circular-reference
       (unprocessable-response "Circular segment reference detected" {:id (:id data)})
 
@@ -136,9 +165,9 @@
 
 (defn builder-page-handler
   "GET /web/audiences/builder — new segment form."
-  [_resolver _store _request]
+  [_resolver _store request]
   (log/debug "Rendering new audience builder page")
-  (html-response (ui/builder-layout {})))
+  (html-response (ui/builder-layout {:csrf-token (:anti-forgery-token request)})))
 
 (defn builder-edit-handler
   "GET /web/audiences/builder/:id — edit existing segment."
@@ -149,7 +178,9 @@
       (try
         (let [segment (ports/find-audience store id)]
           (if segment
-            (html-response (ui/builder-layout {:segment segment}))
+            (html-response (ui/builder-layout {:segment    segment
+                                               :edit?      true
+                                               :csrf-token (:anti-forgery-token request)}))
             {:status  404
              :headers {"Content-Type" "text/html; charset=utf-8"}
              :body    (str (h/html [:div [:p "Audience not found."]]))}))
@@ -158,53 +189,126 @@
           (html-response [:div [:p "An error occurred."]] 500))))))
 
 ;; =============================================================================
+;; Saving, shared by the API and the builder form
+;; =============================================================================
+
+(defn- invalid-new-id-response
+  "A 400 unless `id` is one every /audiences/:id path accepts, else nil.
+   /audiences/preview matches the literal route, not :id."
+  [id]
+  (let [id (some-> id symbol str)]
+    (when (or (= "preview" id) (not (parse-audience-id id)))
+      (bad-request-response "Invalid audience id"))))
+
+(defn- save-response
+  "Check `definition`, then save it with `save!`: `status` and the saved id and
+   label, or the error response."
+  [save! definition filter-fields status]
+  (or
+   (invalid-definition-response definition filter-fields)
+   (try
+     (log/info "Saving audience" {:id (:id definition)})
+     (let [saved (save! definition)]
+       (json-response {:id    (name (:id saved))
+                       :label (:label saved)}
+                      status))
+     (catch clojure.lang.ExceptionInfo e
+       (handle-audience-error e (:id definition)))
+     (catch Exception e
+       (log/error e "Failed to save audience" {:id (:id definition)})
+       (internal-error-response "Internal error")))))
+
+;; =============================================================================
+;; Builder form handlers
+;; =============================================================================
+
+(def ^:private decode-form-definition
+  (m/decoder schema/DynamicAudienceDefinition
+             (mt/transformer mt/strip-extra-keys-transformer mt/json-transformer)))
+
+(def ^:private valid-definition? (m/validator schema/DynamicAudienceDefinition))
+
+(defn- form->definition
+  "The definition a builder form posts, or nil when it is not one."
+  [{:strs [id label description filters-data compose-data]}]
+  (let [parse      #(when-not (str/blank? %) (json/parse-string % true))
+        definition (try
+                     (let [compose (parse compose-data)]
+                       (decode-form-definition
+                        (cond-> {:id id :label label :filters (or (parse filters-data) [])}
+                          (not (str/blank? description)) (assoc :description description)
+                          compose                        (assoc :compose compose))))
+                     (catch Exception _ nil))]
+    (when (valid-definition? definition)
+      definition)))
+
+(defn- submitted
+  "What the form sent, to show again when it is not a definition."
+  [params]
+  {:id (get params "id") :label (get params "label") :description (get params "description")})
+
+(defn- form-response
+  "Back to the list when `response` saved; otherwise the builder again, showing
+   `segment` and the error."
+  [response request segment edit?]
+  (if (< (:status response) 300)
+    {:status 303 :headers {"Location" "/web/audiences"} :body ""}
+    (html-response (ui/builder-layout {:segment    segment
+                                       :edit?      edit?
+                                       :error      (get-in response [:body :error :message])
+                                       :csrf-token (:anti-forgery-token request)})
+                   (:status response))))
+
+(defn create-audience-form-handler
+  "POST /web/audiences — create from the builder form."
+  [_resolver store request & [filter-fields]]
+  (let [params     (:form-params request)
+        definition (form->definition params)]
+    (form-response (or (when-not definition (bad-request-response "Invalid audience definition"))
+                       (invalid-new-id-response (:id definition))
+                       (save-response #(ports/create-audience store %) definition filter-fields 201))
+                   request
+                   (or definition (submitted params))
+                   false)))
+
+(defn update-audience-form-handler
+  "POST /web/audiences/builder/:id — update from the builder form. What the
+   form has no field for — cache config and tags — is kept."
+  [_resolver store request & [filter-fields]]
+  (if-let [id (parse-audience-id (get-in request [:path-params :id]))]
+    (let [params     (:form-params request)
+          definition (form->definition (assoc params "id" (name id)))
+          keep-rest  (fn [d] (merge (select-keys (ports/find-audience store id) [:cache-config :tags]) d))]
+      (form-response (if definition
+                       (save-response #(ports/update-audience store (keep-rest %)) definition filter-fields 200)
+                       (bad-request-response "Invalid audience definition"))
+                     request
+                     (or definition (assoc (submitted params) :id id))
+                     true))
+    (bad-request-response "Invalid audience id")))
+
+;; =============================================================================
 ;; API handlers
 ;; =============================================================================
 
 (defn create-audience-handler
-  "POST /api/audiences — create a new audience definition. `filter-fields` are
-   the fields a filter may name, `filter/default-filter-fields` when nil."
+  "POST /api/audiences — create a new audience definition; 409 when its id is
+   taken. `filter-fields` are the fields a filter may name,
+   `filter/default-filter-fields` when nil."
   [_resolver store request & [filter-fields]]
-  (let [definition (get-in request [:parameters :body])
-        id         (some-> (:id definition) symbol str)]
-    ;; The id is used in every /audiences/:id path, so it must be one they
-    ;; accept. /audiences/preview matches the literal route, not :id.
-    (if (or (= "preview" id) (not (parse-audience-id id)))
-      (bad-request-response "Invalid audience id")
-      (or
-       (invalid-definition-response definition filter-fields)
-       (try
-         (log/info "Creating audience" {:label (:label definition)})
-         (let [saved (ports/save-audience store definition)]
-           (json-response {:id    (name (:id saved))
-                           :label (:label saved)}
-                          201))
-         (catch clojure.lang.ExceptionInfo e
-           (handle-audience-error e (:id definition)))
-         (catch Exception e
-           (log/error e "Failed to create audience" {:label (:label definition)})
-           (internal-error-response "Internal error")))))))
+  (let [definition (body->definition (get-in request [:parameters :body]))]
+    (or (invalid-new-id-response (:id definition))
+        (save-response #(ports/create-audience store %) definition filter-fields 201))))
 
 (defn update-audience-handler
-  "PUT /api/audiences/:id — update an existing audience definition. See
-   `create-audience-handler` for `filter-fields`."
+  "PUT /api/audiences/:id — replace an audience definition; 404 when none is
+   stored. See `create-audience-handler` for `filter-fields`."
   [_resolver store request & [filter-fields]]
-  (let [id (parse-audience-id (get-in request [:path-params :id]))]
-    (if-not id
-      (bad-request-response "Invalid audience id")
-      (let [definition (assoc (get-in request [:parameters :body]) :id id)]
-        (or
-         (invalid-definition-response definition filter-fields)
-         (try
-           (log/info "Updating audience" {:id id})
-           (let [updated (ports/save-audience store definition)]
-             (json-response {:id    (name (:id updated))
-                             :label (:label updated)}))
-           (catch clojure.lang.ExceptionInfo e
-             (handle-audience-error e id))
-           (catch Exception e
-             (log/error e "Failed to update audience" {:id id})
-             (internal-error-response "Internal error"))))))))
+  (if-let [id (parse-audience-id (get-in request [:path-params :id]))]
+    (save-response #(ports/update-audience store %)
+                   (assoc (body->definition (get-in request [:parameters :body])) :id id)
+                   filter-fields 200)
+    (bad-request-response "Invalid audience id")))
 
 (defn delete-audience-handler
   "DELETE /api/audiences/:id — delete an audience definition."
@@ -223,24 +327,21 @@
           (internal-error-response "Internal error"))))))
 
 (defn preview-audience-handler
-  "POST /api/audiences/preview — evaluate filters and return count + sample."
+  "POST /api/audiences/preview — resolve the audience named by `audienceId` and
+   return count + sample."
   [resolver _store request]
-  (let [body        (get-in request [:parameters :body] {})
-        raw-id      (get body :audienceId)
-        audience-id (when raw-id (parse-audience-id raw-id))]
-    (if (and raw-id (nil? audience-id))
-      (bad-request-response "Invalid audienceId format")
-      (let [resolved-id (or audience-id :preview)]
-        (try
-          (log/debug "Previewing audience" {:audience-id resolved-id})
-          (let [result (ports/resolve-audience resolver resolved-id {:force-refresh? true})]
-            (json-response {:count  (:count result)
-                            :sample (take 10 (:user-ids result))}))
-          (catch clojure.lang.ExceptionInfo e
-            (handle-audience-error e resolved-id))
-          (catch Exception e
-            (log/error e "Failed to preview audience" {:audience-id resolved-id})
-            (internal-error-response "Internal error")))))))
+  (if-let [audience-id (parse-audience-id (get-in request [:parameters :body :audienceId]))]
+    (try
+      (log/debug "Previewing audience" {:audience-id audience-id})
+      (let [result (ports/resolve-audience resolver audience-id {:force-refresh? true})]
+        (json-response {:count  (:count result)
+                        :sample (take 10 (:user-ids result))}))
+      (catch clojure.lang.ExceptionInfo e
+        (handle-audience-error e audience-id))
+      (catch Exception e
+        (log/error e "Failed to preview audience" {:audience-id audience-id})
+        (internal-error-response "Internal error")))
+    (bad-request-response "audienceId must name a saved audience: lowercase letters, digits and dashes")))
 
 (defn evaluate-audience-handler
   "POST /api/audiences/:id/evaluate — trigger full evaluation and cache."
@@ -300,19 +401,25 @@
    Args:
      resolver   - IAudienceResolver
      store      - IAudienceRepository
-     middleware - route middleware every page is wrapped in (authorization)"
+     middleware - route middleware every page is wrapped in (authorization)
+     opts       - {:filter-fields #{...}}, the fields a filter may name"
   ([resolver store] (audience-web-routes resolver store []))
-  ([resolver store middleware]
+  ([resolver store middleware] (audience-web-routes resolver store middleware {}))
+  ([resolver store middleware {:keys [filter-fields]}]
    (guarded middleware
             [["/audiences"
-              {:get {:handler (fn [req] (list-audiences-handler resolver store req))
-                     :summary "List audience segments"}}]
+              {:get  {:handler (fn [req] (list-audiences-handler resolver store req))
+                      :summary "List audience segments"}
+               :post {:handler (fn [req] (create-audience-form-handler resolver store req filter-fields))
+                      :summary "Create audience from the builder form"}}]
              ["/audiences/builder"
               {:get {:handler (fn [req] (builder-page-handler resolver store req))
                      :summary "New audience builder page"}}]
              ["/audiences/builder/:id"
-              {:get {:handler (fn [req] (builder-edit-handler resolver store req))
-                     :summary "Edit audience builder page"}}]])))
+              {:get  {:handler (fn [req] (builder-edit-handler resolver store req))
+                      :summary "Edit audience builder page"}
+               :post {:handler (fn [req] (update-audience-form-handler resolver store req filter-fields))
+                      :summary "Update audience from the builder form"}}]])))
 
 (defn audience-api-routes
   "Reitit route data for the audience API. Mounted under /api/v1.
@@ -329,11 +436,11 @@
             [["/audiences"
               {:post {:handler    (fn [req] (create-audience-handler resolver store req filter-fields))
                       :summary    "Create audience segment"
-                      :parameters {:body schema/DynamicAudienceDefinition}}}]
+                      :parameters {:body create-body}}}]
              ["/audiences/preview"
               {:post {:handler    (fn [req] (preview-audience-handler resolver store req))
                       :summary    "Preview audience filter results"
-                      :parameters {:body [:map [:audienceId {:optional true} :string]]}}}]
+                      :parameters {:body [:map [:audienceId :string]]}}}]
              ["/audiences/:id"
               {:put    {:handler    (fn [req] (update-audience-handler resolver store req filter-fields))
                         :summary    "Update audience segment"

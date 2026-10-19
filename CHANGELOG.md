@@ -192,6 +192,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **The audience API ignored the request body** (BOU-744): create and update always answered 422. An audience with
   both `:filters` and `:compose` is now refused rather than its filters dropped; give it `:filters []`.
+- **The audience API: create overwrote a taken id, update created an unknown one** (BOU-746): now 409 and 404. Keys are
+  camelCase, preview needs `audienceId`; a custom `IAudienceRepository` adds `create-audience`/`update-audience`.
 - **An audience filter could name any users column, password hashes included** (BOU-745). Filters now take only
   allowlisted fields; list your own columns in `:wagoe/audience {:filter-fields #{...}}`.
 - **Redis dead-letter retention could delete a job `retry-job!` had just retried** (BOU-738). It now purges in
