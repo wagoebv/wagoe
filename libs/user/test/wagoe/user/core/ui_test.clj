@@ -128,7 +128,26 @@
       (is (= :div#audit-table-container (first result)))
       (let [html (str result)]
         (is (re-find #"audit-table" html))
-        (is (re-find #"audit-action-badge" html))))))
+        (is (re-find #"audit-action-badge" html)))))
+
+  (testing "controls request and push the page URL, filters kept"
+    (let [html (str (ui/audit-logs-table [{:action :login :result :success}]
+                                         {:sort :created-at :dir :desc :page 1 :page-size 50}
+                                         1 {:action "login"}))]
+      (is (re-find #":hx-get \"/web/audit\?sort=created-at&dir=asc[^\"]*action=login" html))
+      (is (not (re-find #"/web/audit/table" html)))))
+
+  (testing "an empty list says whether the filters emptied it"
+    (let [tq {:sort :created-at :dir :desc :page 1 :page-size 50}]
+      (is (re-find #"audit-empty-state-filtered" (str (ui/audit-logs-table [] tq 0 {:result "failure"}))))
+      (is (not (re-find #"audit-empty-state-filtered" (str (ui/audit-logs-table [] tq 0 {}))))))))
+
+(deftest ^:unit audit-page-in-admin-shell-test
+  (let [page (str (ui/audit-page [] {:sort :created-at :dir :desc :page 1 :page-size 50} 0
+                                 {:action "login"} {:user {:email "a@example.com"}}))]
+    (is (re-find #"admin-shell" page))
+    (is (re-find #":id \"audit-filter-action\"" page))
+    (is (re-find #":id \"audit-record-count\"" page))))
 
 (deftest ^:unit session-row-test
   (testing "names the session by id and never carries a token (BOU-696)"

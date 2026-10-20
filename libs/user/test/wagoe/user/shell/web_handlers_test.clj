@@ -464,6 +464,26 @@
 ;; HTMX Fragment Handler Tests
 ;; =============================================================================
 
+(deftest ^:contract audit-page-handler-test
+  (let [handler (web-handlers/audit-page-handler (create-mock-service) {})
+        htmx    {"hx-request" "true" "hx-target" "audit-table-container"}]
+    (testing "a browser gets the page in the admin shell"
+      (let [response (handler {:query-params {}})]
+        (is (= 200 (:status response)))
+        (is (html-contains? response "admin-shell"))
+        (is (= "HX-Request, HX-Target" (get-in response [:headers "Vary"])))))
+
+    (testing "the table's controls get the table and the count out of band"
+      (let [body (:body (handler {:query-params {} :headers htmx}))]
+        (is (re-find #"^\s*<div [^>]*\bid=\"audit-table-container\"" body))
+        (is (re-find #"id=\"audit-record-count\"[^>]*hx-swap-oob|hx-swap-oob[^>]*id=\"audit-record-count\"" body))
+        (is (not (str/includes? body "admin-shell")))))
+
+    (testing "a history restore gets the page"
+      (is (html-contains? (handler {:query-params {}
+                                    :headers (assoc htmx "hx-history-restore-request" "true")})
+                          "admin-shell")))))
+
 (deftest ^:contract users-table-fragment-handler-test
   (testing "returns users table fragment"
     (let [user1 (create-test-user {:name "Alice"})

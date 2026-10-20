@@ -228,6 +228,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **The audit trail left the admin shell** (BOU-767): `/web/audit` now renders in it as an admin list, with filters in
+  the URL, and its detail button works again. Nothing to do.
 - **Admin `:writer` entities could save a record without its many-to-many links, and kept join rows on hard delete**
   (BOU-779). The writer now runs in the admin's transaction. Nothing to do.
 - **A nested `db/with-transaction` committed its writes early**, so an outer rollback kept them (BOU-779). It now joins
