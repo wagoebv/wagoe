@@ -7,12 +7,27 @@
   scope is `{key #{value}}`, and `{}` holds everywhere. Rights add up: a
   permission is held in each of its scopes.
 
-  Safe by default: a scope admits only where every one of its keys is checked.")
+  Safe by default: a scope admits only where every one of its keys is checked."
+  (:require [wagoe.platform.core.http.access :as access]))
+
+(defn- in-ns? [ns v]
+  (and (qualified-keyword? v) (= ns (namespace v))))
 
 (defn source?
   "Whether scope value `v` is taken from the user, `:user/department`."
   [v]
-  (and (qualified-keyword? v) (= "user" (namespace v))))
+  (in-ns? "user" v))
+
+(defn route-scope?
+  "Whether `s`, route data's `:scope`, is one `route-decision` reads: absent,
+   `:handler`, or a map of keys of `scopes` (the registry's) to path
+   parameters, `{:domain-id :path/domain-id}`."
+  [scopes s]
+  (or (nil? s)
+      (= :handler s)
+      (and (map? s)
+           (seq s)
+           (every? (fn [[k v]] (and (contains? scopes k) (in-ns? "path" v))) s))))
 
 (defn scope-schema
   "The Malli form a stored scope fits, from the registry's `scopes`: a closed
@@ -42,7 +57,7 @@
   [scope values]
   (every? (fn [[k allowed]]
             (let [v (get values k)]
-              (and (some? v) (boolean (some #(= (str v) (str %)) allowed)))))
+              (some #(access/same-id? v %) allowed)))
           scope))
 
 (defn in-scope?
@@ -98,7 +113,4 @@
     (let [conds (for [scope scopes
                       :when (every? #(contains? fields %) (keys scope))]
                   (into [:and] (map (fn [[k vs]] (condition (get fields k) vs))) (sort-by key scope)))]
-      (case (count conds)
-        0 [:= 1 0]
-        1 (first conds)
-        (into [:or] conds)))))
+      (if (seq conds) (into [:or] conds) [:= 1 0]))))

@@ -57,15 +57,15 @@
   "What `v`, the value of scope key `k`, stands for for `user`: a source
    resolved, then `k`'s `:expand`. Empty when a source resolves to nothing or
    has no resolver."
-  [registry user k v]
+  [{:keys [scopes sources]} user k v]
   (let [values (if (scope/source? v)
-                 (if-let [resolver (get-in (ports/scope-sources registry) [v :resolve])]
+                 (if-let [resolver (get-in sources [v :resolve])]
                    (set (resolver user))
                    (do (log/error "A right's scope names a source nothing resolves; it gives no rights"
                                   {:scope-key k :source v})
                        #{}))
                  #{v})
-        expand (get-in (ports/scopes registry) [k :expand])]
+        expand (get-in scopes [k :expand])]
     (if (and expand (seq values)) (set (expand values)) values)))
 
 (defn resolve-rights
@@ -75,15 +75,16 @@
    added later counts. A right whose scope resolves to nothing for a key is
    dropped: it gives no rights, not rights everywhere."
   [registry user rights]
-  (into []
-        (keep (fn [{:keys [scope] :as right}]
-                (when-let [resolved (reduce-kv (fn [acc k v]
-                                                 (let [values (scope-values registry user k v)]
-                                                   (if (seq values) (assoc acc k values) (reduced nil))))
-                                               {}
-                                               (or scope {}))]
-                  (assoc right :scope resolved))))
-        rights))
+  (let [declared {:scopes (ports/scopes registry) :sources (ports/scope-sources registry)}]
+    (into []
+          (keep (fn [{:keys [scope] :as right}]
+                  (when-let [resolved (reduce-kv (fn [acc k v]
+                                                   (let [values (scope-values declared user k v)]
+                                                     (if (seq values) (assoc acc k values) (reduced nil))))
+                                                 {}
+                                                 scope)]
+                    (assoc right :scope resolved))))
+          rights)))
 
 (defn authorize-scope
   "The scope check of a route whose data says `route-scope`, for a caller
@@ -117,7 +118,11 @@
                       (let [user   (:user request)
                             scopes (if (access/platform-admin? user)
                                      [{}]
-                                     (scope/scopes-for (resolve-rights registry user (rights-of request))
-                                                       (permission-of request)))
+                                     ;; Only the route's permission's rights: resolvers may read.
+                                     (let [p (permission-of request)]
+                                       (->> (rights-of request)
+                                            (filterv #(= p (:permission %)))
+                                            (resolve-rights registry user)
+                                            (#(scope/scopes-for % p)))))
                             {admitted :request response :response} (authorize-scope request scopes route-scope)]
                         (if admitted (handler admitted) response)))))))})

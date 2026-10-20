@@ -51,7 +51,7 @@
 (deftest ^:unit scope-filter-is-a-honeysql-where
   (testing "true when one scope holds everywhere"
     (is (= [:= 1 1] (sut/scope-filter [{:domain-id #{42}} {}] {:domain-id :domain_id}))))
-  (is (= [:and [:in :domain_id [42]]] (sut/scope-filter [{:domain-id #{42}}] {:domain-id :domain_id})))
+  (is (= [:or [:and [:in :domain_id [42]]]] (sut/scope-filter [{:domain-id #{42}}] {:domain-id :domain_id})))
   (is (= [:or [:and [:in :domain_id [42 43]]] [:and [:in :category_id [1]] [:in :domain_id [7]]]]
          (sut/scope-filter [{:domain-id #{43 42}} {:domain-id #{7} :category-id #{1}}]
                            {:domain-id :domain_id :category-id :category_id})))
@@ -60,7 +60,7 @@
     (is (= [:= 1 0] (sut/scope-filter [] {:domain-id :domain_id}))))
   (testing "a scope through a relation is the condition the entity declares"
     (let [via-customer (fn [ids] [:in :customer_id {:select [:id] :from [:customers] :where [:in :domain_id ids]}])]
-      (is (= ["SELECT * FROM orders WHERE (customer_id IN (SELECT id FROM customers WHERE domain_id IN (?)))" 42]
+      (is (= ["SELECT * FROM orders WHERE ((customer_id IN (SELECT id FROM customers WHERE domain_id IN (?))))" 42]
              (sql/format {:select [:*] :from [:orders]
                           :where  (sut/scope-filter [{:domain-id #{42}}] {:domain-id via-customer})}))))))
 

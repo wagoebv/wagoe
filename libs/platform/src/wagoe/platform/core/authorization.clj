@@ -13,11 +13,11 @@
   declared. What a scope means is ADR-041 §4, `core.scope`."
   (:require [clojure.string :as str]
             [malli.core :as m]
-            [malli.error :as me]))
+            [malli.error :as me]
+            [wagoe.platform.core.scope :as scope]))
 
 (def ^:private Source
-  [:and :qualified-keyword
-   [:fn {:error/message "a scope source is a :user/<name> keyword"} #(= "user" (namespace %))]])
+  [:fn {:error/message "a scope source is a :user/<name> keyword"} scope/source?])
 
 (def Declaration
   "What a module contributes under `:authorization`. A permission's or scope
@@ -159,34 +159,26 @@
             (source-error acc)
             acc))))
 
+(defn- route-values
+  "`k` in route `data` and in each of its methods'."
+  [k data]
+  (cons (k data) (keep #(when (map? %) (k %)) (vals data))))
+
 (defn unknown-route-permissions
   "The `:permission`s in `routes`, a router's flattened [path data] pairs, that
    `permissions` (the registry's map) does not hold, as [{:path :permission}].
    A `:permission` may sit in the route data or in a method's."
   [permissions routes]
   (vec (for [[path data] routes
-             p (cons (:permission data) (keep #(when (map? %) (:permission %)) (vals data)))
+             p (route-values :permission data)
              :when (and (some? p) (not (contains? permissions p)))]
          {:path path :permission p})))
 
-(defn- route-scope-ok?
-  "Whether `scope`, route data's `:scope`, is absent, `:handler`, or maps keys
-   of `scopes` to path parameters, `{:domain-id :path/domain-id}`."
-  [scopes scope]
-  (or (nil? scope)
-      (= :handler scope)
-      (and (map? scope)
-           (seq scope)
-           (every? (fn [[k v]]
-                     (and (contains? scopes k) (qualified-keyword? v) (= "path" (namespace v))))
-                   scope))))
-
 (defn invalid-route-scopes
-  "The `:scope`s in `routes`, flattened [path data] pairs, that are neither
-   `:handler` nor a map of `scopes` (the registry's) keys to `:path/<param>`,
-   as [{:path :scope}]. Like `:permission`, in the route data or a method's."
+  "The `:scope`s in `routes` that `core.scope/route-scope?` refuses for the
+   registry's `scopes`, as [{:path :scope}]. Like `:permission`."
   [scopes routes]
   (vec (for [[path data] routes
-             s (cons (:scope data) (keep #(when (map? %) (:scope %)) (vals data)))
-             :when (not (route-scope-ok? scopes s))]
+             s (route-values :scope data)
+             :when (not (scope/route-scope? scopes s))]
          {:path path :scope s})))
