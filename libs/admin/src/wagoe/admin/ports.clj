@@ -502,7 +502,9 @@
      `options` are the list's: search and filters narrow facets and summary
      the way they narrow the rows. With `:overview/fields`, the titles and
      counts are for those fields of `records` instead of the list columns, and
-     there are no facets or summary: the record drawer asks this way. A part whose query fails is left out; the
+     there are no facets or summary: the record drawer asks this way.
+     `:overview/link-scopes {column scopes}` keeps a many-to-many column's
+     items inside its scopes. A part whose query fails is left out; the
      page still renders."))
 
 ;; =============================================================================
@@ -519,4 +521,5 @@
     "{id-string {:items [{:id :title}] :total n}} for the records `ids` of
      `entity-name`: what relation `rel-key` links each to, by title. opts
      `{:per-owner n}` keeps the first n items of each; :total still counts
-     them all. A record without links is left out."))
+     them all. `{:scopes scopes}` keeps only linked records inside them. A
+     record without links is left out."))

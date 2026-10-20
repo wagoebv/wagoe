@@ -53,16 +53,44 @@
   (let [records (inside! inner schema-provider user entity-name :write [id])]
     (delay (or (first records) (ports/get-entity inner entity-name id)))))
 
+(defn- link-scopes
+  "{relation-key scopes} for each many-to-many of `entity-name` whose linked
+   records `user` may read only inside scopes."
+  [schema-provider user entity-name]
+  (into {}
+        (keep (fn [{k :key target :entity}]
+                (let [scopes (scopes-of schema-provider user target :read)]
+                  (when-not (scope/everywhere? scopes) [k scopes]))))
+        (:many-to-many (ports/get-entity-config schema-provider entity-name))))
+
+(defn- with-hidden-links
+  "`data` keeping, in each relation its `:admin/links` replaces, the links to
+   records `user` may not read: the form never showed them to unlink."
+  [inner schema-provider user entity-name id data]
+  (let [hidden (select-keys (link-scopes schema-provider user entity-name) (keys (:admin/links data)))
+        ids-of (fn [k opts]
+                 (map :id (:items (get (ports/linked-records inner entity-name k [id] opts) (str id)))))]
+    (reduce-kv (fn [data k scopes]
+                 (let [visible (set (ids-of k {:scopes scopes}))]
+                   (update-in data [:admin/links k]
+                              #(vec (distinct (concat % (remove visible (ids-of k {}))))))))
+               data
+               (if (satisfies? ports/ILinks inner) hidden {}))))
+
 (defrecord ScopedAdminService [inner schema-provider user]
   ports/IListOverview
   (list-overview [_ entity-name options records]
     (when (satisfies? ports/IListOverview inner)
-      (ports/list-overview inner entity-name (scoped schema-provider user entity-name :read options) records)))
+      (ports/list-overview inner entity-name
+                           (assoc (scoped schema-provider user entity-name :read options)
+                                  :overview/link-scopes (link-scopes schema-provider user entity-name))
+                           records)))
 
   ports/ILinks
   (linked-records [_ entity-name rel-key ids opts]
     (if (satisfies? ports/ILinks inner)
-      (ports/linked-records inner entity-name rel-key ids opts)
+      (let [scopes (get (link-scopes schema-provider user entity-name) rel-key)]
+        (ports/linked-records inner entity-name rel-key ids (cond-> opts scopes (assoc :scopes scopes))))
       {}))
 
   ports/IAdminService
@@ -106,7 +134,7 @@
   (update-entity [_ entity-name id data]
     (let [record (stored inner schema-provider user entity-name id)]
       (writable! schema-provider user entity-name (delay (merge @record data))))
-    (ports/update-entity inner entity-name id data))
+    (ports/update-entity inner entity-name id (with-hidden-links inner schema-provider user entity-name id data)))
 
   (update-entity-field [_ entity-name id field value]
     (let [record (stored inner schema-provider user entity-name id)]

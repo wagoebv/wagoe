@@ -28,9 +28,8 @@
                                           [record]))))
 
 (defn entity-detail-handler
-  "Handler for entity detail/edit page.
-
-   Shows form for editing existing entity."
+  "Handler for entity detail/edit page: the form for editing an existing
+   entity, read-only for a user who may read it but not write."
   [admin-service schema-provider config]
   (fn [request]
     (let [user (support/require-admin-user! request)
@@ -45,8 +44,8 @@
 
           entity-config (ports/get-entity-config schema-provider entity-name)
 
-          ; Check permissions
-          _ (shell-permissions/assert-can-edit-entity! user entity-name entity-config)
+          ; Read opens the page; without write it renders read-only
+          _ (shell-permissions/assert-can-view-entity! user entity-name entity-config)
 
           ; Get entity record
           record (ports/get-entity admin-service entity-name id)

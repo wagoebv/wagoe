@@ -898,8 +898,9 @@
 (defn- linked-records*
   "{owner-id-string {:items [{:id :title}] :total n}}: what `rel` links each
    of `owner-ids` to, live rows only, by title. With `per-owner`, the first
-   few of each, in one query (ROW_NUMBER, on all four engines)."
-  [db-ctx schema-provider rel owner-ids per-owner]
+   few of each, in one query (ROW_NUMBER, on all four engines). With
+   `scopes`, only the linked rows inside them."
+  [db-ctx schema-provider rel owner-ids per-owner scopes]
   (when (seq owner-ids)
     (let [tcfg  (ports/get-entity-config schema-provider (:entity rel))
           tpk   (:primary-key tcfg :id)
@@ -908,7 +909,9 @@
           title (col (:title-field tcfg tpk))
           owner (link-column (:foreign-key rel))
           where (cond-> [:and [:in owner (mapv str owner-ids)]]
-                  (:soft-delete tcfg false) (conj [:= (col :deleted-at) nil]))
+                  (:soft-delete tcfg false) (conj [:= (col :deleted-at) nil])
+                  scopes                    (conj (scope/scope-filter scopes (update-vals (:scope tcfg)
+                                                                                          #(if (keyword? %) (col %) %)))))
           base  (fn [select]
                   (-> {:select select}
                       (with-from qc where)
@@ -1114,7 +1117,8 @@
      :links   (per-column :links (of-role :links)
                           #(linked-records* db-ctx schema-provider (display/link-rel entity-config %)
                                             (id-strings records (:primary-key entity-config :id))
-                                            links-per-cell))
+                                            links-per-cell
+                                            (get-in options [:overview/link-scopes %])))
      :facets  (when (and facet (not record?))
                 {facet (overview-part entity-name [:facet facet]
                                       #(facet-counts db-ctx entity-config qc options))})
@@ -1126,12 +1130,12 @@
     (list-overview* db-ctx schema-provider entity-name options records))
 
   ports/ILinks
-  (linked-records [_ entity-name rel-key ids {:keys [per-owner]}]
+  (linked-records [_ entity-name rel-key ids {:keys [per-owner scopes]}]
     (let [rel (display/link-rel (ports/get-entity-config schema-provider entity-name) rel-key)]
       (when-not rel
         (throw (ex-info (str "No many-to-many " (name rel-key) " on " (name entity-name))
                         {:type :not-found :entity-name entity-name :relation rel-key})))
-      (or (linked-records* db-ctx schema-provider rel ids per-owner) {})))
+      (or (linked-records* db-ctx schema-provider rel ids per-owner scopes) {})))
 
   ports/IAdminService
 

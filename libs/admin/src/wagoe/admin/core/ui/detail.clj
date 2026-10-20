@@ -507,11 +507,15 @@
    Notes:
      If :field-groups is configured, renders fields in grouped sections.
      Otherwise, renders flat list of editable fields."
-  [entity-name entity-config record errors _permissions & [cancel-url display prefill nested links]]
+  [entity-name entity-config record errors permissions & [cancel-url display prefill nested links]]
   (let [primary-key (:primary-key entity-config :id)
         record-id (get record primary-key)
-        entity-config (-> (cond-> entity-config (nil? record) introspection/for-create)
-                          (with-live-validation entity-name record-id))
+        ;; One who may read but not write sees the record, and nothing to save
+        read-only? (and (some? record) (false? (:can-edit permissions)))
+        entity-config (cond-> entity-config
+                        (nil? record)     introspection/for-create
+                        read-only?        (update :fields update-vals #(assoc % :readonly true))
+                        (not read-only?)  (with-live-validation entity-name record-id))
         editable-fields (:editable-fields entity-config)
         values (or record prefill)
         field-groups (compute-field-groups entity-config)
@@ -537,7 +541,9 @@
                                 editable-fields)
         optional-details-key (str "admin_optional_details_open_" (name entity-name))]
     [:form.entity-form
-     (merge {hx-attr form-action
+     (if read-only?
+       {:data-readonly "true"}
+       (merge {hx-attr form-action
              :hx-target "body"
              :hx-swap "outerHTML"
              ;; Dirty tracking and ⌘S / Ctrl+S for the save bar (admin-ux.js)
@@ -556,7 +562,7 @@
               {:hx-push-url form-action
                ;; ⌘↵ / Ctrl+↵: save, then back to the list
                :x-on:keydown.meta.enter.window.prevent "saveAndBack()"
-               :x-on:keydown.ctrl.enter.window.prevent "saveAndBack()"}))
+               :x-on:keydown.ctrl.enter.window.prevent "saveAndBack()"})))
      ;; No longer need hidden _method field since HTMX sends proper HTTP method
      ;; The zone the :instant fields above were rendered in. The handler parses
      ;; them back in exactly this zone; reading it from the cookie instead would
@@ -614,14 +620,15 @@
                   field-value (get values field-name)
                   field-errors (get errors field-name)]
               (render-field-widget field-name field-value field-config field-errors display)))])
-       (links-section links errors)
+       ;; Read-only, the links show in the summary beside the form
+       (when-not read-only? (links-section links errors))
        (when-not is-edit?
          (for [section nested]
            (child-rows-section entity-name section display)))]]
      ;; Beside the fields: what the record is, that the form cannot change
      (when is-edit? (record-summary entity-config record display links))
      ;; Outside the card: its overflow-hidden would stop the bar sticking
-     (save-bar entity-name is-edit? cancel-url)]))
+     (when-not read-only? (save-bar entity-name is-edit? cancel-url))]))
 
 (defn parent-context-banner
   "Renders a read-only info strip showing key fields from a parent record.
