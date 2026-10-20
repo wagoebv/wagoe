@@ -34,8 +34,9 @@ clojure -M:migrate up    # run pending migrations
 # Users
 bb create-admin          # create the first admin account (interactive)
 # A new project has no users, and runs :wagoe/authorization :enforce: only
-# this admin passes every route. Everyone else needs a role on one of their
-# groups, given at /web/admin/groups.
+# this admin passes every route; others need a role on a group, given at
+# /web/admin/groups. Run it after the first start, or that start gives the
+# Everyone group every module's editor role.
 
 # Modules
 wagoe add <module>          # add an optional module

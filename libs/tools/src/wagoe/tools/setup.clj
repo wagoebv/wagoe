@@ -451,9 +451,10 @@
                   ;; from every read but its row stays, so without this key
                   ;; user_sessions grows with every login (BOU-429).
                   "  :wagoe/session-pruner\n  {:enable-pruning true :retention-days 30 :interval-hours 6}\n"
-                  ;; As wagoe new writes it: a new app starts closed. Merging
-                  ;; into an existing config leaves this key alone.
-                  "  :wagoe/authorization\n  {:mode :enforce}\n"
+                  ;; As wagoe new writes it: a new app starts closed. An existing
+                  ;; project's prod takes dev's mode instead, by carry-over.
+                  (when-not (:existing? spec)
+                    "  :wagoe/authorization\n  {:mode :enforce}\n")
                   (logging-template env)
                   (observability-template env)
                   (admin-template (:admin-ui spec) env)
@@ -1020,7 +1021,8 @@
         from-dev  (cond-> (project-spec dev)
                     (#{:memory :in-memory} (:cache (project-spec dev))) (assoc :cache :redis))
         prod-spec (cond-> (with-defaults (merge-with #(if (nil? %2) %1 %2) from-dev spec))
-                    (contains? dev :wagoe/admin) (assoc :admin-ui false))
+                    (contains? dev :wagoe/admin) (assoc :admin-ui false)
+                    existing?                    (assoc :existing? true))
         carried   (when (and existing? (:prod? spec) dev-text)
                     (carry-over (build-config prod-spec "prod") dev-text prod-spec))
         create    (fn [env]

@@ -55,11 +55,9 @@
    :wagoe/session-pruner
    {:enable-pruning true :retention-days 30 :interval-hours 6}
 
-   ;; Every route needs a rule, or it answers 403: `:public true`,
-   ;; `:authorization :signed-in` or `:self`, a `:permission`, or its module's
-   ;; <module>/read and <module>/write, which a scaffolded module's routes get.
-   ;; A platform admin passes all of them; everyone else gets rights through a
-   ;; group's roles. `clojure -M:run authz-report` lists the routes.
+   ;; A new app starts closed: a route without a rule answers 403, and a user
+   ;; needs a role on one of their groups. `clojure -M:run authz-report` lists
+   ;; each route's rule; the Authorization guide has the rest.
    :wagoe/authorization
    {:mode :enforce}
 

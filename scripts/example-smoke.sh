@@ -28,9 +28,10 @@ ok "prints what its README says it prints"
 echo "[2/2] examples/shop"
 cd "$REPO_ROOT/examples/shop"
 
-# The test profile is H2 in-memory, so there is nothing to install and nothing
-# to clean up. JWT_SECRET is normally in .env, which is generated per project
-# and not committed.
+# The system test and the uberjar run the test profile, H2 in memory. The HTTP
+# checks run the dev profile's SQLite file instead, because `bb create-admin`
+# writes from a process of its own. JWT_SECRET is normally in .env, which is
+# generated per project and not committed.
 export WAG_ENV=test
 export JWT_SECRET="example-smoke-secret-minimum-32-characters"
 
@@ -41,11 +42,7 @@ grep -qE '(^|[^0-9])1 tests,' /tmp/shop-test.log \
   || { log_excerpt /tmp/shop-test.log 30; fail "the generated system test did not run"; }
 ok "the generated integration test passes through wagoe.test"
 
-# The app runs :wagoe/authorization :enforce, so the product routes need a
-# platform admin or product/read and /write. `bb create-admin` writes the admin
-# from a process of its own, which cannot reach the test profile's in-memory
-# H2, so these requests run on the dev profile's SQLite file. A shop-dev.db
-# already there is put back afterwards.
+# A shop-dev.db already there is put back afterwards.
 DEV_DB=shop-dev.db
 if [ -e "$DEV_DB" ]; then mv "$DEV_DB" "$DEV_DB.smoke-backup"; fi
 # shellcheck disable=SC2317
@@ -76,12 +73,12 @@ CODE=$(curl -s -o /dev/null -w '%{http_code}' -X POST \
             --data-urlencode "name=Smoke" --data-urlencode "email=smoke@example.test" \
             --data-urlencode "password=Example-pass-1" "http://localhost:$PORT/web/register")
 [ "$CODE" = "303" ] || { log_excerpt /tmp/shop-smoke.log 30; fail "POST /web/register answered $CODE, expected 303"; }
-TOKEN=$(login_token "http://localhost:$PORT" smoke@example.test Example-pass-1)
-[ -n "$TOKEN" ] || fail "POST /api/v1/auth/login returned no jwt-token"
-USER_AUTH=(-H "Authorization: Bearer $TOKEN")
+USER_TOKEN=$(login_token "http://localhost:$PORT" smoke@example.test Example-pass-1)
+[ -n "$USER_TOKEN" ] || fail "POST /api/v1/auth/login returned no jwt-token"
+USER_AUTH=(-H "Authorization: Bearer $USER_TOKEN")
 
-# Signed in is not enough: in a new app nobody holds product/read until an
-# administrator gives one of their groups a product role.
+# The app runs :wagoe/authorization :enforce: signed in is not enough, and in
+# a new app nobody holds product/read until a group of theirs gets a role.
 CODE=$(curl -s -o /dev/null -w '%{http_code}' "${USER_AUTH[@]}" "http://localhost:$PORT/api/v1/products")
 [ "$CODE" = "403" ] || fail "GET /api/v1/products without product/read answered $CODE, expected 403"
 ok "under :enforce, a signed-in user without product/read is refused"
@@ -90,17 +87,16 @@ ADMIN_PW="Str0ng-Smoke-pass-9"
 printf '%s\n%s\n' "$ADMIN_PW" "$ADMIN_PW" \
   | bb create-admin --env dev --email admin@example.test --name Admin > /tmp/shop-admin.log 2>&1 \
   || { log_excerpt /tmp/shop-admin.log 20; fail "bb create-admin failed"; }
-grep -q "Admin user created successfully" /tmp/shop-admin.log \
-  || { log_excerpt /tmp/shop-admin.log 20; fail "bb create-admin did not create the admin"; }
-TOKEN=$(login_token "http://localhost:$PORT" admin@example.test "$ADMIN_PW")
-[ -n "$TOKEN" ] || fail "POST /api/v1/auth/login returned no jwt-token for the admin"
-AUTH=(-H "Authorization: Bearer $TOKEN")
+ADMIN_TOKEN=$(login_token "http://localhost:$PORT" admin@example.test "$ADMIN_PW")
+[ -n "$ADMIN_TOKEN" ] || fail "POST /api/v1/auth/login returned no jwt-token for the admin"
+AUTH=(-H "Authorization: Bearer $ADMIN_TOKEN")
 ok "the first admin, made with bb create-admin, gets in"
 
-# Everyone is the built-in group of every signed-in user. Given product/viewer,
-# the user reads products and still may not write them.
+# Everyone, every signed-in user's group (wagoe.user.core.group/everyone-id).
+# Given product/viewer, the user reads products and still may not write them.
+EVERYONE_ID=00000000-0000-0000-0000-000000000001
 CODE=$(curl -s -o /dev/null -w '%{http_code}' -X POST "${AUTH[@]}" --data-urlencode "role=product/viewer" \
-            "http://localhost:$PORT/web/admin/groups/00000000-0000-0000-0000-000000000001/roles")
+            "http://localhost:$PORT/web/admin/groups/$EVERYONE_ID/roles")
 [ "$CODE" = "303" ] || fail "giving Everyone product/viewer answered $CODE, expected 303"
 CODE=$(curl -s -o /dev/null -w '%{http_code}' "${USER_AUTH[@]}" "http://localhost:$PORT/api/v1/products")
 [ "$CODE" = "200" ] || fail "GET /api/v1/products with product/viewer answered $CODE, expected 200"

@@ -75,8 +75,9 @@ and no module, such as one mounted by hand outside a module, is refused to all
 but a platform admin. A GET that writes needs an explicit `:permission`.
 
 `clojure -M:run authz-report` prints every route with its rule and permission,
-and the routes no rule covers, without starting the server. An app generated
-before the command existed can copy it from a new app's `main.clj`.
+and the routes no rule covers, without starting the server; outside `:off` the boot logs the same list. An
+app generated before the command existed can copy it from a new app's
+`main.clj`.
 
 == Scopes
 
@@ -128,9 +129,11 @@ bb create-admin
 
 Every other user signs in to a 403 on the module routes until an
 administrator gives one of their groups a role, say `product/viewer` on
-Everyone. The first boot with users already present gives Everyone every
-module's `editor` role, as an upgrade does (below), so check Everyone's roles
-when you created the admin before the first start.
+Everyone.
+
+Run `bb create-admin` after the app has started once. If users exist at the
+first start, it gives Everyone every module's `editor` role, as an upgrade
+does; narrow it at `/web/admin/groups`.
 
 == Moving an existing app to `:enforce`
 
@@ -138,9 +141,8 @@ when you created the admin before the first start.
   nobody can do less under `:enforce` than under `:off`, and nobody becomes an
   admin: each group grant becomes a managed role, Everyone gets every module's
   `editor` role, and users with role `:viewer` join a group called Readers.
-. *Find the routes without a rule.* Run `clojure -M:run authz-report`. Mark
-  each route it lists `:public`, `:authorization :signed-in` or `:self`, or
-  give it a `:permission`. Outside `:off` the boot logs the same list.
+. *Find the routes without a rule.* Run `clojure -M:run authz-report` and
+  give each route it lists a rule.
 . *Switch to `:report`* and run the app as usual. Each line `Authorization
   would refuse this request under :enforce` names the user, route and
   permission. Give the route a rule, or a group the role, until the lines stop.
