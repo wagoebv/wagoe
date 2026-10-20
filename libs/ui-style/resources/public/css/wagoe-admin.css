@@ -135,11 +135,17 @@
   border-radius: 4px !important;
 }
 .admin-sidebar .entity-list a:hover,
+.admin-sidebar .entity-list a:focus-visible,
 .admin-sidebar .nav-module-toggle:hover,
-.admin-sidebar-footer a:hover {
+.admin-sidebar .nav-module-toggle:focus-visible,
+.admin-sidebar-footer a:hover,
+.admin-sidebar-footer a:focus-visible {
   background: var(--wg-chrome-hover) !important;
   color: #F2F6F4 !important;
 }
+/* admin.css slides a --surface-2 panel in on hover, near-white in the light
+   theme; the chrome stays dark in both, so it hid the text */
+.admin-sidebar .entity-list a::after { content: none; }
 .admin-sidebar .entity-list li.active a {
   background: rgba(95, 211, 182, 0.12) !important;
   color: var(--wg-teal) !important;

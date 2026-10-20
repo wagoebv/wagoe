@@ -254,6 +254,15 @@
   stroke-width: 1.5;
 }
 
+/* A long label truncates, rather than pushing the icon and chevron out */
+.nav-text,
+.nav-flyout-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Collapsed state — hide text, center icons */
 .admin-shell[data-sidebar-state="collapsed"] .nav-text,
 .admin-shell[data-sidebar-state="collapsed"] .admin-sidebar-nav h3 {
@@ -329,6 +338,7 @@
   left: var(--sidebar-width-collapsed);
   margin-top: -40px;
   min-width: 200px;
+  max-width: 280px;
   padding: var(--space-1);
   background: var(--surface-0);
   border: 1px solid var(--border-default);

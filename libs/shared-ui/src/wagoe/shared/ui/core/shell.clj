@@ -23,12 +23,12 @@
 (defn- nav-link [attrs icon label]
   [:a (merge attrs (alpine/sidebar-nav-link-attrs))
    (icons/icon icon {:size 20})
-   [:span.nav-text label]])
+   [:span.nav-text {:title label} label]])
 
 (defn- nav-items [items & [title]]
   [:ul.entity-list
    ;; A collapsed sidebar shows a module's items in a flyout, under its name
-   (when title [:li.nav-flyout-title title])
+   (when title [:li.nav-flyout-title {:title title} title])
    (for [item items]
      [:li {:class (when (:active? item) "active")}
       ;; Always an icon: a collapsed sidebar hides the label
@@ -44,7 +44,8 @@
                                        :type          "button"
                                        :aria-expanded (str (boolean open?)))
       (icons/icon (or icon :folder) {:size 20})
-      [:span.nav-text label]
+      ;; A long label truncates with an ellipsis; the title shows all of it
+      [:span.nav-text {:title label} label]
       (icons/icon :chevron-down {:size 14 :class "nav-chevron"})]
      (nav-items items label)]
     (list
