@@ -229,9 +229,15 @@
     (str data)))
 
 (defn format-error
-  "Format error message based on output format."
+  "Format error message based on output format. Takes a flat error map or the
+   pipeline's error body, `{:error {:type :message :details}}`."
   [format-type error-data]
-  (let [message (or (:message error-data) (:detail error-data) "Unknown error")
+  (let [body (if (map? (:error error-data)) error-data {:error error-data})
+        error-data (if (map? (:error error-data))
+                     (let [{:keys [details] :as e} (:error error-data)]
+                       (merge (when (map? details) details) (dissoc e :details)))
+                     error-data)
+        message (or (:message error-data) (:detail error-data) "Unknown error")
         ;; The violations, then whatever is genuinely absent. Every validation
         ;; error used to be printed as "Missing fields: :password", so a
         ;; password the policy rejected read as one the user had not typed
@@ -247,7 +253,7 @@
                                           [(str "missing fields: "
                                                 (str/join ", " missing))])))))]
     (case format-type
-      :json (format-json {:error error-data})
+      :json (format-json body)
       :table (str "Error: " message
                   (when details
                     (str "\nDetails: " details)))
@@ -403,15 +409,20 @@
   "Run the user command `verb` with `opts`. Returns a map with :status and
    :entity-type and :data, or :message."
   [verb opts service]
-  (case verb
-    :create (execute-user-create service nil opts)
-    :list (execute-user-list service nil opts)
-    :find (execute-user-get service nil opts) ; Note: find -> get mapping
-    :update (execute-user-update service nil opts)
-    :delete (execute-user-delete service nil opts)
-    (throw (ex-info (str "Unknown user command: " (name verb))
-                    {:type :unknown-command
-                     :message (str "Unknown command: user " (name verb))}))))
+  (let [result (case verb
+                 :create (execute-user-create service nil opts)
+                 :list (execute-user-list service nil opts)
+                 :find (execute-user-get service nil opts) ; Note: find -> get mapping
+                 :update (execute-user-update service nil opts)
+                 :delete (execute-user-delete service nil opts)
+                 (throw (ex-info (str "Unknown user command: " (name verb))
+                                 {:type :unknown-command
+                                  :message (str "Unknown command: user " (name verb))})))]
+    ;; A failed pipeline answers with an error body, which printed as nothing.
+    (if (get-in result [:body :error])
+      {:status 1
+       :message (format-error (keyword (get opts :format "table")) (:body result))}
+      result)))
 
 ;; =============================================================================
 ;; Help Text
