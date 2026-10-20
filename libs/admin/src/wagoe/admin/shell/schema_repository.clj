@@ -42,6 +42,19 @@
         (log/warn e "admin: Malli schema ignored for form constraints" {:entity entity-name})
         nil))))
 
+(defn- unique-keys
+  "The unique keys of `table-name` as sets of fields, which tell a join table
+   (`introspection/join-keys`). None when the database cannot say: the table
+   is then no join table, rather than the admin down."
+  [{:keys [db-ctx]} table-name]
+  (try
+    (mapv #(into #{} (map (comp keyword case-conv/snake-case->kebab-case-string)) %)
+          (db-protocols/unique-keys (:adapter db-ctx) (:datasource db-ctx)
+                                    (case-conv/kebab-case->snake-case-string (name table-name))))
+    (catch Exception e
+      (log/warn e "admin: unique keys unreadable, not a join table" {:table table-name})
+      [])))
+
 (defn- compute-entity-config
   "Compute the complete entity configuration for `entity-name`.
 
@@ -119,6 +132,9 @@
         ;; Logged by get-entity-config; the create form refuses on it (BOU-494).
         create-errors (introspection/create-form-column-errors entity-name merged-config table-metadata)]
     (cond-> (introspection/detect-relationships ordered-config)
+      ;; Two keys, a primary key and two timestamps at most: a join table
+      (and (nil? (:join-table manual-config)) (<= (count table-metadata) 5))
+      (assoc :unique-keys (unique-keys repo effective-table-name))
       (seq create-errors) (assoc :create-config-errors create-errors))))
 
 (defn- base-entity-config
@@ -191,12 +207,14 @@
               ;; Roles last: a has-many column needs the inverse relations, and
               ;; the default columns need the roles (ADR-040).
               entity-config (-> (introspection/with-inverse-relationships entity-name own all)
+                                (as-> c (introspection/with-many-to-many entity-name c all))
                                 (display/with-display
                                   {:derive-list-fields?
                                    (not (contains? (get-in config [:entities entity-name]) :list-fields))}))]
           ;; Here and not in compute-entity-config, which also runs for each
           ;; entity as another's possible child.
-          (doseq [{:keys [message]} (:create-config-errors own)]
+          ;; A join table is not created from a form (BOU-778).
+          (doseq [{:keys [message]} (when-not (:join-keys entity-config) (:create-config-errors own))]
             (log/error "Admin config error:" message))
           (swap! config-cache assoc entity-name entity-config)
           entity-config)))

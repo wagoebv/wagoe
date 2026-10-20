@@ -418,6 +418,32 @@ On the child entity, use `:parent-context` to show parent info at the top of the
                    :fields [:order-number :status :customer-name]}}}
 ```
 
+## Many-to-Many Relationships
+
+A join table such as `product_tags (product_id, tag_id)` links two entities.
+List it, and both entities, in `:entity-discovery :allowlist`; the admin takes
+it for a join table when it has exactly two foreign keys, unique together (a
+composite primary key or a unique index), and no other column than its own
+primary key and `created_at` / `updated_at`. Then:
+
+- each side gets a relation keyed by the other entity (`:tags` on products), or
+  `<join>-by-<other-key>` when that is ambiguous;
+- the form edits it with checkboxes over up to ten records, else a multiple
+  combobox (`/:entity/options/:key`); saving replaces the links in the record's
+  transaction;
+- the detail page and the list show the linked records as chips, the list the
+  first three and "+N"; name the key in `:list-fields` to place the column;
+- the list filters on "has" / "has no" a record;
+- a hard delete removes the record's join rows;
+- the join table is hidden from the sidebar (`:sidebar-hidden false` shows it).
+
+A join table with another column, such as a role on a membership, stays an
+ordinary has-many. `:join-table true` on the join entity's config declares one
+the checks miss; `:join-table false` keeps it a has-many.
+
+Through the port: `create-entity` and `update-entity` take
+`:admin/links {:tags [id ...]}`; `ports/linked-records` reads them.
+
 ---
 
 ## Multi-table JOIN Queries

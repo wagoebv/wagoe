@@ -70,8 +70,11 @@
         ;; The bare table is the one response without the filter chips
         entity-config (if (htmx/fragment-request? (:headers request) ["entity-table-container"])
                         entity-config
-                        (support/with-filter-value-labels admin-service schema-provider user entity-name
-                          entity-config (:filters options)))
+                        (-> (support/with-filter-value-labels admin-service schema-provider user entity-name
+                              entity-config (:filters options))
+                            ;; A link filter's chip names the record, not its id
+                            (as-> c (support/with-link-options admin-service schema-provider config c
+                                      #(contains? (:filters options) (:key %))))))
         result (ports/list-entities admin-service entity-name options)
         records (support/with-workflow-states config entity-config (:records result))]
     {:entity-config entity-config
@@ -153,6 +156,7 @@
   [admin-service schema-provider config]
   (fn [request]
     (let [[user entity-name entity-config] (support/viewable-entity! schema-provider request)
+          entity-config (support/with-link-options admin-service schema-provider config entity-config any?)
           filters (:filters (support/parse-query-params (:query-params request)))]
       (support/html-response request
                              (admin-ui/filter-drawer entity-name

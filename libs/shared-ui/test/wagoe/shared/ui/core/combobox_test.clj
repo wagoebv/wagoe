@@ -65,3 +65,20 @@
   (is (= "ac" (combobox/query {:query-params {"q" " ac "}})))
   (is (nil? (combobox/query {:query-params {"q" "  "}})))
   (is (nil? (combobox/query {:query-params {}}))))
+
+(deftest ^:unit a-multiple-combobox-submits-one-input-per-chip
+  (let [page (html (combobox/combobox :tags {:url "/opts" :multiple true :required true
+                                             :chosen [["1" "Red"] ["2" "Blue"]] :remove-label "Remove"}))
+        chips (subs page 0 (str/index-of page "<template"))]
+    (testing "each chosen value a chip with its label and a hidden input"
+      (is (= 2 (count (re-seq #"class=\"link-chip\"" chips))))
+      (is (str/includes? chips "<span class=\"link-chip-label\">Blue</span>"))
+      (is (= 2 (count (re-seq #"<input name=\"tags\" type=\"hidden\"" chips))))
+      (is (str/includes? chips "aria-label=\"Remove\"")))
+    (testing "a template the component fills in for each pick"
+      (is (str/includes? page "<template x-ref=\"chip\">")))
+    (testing "the text input is empty and not required: the chips are the value"
+      (let [text (input-tag page "role=\"combobox\"")]
+        (is (str/includes? text "value=\"\""))
+        (is (not (str/includes? text "required")))))
+    (is (str/includes? page "data-multiple=\"true\""))))

@@ -19,6 +19,8 @@
      :string-match       :like or :ilike
      :table-exists?      (fn [datasource table-name] -> boolean)
      :table-info         (fn [datasource table-name] -> vector of column maps)
+     :unique-keys        optional (fn [datasource table-name] -> vector of column-name
+                         vectors); without one, read from the JDBC metadata
      :engine             :postgresql, :mysql, :sqlite or :h2
      :capabilities       a subset of protocols/capability-keywords
      :column-types       {logical-type DDL-type} for protocols/logical-column-types;
@@ -31,6 +33,7 @@
      :db->value          optional (fn [value] -> value) for each value read"
   (:require [wagoe.core.utils.type-conversion :as tc]
             [wagoe.platform.ports.database :as protocols]
+            [wagoe.platform.shell.adapters.database.common.introspection :as introspection]
             [clojure.tools.logging :as log]
             [next.jdbc :as jdbc]))
 
@@ -173,6 +176,9 @@
 
   (key-columns [_ datasource table-name key-name]
     (when-let [f (:key-columns spec)] (f datasource table-name key-name)))
+
+  (unique-keys [_ datasource table-name]
+    ((:unique-keys spec introspection/jdbc-unique-keys) datasource table-name))
 
   (engine [_] (:engine spec))
 

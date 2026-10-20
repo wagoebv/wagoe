@@ -54,6 +54,7 @@
    :prefill       form-data
    :return-to     (support/safe-return-to request)
    :field-options (support/foreign-key-options admin-service config entity-configs entity-name form-data)
+   :links         (support/link-fields admin-service config entity-configs entity-name nil (:admin/links form-data))
    :nested        (:sections nested)})
 
 ;; =============================================================================
@@ -172,8 +173,10 @@
                                                              user entity-name entity-config)
 
           [zones params] (support/form-zone-options config request (submitted-params request))
+          [params links] (forms/split-link-params entity-config params)
           [params child-params] (forms/split-child-params params)
           [form-data parse-errors] (support/parse-form-params-checked params entity-config zones)
+          form-data (cond-> form-data (seq links) (assoc :admin/links links))
 
           ; Validate data
           validation-result (ports/validate-entity-data admin-service entity-name form-data)
@@ -323,7 +326,9 @@
           then-list?     (= "list" (get (submitted-params request) "__then"))
           [zones params] (support/form-zone-options config request
                                                     (dissoc (submitted-params request) "__then" :__then))
+          [params links] (forms/split-link-params entity-config params)
           [form-data parse-errors] (support/parse-form-params-checked params entity-config zones)
+          form-data (cond-> form-data (seq links) (assoc :admin/links links))
 
           ;; An update is validated as the entity it would leave behind, not as
           ;; the fields the request happened to carry. Validating `form-data`

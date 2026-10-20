@@ -111,6 +111,59 @@
     (when (every? :attname found)
       (mapv :attname found))))
 
+(defn pg-unique-keys
+  "The unique keys of the table the search path resolves `table-name` to,
+   from PostgreSQL's catalog: a unique index is not in information_schema."
+  [datasource table-name]
+  (let [found (jdbc/execute! datasource
+                             [(str "SELECT ic.relname AS key_name, a.attname FROM pg_index i"
+                                   " JOIN pg_class ic ON ic.oid = i.indexrelid"
+                                   " CROSS JOIN LATERAL unnest(i.indkey::int2[]) WITH ORDINALITY AS k(attnum, ord)"
+                                   " LEFT JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = k.attnum"
+                                   " WHERE i.indrelid = to_regclass(quote_ident(?)) AND i.indisunique"
+                                   " AND i.indpred IS NULL AND k.ord <= i.indnkeyatts"
+                                   " ORDER BY ic.relname, k.ord")
+                              (text/lower-case (name table-name))]
+                             {:builder-fn rs/as-unqualified-lower-maps})]
+    (into [] (comp (partition-by :key_name)
+                   (filter #(every? :attname %))
+                   (map #(mapv :attname %)))
+          found)))
+
+(defn- metadata-rows
+  "The rows of a DatabaseMetaData result set, closed after reading."
+  [^java.sql.ResultSet result-set]
+  (with-open [result-set result-set]
+    (rs/datafiable-result-set result-set {:builder-fn rs/as-unqualified-lower-maps})))
+
+(defn jdbc-unique-keys
+  "The unique keys of `table-name` in the connection's own catalog and
+   schema, from the JDBC metadata: the primary key and every unique index
+   without a filter. H2 keeps names lower case (DATABASE_TO_LOWER), SQLite
+   and MySQL as created."
+  [datasource table-name]
+  (let [read (fn [^java.sql.Connection conn]
+               (let [md      (.getMetaData conn)
+                     catalog (.getCatalog conn)
+                     schema  (try (.getSchema conn) (catch Exception _ nil))
+                     table   (name table-name)
+                     pk      (->> (metadata-rows (.getPrimaryKeys md catalog schema table))
+                                  (sort-by :key_seq)
+                                  (mapv #(text/lower-case (:column_name %))))
+                     indexes (->> (metadata-rows (.getIndexInfo md catalog schema table true false))
+                                  (filter :column_name)
+                                  ;; SQLite's driver ignores the unique flag above
+                                  (remove #(contains? #{true 1} (:non_unique %)))
+                                  (remove :filter_condition)
+                                  (group-by :index_name)
+                                  vals
+                                  (map #(mapv (comp text/lower-case :column_name)
+                                              (sort-by :ordinal_position %))))]
+                 (into [] (distinct) (cond->> indexes (seq pk) (cons pk)))))]
+    (if (instance? java.sql.Connection datasource)
+      (read datasource)
+      (with-open [conn (jdbc/get-connection datasource)] (read conn)))))
+
 (defn- generated-always?
   "Whether the database refuses a value for this column: a computed column,
    or an identity GENERATED ALWAYS. An identity BY DEFAULT, an auto_increment

@@ -4,11 +4,13 @@
   (:require [clojure.string :as str]))
 
 (defn shown-fields
-  "The fields the entity form renders as a visible input."
+  "The fields the entity form renders as a visible input, its many-to-many
+   keys included."
   [entity-config]
-  (into #{}
-        (remove #(= :hidden (get-in entity-config [:fields % :widget])))
-        (:editable-fields entity-config)))
+  (-> #{}
+      (into (remove #(= :hidden (get-in entity-config [:fields % :widget])))
+            (:editable-fields entity-config))
+      (into (map :key) (:many-to-many entity-config))))
 
 (defn off-form-errors
   "The entries of `errors` ({field [message]}) on fields the form does not
@@ -118,3 +120,29 @@
                           (= 2 (count v))
                           (= #{"false" "true"} (set v))))))
          values)))
+
+;; =============================================================================
+;; Many-to-many links (BOU-778)
+;; =============================================================================
+
+(def links-param
+  "Names each many-to-many key on the form, so one with nothing chosen,
+   which submits nothing of its own, still empties its links."
+  "__links")
+
+(defn- param [params k]
+  (if (contains? params k) (get params k) (get params (keyword k))))
+
+(defn- as-values [v]
+  (cond (nil? v) [] (sequential? v) (vec v) :else [v]))
+
+(defn split-link-params
+  "`params` as [params links]: the params without the many-to-many keys of
+   `entity-config`, and {key [id ...]} for each key submitted or named in
+   `links-param`, empty when nothing is chosen. The service cleans the ids."
+  [entity-config params]
+  (let [named (set (map str (as-values (param params links-param))))
+        keys  (map (comp name :key) (:many-to-many entity-config))
+        sent  (filter #(or (named %) (some? (param params %))) keys)]
+    [(apply dissoc params links-param (keyword links-param) (mapcat (juxt identity keyword) keys))
+     (into {} (map (fn [k] [(keyword k) (as-values (param params k))])) sent)]))
