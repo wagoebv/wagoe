@@ -1,6 +1,7 @@
 (ns wagoe.platform.shell.authorization
   "`:wagoe/permission-registry`: the registry `core.authorization` builds,
-  behind `IPermissionRegistry`, and the scope check of a route (ADR-041 §4).
+  behind `IPermissionRegistry`, the scope check of a route (ADR-041 §4) and
+  the authorization interceptor that runs both (§5).
   Read it at the REPL with
 
     (ports/permissions (get (wagoe.platform.shell.system.wiring/system)
@@ -8,7 +9,6 @@
   (:require [clojure.tools.logging :as log]
             [wagoe.platform.core.authorization :as core]
             [wagoe.platform.core.http.access :as access]
-            [wagoe.platform.core.http.errors :as errors]
             [wagoe.platform.core.scope :as scope]
             [wagoe.platform.ports.authorization :as ports]))
 
@@ -34,7 +34,9 @@
 
 (defn assert-route-permissions!
   "Throw :configuration-error when a route's `:permission` is not in
-   `registry`, or its `:scope` is not one `core.scope` reads. `routes` are a
+   `registry`, its `:scope` is not one `core.scope` reads or sits on a route
+   that checks none, or its `:authorization` is neither `:signed-in` nor
+   `:self`. `routes` are a
    router's flattened [path data] pairs."
   [registry routes]
   (when-let [unknown (seq (core/unknown-route-permissions (ports/permissions registry) routes))]
@@ -47,7 +49,17 @@
                     :message (str "Routes say a :scope that is neither :handler nor a map of declared"
                                   " scope keys to :path/<param> parameters of the route: "
                                   (pr-str (mapv (juxt :path :scope) invalid)))
-                    :routes  (vec invalid)})))
+                    :routes  (vec invalid)}))
+  (when-let [invalid (seq (core/invalid-route-markers routes))]
+    (config-error! {:type    :configuration-error
+                    :message (str "Routes say an :authorization other than :signed-in or :self: "
+                                  (pr-str (mapv (juxt :path :authorization) invalid)))
+                    :routes  (vec invalid)}))
+  (when-let [unchecked (seq (core/unchecked-route-scopes routes))]
+    (config-error! {:type    :configuration-error
+                    :message (str "Routes say a :scope under :public or an :authorization marker, which"
+                                  " check no scope: " (pr-str (mapv (juxt :path :method :scope) unchecked)))
+                    :routes  (vec unchecked)})))
 
 ;; =============================================================================
 ;; Scopes
@@ -96,34 +108,99 @@
   "The scope check of a route whose data says `route-scope`, for a caller
    holding the route's permission in `scopes` (`core.scope/scopes-for`).
    `{:request r}`, the scopes on it as `:wagoe/scopes` for
-   `core.scope/scope-filter`, or `{:response r}`: 403, or 404 for a
+   `core.scope/scope-filter`, or `{:response r :error e}`: 403, or 404 for a
    parameter outside their scope."
   [request scopes route-scope]
   (let [{:keys [error] :as decision} (scope/route-decision scopes route-scope (:path-params request))]
     (if error
-      {:response (errors/response (if (= :not-found (:type error)) 404 403) (:type error) (:message error)
-                                  {:correlation-id (access/correlation-id request (str (random-uuid)))})}
+      {:response (access/refusal-response (if (= :not-found (:type error)) 404 403) (:type error) (:message error)
+                                          request (access/correlation-id request (str (random-uuid))))
+       :error    error}
       {:request (assoc request :wagoe/scopes (:scopes decision))})))
 
-(defn scope-middleware
-  "Reitit middleware running `authorize-scope` on every non-public endpoint; a
-   platform admin holds everywhere. `rights-of` and `permission-of` take the
-   request. Unmounted until the authorization interceptor supplies both."
-  [registry {:keys [rights-of permission-of]}]
-  {:name    ::scope
-   :compile (fn [data _opts]
-              (when-not (access/public? data)
-                (let [route-scope (:scope data)]
-                  (fn [handler]
-                    (fn [request]
-                      (let [user   (:user request)
-                            scopes (if (access/platform-admin? user)
-                                     [{}]
-                                     ;; Only the route's permission's rights: resolvers may read.
-                                     (let [p (permission-of request)]
-                                       (->> (rights-of request)
-                                            (filterv #(= p (:permission %)))
-                                            (resolve-rights registry user)
-                                            (#(scope/scopes-for % p)))))
-                            {admitted :request response :response} (authorize-scope request scopes route-scope)]
-                        (if admitted (handler admitted) response)))))))})
+;; =============================================================================
+;; The interceptor (ADR-041 §5)
+;; =============================================================================
+
+(def ^:private report-interval-ms
+  "How long one refusal, by user, route, method and permission, stays quiet
+   after it was logged."
+  60000)
+
+(defn- log-refusal! [{:keys [mode] :as entry}]
+  (if (= :report mode)
+    (log/warn "Authorization would refuse this request under :enforce" entry)
+    (log/info "Authorization refused a request" entry)))
+
+(defn- refusal-logger
+  "A fn logging a refusal at most once per `report-interval-ms` for the same
+   user, route, method and permission."
+  []
+  (let [seen (atom {})]
+    (fn [entry]
+      (let [k     (select-keys entry [:user-id :route :method :permission])
+            now   (System/currentTimeMillis)
+            fresh (fn [m] (let [m (if (> (count m) 10000) {} m)]
+                            (if (< (- now (get m k 0)) report-interval-ms) m (assoc m k now))))
+            [old new] (swap-vals! seen fresh)]
+        (when (not= (get old k) (get new k))
+          (log-refusal! entry))))))
+
+(defn- scopes-of
+  "The scopes in which `user` holds `permission`, rights read once."
+  [registry rights-source user permission]
+  (if (access/platform-admin? user)
+    [{}]
+    ;; Only the permission's rights are resolved: a resolver may read.
+    (->> (when rights-source (ports/rights rights-source user))
+         (filterv #(= permission (:permission %)))
+         (resolve-rights registry user)
+         (#(scope/scopes-for % permission)))))
+
+(defn- check
+  "`{:request r}` admitted, or `{:response r :error e :permission p}`. Only for
+   a rule that can refuse: `:permission`, `:module` or `:none`."
+  [registry rights-source rule route-scope request]
+  (let [user (:user request)]
+    (if-let [permission (core/required-permission rule (:request-method request))]
+      (assoc (authorize-scope request (scopes-of registry rights-source user permission) route-scope)
+             :permission permission)
+      (if (access/platform-admin? user)
+        {:request request}
+        (let [error {:type :forbidden :message "No authorization rule covers this route"}]
+          {:error    error
+           :response (access/refusal-response 403 :forbidden (:message error) request
+                                              (access/correlation-id request (str (random-uuid))))})))))
+
+(defn authorization-middleware
+  "Reitit middleware deciding every endpoint by `core/route-rule`, then its
+   scope (`authorize-scope`); a platform admin passes everything. Mounted
+   after the sign-in guard, so it sees only signed-in callers, and not at all
+   on a rule that admits every one of them. `rights-source` is an `IRights`,
+   read once per request. `mode`: `:report` logs what `:enforce` refuses and
+   lets it through; `:off` mounts nothing."
+  [registry rights-source {:keys [mode]}]
+  (let [log-refusal (refusal-logger)]
+    {:name    ::authorization
+     :compile (fn [data _opts]
+                (let [rule        (core/route-rule data)
+                      route-scope (:scope data)]
+                  (when-not (or (= :off mode) (#{:public :signed-in :self} (:rule rule)))
+                    (fn [handler]
+                      (fn [request]
+                        (let [{admitted :request :keys [response error permission]}
+                              (try (check registry rights-source rule route-scope request)
+                                   (catch Exception e
+                                     (when-not (= :report mode) (throw e))
+                                     (log/error e "Authorization report failed; the request goes through")
+                                     {:request request}))]
+                          (when error
+                            (log-refusal {:mode       mode
+                                          :user-id    (get-in request [:user :id])
+                                          :route      (or (:template (:reitit.core/match request)) (:uri request))
+                                          :method     (:request-method request)
+                                          :permission permission
+                                          :reason     (:type error)}))
+                          (cond admitted         (handler admitted)
+                                (= :report mode) (handler request)
+                                :else            response)))))))}))

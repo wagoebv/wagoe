@@ -21,3 +21,11 @@
 
   (permission? [this permission]
     "Whether `permission` is in the registry."))
+
+(defprotocol IRights
+  "A user's effective rights, read per request by the authorization
+  interceptor. The user module implements it, so the platform needs no
+  dependency on it."
+  (rights [this user]
+    "`[{:permission kw :scope nil-or-{key value}}]` for `user`, a signed-in
+    user map; a scope value fixed or a `:user/<name>` source."))

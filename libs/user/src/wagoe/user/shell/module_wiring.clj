@@ -394,6 +394,8 @@
    ;; iterate sorted, and :wagoe/tenant sorts before :wagoe/user, so ordering
    ;; could not have come from here (BOU-373).
    :http   {:user-service     (ig/ref :wagoe/user-service)
+            ;; Effective rights for the authorization interceptor (ADR-041 §5).
+            :rights           (ig/ref :wagoe/user-group-service)
             :auth-middleware  (ig/ref :wagoe/user-http-middleware)
             :extra-middleware (ig/ref :wagoe/user-home-middleware)}
    :routes [(ig/ref :wagoe/user-routes) (ig/ref :wagoe/user-group-routes)

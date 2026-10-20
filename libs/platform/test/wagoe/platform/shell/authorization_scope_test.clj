@@ -7,6 +7,7 @@
             [next.jdbc :as jdbc]
             [next.jdbc.result-set :as rs]
             [wagoe.platform.core.scope :as scope]
+            [wagoe.platform.ports.authorization :as ports]
             [wagoe.platform.shell.authorization :as sut]
             [wagoe.platform.shell.http.reitit-router :as router]))
 
@@ -76,12 +77,15 @@
 
 (defn- handler [ds]
   (router/compile-routes
-   [["/api/orders" {:get {:handler (fn [_] {:status 200 :body {:ok true}})}}]
+   [["/api/orders" {:wagoe/module :wagoe/orders
+                    :get {:handler (fn [_] {:status 200 :body {:ok true}})}}]
     ["/api/domains/:domain-id/orders"
-     {:scope {:domain-id :path/domain-id}
-      :get   {:handler (fn [_] {:status 200 :body {:ok true}})}}]
+     {:scope      {:domain-id :path/domain-id}
+      :permission :orders/read
+      :get        {:handler (fn [_] {:status 200 :body {:ok true}})}}]
     ["/api/my-orders"
-     {:get {:scope   :handler
+     {:get {:scope      :handler
+            :permission :orders/read
             :handler (fn [request]
                        {:status 200
                         :body   {:ids (order-ids ds (scope/scope-filter (:wagoe/scopes request)
@@ -93,8 +97,9 @@
                                              (h (if-let [who (get-in req [:headers "x-user"])]
                                                   (assoc req :user (assoc (users who) :id who))
                                                   req))))]}
-    :middleware      [(sut/scope-middleware registry {:rights-of     #(get-in % [:user :rights])
-                                                      :permission-of (constantly :orders/read)})]}))
+    :authorization   [(sut/authorization-middleware registry
+                                                (reify ports/IRights (rights [_ user] (:rights user)))
+                                                {:mode :enforce})]}))
 
 (defn- call [h uri user]
   (let [r (h {:request-method :get :uri uri :scheme :http :server-name "localhost" :server-port 80

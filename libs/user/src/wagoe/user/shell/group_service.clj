@@ -369,6 +369,11 @@
 ;; =============================================================================
 
 (defrecord UserGroupService [group-repository user-repository audit-repository settings registry membership]
+  authz/IRights
+  ;; What the platform's authorization interceptor reads, once per request.
+  (rights [this user]
+    (ports/user-grants this user))
+
   ports/IUserGroupService
 
   (list-groups [_]

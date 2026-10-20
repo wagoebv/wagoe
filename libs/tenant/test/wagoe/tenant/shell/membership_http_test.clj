@@ -9,6 +9,7 @@
             [wagoe.tenant.shell.persistence :as tenant-persistence]
             [wagoe.tenant.ports :as ports]
             [cheshire.core :as json]
+            [reitit.ring :as ring]
             [clojure.test :refer [deftest is testing use-fixtures]])
   (:import (java.util UUID)))
 
@@ -185,7 +186,7 @@
       ;; [path {method {:handler f}}] — ADR-037.
       (doseq [[path data] (:api routes)]
         (is (string? path))
-        (doseq [[_method config] data]
+        (doseq [[_method config] (select-keys data ring/http-methods)]
           (is (fn? (:handler config))))))))
 
 ;; =============================================================================

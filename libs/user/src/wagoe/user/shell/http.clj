@@ -361,7 +361,8 @@
   [user-service mfa-service]
   (let [auth-middleware (user-middleware/flexible-authentication-middleware user-service)]
     [["/users"
-      {:middleware [auth-middleware]
+      {:authorization :self
+       :middleware [auth-middleware]
        :post {:handler      (create-user-handler user-service)
               :interceptors ['wagoe.user.shell.http-interceptors/require-authenticated
                              'wagoe.user.shell.http-interceptors/require-admin
@@ -396,7 +397,8 @@
                                    [:role {:optional true} [:enum "admin" "user"]]
                                    [:active {:optional true} :boolean]]}}}]
      ["/users/:id"
-      {:middleware [auth-middleware]
+      {:authorization :self
+       :middleware [auth-middleware]
        :get    {:handler    (get-user-handler user-service)
                 ;; Read own record or admin — closes the cross-user IDOR
                 ;; (a non-admin cannot fetch another user's record by :id).
@@ -463,13 +465,15 @@
                 :tags       ["sessions"]
                 :parameters {:path [:map [:token :string]]}}}]
      ["/auth/mfa/setup"
-      {:middleware [(user-middleware/flexible-authentication-middleware user-service)]
+      {:authorization :signed-in
+       :middleware [(user-middleware/flexible-authentication-middleware user-service)]
        :post {:handler    (mfa-setup-handler mfa-service)
               :summary    "Initiate MFA setup"
               :tags       ["mfa"]
               :description "Returns TOTP secret, QR code URL, and backup codes for MFA setup"}}]
      ["/auth/mfa/enable"
-      {:middleware [(user-middleware/flexible-authentication-middleware user-service)]
+      {:authorization :signed-in
+       :middleware [(user-middleware/flexible-authentication-middleware user-service)]
        :post {:handler    (mfa-enable-handler mfa-service)
               :summary    "Enable MFA after verification"
               :tags       ["mfa"]
@@ -478,7 +482,8 @@
                                   [:backupCodes [:vector :string]]
                                   [:verificationCode :string]]}}}]
      ["/auth/mfa/disable"
-      {:middleware [(user-middleware/flexible-authentication-middleware user-service)]
+      {:authorization :signed-in
+       :middleware [(user-middleware/flexible-authentication-middleware user-service)]
        :post {:handler    (mfa-disable-handler mfa-service)
               :summary    "Disable MFA"
               :tags       ["mfa"]
@@ -487,7 +492,8 @@
                                   [:password {:optional true} :string]
                                   [:code {:optional true} :string]]}}}]
      ["/auth/mfa/status"
-      {:middleware [(user-middleware/flexible-authentication-middleware user-service)]
+      {:authorization :signed-in
+       :middleware [(user-middleware/flexible-authentication-middleware user-service)]
        :get {:handler    (mfa-status-handler mfa-service)
              :summary    "Get MFA status"
              :tags       ["mfa"]
@@ -527,12 +533,14 @@
                :summary "Submit login form"}}]
       ["/logout"
        {:no-doc true
+        :authorization :signed-in
         :post {:middleware [auth-middleware]
                :handler    (web-handlers/logout-handler user-service config)
                :summary    "Logout current user"}}]
       (when-let [handler (landing/dashboard-handler config)]
         ["/dashboard"
          {:no-doc     true
+          :authorization :signed-in
           :middleware [auth-middleware]
           :get {:handler handler
                 :summary "Dashboard, or a redirect to it"}}])
@@ -541,11 +549,13 @@
       ;; write both auth_users and users atomically.
       ["/users/new"
        {:no-doc     true
+        :authorization :self
         :middleware [auth-middleware user-middleware/require-admin-middleware]
         :get {:handler (web-handlers/create-user-page-handler config)
               :summary "Create user page"}}]
       ["/users"
        {:no-doc     true
+        :authorization :self
         :middleware [auth-middleware user-middleware/require-admin-middleware]
         :get  {:handler (web-handlers/users-page-handler user-service config)
                :summary "Users management list page (admin)"}
@@ -553,6 +563,7 @@
                :summary "Create user (HTMX fragment)"}}]
       ["/users/table"
        {:no-doc     true
+        :authorization :self
         :middleware [auth-middleware]
         :get {:handler (web-handlers/users-table-fragment-handler user-service config)
               :interceptors ['wagoe.user.shell.http-interceptors/require-authenticated
@@ -560,6 +571,7 @@
               :summary "Users table fragment (HTMX refresh)"}}]
       ["/users/bulk"
        {:no-doc     true
+        :authorization :self
         :middleware [auth-middleware]
         :post {:handler (web-handlers/bulk-update-users-htmx-handler user-service config)
                :interceptors ['wagoe.user.shell.http-interceptors/require-authenticated
@@ -567,6 +579,7 @@
                :summary "Bulk user operations (HTMX)"}}]
       ["/users/:id"
        {:no-doc     true
+        :authorization :self
         :middleware [auth-middleware]
         :get    {:handler (web-handlers/user-detail-page-handler user-service config)
                  ;; Admin-only: this is the user-MANAGEMENT detail page
@@ -588,6 +601,7 @@
                  :summary "Delete user (HTMX)"}}]
       ["/users/:id/hard-delete"
        {:no-doc     true
+        :authorization :self
         :middleware [auth-middleware]
         :post {:handler (web-handlers/hard-delete-user-handler user-service config)
                :interceptors ['wagoe.user.shell.http-interceptors/require-authenticated
@@ -596,6 +610,7 @@
        ;; Session management routes (user-specific, not duplicated in admin)
       ["/users/:id/sessions"
        {:no-doc     true
+        :authorization :self
         :middleware [auth-middleware]
         :get {:handler (web-handlers/user-sessions-page-handler user-service config)
               ;; The handler reads the :id path param, so a non-admin must
@@ -605,6 +620,7 @@
               :summary "User sessions management page"}}]
       ["/users/:id/sessions/revoke-all"
        {:no-doc     true
+        :authorization :self
         :middleware [auth-middleware]
         :post {:handler (web-handlers/revoke-all-sessions-handler user-service config)
                ;; Revoking by :id path param — own or admin only, else a
@@ -614,6 +630,7 @@
                :summary "Revoke all user sessions"}}]
       ["/users/:id/sessions/:session-id/revoke"
        {:no-doc     true
+        :authorization :self
         :middleware [auth-middleware]
         :post {:handler (web-handlers/revoke-session-handler user-service config)
                :interceptors ['wagoe.user.shell.http-interceptors/require-authenticated
@@ -622,12 +639,14 @@
       ;; Audit trail routes
       ["/audit"
        {:no-doc     true
+        :authorization :self
         :middleware [auth-middleware]
         :get {:handler (web-handlers/audit-page-handler user-service config)
               :interceptors ['wagoe.user.shell.http-interceptors/require-platform-admin]
               :summary "Audit trail page"}}]
       ["/audit/table"
        {:no-doc     true
+        :authorization :self
         :middleware [auth-middleware]
         :get {:handler (web-handlers/audit-table-fragment-handler user-service config)
               :interceptors ['wagoe.user.shell.http-interceptors/require-platform-admin]
@@ -635,6 +654,7 @@
        ;; Profile routes
       ["/profile"
        {:no-doc     true
+        :authorization :signed-in
         :middleware [auth-middleware]
         :get  {:handler (web-handlers/profile-page-handler user-service mfa-service config)
                :summary "User profile page"}
@@ -642,21 +662,25 @@
                :summary "Update profile (HTMX fragment)"}}]
       ["/profile/edit"
        {:no-doc     true
+        :authorization :signed-in
         :middleware [auth-middleware]
         :get {:handler (web-handlers/profile-edit-form-handler user-service config)
               :summary "Show profile edit form (HTMX fragment)"}}]
       ["/profile/info"
        {:no-doc     true
+        :authorization :signed-in
         :middleware [auth-middleware]
         :get {:handler (web-handlers/profile-info-fragment-handler user-service config)
               :summary "Show profile info card (HTMX fragment)"}}]
       ["/profile/preferences/edit"
        {:no-doc     true
+        :authorization :signed-in
         :middleware [auth-middleware]
         :get {:handler (web-handlers/preferences-edit-form-handler user-service config)
               :summary "Show preferences edit form (HTMX fragment)"}}]
       ["/profile/preferences"
        {:no-doc     true
+        :authorization :signed-in
         :middleware [auth-middleware]
         :get  {:handler (web-handlers/preferences-fragment-handler user-service config)
                :summary "Show preferences card (HTMX fragment)"}
@@ -664,11 +688,13 @@
                :summary "Update preferences (HTMX fragment)"}}]
       ["/profile/password/form"
        {:no-doc     true
+        :authorization :signed-in
         :middleware [auth-middleware]
         :get {:handler (web-handlers/password-change-form-handler config)
               :summary "Show password change form (HTMX fragment)"}}]
       ["/profile/password"
        {:no-doc     true
+        :authorization :signed-in
         :middleware [auth-middleware]
         :get  {:handler (web-handlers/password-section-fragment-handler config)
                :summary "Show collapsed password section (HTMX fragment)"}
@@ -677,6 +703,7 @@
       ;; MFA routes
       ["/profile/mfa/setup"
        {:no-doc     true
+        :authorization :signed-in
         :middleware [auth-middleware]
         :get  {:handler (web-handlers/mfa-setup-page-handler mfa-service config)
                :summary "MFA setup page"}
@@ -684,16 +711,19 @@
                :summary "Initiate MFA setup (HTMX fragment)"}}]
       ["/profile/mfa/verify"
        {:no-doc     true
+        :authorization :signed-in
         :middleware [auth-middleware]
         :post {:handler (web-handlers/mfa-verify-handler mfa-service config)
                :summary "Verify MFA code (HTMX fragment)"}}]
       ["/profile/mfa/backup-codes"
        {:no-doc     true
+        :authorization :signed-in
         :middleware [auth-middleware]
         :get {:handler (web-handlers/mfa-backup-codes-page-handler mfa-service config)
               :summary "View MFA backup codes"}}]
       ["/profile/mfa/disable"
        {:no-doc     true
+        :authorization :signed-in
         :middleware [auth-middleware]
         :get  {:handler (web-handlers/mfa-disable-page-handler mfa-service config)
                :summary "MFA disable confirmation page"}
@@ -761,7 +791,7 @@
   [user-service group-service config]
   (let [guard [(user-middleware/flexible-authentication-middleware user-service)
                user-middleware/require-admin-middleware]
-        route (fn [path methods] [path (assoc methods :no-doc true :middleware guard)])]
+        route (fn [path methods] [path (assoc methods :no-doc true :authorization :self :middleware guard)])]
     {:api        []
      :static     []
      :web-prefix "/web/admin"
@@ -855,19 +885,22 @@
   [{:keys [user-service data-export audit-repository export-jobs config]}]
   (let [auth  (user-middleware/flexible-authentication-middleware user-service)
         admin [auth require-platform-admin-middleware]
-        own   {:middleware [auth]
+        own   {:authorization :signed-in
+               :middleware [auth]
                :get        {:handler (export-own-data-handler data-export)
                             :summary "Download your data"}}]
     {:api    (cond-> [["/me/export" (assoc-in own [:get :tags] ["users"])]
                       ["/users/:id/export"
-                       {:middleware admin
+                       {:authorization :self
+                        :middleware admin
                         :get        {:handler    (export-user-data-handler data-export audit-repository)
                                      :summary    "Download a user's data (admin)"
                                      :tags       ["users"]
                                      :parameters {:path [:map [:id :string]]}}}]]
                export-jobs
                (conj ["/users/:id/export-jobs"
-                      {:middleware admin
+                      {:authorization :self
+                       :middleware admin
                        :post       {:handler    (request-user-export-job-handler user-service export-jobs audit-repository)
                                     :summary    "Ask for a user's data as a background job (admin)"
                                     :tags       ["users"]

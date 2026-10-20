@@ -337,7 +337,8 @@
   "Create default middleware stack for Reitit router.
 
   `:authentication` in `config`, when present, is `{:middleware [..]}`: what
-  sets `:user`, followed by the default-deny guard. Both run before the body
+  sets `:user`, followed by the default-deny guard, then `:authorization`,
+  a vector of middleware deciding what that user may do. All run before the body
   is decoded and coerced, so an anonymous caller is told 401 rather than
   what was wrong with a body it may not send.
 
@@ -357,6 +358,8 @@
          (create-exception-middleware config)]
         (into (:middleware authentication))
         (into (when authentication [require-authentication]))
+        ;; After the guard, so it only ever sees a signed-in caller.
+        (into (:authorization config))
         (into [;; Decoding request body — multipart after authentication, so
                ;; an anonymous caller cannot make the server spool an upload
                (multipart-params (:multipart config))
