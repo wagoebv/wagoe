@@ -296,8 +296,10 @@
     ;; "user" is how the column stores no role.
     (db/execute-update! ctx {:update :users :set {:role "user"} :where [:= :role "viewer"]}))
 
-  (any-users? [_]
-    (some? (db/execute-one! ctx {:select [:id] :from [:auth_users] :limit 1})))
+  (any-non-admin-users? [_]
+    (some? (db/execute-one! ctx {:select [:u.id] :from [[:users :u]]
+                                 :where  [:or [:= :u.role nil] [:<> :u.role "admin"]]
+                                 :limit  1})))
 
   (find-user-groups [_ user-id]
     (mapv db->group (db/execute-query! ctx {:select   [:g.id :g.name :g.description :g.created_at :g.updated_at]
