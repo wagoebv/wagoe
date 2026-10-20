@@ -418,6 +418,10 @@ grants through their groups on every call; `wagoe.user.core.group` has `holds?`,
   A `:scope` map key with `{:wagoe/entity :domains}` gets a lookup reading the
   admin's `/web/admin/domains/lookup`; its value is decoded with the scope schema
   and merged into the EDN typed beside it.
+- The group service takes `:permission-registry`. When the registry declares
+  scope keys, the scope schema is `wagoe.platform.core.scope/scope-schema` of
+  them (`with-registry-scopes`); a `:map` `:groups :scope` is declared into the
+  registry by `declared-scopes`. See platform AGENTS.md, Scopes.
 - Audit is per user: `:group-join`/`:group-leave` for the member,
   `:grant-add`/`:grant-remove` for every member, so a grant changed in an empty
   group writes nothing. A join lists the group's grants.

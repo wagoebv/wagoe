@@ -172,11 +172,8 @@
                                                              :having   [:> [:count :*] 1]}))}))))
 
 (def tables
-  "The user module's tables, by name, and the Malli schema each is built from.
-   In order, each after the tables it references: past eight entries a map
-   literal would not keep it."
-  (array-map
-   "auth_users"      user-schema/AuthUser
+  "The user module's tables, by name, and the Malli schema each is built from."
+  {"auth_users"      user-schema/AuthUser
    "users"           user-schema/TenantUser
    "user_sessions"   user-schema/UserSession
    "user_audit_log"  user-schema/UserAuditLog
@@ -185,7 +182,7 @@
    "user_group_members" user-schema/UserGroupMember
    "user_group_grants"  user-schema/UserGroupGrant
    "user_roles"         user-schema/UserRole
-   "user_group_roles"   user-schema/UserGroupRole))
+   "user_group_roles"   user-schema/UserGroupRole})
 
 (defn initialize-user-schema!
   "Initialize database schema for user entities using Malli schema definitions.

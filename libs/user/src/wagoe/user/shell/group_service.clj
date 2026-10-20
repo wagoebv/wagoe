@@ -7,6 +7,7 @@
             [malli.core :as m]
             [malli.error :as me]
             [wagoe.config :as config]
+            [wagoe.platform.core.scope :as scope]
             [wagoe.platform.ports.authorization :as authz]
             [wagoe.user.core.audit :as audit-core]
             [wagoe.user.core.group :as group-core]
@@ -50,6 +51,27 @@
                         (comp (filter keyword?)
                               (map (fn [p] [p {:label (group-core/permission-str p) :source :groups-schema}])))
                         (m/children permissions))}))
+
+(defn declared-scopes
+  "The keys of a `:scope` map schema in prepared `groups` settings, as scope
+   keys for the permission registry, `:wagoe/entity` read as `:entity`.
+   Another schema declares none. Read until 2.0, like `:permissions`."
+  [{:keys [scope-schema]}]
+  (when (and scope-schema (= :map (m/type scope-schema)))
+    {:scopes (into {}
+                   (map (fn [[k props child]]
+                          [k (cond-> {:label (name k) :schema child :source :groups-schema}
+                               (:wagoe/entity props) (assoc :entity (:wagoe/entity props)))]))
+                   (m/children scope-schema))}))
+
+(defn with-registry-scopes
+  "`settings` checking a grant's scope against the scope keys in `registry`
+   (`wagoe.platform.core.scope/scope-schema`) when it declares any; else
+   against the `:groups :scope` schema, or any map, as before."
+  [settings registry]
+  (let [scopes (some-> registry authz/scopes)]
+    (cond-> settings
+      (seq scopes) (assoc :scope-schema (m/schema (scope/scope-schema scopes))))))
 
 ;; =============================================================================
 ;; Service
@@ -280,6 +302,22 @@
         (assign-once! repo (:id readers) role))
       (ports/clear-legacy-roles repo))))
 
+(defn- assert-sources!
+  "Throw :configuration-error when a stored assignment takes a scope value from
+   a `:user/<name>` source no module registers: it would give no rights."
+  [repo registry]
+  (let [known   (authz/scope-sources registry)
+        unknown (into (sorted-set)
+                      (for [g (ports/find-groups repo)
+                            a (ports/find-assignments repo (:id g))
+                            v (vals (:scope a))
+                            :when (and (scope/source? v) (not (contains? known v)))]
+                        v))]
+    (when (seq unknown)
+      (throw (ex-info (str "Group roles take scope values from " (str/join ", " unknown)
+                           ", which no module registers under :scope-sources")
+                      {:type :configuration-error :sources (vec unknown)})))))
+
 (defn migrate!
   "ADR-041's migration: under :enforce nobody may do less than under :off, and
    nobody becomes an admin. Idempotent; runs at boot.
@@ -305,7 +343,8 @@
   (when registry
     (when-let [legacy (seq (sort (remove (authz/permissions registry)
                                          (mapcat :permissions (ports/find-roles group-repository)))))]
-      (log/warn "Managed roles hold permissions no module declares; they still count" {:permissions (vec legacy)}))))
+      (log/warn "Managed roles hold permissions no module declares; they still count" {:permissions (vec legacy)}))
+    (assert-sources! group-repository registry)))
 
 ;; =============================================================================
 ;; Service

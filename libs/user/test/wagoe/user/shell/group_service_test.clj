@@ -5,11 +5,12 @@
    everyone's reach."
   (:require [clojure.set :as set]
             [clojure.test :refer [deftest is testing]]
+            [malli.core :as m]
             [next.jdbc :as jdbc]
             [next.jdbc.result-set :as rs]
             [support.test-db :as test-db]
             [wagoe.platform.core.authorization :as authz-core]
-            [wagoe.platform.shell.authorization :as authz]
+            [wagoe.platform.shell.authorization :as authorization]
             [wagoe.user.core.group :as group]
             [wagoe.user.ports :as ports]
             [wagoe.user.shell.group-persistence :as group-persistence]
@@ -75,6 +76,31 @@
   (testing "a schema that is not an enum lists nothing"
     (is (nil? (sut/declared-permissions (sut/prepare-settings {:permissions :keyword}))))
     (is (nil? (sut/declared-permissions (sut/prepare-settings nil))))))
+
+(deftest ^:unit the-scope-map-is-declared-to-the-registry
+  (let [{:keys [scopes]} (sut/declared-scopes
+                          (sut/prepare-settings {:scope [:map [:domain-id {:optional true :wagoe/entity :domains} :int]]}))]
+    (is (= {:label "domain-id" :source :groups-schema :entity :domains}
+           (dissoc (:domain-id scopes) :schema)))
+    (is (= :int (m/form (get-in scopes [:domain-id :schema])))))
+  (is (nil? (sut/declared-scopes (sut/prepare-settings {:scope [:map-of :keyword :any]})))))
+
+(deftest ^:unit grants-are-checked-against-the-registrys-scope-keys
+  (let [registry (authorization/create-registry
+                  {:wagoe/app {:scopes        {:domain-id     {:label "Domain" :entity :domains :schema :int}
+                                               :department-id {:label "Department" :sources #{:user/department}}}
+                               :scope-sources {:user/department {:label "Their department" :resolve (constantly #{7})}}}})
+        settings (sut/with-registry-scopes (sut/prepare-settings nil) registry)
+        refused  #(get-in (group/grant-refusal {:permission :orders/read :scope %} settings) [:error :field])]
+    (is (nil? (refused {:domain-id 42})))
+    (is (nil? (refused {:department-id :user/department})) "a value taken from the user")
+    (is (nil? (refused {})))
+    (is (= :scope (refused {:domain-id "42"})))
+    (is (= :scope (refused {:area-id 1})) "an undeclared key")
+    (is (= :scope (refused {:domain-id :user/department})) "a source the key does not take")
+    (testing "without declared scope keys, the :groups :scope schema stands"
+      (is (= (sut/prepare-settings nil)
+             (sut/with-registry-scopes (sut/prepare-settings nil) (authorization/create-registry {:wagoe/app nil})))))))
 
 (deftest ^:integration every-change-to-a-users-rights-is-audited
   (with-service nil
@@ -276,7 +302,7 @@
 ;; =============================================================================
 
 (def ^:private registry
-  (authz/create-registry {:wagoe/orders  nil
+  (authorization/create-registry {:wagoe/orders  nil
                           :wagoe/reports nil
                           :wagoe/admin   {:permissions (authz-core/read-write-permissions "admin.users" "users")}}))
 
@@ -410,3 +436,11 @@
                (:type (refusal #(as tenant (fn [] (ports/update-user-profile svc {:id (:id ada) :role :admin})))))))
         (is (= :forbidden
                (:type (refusal #(as ada (fn [] (ports/update-user-profile svc {:id (:id ada) :role :admin})))))))))))
+
+(deftest ^:integration an-assignment-from-an-unregistered-source-fails-boot
+  (with-service nil {:registry registry}
+    (fn [{:keys [svc]}]
+      (let [g (ports/create-group svc {:name "Departments"})]
+        (ports/add-group-role svc (:id g) {:role :orders/viewer :scope {:department-id :user/department}})
+        (is (= {:type :configuration-error :sources [:user/department]}
+               (refusal #(sut/migrate! svc))))))))

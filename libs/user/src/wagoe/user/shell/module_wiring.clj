@@ -279,7 +279,8 @@
 
 (defmethod ig/init-key :wagoe/user-group-service
   [_ {:keys [group-repository user-repository audit-repository settings permission-registry hooks]}]
-  (let [svc (group-service/create-group-service group-repository user-repository audit-repository settings
+  (let [svc (group-service/create-group-service group-repository user-repository audit-repository
+                                                (group-service/with-registry-scopes settings permission-registry)
                                                 {:registry   permission-registry
                                                  :membership (:group-membership hooks)})]
     (group-service/migrate! svc)
@@ -415,7 +416,8 @@
   (let [config (landing/prepare config)
         groups (group-service/prepare-settings (:groups settings))]
     (cond-> (assoc (base-graph config validation-config (:auth settings {}) groups)
-                   :authorization (group-service/declared-permissions groups))
+                   :authorization (merge (group-service/declared-permissions groups)
+                                         (group-service/declared-scopes groups)))
       (seq (get-in settings [:oidc :providers]))
       (-> (update :components assoc
                   :wagoe/user-oidc        {:settings            (:oidc settings)

@@ -656,7 +656,8 @@
                              ;; "do not check" (BOU-356).
                              (select-keys settings [:coercion :muuntaja :multipart :conflicts]))
         handler (reitit-router/compile-routes all-routes router-config)
-        ;; A :permission no module declares fails the boot, not the request.
+        ;; A :permission no module declares, or a :scope naming no declared key,
+        ;; fails the boot, not the request.
         ;; Checked on the router's flattened routes, where data is inherited.
         _ (when-let [router (and permission-registry (:reitit/router (meta handler)))]
             (authorization/assert-route-permissions! permission-registry (reitit.core/routes router)))
