@@ -20,11 +20,11 @@
       (is (= ["dept" ": " :user.rights/scope-from-source "department"]
              (text (sut/scope-view {:dept :user/department} info))))
       (is (= ["dept" ": " :user.rights/scope-from-source "department" " = " "3, 7"]
-             (text (sut/scope-view {:dept :user/department} (assoc info :resolved {:user/department #{7 3}})))))
+             (text (sut/scope-view {:dept :user/department} (assoc info :resolved {[:dept :user/department] #{7 3}})))))
       (is (some #{:user.rights/scope-resolved-none}
-                (text (sut/scope-view {:dept :user/department} (assoc info :resolved {:user/department #{}})))))
+                (text (sut/scope-view {:dept :user/department} (assoc info :resolved {[:dept :user/department] #{}})))))
       (is (some #{:user.rights/scope-resolve-failed}
-                (text (sut/scope-view {:dept :user/department} (assoc info :resolved {:user/department :error}))))))))
+                (text (sut/scope-view {:dept :user/department} (assoc info :resolved {[:dept :user/department] :error}))))))))
 
 (deftest ^:unit permissions-are-grouped-by-module
   (let [registry {:orders/read  {:label "Read orders" :module :wagoe/orders}

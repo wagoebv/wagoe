@@ -82,7 +82,8 @@
 
 (defn scope-view
   "A stored scope as text. `info`: {:labels {key label} :sources {source label}
-   :resolved {source values-or-:error}}, the last when the scope is a user's."
+   :resolved {[key source] values-or-:error}}, the last when the scope is a
+   user's."
   [scope {:keys [labels sources resolved]}]
   (if (empty? scope)
     [:span.scope-everywhere [:t :user.rights/scope-everywhere]]
@@ -92,7 +93,7 @@
            (for [[k v] (sort-by key scope)
                  :let [label (or (get labels k) (name k))]]
              (if (scope/source? v)
-               (let [r (get resolved v ::none)]
+               (let [r (get resolved [k v] ::none)]
                  [:span.scope-part
                   label ": " [:t :user.rights/scope-from-source {:source (get sources v (group/permission-str v))}]
                   (cond
@@ -306,12 +307,21 @@
 ;; A user's rights
 ;; =============================================================================
 
+(def detail-tabs
+  "This module's pages for a user, beside the admin's edit page. The admin's
+   `:users` config names this var as its `:detail-tabs`; `{id}` is the user's."
+  [{:label [:t :user/tab-sessions] :href "/web/users/{id}/sessions"}
+   {:label [:t :user.rights/tab] :href "/web/users/{id}/rights"}])
+
 (defn user-tabs
-  "A user's pages as tabs: the admin's edit page, sessions and rights."
+  "A user's pages as tabs: the admin's edit page, then `detail-tabs`, the one
+   ending in `active` (:sessions, :rights) marked."
   [user-id active]
-  (ui/tabs [{:label [:t :admin/tab-details] :href (str "/web/admin/users/" user-id)}
-            {:label [:t :user/tab-sessions] :href (str "/web/users/" user-id "/sessions") :active? (= :sessions active)}
-            {:label [:t :user.rights/tab] :href (user-rights-path user-id) :active? (= :rights active)}]))
+  (ui/tabs (into [{:label [:t :admin/tab-details] :href (str "/web/admin/users/" user-id)}]
+                 (for [{:keys [label href]} detail-tabs]
+                   {:label   label
+                    :href    (str/replace href "{id}" (str user-id))
+                    :active? (str/ends-with? href (str "/" (name active)))}))))
 
 (defn- group-source-badge [source]
   (case source

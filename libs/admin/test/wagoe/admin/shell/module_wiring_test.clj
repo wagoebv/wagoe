@@ -187,3 +187,12 @@
     (is (= {:domain-id :domain-id} (scope {:domain-id :domain-id})))
     (is (thrown-with-msg? clojure.lang.ExceptionInfo #"resolves to nothing"
                           (scope {:domain-id 'no.such/condition})))))
+
+(def ^:private tabs [{:label "Rights" :href "/web/users/{id}/rights"}])
+
+(deftest ^:unit a-detail-tabs-symbol-resolves-to-its-var-at-boot
+  (let [resolved (fn [t] (get-in (wiring/ig-config {:entities {:users {:detail-tabs t}}} {})
+                                 [:components :wagoe/admin-routes :config :entities :users :detail-tabs]))]
+    (is (= tabs (resolved `tabs)))
+    (is (= tabs (resolved tabs)))
+    (is (thrown-with-msg? clojure.lang.ExceptionInfo #"resolves to nothing" (resolved 'no.such/tabs)))))
