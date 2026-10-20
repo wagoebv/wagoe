@@ -67,6 +67,11 @@
   :note   "Group grants (add-group-grant, remove-group-grant, import :grants), :role :user, and the OIDC provider's :default-role. Boot moves grants onto roles; the user_group_grants rows stay until 2.0."
   :manual "Call add-group-role / remove-group-role and import :roles [{:role :scope}], drop :role :user and :default-role. A grant names a permission and an assignment a role, which a rewrite cannot choose."}
 
+ {:ticket "BOU-774"
+  :since  "1.0.2"
+  :note   ":require-role in the :wagoe/admin config. Nothing reads it; under :wagoe/authorization :report or :enforce the admin reads admin.<entity>/read|write."
+  :manual "Delete :require-role from :wagoe/admin. The rewrites rename or revalue a key; none removes one."}
+
  {:ticket "BOU-782"
   :since  "1.0.2"
   :note   "POST /api/auth/mfa/disable without a body. It needs {\"password\": …} or {\"code\": …}, a current TOTP or backup code; wrong ones count towards the lockout. wagoe.user.shell.mfa/disable-mfa takes the same proof and the request context."
