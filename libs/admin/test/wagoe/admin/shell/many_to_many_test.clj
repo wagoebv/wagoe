@@ -23,7 +23,7 @@
 
 (def ^:private ddl
   ["CREATE TABLE products (id VARCHAR(36) PRIMARY KEY, name VARCHAR(100) NOT NULL)"
-   "CREATE TABLE tags (id VARCHAR(36) PRIMARY KEY, name VARCHAR(50) NOT NULL)"
+   "CREATE TABLE tags (id VARCHAR(36) PRIMARY KEY, name VARCHAR(50) NOT NULL, deleted_at VARCHAR(40))"
    ;; Composite key, a timestamp: a join table
    (str "CREATE TABLE product_tags (product_id VARCHAR(36) NOT NULL REFERENCES products(id),"
         " tag_id VARCHAR(36) NOT NULL REFERENCES tags(id), created_at VARCHAR(40),"
@@ -35,12 +35,17 @@
    ;; A role on the link: an ordinary child
    (str "CREATE TABLE memberships (id VARCHAR(36) PRIMARY KEY,"
         " product_id VARCHAR(36) NOT NULL, tag_id VARCHAR(36) NOT NULL, role VARCHAR(20),"
-        " CONSTRAINT uq_memberships UNIQUE (product_id, tag_id))")])
+        " CONSTRAINT uq_memberships UNIQUE (product_id, tag_id))")
+   ;; A join table that refuses every link: the admin stamps created_at
+   (str "CREATE TABLE locked_tags (product_id VARCHAR(36) NOT NULL REFERENCES products(id),"
+        " tag_id VARCHAR(36) NOT NULL REFERENCES tags(id),"
+        " created_at VARCHAR(40) CONSTRAINT ck_locked_tags CHECK (created_at IS NULL),"
+        " PRIMARY KEY (product_id, tag_id))")])
 
 (defonce ^:private backends (atom {}))
 
 (defn- create-tables! [db-ctx]
-  (doseq [t ["memberships" "featured_tags" "product_tags" "tags" "products"]]
+  (doseq [t ["locked_tags" "memberships" "featured_tags" "product_tags" "tags" "products"]]
     (db/execute-update! db-ctx {:raw (str "DROP TABLE IF EXISTS " t)}))
   (doseq [stmt ddl]
     (db/execute-update! db-ctx {:raw stmt})))
@@ -66,13 +71,14 @@
 
 (use-fixtures :once with-backends)
 
-(defn- system [db-ctx]
+(defn- system [db-ctx & [config writers]]
   (create-tables! db-ctx)
-  (let [schema (schema-repo/create-schema-repository db-ctx admin-config {})
+  (let [config (or config admin-config)
+        schema (schema-repo/create-schema-repository db-ctx config {})
         svc    (service/create-admin-service db-ctx schema
                                              (logging-no-op/create-logging-component {})
                                              (error-reporting-no-op/create-error-reporting-component {})
-                                             admin-config)]
+                                             config nil nil writers)]
     {:schema schema :svc svc}))
 
 (defn- links-of [svc entity k id]
@@ -169,3 +175,54 @@
       (testing "a hard delete takes the links with it"
         (ports/delete-entity svc :products (:id many))
         (is (= 1 (:n (db/execute-one! db-ctx {:select [[:%count.* :n]] :from [:product_tags]}))))))))
+
+(def ^:private writer-config
+  "Products written through a writer; tags soft-deleted."
+  (-> admin-config
+      (update-in [:entity-discovery :allowlist] conj :locked-tags)
+      (assoc-in [:entities :products :writer] :products)
+      (assoc-in [:entities :tags :soft-delete] true)))
+
+(defn- products-writer
+  "A writer that, like a module's service, opens its own transactions."
+  [db-ctx]
+  (reify ports/IEntityWriter
+    (update-record! [_ id changes]
+      (when-let [changes (not-empty (select-keys changes [:name]))]
+        (db/with-transaction [tx db-ctx]
+          (db/execute-update! tx {:update :products :set changes :where [:= :id (str id)]}))))
+    (delete-records! [_ ids _opts]
+      (db/with-transaction [tx db-ctx]
+        (db/execute-update! tx {:delete-from :products :where [:in :id (mapv str ids)]})
+        (mapv str ids)))))
+
+(deftest ^:integration a-writer-entity-links-in-the-writers-transaction
+  (doseq [[backend db-ctx] @backends
+          :let [{:keys [svc]} (system db-ctx writer-config {:products (products-writer db-ctx)})
+                red  (tag! svc "Red")
+                blue (tag! svc "Blue")
+                k    :product-tags-by-tag-id
+                id   (:id (ports/create-entity svc :products {:name "Shirt" :admin/links {k [red]}}))]]
+    (testing (str backend)
+      (testing "the record and its links are written together"
+        (ports/update-entity svc :products id {:name "T-shirt" :admin/links {k [red blue]}})
+        (is (= "T-shirt" (:name (ports/get-entity svc :products id))))
+        (is (= ["Blue" "Red"] (links-of svc :products k id))))
+
+      (testing "a refused link rolls the writer's update back"
+        (is (thrown? Exception (ports/update-entity svc :products id
+                                                    {:name "Hat" :admin/links {:locked-tags-by-tag-id [red]}})))
+        (is (= "T-shirt" (:name (ports/get-entity svc :products id))))
+        (is (= ["Blue" "Red"] (links-of svc :products k id))))
+
+      (testing "a link to a soft-deleted record survives an update, which cannot show it"
+        (ports/delete-entity svc :tags red)
+        (ports/update-entity svc :products id {:admin/links {k [blue]}})
+        (is (= #{red blue}
+               (set (map :t (db/execute-query! db-ctx {:select [[:tag_id :t]] :from [:product_tags]
+                                                       :where  [:= :product_id (str id)]}))))))
+
+      (testing "the writer's hard delete takes the join rows"
+        (ports/delete-entity svc :products id)
+        (is (nil? (ports/get-entity svc :products id)))
+        (is (= 0 (:n (db/execute-one! db-ctx {:select [[:%count.* :n]] :from [:product_tags]}))))))))

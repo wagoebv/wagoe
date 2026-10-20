@@ -581,6 +581,15 @@
 ;; the rows already visited.
 (defrecord ^:private Deletion [tx soft? now priors? seen])
 
+(defn- remove-links!
+  "Delete the join rows of records `ids` of `entity-config`, on `tx`."
+  [tx entity-config ids]
+  (when (seq ids)
+    (doseq [{:keys [table foreign-key]} (:many-to-many entity-config)]
+      (db/execute-update! tx {:delete-from table
+                              :where [:in (case-conversion/kebab-case->snake-case-keyword foreign-key)
+                                      (mapv str ids)]}))))
+
 (defn- delete-tree!
   "Delete `id` of `entity-name` and, first, its cascading has-many children,
    which follow the parent: removed with a hard delete, given a deleted_at with
@@ -616,9 +625,7 @@
               prior    (when priors? (first (live-records tx schema-provider entity-name [id-str])))]
           ;; Its links go with a hard delete, as cascaded children do (BOU-778)
           (when-not soft?
-            (doseq [{:keys [table foreign-key]} (:many-to-many cfg)]
-              (db/execute-update! tx {:delete-from table
-                                      :where [:= (case-conversion/kebab-case->snake-case-keyword foreign-key) id-str]})))
+            (remove-links! tx cfg [id-str]))
           (if (delete-row! tx cfg id-str soft? now)
             (conj (vec children) {:entity entity-name :id id-str :prior prior})
             children))))))
@@ -656,6 +663,49 @@
   (count (filter (set (map (juxt :entity :id) removed))
                  (distinct (map #(vector entity-name (str %)) ids)))))
 
+(defn- sync-links!
+  "Make the links of record `id` in each relation of `links` exactly those
+   ids, on `tx`: the missing join rows added, the others removed. A link to
+   a soft-deleted record stays: the form cannot show it, so its absence from
+   `ids` is no choice to remove it."
+  [tx schema-provider entity-config id links]
+  (let [id-str (str id)
+        now    (Instant/now)]
+    (doseq [[k ids] links
+            :let  [{:keys [table foreign-key other-key through entity]} (display/link-rel entity-config k)
+                   tcfg    (ports/get-entity-config schema-provider entity)
+                   jcfg    (ports/get-entity-config schema-provider through)
+                   jpk     (:primary-key jcfg :id)
+                   fk-col  (case-conversion/kebab-case->snake-case-keyword foreign-key)
+                   oth-col (case-conversion/kebab-case->snake-case-keyword other-key)
+                   current (set (map (comp str :other)
+                                     (db/execute-query! tx {:select [[oth-col :other]] :from [table]
+                                                            :where  [:= fk-col id-str]})))
+                   wanted  (set ids)
+                   gone    (let [g (vec (remove wanted current))]
+                             (if (and (seq g) (:soft-delete tcfg false))
+                               (mapv #(str (get % (:primary-key tcfg :id)))
+                                     (live-records tx schema-provider entity g))
+                               g))
+                   added   (remove current wanted)]]
+      (try
+        (when (seq gone)
+          (db/execute-update! tx {:delete-from table :where [:and [:= fk-col id-str] [:in oth-col gone]]}))
+        (when (seq added)
+          (db/execute-update!
+           tx {:insert-into table
+             :values (for [other added]
+                       (case-conversion/kebab-case->snake-case-map
+                        (cond-> {foreign-key id-str other-key other}
+                          ;; A surrogate key the database does not number
+                          (and (not (#{foreign-key other-key} jpk))
+                               (#{:uuid :string} (get-in jcfg [:fields jpk :type])))
+                          (assoc jpk (str (UUID/randomUUID)))
+                          (contains? (:fields jcfg) :created-at) (assoc :created-at now)
+                          (contains? (:fields jcfg) :updated-at) (assoc :updated-at now))))}))
+        (catch Exception e
+          (throw (refused-write jcfg e)))))))
+
 ;; =============================================================================
 ;; Entity writers (BOU-665)
 ;; =============================================================================
@@ -674,24 +724,40 @@
   (apply dissoc data (conj (:readonly-fields entity-config #{}) (:primary-key entity-config :id))))
 
 (defn- written-update!
-  "Update through `writer`, returning the record read back. A duplicate or a
-   CHECK is shown on its field, as the SQL path shows it (BOU-673)."
-  [svc writer entity-config entity-name id data]
-  (try
-    (ports/update-record! writer id (writable-data entity-config data))
-    (catch clojure.lang.ExceptionInfo e
-      (throw (or (unique-violation e) (check-violation entity-config e) e))))
-  (ports/get-entity svc entity-name id))
+  "Update through `writer`, and with it the record's `links`, in one
+   transaction when there are any: the writer's own transactions join it.
+   Returns the record read back. A duplicate or a CHECK is shown on its
+   field, as the SQL path shows it (BOU-673)."
+  [{:keys [db-ctx schema-provider] :as svc} writer entity-config entity-name id data links]
+  (let [update! #(try
+                   (ports/update-record! writer id (writable-data entity-config data))
+                   (catch clojure.lang.ExceptionInfo e
+                     (throw (or (unique-violation e) (check-violation entity-config e) e))))]
+    (if (seq links)
+      (db/with-transaction* db-ctx
+        (fn [tx]
+          (update!)
+          (sync-links! tx schema-provider entity-config id links)))
+      (update!))
+    (ports/get-entity svc entity-name id)))
 
 (defn- written-delete!
   "Delete `ids` through `writer`, all or none (BOU-673). Returns
    {:entity :id :prior} per record deleted, like delete-records!."
   [{:keys [db-ctx schema-provider]} writer entity-config entity-name ids priors?]
-  (let [priors (when priors?
-                 (into {} (map (juxt #(str (get % (:primary-key entity-config :id))) identity))
-                       (live-records db-ctx schema-provider entity-name ids)))]
+  (let [soft?   (:soft-delete entity-config false)
+        priors  (when priors?
+                  (into {} (map (juxt #(str (get % (:primary-key entity-config :id))) identity))
+                        (live-records db-ctx schema-provider entity-name ids)))
+        delete! #(ports/delete-records! writer ids {:soft? soft?})]
     (mapv (fn [id] {:entity entity-name :id id :prior (get priors id)})
-          (ports/delete-records! writer ids {:soft? (:soft-delete entity-config false)}))))
+          (if (or soft? (empty? (:many-to-many entity-config)))
+            (delete!)
+            ;; A hard delete takes the links, as the SQL path does (BOU-779)
+            (db/with-transaction* db-ctx
+              (fn [tx]
+                (remove-links! tx entity-config ids)
+                (delete!)))))))
 
 ;; =============================================================================
 ;; Admin Service Implementation
@@ -873,49 +939,6 @@
       (when-not (= wanted found)
         (throw (ex-info (str "Unknown " (name (:entity rel)) ": " (str/join ", " (remove found wanted)))
                         {:type :validation-error :errors {k [[:t :admin/links-unknown]]}}))))))
-
-(defn- sync-links!
-  "Make the links of record `id` in each relation of `links` exactly those
-   ids, on `tx`: the missing join rows added, the others removed. A link to
-   a soft-deleted record stays: the form cannot show it, so its absence from
-   `ids` is no choice to remove it."
-  [tx schema-provider entity-config id links]
-  (let [id-str (str id)
-        now    (Instant/now)]
-    (doseq [[k ids] links
-            :let  [{:keys [table foreign-key other-key through entity]} (display/link-rel entity-config k)
-                   tcfg    (ports/get-entity-config schema-provider entity)
-                   jcfg    (ports/get-entity-config schema-provider through)
-                   jpk     (:primary-key jcfg :id)
-                   fk-col  (case-conversion/kebab-case->snake-case-keyword foreign-key)
-                   oth-col (case-conversion/kebab-case->snake-case-keyword other-key)
-                   current (set (map (comp str :other)
-                                     (db/execute-query! tx {:select [[oth-col :other]] :from [table]
-                                                            :where  [:= fk-col id-str]})))
-                   wanted  (set ids)
-                   gone    (let [g (vec (remove wanted current))]
-                             (if (and (seq g) (:soft-delete tcfg false))
-                               (mapv #(str (get % (:primary-key tcfg :id)))
-                                     (live-records tx schema-provider entity g))
-                               g))
-                   added   (remove current wanted)]]
-      (try
-        (when (seq gone)
-          (db/execute-update! tx {:delete-from table :where [:and [:= fk-col id-str] [:in oth-col gone]]}))
-        (when (seq added)
-          (db/execute-update!
-           tx {:insert-into table
-             :values (for [other added]
-                       (case-conversion/kebab-case->snake-case-map
-                        (cond-> {foreign-key id-str other-key other}
-                          ;; A surrogate key the database does not number
-                          (and (not (#{foreign-key other-key} jpk))
-                               (#{:uuid :string} (get-in jcfg [:fields jpk :type])))
-                          (assoc jpk (str (UUID/randomUUID)))
-                          (contains? (:fields jcfg) :created-at) (assoc :created-at now)
-                          (contains? (:fields jcfg) :updated-at) (assoc :updated-at now))))}))
-        (catch Exception e
-          (throw (refused-write jcfg e)))))))
 
 (defn- links-of
   "`data` as [data links]: the record's own fields, and its `:admin/links`
@@ -1234,11 +1257,7 @@
           [data links]  (links-of data)
           _             (assert-links! db-ctx schema-provider entity-config links)]
       (if-let [writer (entity-writer writers entity-config)]
-        ;; The writer owns its transaction; the links follow it
-        (let [record (written-update! this writer entity-config entity-name id data)]
-          (when (seq links)
-            (db/with-transaction* db-ctx #(sync-links! % schema-provider entity-config id links)))
-          record)
+        (written-update! this writer entity-config entity-name id data links)
         (persist-interceptors/execute-persistence-operation
          :admin-update-entity
          {:entity (name entity-name) :id id}
