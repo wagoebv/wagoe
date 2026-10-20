@@ -689,7 +689,7 @@
         :middleware [auth-middleware]
         :get  {:handler (web-handlers/mfa-disable-page-handler mfa-service config)
                :summary "MFA disable confirmation page"}
-        :post {:handler (web-handlers/mfa-disable-handler user-service mfa-service config)
+        :post {:handler (web-handlers/mfa-disable-handler mfa-service config)
                :summary "Disable MFA"}}]])))
 
 (defn oidc-routes

@@ -11,6 +11,7 @@
    is delegated to wagoe.user.core.mfa."
   (:require [wagoe.user.core.mfa :as mfa-core]
             [wagoe.user.shell.mfa-crypto :as mfa-crypto]
+            [buddy.hashers :as hashers]
             [one-time.core :as otp]
             [clojure.string :as str]
             [clojure.tools.logging :as log])
@@ -282,6 +283,14 @@
         {:success? false
          :error {:type    :mfa-disable-failed
                  :message "Disabling MFA failed"}}))))
+
+(defn password-matches?
+  "Whether `password` is `user-id`'s, to confirm turning MFA off. Read from the
+   repository: the user service never hands out the hash."
+  [mfa-service user-id password]
+  (let [user (.find-user-by-id (:user-repository mfa-service) user-id)]
+    (boolean (and password (:password-hash user)
+                  (hashers/check password (:password-hash user))))))
 
 (defn- find-unused-backup-code-hash
   "Return the stored bcrypt hash that the presented plaintext `code` matches and
