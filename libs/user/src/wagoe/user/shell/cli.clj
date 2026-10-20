@@ -355,8 +355,7 @@
                  :user-update
                  service
                  []
-                 ;; --format is an output option; left in, it counts as a field
-                 (dissoc opts :format))
+                 opts)
         pipeline (user-interceptors/create-user-update-pipeline :cli)
         result-context (interceptor/run-pipeline context pipeline)]
     (:response result-context)))
@@ -551,7 +550,8 @@ Examples:
                     (binding [*out* *err*]
                       (println (:message result)))
 
-                    (:message result)
+                    ;; JSON output is for scripts; a sentence is not JSON.
+                    (and (:message result) (not= :json format-type))
                     (println (:message result))
 
                     :else
