@@ -14,6 +14,7 @@
             [wagoe.core.utils.type-conversion :as type-conv]
             [wagoe.core.interceptor :as interceptor]
             [wagoe.core.interceptor-context :as interceptor-context]
+            [wagoe.platform.core.http.errors :as errors]
             [wagoe.user.shell.interceptors :as user-interceptors]
             [wagoe.user.shell.service :as user-svc]
             [cheshire.core :as json]
@@ -229,9 +230,15 @@
     (str data)))
 
 (defn format-error
-  "Format error message based on output format."
+  "Format error message based on output format. Takes a flat error map or the
+   pipeline's error body, `{:error {:type :message :details}}`."
   [format-type error-data]
-  (let [message (or (:message error-data) (:detail error-data) "Unknown error")
+  (let [[body error-data] (if-let [e (when (map? (:error error-data)) (:error error-data))]
+                            (let [d (:details e)]
+                              [error-data (merge (if (map? d) d {:details d})
+                                                 (dissoc e :details))])
+                            [{:error error-data} error-data])
+        message (or (:message error-data) (:detail error-data) "Unknown error")
         ;; The violations, then whatever is genuinely absent. Every validation
         ;; error used to be printed as "Missing fields: :password", so a
         ;; password the policy rejected read as one the user had not typed
@@ -246,12 +253,8 @@
                                         (when missing
                                           [(str "missing fields: "
                                                 (str/join ", " missing))])))))]
-    (case format-type
-      :json (format-json {:error error-data})
-      :table (str "Error: " message
-                  (when details
-                    (str "\nDetails: " details)))
-      ;; Safe default: plain string formatting
+    (if (= :json format-type)
+      (format-json body)
       (str "Error: " message
            (when details
              (str "\nDetails: " details))))))
@@ -318,34 +321,8 @@
         pipeline (user-interceptors/create-user-creation-pipeline :cli)
 
         ;; Execute the pipeline
-        result-context (interceptor/run-pipeline context pipeline)
-        response (:response result-context)]
-
-    ;; Convert interceptor response format to CLI expected format
-    (cond
-      ;; Success case - CLI interceptor already formats correctly
-      (and response (= (:status response) 0))
-      response
-
-      ;; Success case - HTTP-style format (status 200)
-      (and response (= (:status response) 200))
-      {:status 0
-       :entity-type :user
-       :data (:body response)}
-
-      ;; Error case - response contains error details
-      (and response (not (#{0 200} (:status response))))
-      (let [error-body (:body response)
-            format-type (keyword (get opts :format "table"))]
-        {:status 1
-         :message (format-error format-type error-body)})
-
-      ;; Fallback - no response (shouldn't happen)
-      :else
-      {:status 1
-       :message (format-error (keyword (get opts :format "table"))
-                              {:type :internal-error
-                               :message "No response received from operation"})})))
+        result-context (interceptor/run-pipeline context pipeline)]
+    (:response result-context)))
 
 (defn execute-user-get
   "Execute user get command using interceptor pipeline."
@@ -403,15 +380,21 @@
   "Run the user command `verb` with `opts`. Returns a map with :status and
    :entity-type and :data, or :message."
   [verb opts service]
-  (case verb
-    :create (execute-user-create service nil opts)
-    :list (execute-user-list service nil opts)
-    :find (execute-user-get service nil opts) ; Note: find -> get mapping
-    :update (execute-user-update service nil opts)
-    :delete (execute-user-delete service nil opts)
-    (throw (ex-info (str "Unknown user command: " (name verb))
-                    {:type :unknown-command
-                     :message (str "Unknown command: user " (name verb))}))))
+  (let [result (or (case verb
+                     :create (execute-user-create service nil opts)
+                     :list (execute-user-list service nil opts)
+                     :find (execute-user-get service nil opts) ; Note: find -> get mapping
+                     :update (execute-user-update service nil opts)
+                     :delete (execute-user-delete service nil opts)
+                     (throw (ex-info (str "Unknown user command: " (name verb))
+                                     {:type :unknown-command
+                                      :message (str "Unknown command: user " (name verb))})))
+                   {:body (errors/body :internal-error "No response received from operation")})]
+    ;; A failed pipeline answers with an error body, which printed as nothing.
+    (if (errors/error-body? (:body result))
+      {:status 1
+       :message (format-error (keyword (get opts :format "table")) (:body result))}
+      result)))
 
 ;; =============================================================================
 ;; Help Text
@@ -562,8 +545,15 @@ Examples:
                                             :details (str/join ", " errors)})))
                   1)
                 (let [result (dispatch-command verb opts service)]
-                  (if (:message result)
+                  (cond
+                    (= 1 (:status result))
+                    (binding [*out* *err*]
+                      (println (:message result)))
+
+                    (:message result)
                     (println (:message result))
+
+                    :else
                     (println (format-success format-type
                                              (:entity-type result)
                                              (:data result))))

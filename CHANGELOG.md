@@ -257,6 +257,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **`bb create-admin` printed "Error: Unknown error" for a rejected password** (BOU-789); it prints the rule now, and
+  the other `user` CLI commands print their errors to stderr instead of nothing, and `user find --id` works.
 - **Push routes had no authorization rule, so `:enforce` refused them** (BOU-786): device routes are `:self`, stats
   need `push/read`. Grant it to whoever reads push stats before switching to `:enforce`.
 - **A check that throws under `:report` logged an ERROR on every request** (BOU-786); now once a minute per route.

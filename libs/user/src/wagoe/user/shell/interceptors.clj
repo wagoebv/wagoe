@@ -220,7 +220,7 @@
             (let [interface-type (ctx/get-interface-type context)
                   user-id (case interface-type
                             :http (get-in context [:request :parameters :path :id])
-                            :cli (get-in context [:opts :user-id]))]
+                            :cli (get-in context [:opts :id]))]
 
               (if user-id
                 (-> context
