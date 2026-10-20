@@ -144,7 +144,7 @@
              (when (pages/mounted? "/web/logout")
                [:form {:method "POST" :action "/web/logout" :class "logout-form"}
                 (csrf/hidden-field)
-                [:button {:type "submit" :class "logout-button"}
+                [:button {:type "submit" :class "user-menu-item"}
                  (icons/icon :log-out {:size 14})
                  [:span [:t :admin/button-logout]]]])]])]]
        [:main.admin-content

@@ -1847,32 +1847,27 @@
    Verifies password and disables MFA.
    
    Args:
-     user-service: User service instance
      mfa-service: MFA service instance
      config: Application configuration map
      
    Returns:
      Ring handler function"
-  [_user-service mfa-service _config]
+  [mfa-service _config]
   (fn [request]
     (try
       (let [current-user (:user request)
             user-id (:id current-user)
-            password (get-in request [:form-params "password"])]
-        (if (mfa/password-matches? mfa-service user-id password)
-          ;; Password correct - disable MFA
-          (let [disable-result (mfa/disable-mfa mfa-service user-id)]
-            (if (:success? disable-result)
-              (-> (response/redirect "/web/profile")
-                  (assoc :flash {:success "Two-factor authentication has been disabled"}))
-              (html-response request
-                             (profile-ui/mfa-disable-confirm-page {:password [(mfa-error-message disable-result)]}
-                                                                  {:user current-user})
-                             400)))
-          ;; Password incorrect
+            password (get-in request [:form-params "password"])
+            result (if (mfa/password-matches? mfa-service user-id password)
+                     (mfa/disable-mfa mfa-service user-id)
+                     {:success? false})]
+        (if (:success? result)
+          (-> (response/redirect "/web/profile")
+              (assoc :flash {:success "Two-factor authentication has been disabled"}))
           (html-response request
-                         (profile-ui/mfa-disable-confirm-page {:password ["Incorrect password"]}
-                                                              {:user current-user})
+                         (profile-ui/mfa-disable-confirm-page
+                          {:password [(if (:error result) (mfa-error-message result) "Incorrect password")]}
+                          {:user current-user})
                          400)))
       (catch Exception e
         (server-error request e "Error in mfa-disable-handler")))))
