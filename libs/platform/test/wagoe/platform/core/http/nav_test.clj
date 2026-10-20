@@ -86,4 +86,8 @@
   (is (not (nav/allowed? nil nil)))
   (is (nav/allowed? :admin {:role "admin" :tenant-id 1}))
   (is (not (nav/allowed? :platform-admin {:role :admin :tenant-id 1})))
-  (is (not (nav/allowed? :unknown {:role :admin}))))
+  (is (not (nav/allowed? :unknown {:role :admin})))
+  (testing "a fn of the signed-in user"
+    (is (nav/allowed? #(= 1 (:id %)) {:id 1}))
+    (is (not (nav/allowed? #(= 1 (:id %)) {:id 2})))
+    (is (not (nav/allowed? (constantly true) nil)))))

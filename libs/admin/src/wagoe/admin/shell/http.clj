@@ -13,15 +13,18 @@
    - Delete and bulk delete operations
    - HTMX fragment handlers for dynamic updates
 
-   All routes require authentication and admin role."
+   All routes require authentication. Who may do what is
+   `wagoe.admin.core.permissions`."
   (:require
    [wagoe.admin.shell.http.handlers.crud :as crud]
    [wagoe.admin.shell.http.handlers.delete :as delete]
    [wagoe.admin.shell.http.handlers.detail :as detail]
    [wagoe.admin.shell.http.handlers.inline :as inline]
    [wagoe.admin.shell.http.handlers.list :as list-handlers]
+   [wagoe.admin.core.permissions :as permissions]
    [wagoe.admin.core.ui.layout :as layout]
    [wagoe.admin.ports :as ports]
+   [wagoe.admin.shell.scoped-service :as scoped-service]
    [wagoe.user.shell.middleware :as user-middleware]))
 
 ;; Facade re-export: consumers (e.g. http_test) resolve
@@ -36,103 +39,128 @@
   "The admin interface's web routes, as Reitit data.
 
    Paths are relative to :web-prefix below, not to /web.
-   All routes require authentication and admin role.
+   All routes require authentication; the handlers check permissions.
    Routes use flexible-authentication-middleware for session or token auth."
   [admin-service schema-provider config user-service]
   (let [;; Reuse existing auth middleware from user module
-        auth-middleware (user-middleware/flexible-authentication-middleware user-service)]
+        auth-middleware (user-middleware/flexible-authentication-middleware user-service)
+        ;; Under :report and :enforce the user carries their rights, and under
+        ;; :enforce each request gets the service scoped to them (ADR-041 §6).
+        ;; Under :off neither: the handlers are built once, as before.
+        access          (:access config)
+        auth-middleware (if access
+                          (fn [handler]
+                            (auth-middleware
+                             (fn [request]
+                               (handler (update request :user #(when % (permissions/with-access % (access %))))))))
+                          auth-middleware)
+        h               (if access
+                          (fn [ctor]
+                            (fn [request]
+                              ((ctor (scoped-service/for-user admin-service schema-provider (:user request))
+                                     schema-provider config)
+                               request)))
+                          (fn [ctor] (ctor admin-service schema-provider config)))]
 
     [["/"
       {:middleware [auth-middleware]
-       :get {:handler (list-handlers/admin-home-handler admin-service schema-provider config)
+       :get {:handler (h list-handlers/admin-home-handler)
              :summary "Admin home page"}}]
 
       ;; More specific routes first (to avoid matching /:id patterns)
      ["/:entity/new"
       {:middleware [auth-middleware]
-       :get {:handler (detail/new-entity-handler admin-service schema-provider config)
+       :get {:handler (h detail/new-entity-handler)
              :summary "Create form page"}}]
 
      ["/:entity/new/rows/:child"
       {:middleware [auth-middleware]
-       :get {:handler (detail/new-child-row-handler admin-service schema-provider config)
+       :get {:handler (h detail/new-child-row-handler)
              :summary "HTMX child row for a create form"}}]
 
      ["/:entity/table"
       {:middleware [auth-middleware]
-       :get {:handler (list-handlers/entity-table-fragment-handler admin-service schema-provider config)
+       :get {:handler (h list-handlers/entity-table-fragment-handler)
              :summary "HTMX table fragment"}}]
 
      ["/:entity/validate-field"
       {:middleware [auth-middleware]
-       :post {:handler (crud/validate-field-handler admin-service schema-provider config)
+       :post {:handler (h crud/validate-field-handler)
               :summary "One field's errors, on leaving it"}}]
 
      ["/:entity/options/:field"
       {:middleware [auth-middleware]
-       :get {:handler (crud/field-options-handler admin-service schema-provider config)
+       :get {:handler (h crud/field-options-handler)
              :summary "HTMX options of a foreign key's combobox"}}]
 
      ["/:entity/lookup"
       {:middleware [auth-middleware]
-       :get {:handler (crud/lookup-handler admin-service schema-provider config)
+       :get {:handler (h crud/lookup-handler)
              :summary "HTMX options of a combobox choosing one of the entity's rows"}}]
 
      ["/:entity/filters"
       {:middleware [auth-middleware]
-       :get {:handler (list-handlers/filter-drawer-handler admin-service schema-provider config)
+       :get {:handler (h list-handlers/filter-drawer-handler)
              :summary "HTMX filter drawer"}}]
 
      ["/:entity/bulk-delete"
       {:middleware [auth-middleware]
-       :post {:handler (delete/bulk-delete-handler admin-service schema-provider config)
+       :post {:handler (h delete/bulk-delete-handler)
               :summary "Bulk delete entities"}}]
 
       ;; Inline editing routes (Week 2)
      ["/:entity/:id/:field/edit"
       {:middleware [auth-middleware]
-       :get {:handler (inline/inline-edit-widget-handler admin-service schema-provider config)
+       :get {:handler (h inline/inline-edit-widget-handler)
              :summary "Get inline edit form for field"}}]
 
      ["/:entity/:id/:field/cancel"
       {:middleware [auth-middleware]
-       :get {:handler (inline/cancel-inline-edit-handler admin-service schema-provider config)
+       :get {:handler (h inline/cancel-inline-edit-handler)
              :summary "Cancel inline edit"}}]
 
      ["/:entity/:id/:field"
       {:middleware [auth-middleware]
-       :patch {:handler (inline/update-field-handler admin-service schema-provider config)
+       :patch {:handler (h inline/update-field-handler)
                :summary "Update single field (inline edit)"}}]
 
       ;; General routes with path params last
      ["/:entity"
       {:middleware [auth-middleware]
-       :get {:handler (list-handlers/entity-list-handler admin-service schema-provider config)
+       :get {:handler (h list-handlers/entity-list-handler)
              :summary "Entity list page"}
-       :post {:handler (crud/create-entity-handler admin-service schema-provider config)
+       :post {:handler (h crud/create-entity-handler)
               :summary "Create entity"}}]
 
      ["/:entity/:id"
       {:middleware [auth-middleware]
-       :get {:handler (detail/entity-detail-handler admin-service schema-provider config)
+       :get {:handler (h detail/entity-detail-handler)
              :summary "Entity detail/edit page"}
-       :put {:handler (crud/update-entity-handler admin-service schema-provider config)
+       :put {:handler (h crud/update-entity-handler)
              :summary "Update entity"}
-       :delete {:handler (delete/delete-entity-handler admin-service schema-provider config)
+       :delete {:handler (h delete/delete-entity-handler)
                 :summary "Delete entity"}}]]))
 
 (defn- nav-contribution
   "The admin's sidebar items, from each entity's resolved config, or its own
    config when that cannot be resolved (its table is missing). Only :allowlist
    discovery lists; the other modes throw, and must fail the admin's pages,
-   not every page's sidebar."
+   not every page's sidebar. Under :enforce an item shows to a user who may
+   read its entity, their rights read once per page."
   [schema-provider config]
   (let [entities (try (ports/list-available-entities schema-provider)
-                      (catch clojure.lang.ExceptionInfo _ []))]
-    (layout/nav entities
-                (into {} (map (fn [e] [e (try (ports/get-entity-config schema-provider e)
+                      (catch clojure.lang.ExceptionInfo _ []))
+        configs  (into {} (map (fn [e] [e (try (ports/get-entity-config schema-provider e)
                                               (catch Exception _ (get-in config [:entities e])))]))
-                      entities))))
+                       entities)
+        nav      (layout/nav entities configs)]
+    (if (= :enforce (:authorization-mode config))
+      (let [access (memoize (fn [user] (permissions/with-access user ((:access config) user))))]
+        (update-in nav [:admin :items]
+                   (partial mapv (fn [{:keys [entity] :as item}]
+                                   (assoc item :access #(permissions/can-view-entity?
+                                                         (access %) entity (get configs entity)))))))
+      nav)))
 
 (defn- handler-checks
   "`routes` marked `:authorization :self`: the admin checks per entity, so the

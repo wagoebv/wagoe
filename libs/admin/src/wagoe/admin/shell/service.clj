@@ -24,6 +24,7 @@
    [wagoe.admin.core.forms :as forms]
    [wagoe.events.core.event :as event]
    [wagoe.events.ports :as events]
+   [wagoe.platform.core.scope :as scope]
    [clojure.string :as str]
    [clojure.tools.logging :as log])
   (:import [java.util UUID]
@@ -311,10 +312,18 @@
              [{} []]
              (or filters {})))
 
+(defn- scope-where
+  "The rows inside `scopes` (ADR-041 §4), each key's field under the entity's
+   `:scope` as its column, or its relation condition as it is."
+  [entity-config field-aliases scopes]
+  (scope/scope-filter scopes (update-vals (:scope entity-config)
+                                          #(if (keyword? %) (get field-aliases % %) %))))
+
 (defn- list-where
   "The WHERE a list applies for `options`: its search, its filters and, for a
    soft-deleting entity, live rows only. The overview's facet and summary
-   queries use it too, so they count exactly the rows the list shows."
+   queries use it too, so they count exactly the rows the list shows.
+   `:scopes` keeps the rows inside them, `:ids` those records."
   [adapter entity-config field-aliases options]
   (let [search-fields (mapv #(get field-aliases % %) (:search-fields entity-config))
         [plain links] (link-filters entity-config (:filters options))
@@ -325,7 +334,12 @@
       [(build-search-where adapter (:search options) search-fields)
        (build-filter-where adapter filters)
        (when (:soft-delete entity-config false)
-         [:= (get field-aliases :deleted-at :deleted_at) nil])]
+         [:= (get field-aliases :deleted-at :deleted_at) nil])
+       (when-let [scopes (:scopes options)]
+         (scope-where entity-config field-aliases scopes))
+       (when-let [ids (seq (:ids options))]
+         [:in (get field-aliases :id (:primary-key entity-config :id))
+          (mapv type-conversion/uuid->string ids)])]
       links))))
 
 ;; =============================================================================
