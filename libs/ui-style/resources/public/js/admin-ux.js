@@ -388,6 +388,28 @@ document.addEventListener('alpine:init', function () {
       }
     });
 
+    // An audit row's details, from the button's data attributes, into the
+    // modal it opens (components.js opens it)
+    document.addEventListener('click', function (event) {
+      var trigger = event.target.closest('.audit-detail-trigger');
+      if (!trigger) return;
+      ['timestamp', 'action', 'actor', 'target', 'ip', 'userAgent', 'error'].forEach(function (key) {
+        var node = document.getElementById('audit-detail-' + key.replace(/[A-Z]/g, '-$&').toLowerCase());
+        if (node) node.textContent = trigger.dataset[key] || '-';
+      });
+      var errorRow = document.getElementById('audit-detail-error-row');
+      if (errorRow) errorRow.hidden = !trigger.dataset.error;
+    });
+
+    // Back and forward restore a snapshot whose filter inputs show what the
+    // server rendered, not what was chosen since; the URL holds the truth
+    document.addEventListener('htmx:historyRestore', function () {
+      var params = new URLSearchParams(window.location.search);
+      document.querySelectorAll('select[hx-push-url], input[hx-push-url]').forEach(function (el) {
+        if (el.name) el.value = params.get(el.name) || '';
+      });
+    });
+
     // Close, previous and next inside the drawer
     document.addEventListener('click', function (event) {
       var control = event.target.closest('[data-drawer]');
