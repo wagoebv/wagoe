@@ -2,7 +2,8 @@
   "Toasts: a live region every page layout renders, and toasts an htmx
    response adds to it out of band. The `toast` Alpine component in
    components.js dismisses them."
-  (:require [wagoe.shared.ui.core.alpine :as alpine]))
+  (:require [cheshire.core :as json]
+            [wagoe.shared.ui.core.alpine :as alpine]))
 
 (def region-id "toasts")
 
@@ -62,3 +63,27 @@
    layout instead."
   [response opts render]
   (update response :body #(str % (render (oob-toast opts)))))
+
+;; Toasts components.js shows from response headers, for a response whose
+;; body is not swapped. `message` is a string, already translated.
+
+(defn- header-json [x]
+  ;; ASCII only: a header value carries no UTF-8
+  (json/generate-string x {:escape-non-ascii true}))
+
+(defn redirect-with-toast
+  "A response sending htmx to `location` with a toast to show there:
+   components.js keeps the X-Toast across the redirect. A flash would not,
+   nothing renders it."
+  [location type message]
+  {:status  200
+   :headers {"HX-Redirect" location
+             "X-Toast"     (header-json {:type type :message message})}
+   :body    ""})
+
+(defn with-error-toast
+  "Failed `response` with `message` as an error toast: htmx swaps no 4xx/5xx
+   body, so a button's request would fail silently."
+  [response message]
+  (assoc-in response [:headers "HX-Trigger"]
+            (header-json {:showToast {:type :error :message message}})))

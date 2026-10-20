@@ -10,7 +10,6 @@
             [wagoe.admin.core.ui.drawer :as drawer]
             [wagoe.admin.core.ui.filters :as filters]
             [wagoe.shared.ui.core.icons :as icons]
-            [wagoe.shared.ui.core.modal :as modal]
             [wagoe.shared.ui.core.table :as table-ui]
             [wagoe.shared.ui.core.alpine :as alpine]
             [clojure.string :as str]))
@@ -384,45 +383,28 @@
      [:span (for [k ks] [:kbd k]) " " [:t label]])])
 
 (defn- bulk-bar
-  "The bar that appears once rows are selected: how many,
-   what to do with them, and how to stop. Inside the Alpine bulk-selection
-   scope of the list page."
+  "The bar that appears once rows are selected. Inside the Alpine
+   bulk-selection scope of the list page."
   [entity-name]
-  [:div {:class      "bulk-bar"
-         :role       "region"
-         :aria-label [:t :admin/bulk-bar-label]
-         :x-show     "selectedIds.length > 0"
-         :x-cloak    true}
-   [:span {:class "bulk-count"}
-    [:span {:x-text "selectedIds.length"}] " " [:t :admin/bulk-selected]]
-   ;; htmx asks the form, not the button, to confirm a submit
-   [:form#bulk-action-form
-    (merge (modal/confirm-attrs "bulk-delete-confirm")
-           {:hx-post    (str "/web/admin/" (name entity-name) "/bulk-delete")
-            :hx-target  "#entity-table-container"
-            :hx-swap    "outerHTML"
-            :hx-include "[name='ids[]']"})
-    [:button.button
-     (merge (alpine/delete-button-attrs)
-            {:type                "submit"
-             :class               "bulk-danger"
-             :name                "action"
-             :value               "delete"
-             :id                  "bulk-delete-btn"
-             :form                "bulk-action-form"})
-     (icons/icon :trash {:size 14})
-     [:t :admin/button-delete-selected]]]
-   (modal/confirm-modal
-    {:id            "bulk-delete-confirm"
-     :title         [:t :admin/modal-confirm-delete-title]
-     :message       [:t :admin/confirm-delete-selected]
-     :confirm-label [:t :common/button-delete]
-     :danger?       true})
-   [:button {:type         "button"
-             :class        "button bulk-clear"
-             :x-on:click   "clearSelection()"}
-    [:t :admin/bulk-clear]
-    [:kbd "q"]]])
+  (table-ui/bulk-bar
+   {:form-attrs {:hx-post    (str "/web/admin/" (name entity-name) "/bulk-delete")
+                 :hx-target  "#entity-table-container"
+                 :hx-swap    "outerHTML"
+                 :hx-include "[name='ids[]']"}
+    :controls   [[:button.button
+                  (merge (alpine/delete-button-attrs)
+                         {:type  "submit"
+                          :class "bulk-danger"
+                          :name  "action"
+                          :value "delete"
+                          :id    "bulk-delete-btn"})
+                  (icons/icon :trash {:size 14})
+                  [:t :admin/button-delete-selected]]]
+    :confirm    {:id            "bulk-delete-confirm"
+                 :title         [:t :admin/modal-confirm-delete-title]
+                 :message       [:t :admin/confirm-delete-selected]
+                 :confirm-label [:t :common/button-delete]
+                 :danger?       true}}))
 
 (defn entity-list-page
   "Complete entity list page with search, table, and actions.

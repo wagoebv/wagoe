@@ -511,13 +511,30 @@
       (is (re-find #"^\s*<div [^>]*\bid=\"audit-table-container\""
                    (:body ((web-handlers/audit-table-fragment-handler service config) {}))))))
 
-  (testing "htmx shows the page's URL, not the fragment's"
+  (testing "pushes no URL: a refresh after a create or update is no history entry"
     (let [handler (web-handlers/users-table-fragment-handler (create-mock-service) {})]
-      (is (= "/web/users?sort=email&dir=asc&page=1&page-size=20&q=ann"
-             (get-in (handler {:headers {"hx-request" "true"}
-                               :query-params {"sort" "email" "dir" "asc" "q" "ann"}})
-                     [:headers "HX-Push-Url"])))
-      (is (nil? (get-in (handler {}) [:headers "HX-Push-Url"])))))
+      (is (nil? (get-in (handler {:headers {"hx-request" "true"}
+                                  :query-params {"sort" "email" "dir" "asc" "q" "ann"}})
+                        [:headers "HX-Push-Url"]))))))
+
+(deftest ^:contract users-page-serves-its-table-controls-test
+  (let [handler (web-handlers/users-page-handler (create-mock-service) {})
+        htmx    {"hx-request" "true" "hx-target" "users-table-container"}]
+    (testing "a browser gets the page"
+      (let [response (handler {:query-params {}})]
+        (is (html-contains? response "admin-shell"))
+        (is (= "HX-Request, HX-Target" (get-in response [:headers "Vary"])))))
+    (testing "the table's controls get the table, and push their own URL"
+      (let [response (handler {:query-params {"sort" "email" "dir" "asc"} :headers htmx})]
+        (is (re-find #"^\s*<div [^>]*\bid=\"users-table-container\"" (:body response)))
+        (is (not (html-contains? response "admin-shell")))
+        (is (nil? (get-in response [:headers "HX-Push-Url"])))))
+    (testing "a history restore gets the page"
+      (is (html-contains? (handler {:query-params {}
+                                    :headers (assoc htmx "hx-history-restore-request" "true")})
+                          "admin-shell")))))
+
+(deftest ^:contract users-table-fragment-handler-errors-test
 
   (testing "handles errors"
     (let [service (reify ports/IUserService
@@ -735,6 +752,18 @@
       (is (html-contains? response "hx-swap-oob=\"beforeend:#toasts\""))
       (is (html-contains? response "message-updated"))
       (is (html-contains? response "Updated Name"))))
+
+  (testing "active as the form sends it: the checkbox's hidden false, then true when checked"
+    (doseq [[sent expected] [[["false" "true"] true] ["false" false] ["true" true]]]
+      (let [user     (create-test-user {})
+            written  (atom nil)
+            service  (reify ports/IUserService
+                       (get-user-by-id [_ _] user)
+                       (update-user-profile [_ data] (reset! written data) (merge user data)))]
+        ((web-handlers/update-user-htmx-handler service {})
+         {:path-params {:id (str (:id user))}
+          :form-params {"name" "Test User" "email" "test@example.com" "role" "user" "active" sent}})
+        (is (= expected (:active @written)) (pr-str sent)))))
 
   (testing "returns validation errors for invalid data"
     (let [user (create-test-user {})

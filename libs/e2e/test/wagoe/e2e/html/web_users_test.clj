@@ -48,3 +48,38 @@
         (is (= 1 (loc/count-elements (page/locator pg "table.data-table tbody tr"))))
         (is (not (true? (get-in (users/validate-session other) [:body :valid])))
             "the revoked session no longer signs anyone in")))))
+
+(defn- await! [pg js]
+  (is (not (map? (page/wait-for-function pg js {:timeout 5000.0}))) js))
+
+(deftest ^:integration ^:e2e deactivate-asks-the-confirm-modal
+  (testing "Deactivate asks in the modal, Reactivate undoes it"
+    (spel/with-testing-page [pg]
+      (admin/login-as-admin! pg fx/*seed*)
+      (page/navigate pg (admin/app-url (str "/web/users/" (-> fx/*seed* :user :id))))
+      (page/wait-for-load-state pg)
+      (loc/click (page/locator pg "#deactivate-user"))
+      (page/wait-for-selector pg "#deactivate-confirm[open]" {:timeout 5000.0})
+      (loc/click (page/locator pg "#deactivate-confirm button[value='confirm']"))
+      (page/wait-for-selector pg "#reactivate-user" {:timeout 10000.0})
+      (is (not (loc/is-checked? (page/locator pg "#user-detail input#active"))))
+      (loc/click (page/locator pg "#reactivate-user"))
+      (page/wait-for-selector pg "#deactivate-user" {:timeout 10000.0})
+      (is (loc/is-checked? (page/locator pg "#user-detail input#active"))))))
+
+(deftest ^:integration ^:e2e users-table-pushes-its-own-url
+  (testing "Sorting pushes the page's URL once; a refresh adds no history entry"
+    (spel/with-testing-page [pg]
+      (admin/login-as-admin! pg fx/*seed*)
+      (page/navigate pg (admin/app-url "/web/users"))
+      (page/wait-for-load-state pg)
+      (let [before (page/evaluate pg "history.length")]
+        (loc/click (page/locator pg "#users-table-container th.field-email"))
+        (await! pg "location.pathname === '/web/users' && location.search.includes('sort=email')")
+        (is (= (inc before) (page/evaluate pg "history.length")))
+        (page/evaluate pg (str "window.e2eSettled = false;"
+                               "document.body.addEventListener('htmx:afterSettle', () => window.e2eSettled = true, {once: true});"
+                               "htmx.trigger(document.body, 'userUpdated')"))
+        (await! pg "window.e2eSettled")
+        (is (= (inc before) (page/evaluate pg "history.length")))
+        (is (str/includes? (page/url pg) "sort=email"))))))
