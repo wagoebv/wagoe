@@ -20,15 +20,20 @@
             [wagoe.platform.core.http.pages :as pages]
             [clojure.string :as str]))
 
+(defn- nav-text
+  "A label that truncates with an ellipsis; the title shows all of it."
+  [label]
+  [:span.nav-text {:title label} label])
+
 (defn- nav-link [attrs icon label]
   [:a (merge attrs (alpine/sidebar-nav-link-attrs))
    (icons/icon icon {:size 20})
-   [:span.nav-text label]])
+   (nav-text label)])
 
 (defn- nav-items [items & [title]]
   [:ul.entity-list
    ;; A collapsed sidebar shows a module's items in a flyout, under its name
-   (when title [:li.nav-flyout-title title])
+   (when title [:li.nav-flyout-title {:title title} title])
    (for [item items]
      [:li {:class (when (:active? item) "active")}
       ;; Always an icon: a collapsed sidebar hides the label
@@ -44,7 +49,7 @@
                                        :type          "button"
                                        :aria-expanded (str (boolean open?)))
       (icons/icon (or icon :folder) {:size 20})
-      [:span.nav-text label]
+      (nav-text label)
       (icons/icon :chevron-down {:size 14 :class "nav-chevron"})]
      (nav-items items label)]
     (list
@@ -137,10 +142,14 @@
               [:span [:t :admin/header-welcome {:name who}]]
               (when (and (:display-name user) (:email user))
                 [:span {:class "user-menu-email"} (:email user)])]
+             (when (pages/mounted? "/web/profile")
+               [:a {:href "/web/profile" :class "user-menu-item"}
+                (icons/icon :user {:size 14})
+                [:span [:t :user/profile-page-title]]])
              (when (pages/mounted? "/web/logout")
                [:form {:method "POST" :action "/web/logout" :class "logout-form"}
                 (csrf/hidden-field)
-                [:button {:type "submit" :class "logout-button"}
+                [:button {:type "submit" :class "user-menu-item"}
                  (icons/icon :log-out {:size 14})
                  [:span [:t :admin/button-logout]]]])]])]]
        [:main.admin-content

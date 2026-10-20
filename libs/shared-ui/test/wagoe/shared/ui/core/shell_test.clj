@@ -1,5 +1,6 @@
 (ns wagoe.shared.ui.core.shell-test
   (:require [wagoe.platform.core.http.nav :as nav]
+            [wagoe.platform.core.http.pages :as pages]
             [wagoe.shared.ui.core.shell :as shell]
             [clojure.test :refer [deftest testing is]]))
 
@@ -53,9 +54,10 @@
         (is (= "true" (:aria-expanded (second (toggle user)))))
         (is (= "false" (:aria-expanded (second (toggle other)))))
         (is (= "open" (:x-bind:aria-expanded (second (toggle other))))))
-      (testing "the group is named on its button and atop its flyout"
-        (is (some #{[:span.nav-text "Users"]} (nodes (toggle user))))
-        (is (= [[:li.nav-flyout-title "Other"]] (tagged other :li.nav-flyout-title))))
+      (testing "the group is named on its button and atop its flyout, in full in the title"
+        (is (some #{[:span.nav-text {:title "Users"} "Users"]} (nodes (toggle user))))
+        (is (= [[:li.nav-flyout-title {:title "Other"} "Other"]] (tagged other :li.nav-flyout-title)))
+        (is (= [{:title "Notes"} "Notes"] (rest (last (tagged other :span.nav-text)))) "and its items"))
       (testing "only what the user may open, the current page active"
         (is (= [["/web/admin/users" "active"] ["/web/admin/notes" nil]]
                (->> (tagged sidebar :li)
@@ -68,3 +70,10 @@
                         :button.nav-module-toggle))))
   (testing "outside a request there is none"
     (is (nil? (shell/user-nav {:role :admin})))))
+
+(deftest ^:unit the-user-menu-links-to-the-profile-when-mounted
+  (let [profile-links #(->> (tagged (shell/admin-shell [:p] {:nav nav :user {:email "a@b.c"}}) :a)
+                            (filter (comp #{"/web/profile"} :href second)))]
+    (is (= 1 (count (profile-links))))
+    (binding [pages/*mounted?* (complement #{"/web/profile"})]
+      (is (empty? (profile-links))))))
