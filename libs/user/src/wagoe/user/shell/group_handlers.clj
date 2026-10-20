@@ -28,15 +28,8 @@
 (defn- form [request k]
   (some-> (get-in request [:form-params k]) str str/trim))
 
-(defn- permission-options
-  "The declared permissions when they are a fixed set, for a select."
-  [group-service]
-  (let [schema (get-in group-service [:settings :permissions])]
-    (when (and schema (= :enum (m/type schema)))
-      (m/children schema))))
-
 (defn- scope-lookups
-  "The scope keys a grant chooses through a lookup: those the declared scope
+  "The scope keys an assignment chooses through a lookup: those the declared scope
    map says point at an admin entity, `[:domain-id {:wagoe/entity :domains} :int]`."
   [group-service]
   (let [schema (get-in group-service [:settings :scope-schema])]
@@ -51,7 +44,7 @@
    explanation when there is one."
   [e]
   (let [{:keys [type field errors]} (ex-data e)]
-    (list [:t (or ({:permission :user.groups/error-permission
+    (list [:t (or ({:role       :user.groups/error-role
                     :scope      :user.groups/error-scope
                     :email      :user.groups/error-no-user} field)
                   ({:not-found :user.groups/not-found} type)
@@ -65,7 +58,7 @@
 (defn- group-page [request group-service group-id status opts]
   (if-let [group (ports/get-group group-service group-id)]
     (html-response request
-          (group-ui/group-page group (permission-options group-service)
+          (group-ui/group-page group (ports/list-roles group-service)
                                (merge (page-opts request) {:scope-lookups (scope-lookups group-service)} opts))
           status)
     (not-found request)))
@@ -184,7 +177,7 @@
            (throw (ex-info "The scope is not EDN" {:type :validation-error :field :scope}))))))
 
 (defn- form-scope
-  "The grant's scope: the EDN typed, with each key chosen through a lookup
+  "The assignment's scope: the EDN typed, with each key chosen through a lookup
    added, read as the declared scope schema reads it from a string."
   [group-service request]
   (let [scope  (parse-scope (form request "scope"))
@@ -199,18 +192,18 @@
       (merge scope (m/decode (get-in group-service [:settings :scope-schema]) chosen (mt/string-transformer)))
       scope)))
 
-(defn add-grant [group-service]
+(defn add-role [group-service]
   (fn [request]
-    (change group-service request :user.groups/flash-grant-added
-            #(ports/add-group-grant group-service %
-                                    {:permission (some-> (form request "permission")
-                                                         (str/replace #"^:" "")
-                                                         not-empty
-                                                         keyword)
-                                     :scope      (form-scope group-service request)}))))
+    (change group-service request :user.groups/flash-role-added
+            #(ports/add-group-role group-service %
+                                   {:role  (some-> (form request "role")
+                                                   (str/replace #"^:" "")
+                                                   not-empty
+                                                   keyword)
+                                    :scope (form-scope group-service request)}))))
 
-(defn remove-grant [group-service]
+(defn remove-role [group-service]
   (fn [request]
-    (change group-service request :user.groups/flash-grant-removed
-            #(when-let [grant-id (path-uuid request :grant-id)]
-               (ports/remove-group-grant group-service % grant-id)))))
+    (change group-service request :user.groups/flash-role-removed
+            #(when-let [assignment-id (path-uuid request :assignment-id)]
+               (ports/remove-group-role group-service % assignment-id)))))

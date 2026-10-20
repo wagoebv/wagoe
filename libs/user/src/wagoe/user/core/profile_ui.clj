@@ -35,8 +35,7 @@
 (defn- format-role
   "Format role keyword for display."
   [role]
-  (when role
-    (-> role name text/capitalize)))
+  (-> (or role :user) name text/capitalize))
 
 ;; =============================================================================
 ;; Profile Information Components

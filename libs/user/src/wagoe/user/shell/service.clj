@@ -22,6 +22,7 @@
             [wagoe.user.shell.auth :as auth-shell]
             [wagoe.user.ports :as ports]
             [wagoe.platform.core.database.constraint :as constraint]
+            [wagoe.platform.core.http.access :as access]
             [wagoe.platform.core.http.client-ip :as client-ip]
             [wagoe.platform.shell.service-interceptors :as service-interceptors]
             [clojure.string :as str])
@@ -160,11 +161,22 @@
     (if refusal (throw refusal) result)))
 
 (defn- ends-sessions?
-  "Whether `after` changes `before`'s access: a role change (BOU-191) or a
-   deactivation (BOU-665). A role `after` leaves out is kept."
+  "Whether `after` changes `before`'s access: gaining or losing :admin
+   (BOU-191) or a deactivation (BOU-665). A role `after` leaves out is kept."
   [before after]
-  (or (and (:role after) (not= (:role before) (:role after)))
+  (or (and (contains? after :role) (not= (= :admin (:role before)) (= :admin (:role after))))
       (user-core/deactivates? before after)))
+
+(defn- check-admin-change!
+  "Throw :forbidden when the bound actor, not a platform admin, sets or clears
+   :admin. Without an actor (the CLI, a migration) it is allowed."
+  [user-repository before after]
+  (when-let [actor-id (:actor-id *audit-context*)]
+    (when (user-core/admin-change-refusal false before after)
+      (when-let [{:keys [error]} (user-core/admin-change-refusal
+                                  (access/platform-admin? (.find-user-by-id user-repository actor-id))
+                                  before after)]
+        (throw (ex-info (:message error) error))))))
 
 (defn- touches-access?
   "Whether `after` sets a key the admin guard and session ending judge."
@@ -265,7 +277,8 @@
                   {:user-data user-data
                    :email (:email user-data)}
                   (fn [{:keys [params]}]
-                    (let [user-data (:user-data params)
+                    (let [user-data (user-core/normalize-role (:user-data params))
+                          _ (check-admin-change! user-repository nil user-data)
                           ;; Each rule with its own :code, which step 1 reports as one
                           ;; English sentence; a form shows them one by one. This runs
                           ;; before the schema check, so a non-string email is left out
@@ -595,14 +608,16 @@
      {:user-entity user-entity
       :user-id (:id user-entity)}
      (fn [{:keys [params]}]
-       (let [input (:user-entity params)
+       (let [input (user-core/normalize-role (:user-entity params))
              ;; Get old user data for audit trail (before update)
              old-user (.find-user-by-id user-repository (:id input))
+             _ (check-admin-change! user-repository old-user input)
              ;; A partial update is validated with the stored values of the
              ;; required keys, but writes only its own: a stale role written
              ;; back would undo a concurrent promotion unguarded (BOU-685).
              merged (cond->> input
-                      old-user (merge (select-keys old-user [:email :name :role :active :created-at])))]
+                      old-user (merge (user-core/normalize-role
+                                       (select-keys old-user [:email :name :role :active :created-at]))))]
          ;; 1. Validate update using pure core function
          (let [validation-result (user-core/validate-user-update-request merged)]
            (when-not (:valid? validation-result)
