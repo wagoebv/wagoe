@@ -106,9 +106,8 @@
   ;; "not found" and returns nil without throwing, which Apply used to count as
   ;; a restart: the response said "Config applied successfully" and nothing
   ;; changed. It must refuse, and say why.
-  (let [{:keys [port] :as started}
-        (ig/init-key :wagoe/dashboard {:port         (free-port)
-                                       :ig-config-fn (fn [] {:wagoe/http {:port 3000}})})]
+  ;; No prep fn either, as wagoe.main leaves none: (go) is still the answer.
+  (let [{:keys [port] :as started} (ig/init-key :wagoe/dashboard {:port (free-port)})]
     (try
       (let [resp (http/post (str "http://localhost:" port "/dashboard/fragments/config-apply")
                             {:form-params      {"config-:wagoe/http" "{:port 3001}"}
@@ -150,6 +149,7 @@
   (let [state-sys  (resolve 'integrant.repl.state/system)
         state-cfg  (resolve 'integrant.repl.state/config)
         app-prep   (fn [] {::probe {:n 1}})
+        prev-prep  integrant.repl.state/preparer
         {:keys [port] :as started} (ig/init-key :wagoe/dashboard {:port (free-port)})
         apply!     (fn [edn]
                      (:body (http/post (str "http://localhost:" port "/dashboard/fragments/config-apply")
@@ -165,7 +165,7 @@
       (is (= {::probe {:n 3}} (integrant.repl.state/preparer))
           "the prep fn is the app's own with the edits on top")
       (finally
-        (integrant.repl/set-prep! nil)
+        (integrant.repl/set-prep! prev-prep)
         (alter-var-root state-sys (constantly nil))
         (alter-var-root state-cfg (constantly nil))
         (wagoe.devtools.shell.dashboard.server/clear-config-overrides!)

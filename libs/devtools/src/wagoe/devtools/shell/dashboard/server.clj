@@ -233,18 +233,7 @@
                                   ig-config-fn (or (:ig-config-fn config) (app-preparer))
                                   sys-var      (resolve 'integrant.repl.state/system)
                                   restart-fn   (resolve 'wagoe.devtools.shell.repl/restart-component)]
-                              ;; Split from the resolve checks below on purpose:
-                              ;; folding it in reported a missing prep fn
-                              ;; as "is the system running?", which sends the
-                              ;; reader to look at the wrong thing entirely.
                               (cond
-                                (nil? ig-config-fn)
-                                {:success? false
-                                 :error {:type    :configuration-error
-                                         :message (str "This dashboard cannot rebuild the system: integrant.repl "
-                                                       "has no prep fn. Call (integrant.repl/set-prep! ...) with a "
-                                                       "zero-argument function returning your Integrant config.")}}
-
                                 ;; Before anything is mutated. With no (go) the
                                 ;; REPL system is nil, restart-component answers
                                 ;; "not found" and returns nil without throwing,
@@ -260,6 +249,17 @@
                                                        "REPL with (go). This one was started another way (e.g. "
                                                        "wagoe.main), so there is nothing here it can restart — "
                                                        "the config is shown read-only.")}}
+
+                                ;; Split from the resolve checks below on purpose:
+                                ;; folding it in reported a missing prep fn
+                                ;; as "is the system running?", which sends the
+                                ;; reader to look at the wrong thing entirely.
+                                (nil? ig-config-fn)
+                                {:success? false
+                                 :error {:type    :configuration-error
+                                         :message (str "This dashboard cannot rebuild the system: integrant.repl "
+                                                       "has no prep fn. Call (integrant.repl/set-prep! ...) with a "
+                                                       "zero-argument function returning your Integrant config.")}}
 
                                 (and set-prep-fn sys-var cfg-var restart-fn)
                                 (let [;; Snapshot previous state so we can roll back on failure

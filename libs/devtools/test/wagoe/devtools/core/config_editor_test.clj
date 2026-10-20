@@ -111,7 +111,13 @@
         (is (= {:value v :hidden []} (cfg-edit/strip-unreadable v)))
         (is (= v (edn/read-string (cfg-edit/format-edn v))))))
     (testing "a value that is itself unreadable"
-      (is (= {:value nil :hidden [[]]} (cfg-edit/strip-unreadable f))))))
+      (is (= {:value nil :hidden [[]]} (cfg-edit/strip-unreadable f))))
+    (testing "a record, an ig/refset among them, is hidden rather than shown as a map"
+      (is (= {:value {:db (cfg-edit/strip-refs (ig/ref :wagoe/db))} :hidden [[:jobs]]}
+             (cfg-edit/strip-unreadable {:db (ig/ref :wagoe/db) :jobs (ig/refset :wagoe/export-jobs)}))))
+    (testing "a java.time.Instant prints as #object, so it is hidden"
+      (is (= {:value {} :hidden [[:at]]}
+             (cfg-edit/strip-unreadable {:at (java.time.Instant/parse "2026-01-01T00:00:00Z")}))))))
 
 (deftest ^:unit restore-unreadable-puts-hidden-values-back
   (let [f        (fn [] {})
@@ -120,4 +126,9 @@
            (cfg-edit/restore-unreadable original {:port 2 :db (ig/ref :wagoe/other) :nested {}}))
         "an ig/ref is not hidden, so an edited one is not overwritten")
     (is (= {:port 2 :f f} (cfg-edit/restore-unreadable original {:port 2}))
-        "a map the edit removed is not recreated")))
+        "a map the edit removed is not recreated")
+    (is (= {:port 2 :jobs (ig/refset :wagoe/export-jobs)}
+           (cfg-edit/restore-unreadable {:port 1 :jobs (ig/refset :wagoe/export-jobs)} {:port 2}))
+        "an ig/refset comes back as itself")
+    (is (= f (cfg-edit/restore-unreadable f {:port 2}))
+        "a wholly hidden value is not replaced by an edit")))

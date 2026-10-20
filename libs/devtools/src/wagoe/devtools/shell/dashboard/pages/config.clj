@@ -23,7 +23,7 @@
   (let [key-str   (pr-str section-key)
         {:keys [value hidden]} (cfg-edit/strip-unreadable section-val)
         editable? (and editable? (not (some empty? hidden)))
-        val-str   (section-edn value)]
+        val-str   (if (some empty? hidden) "" (section-edn value))]
     (c/card {:title key-str}
             [:div
              [:textarea.code-block

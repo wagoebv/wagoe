@@ -58,7 +58,9 @@
 (defn strip-refs
   "Replace ig/ref values with a keyword placeholder for serialization.
    Encodes the full qualified key (namespace + name) so restore-refs can
-   round-trip refs with any namespace, not just :wagoe/*."
+   round-trip refs with any namespace, not just :wagoe/*. Other records, an
+   ig/refset among them, are left whole: rebuilt as a plain map they would
+   be written back as one."
   [v]
   (cond
     (ig/ref? v) (let [k (ig/ref-key v)]
@@ -66,6 +68,7 @@
                            (if (namespace k)
                              (str (namespace k) "/" (name k))
                              (name k))))
+    (record? v) v
     (map? v) (reduce-kv (fn [m k val] (assoc m k (strip-refs val))) {} v)
     (sequential? v) (mapv strip-refs v)
     :else v))
@@ -95,7 +98,8 @@
     (map? v)    (every? (fn [[k x]] (and (edn-value? k) (edn-value? x))) v)
     (coll? v)   (every? edn-value? v)
     :else       (or (nil? v) (boolean? v) (number? v) (string? v) (keyword? v)
-                    (symbol? v) (char? v) (inst? v) (uuid? v))))
+                    ;; Not inst?: a java.time.Instant prints as #object.
+                    (symbol? v) (char? v) (instance? java.util.Date v) (uuid? v))))
 
 (defn strip-unreadable
   "`v` without the map entries EDN cannot represent — a function, a live
@@ -106,7 +110,7 @@
   (letfn [(walk [x path]
             (cond
               (edn-value? x) [x []]
-              (map? x)
+              (and (map? x) (not (record? x)))
               (reduce-kv (fn [[m hidden] k val]
                            (if (edn-value? k)
                              (let [[val' hidden'] (walk val (conj path k))]
@@ -121,12 +125,14 @@
 
 (defn restore-unreadable
   "Put back into `edited` what strip-unreadable hid from `original`, so
-   saving a section does not drop its functions."
+   saving a section does not drop its functions. A wholly hidden `original`
+   comes back unchanged."
   [original edited]
   (reduce (fn [acc path]
-            (if (and (seq path) (map? (get-in acc (pop path))))
-              (assoc-in acc path (get-in original path))
-              acc))
+            (cond
+              (empty? path)                    (reduced original)
+              (map? (get-in acc (pop path)))   (assoc-in acc path (get-in original path))
+              :else                            acc))
           edited
           (:hidden (strip-unreadable original))))
 
