@@ -152,13 +152,14 @@
          (#(scope/scopes-for % permission)))))
 
 (defn- check
-  "`{:request r}` admitted, or `{:response r :error e :permission p}`."
+  "`{:request r}` admitted, or `{:response r :error e :permission p}`. Only for
+   a rule that can refuse: `:permission`, `:module` or `:none`."
   [registry rights-source rule route-scope request]
   (let [user (:user request)]
     (if-let [permission (core/required-permission rule (:request-method request))]
       (assoc (authorize-scope request (scopes-of registry rights-source user permission) route-scope)
              :permission permission)
-      (if (or (#{:signed-in :self} (:rule rule)) (access/platform-admin? user))
+      (if (access/platform-admin? user)
         {:request request}
         (let [error {:type :forbidden :message "No authorization rule covers this route"}]
           {:error    error
@@ -166,36 +167,34 @@
                                               (access/correlation-id request (str (random-uuid))))})))))
 
 (defn authorization-middleware
-  "Reitit middleware deciding every non-public endpoint by `core/route-rule`,
-   then its scope (`authorize-scope`); a platform admin passes everything.
-   `rights-source` is an `IRights`, read once per request and only for a
-   rule that asks a permission. `mode`: `:report` logs what `:enforce`
-   refuses and lets it through; `:off` mounts nothing."
+  "Reitit middleware deciding every endpoint by `core/route-rule`, then its
+   scope (`authorize-scope`); a platform admin passes everything. Mounted
+   after the sign-in guard, so it sees only signed-in callers, and not at all
+   on a rule that admits every one of them. `rights-source` is an `IRights`,
+   read once per request. `mode`: `:report` logs what `:enforce` refuses and
+   lets it through; `:off` mounts nothing."
   [registry rights-source {:keys [mode]}]
   (let [log-refusal (refusal-logger)]
     {:name    ::authorization
      :compile (fn [data _opts]
-                (let [rule (core/route-rule data)]
-                  (when-not (or (= :off mode) (= :public (:rule rule)))
+                (let [rule        (core/route-rule data)
+                      route-scope (:scope data)]
+                  (when-not (or (= :off mode) (#{:public :signed-in :self} (:rule rule)))
                     (fn [handler]
                       (fn [request]
-                        (if-not (:user request)
-                          (access/unauthorized-response "Authentication required" request
-                                                        (access/correlation-id request (str (random-uuid))))
-                          (let [{admitted :request :keys [response error permission]}
-                                (if (= :report mode)
-                                  (try (check registry rights-source rule (:scope data) request)
-                                       (catch Exception e
-                                         (log/error e "Authorization report failed; the request goes through")
-                                         {:request request}))
-                                  (check registry rights-source rule (:scope data) request))]
-                            (when error
-                              (log-refusal {:mode       mode
-                                            :user-id    (get-in request [:user :id])
-                                            :route      (or (:template (:reitit.core/match request)) (:uri request))
-                                            :method     (:request-method request)
-                                            :permission permission
-                                            :reason     (:type error)}))
-                            (cond admitted          (handler admitted)
-                                  (= :report mode)  (handler request)
-                                  :else             response))))))))}))
+                        (let [{admitted :request :keys [response error permission]}
+                              (try (check registry rights-source rule route-scope request)
+                                   (catch Exception e
+                                     (when-not (= :report mode) (throw e))
+                                     (log/error e "Authorization report failed; the request goes through")
+                                     {:request request}))]
+                          (when error
+                            (log-refusal {:mode       mode
+                                          :user-id    (get-in request [:user :id])
+                                          :route      (or (:template (:reitit.core/match request)) (:uri request))
+                                          :method     (:request-method request)
+                                          :permission permission
+                                          :reason     (:type error)}))
+                          (cond admitted         (handler admitted)
+                                (= :report mode) (handler request)
+                                :else            response)))))))}))

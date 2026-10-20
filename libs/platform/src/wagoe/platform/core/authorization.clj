@@ -270,9 +270,10 @@
   "Each endpoint of flattened route `data` as [method merged-data]; a route
    with a top-level `:handler` answers any method, `:any`."
   [data]
-  (let [methods (filter #(map? (get data %)) http-methods)]
-    (cond-> (mapv (fn [m] [m (merge (apply dissoc data http-methods) (get data m))]) (sort methods))
-      (:handler data) (conj [:any (apply dissoc data http-methods)]))))
+  (let [shared  (apply dissoc data http-methods)
+        methods (sort (filter #(map? (get data %)) http-methods))]
+    (cond-> (mapv (fn [m] [m (merge shared (get data m))]) methods)
+      (:handler data) (conj [:any shared]))))
 
 (defn unruled-routes
   "The endpoints of `routes`, a router's flattened [path data] pairs, that no

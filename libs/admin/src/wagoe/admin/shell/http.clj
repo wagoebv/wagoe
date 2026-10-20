@@ -136,7 +136,9 @@
 
 (defn- handler-checks
   "`routes` marked `:authorization :self`: the admin checks per entity, so the
-   platform's authorization interceptor leaves them to it (ADR-041 §5)."
+   platform's authorization leaves them to it (ADR-041 §5). Not one parent
+   route: the platform orders flat routes by specificity, and a parent would
+   put `/:entity/:id` ahead of other modules' `/web/admin/...` pages."
   [routes]
   (mapv (fn [[path data]] [path (assoc data :authorization :self)]) routes))
 
@@ -147,7 +149,7 @@
    JSON API for it yet."
   [admin-service schema-provider config user-service]
   {:api []  ; Week 2+: JSON API endpoints
-   :web (handler-checks (web-routes admin-service schema-provider config user-service))
+:web (handler-checks (web-routes admin-service schema-provider config user-service))
    :static []  ; Week 2+: Admin-specific static assets
 
    ;; Its entities, for the sidebar, asked per page: whether one is a join
