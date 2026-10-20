@@ -62,6 +62,7 @@
  :common/audit-grant-add "Recht toegekend"
  :common/audit-grant-remove "Recht ingetrokken"
  :common/audit-data-export "Gegevens geëxporteerd"
+ :common/audit-mfa-disabled "Tweestapsverificatie uitgezet"
  :common/audit-all-results  "Alle resultaten"
 
  ;; Meldingen bij formuliervelden (wagoe.shared.ui.core.form)
@@ -294,8 +295,10 @@
  :user/mfa-backup-codes-page-title  "Tweestapsverificatie back-upcodes"
  :user/mfa-disable-title            "Tweestapsverificatie uitschakelen"
  :user/mfa-disable-warning          "Waarschuwing: Het uitschakelen van tweestapsverificatie maakt uw account minder veilig."
- :user/mfa-disable-prompt           "Om tweestapsverificatie uit te schakelen, bevestig uw wachtwoord:"
- :user/mfa-disable-wrong-password   "Onjuist wachtwoord"
+ :user/mfa-disable-prompt           "Om tweestapsverificatie uit te schakelen, bevestig uw wachtwoord of voer een code uit uw authenticator-app of een back-upcode in:"
+ :user/mfa-disable-code-label       "Verificatiecode of back-upcode"
+ :user/mfa-disable-wrong-proof      "Onjuist wachtwoord of onjuiste code"
+ :user/mfa-disable-locked           "Te veel mislukte pogingen. Probeer het later opnieuw."
  :user/profile-page-title           "Profiel & beveiliging"
  :user/profile-label-sessions       "Sessies"
  :user/profile-card-data-title      "Uw gegevens"

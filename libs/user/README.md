@@ -153,7 +153,7 @@ The module registers these routes automatically:
 | `/api/auth/refresh` | POST | Refresh JWT token |
 | `/api/auth/mfa/setup` | POST | Generate MFA secret |
 | `/api/auth/mfa/enable` | POST | Enable MFA |
-| `/api/auth/mfa/disable` | POST | Disable MFA |
+| `/api/auth/mfa/disable` | POST | Disable MFA; needs `password` or a TOTP/backup `code` |
 | `/api/users` | GET | List users (admin) |
 | `/api/users/:id` | GET | Get user |
 | `/api/users/:id` | PUT | Update user |

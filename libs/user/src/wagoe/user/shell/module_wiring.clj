@@ -93,9 +93,9 @@
 ;; =============================================================================
 
 (defmethod ig/init-key :wagoe/mfa-service
-  [_ {:keys [user-repository mfa-config]}]
+  [_ {:keys [user-repository mfa-config] :as opts}]
   (log/info "Initializing MFA service")
-  (let [service (user-mfa/create-mfa-service user-repository mfa-config)]
+  (let [service (user-mfa/create-mfa-service user-repository mfa-config opts)]
     (log/info "MFA service initialized")
     service))
 
@@ -327,8 +327,10 @@
     :wagoe/audit-repository   {:ctx               (ig/ref :wagoe/db-context)
                                :pagination-config (get-in config [:active :wagoe/pagination]
                                                           {:default-limit 20 :max-limit 100})}
-    :wagoe/mfa-service        {:user-repository (ig/ref :wagoe/user-repository)
-                               :mfa-config      {}}
+    :wagoe/mfa-service        {:user-repository  (ig/ref :wagoe/user-repository)
+                               :audit-repository (ig/ref :wagoe/audit-repository)
+                               :auth-config      (dissoc auth-config :mfa-required?)
+                               :mfa-config       {}}
     ;; Platform adds the modules' :auth part as :contributed.
     :wagoe/auth-hooks         {:configured (assoc (select-keys (get-in config [:active :wagoe/user])
                                                                hooks/config-hooks)

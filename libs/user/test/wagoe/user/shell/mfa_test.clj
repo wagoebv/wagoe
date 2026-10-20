@@ -6,11 +6,12 @@
   {:kaocha.testable/meta {:integration true :user true}}
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest testing is use-fixtures]]
-            [wagoe.user.shell.auth :as auth-shell]
             [wagoe.user.shell.mfa :as mfa-shell]
             [wagoe.user.shell.mfa-crypto :as mfa-crypto]
             [wagoe.user.ports :as ports]
-            [wagoe.user.totp-clock :as totp-clock]))
+            [wagoe.user.shell.in-memory-repository-test :as mem]
+            [wagoe.user.totp-clock :as totp-clock])
+  (:import (java.util UUID)))
 
 (use-fixtures :each totp-clock/frozen)
 
@@ -335,22 +336,76 @@
     (let [mock-repo (create-mock-repository)
           config {:issuer "TestApp"}
           service (mfa-shell/create-mfa-service mock-repo config)
-          result (mfa-shell/disable-mfa service (:id test-user))]
+          result (mfa-shell/disable-mfa service (:id test-user) {:password "x"} {})]
 
       (testing "returns error when MFA not enabled"
         (is (some? result))
         (is (false? (:success? result)))
         (is (= {:type :cannot-disable :message "MFA is not enabled"} (:error result)))))))
 
-(deftest ^:unit ^:security password-matches-reads-the-hash-from-the-repository
-  ;; The user service drops the hash, so checking against its user refused
-  ;; every password and MFA could not be turned off from the profile.
-  (let [repo (create-mock-repository)
-        _    (ports/update-user repo {:id (:id test-user)
-                                      :password-hash (auth-shell/hash-password "Right-Pass-1!")})
-        svc  (mfa-shell/create-mfa-service repo {})
-        id   (:id test-user)]
-    (is (true? (mfa-shell/password-matches? svc id "Right-Pass-1!")))
-    (is (false? (mfa-shell/password-matches? svc id "wrong")))
-    (is (false? (mfa-shell/password-matches? svc id nil)))
-    (is (false? (mfa-shell/password-matches? svc "nobody" "Right-Pass-1!")))))
+;; Disabling needs proof (BOU-782): a stolen session alone must not be able to
+;; remove the second factor, nor guess the proof without locking the account.
+
+(defn- disable-fixture
+  "A user with MFA on, in memory: `password` nil makes them OIDC-only."
+  [password]
+  (let [id    (UUID/randomUUID)
+        users (atom {id (mem/mfa-user id password)})
+        audit (atom [])]
+    {:id id :users users :audit audit
+     :svc (mfa-shell/create-mfa-service (mem/->MemoryUserRepository users) {}
+                                        {:audit-repository (mem/->MemoryAuditRepository audit)
+                                         :auth-config      {:max-failed-attempts 3}})}))
+
+(defn- disable [{:keys [svc id]} proof]
+  (mfa-shell/disable-mfa svc id proof {:ip-address "10.0.0.1" :user-agent "test"}))
+
+(deftest ^:unit ^:security disable-mfa-with-the-password
+  (let [{:keys [users audit id] :as fx} (disable-fixture "Right-Pass-1!")]
+    (is (= {:success? true} (disable fx {:password "Right-Pass-1!"})))
+    (is (false? (get-in @users [id :mfa-enabled])))
+    (is (= [{:action :mfa-disabled :actor-id id :target-user-id id :ip-address "10.0.0.1"}]
+           (map #(select-keys % [:action :actor-id :target-user-id :ip-address]) @audit)))))
+
+(deftest ^:unit ^:security disable-mfa-with-a-code-needs-no-password
+  (testing "a current TOTP code, the proof an OIDC-only user has"
+    (let [{:keys [users id] :as fx} (disable-fixture nil)]
+      (is (= {:success? true} (disable fx {:code (totp-clock/code mem/mfa-secret)})))
+      (is (false? (get-in @users [id :mfa-enabled])))))
+  (testing "a backup code"
+    (let [{:keys [users id] :as fx} (disable-fixture nil)]
+      (is (= {:success? true} (disable fx {:code "AAAA-BBBB-CCCC"})))
+      (is (false? (get-in @users [id :mfa-enabled]))))))
+
+(deftest ^:unit ^:security disable-mfa-without-proof-is-refused
+  (let [{:keys [users audit id] :as fx} (disable-fixture "Right-Pass-1!")]
+    (is (= :proof-required (get-in (disable fx {}) [:error :type])))
+    (is (= :proof-required (get-in (disable fx {:password "" :code " "}) [:error :type])))
+    (is (nil? (get-in @users [id :failed-login-count])) "asking is not guessing")
+    (is (true? (get-in @users [id :mfa-enabled])))
+    (is (empty? @audit))))
+
+(deftest ^:unit ^:security wrong-disable-proofs-count-towards-the-lockout
+  (let [{:keys [users audit id] :as fx} (disable-fixture "Right-Pass-1!")]
+    (is (= :invalid-proof (get-in (disable fx {:password "wrong"}) [:error :type])))
+    (is (= :invalid-proof (get-in (disable fx {:code "000000"}) [:error :type])))
+    (is (= 2 (get-in @users [id :failed-login-count])))
+    (disable fx {:password "wrong again"})
+    (let [locked (disable fx {:password "Right-Pass-1!"})]
+      (is (= :account-locked (get-in locked [:error :type]))
+          "once locked, not even the right password disables")
+      (is (inst? (get-in locked [:error :retry-after]))))
+    (is (true? (get-in @users [id :mfa-enabled])))
+    (is (empty? @audit))))
+
+(deftest ^:unit ^:security an-oidc-only-user-cannot-disable-with-a-password
+  (let [fx (disable-fixture nil)]
+    (is (= :invalid-proof (get-in (disable fx {:password "anything"}) [:error :type])))))
+
+(deftest ^:unit ^:security each-wrong-field-is-a-guess
+  (let [{:keys [users id] :as fx} (disable-fixture "Right-Pass-1!")]
+    (disable fx {:password "wrong" :code "000000"})
+    (is (= 2 (get-in @users [id :failed-login-count])))
+    (testing "a disable clears the count, as a sign-in does"
+      (is (:success? (disable fx {:password "Right-Pass-1!"})))
+      (is (zero? (get-in @users [id :failed-login-count]))))))

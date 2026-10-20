@@ -7,6 +7,8 @@
    service starts calling fails here instead of at someone else's runtime."
   (:require [clojure.test :refer [deftest is testing]]
             [wagoe.user.ports :as ports]
+            [wagoe.user.shell.auth :as auth]
+            [wagoe.user.shell.mfa-crypto :as mfa-crypto]
             [wagoe.user.shell.service :as service])
   (:import [java.time Instant]
            [java.util UUID]))
@@ -73,6 +75,18 @@
                true)))
 
   (with-admins-locked [_ f] (f)))
+
+(def mfa-secret "The TOTP secret of `mfa-user`." "JBSWY3DPEHPK3PXP")
+
+(defn mfa-user
+  "A user with MFA on and one backup code, AAAA-BBBB-CCCC. Without `password`
+   they have no hash, like a user only an MFA test cares about."
+  [id password]
+  (cond-> {:id id :email "mfa@example.com" :active true
+           :mfa-enabled true :mfa-secret mfa-secret
+           :mfa-backup-codes [(mfa-crypto/hash-backup-code "AAAA-BBBB-CCCC")]
+           :mfa-backup-codes-used []}
+    password (assoc :password-hash (auth/hash-password password))))
 
 (defrecord MemorySessionRepository [state]
   ports/IUserSessionRepository

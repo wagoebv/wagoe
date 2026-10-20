@@ -10,6 +10,7 @@
   (:require [wagoe.user.shell.web-handlers :as web-handlers]
             [wagoe.user.ports :as ports]
             [wagoe.user.shell.service :as service]
+            [wagoe.user.shell.mfa :as mfa]
             [wagoe.user.shell.in-memory-repository-test :as mem]
             [wagoe.email.ports :as email-ports]
             [wagoe.i18n.shell.middleware :as i18n-middleware]
@@ -1203,3 +1204,35 @@
                   {:path-params {:id (str uid) :session-id "nope"}})]
         (is (= 400 (:status resp)))
         (is (re-find #"\"showToast\".*Invalid session" (get-in resp [:headers "HX-Trigger"])))))))
+
+(defn- mfa-user-service [id password]
+  (mfa/create-mfa-service (mem/->MemoryUserRepository (atom {id (mem/mfa-user id password)}))
+                          {} {:auth-config {:max-failed-attempts 2}}))
+
+(deftest ^:contract ^:security mfa-disable-form-needs-proof-and-locks-out
+  ;; It checked the password, but did not count wrong ones, so a session
+  ;; could guess at it (BOU-782).
+  (let [id      (UUID/randomUUID)
+        handler (web-handlers/mfa-disable-handler (mfa-user-service id "Right-Pass-1!") {})
+        post    #(handler {:user {:id id} :form-params %})]
+    (testing "a wrong password re-renders the form"
+      (let [resp (post {"password" "wrong"})]
+        (is (= 400 (:status resp)))
+        (is (html-contains? resp "name=\"code\""))))
+    (testing "the second wrong one locks, and then the right one is refused too"
+      (post {"password" "wrong"})
+      (is (= 429 (:status (post {"password" "Right-Pass-1!"})))))))
+
+(deftest ^:contract mfa-disable-form-redirects-on-the-right-password
+  (let [id   (UUID/randomUUID)
+        resp ((web-handlers/mfa-disable-handler (mfa-user-service id "Right-Pass-1!") {})
+              {:user {:id id} :form-params {"password" "Right-Pass-1!"}})]
+    (is (= 302 (:status resp)))
+    (is (has-header? resp "Location" "/web/profile"))))
+
+(deftest ^:contract mfa-disable-page-offers-the-password-and-a-code
+  ;; A user who signs in through OIDC knows no password, so the code is there too.
+  (let [id   (UUID/randomUUID)
+        page ((web-handlers/mfa-disable-page-handler (mfa-user-service id nil) {}) {:user {:id id}})]
+    (is (html-contains? page "name=\"password\""))
+    (is (html-contains? page "name=\"code\""))))

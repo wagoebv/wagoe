@@ -1759,13 +1759,13 @@
 
 (defn mfa-disable-page-handler
   "Handler for MFA disable confirmation page (GET /web/profile/mfa/disable).
-   
-   Shows password confirmation form to disable MFA.
-   
+
+   Asks for the password or an authentication code.
+
    Args:
      mfa-service: MFA service instance
      config: Application configuration map
-     
+
     Returns:
      Ring handler function"
   [_mfa-service _config]
@@ -1777,15 +1777,23 @@
       (catch Exception e
         (server-error-page request e "Error in mfa-disable-page-handler")))))
 
+(defn- mfa-disable-refusal
+  "[status form-errors] for a refused disable."
+  [result]
+  (case (get-in result [:error :type])
+    (:invalid-proof :proof-required) [400 {:code [[:t :user/mfa-disable-wrong-proof]]}]
+    :account-locked                  [429 {:code [[:t :user/mfa-disable-locked]]}]
+    [400 {:code [(mfa-error-message result)]}]))
+
 (defn mfa-disable-handler
   "Handler for MFA disable submission (POST /web/profile/mfa/disable).
-   
-   Verifies password and disables MFA.
-   
+
+   Checks the password or code and disables MFA; see `mfa/disable-mfa`.
+
    Args:
      mfa-service: MFA service instance
      config: Application configuration map
-     
+
    Returns:
      Ring handler function"
   [mfa-service _config]
@@ -1793,17 +1801,16 @@
     (try
       (let [current-user (:user request)
             user-id (:id current-user)
-            password (get-in request [:form-params "password"])
-            ;; nil when the password is wrong
-            result (when (mfa/password-matches? mfa-service user-id password)
-                     (mfa/disable-mfa mfa-service user-id))]
+            params (:form-params request)
+            result (mfa/disable-mfa mfa-service user-id
+                                    {:password (get params "password") :code (get params "code")}
+                                    (login-context request))]
         (if (:success? result)
           (-> (response/redirect "/web/profile")
               (assoc :flash {:success "Two-factor authentication has been disabled"}))
-          (html-response request
-                         (profile-ui/mfa-disable-confirm-page
-                          {:password [(if result (mfa-error-message result) [:t :user/mfa-disable-wrong-password])]}
-                          {:user current-user})
-                         400)))
+          (let [[status errors] (mfa-disable-refusal result)]
+            (html-response request
+                           (profile-ui/mfa-disable-confirm-page errors {:user current-user})
+                           status))))
       (catch Exception e
         (server-error request e "Error in mfa-disable-handler")))))

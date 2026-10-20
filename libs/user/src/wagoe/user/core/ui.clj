@@ -1201,6 +1201,7 @@
                   :logout :neutral
                   :session-revoked :warning
                   :data-export :warning
+                  :mfa-disabled :warning
                   :role-change :warning
                   :bulk-action :info
                   (:group-join :grant-add) :info
@@ -1394,7 +1395,7 @@
    ["bulk-action" :common/audit-bulk-action]
    ["group-join" :common/audit-group-join] ["group-leave" :common/audit-group-leave]
    ["grant-add" :common/audit-grant-add] ["grant-remove" :common/audit-grant-remove]
-   ["data-export" :common/audit-data-export]])
+   ["data-export" :common/audit-data-export] ["mfa-disabled" :common/audit-mfa-disabled]])
 
 (defn audit-filters
   "The toolbar's filters. Each re-queries the table as it changes, sending

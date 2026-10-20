@@ -865,6 +865,15 @@
   [instant]
   (max 1 (.getSeconds (Duration/between (Instant/now) instant))))
 
+(defn lockout-response
+  "The 429 for an account locked until `retry-after`, telling the caller when
+   to retry in the body and in Retry-After."
+  [retry-after opts]
+  (let [secs (some-> retry-after seconds-until)]
+    (cond-> (errors/response 429 :account-locked "Too many failed attempts, try again later"
+                             (cond-> opts secs (assoc :details {:retry-after-seconds secs})))
+      secs (assoc-in [:headers "Retry-After"] (str secs)))))
+
 (defn- login-refusal
   "The error response for a refused login (BOU-691). Unknown email, wrong
    password and an inactive account get the same 401; a lockout, which does
@@ -873,11 +882,7 @@
   [{:keys [reason message retry-after]} correlation-id]
   (let [opts {:correlation-id correlation-id}]
     (case (if retry-after :account-locked reason)
-      :account-locked
-      (let [secs (some-> retry-after seconds-until)]
-        (cond-> (errors/response 429 :account-locked "Too many failed attempts, try again later"
-                                 (cond-> opts secs (assoc :details {:retry-after-seconds secs})))
-          secs (assoc-in [:headers "Retry-After"] (str secs))))
+      :account-locked          (lockout-response retry-after opts)
       :validation-error        (errors/response 400 :validation-error message opts)
       :mfa-verification-failed (errors/response 401 :mfa-verification-failed "Invalid MFA code" opts)
       :mfa-enrolment-required  (errors/response 403 :mfa-enrolment-required message opts)

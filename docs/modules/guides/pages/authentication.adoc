@@ -151,12 +151,16 @@ hook on `:ip-address`; without it every login carries the proxy's address.
 
 === Disable MFA
 
+Send the current `password`, or a current TOTP or backup `code`; a user who signs
+in only through OIDC has only the code. A wrong one counts as a failed login and
+locks the account like one.
+
 [source,bash]
 ----
 curl -X POST http://localhost:3000/api/auth/mfa/disable \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
-  -d '{"verificationCode": "123456"}'
+  -d '{"code": "123456"}'
 ----
 
 [#oidc]
