@@ -142,10 +142,14 @@
               [:span [:t :admin/header-welcome {:name who}]]
               (when (and (:display-name user) (:email user))
                 [:span {:class "user-menu-email"} (:email user)])]
+             (when (pages/mounted? "/web/profile")
+               [:a {:href "/web/profile" :class "user-menu-item"}
+                (icons/icon :user {:size 14})
+                [:span [:t :user/profile-page-title]]])
              (when (pages/mounted? "/web/logout")
                [:form {:method "POST" :action "/web/logout" :class "logout-form"}
                 (csrf/hidden-field)
-                [:button {:type "submit" :class "logout-button"}
+                [:button {:type "submit" :class "user-menu-item"}
                  (icons/icon :log-out {:size 14})
                  [:span [:t :admin/button-logout]]]])]])]]
        [:main.admin-content

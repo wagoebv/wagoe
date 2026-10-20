@@ -29,7 +29,6 @@
             [wagoe.user.ports :as user-ports]
             [wagoe.user.schema :as user-schema]
             [wagoe.email.ports :as email-ports]
-            [wagoe.user.shell.auth :as auth]
             [wagoe.user.shell.landing :as landing]
             [wagoe.user.shell.middleware :as user-middleware]
             [wagoe.user.shell.mfa :as mfa]
@@ -1833,33 +1832,27 @@
    Verifies password and disables MFA.
    
    Args:
-     user-service: User service instance
      mfa-service: MFA service instance
      config: Application configuration map
      
    Returns:
      Ring handler function"
-  [user-service mfa-service _config]
+  [mfa-service _config]
   (fn [request]
     (try
       (let [current-user (:user request)
             user-id (:id current-user)
-            form-data (:form-params request)
-            password (get form-data "password")
-            ;; Verify password first
-            user (user-ports/get-user-by-id user-service user-id)]
-        (if (auth/verify-password password (:password-hash user))
-          ;; Password correct - disable MFA
-          (let [disable-result (mfa/disable-mfa mfa-service user-id)]
-            (if (:success? disable-result)
-              (-> (response/redirect "/web/profile")
-                  (assoc :flash {:success "Two-factor authentication has been disabled"}))
-              (html-response request
-                             (profile-ui/mfa-disable-confirm-page {:password [(mfa-error-message disable-result)]})
-                             400)))
-          ;; Password incorrect
+            password (get-in request [:form-params "password"])
+            ;; nil when the password is wrong
+            result (when (mfa/password-matches? mfa-service user-id password)
+                     (mfa/disable-mfa mfa-service user-id))]
+        (if (:success? result)
+          (-> (response/redirect "/web/profile")
+              (assoc :flash {:success "Two-factor authentication has been disabled"}))
           (html-response request
-                         (profile-ui/mfa-disable-confirm-page {:password ["Incorrect password"]})
+                         (profile-ui/mfa-disable-confirm-page
+                          {:password [(if result (mfa-error-message result) [:t :user/mfa-disable-wrong-password])]}
+                          {:user current-user})
                          400)))
       (catch Exception e
         (server-error request e "Error in mfa-disable-handler")))))

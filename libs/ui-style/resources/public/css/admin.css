@@ -557,17 +557,9 @@
 
 .admin-topbar-actions > span,
 .admin-topbar-actions > button,
-.admin-topbar-actions .logout-form,
-.admin-topbar-actions .logout-button,
 .admin-topbar-actions .theme-toggle {
   align-self: center;
   margin: 10px 0;
-}
-
-.admin-topbar-actions span {
-  font-size: var(--text-sm);
-  color: var(--text-muted);
-  white-space: nowrap;
 }
 
 /* User dropdown */
@@ -594,11 +586,6 @@
 }
 
 /* Topbar icon buttons */
-.admin-topbar-actions .logout-form {
-  display: contents;
-}
-
-.admin-topbar-actions .logout-button,
 .admin-topbar-actions .theme-toggle {
   display: inline-flex;
   align-items: center;
@@ -616,14 +603,12 @@
   flex-shrink: 0;
 }
 
-.admin-topbar-actions .logout-button svg,
 .admin-topbar-actions .theme-toggle svg {
   width: 18px;
   height: 18px;
   stroke-width: 2.25;
 }
 
-.admin-topbar-actions .logout-button .logout-icon,
 .admin-topbar-actions .theme-toggle span {
   display: inline-flex;
   align-items: center;
@@ -632,13 +617,11 @@
   height: 100%;
 }
 
-.admin-topbar-actions .logout-button:hover,
 .admin-topbar-actions .theme-toggle:hover {
   background: var(--surface-2);
   color: var(--text-primary);
 }
 
-.admin-topbar-actions .logout-button:focus-visible,
 .admin-topbar-actions .theme-toggle:focus-visible {
   outline: 2px solid var(--accent-primary);
   outline-offset: 2px;
@@ -1643,8 +1626,7 @@
 
   /* Unified icon button style for mobile header - applies to all icon buttons */
   .mobile-menu-toggle,
-  .admin-topbar-actions .theme-toggle,
-  .admin-topbar-actions .logout-button {
+  .admin-topbar-actions .theme-toggle {
     width: 44px !important;
     height: 44px !important;
     display: inline-flex !important;
@@ -1665,16 +1647,14 @@
   }
 
   .mobile-menu-toggle:hover,
-  .admin-topbar-actions .theme-toggle:hover,
-  .admin-topbar-actions .logout-button:hover {
+  .admin-topbar-actions .theme-toggle:hover {
     background: var(--surface-2) !important;
     color: var(--text-primary) !important;
     border-color: var(--border-strong) !important;
   }
 
   .mobile-menu-toggle svg,
-  .admin-topbar-actions .theme-toggle svg,
-  .admin-topbar-actions .logout-button svg {
+  .admin-topbar-actions .theme-toggle svg {
     display: block;
     margin: auto;
   }
@@ -1712,14 +1692,6 @@
 
   /* Theme toggle icon spans - use flexbox centering for SVG */
 .admin-topbar-actions .theme-toggle span {
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  width: 100% !important;
-  height: 100% !important;
-}
-
-.admin-topbar-actions .logout-button span {
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;

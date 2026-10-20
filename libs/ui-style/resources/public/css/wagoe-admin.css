@@ -1087,10 +1087,14 @@ time.tone-danger  { color: var(--tone-danger-fg);  font-weight: 600; }
 }
 .user-menu-email { font-size: 12px; color: var(--text-muted); }
 .user-menu .logout-form { margin: 0; }
-.user-menu .logout-button {
+/* Links and the logout button alike; the button resets the global button rule */
+.user-menu .user-menu-item {
   display: flex;
   align-items: center;
+  justify-content: flex-start;
   gap: 8px;
+  min-height: 0;
+  font-weight: inherit;
   width: 100%;
   padding: 6px 8px;
   border: 0;
@@ -1098,9 +1102,10 @@ time.tone-danger  { color: var(--tone-danger-fg);  font-weight: 600; }
   background: none;
   color: var(--text-primary);
   font-size: 13px;
+  text-decoration: none;
   cursor: pointer;
 }
-.user-menu .logout-button:hover { background: var(--surface-2); }
+.user-menu .user-menu-item:hover { background: var(--surface-2); }
 
 /* Filter inputs in the toolbar (table/filter-input), one line where there is room */
 .admin-content .toolbar-filters { display: flex; flex-wrap: wrap; gap: var(--space-2); flex: 1; justify-content: flex-end; }

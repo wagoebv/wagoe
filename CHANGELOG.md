@@ -31,6 +31,7 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **Profile and two-factor pages in the admin shell** (BOU-768), reached from the user menu. Nothing to change.
 - **Admin sidebar grouped by module** (BOU-777): modules contribute `:nav` in their routes. Set `:module` on an admin
   entity to move it out of "Other", and `:wagoe/settings :nav-order` to order the groups.
 - **Admin many-to-many through a join table** (BOU-778): detected, edited with checkboxes or a multiple combobox, shown
@@ -228,6 +229,7 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **Admin sidebar: a long group name pushed its icon and chevron out, and hovered items were white on white** in the
   light theme (BOU-780). Long names truncate with the full name as a tooltip. Nothing to do.
+- **Turning off two-factor authentication on the profile refused every password** (BOU-768). Nothing to do.
 - **Dev dashboard config editor: saving a section holding a function failed, and Apply needed `:ig-config-fn`** (BOU-781).
   Functions are left out of the editor and kept; Apply rebuilds with your `set-prep!` fn, so `:ig-config-fn` can go.
 - **The audit trail left the admin shell** (BOU-767): `/web/audit` now renders in it as an admin list, with filters in

@@ -1,5 +1,6 @@
 (ns wagoe.shared.ui.core.shell-test
   (:require [wagoe.platform.core.http.nav :as nav]
+            [wagoe.platform.core.http.pages :as pages]
             [wagoe.shared.ui.core.shell :as shell]
             [clojure.test :refer [deftest testing is]]))
 
@@ -69,3 +70,10 @@
                         :button.nav-module-toggle))))
   (testing "outside a request there is none"
     (is (nil? (shell/user-nav {:role :admin})))))
+
+(deftest ^:unit the-user-menu-links-to-the-profile-when-mounted
+  (let [profile-links #(->> (tagged (shell/admin-shell [:p] {:nav nav :user {:email "a@b.c"}}) :a)
+                            (filter (comp #{"/web/profile"} :href second)))]
+    (is (= 1 (count (profile-links))))
+    (binding [pages/*mounted?* (complement #{"/web/profile"})]
+      (is (empty? (profile-links))))))
