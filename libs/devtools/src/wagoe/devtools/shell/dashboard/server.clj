@@ -143,6 +143,19 @@
   []
   (reset! config-overrides* {}))
 
+(defn- app-preparer
+  "The prep fn the application handed integrant.repl/set-prep!, seen through
+   the wrapper Apply installs in its place."
+  []
+  (when-let [p (some-> (resolve 'integrant.repl.state/preparer) deref)]
+    (::app-preparer (meta p) p)))
+
+(defn- override-preparer
+  "A prep fn that is `ig-config-fn` with the accumulated overrides on top."
+  [ig-config-fn]
+  (with-meta (fn [] (merge (ig-config-fn) @config-overrides*))
+    {::app-preparer ig-config-fn}))
+
 (defn- make-handler [config]
   (-> (ring/router
        [["/dashboard"
@@ -205,33 +218,22 @@
                         result
                         (if (and section-key new-val-str)
                           (try
-                            (let [new-val      (config-page/parse-edited-value new-val-str ::parse-failed)
+                            (let [cfg-var      (resolve 'integrant.repl.state/config)
+                                  new-val      (config-page/parse-edited-value
+                                                new-val-str
+                                                (some-> cfg-var deref (get section-key))
+                                                ::parse-failed)
                                   _            (when (= new-val ::parse-failed)
                                                  (throw (ex-info "Failed to parse edited config value as EDN" {:type :validation-error})))
                                   set-prep-fn  (resolve 'integrant.repl/set-prep!)
-                                  ;; Supplied by the application on :wagoe/dashboard.
                                   ;; Rebuilding the Integrant config means knowing
-                                  ;; which components this application runs, which
-                                  ;; is not something a library can know — this used
-                                  ;; to resolve wagoe.config/ig-config at runtime
-                                  ;; (BOU-306).
-                                  ig-config-fn (:ig-config-fn config)
+                                  ;; which components this application runs. The
+                                  ;; prep fn it gave integrant.repl knows; an
+                                  ;; :ig-config-fn on :wagoe/dashboard overrides it.
+                                  ig-config-fn (or (:ig-config-fn config) (app-preparer))
                                   sys-var      (resolve 'integrant.repl.state/system)
-                                  cfg-var      (resolve 'integrant.repl.state/config)
                                   restart-fn   (resolve 'wagoe.devtools.shell.repl/restart-component)]
-                              ;; Split from the resolve checks below on purpose:
-                              ;; folding it in reported a missing :ig-config-fn
-                              ;; as "is the system running?", which sends the
-                              ;; reader to look at the wrong thing entirely.
                               (cond
-                                (nil? ig-config-fn)
-                                {:success? false
-                                 :error {:type    :configuration-error
-                                         :message (str "This dashboard cannot rebuild the system: no :ig-config-fn "
-                                                       "on :wagoe/dashboard. Wire it as a zero-argument function "
-                                                       "returning your Integrant config, e.g. "
-                                                       "#(my-app.system-config/ig-config (wagoe.config/load-config)).")}}
-
                                 ;; Before anything is mutated. With no (go) the
                                 ;; REPL system is nil, restart-component answers
                                 ;; "not found" and returns nil without throwing,
@@ -248,6 +250,17 @@
                                                        "wagoe.main), so there is nothing here it can restart — "
                                                        "the config is shown read-only.")}}
 
+                                ;; Split from the resolve checks below on purpose:
+                                ;; folding it in reported a missing prep fn
+                                ;; as "is the system running?", which sends the
+                                ;; reader to look at the wrong thing entirely.
+                                (nil? ig-config-fn)
+                                {:success? false
+                                 :error {:type    :configuration-error
+                                         :message (str "This dashboard cannot rebuild the system: integrant.repl "
+                                                       "has no prep fn. Call (integrant.repl/set-prep! ...) with a "
+                                                       "zero-argument function returning your Integrant config.")}}
+
                                 (and set-prep-fn sys-var cfg-var restart-fn)
                                 (let [;; Snapshot previous state so we can roll back on failure
                                       prev-override (get @config-overrides* section-key ::absent)
@@ -256,9 +269,7 @@
                                   (swap! config-overrides* assoc section-key new-val)
                                   ;; Patch the prep function to apply ALL accumulated overrides
                                   ;; after loading from disk, so reset preserves all edits
-                                  (set-prep-fn
-                                   (fn []
-                                     (merge (ig-config-fn) @config-overrides*)))
+                                  (set-prep-fn (override-preparer ig-config-fn))
                                   ;; Update the live config var, restart the component,
                                   ;; then cascade to all dependents so they pick up
                                   ;; the new instance (restart-component alone leaves
@@ -307,9 +318,7 @@
                                             (swap! config-overrides* dissoc section-key)
                                             (swap! config-overrides* assoc section-key prev-override))
                                           (alter-var-root cfg-var assoc section-key prev-cfg-val)
-                                          (set-prep-fn
-                                           (fn []
-                                             (merge (ig-config-fn) @config-overrides*)))
+                                          (set-prep-fn (override-preparer ig-config-fn))
                                           ;; Re-restart succeeded components with restored config
                                           (doseq [k succeeded]
                                             (try (restart-fn sys-var @cfg-var k)
