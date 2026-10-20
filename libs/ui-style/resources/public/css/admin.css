@@ -222,15 +222,19 @@
 }
 
 .entity-list a:hover,
-.nav-module-toggle:hover {
+.entity-list a:focus-visible,
+.nav-module-toggle:hover,
+.nav-module-toggle:focus-visible {
   color: var(--text-primary);
 }
 
-.entity-list a:hover::after {
+.entity-list a:hover::after,
+.entity-list a:focus-visible::after {
   transform: scaleX(1);
 }
 
-.entity-list a:hover::before {
+.entity-list a:hover::before,
+.entity-list a:focus-visible::before {
   height: 40%;
 }
 
@@ -252,6 +256,14 @@
   height: 16px;
   flex-shrink: 0;
   stroke-width: 1.5;
+}
+
+/* A long label truncates, rather than pushing the icon and chevron out */
+.nav-text,
+.nav-flyout-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Collapsed state — hide text, center icons */
@@ -287,7 +299,8 @@
   cursor: pointer;
 }
 
-.nav-module-toggle:hover {
+.nav-module-toggle:hover,
+.nav-module-toggle:focus-visible {
   background: var(--surface-2);
 }
 
@@ -329,6 +342,7 @@
   left: var(--sidebar-width-collapsed);
   margin-top: -40px;
   min-width: 200px;
+  max-width: 280px;
   padding: var(--space-1);
   background: var(--surface-0);
   border: 1px solid var(--border-default);
@@ -392,7 +406,8 @@
   transition: background-color var(--transition-fast), color var(--transition-fast);
 }
 
-.admin-sidebar-footer a:hover {
+.admin-sidebar-footer a:hover,
+.admin-sidebar-footer a:focus-visible {
   background: var(--surface-2);
   color: var(--text-primary);
 }
