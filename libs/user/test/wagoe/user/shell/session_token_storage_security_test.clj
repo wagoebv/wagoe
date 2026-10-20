@@ -141,15 +141,54 @@
             (is (some? (:lockout-until stored)) "locked at the threshold"))
           (is (= :account-locked (:reason (login service user password)))))))))
 
-(deftest ^:integration ^:security the-lockout-is-set-in-the-increment-that-reaches-the-limit
+(deftest ^:integration ^:security parallel-attempts-stop-at-the-limit
+  ;; The lockout was read before any failure was written, so a burst of
+  ;; parallel guesses all passed the check (BOU-785).
+  (let [limit 3 n 12]
+    (with-service "claim_limit" {:max-failed-attempts limit :lockout-duration-minutes 15}
+      (fn [{:keys [users service]}]
+        (let [burst (fn [attempt]
+                      (let [start (CountDownLatch. 1)
+                            tries (doall (repeatedly n #(future (.await start) (attempt))))]
+                        (.countDown start)
+                        (mapv deref tries)))]
+          (testing "sign-in"
+            (let [user    (create-user! users)
+                  results (burst #(login service user "wrong-password"))]
+              (is (= limit (:failed-login-count (ports/find-user-by-id users (:id user))))
+                  "only `limit` passwords were checked")
+              (is (= (- n limit) (count (filter :retry-after results))) "the rest were told it is locked")))
+          (testing "change-password"
+            (let [user    (create-user! users)
+                  results (burst #(try (ports/change-password service (:id user) "wrong-password" "New-Horse-2!")
+                                       (catch clojure.lang.ExceptionInfo e (:type (ex-data e)))))]
+              (is (= limit (:failed-login-count (ports/find-user-by-id users (:id user)))))
+              (is (= (- n limit) (count (filter #{:account-locked} results)))))))))))
+
+(deftest ^:integration ^:security a-claim-counts-only-while-unlocked
   ;; Written separately, a lockout could land after a login that had just
-  ;; reset the count.
+  ;; reset the count (BOU-696); read separately, parallel attempts passed it
+  ;; (BOU-785).
   (with-service "lockout_write" {}
     (fn [{:keys [users]}]
       (let [user    (create-user! users)
-            lockout {:max-attempts 2 :until (.plusSeconds (java.time.Instant/now) 900)}]
-        (is (= 1 (ports/increment-failed-login-count users (:id user) lockout)))
-        (is (nil? (:lockout-until (ports/find-user-by-id users (:id user)))) "not before the limit")
-        (is (= 2 (ports/increment-failed-login-count users (:id user) lockout)))
-        (is (some? (:lockout-until (ports/find-user-by-id users (:id user)))))
-        (is (nil? (ports/increment-failed-login-count users (UUID/randomUUID) lockout)) "unknown user")))))
+            now     (java.time.Instant/now)
+            lockout {:max-attempts 2 :until (.plusSeconds now 900) :now now}
+            claim   #(ports/claim-login-attempts users (:id user) 1 %)
+            stored  #(ports/find-user-by-id users (:id user))]
+        (is (= {:claimed? true :failed-login-count 1} (claim lockout)))
+        (is (nil? (:lockout-until (stored))) "not before the limit")
+        (is (= {:claimed? true :failed-login-count 2} (claim lockout)))
+        (is (some? (:lockout-until (stored))))
+        (let [refused (claim lockout)]
+          (is (false? (:claimed? refused)) "locked: nothing is counted")
+          (is (some? (:lockout-until refused))))
+        (is (= 2 (:failed-login-count (stored))))
+        (testing "release takes one back, and the lockout it set"
+          (ports/release-login-attempt users (:id user) true)
+          (is (= 1 (:failed-login-count (stored))))
+          (is (nil? (:lockout-until (stored)))))
+        (testing "an expired lockout claims again"
+          (claim lockout)
+          (is (:claimed? (claim (assoc lockout :now (.plusSeconds now 1000))))))
+        (is (nil? (ports/claim-login-attempts users (UUID/randomUUID) 1 lockout)) "unknown user")))))

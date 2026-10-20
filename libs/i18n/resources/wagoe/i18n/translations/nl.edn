@@ -298,7 +298,7 @@
  :user/mfa-disable-prompt           "Om tweestapsverificatie uit te schakelen, bevestig uw wachtwoord of voer een code uit uw authenticator-app of een back-upcode in:"
  :user/mfa-disable-code-label       "Verificatiecode of back-upcode"
  :user/mfa-disable-wrong-proof      "Onjuist wachtwoord of onjuiste code"
- :user/mfa-disable-locked           "Te veel mislukte pogingen. Probeer het later opnieuw."
+ :user/too-many-attempts            "Te veel mislukte pogingen. Probeer het later opnieuw."
  :user/profile-page-title           "Profiel & beveiliging"
  :user/profile-label-sessions       "Sessies"
  :user/profile-card-data-title      "Uw gegevens"

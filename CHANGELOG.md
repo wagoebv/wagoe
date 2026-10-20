@@ -249,6 +249,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Wrong current passwords on change-password did not count towards the lockout, and parallel attempts exceeded it**
+  (BOU-785). Custom `IUserRepository`s implement `claim-login-attempts` and `release-login-attempt` instead of `increment-failed-login-count`.
 - **Flash messages were never shown** (BOU-783): a response's `:flash` now reaches the next request, in a `wagoe-flash`
   cookie. Group changes and the welcome after registration show their toast; nothing to do.
 - **Saving a user's detail form deactivated them, Reactivate did nothing, and the users table added a history entry on

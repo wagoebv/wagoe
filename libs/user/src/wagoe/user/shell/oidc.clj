@@ -22,7 +22,8 @@
             [wagoe.user.core.mfa :as mfa-core]
             [wagoe.user.core.oidc :as oidc]
             [wagoe.user.ports :as ports]
-            [wagoe.user.shell.auth :as auth])
+            [wagoe.user.shell.auth :as auth]
+            [wagoe.user.shell.lockout :as lockout])
   (:import (java.net URLEncoder)
            (java.nio.charset StandardCharsets)
            (java.time Instant)))
@@ -353,7 +354,7 @@
   "Finish a sign-in that stopped for the second factor."
   [client mfa-cookie code login-context]
   (let [sign-in (unseal client :mfa mfa-cookie)
-        {:keys [user-repository]} (:auth-service client)
+        {:keys [user-repository auth-config]} (:auth-service client)
         user    (some->> (:user-id sign-in) parse-uuid (ports/find-user-by-id user-repository))
         allowed (when user (auth-core/should-allow-login-attempt? user nil (Instant/now)))]
     (cond
@@ -364,9 +365,15 @@
       {:error {:type :oidc/account-unavailable :message (:reason allowed)}}
 
       :else
-      (let [check (auth/verify-second-factor! (:auth-service client) user code (Instant/now))]
-        (if (:valid? check)
+      (let [claim (lockout/claim-attempts! user-repository auth-config (:id user) 1 (Instant/now))]
+        (cond
+          (not (:claimed? claim))
+          {:error (assoc (lockout/locked-error (:retry-after claim)) :type :oidc/account-unavailable)}
+
+          (:valid? (auth/verify-second-factor! (:auth-service client) user code))
           (finish! client user sign-in login-context)
+
+          :else
           (do (audit! client user login-context (:provider-id sign-in) false "Invalid MFA code")
               {:error {:type :oidc/mfa-failed :message "Invalid MFA code"}}))))))
 

@@ -20,6 +20,7 @@
             [wagoe.user.core.authentication :as auth-core]
             [wagoe.user.core.audit :as audit-core]
             [wagoe.user.shell.auth :as auth-shell]
+            [wagoe.user.shell.lockout :as lockout]
             [wagoe.user.ports :as ports]
             [wagoe.platform.core.database.constraint :as constraint]
             [wagoe.platform.core.http.access :as access]
@@ -829,14 +830,8 @@
                            {:type :user-not-found
                             :user-id user-id})))
 
-         ;; 2. Verify current password
-         (when-not (auth-shell/verify-password current-password (:password-hash user))
-           (throw (ex-info "Current password is incorrect"
-                           {:type :invalid-current-password
-                            :user-id user-id})))
-
-         ;; 3. Validate new password against policy
-         (let [password-validation (auth-core/meets-password-policy? new-password
+         ;; 2. Validate new password against policy; a missing one fails it.
+         (let [password-validation (auth-core/meets-password-policy? (str new-password)
                                                                      (:password-policy validation-config)
                                                                      user)]
            (when-not (:valid? password-validation)
@@ -844,14 +839,28 @@
                              {:type :password-policy-violation
                               :violations (:violations password-validation)}))))
 
+         ;; 3. Verify current password. A wrong one counts towards the lockout,
+         ;;    as at sign-in, so a session cannot be used to guess it (BOU-785).
+         (let [claim (lockout/claim-attempts! user-repository (:auth-config auth-service)
+                                              user-id 1 (current-timestamp))]
+           (when-not (:claimed? claim)
+             (let [error (lockout/locked-error (:retry-after claim))]
+               (throw (ex-info (:message error) (assoc error :user-id user-id)))))
+           (when-not (auth-shell/verify-password current-password (:password-hash user))
+             (throw (ex-info "Current password is incorrect"
+                             {:type :invalid-current-password
+                              :user-id user-id}))))
+
          ;; 4. Hash new password
          (let [new-password-hash (auth-shell/hash-password new-password)
                current-time (current-timestamp)
                ;; 5. Update user with new password hash
                updated-user (.update-user user-repository
-                                          {:id            user-id
-                                           :password-hash new-password-hash
-                                           :updated-at    current-time})]
+                                          {:id                 user-id
+                                           :password-hash      new-password-hash
+                                           :failed-login-count 0
+                                           :lockout-until      nil
+                                           :updated-at         current-time})]
          ;; 5b. Invalidate every session for this user (BOU-191): a credential
          ;;     change must not leave older sessions authenticated. The caller
          ;;     re-authenticates with the new password.

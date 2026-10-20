@@ -17,6 +17,8 @@
     (find-user-by-id [_ id] (get @state id))
     (find-user-by-email [_ email] (some #(when (= email (:email %)) %) (vals @state)))
     (update-user [_ u] (swap! state update (:id u) merge u) u)
+    (claim-login-attempts [_ _ _ _] {:claimed? true :failed-login-count 1})
+    (release-login-attempt [_ _ _] nil)
     (with-admins-locked [_ f] (f))))
 
 (defn- session-repo

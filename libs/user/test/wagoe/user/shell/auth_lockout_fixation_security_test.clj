@@ -12,6 +12,7 @@
    exercised together (not the pure fns in isolation)."
   (:require [wagoe.user.ports :as ports]
             [wagoe.user.shell.auth :as auth]
+            [wagoe.user.shell.in-memory-repository-test :as mem]
             [clojure.test :refer [deftest is testing]])
   (:import [java.time Instant]
            [java.util UUID]))
@@ -44,11 +45,12 @@
                          (update-user [_ entity]
                            (swap! state merge entity)
                            @state)
-                         (increment-failed-login-count [_ _ {:keys [max-attempts until]}]
-                           (:failed-login-count
-                            (swap! state #(let [n (inc (or (:failed-login-count %) 0))]
-                                            (cond-> (assoc % :failed-login-count n)
-                                              (>= n max-attempts) (assoc :lockout-until until)))))))
+                         (claim-login-attempts [_ _ n lockout]
+                           (let [[old new] (swap-vals! state mem/claim-attempts n lockout)]
+                             (mem/claim-result old new lockout)))
+                         (release-login-attempt [_ _ unlock?]
+                           (swap! state mem/release-attempt unlock?)
+                           nil))
    :session-repository (reify ports/IUserSessionRepository
                          (find-sessions-by-user [_ _] [])
                          (create-session [_ s] s))
@@ -130,8 +132,10 @@
                                (update-user [_ entity]
                                  (swap! writes conj entity)
                                  (ports/update-user repo entity))
-                               (increment-failed-login-count [_ id lockout]
-                                 (ports/increment-failed-login-count repo id lockout))))))]
+                               (claim-login-attempts [_ id n lockout]
+                                 (ports/claim-login-attempts repo id n lockout))
+                               (release-login-attempt [_ id unlock?]
+                                 (ports/release-login-attempt repo id unlock?))))))]
     (is (false? (:success? (login svc "wrong-password"))))
     (is (true? (:success? (login svc correct-password))))
     (is (= 1 (count @writes)) "a failure below the limit only increments")

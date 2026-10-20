@@ -80,11 +80,13 @@
     {:allowed? true}))
 
 (defn failed-login-lockout
-  "The lockout a failed login applies: {:max-attempts n :until inst}. The
-   repository sets :until in the same write that reaches n (BOU-696)."
+  "The lockout a login attempt claims under: {:max-attempts n :until inst :now
+   inst}. The repository sets :until in the same write that reaches n
+   (BOU-696), and claims nothing while locked at :now (BOU-785)."
   [login-config current-time]
   {:max-attempts (get login-config :max-failed-attempts 5)
-   :until        (.plus current-time (Duration/ofMinutes (get login-config :lockout-duration-minutes 15)))})
+   :until        (.plus current-time (Duration/ofMinutes (get login-config :lockout-duration-minutes 15)))
+   :now          current-time})
 
 (defn prepare-successful-login-updates
   "Pure function: Prepare user updates for successful login.
