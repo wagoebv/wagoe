@@ -44,13 +44,13 @@
    needs read on one entity (ADR-041 §6)."
   [admin-service schema-provider config]
   (fn [request]
-    (let [user (if (= :enforce (permissions/mode (support/get-current-user request)))
-                 (support/require-admin-user! request)
-                 (support/get-current-user request))
+    (let [user (support/get-current-user request)
+          _ (when (= :enforce (permissions/mode user))
+              (support/require-admin-user! request))
           available (ports/list-available-entities schema-provider)
-          entity-configs (into {} (map (fn [e] [e (ports/get-entity-config schema-provider e)])) available)
-          entities (permissions/filter-visible-entities user available entity-configs)
-          entity-configs (select-keys entity-configs entities)
+          all-configs (into {} (map (fn [e] [e (ports/get-entity-config schema-provider e)])) available)
+          entities (permissions/filter-visible-entities user available all-configs)
+          entity-configs (select-keys all-configs entities)
           stats (into {} (map (fn [e] [e {:count (ports/count-entities admin-service e {})}])) entities)]
       (support/html-response request
                              (admin-ui/admin-layout

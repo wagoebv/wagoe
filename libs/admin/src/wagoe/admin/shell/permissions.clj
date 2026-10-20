@@ -109,5 +109,5 @@
    (report! user entity-name :delete entity-config)
    (when-not (core-permissions/can-delete-entity? user entity-name entity-config record)
      (throw (ex-info (str "User cannot delete entity: " (name entity-name))
-                     (refusal user entity-name :write {:record-id (:id record)}))))
+                     (refusal user entity-name :delete {:record-id (:id record)}))))
    true))

@@ -21,26 +21,37 @@
 
 (defn- inside!
   "Throw :not-found unless every one of `ids` lies inside `user`'s scopes for
-   `action`, so a record outside them does not leak its existence."
+   `action`, so a record outside them does not leak its existence. The records
+   when that took a query; nil when the scopes hold everywhere."
   [inner schema-provider user entity-name action ids]
-  (let [options (scoped schema-provider user entity-name action {:ids ids :limit 1})]
-    (when (and (contains? options :scopes)
-               (not= (count (distinct ids)) (:total-count (ports/list-entities inner entity-name options))))
-      (throw (ex-info "Entity not found" {:type :not-found :entity-name entity-name})))))
+  (let [options (scoped schema-provider user entity-name action {:ids ids :limit (max 1 (count ids))})]
+    (when (contains? options :scopes)
+      (let [{:keys [records total-count]} (ports/list-entities inner entity-name options)]
+        (when (not= (count (distinct ids)) total-count)
+          (throw (ex-info "Entity not found" {:type :not-found :entity-name entity-name})))
+        records))))
 
 (defn- writable!
-  "Throw a :validation-error on the scope fields unless `record`, as a write
-   would leave it, lies inside `user`'s write scopes."
+  "Throw a :validation-error on the scope fields unless `record` (or a delay
+   of it), as a write would leave it, lies inside `user`'s write scopes."
   [schema-provider user entity-name record]
   (let [entity-config (ports/get-entity-config schema-provider entity-name)
+        scopes        (permissions/scopes user entity-name :write entity-config)
         message       "Outside the scope you may change"]
-    (when-not (permissions/record-in-scope? (permissions/scopes user entity-name :write entity-config)
-                                            entity-config record)
+    (when-not (or (scope/everywhere? scopes)
+                  (permissions/record-in-scope? scopes entity-config (force record)))
       (throw (ex-info message
                       {:type   :validation-error
                        :entity entity-name
-                       :errors (into {} (keep (fn [v] (when (keyword? v) [v [message]])))
-                                     (vals (:scope entity-config)))})))))
+                       :errors (into {} (map (fn [field] [field [message]]))
+                                     (vals (permissions/scope-fields entity-config)))})))))
+
+(defn- stored
+  "The record `id` as stored, once `inside!` admits it for writing: a delay,
+   read only when the write's scopes need it."
+  [inner schema-provider user entity-name id]
+  (let [records (inside! inner schema-provider user entity-name :write [id])]
+    (delay (or (first records) (ports/get-entity inner entity-name id)))))
 
 (defrecord ScopedAdminService [inner schema-provider user]
   ports/IListOverview
@@ -83,13 +94,13 @@
     (ports/create-entity-with-children inner entity-name data children))
 
   (update-entity [_ entity-name id data]
-    (inside! inner schema-provider user entity-name :write [id])
-    (writable! schema-provider user entity-name (merge (ports/get-entity inner entity-name id) data))
+    (let [record (stored inner schema-provider user entity-name id)]
+      (writable! schema-provider user entity-name (delay (merge @record data))))
     (ports/update-entity inner entity-name id data))
 
   (update-entity-field [_ entity-name id field value]
-    (inside! inner schema-provider user entity-name :write [id])
-    (writable! schema-provider user entity-name (assoc (ports/get-entity inner entity-name id) field value))
+    (let [record (stored inner schema-provider user entity-name id)]
+      (writable! schema-provider user entity-name (delay (assoc @record field value))))
     (ports/update-entity-field inner entity-name id field value))
 
   (delete-entity [_ entity-name id]

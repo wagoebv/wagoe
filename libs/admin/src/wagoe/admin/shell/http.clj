@@ -35,6 +35,14 @@
 ;; Route Definitions
 ;; =============================================================================
 
+(defn- with-access
+  "`user` with their rights, read through `(:access config)` unless the admin's
+   middleware already put them on."
+  [config user]
+  (if (or (nil? user) (permissions/has-access? user))
+    user
+    (permissions/with-access user ((:access config) user))))
+
 (defn web-routes
   "The admin interface's web routes, as Reitit data.
 
@@ -52,7 +60,7 @@
                           (fn [handler]
                             (auth-middleware
                              (fn [request]
-                               (handler (update request :user #(when % (permissions/with-access % (access %))))))))
+                               (handler (update request :user (partial with-access config))))))
                           auth-middleware)
         h               (if access
                           (fn [ctor]
@@ -155,7 +163,7 @@
                        entities)
         nav      (layout/nav entities configs)]
     (if (= :enforce (:authorization-mode config))
-      (let [access (memoize (fn [user] (permissions/with-access user ((:access config) user))))]
+      (let [access (memoize (partial with-access config))]
         (update-in nav [:admin :items]
                    (partial mapv (fn [{:keys [entity] :as item}]
                                    (assoc item :access #(permissions/can-view-entity?

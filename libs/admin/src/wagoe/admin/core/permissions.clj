@@ -9,7 +9,7 @@
 
    The shell puts the request's rights on the user map under `::access`
    (`with-access`); a user without it is decided by the role."
-  (:require [clojure.string :as str]
+  (:require [wagoe.platform.core.authorization :as authorization]
             [wagoe.platform.core.scope :as scope]))
 
 ;; =============================================================================
@@ -78,15 +78,25 @@
   [user access]
   (when user (assoc user ::access access)))
 
+(defn has-access?
+  "Whether `user` already carries their access."
+  [user]
+  (contains? user ::access))
+
 (defn mode
   "The authorization mode `user` is decided under, `:off` without access."
   [user]
   (get-in user [::access :mode] :off))
 
+(defn- right
+  "The permission's action `action` needs: deleting is writing."
+  [action]
+  (if (= :delete action) :write action))
+
 (defn entity-permission
-  "`admin.<entity>/read` or `admin.<entity>/write`."
+  "`admin.<entity>/read` or `admin.<entity>/write`, the one `action` needs."
   [entity-name action]
-  (keyword (str "admin." (name entity-name)) (name action)))
+  (keyword (str "admin." (name entity-name)) (name (right action))))
 
 (defn scopes
   "The scopes in which `user`'s rights let them take `action` (:read or :write)
@@ -101,22 +111,25 @@
       (filterv #(every? (partial contains? fields) (keys %))
                (scope/scopes-for rights (entity-permission entity-name action))))))
 
+(defn scope-fields
+  "{scope-key field} for the keys `entity-config` maps to a field of its own,
+   not a relation condition."
+  [entity-config]
+  (into {} (filter (comp keyword? val)) (:scope entity-config)))
+
 (defn- field-scopes
-  "Those of `scopes` a record's own values can be checked against: every key
-   mapped to a field, not a relation condition."
+  "Those of `scopes` a record's own values can be checked against."
   [scopes entity-config]
-  (let [field? (fn [k] (keyword? (get-in entity-config [:scope k])))]
-    (filterv #(every? field? (keys %)) scopes)))
+  (let [fields (scope-fields entity-config)]
+    (filterv #(every? fields (keys %)) scopes)))
 
 (defn- by-rights?
   "Whether `user`'s rights admit `action` on `entity-name`. `:write` creates and
    edits, so only scopes a record's values can be checked against count;
    `:delete` checks the record in the database, so all write scopes do."
   [user entity-name action entity-config]
-  (boolean (seq (case action
-                  :write  (field-scopes (scopes user entity-name :write entity-config) entity-config)
-                  :delete (scopes user entity-name :write entity-config)
-                  (scopes user entity-name action entity-config)))))
+  (let [scopes (scopes user entity-name (right action) entity-config)]
+    (boolean (seq (if (= :write action) (field-scopes scopes entity-config) scopes)))))
 
 (defn- allows?
   "Whether `user` may take `action` (:read, :write or :delete) on
@@ -133,14 +146,13 @@
   (when (and (= :report (mode user))
              (is-admin? user)
              (not (by-rights? user entity-name action entity-config)))
-    (entity-permission entity-name (if (= :delete action) :write action))))
+    (entity-permission entity-name action)))
 
 (defn- reads-any-entity? [user]
   (let [{:keys [platform-admin? rights]} (::access user)]
-    (or (boolean platform-admin?)
-        (boolean (some (fn [{:keys [permission]}]
-                         (and (str/starts-with? (str (namespace permission)) "admin.")
-                              (= "read" (name permission))))
+    (boolean (or platform-admin?
+                 (some (fn [{:keys [permission]}]
+                         (and (authorization/admin-permission? permission) (= "read" (name permission))))
                        rights)))))
 
 (defn report-access-refusal
@@ -157,8 +169,7 @@
   [scopes entity-config record]
   (or (scope/everywhere? scopes)
       (scope/in-scope? (field-scopes scopes entity-config)
-                       (update-vals (into {} (filter (comp keyword? val)) (:scope entity-config))
-                                    #(get record %)))))
+                       (update-vals (scope-fields entity-config) #(get record %)))))
 
 ;; =============================================================================
 ;; Admin Access Control

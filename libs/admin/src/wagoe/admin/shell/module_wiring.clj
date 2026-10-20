@@ -10,9 +10,9 @@
    Dependencies are injected via Integrant refs, maintaining FC/IS separation
    and enabling testability with mock implementations."
   (:require
-   [clojure.string :as str]
    [clojure.tools.logging :as log]
    [integrant.core :as ig]
+   [wagoe.admin.core.permissions :as permissions]
    [wagoe.admin.schema :as admin-schema]
    [wagoe.admin.shell.schema-repository :as schema-repo]
    [wagoe.admin.shell.service :as service]
@@ -21,7 +21,6 @@
    [wagoe.admin.shell.http.support :as support]
    [wagoe.platform.core.authorization :as authorization]
    [wagoe.platform.core.http.access :as access]
-   [wagoe.platform.ports.authorization :as authz-ports]
    [wagoe.platform.shell.authorization :as platform-authorization]))
 
 ;; =============================================================================
@@ -82,9 +81,6 @@
 ;; Admin Routes Component
 ;; =============================================================================
 
-(defn- admin-right? [{:keys [permission]}]
-  (str/starts-with? (str (namespace permission)) "admin."))
-
 (defn- access-fn
   "A fn from a signed-in user to what `wagoe.admin.core.permissions` decides
    on: their admin.* rights, resolved, read once per call."
@@ -93,11 +89,10 @@
     (let [platform-admin? (access/platform-admin? user)]
       {:mode            mode
        :platform-admin? platform-admin?
-       :rights          (if (or platform-admin? (nil? rights-source))
+       :rights          (if platform-admin?
                           []
-                          (->> (authz-ports/rights rights-source user)
-                               (filterv admin-right?)
-                               (platform-authorization/resolve-rights registry user)))})))
+                          (platform-authorization/rights-for registry rights-source user
+                                                             authorization/admin-permission?))})))
 
 (defmethod ig/init-key :wagoe/admin-routes
   [_ {:keys [admin-service schema-provider user-service config workflows permission-registry rights]}]
@@ -155,21 +150,18 @@
               admin-schema/default-admin-config
               settings))
 
+(defn- entity-ns [entity] (namespace (permissions/entity-permission entity :read)))
+
 (defn- entity-permissions
   "`admin.<entity>/read` and `admin.<entity>/write`."
   [entity]
-  (authorization/read-write-permissions (str "admin." (name entity))
-                                        (str (name entity) " in the admin")))
+  (authorization/read-write-permissions (entity-ns entity) (str (name entity) " in the admin")))
 
 (defn- entity-roles
   "`admin.<entity>/viewer` and `admin.<entity>/editor`. Only the admin's code
    roles may hold admin.* permissions (ADR-041 §2)."
   [entity]
-  (let [ns (str "admin." (name entity))]
-    {(keyword ns "viewer") {:description (str "Reads " (name entity) " in the admin")
-                            :permissions #{(keyword ns "read")}}
-     (keyword ns "editor") {:description (str "Reads and changes " (name entity) " in the admin")
-                            :permissions #{(keyword ns "read") (keyword ns "write")}}}))
+  (authorization/derived-roles (entity-ns entity)))
 
 (defn- resolve-condition
   "`v`, a scope's field or relation condition; a symbol, how config.edn names
