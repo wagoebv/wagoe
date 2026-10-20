@@ -8,6 +8,7 @@
             [wagoe.core.utils.redirect :as redirect]
             [wagoe.config :as wagoe-config]
             [wagoe.core.validation :as cv]
+            [wagoe.platform.shell.http.pages :as pages]
             [wagoe.shared.ui.core.home :as home]
             [wagoe.user.core.landing :as landing]
             [wagoe.user.shell.hooks :as hooks]
@@ -61,6 +62,11 @@
           config
           hooks/config-hooks))
 
+(defn- dashboard
+  "The admin's dashboard, or the profile in an application without the admin."
+  [request]
+  (if (pages/mounted? request home/default) home/default "/web/profile"))
+
 (defn path-for
   "Where `user` lands after signing in. A function gets the user and
    `login-context` (`:ip-address`, `:user-agent`, `:request`). Its answer that
@@ -69,7 +75,9 @@
   [config user login-context]
   (let [s       (settings config)
         r       (:login-redirect s)
-        default (if (= :built-in (landing/dashboard-mode s)) home/default landing/app-dashboard-path)]
+        default (if (= :built-in (landing/dashboard-mode s))
+                  (dashboard (:request login-context))
+                  landing/app-dashboard-path)]
     (if (and r (not (map? r)))
       (let [path (try (r user login-context)
                       (catch Exception e
@@ -109,21 +117,21 @@
 
 (defn dashboard-handler
   "The handler to mount at /web/dashboard: nil for `:dashboard false`, the
-   configured one, or a redirect to the admin's dashboard."
+   configured one, or a redirect to the admin's dashboard (the profile without
+   the admin)."
   [config]
   (let [s (settings config)]
     (case (landing/dashboard-mode s)
       :off      nil
       :app      (get-in s [:dashboard :handler])
-      :built-in (constantly (response/redirect home/default)))))
+      :built-in #(response/redirect (dashboard %)))))
 
 (defn wrap-home
-  "Middleware binding the layouts' home path for each request. Identity when
-   the settings leave it at the default."
+  "Middleware binding the layouts' home path for each request: the configured
+   one, else the dashboard."
   [config]
-  (if-let [path (landing/home-path (settings config))]
+  (let [path (landing/home-path (settings config))]
     (fn [handler]
       (fn [request]
-        (binding [home/*path* path]
-          (handler request))))
-    identity))
+        (binding [home/*path* (or path (dashboard request))]
+          (handler request))))))

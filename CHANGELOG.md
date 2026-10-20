@@ -170,7 +170,7 @@ for what is public API, what is internal, and how deprecations are announced.
 ### Changed
 
 - **One dashboard, the admin's home, for every signed-in user** (BOU-765): everyone lands on `/web/admin/`, and
-  `/web/dashboard` redirects there. `:dashboard-extra-cards` is gone: add nav items with a `:description`.
+  `/web/dashboard` redirects there (to `/web/profile` without the admin). Nothing to do.
 - **`:export-requests-per-hour 0` means no limit** (BOU-759); it refused every request. Anything but a whole number
   now fails boot.
 - **The devtools config editor shows pretty-printed EDN** (BOU-21): one key per line, keys sorted.
@@ -221,6 +221,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Removed
 
+- **`:dashboard-extra-cards`** (BOU-765): the page it extended is gone. For a dashboard card, give a module's nav
+  item a `:description`.
 - **`window.AdminUX.showToast` and the `.flash-messages` banner** (BOU-755): send `HX-Trigger: {"showToast": {"type": ..., "message": ...}}`
   or a toast out of band instead; `title` is no longer shown.
 - **The `:base` CSS bundle: pico, open-props, `tokens-openprops.css`, `base-css`** (BOU-458): `(bundle :base)` serves `:pilot` and warns.

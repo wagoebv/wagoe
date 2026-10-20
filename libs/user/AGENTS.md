@@ -335,7 +335,8 @@ Five `:wagoe/user` keys, all checked at boot; a bad value fails it.
  ;; or a (fn [user login-context]), resolved at boot; nil or an off-site path
  ;; means the default:   :login-redirect my.app.web/landing
 
- ;; /web/dashboard redirects to the dashboard. false: it is not mounted, so
+ ;; /web/dashboard redirects to the dashboard (/web/profile without the
+ ;; admin module). false: it is not mounted, so
  ;; the app can route it. {:handler my.app.web/dashboard}: that Ring handler
  ;; serves it, signed in. Either way users then land on /web/dashboard.
  :dashboard false
