@@ -249,15 +249,15 @@
    type as the reason; a 500 when mfa.clj caught an exception, which it logged
    (BOU-586)."
   [result]
-  (let [{:keys [type message retry-after]} (:error result)
-        body (if (mfa-failures type)
-               (errors/body :internal-error "Internal Server Error")
-               (errors/body :validation-error message {:details {:reason (errors/type-name type)}}))]
+  (let [{:keys [type message retry-after]} (:error result)]
     (if (= :account-locked type)
       (user-interceptors/lockout-response retry-after {})
       {:status  (if (mfa-failures type) 500 400)
        :headers {"Content-Type" "application/json"}
-       :body    (json/generate-string body)})))
+       :body    (json/generate-string
+                 (if (mfa-failures type)
+                   (errors/body :internal-error "Internal Server Error")
+                   (errors/body :validation-error message {:details {:reason (errors/type-name type)}})))})))
 
 ;; Untyped exceptions are not caught here: the platform's http-error-handler
 ;; logs them and answers a generic 500 (BOU-557).

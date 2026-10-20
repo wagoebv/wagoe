@@ -97,7 +97,7 @@
     (let [secret (mfa-shell/generate-totp-secret)]
 
       (testing "rejects invalid TOTP code"
-        (let [wrong (format "%06d" (mod (inc (parse-long (totp-clock/code mem/mfa-secret))) 1000000))]
+        (let [wrong (format "%06d" (mod (inc (parse-long (totp-clock/code secret))) 1000000))]
           (is (false? (mfa-shell/verify-totp-code wrong secret)))))
 
       (testing "rejects nil code"
@@ -401,3 +401,11 @@
 (deftest ^:unit ^:security an-oidc-only-user-cannot-disable-with-a-password
   (let [fx (disable-fixture nil)]
     (is (= :invalid-proof (get-in (disable fx {:password "anything"}) [:error :type])))))
+
+(deftest ^:unit ^:security each-wrong-field-is-a-guess
+  (let [{:keys [users id] :as fx} (disable-fixture "Right-Pass-1!")]
+    (disable fx {:password "wrong" :code "000000"})
+    (is (= 2 (get-in @users [id :failed-login-count])))
+    (testing "a disable clears the count, as a sign-in does"
+      (is (:success? (disable fx {:password "Right-Pass-1!"})))
+      (is (zero? (get-in @users [id :failed-login-count]))))))

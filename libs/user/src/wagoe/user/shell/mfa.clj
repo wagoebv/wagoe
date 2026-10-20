@@ -393,12 +393,15 @@
                                    :message "Confirm with your password or an authentication code"}}
 
           (not (proof-holds? user-repository user proof))
-          (do (record-failed-login! user-repository auth-config user-id now)
+          ;; One failure per wrong field: a request is not two guesses for one.
+          (do (dotimes [_ (count (remove str/blank? [(:password proof) (:code proof)]))]
+                (record-failed-login! user-repository auth-config user-id now))
               {:success? false :error {:type :invalid-proof :message "Incorrect password or code"}})
 
           :else
           (do (ports/update-user user-repository
-                                 (assoc (mfa-core/prepare-mfa-disablement user) :id (:id user)))
+                                 (assoc (mfa-core/prepare-mfa-disablement user)
+                                        :id (:id user) :failed-login-count 0 :lockout-until nil))
               (audit-disable! audit-repository user request-context)
               {:success? true})))
       (catch Exception e
