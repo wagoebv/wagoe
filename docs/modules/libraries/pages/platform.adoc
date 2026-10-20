@@ -244,7 +244,9 @@ wiring namespace:
 ----
 
 A module never declares `<module>/read` and `<module>/write`: every module has
-them. Every admin entity has `admin.<entity>/read` and `admin.<entity>/write`.
+them, and the code roles `<module>/viewer` and `<module>/editor` holding them
+unless it declares its own. Every admin entity has `admin.<entity>/read` and
+`admin.<entity>/write`.
 The `:permissions` enum under `:wagoe/user :groups` is read in as well, until
 2.0. `bb scaffold` gives a new module three code roles: `<module>/viewer`,
 `<module>/editor` and `<module>/manager`.

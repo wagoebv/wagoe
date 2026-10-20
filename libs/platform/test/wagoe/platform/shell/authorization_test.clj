@@ -14,7 +14,7 @@
   (let [r (registry {:wagoe/orders {:roles {:orders/viewer {:permissions #{:orders/read}}}}})]
     (is (ports/permission? r :orders/write))
     (is (not (ports/permission? r :orders/refund)))
-    (is (= #{:orders/viewer} (set (keys (ports/roles r)))))
+    (is (= #{:orders/viewer :orders/editor} (set (keys (ports/roles r)))))
     (is (= {} (ports/scopes r)))))
 
 (deftest ^:unit a-role-naming-an-unknown-permission-fails-boot

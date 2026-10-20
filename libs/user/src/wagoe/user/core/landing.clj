@@ -21,9 +21,9 @@
 
 (defn role-path
   "The landing path for `user` from a role map, `:default` falling back to
-   `default`."
+   `default`. A user without a role is looked up as `:user`."
   [paths default user]
-  (get paths (:role user) (get paths :default default)))
+  (get paths (or (:role user) :user) (get paths :default default)))
 
 (defn home-path
   "The path the layouts link to as home, or nil for their default,

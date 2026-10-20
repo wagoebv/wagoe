@@ -18,7 +18,7 @@ Authentication and authorization domain: user lifecycle, credentials, sessions/t
 | `wagoe.user.shell.http` | Auth/user HTTP handlers |
 | `wagoe.user.shell.http-interceptors` | Auth, authorization, and audit interceptors |
 | `wagoe.user.ports` | `IUserRepository`, `IUserSessionRepository`, `IUserAuditRepository`, `IUserService`, `IUserGroupRepository`, `IUserGroupService` protocols |
-| `wagoe.user.core.group` | Pure grant checks: `holds?`, `grants-for`, `authorized?`, `grant-refusal`, `users-with-permission`, `import-changes` |
+| `wagoe.user.core.group` | Pure rights: `user-grants`, `holds?`, `grants-for`, `authorized?`, `assignment-refusal`, `role-refusal`, `users-with-permission`, `import-changes` |
 | `wagoe.user.schema` | Malli schemas for User, Session, and request/response types |
 
 ---
@@ -405,17 +405,55 @@ so two of them deleting the same rows is that DELETE twice.
 A revoked session is pruned on the same terms as any other: revoking hides it,
 expiry plus retention removes it.
 
-## Groups and grants
+## Groups, roles and assignments
 
-`:wagoe/user-group-service` implements `IUserGroupService`: groups, members, and
-grants of `{:permission kw :scope map}`. `(user-grants svc user)` reads a user's
-grants through their groups on every call; `wagoe.user.core.group` has `holds?`,
-`grants-for` and `authorized?`. The admin pages are `/web/admin/groups`
-(`group-routes`, mounted beside the admin UI, admins only).
+ADR-041 §2–3. `:wagoe/user-group-service` implements `IUserGroupService`. An
+assignment is group + role + scope (`{}` is everywhere). A user's grants,
+`(user-grants svc user)`, are the permissions of the roles of their groups, each
+`{:permission :scope :group-id :group-name :role}`, read on every call;
+`wagoe.user.core.group` has `holds?`, `grants-for` and `authorized?`. The admin
+pages are `/web/admin/groups` (`group-routes`, mounted beside the admin UI, admins
+only).
 
+- Roles: code roles come from the permission registry (`:permission-registry`);
+  managed roles (`create-role`, `update-role`, `delete-role`) are stored in
+  `user_roles` and may name only registry permissions and no code role's name.
+  `list-roles` gives both, with `:source` `:code` or `:managed`.
+- `add-group-role` / `remove-group-role` change assignments (`user_group_roles`,
+  the role stored by name). The scope is checked against the group service's
+  scope schema; it is plain data and the platform resolves it (Scopes, platform
+  AGENTS.md). An assignment taking a value from a `:user/<name>` source no
+  module registers fails boot.
+- Everyone (`core.group/everyone-id`) is built in: every signed-in user is in it
+  without a row, new signups included. It cannot be renamed, deleted or given
+  members, and its page shows roles only.
+- `:group-membership` hook, `(fn [user] #{group-name …})` or an
+  `IGroupMembership` component, set in `:wagoe/user` or a module's `:auth`: the
+  groups an identity provider puts the user in. They count as membership and are
+  not stored; a name with no group gives nothing. `permission-holders` does not
+  see them.
+- `:role` is `:admin` or nil. Rights come from groups. The column still stores
+  `"user"` for no role so the previous version reads it, and `:user` is accepted on
+  input as no role until 2.0. Only a platform admin may set or clear `:admin`
+  (`core.user/admin-change-refusal`, checked in the service against the bound
+  actor); without an actor (CLI) it is allowed.
+- Migration (`group-service/migrate!`, at group-service init, idempotent): the
+  first boot creates Everyone and, when users exist, gives it every module's
+  `editor` code role except the admin's; users stored as `viewer` join `Readers`
+  with every module's `viewer` role and keep no role. Neither gets a role holding
+  a permission already checked as a grant (`core.group/gated-permissions`:
+  declared by a module, in the groups schema, or granted), such as
+  `:workflow/read`; each `user_group_grants`
+  row not yet marked becomes an assignment of a managed role named after its
+  permission, keeping the row's id, and is marked `migrated_at`. Rows stay until
+  2.0 for nodes on the previous version during a rolling deploy; rights are read
+  from assignments only. Permissions no module declares stay in their roles and
+  are logged.
+- `add-group-grant` / `remove-group-grant` and import `:grants` are deprecated:
+  each grant becomes the managed role of its permission.
 - `:wagoe/user {:groups {:permissions <schema> :scope <schema>}}`, Malli or a
-  symbol naming one, resolved in `ig-config`; a bad one fails boot. Grants that do
-  not fit are refused with `:validation-error` and `:field`.
+  symbol naming one, resolved in `ig-config`; a bad one fails boot. The
+  permissions enum is declared into the registry until 2.0.
 - The group page adds a member through a user lookup (`/:id/members/options`).
   A `:scope` map key with `{:wagoe/entity :domains}` gets a lookup reading the
   admin's `/web/admin/domains/lookup`; its value is decoded with the scope schema
@@ -425,26 +463,25 @@ grants through their groups on every call; `wagoe.user.core.group` has `holds?`,
   them (`with-registry-scopes`); a `:map` `:groups :scope` is declared into the
   registry by `declared-scopes`. See platform AGENTS.md, Scopes.
 - Audit is per user: `:group-join`/`:group-leave` for the member,
-  `:grant-add`/`:grant-remove` for every member, so a grant changed in an empty
-  group writes nothing. A join lists the group's grants.
-- Tables `user_groups`, `user_group_members`, `user_group_grants`. Keys cascade from
-  `auth_users` and `user_groups` (`:references` on the schema field); the
-  repository deletes explicitly too, for SQLite connections without foreign keys.
-  `scope` is EDN text (`:column-type :text`); `edn-value?` refuses what would not
+  `:grant-add`/`:grant-remove` for every member when an assignment or a managed
+  role's permissions change, so a change in an empty group writes nothing. A
+  change to Everyone writes one entry, for the actor.
+- Tables `user_groups`, `user_group_members`, `user_roles`, `user_group_roles`, and
+  `user_group_grants` (kept, marked, until 2.0). Keys cascade from `auth_users`
+  and `user_groups`; the repository deletes explicitly too, for SQLite connections
+  without foreign keys. `scope` is EDN text; `edn-value?` refuses what would not
   read back, an `Instant` for one.
-- A soft-deleted user drops out of `find-user-grants` and member lists, and keeps
-  their memberships for a restore.
-- `(permission-holders svc permission)` is one join: `{:user-id :permission :scope}`
-  per active, not soft-deleted holder, distinct. Filter the scope with
-  `core.group/users-with-permission`. `user_group_grants(permission)` is indexed for
-  it; `user_id` and `group_id` are, as every `-id` column is.
-- `(import-groups! svc groups {:replace? bool})` upserts groups by name. It checks
-  every group (`GroupImport`), grant (`grant-refusal`) and member first, then
-  writes and audits in one transaction (the audit repository's queries join it, so
-  a failed entry rolls back). Additive unless `:replace?`. `ensure-tables` runs
-  `initialize-user-schema!` when the group tables are missing, so an app migration
-  can run it before the user library's. A concurrent import that loses the race
-  gets `:conflict`; run it again.
+- A soft-deleted user holds nothing, Everyone included, and keeps their
+  memberships for a restore.
+- `(permission-holders svc permission)`: `{:user-id :permission :scope}` per
+  active, not soft-deleted holder through a stored membership or Everyone,
+  distinct. Filter the scope with `core.group/users-with-permission`.
+- `(import-groups! svc groups {:replace? bool})` upserts groups by name, with
+  `:roles [{:role :scope}]`. It checks every group, assignment and member first,
+  then writes and audits in one transaction. Additive unless `:replace?`.
+  `ensure-tables` runs `initialize-user-schema!` when the tables are missing, so an
+  app migration can run it before the user library's. A concurrent import that
+  loses the race gets `:conflict`; run it again.
 - `user_groups.name` is unique (`uk_user_groups_name`): create, rename and import
   answer `:conflict` with `:field :name`. Where names already repeat, boot logs
   them at ERROR and goes on without the key.

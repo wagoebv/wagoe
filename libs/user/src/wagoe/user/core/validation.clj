@@ -21,7 +21,7 @@
          valid-user-role? validate-role-constraint
          valid-password? validate-password-constraint
          validate-cross-field-constraints
-         admin-email-domain-valid? validate-enhanced-role-transition)
+         admin-email-domain-valid?)
 
 (defn- humanized-errors->error-maps
   "Convert a humanized Malli error structure to a flat vector of error maps.
@@ -182,24 +182,22 @@
 ;; =============================================================================
 
 (defn valid-user-role?
-  "Pure function: Check if user role is valid for creation context."
+  "Pure function: Check if user role is valid for creation context. No role,
+   which `:user` still means until 2.0, is always valid: rights come from
+   groups."
   [role validation-config]
-  (let [allowed-roles (get-in validation-config [:role-restrictions :allowed-for-creation] #{:user :admin :viewer})
+  (let [allowed-roles (get-in validation-config [:role-restrictions :allowed-for-creation] #{:admin})
         restricted-roles (get-in validation-config [:role-restrictions :creation-restricted] #{})]
-    (and (contains? allowed-roles role)
-         (not (contains? restricted-roles role)))))
+    (or (nil? role) (= :user role)
+        (and (contains? allowed-roles role)
+             (not (contains? restricted-roles role))))))
 
 (defn validate-role-constraint
   "Pure function: Generate error for invalid user role."
   [role validation-config]
-  (let [allowed-roles (get-in validation-config [:role-restrictions :allowed-for-creation] #{:user :admin :viewer})
+  (let [allowed-roles (get-in validation-config [:role-restrictions :allowed-for-creation] #{:admin})
         restricted-roles (get-in validation-config [:role-restrictions :creation-restricted] #{})]
     (cond
-      (nil? role)
-      {:field :role
-       :code :role-required
-       :message "Role is required"}
-
       (contains? restricted-roles role)
       {:field :role
        :code :role-creation-restricted
@@ -292,14 +290,7 @@
                       (not (admin-email-domain-valid? (:email user-data) validation-config)))
                  (conj {:field :email
                         :code :admin-email-domain-restricted
-                        :message "Admin users must have email from approved corporate domains"})
-
-                 ;; Viewer role cannot be active=false on creation
-                 (and (= :viewer (:role user-data))
-                      (= false (:active user-data)))
-                 (conj {:field :active
-                        :code :viewer-must-be-active
-                        :message "Viewer users must be created as active"}))]
+                        :message "Admin users must have email from approved corporate domains"}))]
     (if (empty? errors)
       {:valid? true}
       {:valid? false :errors errors})))
@@ -312,55 +303,6 @@
       true ; No admin-specific restrictions
       (let [domain (second (str/split email #"@"))]
         (contains? admin-domains domain)))))
-
-;; =============================================================================
-;; Enhanced Role Transition Validation
-;; =============================================================================
-
-(defn validate-enhanced-role-transition
-  "Pure function: Enhanced role transition validation with context.
-   
-   Args:
-     current-role: Current user role
-     new-role: Proposed new role
-     requesting-user: User making the request (with role and context)
-     validation-config: Enhanced role validation configuration
-   
-   Returns:
-     {:valid? true} or {:valid? false :errors [...]}
-   
-   Pure - enhanced role transition business rules."
-  [current-role new-role requesting-user validation-config]
-  (let [role-hierarchy (get-in validation-config [:role-hierarchy] {:user 1 :viewer 2 :admin 3})
-        current-level (role-hierarchy current-role 0)
-        new-level (role-hierarchy new-role 0)
-        requester-level (role-hierarchy (:role requesting-user) 0)
-        role-transitions (get-in validation-config [:role-transitions] {})
-        allowed-transitions (get role-transitions current-role #{})
-
-        errors (cond-> []
-                 ;; Can't promote to a level higher than your own
-                 (> new-level requester-level)
-                 (conj {:field :role
-                        :code :insufficient-privileges
-                        :message "Cannot promote user to a role higher than your own"})
-
-                 ;; Can't modify someone at your level or higher (unless self)
-                 (and (>= current-level requester-level)
-                      (not= (:id requesting-user) (:target-user-id requesting-user)))
-                 (conj {:field :role
-                        :code :cannot-modify-peer-or-superior
-                        :message "Cannot modify user at your role level or higher"})
-
-                 ;; Role transition not allowed by business rules
-                 (and (not (empty? allowed-transitions))
-                      (not (contains? allowed-transitions new-role)))
-                 (conj {:field :role
-                        :code :transition-not-allowed
-                        :message (str "Cannot transition from " (name current-role) " to " (name new-role))}))]
-    (if (empty? errors)
-      {:valid? true}
-      {:valid? false :errors errors})))
 
 ;; =============================================================================
 ;; Comprehensive User Creation Validation

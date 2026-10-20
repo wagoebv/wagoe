@@ -311,12 +311,12 @@
       (add-user! a)
       (swap! idp assoc :claims-fn #(assoc % :email_verified false))
       (is (= 403 (:status (sign-in! a))))))
-  (testing "auto-create makes a :user, never an admin"
+  (testing "auto-create gives no role, never an admin"
     (let [a    (app :auto-create? true)
           resp (sign-in! a)
           [u]  (vals @(:state (:users a)))]
       (is (= 200 (:status resp)))
-      (is (= {:email "ada@example.com" :name "Ada Lovelace" :role :user}
+      (is (= {:email "ada@example.com" :name "Ada Lovelace"}
              (select-keys u [:email :name :role])))
       (is (= "ada@example.com" (authenticated-as a (session-token resp)))))))
 

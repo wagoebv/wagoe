@@ -400,7 +400,7 @@
           (create-forbidden-response
            (format "Role '%s' required. User has role '%s'"
                    (str/join ", " (map name required-roles))
-                   (name user-role))
+                   (some-> user-role name))
            :insufficient-role
            request)))
 

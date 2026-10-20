@@ -156,13 +156,12 @@
       ;; Navigate to the regular user's detail page (not admin, to safely change role)
       (page/navigate pg (admin/admin-url (str "/users/" (-> fx/*seed* :user :id))))
       (page/wait-for-load-state pg)
-      ;; Change role from user to viewer
-      (loc/select-option (page/locator pg "select[name='role']") "viewer")
+      ;; Promote the user: :admin is the one role left, and a platform admin sets it
+      (loc/select-option (page/locator pg "select[name='role']") "admin")
       (admin/submit-entity-form! pg)
-      ;; Verify the role is now viewer
       (let [role-value (loc/input-value (page/locator pg "select[name='role']"))]
-        (is (= "viewer" role-value)
-            "Role should be updated to 'viewer' after form submission")))))
+        (is (= "admin" role-value)
+            "Role should be updated to 'admin' after form submission")))))
 
 (deftest ^:integration ^:e2e edit-form-submit-preserves-values
   (testing "Editing a field and submitting preserves the new value on the re-rendered form"

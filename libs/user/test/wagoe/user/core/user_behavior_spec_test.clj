@@ -42,7 +42,7 @@
   #{:user.create/valid
     :user.email/required
     :user.name/required
-    :user.role/required
+    :user.role/optional
     :user.email/invalid-format})
 
 (def ^:private executed-rule-ids (atom #{}))
@@ -74,13 +74,13 @@
     :action validate-create-user
     :assertions [{:expect :failure}]}
 
-   {:name "create-user--role-required-missing"
-    :description "Role required"
-    :rule-id :user.role/required
+   {:name "create-user--role-missing"
+    :description "No role is a user without one"
+    :rule-id :user.role/optional
     :base base-valid
     :mutations [(behavior/remove-field :role)]
     :action validate-create-user
-    :assertions [{:expect :failure}]}
+    :assertions [{:expect :success}]}
 
    ;; Wrong format (email)
    {:name "create-user--email-wrong-format"

@@ -104,8 +104,8 @@
           "Errors should be present for nil email"))))
 
 (deftest ^:unit all-required-fields-validation
-  (testing "All required fields must be present"
-    (let [required-fields [:email :name :role]]
+  (testing "All required fields must be present; the role is not one"
+    (let [required-fields [:email :name]]
       (doseq [field required-fields]
         (let [request (dissoc valid-user-creation-request field)
               result (user-core/validate-user-creation-request request vh/test-validation-config)]

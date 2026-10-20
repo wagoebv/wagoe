@@ -144,8 +144,9 @@
       (sut/initialize-user-schema! fresh)
       (test-db/with-db "user_upgraded"
         (fn [upgraded]
-          ;; Each table as an older release left it: its first three fields.
-          (doseq [[table schema] sut/tables]
+          ;; Each table as an older release left it: its first three fields,
+          ;; each after the tables it references.
+          (doseq [[table schema] (#'schema-utils/creation-order sut/tables)]
             (db-core/execute-ddl! upgraded (schema-utils/generate-table-ddl
                                             upgraded table (into [:map] (take 3 (filter vector? (rest schema)))))))
           (sut/initialize-user-schema! upgraded)

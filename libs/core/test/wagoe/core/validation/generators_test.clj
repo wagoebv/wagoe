@@ -35,7 +35,7 @@
       (is (m/validate user-schema/CreateUserRequest user) "Generated user request should be valid")
       (is (string? (:email user)) "User should have email string")
       (is (string? (:name user)) "User should have name string")
-      (is (keyword? (:role user)) "User should have role keyword"))))
+      (is (or (nil? (:role user)) (keyword? (:role user))) "A role, when there is one, is a keyword"))))
 
 (deftest ^:unit ^:phase3 gen-valid-one-create-request-test
   (testing "Generate valid CreateUserRequest"
@@ -44,7 +44,7 @@
       (is (m/validate user-schema/CreateUserRequest request) "Generated request should be valid")
       (is (string? (:email request)) "Request should have email")
       (is (string? (:name request)) "Request should have name")
-      (is (keyword? (:role request)) "Request should have role"))))
+      (is (or (nil? (:role request)) (keyword? (:role request))) "A role, when there is one, is a keyword"))))
 
 ;; SKIPPED: UserSession has inst? fields which don't have built-in generators in Malli 0.19.2
 ;; (deftest ^:phase3 gen-valid-one-user-session-test

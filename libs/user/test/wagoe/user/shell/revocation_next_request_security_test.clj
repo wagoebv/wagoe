@@ -84,7 +84,7 @@
 (deftest ^:security ^:unit role-change-is-seen-on-the-next-request
   (let [st (stores) svc (replica st)
         [user token] (sign-in! svc st)]
-    (is (= :user (:body (request! svc token))))
+    (is (nil? (:body (request! svc token))))
     ;; Written straight to the store, as another replica or an operator would.
     (ports/update-user (:users st) (assoc (ports/find-user-by-id (:users st) (:id user))
                                           :role :admin))

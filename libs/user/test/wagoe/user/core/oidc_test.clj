@@ -124,5 +124,5 @@
                                       [:error :type]))))
     (testing "auto-create"
       (is (= {:action :create
-              :user-data {:email "ada@example.com" :name "Ada Lovelace" :role :user :active true}}
+              :user-data {:email "ada@example.com" :name "Ada Lovelace" :active true}}
              (sut/resolve-account {:claims claims :provider (assoc provider :auto-create? true)}))))))
