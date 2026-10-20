@@ -839,31 +839,53 @@
          user-entity))
      {:db-ctx ctx}))
 
-  (increment-failed-login-count [_ user-id lockout]
+  (claim-login-attempts [_ user-id n lockout]
     (persistence-interceptors/execute-persistence-operation
-     :increment-failed-login-count
-     {:user-id user-id :lockout lockout}
+     :claim-login-attempts
+     {:user-id user-id :n n :lockout lockout}
      (fn [{:keys [params]}]
-       ;; The UPDATE locks the row until commit, so a parallel failure waits and
-       ;; adds to this one, and the read in the same transaction sees this
-       ;; write. No RETURNING: MySQL has none. lockout_until is assigned first:
+       ;; The UPDATE is the lockout check: it matches only an unlocked row, and
+       ;; locks it until commit, so a parallel claim waits and then sees this
+       ;; one. No RETURNING: MySQL has none. lockout_until is assigned first:
        ;; MySQL evaluates SET left to right, so later terms see earlier writes.
        (let [id   (type-conversion/uuid->string (:user-id params))
-             next [:+ [:coalesce :failed_login_count 0] 1]
-             {:keys [max-attempts until]} (:lockout params)]
+             next [:+ [:coalesce :failed_login_count 0] (:n params)]
+             {:keys [max-attempts until now]} (:lockout params)]
          (db/with-transaction [tx ctx]
-           (when (pos? (db/execute-update!
-                        tx {:update :auth_users
-                            :set    (array-map
-                                     :lockout_until      [:case [:>= next max-attempts]
-                                                          until
-                                                          :else :lockout_until]
-                                     :failed_login_count next
-                                     :updated_at         (java.time.Instant/now))
-                            :where  [:= :id id]}))
-             (:failed-login-count (db/execute-one! tx {:select [:failed_login_count]
-                                                       :from   [:auth_users]
-                                                       :where  [:= :id id]}))))))
+           (let [claimed? (pos? (db/execute-update!
+                                 tx {:update :auth_users
+                                     :set    (array-map
+                                              :lockout_until      [:case [:>= next max-attempts]
+                                                                   until
+                                                                   :else :lockout_until]
+                                              :failed_login_count next
+                                              :updated_at         (java.time.Instant/now))
+                                     :where  [:and [:= :id id]
+                                              [:or [:= :lockout_until nil] [:<= :lockout_until now]]]}))
+                 row      (db/execute-one! tx {:select [:failed_login_count :lockout_until]
+                                               :from   [:auth_users]
+                                               :where  [:= :id id]})]
+             (when row
+               (if claimed?
+                 {:claimed? true :failed-login-count (:failed-login-count row)}
+                 {:claimed? false
+                  :lockout-until (type-conversion/string->instant (:lockout-until row))}))))))
+     {:db-ctx ctx}))
+
+  (release-login-attempt [_ user-id unlock?]
+    (persistence-interceptors/execute-persistence-operation
+     :release-login-attempt
+     {:user-id user-id :unlock? unlock?}
+     (fn [{:keys [params]}]
+       (db/execute-update!
+        ctx {:update :auth_users
+             :set    (cond-> {:failed_login_count [:case [:> [:coalesce :failed_login_count 0] 0]
+                                                   [:+ :failed_login_count -1]
+                                                   :else 0]
+                              :updated_at         (java.time.Instant/now)}
+                       (:unlock? params) (assoc :lockout_until nil))
+             :where  [:= :id (type-conversion/uuid->string (:user-id params))]})
+       nil)
      {:db-ctx ctx}))
 
   (consume-backup-code [_ user code-hash]

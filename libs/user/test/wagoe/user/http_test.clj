@@ -537,7 +537,8 @@
                   (update-user [_ _] nil)
                   (soft-delete-user [_ _] nil)
                   (hard-delete-user [_ _] nil)
-                  (increment-failed-login-count [_ _ _] nil)
+                  (claim-login-attempts [_ _ _ _] {:claimed? true :failed-login-count 0})
+                  (release-login-attempt [_ _ _] nil)
                   (consume-backup-code [_ _ _] false)
                   (with-admins-locked [_ f] (f)))
         svc     (mfa/create-mfa-service repo {})
@@ -572,7 +573,11 @@
       (let [resp (post {:password "Right-Pass-1!"})]
         (is (= 429 (:status resp)))
         (is (= "account-locked" (get-in resp [:body :error :type])))
-        (is (get-in resp [:headers "Retry-After"]))))
+        (is (get-in resp [:headers "Retry-After"]))
+        (testing "with a correlation id, as a locked sign-in has (BOU-785)"
+          (is (string? (get-in resp [:body :error :correlation-id])))
+          (is (= (get-in resp [:body :error :correlation-id])
+                 (get-in resp [:headers "X-Correlation-ID"]))))))
     (is (true? (get-in @users [id :mfa-enabled])))
     (testing "the right password, once the lockout has passed"
       (swap! users update id dissoc :lockout-until)

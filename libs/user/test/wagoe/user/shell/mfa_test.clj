@@ -59,7 +59,8 @@
       (hard-delete-user [_ _user-id]
         true)
 
-      (increment-failed-login-count [_ _ _] nil)
+      (claim-login-attempts [_ _ _ _] {:claimed? true :failed-login-count 0})
+      (release-login-attempt [_ _ _] nil)
 
       (consume-backup-code [_ _ _] false)
       (with-admins-locked [_ f] (f)))))

@@ -23,7 +23,8 @@
   // with the form (BOU-381).
   document.body.addEventListener('htmx:beforeSwap', function(event) {
     const status = event.detail.xhr.status;
-    if (status !== 400 && status !== 422) return;
+    // 429: a locked account answers the password form with it (BOU-785).
+    if (status !== 400 && status !== 422 && status !== 429) return;
 
     // The body decides, not the element: on beforeSwap `event.detail.elt` is the
     // swap target, which for hx-target="#create-user-form" is a div, not a form.

@@ -533,6 +533,8 @@ the interceptor internals and token format.
 * CSRF protection is enforced for session-authenticated, state-changing requests — see
   <<csrf>>
 * Internal entities use `:password-hash` (kebab-case) — never `:password_hash`
-* The `user` library enforces account lockout after repeated failed login attempts
+* The `user` library enforces account lockout after repeated failed login attempts. A
+  wrong current password on the password-change form counts too, and a locked account
+  cannot change its password
 
 See xref:libraries:user.adoc[user library] for the full reference.

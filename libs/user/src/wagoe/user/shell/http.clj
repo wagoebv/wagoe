@@ -247,11 +247,12 @@
 (defn- mfa-refusal
   "A validation-error 400 for an MFA refusal the caller can act on, its MFA
    type as the reason; a 500 when mfa.clj caught an exception, which it logged
-   (BOU-586)."
-  [result]
+   (BOU-586); for a lockout, the 429 a locked sign-in answers (BOU-785)."
+  [request result]
   (let [{:keys [type message retry-after]} (:error result)]
     (if (= :account-locked type)
-      (user-interceptors/lockout-response retry-after {})
+      (user-interceptors/lockout-response
+       retry-after {:correlation-id (access/correlation-id request (str (random-uuid)))})
       {:status  (if (mfa-failures type) 500 400)
        :headers {"Content-Type" "application/json"}
        :body    (json/generate-string
@@ -279,7 +280,7 @@
                  :backupCodes (:backup-codes result)
                  :issuer (:issuer result)
                  :accountName (:account-name result)})}
-        (mfa-refusal result)))))
+        (mfa-refusal request result)))))
 
 (defn mfa-enable-handler
   "POST /api/auth/mfa/enable - Enable MFA after verification."
@@ -297,7 +298,7 @@
         {:status 200
          :headers {"Content-Type" "application/json"}
          :body (json/generate-string {:message "MFA enabled successfully"})}
-        (mfa-refusal result)))))
+        (mfa-refusal request result)))))
 
 (defn mfa-disable-handler
   "POST /api/auth/mfa/disable - Disable MFA for the authenticated user, who
@@ -314,7 +315,7 @@
         {:status 200
          :headers {"Content-Type" "application/json"}
          :body (json/generate-string {:message "MFA disabled successfully"})}
-        (mfa-refusal result)))))
+        (mfa-refusal request result)))))
 
 (defn mfa-status-handler
   "GET /api/auth/mfa/status - Get MFA status for authenticated user."

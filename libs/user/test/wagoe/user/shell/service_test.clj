@@ -36,7 +36,8 @@
     user-entity)
   (soft-delete-user [_ _user-id] true)
   (hard-delete-user [_ _user-id] true)
-  (increment-failed-login-count [_ _ _] nil)
+  (claim-login-attempts [_ _ _ _] {:claimed? true :failed-login-count 0})
+  (release-login-attempt [_ _ _] nil)
   (consume-backup-code [_ _ _] false)
   (with-admins-locked [_ f] (f)))
 
@@ -313,7 +314,8 @@
                    (throw (org.postgresql.util.PSQLException.
                            "update or delete on table \"users\" violates foreign key constraint \"fk_tenant_memberships_user\" on table \"tenant_memberships\""
                            org.postgresql.util.PSQLState/FOREIGN_KEY_VIOLATION)))
-                 (increment-failed-login-count [_ _ _] nil)
+                 (claim-login-attempts [_ _ _ _] {:claimed? true :failed-login-count 0})
+                 (release-login-attempt [_ _ _] nil)
                  (consume-backup-code [_ _ _] false)
                  (with-admins-locked [_ f] (f)))
           service (sut/->UserService repo nil nil {} nil)]
@@ -358,7 +360,8 @@
                  (update-user [_ user-entity] user-entity)
                  (soft-delete-user [_ _user-id] true)
                  (hard-delete-user [_ _user-id] true)
-                 (increment-failed-login-count [_ _ _] nil)
+                 (claim-login-attempts [_ _ _ _] {:claimed? true :failed-login-count 0})
+                 (release-login-attempt [_ _ _] nil)
                  (consume-backup-code [_ _ _] false)
                  (with-admins-locked [_ f] (f)))
           service (sut/->UserService repo nil nil {} nil)]
@@ -387,7 +390,8 @@
                      (update-user [_ user-entity] user-entity)
                      (soft-delete-user [_ _user-id] true)
                      (hard-delete-user [_ _user-id] true)
-                     (increment-failed-login-count [_ _ _] nil)
+                     (claim-login-attempts [_ _ _ _] {:claimed? true :failed-login-count 0})
+                     (release-login-attempt [_ _ _] nil)
                      (consume-backup-code [_ _ _] false)
                      (with-admins-locked [_ f] (f)))
                    (->SessionRepoStub session)
@@ -455,7 +459,8 @@
                      (update-user [_ user-entity] user-entity)
                      (soft-delete-user [_ id] (= id user-id))
                      (hard-delete-user [_ _user-id] true)
-                     (increment-failed-login-count [_ _ _] nil)
+                     (claim-login-attempts [_ _ _ _] {:claimed? true :failed-login-count 0})
+                     (release-login-attempt [_ _ _] nil)
                      (consume-backup-code [_ _ _] false)
                      (with-admins-locked [_ f] (f)))
                    ;; Deactivation ends the user's sessions (BOU-665).

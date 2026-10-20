@@ -80,3 +80,14 @@
     (is (= 1 (:failed-login-count (stored f))) "and does not count")
     (is (= 200 (:status (api-login handler backup-code))) "a backup code signs in")
     (is (zero? (:failed-login-count (stored f))))))
+
+(deftest ^:contract ^:security a-right-password-without-a-code-does-not-lock
+  ;; The attempt is counted before the password is checked (BOU-785); the
+  ;; password step of an MFA sign-in takes it back, lockout included.
+  (let [{:keys [svc] :as f} (fixture)
+        handler (user-http/login-handler svc)]
+    (is (= [401 401] (mapv #(:status (api-login handler %)) ["000000" "000000"])))
+    (is (true? (get-in (api-login handler "") [:body :requiresMfa])))
+    (is (= 2 (:failed-login-count (stored f))))
+    (is (nil? (:lockout-until (stored f))))
+    (is (= 200 (:status (api-login handler (totp f)))) "the third attempt may still sign in")))

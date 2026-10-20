@@ -13,6 +13,7 @@
             [wagoe.user.core.authentication :as auth-core]
             [wagoe.user.core.mfa :as mfa-core]
             [wagoe.user.ports :as ports]
+            [wagoe.user.shell.lockout :as lockout]
             [wagoe.user.shell.mfa-crypto :as mfa-crypto]
             [buddy.hashers :as hashers]
             [one-time.core :as otp]
@@ -328,14 +329,6 @@
       check
       {:valid? false :used-backup-code? false})))
 
-(defn record-failed-login!
-  "Count a failed attempt for `user-id`, locking the account in the same write
-   when the count reaches the limit, so parallel failures each count and a
-   lockout cannot follow a login that reset it (BOU-696)."
-  [user-repository auth-config user-id current-time]
-  (ports/increment-failed-login-count user-repository user-id
-                                      (auth-core/failed-login-lockout auth-config current-time)))
-
 (defn- proof-holds?
   "Whether `password` is the user's, or `code` a current TOTP or unused backup
    code, which it spends. The password goes first so a backup code is not
@@ -381,9 +374,7 @@
           {:success? false :error {:type :cannot-disable :message (:reason can)}}
 
           (:retry-after allowed)
-          {:success? false :error {:type        :account-locked
-                                   :message     "Too many failed attempts, try again later"
-                                   :retry-after (:retry-after allowed)}}
+          {:success? false :error (lockout/locked-error (:retry-after allowed))}
 
           (not (:allowed? allowed))
           {:success? false :error {:type :cannot-disable :message (:reason allowed)}}
@@ -392,18 +383,24 @@
           {:success? false :error {:type    :proof-required
                                    :message "Confirm with your password or an authentication code"}}
 
-          (not (proof-holds? user-repository user proof))
-          ;; One failure per wrong field: a request is not two guesses for one.
-          (do (dotimes [_ (count (remove str/blank? [(:password proof) (:code proof)]))]
-                (record-failed-login! user-repository auth-config user-id now))
-              {:success? false :error {:type :invalid-proof :message "Incorrect password or code"}})
-
           :else
-          (do (ports/update-user user-repository
-                                 (assoc (mfa-core/prepare-mfa-disablement user)
-                                        :id (:id user) :failed-login-count 0 :lockout-until nil))
-              (audit-disable! audit-repository user request-context)
-              {:success? true})))
+          ;; One attempt per field given: a request is not two guesses for one.
+          (let [claim (lockout/claim-attempts! user-repository auth-config user-id
+                                       (count (remove str/blank? [(:password proof) (:code proof)]))
+                                       now)]
+            (cond
+              (not (:claimed? claim))
+              {:success? false :error (lockout/locked-error (:retry-after claim))}
+
+              (not (proof-holds? user-repository user proof))
+              {:success? false :error {:type :invalid-proof :message "Incorrect password or code"}}
+
+              :else
+              (do (ports/update-user user-repository
+                                     (assoc (mfa-core/prepare-mfa-disablement user)
+                                            :id (:id user) :failed-login-count 0 :lockout-until nil))
+                  (audit-disable! audit-repository user request-context)
+                  {:success? true})))))
       (catch Exception e
         (log/error e "MFA disable failed")
         {:success? false
