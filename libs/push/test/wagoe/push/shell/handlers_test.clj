@@ -112,3 +112,20 @@
                      :when (:public endpoint)]
                  [path method])]
     (is (= [["/callback" :post]] public))))
+
+(deftest ^:unit every-route-has-an-authorization-rule
+  ;; Mounted by hand, so no module tags them: without a rule of their own,
+  ;; :wagoe/authorization :enforce refuses them.
+  (let [[_ & children] (handlers/push-routes {})
+        rules (into {} (for [[path data] children
+                             [method endpoint] data
+                             :when (map? endpoint)]
+                         [[path method] (or (when (:public endpoint) :public)
+                                            (:authorization data)
+                                            (:permission data))]))]
+    (is (= {["/devices" :post]               :self
+            ["/devices" :get]                :self
+            ["/devices/:token" :delete]      :self
+            ["/callback" :post]              :public
+            ["/stats/:notification-id" :get] :push/read}
+           rules))))

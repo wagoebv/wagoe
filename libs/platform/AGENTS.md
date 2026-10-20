@@ -369,7 +369,10 @@ that asks a permission.
   `:forbidden` (a web caller gets a page, not the login redirect), 404 outside
   the scope. Any other mode fails boot, as does an `:authorization` other than
   `:signed-in` or `:self`.
-- Outside `:off`, boot warns with every route no rule covers.
+- Outside `:off`, boot warns with every route no rule covers. `clojure -M:run authz-report`
+  (`wagoe.platform.shell.system.authorization-report`, also in a generated app's main) prints
+  them without serving, plus each route's rule and permission, in any mode.
+- `:report` logs a check that throws once a minute per route, method and exception class.
 
 ### Per-Route Interceptors
 

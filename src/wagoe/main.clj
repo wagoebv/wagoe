@@ -7,16 +7,19 @@
    - service: Start only the named modules, as an independently deployable
      service (BOU-91)
    - cli: Run CLI commands
+   - authz-report: Print each route's authorization rule, without serving
 
    Usage:
      java -jar wagoe-standalone.jar                   # Start HTTP server
      java -jar wagoe-standalone.jar server            # Start HTTP server explicitly
      java -jar wagoe-standalone.jar worker            # Start a background worker
      java -jar wagoe-standalone.jar service payments  # Start one module as a service
-     java -jar wagoe-standalone.jar cli [args]        # Run CLI commands"
+     java -jar wagoe-standalone.jar cli [args]        # Run CLI commands
+     java -jar wagoe-standalone.jar authz-report      # Routes :enforce would refuse"
   (:require [wagoe.core.utils.text :as text]
             [wagoe.config :as config]
             [wagoe.system-config :as sys-config]
+            [wagoe.platform.shell.system.authorization-report :as authz-report]
             [wagoe.platform.shell.system.wiring :as wiring] ; Integrant init functions, and start!/stop!
             ;; Load feature modules' Integrant init/halt methods at the app layer
             ;; so platform does not depend on the feature libs (BOU-171 / BOU-192).
@@ -44,6 +47,8 @@
   (println "  worker  - Start a background worker (no HTTP listener)")
   (println "  service - Start only the named modules (e.g. service payments)")
   (println "  cli     - Run CLI commands")
+  (println "  authz-report - Print each route's authorization rule and the routes")
+  (println "                 :enforce would refuse, without serving")
   (println "  help    - Show this help message")
   (println)
   (println "Environment Variables:")
@@ -254,6 +259,9 @@
 
       "cli"
       (run-cli! remaining-args)
+
+      "authz-report"
+      (System/exit (authz-report/print-report! (sys-config/ig-config (config/load-config))))
 
       ("help" "-h" "--help")
       (do

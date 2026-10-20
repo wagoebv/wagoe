@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **`clojure -M:run authz-report`** (BOU-786) prints each route's authorization rule and permission, and what
+  `:enforce` would refuse, without serving. Generated apps get it in `main.clj`; older ones can copy it from there.
 - **The admin reads `admin.<entity>/read|write` and scopes under `:wagoe/authorization :enforce`** (BOU-774): entities
   map scope keys with `:scope`. Under `:off` it still admits role `:admin`; try `:report` first.
 - **Route authorization, off by default** (BOU-772): `:wagoe/authorization {:mode :report}` logs what `:enforce` would
@@ -249,6 +251,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Push routes had no authorization rule, so `:enforce` refused them** (BOU-786); a check that throws under `:report`
+  now logs once a minute. Nothing to do.
 - **Wrong current passwords on change-password did not count towards the lockout, and parallel attempts exceeded it**
   (BOU-785). Custom `IUserRepository`s implement `claim-login-attempts` and `release-login-attempt` instead of `increment-failed-login-count`.
 - **Flash messages were never shown** (BOU-783): a response's `:flash` now reaches the next request, in a `wagoe-flash`

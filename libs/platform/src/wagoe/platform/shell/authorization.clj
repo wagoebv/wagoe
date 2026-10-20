@@ -123,28 +123,26 @@
 ;; =============================================================================
 
 (def ^:private report-interval-ms
-  "How long one refusal, by user, route, method and permission, stays quiet
-   after it was logged."
+  "How long one log line, by its key, stays quiet after it was logged."
   60000)
+
+(defn- once-per-interval
+  "A fn of a key and a thunk that calls the thunk at most once per
+   `report-interval-ms` for the same key."
+  []
+  (let [seen (atom {})]
+    (fn [k f]
+      (let [now       (System/currentTimeMillis)
+            fresh     (fn [m] (let [m (if (> (count m) 10000) {} m)]
+                                (if (< (- now (get m k 0)) report-interval-ms) m (assoc m k now))))
+            [old new] (swap-vals! seen fresh)]
+        (when (not= (get old k) (get new k))
+          (f))))))
 
 (defn- log-refusal! [{:keys [mode] :as entry}]
   (if (= :report mode)
     (log/warn "Authorization would refuse this request under :enforce" entry)
     (log/info "Authorization refused a request" entry)))
-
-(defn- refusal-logger
-  "A fn logging a refusal at most once per `report-interval-ms` for the same
-   user, route, method and permission."
-  []
-  (let [seen (atom {})]
-    (fn [entry]
-      (let [k     (select-keys entry [:user-id :route :method :permission])
-            now   (System/currentTimeMillis)
-            fresh (fn [m] (let [m (if (> (count m) 10000) {} m)]
-                            (if (< (- now (get m k 0)) report-interval-ms) m (assoc m k now))))
-            [old new] (swap-vals! seen fresh)]
-        (when (not= (get old k) (get new k))
-          (log-refusal! entry))))))
 
 (defn rights-for
   "`user`'s rights whose permission `pred` admits, read once and resolved.
@@ -182,9 +180,9 @@
    after the sign-in guard, so it sees only signed-in callers, and not at all
    on a rule that admits every one of them. `rights-source` is an `IRights`,
    read once per request. `mode`: `:report` logs what `:enforce` refuses and
-   lets it through; `:off` mounts nothing."
+   lets it through, as it does a check that throws; `:off` mounts nothing."
   [registry rights-source {:keys [mode]}]
-  (let [log-refusal (refusal-logger)]
+  (let [throttled (once-per-interval)]
     {:name    ::authorization
      :compile (fn [data _opts]
                 (let [rule        (core/route-rule data)
@@ -192,19 +190,24 @@
                   (when-not (or (= :off mode) (#{:public :signed-in :self} (:rule rule)))
                     (fn [handler]
                       (fn [request]
-                        (let [{admitted :request :keys [response error permission]}
+                        (let [route (or (:template (:reitit.core/match request)) (:uri request))
+                              {admitted :request :keys [response error permission]}
                               (try (check registry rights-source rule route-scope request)
                                    (catch Exception e
                                      (when-not (= :report mode) (throw e))
-                                     (log/error e "Authorization report failed; the request goes through")
+                                     (throttled [::failed route (:request-method request) (class e)]
+                                                #(log/error e "Authorization report failed; the request goes through"
+                                                            {:route route :method (:request-method request)}))
                                      {:request request}))]
                           (when error
-                            (log-refusal {:mode       mode
-                                          :user-id    (get-in request [:user :id])
-                                          :route      (or (:template (:reitit.core/match request)) (:uri request))
-                                          :method     (:request-method request)
-                                          :permission permission
-                                          :reason     (:type error)}))
+                            (let [entry {:mode       mode
+                                         :user-id    (get-in request [:user :id])
+                                         :route      route
+                                         :method     (:request-method request)
+                                         :permission permission
+                                         :reason     (:type error)}]
+                              (throttled (select-keys entry [:user-id :route :method :permission])
+                                         #(log-refusal! entry))))
                           (cond admitted         (handler admitted)
                                 (= :report mode) (handler request)
                                 :else            response)))))))}))

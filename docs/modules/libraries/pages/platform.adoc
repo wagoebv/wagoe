@@ -346,7 +346,8 @@ Each route falls under the first rule that matches:
 The last falls back on the module the route came from: `<module>/read` for GET
 and HEAD, `<module>/write` otherwise. A route with no rule and no module is
 refused. A platform admin passes every rule. The boot logs, outside `:off`,
-every route no rule covers. The user module supplies each user's rights, read
+every route no rule covers. `clojure -M:run authz-report` prints them without
+serving, and every route with its rule and permission, in any mode. The user module supplies each user's rights, read
 once per request.
 
 == Data export and retention

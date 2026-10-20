@@ -234,7 +234,8 @@
                   (dim (str "bb " (str/join " " (remove #{"--edn"} task)))))))
   (println)
   (println (dim "Those tasks are still there, and CI calls them directly."))
-  (println (dim "For code quality rather than setup, run `bb check`.")))
+  (println (dim "For code quality rather than setup, run `bb check`."))
+  (println (dim "For the routes :wagoe/authorization :enforce would refuse, `clojure -M:run authz-report`.")))
 
 (defn run
   "Run the stages against `dir`. Returns {:results :stopped-at :errors}."

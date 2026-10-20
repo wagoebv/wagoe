@@ -7,7 +7,9 @@
    route added without `:public` and without a guard fails here."
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest is testing use-fixtures]]
-            [support.route-table :as rt :refer [route-table]]))
+            [reitit.core :as r]
+            [support.route-table :as rt :refer [route-table]]
+            [wagoe.platform.core.authorization :as authorization]))
 
 (use-fixtures :once (rt/system-fixture "route-authentication"))
 
@@ -88,3 +90,10 @@
         "the public routes changed; update expected-public only on purpose")
     (is (every? public redirects)
         "an unversioned /api redirect is not public, so it cannot redirect")))
+
+(deftest ^:integration ^:security push-routes-mounted-by-hand-have-a-rule
+  ;; No module tags them, so without a rule of their own :enforce refuses them.
+  (let [routes (r/routes (:reitit/router (meta rt/*handler*)))]
+    (is (some #(= "/api/push/stats/:notification-id" (first %)) routes))
+    (is (empty? (filter #(str/starts-with? (:path %) "/api/push")
+                        (authorization/unruled-routes routes))))))

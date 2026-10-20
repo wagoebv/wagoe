@@ -16,6 +16,7 @@
   (:require [clojure.string :as str]
             [malli.core :as m]
             [malli.error :as me]
+            [wagoe.core.utils.text :as text]
             [wagoe.platform.core.http.access :as access]
             [wagoe.platform.core.scope :as scope]))
 
@@ -307,3 +308,42 @@
              [method d] (endpoints data)
              :when (and (some? (:scope d)) (#{:public :signed-in :self} (:rule (route-rule d))))]
          {:path path :method method :scope (:scope d)})))
+
+(defn route-report
+  "Every endpoint of `routes`, a router's flattened [path data] pairs, with the
+   rule it falls under, as [{:path :method :rule :permissions :scope}].
+   `:permissions` holds what the rule asks, both read and write for a module
+   route answering `:any` method."
+  [routes]
+  (vec (for [[path data] (sort-by first routes)
+             [method d] (endpoints data)
+             :let [rule (route-rule d)]]
+         (cond-> {:path        path
+                  :method      method
+                  :rule        (:rule rule)
+                  :permissions (if (and (= :any method) (= :module (:rule rule)))
+                                 [(required-permission rule :get) (required-permission rule :post)]
+                                 (vec (some-> (required-permission rule method) list)))}
+           (some? (:scope d)) (assoc :scope (:scope d))))))
+
+(defn- report-line [{:keys [path method rule permissions scope]}]
+  (str/trimr (format "  %-7s %-50s %-11s %s%s"
+                     (text/upper-case (name method)) path (name rule)
+                     (str/join ", " (map #(subs (str %) 1) permissions))
+                     (if scope (str "  scope " (pr-str scope)) ""))))
+
+(defn format-route-report
+  "`report` (`route-report`) as text for a terminal: the endpoints no rule
+   covers first, then every endpoint with its rule and permission."
+  [mode report]
+  (let [unruled (filter #(= :none (:rule %)) report)]
+    (str/join
+     "\n"
+     (concat [(str "Route authorization (:wagoe/authorization :mode " mode ")") ""]
+             (if (seq unruled)
+               (concat [(str (count unruled) " endpoint(s) no rule covers; :enforce refuses them to all but a"
+                             " platform admin:")]
+                       (map report-line unruled))
+               ["Every endpoint has a rule."])
+             ["" (str "All " (count report) " endpoint(s):")]
+             (map report-line report)))))

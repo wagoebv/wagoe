@@ -178,7 +178,7 @@ Two job types registered under `:wagoe.push/job-handlers`:
 
 ## HTTP Routes
 
-Registered via `:wagoe.push/routes` Integrant key. Every route but the callback requires a signed-in user; the platform refuses anyone else, and the handlers read `[:user :id]`. The callback is `:public true`: its HMAC is the credential (BOU-568).
+Registered via `:wagoe.push/routes` Integrant key. Every route but the callback requires a signed-in user; the platform refuses anyone else, and the handlers read `[:user :id]`. The callback is `:public true`: its HMAC is the credential (BOU-568). The device routes say `:authorization :self` and the stats `:permission :push/read`, so `:wagoe/authorization :enforce` does not refuse them.
 
 | Method | Path | Handler |
 |--------|------|---------|
