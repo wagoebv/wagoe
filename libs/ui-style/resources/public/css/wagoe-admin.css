@@ -1096,6 +1096,13 @@ time.tone-danger  { color: var(--tone-danger-fg);  font-weight: 600; }
 }
 .user-menu .logout-button:hover { background: var(--surface-2); }
 
+/* Filter inputs in the toolbar (table/filter-input), one line where there is room */
+.admin-content .toolbar-filters { display: flex; flex-wrap: wrap; gap: var(--space-2); flex: 1; justify-content: flex-end; }
+.admin-content .toolbar-filters > * {
+  width: auto; min-width: 11rem; flex: 0 1 14rem;
+  height: 34px; min-height: 0; font-size: var(--text-sm);
+}
+
 /* Search: the magnifier inside the field, `/` as its hint */
 .admin-content .toolbar-search { position: relative; display: flex; align-items: center; }
 .admin-content .toolbar-search .search-input {
@@ -1277,12 +1284,4 @@ time.tone-danger  { color: var(--tone-danger-fg);  font-weight: 600; }
 .workflow-details dt { color: var(--text-muted); }
 .workflow-details dd { margin: 0; }
 
-/* Audit trail: its filters in the list toolbar, one line where there is room */
-.audit-filters { display: flex; flex-wrap: wrap; gap: var(--space-2); flex: 1; justify-content: flex-end; }
-.audit-filters > * {
-  width: auto !important; min-width: 11rem; flex: 0 1 14rem;
-  height: 34px !important; min-height: 0 !important; font-size: var(--text-sm) !important;
-}
 .admin-content .audit-table th.field-created-at { width: 11rem; }
-/* No checkbox column: the first cell is data, full width as a card */
-.admin-content .audit-table td:first-child { width: auto; text-align: left; }
