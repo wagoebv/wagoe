@@ -6,6 +6,8 @@
             [malli.core :as m]
             [malli.error :as me]
             [wagoe.config :as config]
+            [wagoe.platform.core.scope :as scope]
+            [wagoe.platform.ports.authorization :as authz]
             [wagoe.user.core.audit :as audit-core]
             [wagoe.user.core.group :as group-core]
             [wagoe.user.ports :as ports]
@@ -48,6 +50,27 @@
                         (comp (filter keyword?)
                               (map (fn [p] [p {:label (group-core/permission-str p) :source :groups-schema}])))
                         (m/children permissions))}))
+
+(defn declared-scopes
+  "The keys of a `:scope` map schema in prepared `groups` settings, as scope
+   keys for the permission registry, `:wagoe/entity` read as `:entity`.
+   Another schema declares none. Read until 2.0, like `:permissions`."
+  [{:keys [scope-schema]}]
+  (when (and scope-schema (= :map (m/type scope-schema)))
+    {:scopes (into {}
+                   (map (fn [[k props child]]
+                          [k (cond-> {:label (name k) :schema child :source :groups-schema}
+                               (:wagoe/entity props) (assoc :entity (:wagoe/entity props)))]))
+                   (m/children scope-schema))}))
+
+(defn with-registry-scopes
+  "`settings` checking a grant's scope against the scope keys in `registry`
+   (`wagoe.platform.core.scope/scope-schema`) when it declares any; else
+   against the `:groups :scope` schema, or any map, as before."
+  [settings registry]
+  (let [scopes (some-> registry authz/scopes)]
+    (cond-> settings
+      (seq scopes) (assoc :scope-schema (m/schema (scope/scope-schema scopes))))))
 
 ;; =============================================================================
 ;; Service

@@ -35,6 +35,8 @@ for what is public API, what is internal, and how deprecations are announced.
   entity to move it out of "Other", and `:wagoe/settings :nav-order` to order the groups.
 - **Admin many-to-many through a join table** (BOU-778): detected, edited with checkboxes or a multiple combobox, shown
   as chips, filterable. Allowlist the join table; `:join-table` overrides detection.
+- **Scope keys, route `:scope` and `scope-filter`** (BOU-773): declare scope keys under `:authorization :scopes`, which
+  replaces `:wagoe/user :groups :scope` (still read until 2.0). Route checks wait on the authorization interceptor.
 - **Permission registry and code roles** (BOU-770): modules declare permissions and roles under `:authorization`;
   boot fails on an unknown one. Nothing is enforced yet; `bb scaffold` adds viewer, editor and manager roles.
 - **Lookups instead of raw IDs in admin filters and group pages** (BOU-762): foreign-key filters, group members and

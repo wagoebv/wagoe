@@ -321,6 +321,11 @@ EDN, so a uuid or keyword in it reads back as one. A scope key with `:wagoe/enti
 names the admin entity it points at: the group page offers a lookup of its rows for
 that key, and the rest of the scope stays EDN.
 
+The `:scope` schema is being replaced by scope keys a module declares under
+`:authorization :scopes` (see the platform library's Scopes section). A `:map` schema
+here is read in as those keys until 2.0; once any key is declared, a grant's scope is
+checked against the declared keys.
+
 Check grants on each request; nothing is cached, so a change applies to the next one:
 
 [source,clojure]

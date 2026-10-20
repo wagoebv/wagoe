@@ -303,6 +303,36 @@ module: a `def authorization` in its wiring namespace):
 (authz/roles (:wagoe/permission-registry (wagoe.platform.shell.system.wiring/system)))
 ```
 
+### Scopes
+
+ADR-041 §4. `wagoe.platform.core.scope` (pure) and `shell.authorization`.
+
+**The rights contract.** The user module hands over a user's rights as
+`[{:permission kw :scope nil-or-{scope-key value} …}]` (extra keys such as
+`:group-id` ride along). A value is fixed or a `:user/<name>` source; nil or
+`{}` is everywhere. It does not resolve sources or expand.
+`(authorization/resolve-rights registry user rights)` resolves them to
+`{key #{value}}` per request: source resolver, then the key's `:expand`; a key
+resolving to nothing drops the right.
+
+- Declare keys under `:authorization :scopes` (`:label`, optional `:entity`,
+  `:schema`, `:sources`, `:expand`) and resolvers under `:scope-sources`
+  (`{:user/department {:label … :resolve (fn [user] #{7})}}`). A key's source
+  with no resolver fails boot. `:wagoe/user :groups :scope`, a `:map`, is read
+  in as keys (`:source :groups-schema`, yielding to a module's) until 2.0.
+- Route data `:scope`: absent → only unscoped holders; `{:domain-id :path/domain-id}`
+  → the platform checks the parameter (404 outside, 403 when the holder's scope
+  has a key the route does not check); `:handler` → any holder, the handler
+  filters with `(scope/scope-filter (:wagoe/scopes request) {:domain-id :domain_id})`.
+  Any other `:scope` fails boot.
+- `scope-filter` takes a column or `(fn [values] honeysql-condition)` per key;
+  an unmapped key admits nothing (`[:= 1 0]`), everywhere is `[:= 1 1]`.
+- `scope-middleware registry {:rights-of f :permission-of f}` runs the route
+  check; a platform admin holds everywhere. Nothing mounts it yet: the
+  authorization interceptor will, behind its mode.
+- The group service builds its grant scope schema from the registry
+  (`core.scope/scope-schema`) when any key is declared.
+
 ### Per-Route Interceptors
 
 ```clojure
