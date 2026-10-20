@@ -351,7 +351,9 @@
                                                   :filters     filters})))
             (response/header "Vary" "HX-Request, HX-Target")))
       (catch Exception e
-        (server-error-page request e "Error in users-page-handler")))))
+        (if (htmx/fragment-request? (:headers request) ["users-table-container"])
+          (server-error request e "Error in users-page-handler")
+          (server-error-page request e "Error in users-page-handler"))))))
 
 (defn user-detail-page-handler
   "Handler for individual user detail page (GET /web/users/:id).
@@ -1021,11 +1023,10 @@
             ;; Prepare data with kebab-case keyword keys for validation
             ;; The checkbox sends "false" from its hidden input and, checked,
             ;; "true" after it; the Deactivate/Reactivate buttons send one value
-            active    (get form-data "active")
             prepared-data {:name (get form-data "name")
                            :email (get form-data "email")
                            :role (when-let [role (get form-data "role")] (keyword role))
-                           :active (boolean (some #{"on" "true"} (if (sequential? active) active [active])))}
+                           :active (contains? #{"on" "true"} (form/value form-data :active))}
             _ (log/info "Prepared data for update" {:prepared-data prepared-data})
             [valid? validation-errors _] (validate-request-data user-schema/UpdateUserRequest prepared-data)]
         (if-not valid?

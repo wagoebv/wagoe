@@ -378,7 +378,7 @@
                                      :current-entity entity-name
                                      :entity-configs (:entity-configs ctx)
                                      :logo-url (:logo-url config)
-                                   ;; A toast in the new page's region: out of band it would go with the body
+                                     ;; A toast in the new page's region: out of band it would go with the body
                                      :flash {:type :success
                                              :message [:t :admin/flash-updated {:label (introspection/singular-label entity-config entity-name)}]}}))))
 

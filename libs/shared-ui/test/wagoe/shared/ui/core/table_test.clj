@@ -271,7 +271,7 @@
       (is (every? #(and % (not= "false" %)) (push (table-ui/data-table opts)))))
     (testing ":push-url? false leaves the address bar alone"
       (is (every? #(contains? #{nil "false"} %) (push (table-ui/data-table (assoc opts :push-url? false)))))
-      (is (every? nil? (push (table-ui/pagination {:table-query {:page 1 :page-size 1} :total-count 3
+      (is (every? #(contains? #{nil "false"} %) (push (table-ui/pagination {:table-query {:page 1 :page-size 1} :total-count 3
                                                    :base-url "/o" :hx-target "#o" :push-url? false})))))))
 
 (deftest ^:unit bulk-bar-test

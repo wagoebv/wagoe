@@ -89,8 +89,10 @@
         qs-map   (merge base-q (search-filters->params extra-params))
         query-str (encode-query-params qs-map)
         url      (str base-url "?" query-str)
-        push-url (when hx-push-url?
-                   (str (or push-url-base base-url) "?" query-str))]
+        ;; "false", not absent: htmx inherits hx-push-url from an ancestor
+        push-url (if hx-push-url?
+                   (str (or push-url-base base-url) "?" query-str)
+                   "false")]
     [:th
      {:hx-get     url
       :hx-target  hx-target
@@ -141,7 +143,7 @@
    opts:
    - :table-query   normalized TableQuery map
    - :total-count   total number of items
-   - :base-url      base URL for hx-get links (e.g. \"/web/users/table\")
+   - :base-url      base URL for hx-get links (e.g. \"/web/users\")
    - :hx-target     HTMX target selector
    - :hx-swap       default \"outerHTML\"; see `sortable-th`
    - :push-url-base optional path used for browser URL updates (defaults to :base-url)
@@ -172,12 +174,13 @@
                              qs   (merge base extra-q)]
                          (str base-url "?" (encode-query-params qs))))
         mk-push-url  (fn [page*]
-                       (when push-url?
+                       (if push-url?
                          (let [tq   (assoc table-query :page page*)
                                base (table-query->params tq)
                                qs   (merge base extra-q)]
                            (str (or push-url-base base-url) "?"
-                                (encode-query-params qs)))))
+                                (encode-query-params qs)))
+                         "false"))
         prev-page    (max 1 (dec page))
         next-page    (min total-pages (inc page))
         page-btn     (fn [p]
