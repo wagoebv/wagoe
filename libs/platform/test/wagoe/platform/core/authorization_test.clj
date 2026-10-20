@@ -79,3 +79,14 @@
     (is (= [{:path "/orders/:id/refund" :permission :orders/refnud}
             {:path "/reports" :permission :reports/read}]
            (sut/unknown-route-permissions permissions routes)))))
+
+(deftest ^:unit every-module-has-viewer-and-editor-roles
+  (let [{:keys [roles]} (sut/build-registry {:wagoe/orders nil})]
+    (is (= {:orders/viewer #{:orders/read} :orders/editor #{:orders/read :orders/write}}
+           (update-vals roles :permissions)))
+    (is (= :derived (get-in roles [:orders/editor :source]))))
+  (testing "a declared one stands over it, in either order"
+    (doseq [decls [{:wagoe/orders {:roles {:orders/editor {:permissions #{:orders/read}}}}}
+                   {:wagoe/orders nil :wagoe/aaa {:roles {:orders/editor {:permissions #{:orders/read}}}}}
+                   {:wagoe/orders nil :wagoe/zzz {:roles {:orders/editor {:permissions #{:orders/read}}}}}]]
+      (is (= #{:orders/read} (get-in (sut/build-registry decls) [:roles :orders/editor :permissions]))))))

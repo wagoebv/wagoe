@@ -82,6 +82,8 @@
        [:id :uuid]
        [:tenant-id {:optional true} [:maybe :uuid]]
        [:name [:string {:min 1 :max 255}]]
+       ;; The column stores "user" for no role, and keeps "viewer" in its check
+       ;; until 2.0, so a node on the previous version still reads the table.
        [:role [:enum :admin :user :viewer]]
        [:avatar-url {:optional true :column-type :text} :string]
        [:login-count {:optional true} :int]
@@ -109,7 +111,8 @@
        [:email [:re {:error/message "Invalid email format"} email-regex]]
        [:name [:string {:min 1 :max 255}]]
        [:password-hash {:optional true} [:string {:min 60 :max 60}]]
-       [:role [:enum :admin :user :viewer]]
+       ;; Superuser or nothing; every other right comes from groups.
+       [:role {:optional true} [:maybe [:enum :admin]]]
        [:active :boolean]
        [:tenant-id {:optional true} [:maybe :uuid]]
        [:send-welcome {:optional true} :boolean]
@@ -180,6 +183,34 @@
    [:scope {:column-type :text} :map]
    [:created-at inst?]])
 
+(def UserRole
+  "Schema for a managed role: a set of permissions an administrator composed.
+   Code roles ship with modules and are not stored."
+  [:map {:title "User Role"}
+   [:id :uuid]
+   [:name [:string {:min 1 :max 255}]]
+   [:description {:optional true} [:maybe [:string {:max 255}]]]
+   [:permissions {:column-type :text} :string]
+   [:created-at inst?]
+   [:updated-at {:optional true} [:maybe inst?]]])
+
+(def UserGroupRole
+  "Schema for a role assigned to a group, in a scope ({} is everywhere). The
+   role is named, not referenced: a code role has no row."
+  [:map {:title "User Group Role"}
+   [:id :uuid]
+   [:group-id {:references :user_groups :on-delete :cascade} :uuid]
+   [:role :string]
+   [:scope {:column-type :text} :map]
+   [:created-at inst?]])
+
+(def RoleRequest
+  "What creating or changing a managed role takes."
+  [:map {:title "Role Request" :closed true}
+   [:name :keyword]
+   [:description {:optional true} [:maybe [:string {:max 255}]]]
+   [:permissions [:set {:min 1} :keyword]]])
+
 (def GroupRequest
   "What creating or renaming a group takes."
   [:map {:title "Group Request" :closed true}
@@ -192,6 +223,8 @@
   (mu/merge GroupRequest
             [:map {:title "Group Import"}
              [:members {:optional true} [:sequential any?]]
+             [:roles {:optional true} [:sequential [:map [:role any?] [:scope {:optional true} any?]]]]
+             ;; Deprecated: each grant becomes the managed role of its permission.
              [:grants {:optional true} [:sequential [:map [:permission any?] [:scope {:optional true} any?]]]]]))
 
 (def GroupSettings
@@ -240,7 +273,8 @@
        [:email [:re {:error/message "Invalid email format"} email-regex]]
        [:name [:string {:min 1 :max 255}]]
        [:password [:string {:min 8 :max 255 :error/message "Password must be at least 8 characters"}]]
-       [:role [:enum :admin :user :viewer]]
+       ;; :user is read as no role until 2.0.
+       [:role {:optional true} [:maybe [:enum :admin :user]]]
        [:active {:optional true} :boolean]
        [:send-welcome {:optional true} :boolean]]
       (into user-preferences-flat-fields)
@@ -252,7 +286,7 @@
              :closed true}
        [:name {:optional true} [:string {:min 1 :max 255}]]
        [:email {:optional true} [:re {:error/message "Invalid email format"} email-regex]]
-       [:role {:optional true} [:enum :admin :user :viewer]]
+       [:role {:optional true} [:maybe [:enum :admin :user]]]
        [:active {:optional true} :boolean]]
       (into user-preferences-flat-fields)
       (into user-date-time-preferences-flat-fields)))

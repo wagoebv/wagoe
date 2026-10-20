@@ -1,12 +1,24 @@
 (ns wagoe.user.core.group
-  "Grants a user holds through their groups, and whether a grant may be made.
+  "The rights a user holds through their groups, and whether a role or an
+   assignment may be made (ADR-041 §2–3).
 
-   A grant is {:permission kw :scope map}, plus where it came from (:id
-   :group-id :group-name). Wagoe does not say what a permission or a scope
-   means: `holds?` and `grants-for` answer for the permission, and the
+   An assignment is a group, a role and a scope. A user's grants are the
+   permissions of the roles assigned to their groups, each
+   {:permission kw :scope map} plus where it came from (:group-id :group-name
+   :role). `holds?` and `grants-for` answer for the permission, and the
    application judges the scope."
-  (:require [malli.core :as m]
+  (:require [clojure.string :as str]
+            [malli.core :as m]
             [malli.error :as me]))
+
+(def everyone-id
+  "The built-in group every signed-in user is in without being added."
+  #uuid "00000000-0000-0000-0000-000000000001")
+
+(def everyone-name "Everyone")
+
+(defn everyone? [group-id]
+  (= (str everyone-id) (str group-id)))
 
 (defn permission-str
   "`permission` as stored and shown: its namespace kept, no colon."
@@ -58,20 +70,9 @@
            :message message
            :errors  errors}})
 
-(defn grant-refusal
-  "Nil when `grant` names a permission the `permissions` schema takes and a
-   scope the `scope` schema takes, else a :validation-error naming the field."
-  [{:keys [permission scope]} {:keys [permissions scope-schema]}]
-  (let [permissions  (or permissions default-permissions)
-        scope-schema (or scope-schema default-scope)]
+(defn- scope-refusal [scope scope-schema]
+  (let [scope-schema (or scope-schema default-scope)]
     (cond
-      (not (keyword? permission))
-      (refusal :permission "A permission is a keyword" nil)
-
-      (not (m/validate permissions permission))
-      (refusal :permission "Not a permission this application declares"
-               (me/humanize (m/explain permissions permission)))
-
       (not (map? scope))
       (refusal :scope "A scope is a map" nil)
 
@@ -82,29 +83,103 @@
       (not (edn-value? scope))
       (refusal :scope "A scope holds EDN data only" nil))))
 
+(defn grant-refusal
+  "Nil when `grant` names a permission the `permissions` schema takes and a
+   scope the `scope` schema takes, else a :validation-error naming the field."
+  [{:keys [permission scope]} {:keys [permissions scope-schema]}]
+  (let [permissions (or permissions default-permissions)]
+    (cond
+      (not (keyword? permission))
+      (refusal :permission "A permission is a keyword" nil)
+
+      (not (m/validate permissions permission))
+      (refusal :permission "Not a permission this application declares"
+               (me/humanize (m/explain permissions permission)))
+
+      :else (scope-refusal scope scope-schema))))
+
+(defn assignment-refusal
+  "Nil when `assignment` names one of `roles` and a scope the `scope` schema
+   takes, else a :validation-error naming the field."
+  [{:keys [role scope]} roles {:keys [scope-schema]}]
+  (if (contains? roles role)
+    (scope-refusal scope scope-schema)
+    (refusal :role "No such role" nil)))
+
+(defn role-refusal
+  "Nil when managed `role` may be stored beside `code-roles`, holding only
+   `known` permissions, else a :validation-error naming the field."
+  [{:keys [name permissions]} code-roles known]
+  (let [unknown (sort (remove known permissions))]
+    (cond
+      (contains? code-roles name)
+      (refusal :name "A module ships a role of this name" nil)
+
+      (seq unknown)
+      (refusal :permissions (str "No module declares " (str/join ", " unknown)) (vec unknown)))))
+
+(defn user-grants
+  "The grants `assignments` give through `roles`, {role {:permissions #{..}}}.
+   An assignment of a role that no longer exists gives nothing."
+  [assignments roles]
+  (into []
+        (comp (mapcat (fn [{:keys [role] :as a}]
+                        (for [p (sort (get-in roles [role :permissions]))]
+                          (assoc (select-keys a [:group-id :group-name :role :scope]) :permission p))))
+              (distinct))
+        assignments))
+
+(defn roles-holding
+  "The names of `roles` that hold `permission`."
+  [roles permission]
+  (into #{} (keep (fn [[k {:keys [permissions]}]] (when (contains? permissions permission) k))) roles))
+
+(defn- admin-permission? [p]
+  (let [ns (namespace p)]
+    (or (= "admin" ns) (str/starts-with? (str ns) "admin."))))
+
+(defn module-roles
+  "The code roles named `<module>/<kind>` (\"editor\", \"viewer\"), leaving
+   out the admin module's and any holding an admin permission, so a migration
+   that hands them out makes nobody an admin."
+  [code-roles kind]
+  (into (sorted-set)
+        (keep (fn [[k {:keys [module permissions]}]]
+                (when (and (= kind (name k))
+                           (not= :wagoe/admin module)
+                           (not-any? admin-permission? permissions))
+                  k)))
+        code-roles))
+
 (defn users-with-permission
   "The distinct user ids among `holders`, as `permission-holders` returns
    them, whose scope `scope-pred` accepts."
   [holders scope-pred]
   (into [] (comp (filter (comp scope-pred :scope)) (map :user-id) (distinct)) holders))
 
-(defn- grant-key [grant]
-  [(:permission grant) (:scope grant)])
+(defn assignment-key [assignment]
+  [(:role assignment) (:scope assignment)])
 
 (defn import-changes
-  "What importing wanted `members` and `grants` into a group holding
-   `members` and `held` grants changes: users to :join, :leave and :stay,
-   compared by :id, and grants to :add and :remove. Nothing leaves unless
-   `replace?`."
-  [{:keys [held] present :members} {:keys [members grants]} replace?]
+  "What importing wanted `members` and `roles` (assignments) into a group
+   holding `members` and `held` assignments changes: users to :join, :leave
+   and :stay, compared by :id, and assignments to :add and :remove. Nothing
+   leaves unless `replace?`."
+  [{:keys [held] present :members} {:keys [members roles]} replace?]
   (let [present-ids (set (map :id present))
         wanted-ids  (set (map :id members))
         leave       (if replace? (into [] (remove (comp wanted-ids :id)) present) [])
         leave-ids   (set (map :id leave))
-        held-keys   (set (map grant-key held))
-        wanted-keys (set (map grant-key grants))]
+        held-keys   (set (map assignment-key held))
+        wanted-keys (set (map assignment-key roles))]
     {:join   (into [] (comp (remove (comp present-ids :id)) (distinct)) members)
      :leave  leave
      :stay   (into [] (remove (comp leave-ids :id)) present)
-     :add    (into [] (comp (remove (comp held-keys grant-key)) (distinct)) grants)
-     :remove (if replace? (into [] (remove (comp wanted-keys grant-key)) held) [])}))
+     :add    (into [] (comp (remove (comp held-keys assignment-key)) (distinct)) roles)
+     :remove (if replace? (into [] (remove (comp wanted-keys assignment-key)) held) [])}))
+
+(defn grant->assignment
+  "A grant as the assignment that replaces it: the managed role named after
+   its permission, holding only that permission."
+  [{:keys [permission scope]}]
+  {:role permission :scope (or scope {})})
