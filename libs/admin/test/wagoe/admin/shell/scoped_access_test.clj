@@ -18,16 +18,16 @@
             [wagoe.observability.logging.shell.adapters.no-op :as logging-no-op]
             [wagoe.platform.core.http.nav :as nav]
             [wagoe.platform.database :as db]
-            [wagoe.platform.shell.adapters.database.factory :as db-factory]))
+            [support.test-db :as test-db]))
 
 (def ^:private settings
   {:enabled?         true
    :base-path        "/web/admin"
-   :entity-discovery {:mode :allowlist :allowlist #{:orders :notes :lines}}
+   :entity-discovery {:mode :allowlist :allowlist #{:orders :notes :order-lines}}
    :entities         {:orders {:label "Orders" :list-fields [:number :domain-id]
                                :scope {:domain-id :domain-id}}
                       ;; A line's domain is its order's
-                      :lines  {:label "Lines" :list-fields [:sku]
+                      :order-lines {:label "Lines" :list-fields [:sku]
                                :scope {:domain-id (fn [ids] [:in :order_id {:select [:id] :from [:orders]
                                                                             :where  [:in :domain_id ids]}])}}
                       :notes  {:label "Notes" :list-fields [:body]}}
@@ -42,22 +42,22 @@
 (defonce ^:private state (atom nil))
 
 (defn- reset-rows! [db-ctx]
-  (db/execute-update! db-ctx {:raw "DELETE FROM lines"})
+  (db/execute-update! db-ctx {:raw "DELETE FROM order_lines"})
   (db/execute-update! db-ctx {:raw "DELETE FROM orders"})
   (db/execute-update! db-ctx {:insert-into :orders
                               :values [{:id o1 :number "ORD-42-A" :domain_id 42}
                                        {:id o2 :number "ORD-42-B" :domain_id 42}
                                        {:id o3 :number "ORD-7-C" :domain_id 7}]})
-  (db/execute-update! db-ctx {:insert-into :lines
+  (db/execute-update! db-ctx {:insert-into :order_lines
                               :values [{:id l1 :sku "SKU-42-A" :order_id o1}
                                        {:id l3 :sku "SKU-7-C" :order_id o3}]}))
 
 (defn- with-db [f]
-  (let [db-ctx (db-factory/db-context {:adapter :h2 :database-path "mem:admin_scoped_access;DB_CLOSE_DELAY=-1"})]
-    (try
-      (db/execute-update! db-ctx {:raw "CREATE TABLE IF NOT EXISTS orders (id VARCHAR(36) PRIMARY KEY, number VARCHAR(50) NOT NULL, domain_id INT NOT NULL)"})
-      (db/execute-update! db-ctx {:raw "CREATE TABLE IF NOT EXISTS notes (id VARCHAR(36) PRIMARY KEY, body VARCHAR(200))"})
-      (db/execute-update! db-ctx {:raw "CREATE TABLE IF NOT EXISTS lines (id VARCHAR(36) PRIMARY KEY, sku VARCHAR(50) NOT NULL, order_id VARCHAR(36) NOT NULL)"})
+  (test-db/with-db "admin_scoped_access"
+    (fn [db-ctx]
+      (db/execute-update! db-ctx {:raw "CREATE TABLE orders (id VARCHAR(36) PRIMARY KEY, number VARCHAR(50) NOT NULL, domain_id INT NOT NULL)"})
+      (db/execute-update! db-ctx {:raw "CREATE TABLE notes (id VARCHAR(36) PRIMARY KEY, body VARCHAR(200))"})
+      (db/execute-update! db-ctx {:raw "CREATE TABLE order_lines (id VARCHAR(36) PRIMARY KEY, sku VARCHAR(50) NOT NULL, order_id VARCHAR(36) NOT NULL)"})
       (let [provider (schema-repo/create-schema-repository db-ctx settings {})]
         (reset! state {:db-ctx   db-ctx
                        :provider provider
@@ -65,13 +65,7 @@
                                                                (logging-no-op/create-logging-component {})
                                                                (error-reporting-no-op/create-error-reporting-component {})
                                                                settings)}))
-      (f)
-      (finally
-        (db/execute-update! db-ctx {:raw "DROP TABLE IF EXISTS lines"})
-        (db/execute-update! db-ctx {:raw "DROP TABLE IF EXISTS orders"})
-        (db/execute-update! db-ctx {:raw "DROP TABLE IF EXISTS notes"})
-        (db-factory/close-db-context! db-ctx)
-        (reset! state nil)))))
+      (try (f) (finally (reset! state nil))))))
 
 (use-fixtures :once with-db)
 (use-fixtures :each (fn [f] (reset-rows! (:db-ctx @state)) (f)))
@@ -170,14 +164,14 @@
       (is (some? (db/execute-one! (:db-ctx @state) {:select [:id] :from [:orders] :where [:= :number "ORD-42-D"]}))))))
 
 (deftest ^:integration a-relation-condition-scopes-like-a-field
-  (let [app    (handler (config :enforce {(:id editor) [{:permission :admin.lines/read :scope in-42}
-                                                        {:permission :admin.lines/write :scope in-42}]}))
+  (let [app    (handler (config :enforce {(:id editor) [{:permission :admin.order-lines/read :scope in-42}
+                                                        {:permission :admin.order-lines/write :scope in-42}]}))
         skus   #(set (re-seq #"SKU-[0-9]+-[A-C]" (str %)))]
-    (is (= #{"SKU-42-A"} (skus (:body (app (request editor :get "/lines"))))))
-    (is (= 404 (:status (app (request editor :delete (str "/lines/" l3))))))
+    (is (= #{"SKU-42-A"} (skus (:body (app (request editor :get "/order-lines"))))))
+    (is (= 404 (:status (app (request editor :delete (str "/order-lines/" l3))))))
     (testing "a write it cannot check on the record's values is refused"
-      (is (= 403 (:status (app (request editor :put (str "/lines/" l1) {"sku" "SKU-42-B"})))))
-      (is (= 403 (:status (app (request editor :post "/lines" {"sku" "SKU-42-E" "order-id" o1}))))))))
+      (is (= 403 (:status (app (request editor :put (str "/order-lines/" l1) {"sku" "SKU-42-B"})))))
+      (is (= 403 (:status (app (request editor :post "/order-lines" {"sku" "SKU-42-E" "order-id" o1}))))))))
 
 (deftest ^:integration an-entity-mapping-no-scope-admits-only-unscoped-holders
   (let [scoped   {(:id viewer) [{:permission :admin.notes/read :scope in-42}]}
@@ -205,14 +199,14 @@
                                (mapcat :items) (mapv :href) set))]
     (is (= #{"/web/admin/orders"} (hrefs viewer)))
     (is (= #{} (hrefs tenant-admin)))
-    (is (= #{"/web/admin/orders" "/web/admin/notes" "/web/admin/lines"} (hrefs platform-admin)))))
+    (is (= #{"/web/admin/orders" "/web/admin/notes" "/web/admin/order-lines"} (hrefs platform-admin)))))
 
 (deftest ^:integration a-parents-children-show-only-where-their-own-read-admits-them
   (let [{:keys [service provider]} @state
-        rel      {:entity :lines :table :lines :foreign-key :order-id :label "Lines" :fields [:sku]}
+        rel      {:entity :order-lines :table :order_lines :foreign-key :order-id :label "Lines" :fields [:sku]}
         children (fn [rights]
                    (let [user (permissions/with-access editor {:mode :enforce :platform-admin? false :rights rights})]
                      (mapv :sku (ports/list-related-entities (scoped-service/for-user service provider user)
                                                              :orders o1 rel))))]
     (is (= [] (children (get rights (:id editor)))) "no read on lines")
-    (is (= ["SKU-42-A"] (children [{:permission :admin.lines/read :scope in-42}])))))
+    (is (= ["SKU-42-A"] (children [{:permission :admin.order-lines/read :scope in-42}])))))
