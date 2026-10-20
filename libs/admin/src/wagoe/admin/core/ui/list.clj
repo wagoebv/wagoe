@@ -397,8 +397,7 @@
                           :class "bulk-danger"
                           :name  "action"
                           :value "delete"
-                          :id    "bulk-delete-btn"
-                          :form  "bulk-action-form"})
+                          :id    "bulk-delete-btn"})
                   (icons/icon :trash {:size 14})
                   [:t :admin/button-delete-selected]]]
     :confirm    {:id            "bulk-delete-confirm"

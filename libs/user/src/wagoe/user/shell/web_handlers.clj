@@ -824,7 +824,7 @@
    Supports multiple actions: deactivate, activate, delete, role changes.
    Returns the updated users table fragment using the same query
    parameters and filters as the current view."
-  [user-service config]
+  [user-service _config]
   (fn [request]
     (try
       (let [form-params (:form-params request)
@@ -839,13 +839,7 @@
             ;; Merge query params from URL and hidden form fields to
             ;; preserve current filters and table state during bulk ops
             qp          (merge (:query-params request)
-                               (select-keys form-params ["q" "role" "status" "sort" "dir" "page" "page-size"]))
-            _table-query (web-table/parse-table-query
-                          qp
-                          {:default-sort      :created-at
-                           :default-dir       :desc
-                           :default-page-size 20})
-            _filters     (web-table/parse-search-filters qp)]
+                               (select-keys form-params ["q" "role" "status" "sort" "dir" "page" "page-size"]))]
         (when (or (empty? ids) (str/blank? (str action)))
           (throw (ex-info "No users selected or action missing"
                           {:type :bad-request})))
@@ -882,10 +876,7 @@
           (throw (ex-info "Unsupported bulk action"
                           {:type :bad-request
                            :action action})))
-        ;; After bulk operation, reuse users-table-fragment-handler logic
-        (let [fragment-handler (users-table-fragment-handler user-service config)
-              get-request      {:query-params qp}]
-          (fragment-handler get-request)))
+        (html-response request (apply user-ui/users-table-fragment (users-list user-service qp))))
       (catch IllegalArgumentException _
         (-> (html-response request (ui/error-message "Invalid user ID in bulk operation") 400)
             (with-error-toast request "Invalid user ID in bulk operation")))
