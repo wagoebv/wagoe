@@ -278,8 +278,9 @@
   (group-persistence/create-group-repository ctx))
 
 (defmethod ig/init-key :wagoe/user-group-service
-  [_ {:keys [group-repository user-repository audit-repository settings]}]
-  (group-service/create-group-service group-repository user-repository audit-repository settings))
+  [_ {:keys [group-repository user-repository audit-repository settings permission-registry]}]
+  (group-service/create-group-service group-repository user-repository audit-repository
+                                      (group-service/with-registry-scopes settings permission-registry)))
 
 (defmethod ig/init-key :wagoe/user-group-routes
   [_ {:keys [user-service group-service config]}]
@@ -351,7 +352,8 @@
     :wagoe/user-group-service {:group-repository (ig/ref :wagoe/user-group-repository)
                                :user-repository  (ig/ref :wagoe/user-repository)
                                :audit-repository (ig/ref :wagoe/audit-repository)
-                               :settings         group-settings}
+                               :settings         group-settings
+                               :permission-registry (ig/ref :wagoe/permission-registry)}
     :wagoe/user-group-routes  {:user-service  (ig/ref :wagoe/user-service)
                                :group-service (ig/ref :wagoe/user-group-service)
                                :config        config}
@@ -407,7 +409,8 @@
   (let [config (landing/prepare config)
         groups (group-service/prepare-settings (:groups settings))]
     (cond-> (assoc (base-graph config validation-config (:auth settings {}) groups)
-                   :authorization (group-service/declared-permissions groups))
+                   :authorization (merge (group-service/declared-permissions groups)
+                                         (group-service/declared-scopes groups)))
       (seq (get-in settings [:oidc :providers]))
       (-> (update :components assoc
                   :wagoe/user-oidc        {:settings            (:oidc settings)

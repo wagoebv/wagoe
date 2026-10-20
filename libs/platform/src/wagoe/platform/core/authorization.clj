@@ -5,17 +5,26 @@
 
     {:permissions {:orders/refund {:label \"Refund orders\"}}
      :roles       {:orders/viewer {:description \"…\" :permissions #{:orders/read}}}
-     :scopes      {:domain-id {:label \"Domain\" :entity :domains}}}
+     :scopes      {:domain-id {:label \"Domain\" :entity :domains}}
+     :scope-sources {:user/department {:label   \"The member's department\"
+                                       :resolve (fn [user] #{7})}}}
 
   `<module>/read` and `<module>/write` exist for every module without being
-  declared."
+  declared. What a scope means is ADR-041 §4, `core.scope`."
   (:require [clojure.string :as str]
             [malli.core :as m]
             [malli.error :as me]))
 
+(def ^:private Source
+  [:and :qualified-keyword
+   [:fn {:error/message "a scope source is a :user/<name> keyword"} #(= "user" (namespace %))]])
+
 (def Declaration
-  "What a module contributes under `:authorization`. A permission's `:source`
-   is `:declared` unless it says otherwise."
+  "What a module contributes under `:authorization`. A permission's or scope
+   key's `:source` is `:declared` unless it says otherwise.
+
+   A scope key may name its value's `:schema`, the `:sources` its value may be
+   taken from, and `:expand`, a fn from values to them and everything beneath."
   [:map {:closed true}
    [:permissions {:optional true}
     [:map-of :keyword [:map [:label :string] [:source {:optional true} :keyword]]]]
@@ -23,7 +32,14 @@
     [:map-of :qualified-keyword [:map [:description {:optional true} :string]
                                  [:permissions [:set :keyword]]]]]
    [:scopes {:optional true}
-    [:map-of :keyword [:map [:label :string]]]]])
+    [:map-of :keyword [:map [:label :string]
+                       [:entity {:optional true} :keyword]
+                       [:schema {:optional true} any?]
+                       [:sources {:optional true} [:set Source]]
+                       [:expand {:optional true} fn?]
+                       [:source {:optional true} :keyword]]]]
+   [:scope-sources {:optional true}
+    [:map-of Source [:map [:label :string] [:resolve fn?]]]]])
 
 (def ^:private explain-declaration (m/explainer Declaration))
 
@@ -49,6 +65,11 @@
 
 (defn- if-equal [have entry]
   (when (= (dissoc have :module) (dissoc entry :module)) have))
+
+(defn- by-rank-or-equal
+  "As `by-rank`, except that two of equal rank stand when they are the same."
+  [have entry]
+  (if (= (rank have) (rank entry)) (if-equal have entry) (by-rank have entry)))
 
 (defn- add-entries
   "`entries` of `module-key` into `acc` under `part`. Where a key is already
@@ -97,17 +118,29 @@
                      {:role role}))))
         roles))
 
+(defn- source-error
+  "Why the scope keys in `registry` cannot stand, or nil: one is taken from a
+   source nothing resolves."
+  [{:keys [scopes scope-sources]}]
+  (some (fn [[k {:keys [sources]}]]
+          (when-let [missing (seq (sort (remove scope-sources sources)))]
+            (error (str "Scope key " k " is taken from " (str/join ", " missing)
+                        ", which no module resolves under :scope-sources.")
+                   {:scope k :sources (vec missing)})))
+        scopes))
+
 (defn build-registry
   "One registry from `declarations`, {module-key declaration} for every enabled
    module, a declaration being nil when the module declares nothing.
 
-   {:permissions {..} :roles {..} :scopes {..}}, each entry tagged with its
-   `:module`, or {:error {:type :configuration-error …}}. A permission two
-   modules declare is an error, except that a declared one stands over a
-   derived one, and either over any other source."
+   {:permissions {..} :roles {..} :scopes {..} :scope-sources {..}}, each
+   entry tagged with its `:module`, or {:error {:type :configuration-error …}}.
+   A permission two modules declare is an error, except that a declared one
+   stands over a derived one, and either over any other source. A scope key
+   declared twice must be declared the same, or once from another source."
   [declarations]
   (or (invalid-declaration declarations)
-      (let [acc (reduce (fn [acc [k {:keys [permissions roles scopes]}]]
+      (let [acc (reduce (fn [acc [k {:keys [permissions roles scopes scope-sources]}]]
                           (let [acc (-> acc
                                         ;; Apart, so a module's own groups schema yields
                                         ;; to its derived read/write too.
@@ -115,12 +148,15 @@
                                         (add-entries :permissions by-rank k
                                                      (update-vals permissions #(merge {:source :declared} %)))
                                         (add-entries :roles if-equal k roles)
-                                        (add-entries :scopes if-equal k scopes))]
+                                        (add-entries :scopes by-rank-or-equal k
+                                                     (update-vals scopes #(merge {:source :declared} %)))
+                                        (add-entries :scope-sources if-equal k scope-sources))]
                             (cond-> acc (:error acc) reduced)))
-                        {:permissions {} :roles {} :scopes {}}
+                        {:permissions {} :roles {} :scopes {} :scope-sources {}}
                         (sort-by key declarations))]
         (or (when (:error acc) acc)
             (role-error acc)
+            (source-error acc)
             acc))))
 
 (defn unknown-route-permissions
@@ -132,3 +168,25 @@
              p (cons (:permission data) (keep #(when (map? %) (:permission %)) (vals data)))
              :when (and (some? p) (not (contains? permissions p)))]
          {:path path :permission p})))
+
+(defn- route-scope-ok?
+  "Whether `scope`, route data's `:scope`, is absent, `:handler`, or maps keys
+   of `scopes` to path parameters, `{:domain-id :path/domain-id}`."
+  [scopes scope]
+  (or (nil? scope)
+      (= :handler scope)
+      (and (map? scope)
+           (seq scope)
+           (every? (fn [[k v]]
+                     (and (contains? scopes k) (qualified-keyword? v) (= "path" (namespace v))))
+                   scope))))
+
+(defn invalid-route-scopes
+  "The `:scope`s in `routes`, flattened [path data] pairs, that are neither
+   `:handler` nor a map of `scopes` (the registry's) keys to `:path/<param>`,
+   as [{:path :scope}]. Like `:permission`, in the route data or a method's."
+  [scopes routes]
+  (vec (for [[path data] routes
+             s (cons (:scope data) (keep #(when (map? %) (:scope %)) (vals data)))
+             :when (not (route-scope-ok? scopes s))]
+         {:path path :scope s})))

@@ -13,7 +13,11 @@
     "Code roles, {role {:description :permissions #{..} :module}}.")
 
   (scopes [this]
-    "Scope keys, {key {:label :entity :module}}.")
+    "Scope keys, {key {:label :entity :schema :sources :expand :source :module}}.")
+
+  (scope-sources [this]
+    "Where a scope value may come from the user, {:user/<name> {:label :resolve :module}};
+    `:resolve` is a fn from the user to the values.")
 
   (permission? [this permission]
     "Whether `permission` is in the registry."))
