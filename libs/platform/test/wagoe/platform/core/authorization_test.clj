@@ -131,3 +131,36 @@
             {:path "/f" :scope :everywhere}
             {:path "/g/:domian-id" :scope {:domain-id :path/domain-id}}]
            (sut/invalid-route-scopes scopes routes)))))
+
+(deftest ^:unit the-first-matching-rule-decides
+  (is (= {:rule :public} (sut/route-rule {:public true :authorization :self :permission :orders/refund})))
+  (is (= {:rule :signed-in} (sut/route-rule {:authorization :signed-in :permission :orders/refund})))
+  (is (= {:rule :self} (sut/route-rule {:authorization :self :wagoe/module :wagoe/orders})))
+  (is (= {:rule :permission :permission :orders/refund}
+         (sut/route-rule {:permission :orders/refund :wagoe/module :wagoe/orders})))
+  (is (= {:rule :module :module :wagoe/orders} (sut/route-rule {:wagoe/module :wagoe/orders})))
+  (is (= {:rule :none} (sut/route-rule {:public "yes"}))))
+
+(deftest ^:unit a-module-route-asks-read-or-write-by-method
+  (let [rule {:rule :module :module :wagoe/orders}]
+    (is (= :orders/read (sut/required-permission rule :get)))
+    (is (= :orders/read (sut/required-permission rule :head)))
+    (doseq [m [:post :put :patch :delete]]
+      (is (= :orders/write (sut/required-permission rule m)))))
+  (is (= :orders/refund (sut/required-permission {:rule :permission :permission :orders/refund} :get)))
+  (is (nil? (sut/required-permission {:rule :signed-in} :get))))
+
+(deftest ^:unit unruled-routes-are-listed-per-method
+  (is (= [{:path "/loose" :methods [:get :post]}
+          {:path "/half" :methods [:post]}
+          {:path "/any" :methods [:any]}]
+         (sut/unruled-routes [["/loose" {:get {:handler identity} :post {:handler identity}}]
+                              ["/half" {:get {:handler identity :public true} :post {:handler identity}}]
+                              ["/any" {:handler identity}]
+                              ["/owned" {:wagoe/module :wagoe/orders :get {:handler identity}}]
+                              ["/me" {:authorization :signed-in :get {:handler identity}}]]))))
+
+(deftest ^:unit an-unknown-marker-is-reported
+  (is (= [{:path "/x" :authorization :signedin}]
+         (sut/invalid-route-markers [["/x" {:get {:authorization :signedin}}]
+                                     ["/y" {:authorization :self}]]))))

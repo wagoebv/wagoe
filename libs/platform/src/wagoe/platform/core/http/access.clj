@@ -48,6 +48,26 @@
     (login-redirect request)
     (error-response 403 "forbidden" message correlation-id)))
 
+(defn- escape-html [s]
+  (str/escape (str s) {\& "&amp;" \< "&lt;" \> "&gt;" \" "&quot;" \' "&#39;"}))
+
+(defn- error-page [status message correlation-id]
+  {:status  status
+   :headers (cond-> {"Content-Type" "text/html; charset=utf-8"}
+              correlation-id (assoc "X-Correlation-ID" (str correlation-id)))
+   :body    (str "<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\"><title>" status
+                 "</title></head><body><main><h1>" status "</h1><p>" (escape-html message)
+                 "</p><p><a href=\"/\">Home</a></p></main></body></html>")})
+
+(defn refusal-response
+  "`status` for a signed-in caller who may not do this: the error body for an
+   API caller, a page for a web one. Not the login redirect, which would send
+   them back here."
+  [status error message request correlation-id]
+  (if (web-request? request)
+    (error-page status message correlation-id)
+    (error-response status error message correlation-id)))
+
 (defn admin?
   "Whether the signed-in user has the global admin role."
   [request]

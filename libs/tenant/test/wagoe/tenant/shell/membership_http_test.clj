@@ -185,7 +185,7 @@
       ;; [path {method {:handler f}}] — ADR-037.
       (doseq [[path data] (:api routes)]
         (is (string? path))
-        (doseq [[_method config] data]
+        (doseq [[_method config] data :when (map? config)]
           (is (fn? (:handler config))))))))
 
 ;; =============================================================================

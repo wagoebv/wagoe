@@ -298,7 +298,8 @@ module: a `def authorization` in its wiring namespace):
 - Every route a module contributes carries `:wagoe/module` in its route data: the module key whose
   contribution it came from.
 - `bb scaffold` writes `<module>/viewer`, `/editor` and `/manager`.
-- Nothing is enforced yet: authorization behaves as before.
+- `:wagoe/authorization :mode` decides whether any of it is enforced; see
+  Route authorization.
 
 ```clojure
 (require '[wagoe.platform.ports.authorization :as authz])
@@ -329,11 +330,34 @@ resolving to nothing drops the right.
   Any other `:scope` fails boot.
 - `scope-filter` takes a column or `(fn [values] honeysql-condition)` per key;
   an unmapped key admits nothing (`[:= 1 0]`), everywhere is `[:= 1 1]`.
-- `scope-middleware registry {:rights-of f :permission-of f}` runs the route
-  check; a platform admin holds everywhere. Nothing mounts it yet: the
-  authorization interceptor will, behind its mode.
 - The group service builds its grant scope schema from the registry
   (`core.scope/scope-schema`) when any key is declared.
+
+### Route authorization
+
+ADR-041 §5. `authorization-middleware` in `shell.authorization`, mounted by
+`:wagoe/http-handler` after the sign-in guard. Per endpoint, first match wins
+(`core.authorization/route-rule`):
+
+1. `:public true`: nothing checked.
+2. `:authorization :signed-in`: any signed-in user (profile, MFA, logout, dashboard).
+3. `:authorization :self`: the handler checks (the user-management and admin routes).
+4. `:permission p`: that permission.
+5. `:wagoe/module m`: `<m>/read` for GET and HEAD, `<m>/write` otherwise.
+6. Otherwise refused. A platform admin passes everything.
+
+Then the route's `:scope`, as above. Rights come once per request from
+`wagoe.platform.ports.authorization/IRights`, which the user module's group
+service implements (`:rights` on `:wagoe/http-handler`), and only for a rule
+that asks a permission.
+
+- `:wagoe/authorization {:mode :off}` is the 1.x default: nothing mounts.
+  `:report` lets everything through and warns once a minute per user, route,
+  method and permission what `:enforce` would refuse. `:enforce` refuses: 403
+  `:forbidden` (a web caller gets a page, not the login redirect), 404 outside
+  the scope. Any other mode fails boot, as does an `:authorization` other than
+  `:signed-in` or `:self`.
+- Outside `:off`, boot warns with every route no rule covers.
 
 ### Per-Route Interceptors
 

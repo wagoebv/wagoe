@@ -223,3 +223,73 @@
              s (route-values :scope data)
              :when (or (not (scope/route-scope? scopes s)) (unknown-param? path s))]
          {:path path :scope s})))
+
+;; =============================================================================
+;; Route rules (ADR-041 §5)
+;; =============================================================================
+
+(def modes
+  "What `:wagoe/authorization :mode` may say: `:off` checks nothing, `:report`
+   logs what `:enforce` would refuse, `:enforce` refuses it."
+  #{:off :report :enforce})
+
+(def ^:private markers #{:signed-in :self})
+
+(defn route-rule
+  "The rule merged endpoint `data` falls under, first match wins:
+
+   - `:public true`: `{:rule :public}`, nothing checked.
+   - `:authorization :signed-in`: `{:rule :signed-in}`, any signed-in user.
+   - `:authorization :self`: `{:rule :self}`, the handler checks.
+   - `:permission p`: `{:rule :permission :permission p}`.
+   - `:wagoe/module m`: `{:rule :module :module m}`, its read or write.
+   - otherwise `{:rule :none}`: refused."
+  [data]
+  (let [marker (:authorization data)]
+    (cond
+      (true? (:public data))  {:rule :public}
+      (= :signed-in marker)   {:rule :signed-in}
+      (= :self marker)        {:rule :self}
+      (:permission data)      {:rule :permission :permission (:permission data)}
+      (:wagoe/module data)    {:rule :module :module (:wagoe/module data)}
+      :else                   {:rule :none})))
+
+(defn required-permission
+  "The permission `rule` asks of a `method` request: its own, or the module's
+   `<module>/read` for GET and HEAD and `<module>/write` otherwise. Nil for a
+   rule that asks none."
+  [{:keys [rule permission module]} method]
+  (case rule
+    :permission permission
+    :module     (keyword (name module) (if (#{:get :head} method) "read" "write"))
+    nil))
+
+(def ^:private http-methods #{:get :head :post :put :patch :delete :options :trace :connect})
+
+(defn- endpoints
+  "Each endpoint of flattened route `data` as [method merged-data]; a route
+   with a top-level `:handler` answers any method, `:any`."
+  [data]
+  (let [methods (filter #(map? (get data %)) http-methods)]
+    (cond-> (mapv (fn [m] [m (merge (apply dissoc data http-methods) (get data m))]) (sort methods))
+      (:handler data) (conj [:any (apply dissoc data http-methods)]))))
+
+(defn unruled-routes
+  "The endpoints of `routes`, a router's flattened [path data] pairs, that no
+   rule covers, as [{:path :methods}]: what `:enforce` refuses to everyone
+   but a platform admin."
+  [routes]
+  (vec (for [[path data] routes
+             :let [methods (into [] (comp (filter #(= :none (:rule (route-rule (second %))))) (map first))
+                                 (endpoints data))]
+             :when (seq methods)]
+         {:path path :methods methods})))
+
+(defn invalid-route-markers
+  "The `:authorization` values in `routes` other than `:signed-in` and
+   `:self`, as [{:path :authorization}]. Like `:permission`."
+  [routes]
+  (vec (for [[path data] routes
+             a (route-values :authorization data)
+             :when (and (some? a) (not (markers a)))]
+         {:path path :authorization a})))

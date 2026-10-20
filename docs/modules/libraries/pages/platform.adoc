@@ -268,8 +268,6 @@ Read the registry through `wagoe.platform.ports.authorization`:
 (authz/permission? registry :orders/refund)
 ----
 
-The registry does not yet change who may do what.
-
 === Scopes
 
 A scope narrows a right to part of the data: `{:domain-id 42}`. Declare each
@@ -322,8 +320,34 @@ reads the scopes from `:wagoe/scopes` on the request and filters with
 ----
 
 A scope key `scope-filter` is not given a field for admits nothing.
-`scope/in-scope?` checks one record. Until the authorization interceptor
-lands, nothing mounts the route check, so routes behave as before.
+`scope/in-scope?` checks one record.
+
+=== Route authorization
+
+`:wagoe/authorization {:mode ...}` turns the checks on:
+
+* `:off`, the default in 1.x: nothing is checked beyond sign-in.
+* `:report`: nothing is refused; each refusal `:enforce` would make is logged
+  with the user, route and permission.
+* `:enforce`: refusals hold. A missing permission is a 403 `:forbidden`, a
+  web page for a browser; a parameter outside the scope is a 404.
+
+Each route falls under the first rule that matches:
+
+[source,clojure]
+----
+["/ping"        {:public true :get {:handler ping}}]                ; nothing checked
+["/profile"     {:authorization :signed-in :get {:handler me}}]     ; any signed-in user
+["/users/:id"   {:authorization :self :get {:handler user}}]        ; the handler checks
+["/refunds"     {:permission :orders/refund :post {:handler refund}}] ; that permission
+["/orders"      {:get {:handler list-all} :post {:handler create}}]  ; orders/read, orders/write
+----
+
+The last falls back on the module the route came from: `<module>/read` for GET
+and HEAD, `<module>/write` otherwise. A route with no rule and no module is
+refused. A platform admin passes every rule. The boot logs, outside `:off`,
+every route no rule covers. The user module supplies each user's rights, read
+once per request.
 
 == Data export and retention
 
