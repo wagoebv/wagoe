@@ -252,6 +252,27 @@ Example subscriber that starts a workflow: see "Lifecycle Events" in
   the field stays a text input rather than offer a subset.
 - **Epoch millis** in a timestamp column render like ISO text.
 
+## Many-to-many through a join table (BOU-778)
+
+- **Detection.** `introspection/join-keys`: two belongs-to, unique together
+  (`:unique-keys`, from the new `unique-keys` method of the platform's
+  `DBAdapter`), no column but those, the primary key and timestamps.
+  `:join-table` true/false overrides. Both parents must be allowlisted
+  (`join-parents`), else it stays a child.
+- **Config.** `with-many-to-many` adds `:many-to-many [{:key :entity :through
+  :table :foreign-key :other-key :label}]` to each side and `:join-keys` +
+  `:sidebar-hidden` to the join entity. `inverse-has-many` skips join tables.
+- **Writes.** `:admin/links {key [id]}` in the data of `create-entity` /
+  `update-entity`; `sync-links!` diffs the join rows in the write's
+  transaction (a writer's update links after it). Unknown keys or records are
+  a `:validation-error` on the key. Hard deletes remove join rows.
+- **Reads.** `ports/ILinks` `linked-records`; the list overview's `:links`
+  uses ROW_NUMBER for the first three per row. Filters `{key {:op :has|:has-not
+  :value id}}` become EXISTS in `list-where`.
+- **Form.** `forms/split-link-params` reads the key params, named in
+  `__links` so an empty selection still clears. `support/link-fields` picks
+  checkboxes (≤ 10 records) or the multiple combobox.
+
 ## Required fields and form errors (BOU-570)
 
 - `introspection/for-create` drops `:required` from a field with a column

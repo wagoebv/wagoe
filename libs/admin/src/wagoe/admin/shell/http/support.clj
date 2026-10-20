@@ -5,6 +5,7 @@
    error mappings, query/form parsing, and handler helpers used by the handler
    namespaces and the route definitions in `wagoe.admin.shell.http`."
   (:require
+   [wagoe.admin.core.display :as display]
    [wagoe.admin.core.forms :as forms]
    [wagoe.admin.core.permissions :as core-permissions]
    [wagoe.admin.core.schema-introspection :as introspection]
@@ -721,16 +722,112 @@
 (defn search-foreign-key-options
   "What the combobox of foreign key `field` of `entity-name` offers for the
    typed `q`: {:parent :parent-cfg :options}, where the options are the first
-   parent rows, by label, whose label contains `q`, as [id label]. Nil when
-   `field` is no foreign key, or its parent's label is not text."
+   parent rows, by label, whose label contains `q`, as [id label]. A
+   many-to-many key searches the entity it links (BOU-778). Nil when `field`
+   is neither, or its parent's label is not text."
   [admin-service schema-provider entity-name field q]
   (let [entity-configs (all-entity-configs schema-provider)]
-    (when-let [parent (get (introspection/declared-parents entity-name entity-configs) field)]
+    (when-let [parent (or (get (introspection/declared-parents entity-name entity-configs) field)
+                          (:entity (display/link-rel (get entity-configs entity-name) field)))]
       (let [parent-cfg (get entity-configs parent)]
         (when-let [options (search-entity-options admin-service parent-cfg parent q)]
           {:parent     parent
            :parent-cfg parent-cfg
            :options    options})))))
+
+(def ^:private checkbox-limit
+  "The most records a many-to-many offers as checkboxes; past it, a combobox."
+  10)
+
+(defn- chosen-links
+  "[[id label] ...] for `ids` of `parent`, in that order; an id that is not
+   there (deleted since) is left out."
+  [admin-service parent parent-cfg ids]
+  (if (empty? ids)
+    []
+    ;; In pages: the service caps a read at :max-page-size
+    (let [pk     (:primary-key parent-cfg :id)
+          by-id  (into {} (comp (mapcat (fn [part]
+                                          (:records (ports/list-entities admin-service parent
+                                                                         {:limit   (count part)
+                                                                          :filters {pk {:op :in :values (vec part)}}}))))
+                                (map #(row->option parent-cfg %))
+                                (map (juxt first identity)))
+                       (partition-all 100 ids))]
+      (into [] (keep by-id) ids))))
+
+(defn- all-options
+  "Every record of `parent` as [id label], by label, or nil when there are
+   more than `limit`."
+  [admin-service parent parent-cfg limit]
+  (let [page (ports/list-entities admin-service parent
+                                  {:limit limit :sort (label-field parent-cfg) :sort-dir :asc})]
+    (when (<= (:total-count page 0) limit)
+      (mapv #(row->option parent-cfg %) (:records page)))))
+
+(defn- link-field
+  "One relation of `link-fields`, or nil when it cannot be edited."
+  [admin-service config entity-name record-id links {k :key parent :entity :as rel} parent-cfg]
+  (let [chosen  (cond
+                  (contains? links k)
+                  (chosen-links admin-service parent parent-cfg (get links k))
+
+                  record-id
+                  (mapv (juxt :id :title)
+                        (:items (get (ports/linked-records admin-service entity-name k [record-id] {})
+                                     (str record-id))))
+
+                  :else [])
+        options (or (all-options admin-service parent parent-cfg checkbox-limit)
+                    (when-not (text-label? parent-cfg)
+                      (all-options admin-service parent parent-cfg
+                                   (get-in config [:pagination :max-page-size] 200))))]
+    (cond
+      options                  {:rel rel :chosen chosen :options options}
+      (text-label? parent-cfg) {:rel rel :chosen chosen :url (options-url entity-name k)})))
+
+(defn link-fields
+  "How each many-to-many relation of `entity-name` is edited:
+   {key {:rel :chosen [[id label] ...] :options [[id label] ...] | :url}}.
+   Checkboxes (`:options`) while the linked entity has at most
+   `checkbox-limit` records, else a multiple combobox. The chosen ids come
+   from `links` ({key [id ...]}, a form shown again) for a key it has, else
+   from the record `record-id`. A linked entity whose label is not text
+   cannot be searched: up to the maximum page size it is checkboxes too,
+   past it left off the form. So is one that cannot be read. Nil for a
+   service without links."
+  [admin-service config entity-configs entity-name record-id links]
+  (when (satisfies? ports/ILinks admin-service)
+    (not-empty
+     (into {}
+           (for [{k :key parent :entity :as rel} (:many-to-many (get entity-configs entity-name))
+                 :let  [found (try (link-field admin-service config entity-name record-id links rel
+                                               (get entity-configs parent))
+                                   (catch Exception e
+                                     (log/warn e "many-to-many left off the form: linked records unreadable"
+                                               {:entity entity-name :relation k})
+                                     nil))]
+                 :when found]
+             [k found])))))
+
+(defn with-link-options
+  "`entity-config` with, on each many-to-many relation `keep?` accepts, the
+   records its filter offers, while they fit in the maximum page size. Past
+   it the filter takes an id."
+  [admin-service schema-provider config entity-config keep?]
+  (update entity-config :many-to-many
+          (fn [rels]
+            (mapv (fn [{parent :entity :as rel}]
+                    (cond-> rel
+                      (keep? rel)
+                      (assoc :options (try (all-options admin-service parent
+                                                        (ports/get-entity-config schema-provider parent)
+                                                        (get-in config [:pagination :max-page-size] 200))
+                                           (catch Exception e
+                                             (log/warn e "many-to-many filter takes an id: linked records unreadable"
+                                                       {:relation (:key rel)})
+                                             nil)))))
+                  rels))))
 
 (defn nested-relationships
   "The has-many entries `entity-config` is created with, as
@@ -891,4 +988,6 @@
                                                   nil)))
                       :display         (display-options config request)
                       :field-options   (foreign-key-options admin-service config entity-configs entity-name record)
+                      :links           (link-fields admin-service config entity-configs entity-name
+                                                    (get record primary-key) (:admin/links record))
                       :workflow        (:admin/workflow (first (with-workflow-states config entity-config [record])))}}))

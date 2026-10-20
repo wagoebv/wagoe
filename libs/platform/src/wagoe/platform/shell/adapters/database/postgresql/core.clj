@@ -36,7 +36,9 @@
    :table-info         (partial introspection/information-schema-table-info
                                 introspection-spec)
    ;; For a Detail in another language than English (BOU-721).
-   :key-columns        introspection/pg-key-columns})
+   :key-columns        introspection/pg-key-columns
+   ;; The table the search path resolves, as table-info reads it
+   :unique-keys        introspection/pg-unique-keys})
 
 (defn new-adapter
   "Create a PostgreSQL adapter."

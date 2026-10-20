@@ -10,6 +10,7 @@
     (dialect [_] dialect)
     (now-ms-sql [_] nil)
     (key-columns [_ _ _ _] nil)
+    (unique-keys [_ _ _] nil)
     (jdbc-driver [_] jdbc-driver)
     (jdbc-url [_ _] nil)
     (pool-defaults [_] {})
