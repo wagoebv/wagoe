@@ -78,3 +78,14 @@
             (db/with-transaction [_tx ctx]
               (dotimes [_ 2] (db/remembered-in-transaction ::no #(do (swap! n inc) nil))))
             (is (= 2 @n))))))))
+
+(deftest ^:integration a-nested-transaction-rolls-back-with-the-outer
+  (with-table
+    (fn [ctx]
+      (is (thrown? clojure.lang.ExceptionInfo
+                   (db/with-transaction [tx ctx]
+                     (db/with-transaction [inner tx]
+                       (db/execute-update! inner {:insert-into :ac :values [{:k "nested"}]}))
+                     (is (= ["nested"] (committed-keys tx)) "written, in the outer transaction")
+                     (throw (ex-info "boom" {:type :internal-error})))))
+      (is (= [] (committed-keys ctx)) "the nested write did not commit early"))))

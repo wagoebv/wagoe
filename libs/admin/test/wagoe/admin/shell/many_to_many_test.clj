@@ -196,9 +196,6 @@
         (db/execute-update! tx {:delete-from :products :where [:in :id (mapv str ids)]})
         (mapv str ids)))))
 
-(defn- refusal [f]
-  (try (f) nil (catch Exception e e)))
-
 (deftest ^:integration a-writer-entity-links-in-the-writers-transaction
   (doseq [[backend db-ctx] @backends
           :let [{:keys [svc]} (system db-ctx writer-config {:products (products-writer db-ctx)})
@@ -213,8 +210,8 @@
         (is (= ["Blue" "Red"] (links-of svc :products k id))))
 
       (testing "a refused link rolls the writer's update back"
-        (is (some? (refusal #(ports/update-entity svc :products id
-                                                  {:name "Hat" :admin/links {:locked-tags-by-tag-id [red]}}))))
+        (is (thrown? Exception (ports/update-entity svc :products id
+                                                    {:name "Hat" :admin/links {:locked-tags-by-tag-id [red]}})))
         (is (= "T-shirt" (:name (ports/get-entity svc :products id))))
         (is (= ["Blue" "Red"] (links-of svc :products k id))))
 
