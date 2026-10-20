@@ -6,6 +6,7 @@
   {:kaocha.testable/meta {:integration true :user true}}
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest testing is use-fixtures]]
+            [wagoe.user.shell.auth :as auth-shell]
             [wagoe.user.shell.mfa :as mfa-shell]
             [wagoe.user.shell.mfa-crypto :as mfa-crypto]
             [wagoe.user.ports :as ports]
@@ -340,3 +341,16 @@
         (is (some? result))
         (is (false? (:success? result)))
         (is (= {:type :cannot-disable :message "MFA is not enabled"} (:error result)))))))
+
+(deftest ^:unit ^:security password-matches-reads-the-hash-from-the-repository
+  ;; The user service drops the hash, so checking against its user refused
+  ;; every password and MFA could not be turned off from the profile.
+  (let [repo (create-mock-repository)
+        _    (ports/update-user repo {:id (:id test-user)
+                                      :password-hash (auth-shell/hash-password "Right-Pass-1!")})
+        svc  (mfa-shell/create-mfa-service repo {})
+        id   (:id test-user)]
+    (is (true? (mfa-shell/password-matches? svc id "Right-Pass-1!")))
+    (is (false? (mfa-shell/password-matches? svc id "wrong")))
+    (is (false? (mfa-shell/password-matches? svc id nil)))
+    (is (false? (mfa-shell/password-matches? svc "nobody" "Right-Pass-1!")))))
