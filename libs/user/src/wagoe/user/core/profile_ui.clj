@@ -5,8 +5,8 @@
    structures including profile viewing, editing, password changes, and MFA setup."
   (:require [wagoe.core.utils.text :as text]
             [wagoe.shared.ui.core.components :as ui]
-            [wagoe.shared.ui.core.layout :as layout]
             [wagoe.shared.ui.core.icons :as icons]
+            [wagoe.shared.ui.core.shell :as shell]
             [wagoe.platform.core.csrf :as csrf]
             [clojure.string :as str]))
 
@@ -15,9 +15,10 @@
          password-section-fragment)
 
 (defn- page-layout
-  "Profile page layout with daisyUI pilot styling."
-  [title content & [opts]]
-  (layout/pilot-page-layout title content opts))
+  "`content` in the admin shell, `title` in the topbar."
+  [title content opts]
+  (shell/shell-page title [:div.profile-page.profile-shell content]
+                    (assoc opts :page-title title)))
 
 ;; =============================================================================
 ;; Helper Functions
@@ -343,26 +344,21 @@
   [& [opts]]
   (page-layout
    [:t :user/mfa-setup-title]
-   [:div.profile-page.profile-shell
-    [:div.page-header.profile-header
-     [:h1
-      [:a {:href "/web/profile"} (icons/icon :chevron-left {:size 20})]
-      " " [:t :user/mfa-setup-title]]]
-    [:div.profile-content.profile-grid
-     [:div.mfa-setup-intro
-      [:p [:t :user/mfa-setup-description]]
-      [:ul
-       [:li [:t :user/mfa-setup-requirement-app]]
-       [:li [:t :user/mfa-setup-requirement-password]]]
-      [:div.form-actions
-       [:button.button.primary {:hx-post "/web/profile/mfa/setup"
-                                :hx-target "#mfa-setup-content"
-                                :hx-swap "innerHTML"}
-        (icons/icon :shield {:size 16})
-        " " [:t :user/button-start-setup]]
-       [:a.button.secondary {:href "/web/profile"}
-        [:t :common/button-cancel]]]]
-     [:div#mfa-setup-content]]]
+   [:div.profile-content.profile-grid
+    [:div.mfa-setup-intro
+     [:p [:t :user/mfa-setup-description]]
+     [:ul
+      [:li [:t :user/mfa-setup-requirement-app]]
+      [:li [:t :user/mfa-setup-requirement-password]]]
+     [:div.form-actions
+      [:button.button.primary {:hx-post "/web/profile/mfa/setup"
+                               :hx-target "#mfa-setup-content"
+                               :hx-swap "innerHTML"}
+       (icons/icon :shield {:size 16})
+       " " [:t :user/button-start-setup]]
+      [:a.button.secondary {:href "/web/profile"}
+       [:t :common/button-cancel]]]]
+    [:div#mfa-setup-content]]
    opts))
 
 (defn mfa-qr-code-step
@@ -470,14 +466,9 @@
            [:a.button.primary {:href "/web/profile"}
             [:t :user/button-done-return]]]]]
      (if full-page?
-       (page-layout
-        [:t :user/mfa-backup-codes-page-title]
-        [:div.profile-page.profile-shell
-         [:div.page-header.profile-header
-          [:h1 [:t :user/mfa-backup-codes-heading]]]
-         [:div.profile-content.profile-grid
-          content]]
-        opts)
+       (page-layout [:t :user/mfa-backup-codes-page-title]
+                    [:div.profile-content.profile-grid content]
+                    opts)
        content))))
 
 ;; =============================================================================
@@ -497,29 +488,24 @@
   ([errors opts]
    (page-layout
     [:t :user/mfa-disable-title]
-    [:div.profile-page.profile-shell
-     [:div.page-header.profile-header
-      [:h1
-       [:a {:href "/web/profile"} (icons/icon :chevron-left {:size 20})]
-       " " [:t :user/mfa-disable-title]]]
-     [:div.profile-content.profile-grid
-      [:div.alert.alert-warning
-       (icons/icon :alert-circle {:size 20})
-       " " [:t :user/mfa-disable-warning]]
-      [:div.profile-card
-       [:div.card-body
-        [:p [:t :user/mfa-disable-prompt]]
-        [:form {:method "POST" :action "/web/profile/mfa/disable"}
-         (csrf/hidden-field)
-         (ui/form-field :password [:t :user/password-field-current]
-                        (ui/password-input :password "" {:required true})
-                        (:password errors))
-         [:div.form-actions
-          [:button.button.danger {:type "submit"}
-           (icons/icon :unlock {:size 16})
-           " " [:t :user/mfa-disable-title]]
-          [:a.button.secondary {:href "/web/profile"}
-           [:t :common/button-cancel]]]]]]]]
+    [:div.profile-content.profile-grid
+     [:div.alert.alert-warning
+      (icons/icon :alert-circle {:size 20})
+      " " [:t :user/mfa-disable-warning]]
+     [:div.profile-card
+      [:div.card-body
+       [:p [:t :user/mfa-disable-prompt]]
+       [:form {:method "POST" :action "/web/profile/mfa/disable"}
+        (csrf/hidden-field)
+        (ui/form-field :password [:t :user/password-field-current]
+                       (ui/password-input :password "" {:required true})
+                       (:password errors))
+        [:div.form-actions
+         [:button.button.danger {:type "submit"}
+          (icons/icon :unlock {:size 16})
+          " " [:t :user/mfa-disable-title]]
+         [:a.button.secondary {:href "/web/profile"}
+          [:t :common/button-cancel]]]]]]]
     opts)))
 
 ;; =============================================================================
@@ -539,32 +525,29 @@
   [user mfa-status & [opts]]
   (page-layout
    [:t :user/profile-page-title]
-   [:div.profile-page.profile-shell
-    [:div.page-header.profile-header
-     [:h1 [:t :user/profile-page-title]]]
-    [:div.profile-content.profile-grid
-     (profile-info-card user)
-     (preferences-card user)
-     (password-change-card false)
-     (mfa-status-card user mfa-status)
-     [:div.profile-card
-      [:div.card-header
-       [:h2 [:t :user/sessions-title]]]
-      [:div.card-body
-       [:div.info-row
-        [:label [:t :user/profile-label-sessions]]
-        [:span
-         [:a {:href (str "/web/users/" (:id user) "/sessions")}
-          [:t :user/button-manage-sessions] " "
-          (icons/icon :chevron-right {:size 16})]]]]]
-     [:div.profile-card
-      [:div.card-header
-       [:h2 [:t :user/profile-card-data-title]]]
-      [:div.card-body
-       [:div.info-row
-        [:label [:t :user/profile-label-data-export]]
-        [:span
-         [:a {:href "/web/profile/export" :download "data-export.json"}
-          [:t :user/button-download-data] " "
-          (icons/icon :chevron-right {:size 16})]]]]]]]
+   [:div.profile-content.profile-grid
+    (profile-info-card user)
+    (preferences-card user)
+    (password-change-card false)
+    (mfa-status-card user mfa-status)
+    [:div.profile-card
+     [:div.card-header
+      [:h2 [:t :user/sessions-title]]]
+     [:div.card-body
+      [:div.info-row
+       [:label [:t :user/profile-label-sessions]]
+       [:span
+        [:a {:href (str "/web/users/" (:id user) "/sessions")}
+         [:t :user/button-manage-sessions] " "
+         (icons/icon :chevron-right {:size 16})]]]]]
+    [:div.profile-card
+     [:div.card-header
+      [:h2 [:t :user/profile-card-data-title]]]
+     [:div.card-body
+      [:div.info-row
+       [:label [:t :user/profile-label-data-export]]
+       [:span
+        [:a {:href "/web/profile/export" :download "data-export.json"}
+         [:t :user/button-download-data] " "
+         (icons/icon :chevron-right {:size 16})]]]]]]
    opts))
