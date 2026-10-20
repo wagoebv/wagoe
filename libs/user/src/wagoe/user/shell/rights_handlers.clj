@@ -174,12 +174,13 @@
   [group-service user grants]
   (let [registry  (:registry group-service)
         resolvers (some-> registry authz/scope-sources)
-        keys-info (some-> registry authz/scopes)]
+        keys-info (some-> registry authz/scopes)
+        ;; A source under several keys is resolved once
+        values-of (memoize (fn [src] (into #{} (remove nil?) ((get-in resolvers [src :resolve]) user))))]
     (into {}
           (for [[k src] (distinct (filter (comp scope/source? val) (mapcat :scope grants)))
-                :let  [resolver (get-in resolvers [src :resolve])]
-                :when resolver]
-            [[k src] (try (scope/scope-values keys-info (fn [_] (into #{} (remove nil?) (resolver user))) k src)
+                :when (get-in resolvers [src :resolve])]
+            [[k src] (try (scope/scope-values keys-info values-of k src)
                           (catch Exception e
                             (log/warn e "A scope source failed to resolve for the rights page" {:key k :source src})
                             :error))]))))

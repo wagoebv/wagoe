@@ -69,6 +69,13 @@
         (keep (fn [rel] (some->> (link-scope schema-provider user rel) (vector (:key rel)))))
         (:many-to-many (ports/get-entity-config schema-provider entity-name))))
 
+(defn- with-link-scopes
+  "`data` with the scopes its `:admin/links` must keep to: a link to a record
+   the user may not read is neither added nor removed."
+  [schema-provider user entity-name data]
+  (cond-> data
+    (:admin/links data) (assoc :admin/link-scopes (link-scopes schema-provider user entity-name))))
+
 (defrecord ScopedAdminService [inner schema-provider user]
   ports/IListOverview
   (list-overview [_ entity-name options records]
@@ -118,20 +125,16 @@
 
   (create-entity [_ entity-name data]
     (writable! schema-provider user entity-name data)
-    (ports/create-entity inner entity-name data))
+    (ports/create-entity inner entity-name (with-link-scopes schema-provider user entity-name data)))
 
   (create-entity-with-children [_ entity-name data children]
     (writable! schema-provider user entity-name data)
-    (ports/create-entity-with-children inner entity-name data children))
+    (ports/create-entity-with-children inner entity-name (with-link-scopes schema-provider user entity-name data) children))
 
   (update-entity [_ entity-name id data]
     (let [record (stored inner schema-provider user entity-name id)]
       (writable! schema-provider user entity-name (delay (merge @record data))))
-    ;; Replacing the links leaves those to records the user may not read
-    (ports/update-entity inner entity-name id
-                         (cond-> data
-                           (:admin/links data)
-                           (assoc :admin/link-scopes (link-scopes schema-provider user entity-name)))))
+    (ports/update-entity inner entity-name id (with-link-scopes schema-provider user entity-name data)))
 
   (update-entity-field [_ entity-name id field value]
     (let [record (stored inner schema-provider user entity-name id)]

@@ -254,4 +254,8 @@
         (is (not (str/includes? body "TAG-7")))))
     (testing "saving the links keeps the ones the form did not show"
       (ports/update-entity svc :orders o1 {:admin/links {:tags []}})
+      (is (= #{t7} (linked))))
+    (testing "nor links one it may not read"
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Unknown tags"
+                            (ports/update-entity svc :orders o1 {:admin/links {:tags [t42 t7]}})))
       (is (= #{t7} (linked))))))

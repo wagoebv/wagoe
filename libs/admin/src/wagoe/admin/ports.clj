@@ -517,7 +517,7 @@
    take `:admin/links {relation-key [id ...]}` in their data and replace the
    links of each relation named, in the write's transaction. With
    `:admin/link-scopes {relation-key scopes}`, a link to a record outside
-   them stays."
+   them stays, and a new one is refused as unknown."
 
   (linked-records [this entity-name rel-key ids opts]
     "{id-string {:items [{:id :title}] :total n}} for the records `ids` of

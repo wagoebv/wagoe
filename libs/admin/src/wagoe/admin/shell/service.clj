@@ -957,7 +957,8 @@
 
 (defn- assert-links!
   "Refuse `links` naming a relation `entity-config` does not have, or a
-   record the relation cannot link: unknown, or deleted. Checked before the
+   record the relation cannot link: unknown, deleted, or outside the
+   relation's scopes in `links`' `:scopes` metadata. Checked before the
    write, so a refusal is not logged as a failed database operation."
   [db-ctx schema-provider entity-config links]
   (doseq [[k ids] links
@@ -966,10 +967,16 @@
       (throw (ex-info (str "No many-to-many " (name k))
                       {:type :validation-error :errors {k [[:t :admin/links-unknown]]}})))
     (let [wanted (set ids)
-          pk     (:primary-key (ports/get-entity-config schema-provider (:entity rel)) :id)
-          found  (set (map #(str (get % pk))
-                           (when (seq wanted)
-                             (live-records db-ctx schema-provider (:entity rel) (vec wanted)))))]
+          tcfg   (ports/get-entity-config schema-provider (:entity rel))
+          pk     (:primary-key tcfg :id)
+          live   (mapv #(str (get % pk))
+                       (when (seq wanted)
+                         (live-records db-ctx schema-provider (:entity rel) (vec wanted))))
+          scopes (:scopes (meta links))
+          ;; A record the user may not read is as unknown as a missing one
+          found  (set (if (and (seq live) (contains? scopes k))
+                        (inside-scopes db-ctx tcfg live (get scopes k))
+                        live))]
       (when-not (= wanted found)
         (throw (ex-info (str "Unknown " (name (:entity rel)) ": " (str/join ", " (remove found wanted)))
                         {:type :validation-error :errors {k [[:t :admin/links-unknown]]}}))))))

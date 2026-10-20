@@ -57,7 +57,13 @@
                                :entity-name entity-name
                                :id id})))
 
-          permissions (permissions/get-entity-permissions user entity-name entity-config)
+          permissions (cond-> (permissions/get-entity-permissions user entity-name entity-config)
+                        ;; Write in another scope than this record's: read-only here
+                        (and (= :enforce (permissions/mode user))
+                             (not (permissions/record-in-scope?
+                                   (permissions/scopes user entity-name :write entity-config)
+                                   entity-config record)))
+                        (assoc :can-edit false))
           ctx         (support/build-entity-detail-opts admin-service schema-provider config entity-name entity-config record request)]
 
       (if (peek-request? request)

@@ -288,9 +288,11 @@
                 (cond-> entity
                   (symbol? tabs)
                   (assoc :detail-tabs
-                         (or (some-> (try (requiring-resolve tabs) (catch Exception _ nil)) deref)
-                             (throw (ex-info (str "Admin entity :detail-tabs names " tabs ", which resolves to nothing")
-                                             {:type :configuration-error :symbol tabs}))))))))))
+                         (let [refuse #(ex-info (str "Admin entity :detail-tabs names " tabs ", which resolves to nothing")
+                                                {:type :configuration-error :symbol tabs} %)]
+                           ;; A namespace that fails to load says why, as the cause
+                           (or (some-> (try (requiring-resolve tabs) (catch Exception e (throw (refuse e)))) deref)
+                               (throw (refuse nil)))))))))))
 
 (defn create-schema-repository
   "Create new SchemaRepository instance.
