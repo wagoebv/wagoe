@@ -87,6 +87,50 @@
     (sequential? v) (mapv restore-refs v)
     :else v))
 
+(defn- edn-value?
+  "Whether `v` prints as something edn/read-string reads back. Run after
+   strip-refs: an ig/ref is a record, and records do not."
+  [v]
+  (cond
+    (record? v) false
+    (map? v)    (every? (fn [[k x]] (and (edn-value? k) (edn-value? x))) v)
+    (coll? v)   (every? edn-value? v)
+    :else       (or (nil? v) (boolean? v) (number? v) (string? v) (keyword? v)
+                    (symbol? v) (char? v) (inst? v) (uuid? v))))
+
+(defn strip-unreadable
+  "`v` without the map entries EDN cannot represent — a function, a live
+   object — so the editor shows what it can round-trip. Returns
+   `{:value v' :hidden [path ...]}`; :value is nil when `v` itself is
+   unreadable. Expects strip-refs applied first."
+  [v]
+  (letfn [(walk [x path]
+            (cond
+              (edn-value? x) [x []]
+              (and (map? x) (not (record? x)))
+              (reduce-kv (fn [[m hidden] k val]
+                           (if (edn-value? k)
+                             (let [[val' hidden'] (walk val (conj path k))]
+                               [(if (= ::hidden val') m (assoc m k val'))
+                                (into hidden hidden')])
+                             [m (conj hidden (conj path k))]))
+                         [{} []] x)
+              :else [::hidden [path]]))]
+    (let [[value hidden] (walk v [])]
+      {:value  (when-not (= ::hidden value) value)
+       :hidden hidden})))
+
+(defn restore-unreadable
+  "Put back into `edited` what strip-unreadable hid from `original`, so
+   saving a section does not drop its functions."
+  [original edited]
+  (reduce (fn [acc path]
+            (if (and (seq path) (map? (get-in acc (pop path))))
+              (assoc-in acc path (get-in original path))
+              acc))
+          edited
+          (:hidden (strip-unreadable (strip-refs original)))))
+
 (defn format-config-tree
   "Format a config map as an indented string tree for display."
   ([cfg] (format-config-tree cfg 0))
@@ -104,17 +148,17 @@
   [m]
   (let [entries (cond->> (seq m) (every? keyword? (keys m)) (sort-by key))]
     (pp/pprint-logical-block :prefix "{" :suffix "}"
-      (loop [[[k v :as entry] & more] entries]
-        (when entry
-          (pp/pprint-logical-block
-           (pp/write-out k)
-           (print " ")
-           (pp/pprint-newline :linear)
-           (pp/write-out v))
-          (when more
-            (print " ")
-            (pp/pprint-newline :linear)
-            (recur more)))))))
+                             (loop [[[k v :as entry] & more] entries]
+                               (when entry
+                                 (pp/pprint-logical-block
+                                  (pp/write-out k)
+                                  (print " ")
+                                  (pp/pprint-newline :linear)
+                                  (pp/write-out v))
+                                 (when more
+                                   (print " ")
+                                   (pp/pprint-newline :linear)
+                                   (recur more)))))))
 
 (defn- edn-dispatch
   "simple-dispatch prints a record as a plain map; keep its tag, as pr-str does."

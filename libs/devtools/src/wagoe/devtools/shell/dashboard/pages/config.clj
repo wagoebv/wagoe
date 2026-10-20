@@ -11,11 +11,14 @@
 (defn- config-section
   "Render a single top-level config section as a card — editable with Preview
    and Apply when `editable?`, a read-only textarea otherwise.
-   Strips ig/ref values to serializable placeholders so the textarea
-   contains valid EDN that can round-trip through edn/read-string."
+   ig/ref values become placeholders and functions are left out, so the
+   textarea holds EDN that round-trips through edn/read-string; Apply puts
+   the functions back."
   [section-key section-val editable?]
-  (let [key-str (pr-str section-key)
-        val-str (cfg-edit/format-edn (secrets/redact (cfg-edit/strip-refs section-val)))]
+  (let [key-str   (pr-str section-key)
+        {:keys [value hidden]} (cfg-edit/strip-unreadable (cfg-edit/strip-refs section-val))
+        editable? (and editable? (not (some empty? hidden)))
+        val-str   (cfg-edit/format-edn (secrets/redact value))]
     (c/card {:title key-str}
             [:div
              [:textarea.code-block
@@ -25,6 +28,10 @@
                :data-original val-str
                :readonly    (not editable?)}
               val-str]
+             (when (seq hidden)
+               [:p.empty-state
+                (str "Not shown, as EDN cannot represent them: "
+                     (str/join ", " (map #(if (seq %) (pr-str %) key-str) hidden)))])
              (when editable?
               [:div {:style "display:flex;gap:8px;margin-top:8px;justify-content:flex-end"}
               [:button.filter-input
@@ -81,18 +88,21 @@
        [:div.empty-state "No config available. Start the system with (go) first."]))))
 
 (defn parse-edited-value
-  "Parse an edited textarea value back to a Clojure value,
-   restoring ig/ref placeholders to real refs."
-  [new-val-str fallback]
+  "Parse an edited textarea value back to a Clojure value, restoring ig/ref
+   placeholders to real refs and the functions the editor left out of
+   `original`."
+  [new-val-str original fallback]
   (try
-    (secrets/unredact (cfg-edit/restore-refs (edn/read-string new-val-str)))
+    (cfg-edit/restore-unreadable
+     original
+     (secrets/unredact (cfg-edit/restore-refs (edn/read-string new-val-str))))
     (catch Exception _ fallback)))
 
 (defn render-preview-fragment
   "Render a diff preview of proposed config change."
   [section-key old-val new-val-str]
   (str (h/html
-        (let [parsed (parse-edited-value new-val-str ::parse-failed)]
+        (let [parsed (parse-edited-value new-val-str old-val ::parse-failed)]
           (if (= parsed ::parse-failed)
             [:div.detail-panel
              [:p {:style "color:var(--color-red,#f87171)"} "Invalid EDN — please fix syntax errors before applying."]
@@ -106,7 +116,7 @@
                  [:p [:strong "Affected components: "]
                   (str/join ", " (map pr-str (cfg-edit/affected-components diff)))]
                  [:pre.code-block
-                  (str "Current:\n" (cfg-edit/format-edn (secrets/redact old-val)) "\n\nProposed:\n" new-val-str)]])))))))
+                  (str "Current:\n" (cfg-edit/format-edn (secrets/redact (:value (cfg-edit/strip-unreadable (cfg-edit/strip-refs old-val))))) "\n\nProposed:\n" new-val-str)]])))))))
 
 (defn render-apply-result
   "Render the result of a config apply operation as an HTML fragment."

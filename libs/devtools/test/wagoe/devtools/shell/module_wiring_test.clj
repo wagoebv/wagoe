@@ -62,7 +62,7 @@
       (is (= (ig/ref :wagoe/router) (:router dashboard)))
       (is (= (ig/ref :wagoe/logging) (:logging dashboard))))
 
-    (testing "but not to an :ig-config-fn — only the application knows its own graph"
+    (testing "but not to an :ig-config-fn — the editor uses integrant.repl's prep fn"
       (is (nil? (:ig-config-fn dashboard))))
 
     (testing "and the error enricher is still wired from its own key"

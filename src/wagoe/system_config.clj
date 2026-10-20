@@ -4,8 +4,7 @@
    Reading configuration is `wagoe.config`; assembling the components every
    Wagoe app has, plus whichever modules the config switches on, is
    `wagoe.platform.shell.system.config`. What is left here is what only this
-   application knows — which entities its admin UI manages, and the way back
-   into this namespace that the devtools dashboard's config editor needs.
+   application knows — which entities its admin UI manages.
 
    Until BOU-326 this file enumerated the Integrant graph of every framework
    module by hand, 553 lines of it, and the generated `config.clj` carried a
@@ -20,25 +19,8 @@
    Usage:
      (require 'wagoe.main)                 ; registers the unconditional init-keys
      (ig-config (wagoe.config/load-config))"
-  (:require [wagoe.config :as config]
-            [wagoe.platform.shell.system.config :as system]
+  (:require [wagoe.platform.shell.system.config :as system]
             [wagoe.user.schema :as user-schema]))
-
-;; The devtools dashboard is handed a thunk that rebuilds this map.
-(declare ig-config)
-
-(defn- with-dashboard-rebuild
-  "Hand the dashboard a way back to this application's own Integrant config.
-
-   devtools assembles the component itself from `:wagoe/dashboard` in the
-   config (BOU-477); this is the one part of it a library cannot supply, since
-   which components an application runs is the application's to know. The
-   dashboard reports the absence rather than failing, so an application that
-   does not want the config editor leaves this out."
-  [system-cfg]
-  (cond-> system-cfg
-    (contains? system-cfg :wagoe/dashboard)
-    (assoc-in [:wagoe/dashboard :ig-config-fn] #(ig-config (config/load-config)))))
 
 (defn- dev-http-extras
   "What the dashboard needs from the HTTP handler, in dev only.
@@ -59,7 +41,6 @@
       (cond-> (get-in config [:active :wagoe/admin])
         (assoc-in [:wagoe/admin-schema-provider :malli-schemas]
                   {:users user-schema/User}))
-      with-dashboard-rebuild
       (update :wagoe/http-handler merge (dev-http-extras config))))
 
 ;; =============================================================================

@@ -226,6 +226,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Dev dashboard config editor: saving a section holding a function failed, and Apply needed `:ig-config-fn`** (BOU-781).
+  Functions are left out of the editor and kept; Apply rebuilds with your `set-prep!` fn, so `:ig-config-fn` can go.
 - **Admin `:writer` entities could save a record without its many-to-many links, and kept join rows on hard delete**
   (BOU-779). The writer now runs in the admin's transaction. Nothing to do.
 - **A nested `db/with-transaction` committed its writes early**, so an outer rollback kept them (BOU-779). It now joins
