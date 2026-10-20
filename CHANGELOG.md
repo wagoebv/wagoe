@@ -245,6 +245,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Flash messages were never shown** (BOU-783): a response's `:flash` now reaches the next request, in a `wagoe-flash`
+  cookie. Group changes and the welcome after registration show their toast; nothing to do.
 - **Saving a user's detail form deactivated them, Reactivate did nothing, and the users table added a history entry on
   each refresh** (BOU-784). Deactivate asks in the confirm modal now. Nothing to do.
 - **Admin sidebar: a long group name pushed its icon and chevron out, and hovered items were white on white** in the

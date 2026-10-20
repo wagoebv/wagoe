@@ -32,6 +32,7 @@
             [wagoe.config :as wagoe-config]
             [wagoe.platform.core.http.access :as access]
             [wagoe.platform.core.http.errors :as errors]
+            [wagoe.platform.shell.http.flash :as flash]
             [wagoe.platform.shell.http.interceptors :as http-interceptors])
   (:import [java.io ByteArrayInputStream ByteArrayOutputStream]
            [org.apache.commons.fileupload2.core FileUploadException FileUploadSizeException]
@@ -879,10 +880,12 @@
           ;; Wrap handler with middlewares (outermost last):
           ;; 1. Cookies middleware - parse and set cookies
           ;; 2. Static resource middleware - asset-shaped GET/HEAD requests only
+          ;; 3. Flash - inside the static one, so an asset request cannot use it up
           ;; Query/form params are parsed by reitit's parameters-middleware
           ;; (create-default-middleware) — a global wrap-params here would
           ;; parse them a second time for every request.
         handler (-> (ring/ring-handler router default-handler)
+                    (flash/wrap-flash {:secure? (get config :secure-cookies? true)})
                     (wrap-gzip)
                     (wrap-static-resources)
                     (wrap-cookies))]

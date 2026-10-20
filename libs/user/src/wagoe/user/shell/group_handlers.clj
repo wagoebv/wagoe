@@ -17,8 +17,7 @@
 
 (defn- page-opts [request]
   {:user  (:user request)
-   :flash (when-let [[kind k] (first (:flash request))]
-            (when (keyword? k) {kind [:t k]}))})
+   :flash (:flash request)})
 
 (defn- redirect [path flash-key]
   (assoc (response/redirect path :see-other) :flash {:success flash-key}))

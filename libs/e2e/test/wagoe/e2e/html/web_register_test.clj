@@ -69,7 +69,12 @@
       ;; Session cookie should be set (auto-login after registration)
       (let [cookie (find-cookie pg "session-token")]
         (is (some? cookie)
-            "session-token cookie should be set after registration")))))
+            "session-token cookie should be set after registration"))
+      ;; The welcome is a flash on the redirect, shown as a toast on the page
+      ;; it lands on
+      ;; One wait: the toast leaves after five seconds
+      (is (some? (page/wait-for-selector pg "#toasts .alert-success:has-text('Welcome to Wagoe, New Test User')"
+                                         {:timeout 10000.0}))))))
 
 (deftest ^:integration ^:e2e weak-password-shows-validation-errors
   (testing "Weak password stays on /web/register with validation errors"

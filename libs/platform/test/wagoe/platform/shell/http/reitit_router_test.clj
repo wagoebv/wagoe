@@ -250,6 +250,24 @@
               (and (map? (:body response))
                    (contains? (:body response) :error)))))))
 
+(deftest ^:contract redirect-after-action-carries-its-flash-test
+  (testing "A flash set on a redirect reaches the page it redirects to, once"
+    (let [handler  (reitit/compile-routes
+                    [["/web/groups"
+                      {:post {:handler (fn [_] {:status 303 :headers {"Location" "/web/groups"}
+                                                :flash {:success "Group created"}})}
+                       :get  {:handler (fn [req] {:status 200 :body (pr-str (:flash req))})}}]]
+                    {})
+          set-cookies (fn [response] (get-in response [:headers "Set-Cookie"]))
+          posted   (handler {:request-method :post :uri "/web/groups"})
+          sent     (first (filter #(str/starts-with? % "wagoe-flash=") (set-cookies posted)))
+          followed (handler {:request-method :get :uri "/web/groups"
+                             :headers {"cookie" (first (str/split sent #";"))}})]
+      (is (= 303 (:status posted)))
+      (is (= {:success "Group created"} (read-string (:body followed))))
+      (is (some #(str/includes? % "Max-Age=0") (set-cookies followed))
+          "the page that showed the flash clears it"))))
+
 ;; =============================================================================
 ;; HTTP Interceptor Tests
 ;; =============================================================================

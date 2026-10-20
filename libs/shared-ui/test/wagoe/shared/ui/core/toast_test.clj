@@ -22,6 +22,9 @@
       (is (str/includes? out "alert-error"))
       (is (str/includes? out "role=\"alert\""))
       (is (str/includes? out "toast(0)"))))
+  (testing "a keyword message is a catalogue key"
+    (is (some #{[:span [:t :user/group-saved]]}
+              (toast/toast {:message :user/group-saved}))))
   (testing "the message is escaped"
     (is (str/includes? (html (toast/toast {:message "<b>"})) "&lt;b&gt;"))))
 
