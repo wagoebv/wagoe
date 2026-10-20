@@ -1812,13 +1812,6 @@ select:focus-visible {
   border-radius: var(--radius-sm);
 }
 
-.admin-topbar-actions .logout-button {
-  width: 36px;
-  height: 36px;
-  line-height: 0;
-}
-
-.admin-topbar-actions .logout-button svg,
 .admin-topbar-actions .theme-toggle svg {
   width: 18px;
   height: 18px;
@@ -2460,10 +2453,6 @@ select:focus-visible {
   .admin-topbar-actions {
     flex-wrap: wrap;
     gap: var(--space-2);
-  }
-  
-  .admin-topbar-actions span {
-    font-size: var(--text-xs);
   }
 }
 
