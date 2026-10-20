@@ -195,7 +195,7 @@
    - user_identities: OpenID Connect (issuer, subject) links to users
    - user_groups, user_group_members: groups
    - user_roles, user_group_roles: managed roles and the roles of groups
-   - user_group_grants: what groups held before roles, emptied by the migration
+   - user_group_grants: what groups held before roles, kept until 2.0
 
    Includes indexes for:
    - Foreign keys (user_id)

@@ -288,14 +288,17 @@
      (ports/insert-assignment repo (cond-> {:group-id group-id :role role :scope scope} id (assoc :id id))))))
 
 (defn- migrate-grants!
-  "Each grant becomes an assignment of the managed role of its permission,
-   keeping its id so remove-group-grant still finds it."
+  "Each grant not yet migrated becomes an assignment of the managed role of
+   its permission, keeping its id so remove-group-grant still finds it, and is
+   marked. The row stays for nodes on the previous version; marked, an
+   assignment removed later is not made again."
   [repo registry]
-  (doseq [{:keys [id group-id] :as grant} (ports/find-legacy-grants repo)
+  (doseq [{:keys [id group-id migrated-at] :as grant} (ports/find-legacy-grants repo)
+          :when (nil? migrated-at)
           :let [{:keys [role scope]} (group-core/grant->assignment grant)]]
     (legacy-role! repo registry role)
     (assign-once! repo group-id role scope id)
-    (ports/remove-legacy-grant repo id)))
+    (ports/mark-legacy-grant-migrated repo id)))
 
 (defn- migrate-viewers!
   "Users still stored as viewers join Readers, which holds every module's

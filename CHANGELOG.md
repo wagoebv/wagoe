@@ -206,8 +206,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Deprecated
 
-- **Group grants, `:role :user` and OIDC `:default-role`** (BOU-771): a grant becomes the managed role of its
-  permission, `:user` means no role; all go in 2.0. Use `add-group-role` and import `:roles`.
+- **Group grants, `:role :user` and OIDC `:default-role`** (BOU-771): grants move onto managed roles, their rows kept
+  until 2.0 for rolling deploys. Use `add-group-role` and import `:roles`; `:user` means no role.
 - **`shared-ui` `alpine/sidebar-store-init`** (BOU-761): a second copy of the sidebar store that needs the unbundled
   Persist plugin; goes in 2.0. Load the `:admin-pilot` bundle, which registers the store.
 - **Kebab-case keys in the login response's `user` and `session`** (BOU-737): each now has a camelCase twin with the same

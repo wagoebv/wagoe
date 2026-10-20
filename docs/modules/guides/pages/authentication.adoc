@@ -420,8 +420,10 @@ Groups used to hold grants, a permission and a scope, and users had the role `:u
 nobody becomes an admin:
 
 * Each grant becomes an assignment of a managed role named after its permission.
-  `add-group-grant`, `remove-group-grant` and an import's `:grants` still work this
-  way, and are deprecated.
+  The old rows stay until 2.0, so servers still on the previous version keep working
+  during a rolling upgrade; a grant one of them adds moves over at the next start.
+  Rights are read from the assignments only. `add-group-grant`, `remove-group-grant`
+  and an import's `:grants` still work this way, and are deprecated.
 * When there are users, Everyone gets every module's `editor` role. That is what every
   signed-in user could do; narrow it when you are ready. A role holding a permission
   something already checks as a grant, such as `:workflow/read`, is left out, so the

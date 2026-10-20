@@ -225,10 +225,11 @@
 
   (find-legacy-grants [this])
   ;; The rows of user_group_grants, which roles replaced: {:id :group-id
-  ;; :permission :scope}.
+  ;; :permission :scope :migrated-at}. Kept until 2.0 for nodes on the
+  ;; previous version; rights are read from assignments only.
 
-  (remove-legacy-grant [this grant-id])
-  ;; Returns boolean.
+  (mark-legacy-grant-migrated [this grant-id])
+  ;; Sets the grant's :migrated-at. Returns boolean.
 
   (find-legacy-viewers [this])
   ;; The ids of live users whose stored role is still "viewer".

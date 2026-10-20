@@ -64,5 +64,5 @@
 
  {:ticket "BOU-771"
   :since  "1.0.2"
-  :note   "Group grants (add-group-grant, remove-group-grant, import :grants), :role :user, and the OIDC provider's :default-role."
+  :note   "Group grants (add-group-grant, remove-group-grant, import :grants), :role :user, and the OIDC provider's :default-role. Boot moves grants onto roles; the user_group_grants rows stay until 2.0."
   :manual "Call add-group-role / remove-group-role and import :roles [{:role :scope}], drop :role :user and :default-role. A grant names a permission and an assignment a role, which a rewrite cannot choose."}]

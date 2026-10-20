@@ -442,8 +442,11 @@ only).
   a permission already checked as a grant (`core.group/gated-permissions`:
   declared by a module, in the groups schema, or granted), such as
   `:workflow/read`; each `user_group_grants`
-  row becomes an assignment of a managed role named after its permission, then is
-  deleted. Permissions no module declares stay in their roles and are logged.
+  row not yet marked becomes an assignment of a managed role named after its
+  permission, keeping the row's id, and is marked `migrated_at`. Rows stay until
+  2.0 for nodes on the previous version during a rolling deploy; rights are read
+  from assignments only. Permissions no module declares stay in their roles and
+  are logged.
 - `add-group-grant` / `remove-group-grant` and import `:grants` are deprecated:
   each grant becomes the managed role of its permission.
 - `:wagoe/user {:groups {:permissions <schema> :scope <schema>}}`, Malli or a
@@ -462,7 +465,7 @@ only).
   role's permissions change, so a change in an empty group writes nothing. A
   change to Everyone writes one entry, for the actor.
 - Tables `user_groups`, `user_group_members`, `user_roles`, `user_group_roles`, and
-  `user_group_grants` (emptied by the migration). Keys cascade from `auth_users`
+  `user_group_grants` (kept, marked, until 2.0). Keys cascade from `auth_users`
   and `user_groups`; the repository deletes explicitly too, for SQLite connections
   without foreign keys. `scope` is EDN text; `edn-value?` refuses what would not
   read back, an `Instant` for one.

@@ -29,10 +29,11 @@
   (edn/read-string (str (:scope row))))
 
 (defn- db->grant [row]
-  {:id         (tc/string->uuid (:id row))
-   :group-id   (tc/string->uuid (:group-id row))
-   :permission (keyword (:permission row))
-   :scope      (db->scope row)})
+  {:id          (tc/string->uuid (:id row))
+   :group-id    (tc/string->uuid (:group-id row))
+   :permission  (keyword (:permission row))
+   :scope       (db->scope row)
+   :migrated-at (tc/string->instant (:migrated-at row))})
 
 (defn- db->role [row]
   {:id          (tc/string->uuid (:id row))
@@ -280,8 +281,10 @@
     (mapv db->grant (db/execute-query! ctx {:select [:*] :from [:user_group_grants]
                                             :order-by [[:created_at :asc] [:id :asc]]})))
 
-  (remove-legacy-grant [_ grant-id]
-    (pos? (db/execute-update! ctx {:delete-from :user_group_grants :where [:= :id (id-str grant-id)]})))
+  (mark-legacy-grant-migrated [_ grant-id]
+    (pos? (db/execute-update! ctx {:update :user_group_grants
+                                   :set    {:migrated_at (Instant/now)}
+                                   :where  [:= :id (id-str grant-id)]})))
 
   (find-legacy-viewers [_]
     (mapv (comp tc/string->uuid :id)

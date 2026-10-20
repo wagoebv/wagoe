@@ -181,7 +181,10 @@
    [:group-id {:references :user_groups :on-delete :cascade} :uuid]
    [:permission :keyword]
    [:scope {:column-type :text} :map]
-   [:created-at inst?]])
+   [:created-at inst?]
+   ;; When boot moved it onto a role. The row stays until 2.0, for nodes on the
+   ;; previous version.
+   [:migrated-at {:optional true} [:maybe inst?]]])
 
 (def UserRole
   "Schema for a managed role: a set of permissions an administrator composed.

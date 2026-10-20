@@ -410,8 +410,20 @@
                (set (map :role (:roles (ports/get-group svc group/everyone-id)))))
             "Everyone gets every module's editor role but the admin's, once")
         (is (= 2 (count (:roles (ports/get-group svc (:id finance))))) "run twice, nothing doubled")
-        (is (zero? (:n (jdbc/execute-one! (:datasource ctx) ["SELECT COUNT(*) AS n FROM user_group_grants"]
-                                          {:builder-fn rs/as-unqualified-lower-maps}))))))))
+        (is (= 2 (:n (jdbc/execute-one! (:datasource ctx)
+                                        ["SELECT COUNT(*) AS n FROM user_group_grants WHERE migrated_at IS NOT NULL"]
+                                        {:builder-fn rs/as-unqualified-lower-maps})))
+            "the grant rows stay, marked, for nodes on the previous version")
+        (testing "an assignment removed after the migration is not made again"
+          (ports/remove-group-role svc (:id finance) (:id (first (:roles (ports/get-group svc (:id finance))))))
+          (sut/migrate! svc)
+          (is (= 1 (count (:roles (ports/get-group svc (:id finance)))))))
+        (testing "a grant the previous version writes during the rollout moves at the next boot"
+          (legacy-grant! ctx (:id finance) :report/approve {})
+          (sut/migrate! svc)
+          (is (group/holds? (ports/user-grants svc ada) :report/approve))
+          (is (= 1 (count (group/grants-for (ports/user-grants svc ada) :report/approve)))
+              "rights come from assignments only, so the kept row is not counted twice"))))))
 
 (deftest ^:integration everyone-narrowed-stays-narrowed
   (with-service nil {:registry registry}
