@@ -209,6 +209,15 @@
      (BOU-712); PostgreSQL's names them in a Detail that follows lc_messages
      (BOU-721).")
 
+  (unique-keys [this datasource table-name]
+    "Every unique key on `table-name`, the primary key included, as a vector
+     of its lower-case column names in key order. A partial key or one on an
+     expression is left out: it does not make its columns unique.
+
+     Example:
+       (unique-keys h2-adapter ds :product_tags)
+       ;; => [[\"product_id\" \"tag_id\"]]")
+
   (engine [this]
     "Which database this is: :postgresql, :mysql, :sqlite or :h2. Never nil.
      Ask this, not `dialect`, not the driver and not the product name (ADR-039).")

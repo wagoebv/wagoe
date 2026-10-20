@@ -61,6 +61,8 @@
              :module-routes   module-routes
              ;; Each module's `:extra-middleware`, in the same order.
              :module-middleware module-middleware
+             ;; Checks every route's :permission against the registry.
+             :permission-registry (ig/ref :wagoe/permission-registry)
              :router          (ig/ref :wagoe/router)
              :logger          (ig/ref :wagoe/logging)
              :metrics-emitter (ig/ref :wagoe/metrics)
@@ -158,7 +160,7 @@
          ;; feature the config asks for and does not get, and it used to say
          ;; nothing at all (BOU-477).
          _          (modules/assert-every-key-claimed! active known)
-         {:keys [components http auth search data-export retention middleware routes job-handlers]}
+         {:keys [components http auth search data-export retention authorization middleware routes job-handlers]}
          (modules/framework-module-config
           active
           {:config            config
@@ -175,6 +177,7 @@
           discovered-search   :search
           discovered-export   :data-export
           discovered-retain   :retention
+          discovered-authz    :authorization
           discovered-mw       :middleware
           discovered-routes   :routes
           discovered-handlers :job-handlers}
@@ -200,7 +203,8 @@
                                            (concat routes discovered-routes
                                                    (modules/discovered-route-refs active known discovered)))
                                      (into middleware discovered-mw))
-                    {:wagoe/data-export {:contributed data-export}}
+                    {:wagoe/data-export {:contributed data-export}
+                     :wagoe/permission-registry {:declarations (merge authorization discovered-authz)}}
                     components
                     discovered)
        ;; Handlers reach the registry only when the jobs module is on. Assoc'ing

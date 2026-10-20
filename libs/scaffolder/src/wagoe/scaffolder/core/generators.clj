@@ -1926,6 +1926,27 @@ DROP TABLE IF EXISTS %s;
          "  (.close ^java.lang.AutoCloseable (:workflow service))\n"
          "  (log/info \"" module-name " service halted\"))")))
 
+(defn- authorization-section
+  "The module's declaration for the permission registry: its viewer, editor
+   and manager code roles."
+  [module-name]
+  (let [p #(str ":" module-name "/" %)]
+    (str (banner "Authorization")
+         ";; Read into the permission registry at boot. " (p "read") " and " (p "write") "\n"
+         ";; exist without declaring them. An action they do not cover goes under\n"
+         ";; :permissions, {" (p "refund") " {:label \"Refund\"}}, and into the manager role.\n"
+         "\n"
+         "(def authorization\n"
+         "  {:permissions {}\n"
+         "   :roles\n"
+         "   {" (p "viewer") "\n"
+         "    {:description \"Reads " module-name "\" :permissions #{" (p "read") "}}\n"
+         "    " (p "editor") "\n"
+         "    {:description \"Reads and changes " module-name "\" :permissions #{" (p "read") " " (p "write") "}}\n"
+         "    " (p "manager") "\n"
+         "    {:description \"Everything in " module-name "\" :permissions #{" (p "read") " " (p "write") "}}}})\n"
+         "\n")))
+
 (defn- module-wiring-base
   "shell/module_wiring.clj for the module's first entity, before any further
    entity is wired in.
@@ -1953,7 +1974,7 @@ DROP TABLE IF EXISTS %s;
             [clojure.tools.logging :as log]
             [integrant.core :as ig]))
 
-;; =============================================================================
+%s;; =============================================================================
 ;; Repository
 ;; =============================================================================
 
@@ -2027,6 +2048,7 @@ DROP TABLE IF EXISTS %s;
                     base-ns module-name                              ; 8-9   require http
                     base-ns module-name                              ; 10-11 require persistence
                     base-ns module-name                              ; 12-13 require service
+                    (authorization-section module-name)              ;       code roles
                     module-name module-name                          ; 14-15 repository init
                     module-name module-name                          ; 16-17 repository halt
                     module-name module-name                          ; 18-19 service init

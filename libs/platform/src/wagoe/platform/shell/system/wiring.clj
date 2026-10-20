@@ -51,6 +51,9 @@
             [wagoe.platform.shell.utils.port-manager :as port-manager]
             [wagoe.platform.shell.rpc.server :as rpc-server]
             [wagoe.platform.shell.privacy :as privacy]
+            [wagoe.platform.shell.authorization :as authorization]
+            [wagoe.platform.ports.authorization :as ports.authorization]
+            [reitit.core]
             ;; NOTE: no module-wiring is required here any more (BOU-131). Each
             ;; was a static require, so every consumer of platform had to ship
             ;; every module's jar whether or not it used it — a missing one is a
@@ -242,6 +245,30 @@
   [routes]
   (vec (sort-by (comp specificity first) routes)))
 
+(defn- tag-routes
+  "`routes` with `:wagoe/module` in each one's route data, which its children
+   inherit."
+  [module routes]
+  (mapv (fn [[path & more]]
+          (let [data (first more)]
+            (if (or (nil? data) (sequential? data))
+              (into [path {:wagoe/module module}] more)
+              ;; A handler fn or a route name is data too; expanded, or it
+              ;; would be read as a child route.
+              (into [path (assoc (reitit.core/expand data nil) :wagoe/module module)] (rest more)))))
+        routes))
+
+(defn- tagged-contribution
+  "`entry` as a contribution, its routes tagged with their module when it
+   came as `modules/module-routes-ref`. Nil when a service dropped its ref."
+  [entry]
+  (if-let [module (:wagoe/module entry)]
+    (let [c (:contribution entry)]
+      (if (map? c)
+        (update-vals c #(if (sequential? %) (tag-routes module %) %))
+        c))
+    entry))
+
 (defn module-route-contributions
   "Fold every module's routes into {:static [..] :web [..] :api [..]}.
 
@@ -262,6 +289,9 @@
    answers a request does not depend on which module was folded first — see
    `by-specificity`. Contribution order still decides between routes of equal
    specificity, and `:static` is left alone: it is mounted as written.
+
+   An entry may be `{:wagoe/module k :contribution c}`, as the platform hands
+   them over; every route of `c` is then tagged `:wagoe/module k`.
    Public so a test can drive it without an Integrant system."
   [contributions]
   (-> (reduce (fn [acc {:keys [static web api web-prefix extra-web]}]
@@ -272,7 +302,7 @@
                     (update :web into (or extra-web []))
                     (update :api into (or api []))))
               {:static [] :web [] :api []}
-              (remove nil? contributions))
+              (keep tagged-contribution contributions))
       (update :web by-specificity)
       (update :api by-specificity)))
 
@@ -532,7 +562,7 @@
                                :summary "Prometheus metrics scrape endpoint"})}]]))
 
 (defmethod ig/init-key :wagoe/http-handler
-  [_ {:keys [module-routes logger metrics-emitter tracer error-reporter error-enricher config tenant-service db-context cache i18n i18n-middleware user-service request-capture? auth-middleware module-middleware extra-middleware router]}]
+  [_ {:keys [module-routes logger metrics-emitter tracer error-reporter error-enricher config tenant-service db-context cache i18n i18n-middleware user-service request-capture? auth-middleware module-middleware extra-middleware router permission-registry]}]
   (log/info "Initializing top-level HTTP handler")
   (when (empty? auth-middleware)
     (log/warn (str "No authentication middleware is wired (no user module?). "
@@ -628,6 +658,10 @@
                              ;; "do not check" (BOU-356).
                              (select-keys settings [:coercion :muuntaja :multipart :conflicts]))
         handler (reitit-router/compile-routes all-routes router-config)
+        ;; A :permission no module declares fails the boot, not the request.
+        ;; Checked on the router's flattened routes, where data is inherited.
+        _ (when-let [router (and permission-registry (:reitit/router (meta handler)))]
+            (authorization/assert-route-permissions! permission-registry (reitit.core/routes router)))
 
         ;; Wrap handler with version headers middleware
         versioned-handler (http-versioning/wrap-handler-with-version-headers handler config)
@@ -646,12 +680,16 @@
                         versioned-handler)
         ;; Every module's :nav, so a page needs no module to render the sidebar.
         ;; Asked of the router once: what is mounted does not change.
-        final-handler (http-interceptors/wrap-nav
-                       final-handler
-                       (nav/collect (keep :nav module-routes)
-                                    (get-in config [:active :wagoe/settings :nav-order])
-                                    (partial shell-pages/mounted?
-                                             {:reitit.core/router (:reitit/router (meta handler))})))
+        ;; A contribution that is a function (the admin's entities) is asked
+        ;; per page; otherwise the groups are collected once.
+        final-handler (let [contributions (keep (comp :nav tagged-contribution) module-routes)
+                            collect       #(nav/collect contributions
+                                                        (get-in config [:active :wagoe/settings :nav-order])
+                                                        (partial shell-pages/mounted?
+                                                                 {:reitit.core/router (:reitit/router (meta handler))}))]
+                        (http-interceptors/wrap-nav
+                         final-handler
+                         (if (some fn? contributions) collect (constantly (collect)))))
         ;; Outermost, so everything downstream reads the same client address.
         final-handler (http-interceptors/wrap-client-ip final-handler trusted-proxies)]
 
@@ -659,7 +697,7 @@
               {;; Counts rather than six named modules: this line named the
                ;; same six the destructuring did, so a seventh library's routes
                ;; were invisible in the boot log as well as unwireable.
-               :module-contributions (count (remove nil? module-routes))
+               :module-contributions (count (keep tagged-contribution module-routes))
                :module-routes {:static (count module-static)
                                :web    (count module-web)
                                :api    (count module-api)}
@@ -1034,6 +1072,18 @@
     (log/info "Retention: policies" {:policies (update-vals plan str)
                                      :not-run  (vec (remove contributed (keys policies)))})
     {privacy/retention-job-type (privacy/retention-job-handler plan contributed)}))
+
+;; =============================================================================
+;; Permission registry
+;; =============================================================================
+
+;; :declarations is what every enabled module declares under :authorization.
+(defmethod ig/init-key :wagoe/permission-registry
+  [_ {:keys [declarations]}]
+  (let [registry (authorization/create-registry declarations)]
+    (log/info "Permission registry" {:permissions (count (ports.authorization/permissions registry))
+                                     :roles       (count (ports.authorization/roles registry))})
+    registry))
 
 ;; =============================================================================
 ;; Integrant REPL Setup

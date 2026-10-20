@@ -2,12 +2,24 @@
   "Admin pages for groups, their members and their grants. Pure Hiccup; plain
    forms that post and redirect."
   (:require [wagoe.platform.core.csrf :as csrf]
+            [wagoe.shared.ui.core.combobox :as combobox]
             [wagoe.shared.ui.core.layout :as layout]
             [wagoe.user.core.group :as group]))
 
 (def base-path "/web/admin/groups")
 
 (defn group-path [group-id] (str base-path "/" group-id))
+
+(defn- member-options-path
+  "Where the member combobox of a group's page reads its options."
+  [group-id]
+  (str (group-path group-id) "/members/options"))
+
+(defn scope-lookup-field
+  "The form field a grant's scope key `k` is chosen in, when the application
+   says which entity the key points at."
+  [k]
+  (keyword (str "scope-" (name k))))
 
 (defn- notice [{:keys [error]}]
   (when error
@@ -74,9 +86,16 @@
     [:input#grant-permission {:type "text" :name "permission" :required true
                               :placeholder "invoice/approve"}]))
 
+(defn- scope-lookup-input [{:keys [key url]}]
+  (let [field (scope-lookup-field key)]
+    (list [:label {:for (name field)} (name key)]
+          (combobox/combobox field {:url (str url "?field=" (name field)) :placeholder [:t :user.groups/scope-placeholder]}))))
+
 (defn group-page
   "One group: its name, members and grants, with the forms that change them.
-   `permission-options` lists the declared permissions, or is nil."
+   `permission-options` lists the declared permissions, or is nil.
+   `(:scope-lookups opts)`, [{:key :url}], are the scope keys a grant chooses
+   through a lookup, beside the EDN."
   [{:keys [id name members grants] :as group} permission-options opts]
   (let [path (group-path id)]
     (page
@@ -107,8 +126,10 @@
          [:p.empty-state [:t :user.groups/members-empty]])
        [:form.group-member-form {:method "post" :action (str path "/members")}
         (csrf/hidden-field)
-        [:label {:for "member-email"} [:t :user.groups/field-member-email]]
-        [:input#member-email {:type "email" :name "email" :required true}]
+        [:label {:for "user-id"} [:t :user.groups/field-member]]
+        (combobox/combobox :user-id {:url         (member-options-path id)
+                                     :required    true
+                                     :placeholder [:t :user.groups/member-placeholder]})
         [:button {:type "submit"} [:t :user.groups/button-add-member]]]]
 
       [:section.group-grants
@@ -130,6 +151,7 @@
         (csrf/hidden-field)
         [:label {:for "grant-permission"} [:t :user.groups/field-permission]]
         (permission-input permission-options)
+        (map scope-lookup-input (:scope-lookups opts))
         [:label {:for "grant-scope"} [:t :user.groups/field-scope]]
         [:textarea#grant-scope {:name "scope" :rows 3 :placeholder "{:domain-id 42}"}
          (get-in opts [:form :scope])]

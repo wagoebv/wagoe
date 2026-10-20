@@ -3,8 +3,10 @@
 
    Pure Hiccup generators for the filter UI: operator selection per field
    type, value inputs, filter rows, and the overall filter builder."
-  (:require [wagoe.admin.core.ui.base :as base]
+  (:require [wagoe.admin.core.display :as display]
+            [wagoe.admin.core.ui.base :as base]
             [wagoe.core.utils.text :as text]
+            [wagoe.shared.ui.core.combobox :as combobox]
             [wagoe.shared.ui.core.icons :as icons]
             [wagoe.shared.ui.core.table :as table-ui]
             [clojure.string :as str]))
@@ -53,6 +55,10 @@
            [:ne [:t :admin/filter-op-not-equals]]
            [:in [:t :admin/filter-op-any-of]]
            [:not-in [:t :admin/filter-op-none-of]]]
+
+    ;; A many-to-many relation (BOU-778)
+    :link [[:has [:t :admin/filter-op-has]]
+           [:has-not [:t :admin/filter-op-has-not]]]
 
     ;; Default for unknown types
     [[:eq [:t :admin/filter-op-equals]]
@@ -120,6 +126,27 @@
           :placeholder "value1, value2, value3"
           :value (str/join ", " (or (:values filter-value) []))}])
 
+      ;; A foreign key, given its parents by `with-field-options`: what the
+      ;; form offers, so the admin picks a parent rather than typing its id
+      (= :combobox (:widget field-config))
+      (combobox/combobox (keyword (str "filter-" (name field-name)))
+                         (assoc (:combobox field-config)
+                                :name        (str "filters[" (name field-name) "][value]")
+                                :value       (:value filter-value)
+                                :placeholder [:t :admin/combobox-placeholder]))
+
+      ;; An enum's options, a foreign key's parents, or the records a
+      ;; many-to-many links; the form's blank choice is the placeholder here
+      (and options (or (= :select (:widget field-config)) (#{:enum :link} field-type)))
+      [:select.filter-value-input
+       {:name (str "filters[" (name field-name) "][value]")}
+       [:option {:value ""} [:t :admin/select-placeholder]]
+       (for [[value label] options
+             :when (not= "" value)]
+         [:option {:value    (if (keyword? value) (name value) (str value))
+                   :selected (same-value? (:value filter-value) value)}
+          label])]
+
       ;; Boolean field - dropdown
       (= field-type :boolean)
       [:select.filter-value-input
@@ -127,16 +154,6 @@
        [:option {:value ""} [:t :admin/select-placeholder]]
        [:option {:value "true" :selected (same-value? (:value filter-value) true)} [:t :common/option-yes]]
        [:option {:value "false" :selected (same-value? (:value filter-value) false)} [:t :common/option-no]]]
-
-      ;; Enum field with options - dropdown
-      (and (= field-type :enum) options)
-      [:select.filter-value-input
-       {:name (str "filters[" (name field-name) "][value]")}
-       [:option {:value ""} [:t :admin/select-placeholder]]
-       (for [[value label] options]
-         [:option {:value (name value)
-                   :selected (same-value? (:value filter-value) value)}
-          label])]
 
       ;; Date/instant fields - date input
       (#{:instant :date} field-type)
@@ -312,23 +329,36 @@
 
 (defn filterable-fields
   "The fields a list can filter on: its columns (all fields without
-   :list-fields) that are columns of the table and not :filterable false."
+   :list-fields) that are columns of the table and not :filterable false,
+   then its many-to-many relations."
   [entity-config]
-  (filter #(and (contains? (:fields entity-config) %)
-                (get-in entity-config [:fields % :filterable] true))
-          (or (seq (:list-fields entity-config))
-              (keys (:fields entity-config)))))
+  (concat
+   (filter #(and (contains? (:fields entity-config) %)
+                 (get-in entity-config [:fields % :filterable] true))
+           (or (seq (:list-fields entity-config))
+               (keys (:fields entity-config))))
+   (map :key (:many-to-many entity-config))))
+
+(defn filter-field-config
+  "The config a filter on `field` renders with: the field's, or for a
+   many-to-many key one of type :link, over the `:options` the shell gave
+   the relation (else an id is typed)."
+  [entity-config field]
+  (or (get-in entity-config [:fields field])
+      (when-let [rel (display/link-rel entity-config field)]
+        {:type :link :label (:label rel) :options (:options rel)})))
 
 (def ^:private op-symbols
   {:eq "=" :ne "≠" :gt ">" :gte "≥" :lt "<" :lte "≤"
    :contains "∋" :starts-with "^" :ends-with "$"})
 
 (defn- value-label
-  "How a filter value reads in a chip: an enum's option label, yes/no for a
-   boolean, else the value."
+  "How a filter value reads in a chip: a parent's label (`:value-labels`), an
+   enum's option label, yes/no for a boolean, else the value."
   [field-config v]
   (let [s (if (keyword? v) (name v) (str v))]
-    (or (some (fn [[k label]] (when (= s (name k)) label)) (:options field-config))
+    (or (get (:value-labels field-config) s)
+        (some (fn [[k label]] (when (= s (name k)) label)) (:options field-config))
         (when (= :boolean (:type field-config))
           (if (= "true" s) [:t :common/option-yes] [:t :common/option-no]))
         s)))
@@ -374,7 +404,7 @@
         [:t :admin/filters-title]
         (when (seq current) [:span {:class "filter-count"} (str (count current))])]
        (for [[field spec] current
-             :let [fc (get-in entity-config [:fields field])
+             :let [fc (filter-field-config entity-config field)
                    label (:label fc (text/capitalize (str/replace (name field) #"[-_]" " ")))]]
          [:span {:class "filter-chip"}
           [:span (chip-text fc label spec)]
@@ -392,7 +422,7 @@
   "One field in the filter drawer: its label, then operator and value."
   [entity-name field field-config spec]
   (let [operators (get-operators-for-field-type (:type field-config :string))
-        op        (:op spec :eq)
+        op        (:op spec (ffirst operators))
         label     (:label field-config (text/capitalize (str/replace (name field) #"[-_]" " ")))]
     [:div {:class (str "filter-field" (when (and spec (not (blank-filter? spec))) " is-active"))}
      [:label {:class "filter-field-name" :for (str "filter-" (name field))} label]
@@ -413,8 +443,10 @@
       (when (= 1 (count operators))
         [:input {:type "hidden" :name (str "filters[" (name field) "][op]") :value (name op)}])
       (let [inputs (render-filter-value-inputs field field-config op spec)]
-        ;; The first value input carries the label's id
-        (if (and (vector? inputs) (map? (second inputs)))
+        ;; The first value input carries the label's id; a combobox has
+        ;; given its text input that id already
+        (if (and (vector? inputs) (map? (second inputs))
+                 (not= :combobox (:widget field-config)))
           (update inputs 1 assoc :id (str "filter-" (name field)))
           inputs))]]))
 
@@ -446,7 +478,7 @@
              "hx-on::after-request" "if (event.detail.successful && event.detail.elt === this) window.AdminUX.closeDrawer()"}
       [:div {:class "filter-fields"}
        (for [field ordered]
-         (drawer-field entity-name field (get-in entity-config [:fields field]) (get current field)))]
+         (drawer-field entity-name field (filter-field-config entity-config field) (get current field)))]
       [:div {:class "drawer-footer"}
        [:button {:type "submit" :class "button primary"} [:t :admin/button-apply-filters] [:kbd "↵"]]
        [:button {:type      "button"

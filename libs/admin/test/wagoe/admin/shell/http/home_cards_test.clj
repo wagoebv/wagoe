@@ -43,8 +43,9 @@
     ;; inside the navigation the platform binds.
     (str (:body ((interceptors/wrap-nav
                   #(interceptors/run-http-interceptors handler [] % {})
-                  (nav/collect (keep :nav (contributions config)) nil
-                               (partial pages/mounted? {::r/router (router config)})))
+                  (constantly
+                   (nav/collect (keep :nav (contributions config)) nil
+                                (partial pages/mounted? {::r/router (router config)}))))
                  {:request-method :get :uri "/web/admin/"
                   :user (merge {:id (random-uuid) :role :admin :active true} user)
                   ::r/router (router config)})))))

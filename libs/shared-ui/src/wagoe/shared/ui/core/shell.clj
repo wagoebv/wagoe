@@ -56,7 +56,7 @@
    request."
   [user]
   (when-let [{:keys [groups uri]} nav/*nav*]
-    (nav/for-user groups uri user)))
+    (nav/for-user (force groups) uri user)))
 
 (defn sidebar
   "The sidebar for `nav` (see the ns docstring). `opts` supports :logo-url for

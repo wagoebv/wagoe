@@ -54,6 +54,7 @@
    :prefill       form-data
    :return-to     (support/safe-return-to request)
    :field-options (support/foreign-key-options admin-service config entity-configs entity-name form-data)
+   :links         (support/link-fields admin-service config entity-configs entity-name nil (:admin/links form-data))
    :nested        (:sections nested)})
 
 ;; =============================================================================
@@ -172,8 +173,10 @@
                                                              user entity-name entity-config)
 
           [zones params] (support/form-zone-options config request (submitted-params request))
+          [params links] (forms/split-link-params entity-config params)
           [params child-params] (forms/split-child-params params)
           [form-data parse-errors] (support/parse-form-params-checked params entity-config zones)
+          form-data (cond-> form-data (seq links) (assoc :admin/links links))
 
           ; Validate data
           validation-result (ports/validate-entity-data admin-service entity-name form-data)
@@ -320,7 +323,9 @@
           then-list?     (= "list" (get (submitted-params request) "__then"))
           [zones params] (support/form-zone-options config request
                                                     (dissoc (submitted-params request) "__then" :__then))
+          [params links] (forms/split-link-params entity-config params)
           [form-data parse-errors] (support/parse-form-params-checked params entity-config zones)
+          form-data (cond-> form-data (seq links) (assoc :admin/links links))
 
           ;; An update is validated as the entity it would leave behind, not as
           ;; the fields the request happened to carry. Validating `form-data`
@@ -443,12 +448,7 @@
    able to view the entity and the parent whose labels this lists."
   [admin-service schema-provider _config]
   (fn [request]
-    (let [user        (support/require-admin-user! request)
-          entity-name (support/get-entity-name request)
-          _           (when-not (ports/validate-entity-exists schema-provider entity-name)
-                        (throw (ex-info "Unknown entity" {:type :not-found :entity-name entity-name})))
-          _           (shell-permissions/assert-can-view-entity!
-                       user entity-name (ports/get-entity-config schema-provider entity-name))
+    (let [[user entity-name] (support/viewable-entity! schema-provider request)
           field       (keyword (get-in request [:path-params :field]))
           found       (support/search-foreign-key-options admin-service schema-provider entity-name field
                                                           (combobox/query request))
@@ -457,3 +457,18 @@
       (shell-permissions/assert-can-view-entity! user (:parent found) (:parent-cfg found))
       (support/html-response request
                              (combobox/options field (:options found) [:t :admin/combobox-no-matches])))))
+
+(defn lookup-handler
+  "GET /:entity/lookup?q= — the rows of an entity whose label contains the
+   typed text, as combobox options, for a page outside the admin that picks
+   one of them (a grant's scope). The user has to be able to view the entity."
+  [admin-service schema-provider _config]
+  (fn [request]
+    (let [[_ entity-name entity-cfg] (support/viewable-entity! schema-provider request)
+          options (support/search-entity-options admin-service entity-cfg entity-name (combobox/query request))]
+      (when-not options
+        (throw (ex-info "No text label to search" {:type :not-found :entity-name entity-name})))
+      (support/html-response request
+                             ;; Option ids follow the asking combobox, so two on one page differ
+                             (combobox/options (or (not-empty (get-in request [:query-params "field"])) entity-name)
+                                               options [:t :admin/combobox-no-matches])))))

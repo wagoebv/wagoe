@@ -73,6 +73,11 @@
        :get {:handler (crud/field-options-handler admin-service schema-provider config)
              :summary "HTMX options of a foreign key's combobox"}}]
 
+     ["/:entity/lookup"
+      {:middleware [auth-middleware]
+       :get {:handler (crud/lookup-handler admin-service schema-provider config)
+             :summary "HTMX options of a combobox choosing one of the entity's rows"}}]
+
      ["/:entity/filters"
       {:middleware [auth-middleware]
        :get {:handler (list-handlers/filter-drawer-handler admin-service schema-provider config)
@@ -116,6 +121,19 @@
        :delete {:handler (delete/delete-entity-handler admin-service schema-provider config)
                 :summary "Delete entity"}}]]))
 
+(defn- nav-contribution
+  "The admin's sidebar items, from each entity's resolved config, or its own
+   config when that cannot be resolved (its table is missing). Only :allowlist
+   discovery lists; the other modes throw, and must fail the admin's pages,
+   not every page's sidebar."
+  [schema-provider config]
+  (let [entities (try (ports/list-available-entities schema-provider)
+                      (catch clojure.lang.ExceptionInfo _ []))]
+    (layout/nav entities
+                (into {} (map (fn [e] [e (try (ports/get-entity-config schema-provider e)
+                                              (catch Exception _ (get-in config [:entities e])))]))
+                      entities))))
+
 (defn admin-routes
   "Admin's contribution to the application's route table.
 
@@ -126,12 +144,9 @@
    :web (web-routes admin-service schema-provider config user-service)
    :static []  ; Week 2+: Admin-specific static assets
 
-   ;; Its entities, for the sidebar every page renders. Listed once, at boot.
-   ;; Only :allowlist discovery lists; the other modes throw, and must fail the
-   ;; admin's pages rather than the whole boot.
-   :nav (layout/nav (try (ports/list-available-entities schema-provider)
-                         (catch clojure.lang.ExceptionInfo _ []))
-                    (:entities config))
+   ;; Its entities, for the sidebar, asked per page: whether one is a join
+   ;; table, and so hidden, needs its table, which may come after boot.
+   :nav #(nav-contribution schema-provider config)
 
    ;; Where these mount. Platform held this for six modules and a seventh could
    ;; not contribute routes without editing it (BOU-330).

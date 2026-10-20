@@ -1040,10 +1040,86 @@
                                               :foreign-key field :display-field :name})))])))
           entity-configs)))
 
+(def ^:private join-table-extras
+  "Columns a join table may have besides its two keys and its primary key."
+  #{:created-at :updated-at})
+
+(defn join-keys
+  "The two foreign keys of a join table, or nil when `entity-config` is not
+   one. A join table has exactly two belongs-to, unique together (its
+   `:unique-keys`, sets of fields), and no column but those, its primary key
+   and timestamps: one with a role column stays a has-many. `:join-table`
+   true in the config skips the checks but the two keys, false never."
+  [entity-config]
+  (let [flag (:join-table entity-config)
+        fks  (vec (distinct (map :field (get-in entity-config [:relationships :belongs-to]))))]
+    (when (and (not (false? flag)) (= 2 (count fks)))
+      (if (true? flag)
+        fks
+        (let [pk     (:primary-key entity-config :id)
+              others (remove (into join-table-extras fks) (keys (:fields entity-config)))]
+          (when (and (every? #{pk} others)
+                     (some #{(set fks)} (:unique-keys entity-config)))
+            fks))))))
+
+(defn- snake-table [cfg entity]
+  (keyword (str/replace (name (:table-name cfg entity)) "-" "_")))
+
+(defn- join-parents
+  "{key parent} for the two keys of join table `cfg` when both parents are
+   among `entity-configs`, else nil: a join to an entity the admin does not
+   show stays an ordinary child."
+  [cfg entity-configs]
+  (when-let [ks (join-keys cfg)]
+    (let [parent (into {} (map (juxt :field :entity)) (get-in cfg [:relationships :belongs-to]))]
+      (when (every? #(contains? entity-configs (parent %)) ks)
+        (select-keys parent ks)))))
+
+(defn many-to-many
+  "The many-to-many relations of `entity-name`: one per join table among
+   `entity-configs` with a key to it, through to the entity its other key
+   names. `:key` names the relation on a form, in a list and in a filter:
+   the other entity, or `<join>-by-<other-key>` when that is ambiguous, a
+   field's name or in `taken` (the has-many keys, which name list columns too)."
+  [entity-name entity-configs & [taken]]
+  (let [fields (into (set (keys (get-in entity-configs [entity-name :fields]))) taken)
+        rels   (vec (for [[join cfg] entity-configs
+                          :let  [parent (join-parents cfg entity-configs)
+                                 ks     (join-keys cfg)]
+                          :when parent
+                          [fk other-key] [ks (vec (rseq ks))]
+                          :when (= entity-name (parent fk))]
+                      {:entity      (parent other-key)
+                       :through     join
+                       :table       (snake-table cfg join)
+                       :foreign-key fk
+                       :other-key   other-key
+                       :label       (:label (get entity-configs (parent other-key)))}))
+        shared (frequencies (map :entity rels))]
+    (mapv (fn [{:keys [entity through other-key] :as rel}]
+            (if (or (< 1 (shared entity)) (fields entity))
+              (assoc rel
+                     :key (keyword (str (name through) "-by-" (name other-key)))
+                     :label (:label (get entity-configs through)))
+              (assoc rel :key entity)))
+          rels)))
+
+(defn with-many-to-many
+  "`entity-config` with its `:many-to-many` relations and, for a join table,
+   its `:join-keys`, hidden from the sidebar unless the config says
+   otherwise."
+  [entity-name entity-config entity-configs]
+  (cond-> (assoc entity-config :many-to-many
+                 (many-to-many entity-name entity-configs (map :entity (:has-many entity-config))))
+    (join-parents entity-config entity-configs)
+    (-> (assoc :join-keys (join-keys entity-config))
+        (update :sidebar-hidden #(if (nil? %) true %)))))
+
 (defn inverse-has-many
   "The has-many entries on `entity-name` implied by other entities'
    belongs-to, in the shape an explicit `:has-many` config takes. Read-only:
-   an explicit entry can set `:editable true`.
+   an explicit entry can set `:editable true`. A join table is no child: it
+   is a many-to-many.
 
    Args:
      entity-name:    the parent entity
@@ -1053,15 +1129,17 @@
   (if-not (contains? entity-configs entity-name)
     []
     (vec (for [[child cfg] entity-configs
+               :when       (not (join-parents cfg entity-configs))
                bt          (get-in cfg [:relationships :belongs-to])
                :when       (= entity-name (:entity bt))
                :let        [fk (:foreign-key bt)]]
            {:entity      child
-            :table       (keyword (str/replace (name (:table-name cfg child)) "-" "_"))
+            :table       (snake-table cfg child)
             :foreign-key fk
             :label       (:label cfg)
             ;; The key and the parent are already on the page.
-            :fields      (vec (remove #{fk (:primary-key cfg :id)} (:list-fields cfg)))
+            ;; A set literal throws when the key is the primary key (a composite one)
+            :fields      (vec (remove (set [fk (:primary-key cfg :id)]) (:list-fields cfg)))
             :editable    false}))))
 
 (defn with-inverse-relationships

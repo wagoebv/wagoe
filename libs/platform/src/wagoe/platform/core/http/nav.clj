@@ -21,7 +21,8 @@
 
 (def ^:dynamic *nav*
   "`{:groups [..] :uri \"..\"}` for the request being handled: every module's
-   groups, ordered, and the path asked for. nil outside a request."
+   groups, ordered (or a delay of them), and the path asked for. nil outside a
+   request."
   nil)
 
 (def other-group
@@ -43,13 +44,14 @@
 
 (defn collect
   "One ordered vector of groups from `contributions`, each a module's `:nav`
-   map, in module order. `order` lists group ids that come first; the rest
+   map or a function returning one, in module order. `order` lists group ids that come first; the rest
    keep contribution order, and `:other` comes last. Items whose page
    `mounted?` denies are dropped, and then empty groups. An entity item is not
    asked: its page is a parameter of the admin's route, and the admin
    contributes it only when mounted."
   [contributions order mounted?]
-  (let [declared (distinct (mapcat keys contributions))
+  (let [contributions (map #(if (fn? %) (%) %) contributions)
+        declared (distinct (mapcat keys contributions))
         groups   (apply merge-with merge-group contributions)
         claims   (into {} (for [[id group] groups, e (:entities group)] [e id]))
         entity?  (comp some? :entity)

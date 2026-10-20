@@ -27,12 +27,15 @@
    "tenants"
    "e2e_order_lines"
    "e2e_orders"
+   "e2e_ticket_labels"
+   "e2e_ticket_watchers"
    "e2e_tickets"])
 
 (def ^:private fixture-tables
   "Tables no module owns, for admin e2e tests: an order whose lines have a
-   has-many :min (:e2e-orders in resources/conf/test/config.edn, BOU-570), and
-   tickets whose customer is a combobox (BOU-754)."
+   has-many :min (:e2e-orders in resources/conf/test/config.edn, BOU-570),
+   tickets whose customer is a combobox (BOU-754), and two join tables:
+   labels a ticket has, few, and customers watching it, many (BOU-778)."
   ["CREATE TABLE IF NOT EXISTS e2e_orders (
       id UUID PRIMARY KEY,
       number VARCHAR(50) NOT NULL,
@@ -50,7 +53,19 @@
    "CREATE TABLE IF NOT EXISTS e2e_tickets (
       id UUID PRIMARY KEY,
       customer_id UUID NOT NULL REFERENCES e2e_customers(id),
-      subject VARCHAR(255) NOT NULL)"])
+      subject VARCHAR(255) NOT NULL)"
+   "CREATE TABLE IF NOT EXISTS e2e_labels (
+      id UUID PRIMARY KEY,
+      name VARCHAR(50) NOT NULL)"
+   "CREATE TABLE IF NOT EXISTS e2e_ticket_labels (
+      e2e_ticket_id UUID NOT NULL REFERENCES e2e_tickets(id),
+      e2e_label_id UUID NOT NULL REFERENCES e2e_labels(id),
+      PRIMARY KEY (e2e_ticket_id, e2e_label_id))"
+   "CREATE TABLE IF NOT EXISTS e2e_ticket_watchers (
+      id UUID PRIMARY KEY,
+      e2e_ticket_id UUID NOT NULL REFERENCES e2e_tickets(id),
+      e2e_customer_id UUID NOT NULL REFERENCES e2e_customers(id),
+      UNIQUE (e2e_ticket_id, e2e_customer_id))"])
 
 (defn- seed-customers!
   "One more customer than :max-page-size (200) in the test config. Tests only
@@ -61,13 +76,22 @@
     (sql/insert-multi! ds :e2e_customers [:id :name]
                        (for [i (range 1 202)] [(random-uuid) (format "Customer %03d" i)]))))
 
+(defn- seed-labels!
+  "Three labels: few enough for checkboxes. Seeded once, like the customers."
+  [ds]
+  (when (zero? (:n (jdbc/execute-one! ds ["SELECT COUNT(*) AS n FROM e2e_labels"]
+                                      {:builder-fn rs/as-unqualified-lower-maps})))
+    (sql/insert-multi! ds :e2e_labels [:id :name]
+                       (for [n ["Bug" "Feature" "Question"]] [(random-uuid) n]))))
+
 (defn create-fixture-tables!
   "Create the e2e fixture tables if they are missing. Called when the reset
    route is mounted, before the admin first reads their config."
   [ds]
   (doseq [ddl fixture-tables]
     (jdbc/execute! ds [ddl]))
-  (seed-customers! ds))
+  (seed-customers! ds)
+  (seed-labels! ds))
 
 (defn truncate-all!
   "Truncates every table the e2e suite might touch. Uses H2's

@@ -38,6 +38,17 @@
   {:permissions  (some->> (:permissions groups) (schema-of :permissions))
    :scope-schema (some->> (:scope groups) (schema-of :scope))})
 
+(defn declared-permissions
+  "The `:permissions` enum of prepared `groups` settings, as a declaration for
+   the permission registry. A schema that is not an enum lists nothing. Read
+   until 2.0, when modules declare their own."
+  [{:keys [permissions]}]
+  (when (and permissions (= :enum (m/type permissions)))
+    {:permissions (into {}
+                        (comp (filter keyword?)
+                              (map (fn [p] [p {:label (group-core/permission-str p) :source :groups-schema}])))
+                        (m/children permissions))}))
+
 ;; =============================================================================
 ;; Service
 ;; =============================================================================

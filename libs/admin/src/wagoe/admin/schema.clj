@@ -337,6 +337,8 @@
               [:writer :keyword]
               ;; The sidebar group the entity sits in (BOU-777)
               [:module [:or :keyword :string]]
+              ;; true: a join table whatever its keys and columns; false: never
+              [:join-table :boolean]
               [:fields [:map-of :keyword FieldOverride]]
               [:field-groups [:sequential (closed-map :id :label :fields)]]
               [:has-many [:sequential HasManyEntry]]

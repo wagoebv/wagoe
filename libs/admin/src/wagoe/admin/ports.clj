@@ -489,6 +489,8 @@
        {:now     #inst \"…\"                         ; relative dates
         :titles  {field {id-string title}}          ; per relation column
         :counts  {column {parent-id-string n}}      ; per has-many column
+        :links   {column {id-string {:items [{:id :title}] :total n}}}
+                                                    ; per many-to-many column, a few items each
         :facets  {field {value-string n}}           ; the facet, its own filter left out
         :summary [{:label … :value … :role … :field …}]}
 
@@ -497,3 +499,19 @@
      counts are for those fields of `records` instead of the list columns, and
      there are no facets or summary: the record drawer asks this way. A part whose query fails is left out; the
      page still renders."))
+
+;; =============================================================================
+;; Many-to-many Port (BOU-778)
+;; =============================================================================
+
+(defprotocol ILinks
+  "The records a many-to-many relation links, through its join table. The
+   links are written with the record: `create-entity` and `update-entity`
+   take `:admin/links {relation-key [id ...]}` in their data and replace the
+   links of each relation named, in the write's transaction."
+
+  (linked-records [this entity-name rel-key ids opts]
+    "{id-string {:items [{:id :title}] :total n}} for the records `ids` of
+     `entity-name`: what relation `rel-key` links each to, by title. opts
+     `{:per-owner n}` keeps the first n items of each; :total still counts
+     them all. A record without links is left out."))

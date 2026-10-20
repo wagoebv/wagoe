@@ -10,7 +10,7 @@
 
 (def roles
   "Every display role. Closed: the cell renderer and the CSS know each one."
-  #{:title :relation :count :enum :money :number :percent :date :datetime
+  #{:title :relation :count :links :enum :money :number :percent :date :datetime
     :boolean :identifier :email :url :text})
 
 (def tones
@@ -118,6 +118,16 @@
   (into {} (map (juxt :field identity))
         (get-in entity-config [:relationships :belongs-to])))
 
+(defn link-columns
+  "List column key → the many-to-many relation it shows (BOU-778)."
+  [entity-config]
+  (into {} (map (juxt :key identity)) (:many-to-many entity-config)))
+
+(defn link-rel
+  "The many-to-many relation of `entity-config` named `k`, or nil."
+  [entity-config k]
+  (get (link-columns entity-config) k))
+
 (defn has-many-columns
   "List column key → the has-many relationship it counts. A has-many is a list
    column when `:list-fields` names its key: its child entity, or
@@ -143,20 +153,23 @@
   {:entity-config entity-config
    :title         (title-field entity-config)
    :belongs-to    (belongs-to-fields entity-config)
-   :has-many      (has-many-columns entity-config)})
+   :has-many      (has-many-columns entity-config)
+   :links         (link-columns entity-config)})
 
 (defn- role-in
-  [{:keys [entity-config title belongs-to has-many]} field]
+  [{:keys [entity-config title belongs-to has-many links]} field]
   (let [field-config (get-in entity-config [:fields field])
         type         (:type field-config :string)
         explicit     (:display field-config)
         rel          (get belongs-to field)
-        children     (when-not field-config (get has-many field))]
+        children     (when-not field-config (get has-many field))
+        linked       (when-not field-config (get links field))]
     (cond
       (roles explicit) [explicit "explicit"]
       (= field title)  [:title "title field"]
       rel              [:relation (str "belongs-to " (name (:entity rel)))]
       children         [:count (str "has-many " (name (:entity children)))]
+      linked           [:links (str "many-to-many " (name (:entity linked)))]
       (= :enum type)   [:enum "type :enum"]
       ;; An integer key is a number to nobody: no grouping, no "1,234"
       (= field (:primary-key entity-config :id)) [:identifier "primary key"]
@@ -168,7 +181,7 @@
    `belongs-to <entity>`, `has-many <entity>`, a name rule, or `type default`.
 
    Precedence: explicit `:display`, the title field, belongs-to, has-many,
-   enum, name rules, the type default."
+   many-to-many, enum, name rules, the type default."
   [entity-config field]
   (role-in (role-context entity-config) field))
 
@@ -202,7 +215,7 @@
       (audit-fields field)                     nil
       (= role :relation)                       1
       (= field facet)                          2
-      (= role :enum)                           3
+      (#{:enum :links} role)                   3
       (= role :money)                          4
       (#{:date :datetime} role)                5
       ;; A UUID says nothing to a reader; a code or a SKU does
@@ -212,9 +225,10 @@
 
 (defn default-list-fields
   "List columns for an entity with no `:list-fields`: title, relations, the
-   facet, other enums, money, dates, then the rest, at most seven. Long text,
-   JSON, identifiers that are not the title and audit columns other than
-   `created-at` are left out. Within a rank, `field-order` keeps column order."
+   facet, other enums and many-to-many relations, money, dates, then the
+   rest, at most seven. Long text, JSON, identifiers that are not the title
+   and audit columns other than `created-at` are left out. Within a rank,
+   `field-order` keeps column order."
   [entity-config field-order]
   (let [hidden (set (:hide-fields entity-config))
         ctx    (role-context entity-config)
@@ -227,7 +241,7 @@
                                (when-let [rank (list-rank entity-config facet field
                                                           (first (role-in ctx field)))]
                                  [rank i field]))
-                             fields)]
+                             (concat fields (map :key (:many-to-many entity-config))))]
     (->> (sort ranked)
          (map peek)
          (take max-default-columns)

@@ -60,6 +60,14 @@
         (pr-str bad)))
   (is (= {:permissions nil :scope-schema nil} (sut/prepare-settings nil))))
 
+(deftest ^:unit the-permissions-enum-is-declared-to-the-registry
+  (is (= {:permissions {:orders/refund {:label "orders/refund" :source :groups-schema}
+                        :approve       {:label "approve" :source :groups-schema}}}
+         (sut/declared-permissions (sut/prepare-settings {:permissions [:enum :orders/refund :approve]}))))
+  (testing "a schema that is not an enum lists nothing"
+    (is (nil? (sut/declared-permissions (sut/prepare-settings {:permissions :keyword}))))
+    (is (nil? (sut/declared-permissions (sut/prepare-settings nil))))))
+
 (deftest ^:integration every-change-to-a-users-rights-is-audited
   (with-service nil
     (fn [{:keys [svc audit user!]}]

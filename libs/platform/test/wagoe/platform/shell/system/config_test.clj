@@ -51,7 +51,7 @@
                    :wagoe/tasks-service :wagoe/tasks-routes])))
 
     (testing "and the handler is handed its routes, as a collection"
-      (is (= [(ig/ref :wagoe/tasks-routes)]
+      (is (= [{:wagoe/module :wagoe/tasks :contribution (ig/ref :wagoe/tasks-routes)}]
              (get-in c [:wagoe/http-handler :module-routes]))))))
 
 (deftest ^:unit a-framework-module-is-not-mistaken-for-a-scaffolded-one
@@ -72,7 +72,7 @@
   (let [c (sut/system-config (config :wagoe/storage {:enabled? true
                                                      :provider :local
                                                      :expose-http? true}))]
-    (is (= [(ig/ref :wagoe/storage-routes)]
+    (is (= [{:wagoe/module :wagoe/storage :contribution (ig/ref :wagoe/storage-routes)}]
            (get-in c [:wagoe/http-handler :module-routes])))))
 
 (deftest ^:unit a-core-config-key-is-not-mistaken-for-a-module

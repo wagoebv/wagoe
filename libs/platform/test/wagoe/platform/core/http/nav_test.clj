@@ -44,6 +44,9 @@
     (is (= "Users" (:label group)))
     (is (= ["/web/admin/groups" "/web/audit" "/web/x"] (mapv :href (:items group))))))
 
+(deftest ^:unit a-contribution-may-be-a-function-asked-each-time
+  (is (= (nav/collect [admin user] nil all) (nav/collect [(constantly admin) user] nil all))))
+
 (deftest ^:unit empty-groups-are-dropped
   (is (= [:user] (map :id (nav/collect [{:admin {:label "Admin" :items [(entity :users)]}} user] nil all)))
       "the admin's own group, and no :other without leftovers")

@@ -741,12 +741,13 @@
     (meta handler)))
 
 (defn wrap-nav
-  "Binds `nav/*nav*` to `groups` and the request's path, so any page can render
-   the sidebar. Keeps the handler's metadata."
-  [handler groups]
+  "Binds `nav/*nav*` to the request's path and `groups-fn`'s groups, asked
+   for only when a page renders them, so any page can render the sidebar.
+   Keeps the handler's metadata."
+  [handler groups-fn]
   (with-meta
     (fn [request]
-      (binding [nav/*nav* {:groups groups :uri (:uri request)}]
+      (binding [nav/*nav* {:groups (delay (groups-fn)) :uri (:uri request)}]
         (handler request)))
     (meta handler)))
 

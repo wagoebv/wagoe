@@ -83,7 +83,8 @@
    :require-role     :admin
    :entity-discovery {:mode      :allowlist
                       :allowlist #{:users :tenants :e2e-orders :e2e-order-lines
-                                   :e2e-customers :e2e-tickets}}
+                                   :e2e-customers :e2e-tickets :e2e-labels
+                                   :e2e-ticket-labels :e2e-ticket-watchers}}
    :entities         #merge [#include "admin/users.edn"
                              #include "admin/tenants.edn"
                              ;; e2e fixture: an order is created with at least one
@@ -109,7 +110,10 @@
                                                                :foreign-key :customer-id
                                                                :label       "Tickets"
                                                                :fields      [:subject]}]}
-                              :e2e-tickets     {:label "Ticket"}}]
+                              :e2e-tickets     {:label "Ticket"}
+                              ;; Join tables to tickets: few labels, many
+                              ;; watching customers.
+                              :e2e-labels      {:label "E2E Labels" :title-field :name}}]
    :pagination       {:default-page-size 20
                       :max-page-size     200}}
 
