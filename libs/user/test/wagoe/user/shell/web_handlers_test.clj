@@ -9,6 +9,7 @@
    - HTML response structure"
   (:require [wagoe.user.shell.web-handlers :as web-handlers]
             [wagoe.user.ports :as ports]
+            [wagoe.user.shell.auth :as auth]
             [wagoe.user.shell.service :as service]
             [wagoe.user.shell.mfa :as mfa]
             [wagoe.user.shell.in-memory-repository-test :as mem]
@@ -1229,6 +1230,32 @@
               {:user {:id id} :form-params {"password" "Right-Pass-1!"}})]
     (is (= 302 (:status resp)))
     (is (has-header? resp "Location" "/web/profile"))))
+
+(deftest ^:contract ^:security password-change-counts-wrong-passwords-and-locks-out
+  ;; A wrong current password did not count, so a session could guess it
+  ;; (BOU-785).
+  (let [id      (UUID/randomUUID)
+        users   (atom {id (mem/mfa-user id "Right-Pass-1!")})
+        repo    (mem/->MemoryUserRepository users)
+        sess    (mem/->MemorySessionRepository (atom {}))
+        svc     (service/create-user-service repo sess (mem/->MemoryAuditRepository (atom []))
+                                             {} (auth/create-authentication-service
+                                                 repo sess nil {:max-failed-attempts 2}))
+        handler (web-handlers/password-change-handler svc {})
+        post    #(handler {:user {:id id}
+                           :form-params {"current-password" %
+                                         "new-password" "New-Horse-22!" "confirm-password" "New-Horse-22!"}})]
+    (is (= 400 (:status (post "wrong"))))
+    (is (= 1 (get-in @users [id :failed-login-count])))
+    (post "wrong")
+    (testing "locked: the right password is refused too"
+      (let [resp (post "Right-Pass-1!")]
+        (is (= 429 (:status resp)))
+        (is (html-contains? resp "too-many-attempts"))))
+    (testing "once the lockout has passed, the right password changes it and resets the count"
+      (swap! users update id dissoc :lockout-until)
+      (is (= 200 (:status (post "Right-Pass-1!"))))
+      (is (zero? (get-in @users [id :failed-login-count]))))))
 
 (deftest ^:contract mfa-disable-page-offers-the-password-and-a-code
   ;; A user who signs in through OIDC knows no password, so the code is there too.

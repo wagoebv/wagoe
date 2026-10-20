@@ -38,12 +38,19 @@
   ;; entity leaves the rest as stored. Sets :updated-at.
   ;; Returns the stored entity; throws {:type :user-not-found} when absent.
 
-  (increment-failed-login-count [this user-id lockout])
-  ;; lockout {:max-attempts n :until inst}. Adds one to :failed-login-count and,
-  ;; when that reaches :max-attempts, sets :lockout-until to :until, in one
-  ;; write: parallel failures each count, and a lockout cannot land after a
-  ;; login that reset the count (BOU-696). Returns the new count, or nil when
+  (claim-login-attempts [this user-id n lockout])
+  ;; lockout {:max-attempts m :until inst :now inst}. Unless the account is
+  ;; locked at :now, adds n to :failed-login-count, setting :lockout-until to
+  ;; :until when that reaches m, in one write. Callers claim before checking a
+  ;; password or code, so parallel attempts cannot all pass a lockout check made
+  ;; before any of them counted (BOU-785). Returns {:claimed? true
+  ;; :failed-login-count c}, {:claimed? false :lockout-until inst}, or nil when
   ;; absent.
+
+  (release-login-attempt [this user-id unlock?])
+  ;; Takes back one claimed attempt, never below zero; with unlock?, clears
+  ;; :lockout-until too. For an attempt whose password was right but which is
+  ;; not yet a sign-in. Returns nil.
 
   (consume-backup-code [this user code-hash])
   ;; Adds code-hash, one of `user`'s :mfa-backup-codes, to its
@@ -356,8 +363,10 @@
 
   (change-password [this user-id current-password new-password]))
   ;; Verifies the current password, checks the new one against policy, rehashes,
-  ;; revokes every session (BOU-191) and audits. Returns true.
-  ;; Throws :user-not-found, :invalid-current-password, :password-policy-violation.
+  ;; revokes every session (BOU-191) and audits. Returns true. A wrong current
+  ;; password counts towards the sign-in lockout.
+  ;; Throws :user-not-found, :account-locked (with :retry-after),
+  ;; :invalid-current-password, :password-policy-violation.
 
 (defprotocol IUserGroupService
   "Groups of users and the roles assigned to them (ADR-041). A user's grants

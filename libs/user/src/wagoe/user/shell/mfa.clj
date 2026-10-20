@@ -328,13 +328,30 @@
       check
       {:valid? false :used-backup-code? false})))
 
-(defn record-failed-login!
-  "Count a failed attempt for `user-id`, locking the account in the same write
-   when the count reaches the limit, so parallel failures each count and a
-   lockout cannot follow a login that reset it (BOU-696)."
-  [user-repository auth-config user-id current-time]
-  (ports/increment-failed-login-count user-repository user-id
-                                      (auth-core/failed-login-lockout auth-config current-time)))
+(defn claim-attempts!
+  "Count `n` attempts for `user-id` before checking them, unless the account is
+   locked: the count is the lockout check, so parallel attempts cannot exceed
+   the limit (BOU-785). Returns {:claimed? true :locked? b}, :locked? when this
+   claim reached the limit, or {:claimed? false :retry-after inst}."
+  [user-repository auth-config user-id n current-time]
+  (let [lockout (auth-core/failed-login-lockout auth-config current-time)
+        claim   (ports/claim-login-attempts user-repository user-id n lockout)]
+    (if (:claimed? claim)
+      {:claimed? true :locked? (>= (:failed-login-count claim) (:max-attempts lockout))}
+      {:claimed? false :retry-after (or (:lockout-until claim) (:until lockout))})))
+
+(defn release-attempt!
+  "Take back an attempt `claim-attempts!` counted whose password was right,
+   and the lockout it set, if it set one."
+  [user-repository user-id claim]
+  (ports/release-login-attempt user-repository user-id (:locked? claim)))
+
+(defn locked-error
+  "The ADR-036 refusal for an account locked until `retry-after`."
+  [retry-after]
+  {:type        :account-locked
+   :message     "Too many failed attempts, try again later"
+   :retry-after retry-after})
 
 (defn- proof-holds?
   "Whether `password` is the user's, or `code` a current TOTP or unused backup
@@ -381,9 +398,7 @@
           {:success? false :error {:type :cannot-disable :message (:reason can)}}
 
           (:retry-after allowed)
-          {:success? false :error {:type        :account-locked
-                                   :message     "Too many failed attempts, try again later"
-                                   :retry-after (:retry-after allowed)}}
+          {:success? false :error (locked-error (:retry-after allowed))}
 
           (not (:allowed? allowed))
           {:success? false :error {:type :cannot-disable :message (:reason allowed)}}
@@ -392,18 +407,24 @@
           {:success? false :error {:type    :proof-required
                                    :message "Confirm with your password or an authentication code"}}
 
-          (not (proof-holds? user-repository user proof))
-          ;; One failure per wrong field: a request is not two guesses for one.
-          (do (dotimes [_ (count (remove str/blank? [(:password proof) (:code proof)]))]
-                (record-failed-login! user-repository auth-config user-id now))
-              {:success? false :error {:type :invalid-proof :message "Incorrect password or code"}})
-
           :else
-          (do (ports/update-user user-repository
-                                 (assoc (mfa-core/prepare-mfa-disablement user)
-                                        :id (:id user) :failed-login-count 0 :lockout-until nil))
-              (audit-disable! audit-repository user request-context)
-              {:success? true})))
+          ;; One attempt per field given: a request is not two guesses for one.
+          (let [claim (claim-attempts! user-repository auth-config user-id
+                                       (count (remove str/blank? [(:password proof) (:code proof)]))
+                                       now)]
+            (cond
+              (not (:claimed? claim))
+              {:success? false :error (locked-error (:retry-after claim))}
+
+              (not (proof-holds? user-repository user proof))
+              {:success? false :error {:type :invalid-proof :message "Incorrect password or code"}}
+
+              :else
+              (do (ports/update-user user-repository
+                                     (assoc (mfa-core/prepare-mfa-disablement user)
+                                            :id (:id user) :failed-login-count 0 :lockout-until nil))
+                  (audit-disable! audit-repository user request-context)
+                  {:success? true})))))
       (catch Exception e
         (log/error e "MFA disable failed")
         {:success? false

@@ -267,7 +267,8 @@
                       (update-user [_ user] user)
                       (soft-delete-user [_ _] true)
                       (hard-delete-user [_ _] true)
-                      (increment-failed-login-count [_ _ _] nil)
+                      (claim-login-attempts [_ _ _ _] {:claimed? true :failed-login-count 0})
+                      (release-login-attempt [_ _ _] nil)
                       (consume-backup-code [_ _ _] false)
                       (with-admins-locked [_ f] (f)))
           ctx {:system {:user-repository user-repo}
@@ -287,7 +288,8 @@
                          (update-user [_ user] user)
                          (soft-delete-user [_ _] true)
                          (hard-delete-user [_ _] true)
-                         (increment-failed-login-count [_ _ _] nil)
+                         (claim-login-attempts [_ _ _ _] {:claimed? true :failed-login-count 0})
+                         (release-login-attempt [_ _ _] nil)
                          (consume-backup-code [_ _ _] false)
                          (with-admins-locked [_ f] (f)))
           ctx {:system {:user-repository failing-repo}

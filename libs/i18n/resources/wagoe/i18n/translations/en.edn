@@ -298,7 +298,7 @@
  :user/mfa-disable-prompt           "To disable two-factor authentication, confirm your password or enter a code from your authenticator app, or a backup code:"
  :user/mfa-disable-code-label       "Authentication code or backup code"
  :user/mfa-disable-wrong-proof      "Incorrect password or code"
- :user/mfa-disable-locked           "Too many failed attempts. Try again later."
+ :user/too-many-attempts            "Too many failed attempts. Try again later."
  :user/profile-page-title           "Profile & Security"
  :user/profile-label-sessions       "Sessions"
  :user/profile-card-data-title      "Your data"

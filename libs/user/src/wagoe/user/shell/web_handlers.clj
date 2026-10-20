@@ -525,7 +525,8 @@
               ;; Authentication failed (e.g. wrong password or invalid MFA code)
               :else
               (let [error-message (cond
-                                    (= :account-locked (:reason auth-result))
+                                    ;; Only a lockout carries :retry-after, whatever its :reason.
+                                    (:retry-after auth-result)
                                     "Too many failed attempts, please try again in 15 minutes"
 
                                     (= :mfa-verification-failed (:reason auth-result))
@@ -1600,6 +1601,12 @@
                                                                        {:current-password ["Current password is incorrect"]})
                                  400
                                  htmx-no-cache-headers)
+                  :account-locked
+                  (html-response request
+                                 (profile-ui/password-section-fragment true
+                                                                       {:current-password [[:t :user/too-many-attempts]]})
+                                 429
+                                 htmx-no-cache-headers)
                   :password-policy-violation
                   (html-response request
                                  (profile-ui/password-section-fragment true
@@ -1782,7 +1789,7 @@
   [result]
   (case (get-in result [:error :type])
     (:invalid-proof :proof-required) [400 {:code [[:t :user/mfa-disable-wrong-proof]]}]
-    :account-locked                  [429 {:code [[:t :user/mfa-disable-locked]]}]
+    :account-locked                  [429 {:code [[:t :user/too-many-attempts]]}]
     [400 {:code [(mfa-error-message result)]}]))
 
 (defn mfa-disable-handler

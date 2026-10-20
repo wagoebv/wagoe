@@ -15,6 +15,30 @@
 
 (defn- active? [user] (nil? (:deleted-at user)))
 
+(defn- locked-at? [user now]
+  (some-> ^Instant (:lockout-until user) (.isAfter now)))
+
+(defn claim-attempts
+  "`user` with `n` attempts counted, as the database claims them; unchanged
+   while locked."
+  [user n {:keys [max-attempts until now]}]
+  (if (locked-at? user now)
+    user
+    (let [c (+ n (or (:failed-login-count user) 0))]
+      (cond-> (assoc user :failed-login-count c)
+        (>= c max-attempts) (assoc :lockout-until until)))))
+
+(defn claim-result
+  "What `claim-login-attempts` returns for a user `before` and `after` the claim."
+  [before after {:keys [now]}]
+  (if (locked-at? before now)
+    {:claimed? false :lockout-until (:lockout-until before)}
+    {:claimed? true :failed-login-count (:failed-login-count after)}))
+
+(defn release-attempt [user unlock?]
+  (cond-> (update user :failed-login-count #(max 0 (dec (or % 0))))
+    unlock? (assoc :lockout-until nil)))
+
 (defrecord MemoryUserRepository [state]
   ports/IUserRepository
 
@@ -49,13 +73,15 @@
     (let [user (assoc user-entity :updated-at (Instant/now))]
       (get (swap! state update (:id user) merge user) (:id user))))
 
-  (increment-failed-login-count [_ user-id {:keys [max-attempts until]}]
+  (claim-login-attempts [_ user-id n lockout]
     (when (get @state user-id)
-      (get-in (swap! state update user-id
-                     #(let [n (inc (or (:failed-login-count %) 0))]
-                        (cond-> (assoc % :failed-login-count n)
-                          (>= n max-attempts) (assoc :lockout-until until))))
-              [user-id :failed-login-count])))
+      (let [[old new] (swap-vals! state update user-id claim-attempts n lockout)]
+        (claim-result (get old user-id) (get new user-id) lockout))))
+
+  (release-login-attempt [_ user-id unlock?]
+    (when (get @state user-id)
+      (swap! state update user-id release-attempt unlock?))
+    nil)
 
   (consume-backup-code [_ user code-hash]
     (let [seen #(select-keys % [:mfa-backup-codes :mfa-backup-codes-used])
