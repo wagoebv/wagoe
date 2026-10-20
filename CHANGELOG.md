@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **`wagoe new` apps run `:wagoe/authorization :enforce`** (BOU-776): users reach module routes through their groups'
+  roles. Existing apps stay `:off`; the Authorization guide takes them there via `:report`.
 - **The admin reads `admin.<entity>/read|write` and scopes under `:wagoe/authorization :enforce`** (BOU-774): entities
   map scope keys with `:scope`. Under `:off` it still admits role `:admin`; try `:report` first.
 - **Route authorization, off by default** (BOU-772): `:wagoe/authorization {:mode :report}` logs what `:enforce` would

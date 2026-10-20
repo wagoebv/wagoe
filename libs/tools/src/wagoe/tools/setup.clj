@@ -406,7 +406,6 @@
     (str "  :wagoe/admin\n"
          "  {:enabled?         true\n"
          "   :base-path        \"/web/admin\"\n"
-         "   :require-role     :admin\n"
          "   :entity-discovery {:mode      :allowlist\n"
          "                      :allowlist #{:users}}\n"
          "   :entities         #merge [#include \"admin/users.edn\"]\n"
@@ -452,6 +451,9 @@
                   ;; from every read but its row stays, so without this key
                   ;; user_sessions grows with every login (BOU-429).
                   "  :wagoe/session-pruner\n  {:enable-pruning true :retention-days 30 :interval-hours 6}\n"
+                  ;; As wagoe new writes it: a new app starts closed. Merging
+                  ;; into an existing config leaves this key alone.
+                  "  :wagoe/authorization\n  {:mode :enforce}\n"
                   (logging-template env)
                   (observability-template env)
                   (admin-template (:admin-ui spec) env)

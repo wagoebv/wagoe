@@ -416,6 +416,12 @@ assignment is group + role + scope (`{}` is everywhere). A user's grants,
 pages are `/web/admin/groups` (`group-routes`, mounted beside the admin UI, admins
 only).
 
+The rights become refusals only under `:wagoe/authorization :enforce`, which
+`wagoe new` writes and the framework defaults to `:off`. In a new app only the
+platform admin from `bb create-admin` passes; a user needs a role on a group,
+Everyone included. The user module's own routes say `:public`, `:signed-in` or
+`:self`, so none needs a permission. Guide: `docs/modules/guides/pages/authorization.adoc`.
+
 - Roles: code roles come from the permission registry (`:permission-registry`);
   managed roles (`create-role`, `update-role`, `delete-role`) are stored in
   `user_roles` and may name only registry permissions and no code role's name.

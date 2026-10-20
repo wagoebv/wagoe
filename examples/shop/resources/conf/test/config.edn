@@ -19,6 +19,14 @@
     :migrate-on-start? true
     :pool              {:minimum-idle 1 :maximum-pool-size 5}}
 
+   ;; Every route needs a rule, or it answers 403: `:public true`,
+   ;; `:authorization :signed-in` or `:self`, a `:permission`, or its module's
+   ;; <module>/read and <module>/write, which a scaffolded module's routes get.
+   ;; A platform admin passes all of them; everyone else gets rights through a
+   ;; group's roles. `clojure -M:run authz-report` lists the routes.
+   :wagoe/authorization
+   {:mode :enforce}
+
    ;; INFO, not quieter: the port the app bound is logged at INFO, and
    ;; scripts/example-smoke.sh reads it from there.
    :wagoe/logging

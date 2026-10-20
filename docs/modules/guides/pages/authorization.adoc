@@ -1,0 +1,156 @@
+= Authorization: permissions, roles and scopes
+
+Signing in says who someone is. Authorization says what they may do: which
+routes they reach, which admin entities they see, and which records inside
+them. This guide covers declaring what can be granted, giving it to people,
+and moving an existing app onto enforcement. The reference is in the
+xref:libraries:platform.adoc[platform library] (registry, scopes, route
+rules) and the xref:libraries:admin.adoc[admin library] (entity access).
+
+== The model in one paragraph
+
+A *permission* is a keyword, `<module>/<action>`. A *role* bundles
+permissions. A *group* holds roles, each with an optional *scope* that narrows
+it to part of the data, such as one domain. A user holds the permissions of
+every role of every group they are in, plus those of the built-in group
+*Everyone*. A platform admin, a user with role `:admin` and no tenant, passes
+every check.
+
+== Modes
+
+`:wagoe/authorization {:mode ...}` in `config.edn` decides how hard the checks
+are:
+
+[cols="1,3"]
+|===
+| `:off` | Nothing is checked beyond sign-in. The framework default in 1.x, so an existing app is unaffected until it opts in.
+| `:report` | Nothing is refused. Each refusal `:enforce` would make is logged, with the user, route and permission.
+| `:enforce` | Refusals hold: a missing permission is a 403, a record outside the scope a 404.
+|===
+
+`wagoe new` writes `:mode :enforce` into the dev and test profiles, so a new
+app starts closed. In 2.0 `:enforce` becomes the default for every app.
+
+== Declaring permissions and roles
+
+Every module has `<module>/read` and `<module>/write` without declaring them,
+and the code roles `<module>/viewer` and `<module>/editor` holding them. A
+module declares only what does not fit, in a `def authorization` in its wiring
+namespace, or under `:authorization` in its `ig-config`:
+
+[source,clojure]
+----
+(def authorization
+  {:permissions {:orders/refund {:label "Refund orders"}}
+   :roles       {:orders/manager {:description "Everything in orders"
+                                  :permissions #{:orders/read :orders/write :orders/refund}}}})
+----
+
+`bb scaffold` writes this for a new module, with three code roles:
+`<module>/viewer`, `<module>/editor` and `<module>/manager`. Code roles ship
+with the code and are read-only in the UI. An administrator composes managed
+roles from the registry at `/web/admin/roles`, or duplicates a code role there
+to adapt it.
+
+The boot fails when a role or a route names a permission no module declares,
+so a typo is caught before a request is.
+
+== Giving routes a rule
+
+Each route falls under the first rule that matches:
+
+[source,clojure]
+----
+["/ping"     {:public true :get {:handler ping}}]                  ; nothing checked
+["/profile"  {:authorization :signed-in :get {:handler me}}]       ; any signed-in user
+["/users/:id" {:authorization :self :get {:handler user}}]         ; the handler checks
+["/refunds"  {:permission :orders/refund :post {:handler refund}}] ; that permission
+["/orders"   {:get {:handler list-all} :post {:handler create}}]   ; orders/read, orders/write
+----
+
+The last falls back on the module the route came from: `<module>/read` for GET
+and HEAD, `<module>/write` for the rest. A module's contributed routes carry
+their module, so a scaffolded module needs nothing more. A route with no rule
+and no module, such as one mounted by hand outside a module, is refused to all
+but a platform admin. A GET that writes needs an explicit `:permission`.
+
+`clojure -M:run authz-report` prints every route with its rule and permission,
+and the routes no rule covers, without starting the server. An app generated
+before the command existed can copy it from a new app's `main.clj`.
+
+== Scopes
+
+A scope key names part of the data a right can be narrowed to:
+
+[source,clojure]
+----
+{:scopes {:domain-id {:label "Domain" :entity :domains}}}
+----
+
+A route without `:scope` admits only holders whose right is unscoped.
+`:scope {:domain-id :path/domain-id}` checks a path parameter;
+`:scope :handler` leaves the filtering to the handler, through
+`scope/scope-filter`. In the admin an entity maps a key to a field with
+`:scope {:domain-id :domain-id}`, and lists, search and edits stay inside the
+user's scope. A value may also come from the user, so one group serves every
+department. The platform library has the details.
+
+== Assigning rights
+
+Administrators work in the user module's pages:
+
+* `/web/admin/groups`: members, and roles with an optional scope. Everyone
+  lists its roles, not its members.
+* `/web/admin/roles`: code roles, locked, and managed roles as a checklist of
+  the registry, grouped by module.
+* `/web/admin/permissions`: every permission, and who holds it.
+* A user's *Rights* tab: their groups, and each permission with the group,
+  role and scope it comes from. Add `:detail-tabs` to `admin/users.edn` to
+  show it beside the edit page.
+
+From code, `wagoe.user.ports/add-group-role` and `import-groups!` do the same;
+see xref:authentication.adoc[Authentication].
+
+Give Everyone the roles every user should have. In the admin, each entity has
+`admin.<entity>/read` and `admin.<entity>/write`, with the code roles
+`admin.<entity>/viewer` and `admin.<entity>/editor`; a user needs read on one
+entity to open `/web/admin`.
+
+== A new app
+
+A new app runs `:enforce` and has no users. Create the first admin, who
+passes every rule:
+
+[source,bash]
+----
+bb create-admin
+----
+
+Every other user signs in to a 403 on the module routes until an
+administrator gives one of their groups a role, say `product/viewer` on
+Everyone. The first boot with users already present gives Everyone every
+module's `editor` role, as an upgrade does (below), so check Everyone's roles
+when you created the admin before the first start.
+
+== Moving an existing app to `:enforce`
+
+. *Upgrade and start once.* The first start moves the old rights over, so
+  nobody can do less under `:enforce` than under `:off`, and nobody becomes an
+  admin: each group grant becomes a managed role, Everyone gets every module's
+  `editor` role, and users with role `:viewer` join a group called Readers.
+. *Find the routes without a rule.* Run `clojure -M:run authz-report`. Mark
+  each route it lists `:public`, `:authorization :signed-in` or `:self`, or
+  give it a `:permission`. Outside `:off` the boot logs the same list.
+. *Switch to `:report`* and run the app as usual. Each line `Authorization
+  would refuse this request under :enforce` names the user, route and
+  permission. Give the route a rule, or a group the role, until the lines stop.
+  Under `:report` the admin still admits role `:admin`; its refusals are logged
+  too.
+. *Check the admin.* A tenant user with role `:admin` is not a platform admin.
+  Under `:enforce` they need a group with `admin.<entity>/viewer` or `/editor`.
+  `:require-role` in the admin config is read by nothing; delete it.
+. *Switch to `:enforce`.* Then narrow Everyone: replace the `editor` roles the
+  upgrade gave it with what every user should have.
+
+If you use push notifications, the stats routes need `push/read`; give it to
+whoever reads them before switching.

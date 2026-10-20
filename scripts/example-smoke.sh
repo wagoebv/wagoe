@@ -41,14 +41,27 @@ grep -qE '(^|[^0-9])1 tests,' /tmp/shop-test.log \
   || { log_excerpt /tmp/shop-test.log 30; fail "the generated system test did not run"; }
 ok "the generated integration test passes through wagoe.test"
 
-clojure -M:run > /tmp/shop-smoke.log 2>&1 &
+# The app runs :wagoe/authorization :enforce, so the product routes need a
+# platform admin or product/read and /write. `bb create-admin` writes the admin
+# from a process of its own, which cannot reach the test profile's in-memory
+# H2, so these requests run on the dev profile's SQLite file. A shop-dev.db
+# already there is put back afterwards.
+DEV_DB=shop-dev.db
+if [ -e "$DEV_DB" ]; then mv "$DEV_DB" "$DEV_DB.smoke-backup"; fi
+# shellcheck disable=SC2317
+restore_dev_db() {
+  rm -f "$DEV_DB" "$DEV_DB-shm" "$DEV_DB-wal"
+  if [ -e "$DEV_DB.smoke-backup" ]; then mv "$DEV_DB.smoke-backup" "$DEV_DB"; fi
+}
+
+WAG_ENV=dev clojure -M:run > /tmp/shop-smoke.log 2>&1 &
 APP_PID=$!
 # shellcheck disable=SC2317
 cleanup() { kill "$APP_PID" 2>/dev/null || true; wait "$APP_PID" 2>/dev/null || true; }
-trap cleanup EXIT
+trap 'cleanup; restore_dev_db' EXIT
 
 wait_for_health /tmp/shop-smoke.log
-ok "boots on WAG_ENV=test with no external services"
+ok "boots on WAG_ENV=dev, on SQLite, with no external services"
 
 # Generated APIs require a signed-in user (BOU-539). Without one, a write is
 # refused before it reaches the handler.
@@ -65,7 +78,36 @@ CODE=$(curl -s -o /dev/null -w '%{http_code}' -X POST \
 [ "$CODE" = "303" ] || { log_excerpt /tmp/shop-smoke.log 30; fail "POST /web/register answered $CODE, expected 303"; }
 TOKEN=$(login_token "http://localhost:$PORT" smoke@example.test Example-pass-1)
 [ -n "$TOKEN" ] || fail "POST /api/v1/auth/login returned no jwt-token"
+USER_AUTH=(-H "Authorization: Bearer $TOKEN")
+
+# Signed in is not enough: in a new app nobody holds product/read until an
+# administrator gives one of their groups a product role.
+CODE=$(curl -s -o /dev/null -w '%{http_code}' "${USER_AUTH[@]}" "http://localhost:$PORT/api/v1/products")
+[ "$CODE" = "403" ] || fail "GET /api/v1/products without product/read answered $CODE, expected 403"
+ok "under :enforce, a signed-in user without product/read is refused"
+
+ADMIN_PW="Str0ng-Smoke-pass-9"
+printf '%s\n%s\n' "$ADMIN_PW" "$ADMIN_PW" \
+  | bb create-admin --env dev --email admin@example.test --name Admin > /tmp/shop-admin.log 2>&1 \
+  || { log_excerpt /tmp/shop-admin.log 20; fail "bb create-admin failed"; }
+grep -q "Admin user created successfully" /tmp/shop-admin.log \
+  || { log_excerpt /tmp/shop-admin.log 20; fail "bb create-admin did not create the admin"; }
+TOKEN=$(login_token "http://localhost:$PORT" admin@example.test "$ADMIN_PW")
+[ -n "$TOKEN" ] || fail "POST /api/v1/auth/login returned no jwt-token for the admin"
 AUTH=(-H "Authorization: Bearer $TOKEN")
+ok "the first admin, made with bb create-admin, gets in"
+
+# Everyone is the built-in group of every signed-in user. Given product/viewer,
+# the user reads products and still may not write them.
+CODE=$(curl -s -o /dev/null -w '%{http_code}' -X POST "${AUTH[@]}" --data-urlencode "role=product/viewer" \
+            "http://localhost:$PORT/web/admin/groups/00000000-0000-0000-0000-000000000001/roles")
+[ "$CODE" = "303" ] || fail "giving Everyone product/viewer answered $CODE, expected 303"
+CODE=$(curl -s -o /dev/null -w '%{http_code}' "${USER_AUTH[@]}" "http://localhost:$PORT/api/v1/products")
+[ "$CODE" = "200" ] || fail "GET /api/v1/products with product/viewer answered $CODE, expected 200"
+CODE=$(curl -s -o /dev/null -w '%{http_code}' -X POST "${USER_AUTH[@]}" -H "Content-Type: application/json" \
+            -d '{"name":"Tee","sku":"T-0","price":9.99}' "http://localhost:$PORT/api/v1/products")
+[ "$CODE" = "403" ] || fail "POST /api/v1/products with product/viewer answered $CODE, expected 403"
+ok "a role on Everyone gives product/read, and not product/write"
 
 # The point of the example: the scaffolded module serves a request. Asserting
 # on the status alone would pass on the framework's 404 handler, which also
@@ -105,10 +147,9 @@ CODE=$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:$PORT/api/produc
 ok "unversioned /api/products redirects to /api/v1"
 
 # The web route renders core/ui.clj from rows the service read out of the
-# database, so this is the one assertion here that needs a schema. It could not
-# be made until :migrate-on-start? existed: the test profile is in-memory H2
-# inside this process, so no separate `clojure -M:migrate up` can reach it, and
-# the request answered 500 with `Table "products" not found` (BOU-484, BOU-485).
+# database, so this is the one assertion here that needs a schema, which
+# :migrate-on-start? applies; without it the request answered 500 with
+# `Table "products" not found` (BOU-484, BOU-485).
 # Signed out, the page sends the browser to the login page (BOU-539).
 LOC=$(curl -s -o /dev/null -w '%{http_code} %{redirect_url}' "http://localhost:$PORT/web/products")
 case "$LOC" in
@@ -147,7 +188,7 @@ clojure -T:build uber > /tmp/shop-uber.log 2>&1 \
 java -jar target/shop-0.1.0.jar > /tmp/shop-jar.log 2>&1 &
 APP_PID=$!
 wait_for_health /tmp/shop-jar.log
-ok "the uberjar builds and boots"
+ok "the uberjar builds and boots on WAG_ENV=test with no external services"
 
 echo
 echo "✅ examples/todo and examples/shop both run against this checkout"

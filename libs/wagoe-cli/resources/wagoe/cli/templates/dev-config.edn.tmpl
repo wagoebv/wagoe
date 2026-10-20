@@ -55,6 +55,14 @@
    :wagoe/session-pruner
    {:enable-pruning true :retention-days 30 :interval-hours 6}
 
+   ;; Every route needs a rule, or it answers 403: `:public true`,
+   ;; `:authorization :signed-in` or `:self`, a `:permission`, or its module's
+   ;; <module>/read and <module>/write, which a scaffolded module's routes get.
+   ;; A platform admin passes all of them; everyone else gets rights through a
+   ;; group's roles. `clojure -M:run authz-report` lists the routes.
+   :wagoe/authorization
+   {:mode :enforce}
+
    :wagoe/logging
    {:provider :slf4j :level :debug}}
 
