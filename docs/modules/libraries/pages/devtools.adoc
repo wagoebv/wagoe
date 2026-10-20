@@ -80,7 +80,7 @@ Local web UI at `http://localhost:9999` providing live insight into the running 
 * Request capture middleware wraps the main HTTP handler (port 3000)
 * Dark theme CSS in `resources/dashboard/assets/dashboard.css`
 
-Editing a config value from the dashboard rebuilds the system, so `:wagoe/dashboard` also takes `:ig-config-fn` — a zero-argument function returning your Integrant config. Without it the config editor reports what is missing and the rest of the dashboard works as normal.
+Editing a config value from the dashboard rebuilds the system with the prep function your REPL gave `integrant.repl/set-prep!`. To rebuild from something else, set `:ig-config-fn` on `:wagoe/dashboard` to a zero-argument function returning your Integrant config. Functions in a config section are left out of the editor and kept when you apply.
 
 == Introspection & REPL Tools
 

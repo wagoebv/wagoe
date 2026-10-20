@@ -58,7 +58,9 @@
 (defn strip-refs
   "Replace ig/ref values with a keyword placeholder for serialization.
    Encodes the full qualified key (namespace + name) so restore-refs can
-   round-trip refs with any namespace, not just :wagoe/*."
+   round-trip refs with any namespace, not just :wagoe/*. Other records, an
+   ig/refset among them, are left whole: rebuilt as a plain map they would
+   be written back as one."
   [v]
   (cond
     (ig/ref? v) (let [k (ig/ref-key v)]
@@ -66,6 +68,7 @@
                            (if (namespace k)
                              (str (namespace k) "/" (name k))
                              (name k))))
+    (record? v) v
     (map? v) (reduce-kv (fn [m k val] (assoc m k (strip-refs val))) {} v)
     (sequential? v) (mapv strip-refs v)
     :else v))
@@ -86,6 +89,52 @@
     (map? v) (reduce-kv (fn [m k val] (assoc m k (restore-refs val))) {} v)
     (sequential? v) (mapv restore-refs v)
     :else v))
+
+(defn- edn-value?
+  "Whether `v` prints as something edn/read-string reads back."
+  [v]
+  (cond
+    (record? v) false
+    (map? v)    (every? (fn [[k x]] (and (edn-value? k) (edn-value? x))) v)
+    (coll? v)   (every? edn-value? v)
+    :else       (or (nil? v) (boolean? v) (number? v) (string? v) (keyword? v)
+                    ;; Not inst?: a java.time.Instant prints as #object.
+                    (symbol? v) (char? v) (instance? java.util.Date v) (uuid? v))))
+
+(defn strip-unreadable
+  "`v` without the map entries EDN cannot represent — a function, a live
+   object — so the editor shows what it can round-trip. Returns
+   `{:value v' :hidden [path ...]}`; :value is nil when `v` itself is
+   unreadable. ig/refs come back as strip-refs placeholders."
+  [v]
+  (letfn [(walk [x path]
+            (cond
+              (edn-value? x) [x []]
+              (and (map? x) (not (record? x)))
+              (reduce-kv (fn [[m hidden] k val]
+                           (if (edn-value? k)
+                             (let [[val' hidden'] (walk val (conj path k))]
+                               [(if (= ::hidden val') m (assoc m k val'))
+                                (into hidden hidden')])
+                             [m (conj hidden (conj path k))]))
+                         [{} []] x)
+              :else [::hidden [path]]))]
+    (let [[value hidden] (walk (strip-refs v) [])]
+      {:value  (when-not (= ::hidden value) value)
+       :hidden hidden})))
+
+(defn restore-unreadable
+  "Put back into `edited` what strip-unreadable hid from `original`, so
+   saving a section does not drop its functions. A wholly hidden `original`
+   comes back unchanged."
+  [original edited]
+  (reduce (fn [acc path]
+            (cond
+              (empty? path)                    (reduced original)
+              (map? (get-in acc (pop path)))   (assoc-in acc path (get-in original path))
+              :else                            acc))
+          edited
+          (:hidden (strip-unreadable original))))
 
 (defn format-config-tree
   "Format a config map as an indented string tree for display."

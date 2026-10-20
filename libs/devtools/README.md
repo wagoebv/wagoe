@@ -73,7 +73,7 @@ The `:wagoe/dashboard` Integrant component starts Jetty on port 9999. Pages:
 `/dashboard` (overview), `/routes`, `/requests`, `/schemas`, `/db`, `/errors`,
 `/jobs`, `/config`, `/security`, `/docs`.
 
-Editing a config value from the dashboard rebuilds the system, so `:wagoe/dashboard` also takes `:ig-config-fn` — a zero-argument function returning your Integrant config. Without it the config editor reports what is missing and the rest of the dashboard works as normal.
+Editing a config value from the dashboard rebuilds the system with the prep function your REPL gave `integrant.repl/set-prep!`. To rebuild from something else, set `:ig-config-fn` on `:wagoe/dashboard` to a zero-argument function returning your Integrant config. Functions in a config section are left out of the editor and kept when you apply.
 
 ## Documentation
 

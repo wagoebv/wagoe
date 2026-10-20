@@ -232,6 +232,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Dev dashboard config editor: saving a section holding a function failed, and Apply needed `:ig-config-fn`** (BOU-781).
+  Functions are left out of the editor and kept; Apply rebuilds with your `set-prep!` fn, so `:ig-config-fn` can go.
 - **The audit trail left the admin shell** (BOU-767): `/web/audit` now renders in it as an admin list, with filters in
   the URL, and its detail button works again. Nothing to do.
 - **Admin `:writer` entities could save a record without its many-to-many links, and kept join rows on hard delete**
