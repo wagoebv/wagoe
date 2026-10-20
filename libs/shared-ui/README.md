@@ -23,7 +23,8 @@ Pure functions from data to Hiccup. No I/O, no state, no HTTP.
 | Namespace | What it holds |
 |-----------|---------------|
 | `core.components` | Form controls — text, email, password, textarea, select, checkbox, button |
-| `core.table` | `data-table` with sortable headers, filter inputs, pagination or infinite scroll; `parse-table-params` reads the state back from the URL |
+| `core.table` | `data-table` with sortable headers, filter inputs, pagination or infinite scroll, and a `bulk-bar` for selected rows; `parse-table-params` reads the state back from the URL |
+| `core.toast` | The toast region, toasts swapped in out of band, and response helpers for a toast across an `HX-Redirect` or on a failed request |
 | `core.layout` | Page scaffolding shared by the module UIs |
 | `core.shell` | The admin shell: sidebar from nav data, topbar, user menu |
 | `core.icons` | The icon set those components reference |
