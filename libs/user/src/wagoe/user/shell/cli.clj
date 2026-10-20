@@ -232,11 +232,10 @@
   "Format error message based on output format. Takes a flat error map or the
    pipeline's error body, `{:error {:type :message :details}}`."
   [format-type error-data]
-  (let [body (if (map? (:error error-data)) error-data {:error error-data})
-        error-data (if (map? (:error error-data))
-                     (let [{:keys [details] :as e} (:error error-data)]
-                       (merge (when (map? details) details) (dissoc e :details)))
-                     error-data)
+  (let [[body error-data] (if-let [e (when (map? (:error error-data)) (:error error-data))]
+                            [error-data (merge (when (map? (:details e)) (:details e))
+                                               (dissoc e :details))]
+                            [{:error error-data} error-data])
         message (or (:message error-data) (:detail error-data) "Unknown error")
         ;; The violations, then whatever is genuinely absent. Every validation
         ;; error used to be printed as "Missing fields: :password", so a
@@ -252,12 +251,8 @@
                                         (when missing
                                           [(str "missing fields: "
                                                 (str/join ", " missing))])))))]
-    (case format-type
-      :json (format-json body)
-      :table (str "Error: " message
-                  (when details
-                    (str "\nDetails: " details)))
-      ;; Safe default: plain string formatting
+    (if (= :json format-type)
+      (format-json body)
       (str "Error: " message
            (when details
              (str "\nDetails: " details))))))
@@ -327,31 +322,10 @@
         result-context (interceptor/run-pipeline context pipeline)
         response (:response result-context)]
 
-    ;; Convert interceptor response format to CLI expected format
-    (cond
-      ;; Success case - CLI interceptor already formats correctly
-      (and response (= (:status response) 0))
-      response
-
-      ;; Success case - HTTP-style format (status 200)
-      (and response (= (:status response) 200))
-      {:status 0
-       :entity-type :user
-       :data (:body response)}
-
-      ;; Error case - response contains error details
-      (and response (not (#{0 200} (:status response))))
-      (let [error-body (:body response)
-            format-type (keyword (get opts :format "table"))]
-        {:status 1
-         :message (format-error format-type error-body)})
-
-      ;; Fallback - no response (shouldn't happen)
-      :else
-      {:status 1
-       :message (format-error (keyword (get opts :format "table"))
-                              {:type :internal-error
-                               :message "No response received from operation"})})))
+    ;; Errors arrive as an error body, which dispatch-command formats.
+    (or response
+        {:body {:error {:type "internal-error"
+                        :message "No response received from operation"}}})))
 
 (defn execute-user-get
   "Execute user get command using interceptor pipeline."
