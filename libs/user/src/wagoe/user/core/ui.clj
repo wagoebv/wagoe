@@ -107,7 +107,7 @@
   ([users table-query total-count]
    (users-table-fragment users table-query total-count {}))
   ([users table-query total-count filters]
-   (let [base-url      "/web/users/table"
+   (let [base-url      "/web/users"
          hx-target     "#users-table-container"
          table-params  (table-ui/table-query->params table-query)
          filter-params (table-ui/search-filters->params filters)]
@@ -170,7 +170,7 @@
                       :limit     20}
          total-count (count users)
          fragment    (users-table-fragment users table-query total-count {})]
-     (update fragment 1 assoc :hx-get "/web/users/table")))
+     (update fragment 1 assoc :hx-get "/web/users")))
   ([users table-query total-count]
    (users-table users table-query total-count {}))
   ([users table-query total-count filters]
@@ -307,14 +307,17 @@
      Hiccup structure for user detail form"
   ([user] (user-detail-form user nil))
   ([user errors]
-   (let [active? (boolean (:active user))]
+   (let [active? (boolean (:active user))
+         ;; outerHTML: the response is itself a #user-detail, so an innerHTML swap
+         ;; nests one inside the other and leaves a duplicate id behind (BOU-381).
+         put     {:hx-put    (str "/web/users/" (:id user))
+                  :hx-target "#user-detail"
+                  :hx-swap   "outerHTML"}
+         ;; An update with the form's values and `active` set: DELETE on this
+         ;; URL soft-deletes (BOU-681). hx-vals wins over the checkbox.
+         set-active (fn [v] (assoc put :type "button" :hx-vals (str "{\"active\":\"" v "\"}")))]
      [:div#user-detail
-      ;; outerHTML: the response is itself a #user-detail, so an innerHTML swap
-      ;; nests one inside the other and leaves a duplicate id behind (BOU-381).
-      [:form {:hx-put    (str "/web/users/" (:id user))
-              :hx-target "#user-detail"
-              :hx-swap   "outerHTML"
-              :class     "entity-form"}
+      [:form (assoc put :class "entity-form")
        (form-section
         [:t :user/form-detail-title]
         (ui/form-field :name [:t :common/label-name]
@@ -334,26 +337,20 @@
                        (:active errors)))
        [:div.form-actions.save-bar
         [:div.save-actions
-        ;; Show appropriate action button based on active status
          (if active?
-          ;; An update, like Reactivate: DELETE on this URL soft-deletes (BOU-681).
-           [:button.button.danger
-            {:type "button"
-             :onclick (str "if(confirm('Are you sure you want to deactivate this user?')) {"
-                           "const form = this.closest('form');"
-                           "form.querySelector('input[name=active]').checked = false;"
-                           "form.requestSubmit();"
-                           "}")}
+           [:button#deactivate-user.button.danger
+            (merge (set-active "false") (modal/confirm-attrs "deactivate-confirm"))
             [:t :user/button-deactivate]]
-          ;; Reactivate button for inactive users - uses the same update endpoint but sets active=true
-           [:button.button.primary
-            {:type "button"
-             :onclick (str "const form = this.closest('form');"
-                           "const activeCheckbox = form.querySelector('input[name=active]');"
-                           "activeCheckbox.checked = true;"
-                           "form.requestSubmit();")}
+           [:button#reactivate-user.button.primary (set-active "true")
             [:t :user/button-reactivate]])
-         (ui/submit-button [:t :user/button-update] {:loading-text [:t :user/button-update-loading]})]]]])))
+         (ui/submit-button [:t :user/button-update] {:loading-text [:t :user/button-update-loading]})]]]
+      ;; Outside the form: the modal holds forms of its own
+      (when active?
+        (modal/confirm-modal {:id            "deactivate-confirm"
+                              :title         [:t :user/button-deactivate]
+                              :message       [:t :user/confirm-deactivate]
+                              :confirm-label [:t :user/button-deactivate]
+                              :danger?       true}))])))
 
 (defn create-user-form
   "Generate a form for creating new users based on CreateUserRequest schema.
@@ -550,37 +547,25 @@
   "The bar that appears once users are selected: the action and how to stop.
    Inside the bulkSelection scope of the users page."
   []
-  [:div {:class      "bulk-bar"
-         :role       "region"
-         :aria-label [:t :admin/bulk-bar-label]
-         :x-show     "selectedIds.length > 0"
-         :x-cloak    true}
-   [:span {:class "bulk-count"}
-    [:span {:x-text "selectedIds.length"}] " " [:t :admin/bulk-selected]]
-   ;; htmx asks the form, not the button, to confirm a submit
-   [:form#bulk-action-form
-    (merge (modal/confirm-attrs "bulk-action-confirm")
-           {:hx-post    "/web/users/bulk"
-            :hx-target  "#users-table-container"
-            :hx-swap    "outerHTML"
-            :hx-include "[name='ids[]'], #users-table-container .table-state input"
-            :class      "flex flex-wrap items-center gap-2"
-            ;; The rows it acted on are gone or changed: start over
-            "hx-on::after-request" "if (event.detail.successful) window.dispatchEvent(new CustomEvent('bulk-clear'))"})
-    [:select#bulk-action-select {:name "action" :class "select select-sm"
-                                 :aria-label [:t :user/bulk-action-apply-title]}
-     [:option {:value "deactivate"} [:t :user/bulk-action-deactivate]]
-     [:option {:value "activate"} [:t :user/bulk-action-activate]]
-     [:option {:value "delete"} [:t :user/bulk-action-delete]]
-     [:option {:value "role-admin"} [:t :user/bulk-action-role-admin]]
-     [:option {:value "role-user"} [:t :user/bulk-action-role-user]]]
-    [:button#bulk-action-btn.button {:type "submit"} [:t :user/button-apply-bulk]]]
-   (modal/confirm-modal {:id      "bulk-action-confirm"
-                         :title   [:t :user/bulk-action-apply-title]
-                         :message [:t :user/confirm-bulk-action]})
-   [:button {:type "button" :class "button bulk-clear" :x-on:click "clearSelection()"}
-    [:t :admin/bulk-clear]
-    [:kbd "q"]]])
+  (table-ui/bulk-bar
+   {:form-attrs {:hx-post    "/web/users/bulk"
+                 :hx-target  "#users-table-container"
+                 :hx-swap    "outerHTML"
+                 :hx-include "[name='ids[]'], #users-table-container .table-state input"
+                 :class      "flex flex-wrap items-center gap-2"
+                 ;; The rows it acted on are gone or changed: start over
+                 "hx-on::after-request" "if (event.detail.successful) window.dispatchEvent(new CustomEvent('bulk-clear'))"}
+    :controls   [[:select#bulk-action-select {:name "action" :class "select select-sm"
+                                              :aria-label [:t :user/bulk-action-apply-title]}
+                  [:option {:value "deactivate"} [:t :user/bulk-action-deactivate]]
+                  [:option {:value "activate"} [:t :user/bulk-action-activate]]
+                  [:option {:value "delete"} [:t :user/bulk-action-delete]]
+                  [:option {:value "role-admin"} [:t :user/bulk-action-role-admin]]
+                  [:option {:value "role-user"} [:t :user/bulk-action-role-user]]]
+                 [:button#bulk-action-btn.button {:type "submit"} [:t :user/button-apply-bulk]]]
+    :confirm    {:id      "bulk-action-confirm"
+                 :title   [:t :user/bulk-action-apply-title]
+                 :message [:t :user/confirm-bulk-action]}}))
 
 (defn users-page
   "Complete users listing page.
@@ -614,7 +599,7 @@
          filters     (or (:filters opts) {})
          ;; Page one, sorted as now, with the other filter's value
          filter-opts (fn [other]
-                       {:url        "/web/users/table"
+                       {:url        "/web/users"
                         :hx-target  "#users-table-container"
                         :hx-include (str "#users-table-container .table-sort input, " other)})]
      (admin-page

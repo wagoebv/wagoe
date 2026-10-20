@@ -19,7 +19,6 @@
             [wagoe.shared.ui.core.layout :as layout]
             [wagoe.shared.ui.core.form :as form]
             [wagoe.shared.ui.core.htmx :as htmx]
-            [wagoe.shared.ui.core.table :as table-ui]
             [wagoe.shared.ui.core.toast :as toast]
             [wagoe.platform.core.http.client-ip :as client-ip]
             [wagoe.platform.shell.web.table :as web-table]
@@ -35,7 +34,6 @@
             [wagoe.user.shell.middleware :as user-middleware]
             [wagoe.user.shell.mfa :as mfa]
             [wagoe.user.shell.oidc :as oidc]
-            [cheshire.core :as cheshire]
             [clojure.edn :as edn]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
@@ -206,28 +204,17 @@
                  (layout/pilot-page-layout "Error" (ui/error-message [:t :common/error-generic]))
                  500))
 
-(defn- toast-json
-  "A toast for components.js as header-safe JSON; `message` a string or a
-   catalogue key, translated for `request`."
-  [request type message]
+(defn- toast-text
+  "`message`, a string or a catalogue key, as text for `request`."
+  [request message]
   (let [t (or (i18n-middleware/resolve-t-fn request) (:i18n/t request) name)]
-    (cheshire/generate-string {:type type :message (if (keyword? message) (t message) message)}
-                              {:escape-non-ascii true})))
+    (if (keyword? message) (t message) message)))
 
-(defn- redirect-with-toast
-  "Sends htmx to `location` with a toast to show there: components.js keeps
-   the X-Toast across the redirect."
-  [request location type message]
-  (-> (response/response "")
-      (response/header "HX-Redirect" location)
-      (response/header "X-Toast" (toast-json request type message))))
+(defn- redirect-with-toast [request location type message]
+  (toast/redirect-with-toast location type (toast-text request message)))
 
-(defn- with-error-toast
-  "Failed `response` with `message` as a toast: htmx swaps no 4xx/5xx body,
-   so a button's request would fail silently."
-  [response request message]
-  (assoc-in response [:headers "HX-Trigger"]
-            (str "{\"showToast\":" (toast-json request :error message) "}")))
+(defn- with-error-toast [response request message]
+  (toast/with-error-toast response (toast-text request message)))
 
 (defn- user-facing-message
   "The message of an ex-info whose type says its text was written for the
@@ -332,34 +319,41 @@
           (response/redirect (landing-path config (:user session) request))
           (html-response request (user-ui/web-root-page {})))))))
 
+(defn- users-list
+  "The users table's users, table query, total and filters for `query-params`."
+  [user-service query-params]
+  (let [table-query (web-table/parse-table-query
+                     query-params
+                     {:default-sort      :created-at
+                      :default-dir       :desc
+                      :default-page-size 20})
+        filters     (web-table/parse-search-filters query-params)
+        result      (user-ports/list-users user-service (build-user-list-opts table-query filters))]
+    [(:users result) table-query (:total-count result) filters]))
+
 (defn users-page-handler
-  "Handler for the users listing page (GET /web/users).
-   
-   Fetches users from the user service and renders them in a table, with
-   support for shared search filters (q, role, status)."
+  "Handler for the users listing page (GET /web/users), with shared search
+   filters (q, role, status). The table's controls request this URL and push
+   it, so the address bar holds sort, filters and page; they get the table
+   fragment back."
   [user-service _config]
   (fn [request]
     (try
-      (let [qp          (:query-params request)
-            table-query (web-table/parse-table-query
-                         qp
-                         {:default-sort      :created-at
-                          :default-dir       :desc
-                          :default-page-size 20})
-            filters     (web-table/parse-search-filters qp)
-            list-opts   (build-user-list-opts table-query filters)
-            users-result (user-ports/list-users user-service list-opts)
-            page-opts    {:user        (get request :user)
-                          :flash       (get request :flash)
-                          :table-query table-query
-                          :filters     filters}]
-        (html-response request
-                       (user-ui/users-page
-                        (:users users-result)
-                        (:total-count users-result)
-                        page-opts)))
+      (let [[users table-query total-count filters] (users-list user-service (:query-params request))]
+        ;; One URL, two bodies: a cache must not answer one with the other
+        (-> (html-response request
+                           (if (htmx/fragment-request? (:headers request) ["users-table-container"])
+                             (user-ui/users-table-fragment users table-query total-count filters)
+                             (user-ui/users-page users total-count
+                                                 {:user        (:user request)
+                                                  :flash       (:flash request)
+                                                  :table-query table-query
+                                                  :filters     filters})))
+            (response/header "Vary" "HX-Request, HX-Target")))
       (catch Exception e
-        (server-error-page request e "Error in users-page-handler")))))
+        (if (htmx/fragment-request? (:headers request) ["users-table-container"])
+          (server-error request e "Error in users-page-handler")
+          (server-error-page request e "Error in users-page-handler"))))))
 
 (defn user-detail-page-handler
   "Handler for individual user detail page (GET /web/users/:id).
@@ -680,7 +674,7 @@
         (if (= :oidc/mfa-failed (get-in result [:error :type]))
           (html-response request
                          (user-ui/oidc-mfa-page {:mfa-code [[:t :user/oidc-mfa-invalid]]}
-                                               (sign-in-opts config request))
+                                                (sign-in-opts config request))
                          401)
           (oidc-outcome request config result)))
       (catch Exception e
@@ -816,31 +810,13 @@
 ;; HTMX Fragment Handlers
 ;; =============================================================================
 (defn users-table-fragment-handler
-  "Handler for refreshing the users table (GET /web/users/table).
-
-   Returns only the table container fragment for HTMX replacement."
+  "Handler for the users table fragment (GET /web/users/table), for callers
+   that ask for the table alone. The table's own controls request /web/users."
   [user-service _config]
   (fn [request]
     (try
-      (let [qp          (:query-params request)
-            table-query (web-table/parse-table-query
-                         qp
-                         {:default-sort      :created-at
-                          :default-dir       :desc
-                          :default-page-size 20})
-            filters     (web-table/parse-search-filters qp)
-            list-opts   (build-user-list-opts table-query filters)
-            users-result (user-ports/list-users user-service list-opts)]
-        (cond-> (html-response request
-                               (user-ui/users-table-fragment
-                                (:users users-result)
-                                table-query
-                                (:total-count users-result)
-                                filters))
-          ;; The address bar shows the page, not this fragment, whichever
-          ;; control asked: sort, page, search or role
-          (get-in request [:headers "hx-request"])
-          (assoc-in [:headers "HX-Push-Url"] (table-ui/list-url "/web/users" table-query filters))))
+      (html-response request
+                     (apply user-ui/users-table-fragment (users-list user-service (:query-params request))))
       (catch Exception e
         (server-error request e "Error in users-table-fragment-handler")))))
 
@@ -850,7 +826,7 @@
    Supports multiple actions: deactivate, activate, delete, role changes.
    Returns the updated users table fragment using the same query
    parameters and filters as the current view."
-  [user-service config]
+  [user-service _config]
   (fn [request]
     (try
       (let [form-params (:form-params request)
@@ -865,13 +841,7 @@
             ;; Merge query params from URL and hidden form fields to
             ;; preserve current filters and table state during bulk ops
             qp          (merge (:query-params request)
-                               (select-keys form-params ["q" "role" "status" "sort" "dir" "page" "page-size"]))
-            _table-query (web-table/parse-table-query
-                          qp
-                          {:default-sort      :created-at
-                           :default-dir       :desc
-                           :default-page-size 20})
-            _filters     (web-table/parse-search-filters qp)]
+                               (select-keys form-params ["q" "role" "status" "sort" "dir" "page" "page-size"]))]
         (when (or (empty? ids) (str/blank? (str action)))
           (throw (ex-info "No users selected or action missing"
                           {:type :bad-request})))
@@ -908,10 +878,7 @@
           (throw (ex-info "Unsupported bulk action"
                           {:type :bad-request
                            :action action})))
-        ;; After bulk operation, reuse users-table-fragment-handler logic
-        (let [fragment-handler (users-table-fragment-handler user-service config)
-              get-request      {:query-params qp}]
-          (fragment-handler get-request)))
+        (html-response request (apply user-ui/users-table-fragment (users-list user-service qp))))
       (catch IllegalArgumentException _
         (-> (html-response request (ui/error-message "Invalid user ID in bulk operation") 400)
             (with-error-toast request "Invalid user ID in bulk operation")))
@@ -1054,11 +1021,12 @@
             form-data (:form-params request)
             _ (log/info "Update user form data" {:fields (keys form-data)})
             ;; Prepare data with kebab-case keyword keys for validation
-            ;; Note: Checkbox fields are "on" when checked, absent when unchecked
+            ;; The checkbox sends "false" from its hidden input and, checked,
+            ;; "true" after it; the Deactivate/Reactivate buttons send one value
             prepared-data {:name (get form-data "name")
                            :email (get form-data "email")
                            :role (when-let [role (get form-data "role")] (keyword role))
-                           :active (= "on" (get form-data "active"))}
+                           :active (contains? #{"on" "true"} (form/value form-data :active))}
             _ (log/info "Prepared data for update" {:prepared-data prepared-data})
             [valid? validation-errors _] (validate-request-data user-schema/UpdateUserRequest prepared-data)]
         (if-not valid?

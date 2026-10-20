@@ -61,3 +61,15 @@
     (is (str/starts-with? (:body resp) "<tr>row</tr><div hx-swap-oob=\"beforeend:#toasts\"><div class=\"alert alert-warning")))
   (testing "an empty body"
     (is (= "<div>t</div>" (:body (toast/with-toast {} {:message "m"} (constantly "<div>t</div>")))))))
+
+(deftest ^:unit header-toasts-are-ascii-json
+  (testing "a redirect carries its toast in X-Toast"
+    (is (= {:status  200
+            :headers {"HX-Redirect" "/web/users"
+                      "X-Toast"     "{\"type\":\"success\",\"message\":\"Verwijderd \\\"\\u00E9\\\"\"}"}
+            :body    ""}
+           (toast/redirect-with-toast "/web/users" :success "Verwijderd \"é\""))))
+  (testing "a failed response names its toast in HX-Trigger, keeping its status"
+    (is (= {:status  409
+            :headers {"HX-Trigger" "{\"showToast\":{\"type\":\"error\",\"message\":\"No\"}}"}}
+           (toast/with-error-toast {:status 409} "No")))))
