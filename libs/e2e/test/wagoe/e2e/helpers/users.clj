@@ -104,9 +104,9 @@
     setup))
 
 (defn disable-mfa!
-  "POST /api/v1/auth/mfa/disable — no body."
-  [session-token]
-  (api-post "/api/v1/auth/mfa/disable" {} {:cookie session-token}))
+  "POST /api/v1/auth/mfa/disable — `proof` is {:password …} or {:code …}."
+  [session-token proof]
+  (api-post "/api/v1/auth/mfa/disable" proof {:cookie session-token}))
 
 (defn mfa-status
   "GET /api/v1/auth/mfa/status — returns response with body."

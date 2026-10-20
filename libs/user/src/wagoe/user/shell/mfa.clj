@@ -9,7 +9,10 @@
    
    All I/O and side effects happen here. Pure business logic
    is delegated to wagoe.user.core.mfa."
-  (:require [wagoe.user.core.mfa :as mfa-core]
+  (:require [wagoe.user.core.audit :as audit-core]
+            [wagoe.user.core.authentication :as auth-core]
+            [wagoe.user.core.mfa :as mfa-core]
+            [wagoe.user.ports :as ports]
             [wagoe.user.shell.mfa-crypto :as mfa-crypto]
             [buddy.hashers :as hashers]
             [one-time.core :as otp]
@@ -155,11 +158,17 @@
    Args:
      user-repository: IUserRepository implementation
      config: MFA configuration map
+     opts: optional :audit-repository, which records a disable, and
+           :auth-config, whose lockout policy a wrong disable proof counts
+           towards
      
    Returns:
      MFAService instance"
-  [user-repository config]
-  (->MFAService user-repository config))
+  ([user-repository config]
+   (create-mfa-service user-repository config {}))
+  ([user-repository config opts]
+   (merge (->MFAService user-repository config)
+          (select-keys opts [:audit-repository :auth-config]))))
 
 (defn setup-mfa
   "Initiate MFA setup for a user.
@@ -253,45 +262,6 @@
          :error {:type    :mfa-enable-failed
                  :message "Enabling MFA failed"}}))))
 
-(defn disable-mfa
-  "Disable MFA for a user.
-   
-   Args:
-     mfa-service: MFAService instance
-     user-id: UUID of user disabling MFA
-     
-   Returns:
-     `{:success? true}`, or `{:success? false :error {:type … :message …}}` —
-     the ADR-036 §3 shape. `:type` is `:cannot-disable` or
-     `:mfa-disable-failed`."
-  [mfa-service user-id]
-  (let [{:keys [user-repository]} mfa-service]
-    (try
-      (let [user (.find-user-by-id user-repository user-id)
-            can-disable (mfa-core/can-disable-mfa? user)]
-        (if (:can-disable? can-disable)
-          ;; Disable MFA
-          (let [updates (mfa-core/prepare-mfa-disablement user)]
-            (.update-user user-repository (assoc updates :id (:id user)))
-            {:success? true})
-          ;; Cannot disable MFA
-          {:success? false
-           :error {:type    :cannot-disable
-                   :message (:reason can-disable)}}))
-      (catch Exception e
-        (log/error e "MFA disable failed")
-        {:success? false
-         :error {:type    :mfa-disable-failed
-                 :message "Disabling MFA failed"}}))))
-
-(defn password-matches?
-  "Whether `password` is `user-id`'s, to confirm turning MFA off. Read from the
-   repository: the user service never hands out the hash."
-  [mfa-service user-id password]
-  (let [user (.find-user-by-id (:user-repository mfa-service) user-id)]
-    (boolean (and password (:password-hash user)
-                  (hashers/check password (:password-hash user))))))
-
 (defn- find-unused-backup-code-hash
   "Return the stored bcrypt hash that the presented plaintext `code` matches and
    that has not already been used, or nil. Constant-time per candidate."
@@ -335,6 +305,106 @@
        :code-hash used-hash}
       {:valid? false
        :used-backup-code? false})))
+
+(defn- spend-backup-code!
+  "Spend hash `h`. The write is conditional on the codes being as read; when a
+   parallel login changed them, it is tried again against a fresh read, unless
+   that login spent `h`, which makes the code wrong here (BOU-708). Each lost
+   write means another code was spent, so it ends within one try per code."
+  [user-repository user h]
+  (loop [user user, tries (count (:mfa-backup-codes user))]
+    (or (ports/consume-backup-code user-repository user h)
+        (when-let [fresh (and (pos? tries) (ports/find-user-by-id user-repository (:id user)))]
+          (and (= (:mfa-backup-codes fresh) (:mfa-backup-codes user))
+               (not (some #{h} (:mfa-backup-codes-used fresh)))
+               (recur fresh (dec tries)))))))
+
+(defn check-code!
+  "Verify `code`, spending it when it is a backup code."
+  [user-repository user code]
+  (let [check (verify-mfa-code nil user code)]
+    (if (or (not (:used-backup-code? check))
+            (spend-backup-code! user-repository user (:code-hash check)))
+      check
+      {:valid? false :used-backup-code? false})))
+
+(defn- proof-holds?
+  "Whether `password` is the user's, or `code` a current TOTP or unused backup
+   code, which it spends. The password goes first so a backup code is not
+   spent when it was not needed."
+  [user-repository user {:keys [password code]}]
+  (boolean (or (and (not (str/blank? password)) (:password-hash user)
+                    (hashers/check password (:password-hash user)))
+               (and (not (str/blank? code))
+                    (:valid? (check-code! user-repository user code))))))
+
+(defn- audit-disable!
+  "Record the disable; a failed write is logged and does not undo it."
+  [audit-repository user {:keys [ip-address user-agent]}]
+  (when audit-repository
+    (try
+      (ports/create-audit-log audit-repository
+                              (audit-core/mfa-disabled-audit-entry (:id user) (:email user)
+                                                                   ip-address user-agent))
+      (catch Exception e
+        (log/warn e "Could not audit an MFA disable" {:user-id (:id user)})))))
+
+(defn disable-mfa
+  "Turn MFA off for `user-id` once they prove it is them: `proof` is
+   `{:password …}` or `{:code …}`, a current TOTP or backup code, the only
+   proof a user without a password has. A wrong proof counts as a failed
+   login, so guessing locks the account as at sign-in, and a locked account
+   cannot disable. `request-context` carries :ip-address and :user-agent for
+   the audit entry.
+
+   Returns `{:success? true}`, or `{:success? false :error {:type … :message …}}`
+   — the ADR-036 §3 shape. `:type` is `:cannot-disable`, `:proof-required`,
+   `:invalid-proof`, `:account-locked` (with `:retry-after`) or
+   `:mfa-disable-failed`."
+  [mfa-service user-id proof request-context]
+  (let [{:keys [user-repository audit-repository auth-config]} mfa-service]
+    (try
+      (let [now     (Instant/now)
+            user    (ports/find-user-by-id user-repository user-id)
+            can     (mfa-core/can-disable-mfa? user)
+            allowed (when user (auth-core/should-allow-login-attempt? user auth-config now))]
+        (cond
+          (not (:can-disable? can))
+          {:success? false :error {:type :cannot-disable :message (:reason can)}}
+
+          (:retry-after allowed)
+          {:success? false :error {:type        :account-locked
+                                   :message     "Too many failed attempts, try again later"
+                                   :retry-after (:retry-after allowed)}}
+
+          (not (:allowed? allowed))
+          {:success? false :error {:type :cannot-disable :message (:reason allowed)}}
+
+          (every? str/blank? ((juxt :password :code) proof))
+          {:success? false :error {:type    :proof-required
+                                   :message "Confirm with your password or an authentication code"}}
+
+          (not (proof-holds? user-repository user proof))
+          (do (ports/increment-failed-login-count user-repository user-id
+                                                  (auth-core/failed-login-lockout auth-config now))
+              {:success? false :error {:type :invalid-proof :message "Incorrect password or code"}})
+
+          :else
+          (do (ports/update-user user-repository
+                                 (assoc (mfa-core/prepare-mfa-disablement user) :id (:id user)))
+              (audit-disable! audit-repository user request-context)
+              {:success? true})))
+      (catch Exception e
+        (log/error e "MFA disable failed")
+        {:success? false
+         :error {:type    :mfa-disable-failed
+                 :message "Disabling MFA failed"}}))))
+
+(defn has-password?
+  "Whether `user-id` can sign in with a password; a user who signs in only
+   through OIDC has none. Read from the repository, which keeps the hash."
+  [mfa-service user-id]
+  (boolean (:password-hash (ports/find-user-by-id (:user-repository mfa-service) user-id))))
 
 (defn get-mfa-status
   "Get MFA status for a user.

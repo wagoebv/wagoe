@@ -174,6 +174,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Changed
 
+- **`POST /api/auth/mfa/disable` needs `password` or a TOTP/backup `code`** (BOU-782); wrong ones count towards the
+  lockout. Send one from your API clients.
 - **One dashboard, the admin's home, for every signed-in user** (BOU-765): everyone lands on `/web/admin/`, and
   `/web/dashboard` redirects there (to `/web/profile` without the admin). Nothing to do.
 - **`:role` is `:admin` or none** (BOU-771): rights come from groups, and only a platform admin sets or clears
@@ -242,6 +244,8 @@ for what is public API, what is internal, and how deprecations are announced.
 - **Admin sidebar: a long group name pushed its icon and chevron out, and hovered items were white on white** in the
   light theme (BOU-780). Long names truncate with the full name as a tooltip. Nothing to do.
 - **Turning off two-factor authentication on the profile refused every password** (BOU-768). Nothing to do.
+- **A stolen session could turn MFA off, or guess the password on the profile's disable form** (BOU-782). Upgrade if
+  you use MFA. OIDC-only users can now turn it off with a code.
 - **Dev dashboard config editor: saving a section holding a function failed, and Apply needed `:ig-config-fn`** (BOU-781).
   Functions are left out of the editor and kept; Apply rebuilds with your `set-prep!` fn, so `:ig-config-fn` can go.
 - **The audit trail left the admin shell** (BOU-767): `/web/audit` now renders in it as an admin list, with filters in

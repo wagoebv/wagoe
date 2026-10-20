@@ -244,7 +244,7 @@
    `:permanent-delete` did (BOU-682)."
   [:create :update :delete :permanent-delete :activate :deactivate :role-change
    :bulk-action :login :logout :session-revoked :group-join :group-leave :grant-add :grant-remove
-   :data-export])
+   :data-export :mfa-disabled])
 
 (def UserAuditLog
   "Schema for User Audit Log entity - tracks all user-related actions for compliance and security.

@@ -498,7 +498,7 @@
                  (:error (body-of resp)))))))
 
     (testing "disable"
-      (with-redefs [mfa/disable-mfa (fn [_ _] failure)]
+      (with-redefs [mfa/disable-mfa (fn [_ _ _ _] failure)]
         (let [resp ((user-http/mfa-disable-handler nil) request)]
           (is (= 400 (:status resp)))
           (is (= {:type "validation-error" :message "Invalid verification code"
@@ -551,3 +551,32 @@
           (is (= 500 (:status resp)))
           (is (= "internal-error" (get-in (json/parse-string (:body resp) true) [:error :type])))
           (is (not (re-find #"hunter2|jdbc" (:body resp))) (:body resp)))))))
+
+(deftest ^:unit ^:security mfa-disable-endpoint-needs-proof
+  ;; It turned MFA off for any signed-in caller, so a stolen token could remove
+  ;; the second factor (BOU-782).
+  (let [id      (UUID/randomUUID)
+        users   (atom {id {:id id :email "m@example.com" :active true :mfa-enabled true
+                           :mfa-secret "JBSWY3DPEHPK3PXP" :mfa-backup-codes [] :mfa-backup-codes-used []
+                           :password-hash (auth/hash-password "Right-Pass-1!")}})
+        handler (user-http/mfa-disable-handler
+                 (mfa/create-mfa-service (mem/->MemoryUserRepository users) {}
+                                         {:auth-config {:max-failed-attempts 2}}))
+        post    #(handler {:user {:id id} :body-params %})
+        reason  #(get-in (json/parse-string (:body %) true) [:error :details :reason])]
+    (testing "no proof"
+      (let [resp (post {})]
+        (is (= 400 (:status resp)))
+        (is (= "proof-required" (reason resp)))))
+    (testing "a wrong password, twice, locks the account"
+      (is (= "invalid-proof" (reason (post {:password "wrong"}))))
+      (post {:password "wrong"})
+      (let [resp (post {:password "Right-Pass-1!"})]
+        (is (= 429 (:status resp)))
+        (is (= "account-locked" (get-in resp [:body :error :type])))
+        (is (get-in resp [:headers "Retry-After"]))))
+    (is (true? (get-in @users [id :mfa-enabled])))
+    (testing "the right password, once the lockout has passed"
+      (swap! users update id dissoc :lockout-until)
+      (is (= 200 (:status (post {:password "Right-Pass-1!"}))))
+      (is (false? (get-in @users [id :mfa-enabled]))))))

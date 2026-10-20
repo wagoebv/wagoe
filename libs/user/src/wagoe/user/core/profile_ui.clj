@@ -476,7 +476,9 @@
 ;; =============================================================================
 
 (defn mfa-disable-confirm-page
-  "Display MFA disable confirmation page with password verification.
+  "Display MFA disable confirmation page: the password or an authentication
+   code confirms it; a user without a password (OIDC only) gets only the code.
+   opts may carry :has-password? (default true).
    
    Args:
      errors: Validation errors map (optional)
@@ -485,7 +487,7 @@
    Returns:
      Complete HTML page for MFA disable confirmation"
   ([errors] (mfa-disable-confirm-page errors {}))
-  ([errors opts]
+  ([errors {:keys [has-password?] :or {has-password? true} :as opts}]
    (page-layout
     [:t :user/mfa-disable-title]
     [:div.profile-content.profile-grid
@@ -494,12 +496,17 @@
       " " [:t :user/mfa-disable-warning]]
      [:div.profile-card
       [:div.card-body
-       [:p [:t :user/mfa-disable-prompt]]
+       [:p [:t (if has-password? :user/mfa-disable-prompt :user/mfa-disable-prompt-code)]]
        [:form {:method "POST" :action "/web/profile/mfa/disable"}
         (csrf/hidden-field)
-        (ui/form-field :password [:t :user/password-field-current]
-                       (ui/password-input :password "" {:required true})
-                       (:password errors))
+        (when has-password?
+          (ui/form-field :password [:t :user/password-field-current]
+                         (ui/password-input :password "" {:autocomplete "current-password"})
+                         (:password errors)))
+        (ui/form-field :code [:t :user/mfa-disable-code-label]
+                       (ui/text-input :code "" {:autocomplete "one-time-code"
+                                                :required (not has-password?)})
+                       (:code errors))
         [:div.form-actions
          [:button.button.danger {:type "submit"}
           (icons/icon :unlock {:size 16})
