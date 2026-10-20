@@ -344,6 +344,9 @@
               [:has-many [:sequential HasManyEntry]]
               [:parent-context (closed-map :label :fields)]
               [:permissions (closed-map :create :create-hint)]
+              ;; Scope key -> the field it lies in, or a fn (a symbol in EDN)
+              ;; from the allowed values to a HoneySQL condition (ADR-041 §4)
+              [:scope [:map-of :keyword [:or :keyword :symbol fn?]]]
               [:query-overrides (closed-map :from :join :select :field-aliases :soft-delete-table)]
               [:split-table-update (closed-map :secondary-table :secondary-fields)]
               [:workflow [:map {:closed true} [:entity-type :keyword]]]
@@ -432,7 +435,13 @@
     [:string {:min 1}]]
    [:filters {:optional true
               :description "Advanced field-specific filters (Week 2)"}
-    [:map-of :keyword FieldFilter]]])
+    [:map-of :keyword FieldFilter]]
+   [:scopes {:optional true
+             :description "Resolved scopes (ADR-041 §4); only rows inside one of them"}
+    [:vector [:map-of :keyword [:set :any]]]]
+   [:ids {:optional true
+          :description "Only these records"}
+    [:sequential :any]]])
 
 ;; =============================================================================
 ;; Action Schemas

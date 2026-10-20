@@ -141,3 +141,49 @@
     (is (not (contains? (:components (wiring/ig-config {} {:config {:active {}}}))
                         :wagoe/admin))
         "a warning on every correct application is a warning nobody reads")))
+
+(defn- with-mode [mode]
+  {:config {:active {:wagoe/authorization {:mode mode}}}})
+
+(deftest ^:unit every-admin-entity-has-viewer-and-editor-roles
+  (is (= {:admin.orders/viewer #{:admin.orders/read}
+          :admin.orders/editor #{:admin.orders/read :admin.orders/write}}
+         (-> (wiring/ig-config {:entity-discovery {:mode :allowlist :allowlist #{:orders}}} {})
+             (get-in [:authorization :roles])
+             (update-vals :permissions)))))
+
+(deftest ^:unit rights-are-wired-only-when-authorization-checks
+  (let [routes (fn [ctx] (get-in (wiring/ig-config {} ctx) [:components :wagoe/admin-routes]))]
+    (testing ":off wires what it always did"
+      (is (not-any? (routes {}) [:permission-registry :rights]))
+      (is (= :off (get-in (routes {}) [:config :authorization-mode]))))
+    (testing ":report and :enforce read the registry and the user's rights"
+      (doseq [mode [:report :enforce]]
+        (is (= mode (get-in (routes (with-mode mode)) [:config :authorization-mode])))
+        (is (= (ig/ref :wagoe/permission-registry) (:permission-registry (routes (with-mode mode)))))
+        (is (= (ig/ref :wagoe/user-group-service) (:rights (routes (with-mode mode)))))))))
+
+(deftest ^:unit require-role-is-deprecated-once-authorization-checks
+  (log-test/with-log
+    (wiring/ig-config {:require-role :admin} {})
+    (is (not (log-test/logged? 'wagoe.admin.shell.module-wiring :warn #":require-role")) ":off says nothing"))
+  (log-test/with-log
+    (wiring/ig-config {:require-role :admin} (with-mode :enforce))
+    (is (log-test/logged? 'wagoe.admin.shell.module-wiring :warn #"DEPRECATED :require-role.*removed in 2\.0")))
+  (log-test/with-log
+    (wiring/ig-config {} (with-mode :enforce))
+    (is (not (log-test/logged? 'wagoe.admin.shell.module-wiring :warn #":require-role"))
+        "the defaults carry it; a config without it is not warned")))
+
+(defn order-domain
+  "A relation condition, named by symbol as config.edn would."
+  [ids]
+  [:in :order_id {:select [:id] :from [:orders] :where [:in :domain_id ids]}])
+
+(deftest ^:unit a-scope-symbol-resolves-to-its-fn-at-boot
+  (let [scope (fn [s] (get-in (wiring/ig-config {:entities {:lines {:scope s}}} {})
+                              [:components :wagoe/admin-routes :config :entities :lines :scope]))]
+    (is (= order-domain (:domain-id (scope {:domain-id `order-domain}))))
+    (is (= {:domain-id :domain-id} (scope {:domain-id :domain-id})))
+    (is (thrown-with-msg? clojure.lang.ExceptionInfo #"resolves to nothing"
+                          (scope {:domain-id 'no.such/condition})))))

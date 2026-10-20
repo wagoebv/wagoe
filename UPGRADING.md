@@ -42,6 +42,15 @@ level: 2.0 keys there, such as `:securityDefinitions` and `:basePath`, move to
 `wagoe-platform` no longer brings in `metosin/reitit-swagger`. Add it to your
 own deps if you require `reitit.swagger`.
 
+### 2. The admin checks permissions under `:enforce` (BOU-774)
+
+Nothing changes under `:wagoe/authorization {:mode :off}`, the default. Under
+`:enforce` the admin admits a platform admin and holders of
+`admin.<entity>/read|write`, not role `:admin`: a tenant `:admin` needs a group
+with an `admin.<entity>/viewer` or `/editor` role. Run `:report` first; it logs
+each refusal `:enforce` would make. Map scope keys on an entity with `:scope`
+(see the admin docs). `:require-role` is deprecated and goes in 2.0; drop it.
+
 ## beta-5 → beta-6 (error shapes)
 
 ### 1. `wagoe.user.shell.auth/authenticate-user` and the MFA shell return `:error` as a map (BOU-323)

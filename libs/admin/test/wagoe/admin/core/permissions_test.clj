@@ -307,3 +307,62 @@
       (let [config {:require-role :admin}
             perms (permissions/get-admin-permissions admin-user config)]
         (is (true? (:can-access-admin perms)))))))
+
+;; =============================================================================
+;; Rights (ADR-041 §6)
+;; =============================================================================
+
+(def ^:private orders-config {:scope {:domain-id :domain-id}})
+
+(defn- holding [mode user rights]
+  (permissions/with-access user {:mode mode :platform-admin? false :rights rights}))
+
+(deftest ^:unit enforce-decides-by-rights-and-off-by-role
+  (let [read-42 [{:permission :admin.orders/read :scope {:domain-id #{42}}}]]
+    (testing ":enforce: read in a scope the entity maps"
+      (let [u (holding :enforce regular-user read-42)]
+        (is (permissions/can-access-admin? u))
+        (is (permissions/can-view-entity? u :orders orders-config))
+        (is (not (permissions/can-edit-entity? u :orders orders-config)))
+        (is (not (permissions/can-view-entity? u :orders {})) "an entity mapping no scope admits only unscoped holders")
+        (is (not (permissions/can-view-entity? u :notes orders-config)))))
+    (testing ":enforce: the :admin role alone holds nothing"
+      (let [u (holding :enforce admin-user [])]
+        (is (not (permissions/can-access-admin? u)))
+        (is (not (permissions/can-view-entity? u :orders orders-config)))))
+    (testing ":enforce: a platform admin holds everything"
+      (let [u (permissions/with-access admin-user {:mode :enforce :platform-admin? true :rights []})]
+        (is (= [{}] (permissions/scopes u :orders :write {})))
+        (is (permissions/can-delete-entity? u :orders {}))))
+    (testing ":off and :report: the role, whatever the rights"
+      (doseq [mode [:off :report]]
+        (is (permissions/can-edit-entity? (holding mode admin-user []) :orders orders-config))
+        (is (not (permissions/can-view-entity? (holding mode regular-user read-42) :orders orders-config)))))))
+
+(deftest ^:unit report-names-what-enforce-would-refuse
+  (is (= :admin.orders/write (permissions/report-refusal (holding :report admin-user []) :orders :write {})))
+  (is (= :admin.orders/write (permissions/report-refusal (holding :report admin-user []) :orders :delete {})))
+  (is (nil? (permissions/report-refusal (holding :report regular-user []) :orders :write {}))
+      "the role refuses already")
+  (is (nil? (permissions/report-refusal (holding :enforce admin-user []) :orders :write {})))
+  (is (permissions/report-access-refusal (holding :report admin-user [])))
+  (is (not (permissions/report-access-refusal
+            (holding :report admin-user [{:permission :admin.orders/read}])))))
+
+(deftest ^:unit a-relation-scope-admits-reads-and-deletes-not-writes
+  (let [cfg {:scope {:domain-id (fn [ids] [:in :order_id ids])}}
+        u   (holding :enforce regular-user [{:permission :admin.lines/read :scope {:domain-id #{42}}}
+                                            {:permission :admin.lines/write :scope {:domain-id #{42}}}])]
+    (is (permissions/can-view-entity? u :lines cfg))
+    (is (permissions/can-delete-entity? u :lines cfg))
+    (is (not (permissions/can-edit-entity? u :lines cfg)) "a record's values cannot be checked against it")
+    (is (not (permissions/can-create-entity? u :lines cfg)))))
+
+(deftest ^:unit a-record-is-checked-on-its-mapped-fields
+  (let [in-42 [{:domain-id #{42}}]]
+    (is (permissions/record-in-scope? in-42 orders-config {:domain-id 42}))
+    (is (permissions/record-in-scope? in-42 orders-config {:domain-id "42"}) "compared as an id")
+    (is (not (permissions/record-in-scope? in-42 orders-config {:domain-id 7})))
+    (is (not (permissions/record-in-scope? in-42 orders-config {})))
+    (is (permissions/record-in-scope? [{}] orders-config {:domain-id 7}) "everywhere")
+    (is (not (permissions/record-in-scope? [] orders-config {:domain-id 42})))))

@@ -73,14 +73,17 @@
 
 (defn allowed?
   "Whether `user` may open a page guarded by `access`. The one place nav asks
-   who may see what: `:platform-admin`, `:admin`, or nil for anyone signed in.
-   Permission checks (ADR-041) replace these keywords here."
+   who may see what: `:platform-admin`, `:admin`, nil for anyone signed in, or
+   a fn of the signed-in user, for a module that checks permissions itself
+   (the admin under ADR-041 §6)."
   [access user]
-  (case access
-    :platform-admin (access/platform-admin? user)
-    :admin          (access/admin? {:user user})
-    nil             (some? user)
-    false))
+  (if (fn? access)
+    (boolean (and user (access user)))
+    (case access
+      :platform-admin (access/platform-admin? user)
+      :admin          (access/admin? {:user user})
+      nil             (some? user)
+      false)))
 
 (defn- prefix-of? [href uri]
   (and (some? href)

@@ -69,7 +69,6 @@ Add to `resources/conf/dev/config.edn`:
 :wagoe/admin
 {:enabled?         true
  :base-path        "/web/admin"       ; URL prefix for all admin pages
- :require-role     :admin             ; Role required to access admin
 
  ;; Which entities to expose in the admin UI
  :entity-discovery {:mode      :allowlist

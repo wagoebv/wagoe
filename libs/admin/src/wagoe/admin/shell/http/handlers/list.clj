@@ -7,6 +7,7 @@
    [wagoe.admin.core.ui :as admin-ui]
    [wagoe.admin.core.ui.filters :as filters]
    [wagoe.admin.core.permissions :as permissions]
+   [wagoe.admin.shell.permissions :as shell-permissions]
    [wagoe.admin.shell.http.support :as support]
    [wagoe.shared.ui.core.htmx :as htmx]
    [ring.util.response :as ring-response]))
@@ -38,13 +39,18 @@
 ;; =============================================================================
 
 (defn admin-home-handler
-  "The dashboard, for every signed-in user: a tile per entity they may view,
-   and a card per page they may open."
+  "The dashboard: a tile per entity the user may view, and a card per page
+   they may open. For every signed-in user, except under :enforce, where it
+   needs read on one entity (ADR-041 §6)."
   [admin-service schema-provider config]
   (fn [request]
     (let [user (support/get-current-user request)
-          entities (permissions/filter-visible-entities user (ports/list-available-entities schema-provider))
-          entity-configs (into {} (map (fn [e] [e (ports/get-entity-config schema-provider e)])) entities)
+          _ (when (= :enforce (permissions/mode user))
+              (support/require-admin-user! request))
+          available (ports/list-available-entities schema-provider)
+          all-configs (into {} (map (fn [e] [e (ports/get-entity-config schema-provider e)])) available)
+          entities (permissions/filter-visible-entities user available all-configs)
+          entity-configs (select-keys all-configs entities)
           stats (into {} (map (fn [e] [e {:count (ports/count-entities admin-service e {})}])) entities)]
       (support/html-response request
                              (admin-ui/admin-layout
@@ -67,6 +73,7 @@
                      :entity-name entity-name})))
   (let [options (list-options request)
         entity-config (ports/get-entity-config schema-provider entity-name)
+        _ (shell-permissions/assert-can-view-entity! user entity-name entity-config)
         ;; The bare table is the one response without the filter chips
         entity-config (if (htmx/fragment-request? (:headers request) ["entity-table-container"])
                         entity-config

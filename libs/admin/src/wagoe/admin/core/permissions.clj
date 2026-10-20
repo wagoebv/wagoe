@@ -1,29 +1,19 @@
 (ns wagoe.admin.core.permissions
-  "Pure permission logic for admin access control.
+  "Who may do what in the admin, as pure decisions.
 
-   This namespace contains pure business logic for determining admin access
-   permissions. All functions are pure (no side effects) and testable without
-   database or session state.
+   Under `:wagoe/authorization :mode :off` and `:report` today's rule
+   decides: the `:admin` role. Under `:enforce` the user's rights do
+   (ADR-041 §6): `admin.<entity>/read` to see an entity, `admin.<entity>/write`
+   to change it, each held in scopes the entity can check. A platform admin
+   holds everything, everywhere.
 
-   Week 1 Implementation:
-   - Simple role-based access control (RBAC) using :admin role
-   - All permission checks verify user has :admin role
-   - Foundation for more complex permissions in Week 2+
-
-   Week 2+ Roadmap:
-   - Entity-level permissions (some entities admin-only, others viewable by all)
-   - Action-level permissions (some users can view but not edit)
-   - Field-level permissions (hide sensitive fields for certain roles)
-   - Permission groups and hierarchies
-
-   Key responsibilities:
-   - Determine if user can access admin interface
-   - Determine if user can perform operations on entities
-   - Filter entity lists based on permissions
-   - Provide permission metadata for UI rendering")
+   The shell puts the request's rights on the user map under `::access`
+   (`with-access`); a user without it is decided by the role."
+  (:require [wagoe.platform.core.authorization :as authorization]
+            [wagoe.platform.core.scope :as scope]))
 
 ;; =============================================================================
-;; Role-Based Permission Checks (Week 1)
+;; Role-Based Permission Checks
 ;; =============================================================================
 
 (defn has-role?
@@ -79,19 +69,122 @@
        (:role user)))
 
 ;; =============================================================================
-;; Admin Access Control (Week 1 - Simple RBAC)
+;; Rights (ADR-041 §6)
+;; =============================================================================
+
+(defn with-access
+  "`user` carrying `access`: {:mode :off|:report|:enforce, :platform-admin? bool,
+   :rights resolved rights [{:permission kw :scope {key #{value}}}]}."
+  [user access]
+  (when user (assoc user ::access access)))
+
+(defn has-access?
+  "Whether `user` already carries their access."
+  [user]
+  (contains? user ::access))
+
+(defn mode
+  "The authorization mode `user` is decided under, `:off` without access."
+  [user]
+  (get-in user [::access :mode] :off))
+
+(defn- right
+  "The permission's action `action` needs: deleting is writing."
+  [action]
+  (if (= :delete action) :write action))
+
+(defn entity-permission
+  "`admin.<entity>/read` or `admin.<entity>/write`, the one `action` needs."
+  [entity-name action]
+  (keyword (str "admin." (name entity-name)) (name (right action))))
+
+(defn scopes
+  "The scopes in which `user`'s rights let them take `action` (:read or :write)
+   on `entity-name`, `[{}]` for everywhere. Only scopes `entity-config` can
+   check count: each key mapped under its `:scope` to a field or a relation
+   condition. So an entity mapping none admits only unscoped holders."
+  [user entity-name action entity-config]
+  (let [{:keys [platform-admin? rights]} (::access user)
+        fields (:scope entity-config)]
+    (if platform-admin?
+      [{}]
+      (filterv #(every? (partial contains? fields) (keys %))
+               (scope/scopes-for rights (entity-permission entity-name action))))))
+
+(defn scope-fields
+  "{scope-key field} for the keys `entity-config` maps to a field of its own,
+   not a relation condition."
+  [entity-config]
+  (into {} (filter (comp keyword? val)) (:scope entity-config)))
+
+(defn- field-scopes
+  "Those of `scopes` a record's own values can be checked against."
+  [scopes entity-config]
+  (let [fields (scope-fields entity-config)]
+    (filterv #(every? fields (keys %)) scopes)))
+
+(defn- by-rights?
+  "Whether `user`'s rights admit `action` on `entity-name`. `:write` creates and
+   edits, so only scopes a record's values can be checked against count;
+   `:delete` checks the record in the database, so all write scopes do."
+  [user entity-name action entity-config]
+  (let [scopes (scopes user entity-name (right action) entity-config)]
+    (boolean (seq (if (= :write action) (field-scopes scopes entity-config) scopes)))))
+
+(defn- allows?
+  "Whether `user` may take `action` (:read, :write or :delete) on
+   `entity-name`: by rights under `:enforce`, else by the `:admin` role."
+  [user entity-name action entity-config]
+  (if (= :enforce (mode user))
+    (by-rights? user entity-name action entity-config)
+    (is-admin? user)))
+
+(defn report-refusal
+  "Under `:report`, the permission `:enforce` would refuse `user` where the
+   role admits them; else nil."
+  [user entity-name action entity-config]
+  (when (and (= :report (mode user))
+             (is-admin? user)
+             (not (by-rights? user entity-name action entity-config)))
+    (entity-permission entity-name action)))
+
+(defn- reads-any-entity? [user]
+  (let [{:keys [platform-admin? rights]} (::access user)]
+    (boolean (or platform-admin?
+                 (some (fn [{:keys [permission]}]
+                         (and (authorization/admin-permission? permission) (= "read" (name permission))))
+                       rights)))))
+
+(defn report-access-refusal
+  "Under `:report`, whether `:enforce` would keep `user` out of the admin
+   where the role lets them in."
+  [user]
+  (and (= :report (mode user)) (is-admin? user) (not (reads-any-entity? user))))
+
+(defn record-in-scope?
+  "Whether `record` (or the record a write would leave behind) lies inside
+   one of `scopes`. Only fields can be checked on a record: a scope on a key
+   the entity maps to a relation condition admits none, unless one of
+   `scopes` holds everywhere."
+  [scopes entity-config record]
+  (or (scope/everywhere? scopes)
+      (scope/in-scope? (field-scopes scopes entity-config)
+                       (update-vals (scope-fields entity-config) #(get record %)))))
+
+;; =============================================================================
+;; Admin Access Control
 ;; =============================================================================
 
 (defn can-access-admin?
   "Determine if user can access the admin interface at all.
 
-   Week 1: Requires :admin role.
-   Week 2+: Configurable required role(s) from admin config.
+   Under :enforce, `admin.<entity>/read` on at least one entity; else the
+   :admin role.
 
    Args:
      user: User entity map
      admin-config: Optional admin configuration map
-                   (not used in Week 1, reserved for future)
+                   (unused)
 
    Returns:
      Boolean true if user can access admin
@@ -103,9 +196,9 @@
   ([user]
    (can-access-admin? user nil))
   ([user _admin-config]
-   ; Week 1: Simple admin role check
-   ; Week 2+: Check against admin-config :require-role
-   (is-admin? user)))
+   (if (= :enforce (mode user))
+     (reads-any-entity? user)
+     (is-admin? user))))
 
 (defn explain-admin-access-denial
   "Provide human-readable explanation for why admin access was denied.
@@ -130,6 +223,14 @@
      :reason "User not authenticated"
      :required-role :admin}
 
+    (= :enforce (mode user))
+    (if (reads-any-entity? user)
+      {:denied false :reason "Access granted"}
+      {:denied true
+       :reason "User may read no entity in the admin"
+       :user-id (:id user)
+       :required-permission :admin.<entity>/read})
+
     (not (:role user))
     {:denied true
      :reason "User has no assigned role"
@@ -147,14 +248,13 @@
      :reason "Access granted"}))
 
 ;; =============================================================================
-;; Entity-Level Permissions (Week 1 - Simple, Week 2+ - Granular)
+;; Entity-Level Permissions
 ;; =============================================================================
 
 (defn can-view-entity?
   "Determine if user can view/list records from an entity.
 
-   Week 1: Any admin can view all entities.
-   Week 2+: Entity-specific view permissions from config.
+   `admin.<entity>/read` under :enforce, else the :admin role.
 
    Args:
      user: User entity map
@@ -169,16 +269,13 @@
      (can-view-entity? {:role :user} :users nil)    ;=> false"
   ([user entity-name]
    (can-view-entity? user entity-name nil))
-  ([user _entity-name _entity-config]
-   ; Week 1: Admin can view all entities
-   ; Week 2+: Check entity-config :permissions :view
-   (is-admin? user)))
+  ([user entity-name entity-config]
+   (allows? user entity-name :read entity-config)))
 
 (defn can-create-entity?
   "Determine if user can create new records for an entity.
 
-   Week 1: Any admin can create in all entities.
-   Week 2+: Entity-specific create permissions from config.
+   `admin.<entity>/write` under :enforce, else the :admin role.
 
    Args:
      user: User entity map
@@ -193,17 +290,16 @@
      (can-create-entity? {:role :user} :users nil)    ;=> false"
   ([user entity-name]
    (can-create-entity? user entity-name nil))
-  ([user _entity-name entity-config]
+  ([user entity-name entity-config]
    ;; `:permissions {:create false}` is for entities another module must
    ;; create, such as tenants (BOU-534).
-   (and (is-admin? user)
+   (and (allows? user entity-name :write entity-config)
         (not (false? (get-in entity-config [:permissions :create]))))))
 
 (defn can-edit-entity?
   "Determine if user can edit existing records for an entity.
 
-   Week 1: Any admin can edit all entities.
-   Week 2+: Entity-specific edit permissions from config.
+   `admin.<entity>/write` under :enforce, else the :admin role.
 
    Args:
      user: User entity map
@@ -221,17 +317,13 @@
    (can-edit-entity? user entity-name nil nil))
   ([user entity-name entity-config]
    (can-edit-entity? user entity-name entity-config nil))
-  ([user _entity-name _entity-config _record]
-   ; Week 1: Admin can edit all entities
-   ; Week 2+: Check entity-config :permissions :edit
-   ;          Check record-level permissions (e.g., user can only edit own records)
-   (is-admin? user)))
+  ([user entity-name entity-config _record]
+   (allows? user entity-name :write entity-config)))
 
 (defn can-delete-entity?
   "Determine if user can delete records from an entity.
 
-   Week 1: Any admin can delete from all entities.
-   Week 2+: Entity-specific delete permissions from config.
+   `admin.<entity>/write` under :enforce, else the :admin role.
 
    Args:
      user: User entity map
@@ -249,11 +341,8 @@
    (can-delete-entity? user entity-name nil nil))
   ([user entity-name entity-config]
    (can-delete-entity? user entity-name entity-config nil))
-  ([user _entity-name _entity-config _record]
-   ; Week 1: Admin can delete from all entities
-   ; Week 2+: Check entity-config :permissions :delete
-   ;          Check for protected records (e.g., system users)
-   (is-admin? user)))
+  ([user entity-name entity-config _record]
+   (allows? user entity-name :delete entity-config)))
 
 (defn can-bulk-delete-entity?
   "Determine if user can perform bulk delete operations.
@@ -286,8 +375,7 @@
 (defn filter-visible-entities
   "Filter list of entities to only those user can view.
 
-   Week 1: If user is admin, returns all entities; otherwise empty.
-   Week 2+: Filter based on per-entity view permissions.
+   Those `can-view-entity?` admits, given each one's config.
 
    Args:
      user: User entity map
@@ -305,10 +393,8 @@
      ;=> []"
   ([user entity-names]
    (filter-visible-entities user entity-names nil))
-  ([user entity-names _entity-configs]
-   (if (is-admin? user)
-     (vec entity-names)
-     [])))
+  ([user entity-names entity-configs]
+   (filterv #(can-view-entity? user % (get entity-configs %)) entity-names)))
 
 (defn get-accessible-entities-count
   "Count how many entities user can access.
