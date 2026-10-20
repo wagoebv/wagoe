@@ -52,7 +52,7 @@
   {(keyword ns "read")  {:label (str "Read " noun) :source :derived}
    (keyword ns "write") {:label (str "Change " noun) :source :derived}})
 
-(defn- derived-roles
+(defn derived-roles
   "`<ns>/viewer` and `<ns>/editor`, over `<ns>/read` and `<ns>/write`."
   [ns]
   {(keyword ns "viewer") {:description (str "Reads " ns) :source :derived
@@ -123,7 +123,9 @@
                    {:module k})))
         declarations))
 
-(defn- admin-permission? [p]
+(defn admin-permission?
+  "Whether `p` is one of the admin's, `admin.<entity>/...`."
+  [p]
   (str/starts-with? (str (namespace p)) "admin."))
 
 (defn- role-error

@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **The admin reads `admin.<entity>/read|write` and scopes under `:wagoe/authorization :enforce`** (BOU-774): entities
+  map scope keys with `:scope`. Under `:off` it still admits role `:admin`; try `:report` first.
 - **Route authorization, off by default** (BOU-772): `:wagoe/authorization {:mode :report}` logs what `:enforce` would
   refuse. Tag routes `:public`, `:authorization :signed-in`/`:self` or `:permission`, then switch to `:enforce`.
 - **shared-ui: `toast/redirect-with-toast`, `toast/with-error-toast`, `table/bulk-bar`, and `:push-url?` on
@@ -219,6 +221,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Deprecated
 
+- **`:require-role` in the admin config** (BOU-774): nothing reads it; boot warns outside `:off`, and it goes in 2.0.
+  Drop it.
 - **Group grants, `:role :user` and OIDC `:default-role`** (BOU-771): grants move onto managed roles, their rows kept
   until 2.0 for rolling deploys. Use `add-group-role` and import `:roles`; `:user` means no role.
 - **`shared-ui` `alpine/sidebar-store-init`** (BOU-761): a second copy of the sidebar store that needs the unbundled

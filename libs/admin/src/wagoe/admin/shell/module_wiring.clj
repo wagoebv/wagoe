@@ -12,13 +12,16 @@
   (:require
    [clojure.tools.logging :as log]
    [integrant.core :as ig]
+   [wagoe.admin.core.permissions :as permissions]
    [wagoe.admin.schema :as admin-schema]
    [wagoe.admin.shell.schema-repository :as schema-repo]
    [wagoe.admin.shell.service :as service]
    [wagoe.admin.shell.user-writer :as user-writer]
    [wagoe.admin.shell.http :as http]
    [wagoe.admin.shell.http.support :as support]
-   [wagoe.platform.core.authorization :as authorization]))
+   [wagoe.platform.core.authorization :as authorization]
+   [wagoe.platform.core.http.access :as access]
+   [wagoe.platform.shell.authorization :as platform-authorization]))
 
 ;; =============================================================================
 ;; Admin Config Component (pass-through holder referenced by other components)
@@ -78,11 +81,27 @@
 ;; Admin Routes Component
 ;; =============================================================================
 
+(defn- access-fn
+  "A fn from a signed-in user to what `wagoe.admin.core.permissions` decides
+   on: their admin.* rights, resolved, read once per call."
+  [mode registry rights-source]
+  (fn [user]
+    (let [platform-admin? (access/platform-admin? user)]
+      {:mode            mode
+       :platform-admin? platform-admin?
+       :rights          (if platform-admin?
+                          []
+                          (platform-authorization/rights-for registry rights-source user
+                                                             authorization/admin-permission?))})))
+
 (defmethod ig/init-key :wagoe/admin-routes
-  [_ {:keys [admin-service schema-provider user-service config workflows]}]
+  [_ {:keys [admin-service schema-provider user-service config workflows permission-registry rights]}]
   ;; The module's contribution: web routes, mounted under :web-prefix
   (http/admin-routes admin-service schema-provider
-                     (cond-> config workflows (assoc :workflows workflows))
+                     (cond-> config
+                       workflows           (assoc :workflows workflows)
+                       permission-registry (assoc :access (access-fn (:authorization-mode config)
+                                                                     permission-registry rights)))
                      user-service))
 
 (defmethod ig/halt-key! :wagoe/admin-routes
@@ -131,11 +150,45 @@
               admin-schema/default-admin-config
               settings))
 
+(defn- entity-ns [entity] (namespace (permissions/entity-permission entity :read)))
+
 (defn- entity-permissions
   "`admin.<entity>/read` and `admin.<entity>/write`."
   [entity]
-  (authorization/read-write-permissions (str "admin." (name entity))
-                                        (str (name entity) " in the admin")))
+  (authorization/read-write-permissions (entity-ns entity) (str (name entity) " in the admin")))
+
+(defn- entity-roles
+  "`admin.<entity>/viewer` and `admin.<entity>/editor`. Only the admin's code
+   roles may hold admin.* permissions (ADR-041 §2)."
+  [entity]
+  (authorization/derived-roles (entity-ns entity)))
+
+(defn- resolve-condition
+  "`v`, a scope's field or relation condition; a symbol, how config.edn names
+   a condition, resolved to its fn. Throws :configuration-error on a symbol
+   that resolves to nothing."
+  [v]
+  (if (symbol? v)
+    (or (some-> (try (requiring-resolve v) (catch Exception _ nil)) deref)
+        (throw (ex-info (str "Admin entity :scope names " v ", which resolves to nothing")
+                        {:type :configuration-error :symbol v})))
+    v))
+
+(defn- resolve-scope-fns
+  "`settings` with every entity's `:scope` conditions resolved."
+  [settings]
+  (cond-> settings
+    (map? (:entities settings))
+    (update :entities update-vals
+            (fn [entity]
+              (cond-> entity
+                (map? (:scope entity)) (update :scope update-vals resolve-condition))))))
+
+(defn- authorization-mode
+  "`:wagoe/authorization :mode`, `:off` when unset. The platform refuses any
+   other value at boot."
+  [ctx]
+  (or (get-in ctx [:config :active :wagoe/authorization :mode]) :off))
 
 (defn ig-config
   "This module's Integrant entries, for `wagoe.platform.shell.system.config`.
@@ -152,7 +205,13 @@
   ;; rendered raw database timestamps (BOU-382). Copied in rather than handing
   ;; the whole application config to the routes, which would let any handler
   ;; reach anything.
-  (let [settings      (with-defaults settings)
+  (let [mode          (authorization-mode ctx)
+        ;; Before the defaults, which carry :require-role themselves
+        _             (when (and (:require-role settings) (not= :off mode))
+                        (log/warn (str "DEPRECATED :require-role in the admin config — under :wagoe/authorization"
+                                       " :mode " mode " the admin reads admin.<entity>/read|write instead."
+                                       " Drop it; removed in 2.0.")))
+        settings      (resolve-scope-fns (with-defaults settings))
         ;; Optional and one-way: wagoe.workflow depends on the admin, and
         ;; builds the port only when both are on (BOU-563).
         workflows?    (contains? (:enabled ctx) :wagoe/workflow)
@@ -160,7 +219,8 @@
         routes-config (-> (merge (select-keys app-settings [:date-format :date-time-format :time-zone])
                                  settings)
                           (check-date-patterns)
-                          (check-time-zone))]
+                          (check-time-zone)
+                          (assoc :authorization-mode mode))]
     {:components
      {:wagoe/admin-schema-provider {:db-ctx (ig/ref :wagoe/db-context)
                                     :config settings}
@@ -179,10 +239,15 @@
                                             :schema-provider (ig/ref :wagoe/admin-schema-provider)
                                             :user-service    (ig/ref :wagoe/user-service)
                                             :config          routes-config}
-                                     workflows? (assoc :workflows (ig/ref :wagoe/workflow-admin)))}
+                                     workflows? (assoc :workflows (ig/ref :wagoe/workflow-admin))
+                                     ;; Only when checked, so :off wires what it always did
+                                     (not= :off mode)
+                                     (assoc :permission-registry (ig/ref :wagoe/permission-registry)
+                                            :rights (ig/ref :wagoe/user-group-service)))}
      ;; A ref in a collection, not a named slot on the handler: platform holds
      ;; no list of which modules may contribute routes (BOU-330).
      :routes [(ig/ref :wagoe/admin-routes)]
      ;; admin.<entity>/read and /write for every entity the admin manages.
-     :authorization {:permissions (into {} (map entity-permissions)
-                                        (get-in settings [:entity-discovery :allowlist]))}}))
+     :authorization (let [entities (get-in settings [:entity-discovery :allowlist])]
+                      {:permissions (into {} (map entity-permissions) entities)
+                       :roles       (into {} (map entity-roles) entities)})}))

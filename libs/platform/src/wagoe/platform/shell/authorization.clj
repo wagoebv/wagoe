@@ -146,16 +146,20 @@
         (when (not= (get old k) (get new k))
           (log-refusal! entry))))))
 
+(defn rights-for
+  "`user`'s rights whose permission `pred` admits, read once and resolved.
+   Only those are resolved: a resolver may read. None without a source."
+  [registry rights-source user pred]
+  (->> (when rights-source (ports/rights rights-source user))
+       (filterv (comp pred :permission))
+       (resolve-rights registry user)))
+
 (defn- scopes-of
   "The scopes in which `user` holds `permission`, rights read once."
   [registry rights-source user permission]
   (if (access/platform-admin? user)
     [{}]
-    ;; Only the permission's rights are resolved: a resolver may read.
-    (->> (when rights-source (ports/rights rights-source user))
-         (filterv #(= permission (:permission %)))
-         (resolve-rights registry user)
-         (#(scope/scopes-for % permission)))))
+    (scope/scopes-for (rights-for registry rights-source user #{permission}) permission)))
 
 (defn- check
   "`{:request r}` admitted, or `{:response r :error e :permission p}`. Only for

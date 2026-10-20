@@ -170,6 +170,8 @@
                                          [:other-label {:optional true} :string]]]
                                        [:currency {:optional true} :string]]]
    [:has-many        {:optional true} [:vector AdminHasMany]]
+   ;; Scope key -> its field, or a symbol naming a relation condition
+   [:scope           {:optional true} [:map-of :keyword [:or :keyword :symbol]]]
    [:sidebar-hidden  {:optional true} :boolean]
    [:parent-context  {:optional true} [:map {:closed true}
                                        [:label :string]

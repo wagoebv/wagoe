@@ -172,20 +172,10 @@ Navigate: ← Previous | Page 1 of 5 | Next →
 | `DATE` | Date input | `<input type="date">` |
 | `UUID` | Text input (readonly) | `<input readonly>` |
 
-### Permissions (Week 1)
+### Permissions
 
-Week 1 implements simple role-based access control:
-
-```clojure
-;; Only users with :admin role can access
-(= :admin (:role user))  ;=> true (access granted)
-(= :user (:role user))   ;=> false (403 Forbidden)
-```
-
-Week 2+ will add:
-- Entity-level permissions
-- Action-level permissions (view vs edit)
-- Field-level permissions (hide salary from managers)
+Role `:admin` under `:wagoe/authorization :mode :off`; `admin.<entity>/read|write`
+in the user's scopes under `:enforce`. See `core/permissions.clj`.
 
 ## Advanced Features
 

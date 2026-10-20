@@ -34,7 +34,6 @@ resources/conf/dev/
 :wagoe/admin
 {:enabled?         true
  :base-path        "/web/admin"
- :require-role     :admin
  :entity-discovery {:mode :allowlist :allowlist #{:users :products}}
  :entities         #merge [#include "admin/users.edn"
                            #include "admin/products.edn"]
@@ -43,6 +42,12 @@ resources/conf/dev/
 
 **Adding a new entity**: create `admin/{module}.edn` and add it to `:entities #merge [...]`.
 Also add the entity keyword to `:entity-discovery :allowlist`.
+
+**Access** (`wagoe.admin.core.permissions`): role `:admin` under `:wagoe/authorization :mode :off`;
+`admin.<entity>/read|write` in the user's scopes under `:enforce`, the scoped service
+(`shell.scoped-service`) filtering lists and refusing records outside them. An entity maps scope keys with
+`:scope {:domain-id :domain-id}` (a field) or a symbol naming `(fn [ids] honeysql-condition)`.
+`:require-role` is deprecated and read by nothing.
 
 ---
 
