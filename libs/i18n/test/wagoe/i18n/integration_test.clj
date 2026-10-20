@@ -58,14 +58,14 @@
   (testing "Interpolation works in Dutch locale"
     (let [cat    (catalogue/load-catalogue "wagoe/i18n/translations")
           t-fn   (make-t-fn cat [:nl :en])
-          hiccup [:div [:t :user/dashboard-welcome {:name "Thijs"}]]
+          hiccup [:div [:t :admin/header-welcome {:name "Thijs"}]]
           html   (render/render hiccup t-fn)]
       (is (re-find #"Thijs" html) "interpolated name should appear in output")))
 
   (testing "Interpolation works in English locale"
     (let [cat    (catalogue/load-catalogue "wagoe/i18n/translations")
           t-fn   (make-t-fn cat [:en])
-          hiccup [:div [:t :user/dashboard-welcome {:name "Alice"}]]
+          hiccup [:div [:t :admin/header-welcome {:name "Alice"}]]
           html   (render/render hiccup t-fn)]
       (is (re-find #"Alice" html) "interpolated name should appear in output"))))
 

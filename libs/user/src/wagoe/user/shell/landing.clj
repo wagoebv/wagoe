@@ -67,7 +67,9 @@
    is not a path on this site — nil included — falls back to the defaults, as
    does one that throws: by then the session exists, and a 500 would strand it."
   [config user login-context]
-  (let [r (:login-redirect (settings config))]
+  (let [s       (settings config)
+        r       (:login-redirect s)
+        default (landing/default-path s)]
     (if (and r (not (map? r)))
       (let [path (try (r user login-context)
                       (catch Exception e
@@ -78,8 +80,8 @@
           (do (when (some? path)
                 (log/warn ":login-redirect returned a path not on this site; using the default"
                           {:path path}))
-              (landing/role-path nil user))))
-      (landing/role-path r user))))
+              default)))
+      (landing/role-path r default user))))
 
 (defn front-page
   "Where `/` and `/web` send everyone, or nil to keep the defaults."
@@ -107,13 +109,13 @@
 
 (defn dashboard-handler
   "The handler to mount at /web/dashboard: nil for `:dashboard false`, the
-   configured one, or what `default` builds."
-  [config default]
+   configured one, or a redirect to the admin's dashboard."
+  [config]
   (let [d (:dashboard (settings config))]
     (cond
       (false? d) nil
       (map? d)   (:handler d)
-      :else      (default))))
+      :else      (constantly (response/redirect landing/dashboard-path)))))
 
 (defn wrap-home
   "Middleware binding the layouts' home path for each request. Identity when

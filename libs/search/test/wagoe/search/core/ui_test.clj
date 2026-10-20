@@ -9,6 +9,6 @@
                 (:href (second %))))))
 
 (deftest ^:unit back-link-uses-the-configured-home
-  (is (= "/web/dashboard" (back-href (ui/indices-page [] {}))))
+  (is (= "/web/admin/" (back-href (ui/indices-page [] {}))))
   (binding [home/*path* "/app"]
     (is (= "/app" (back-href (ui/indices-page [] {}))))))

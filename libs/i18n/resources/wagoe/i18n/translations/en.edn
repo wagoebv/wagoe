@@ -38,7 +38,6 @@
  :common/option-no          "No"
 
  :common/status-enabled     "Enabled"
- :common/status-disabled    "Disabled"
 
  :common/audit-success      "Success"
  :common/audit-failure      "Failure"
@@ -228,24 +227,9 @@
  :user/page-audit-heading      "Audit Trail"
  :user/page-audit-description  "Complete history of all user-related actions and system events"
 
- :user/page-dashboard-title    "Dashboard"
- :user/dashboard-welcome       "Welcome, {name}"
- :user/dashboard-subtitle      "You're logged into Wagoe Framework"
- :user/stat-member-since       "Member since"
- :user/stat-total-logins       "Total logins"
- :user/stat-last-login         "Last login"
- :user/stat-mfa                "Two-Factor Auth"
-
  :user/dashboard-card-profile-title       "Profile & Security"
  :user/dashboard-card-profile-description "Manage your profile, password, two-factor authentication, and preferences"
- :user/button-view-profile                "View Profile"
- :user/dashboard-card-sessions-title      "Active Sessions"
- :user/dashboard-card-sessions-description {:one   "You have {n} active session"
-                                            :many  "You have {n} active sessions"}
  :user/button-manage-sessions             "Manage Sessions"
- :user/dashboard-card-admin-title         "Admin Panel"
- :user/dashboard-card-admin-description   "Manage users, view audit trails, and configure system settings"
- :user/button-admin-panel                 "Go to Admin Panel"
 
  :user/page-welcome-title      "Welcome"
  :user/page-welcome-heading    "Welcome to Wagoe"
@@ -426,10 +410,10 @@
  :admin/header-welcome             "Welcome, {name}"
  :admin/button-logout              "Logout"
  :admin/page-title                 "Admin - {label}"
- :admin/page-title-dashboard       "Admin Dashboard"
+ :admin/page-title-dashboard       "Dashboard"
  :admin/page-kicker                "Control Center"
- :admin/page-heading               "Admin Dashboard"
- :admin/page-description           "Manage your application entities."
+ :admin/page-heading               "Dashboard"
+ :admin/page-description           "Your application at a glance."
  :admin/filter-placeholder-search  "Search {fields}..."
  :admin/button-clear-search        "Clear search"
  :admin/select-placeholder         "Select..."

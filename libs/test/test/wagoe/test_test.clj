@@ -43,10 +43,10 @@
         (is (= 403 (:status raw)))))
     (let [c (t/client sys)]
       (is (= 302 (:status (t/sign-in! c "signer@example.com" "Kit-Passw0rd-469!"))))
-      (is (= 200 (:status (t/request c :get "/web/dashboard"))) "the session was not kept")
+      (is (= 200 (:status (t/request c :get "/web/admin/"))) "the session was not kept")
       (testing "a signed-in, state-changing request carries a valid token"
         (is (= 302 (:status (t/request c :post "/web/logout"))))
-        (is (not= 200 (:status (t/request c :get "/web/dashboard"))) "logout did not end the session")))
+        (is (not= 200 (:status (t/request c :get "/web/admin/"))) "logout did not end the session")))
     (testing "a wrong password throws rather than leaving the test signed out"
       (is (thrown? clojure.lang.ExceptionInfo
                    (t/sign-in! (t/client sys) "signer@example.com" "wrong"))))))

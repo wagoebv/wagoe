@@ -489,7 +489,7 @@
                 (:href (second %))))))
 
 (deftest ^:unit sidebar-dashboard-link-uses-the-configured-home
-  (is (= "/web/dashboard" (dashboard-href (shell/sidebar nil))))
+  (is (= "/web/admin/" (dashboard-href (shell/sidebar nil))))
   (binding [home/*path* "/app"]
     (is (= "/app" (dashboard-href (shell/sidebar nil))))))
 

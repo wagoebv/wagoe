@@ -186,21 +186,6 @@
       (is (re-find #"1" result))
       (is (not= "2026-03-01" result)))))
 
-(deftest ^:unit dashboard-page-relative-time-test
-  (testing "dashboard page renders relative last-login from explicit current time"
-    (let [user (assoc sample-user
-                      :last-login (java.time.Instant/parse "2026-03-19T08:00:00Z")
-                      :created-at (java.time.Instant/parse "2026-03-01T08:00:00Z")
-                      :login-count 7)
-          page (ui/dashboard-page user
-                                  {:active-sessions-count 2
-                                   :mfa-enabled true}
-                                  {:current-time (java.time.Instant/parse "2026-03-19T10:00:00Z")
-                                   :zone-id (java.time.ZoneId/of "UTC")})
-          page-html (str page)]
-      (is (re-find #"2 hours ago" page-html))
-      (is (re-find #"2026-03-01" page-html)))))
-
 ;; =============================================================================
 ;; User Form Component Tests
 ;; =============================================================================
