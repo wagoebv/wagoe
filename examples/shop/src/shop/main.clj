@@ -5,10 +5,14 @@
    This namespace is everything after that: a process that starts the system,
    blocks, and shuts down cleanly on a signal. It is what `clojure -M:run`, the
    uberjar and the Dockerfile all call, and what a container or systemd unit
-   needs, since none of them can drive a REPL."
+   needs, since none of them can drive a REPL.
+
+   `clojure -M:run authz-report` prints each route's authorization rule, and
+   the routes `:wagoe/authorization :enforce` would refuse, without serving."
   (:require [shop.system-config :as config]
             [clojure.tools.logging :as log]
-            [integrant.core :as ig])
+            [integrant.core :as ig]
+            [wagoe.platform.shell.system.authorization-report :as authz-report])
   (:gen-class))
 
 (defn failure-lines
@@ -28,9 +32,13 @@
               [(str "  expected resources/" path)]))))
 
 (defn -main
-  [& _args]
+  [& args]
   (try
-    (let [system (ig/init (config/ig-config (config/load-config)))]
+    (let [ig-config (config/ig-config (config/load-config))
+          _         (when (= "authz-report" (first args))
+                      (println (authz-report/report ig-config))
+                      (System/exit 0))
+          system    (ig/init ig-config)]
       (log/info "shop started — press Ctrl+C to stop")
       ;; Halt on SIGTERM/SIGINT so a container stop closes the database pool and
       ;; drains the HTTP server rather than having them killed mid-request.

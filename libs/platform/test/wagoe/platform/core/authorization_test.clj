@@ -160,6 +160,19 @@
                               ["/owned" {:wagoe/module :wagoe/orders :get {:handler identity}}]
                               ["/me" {:authorization :signed-in :get {:handler identity}}]]))))
 
+(deftest ^:unit the-route-report-names-each-endpoints-rule-and-permission
+  (is (= [{:path "/orders" :method :get :rule :module :permissions [:orders/read] :scope :handler}
+          {:path "/orders" :method :post :rule :permission :permissions [:orders/create]}
+          {:path "/me" :method :get :rule :signed-in :permissions []}
+          {:path "/loose" :method :get :rule :none :permissions []}
+          {:path "/any" :method :any :rule :module :permissions [:orders/read :orders/write]}]
+         (sut/route-report [["/orders" {:wagoe/module :wagoe/orders
+                                        :get  {:handler identity :scope :handler}
+                                        :post {:handler identity :permission :orders/create}}]
+                            ["/me" {:authorization :signed-in :get {:handler identity}}]
+                            ["/loose" {:get {:handler identity}}]
+                            ["/any" {:wagoe/module :wagoe/orders :handler identity}]]))))
+
 (deftest ^:unit an-unknown-marker-is-reported
   (is (= [{:path "/x" :authorization :signedin}]
          (sut/invalid-route-markers [["/x" {:get {:authorization :signedin}}]

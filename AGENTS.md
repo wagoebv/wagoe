@@ -111,6 +111,7 @@ java -jar target/wagoe-*.jar server             # Run standalone jar (HTTP serve
 java -jar target/wagoe-*.jar worker             # Run as a background worker (no HTTP listener)
 java -jar target/wagoe-*.jar service payments  # Run one module as an independent service (BOU-91)
 java -jar target/wagoe-*.jar service user tenant  # Several modules in one process
+java -jar target/wagoe-*.jar authz-report       # Each route's authorization rule; what :enforce refuses
 
 # Deploy (see deploy/README.md)
 docker build -t wagoe:latest .                  # Prod image (root Dockerfile; server + worker modes)

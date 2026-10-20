@@ -5,9 +5,11 @@
   (:require [cheshire.core :as json]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
+            [clojure.tools.logging]
             [integrant.core :as ig]
             [wagoe.platform.ports.authorization :as ports]
             [wagoe.platform.shell.authorization]
+            [wagoe.platform.shell.system.authorization-report :as authz-report]
             [wagoe.platform.shell.system.wiring]))
 
 (def ^:private users
@@ -16,13 +18,17 @@
    "refund" {:rights [{:permission :orders/refund}]}
    "nobody" {:rights []}
    "scoped" {:rights [{:permission :orders/read :scope {:domain-id 42}}]}
-   "admin"  {:role :admin :rights []}})
+   "admin"  {:role :admin :rights []}
+   "boom"   {:boom? true}})
 
 (def ^:private reads (atom 0))
 
 (def ^:private rights
   (reify ports/IRights
-    (rights [_ user] (swap! reads inc) (:rights user))))
+    (rights [_ user]
+      (swap! reads inc)
+      (when (:boom? user) (throw (ex-info "rights store down" {:type :internal-error})))
+      (:rights user))))
 
 (defn- ok [_] {:status 200 :body {:ok true}})
 
@@ -142,6 +148,38 @@
               entries)
         "names the user, the route and the permission")
     (is (some #(= "/api/v1/loose" (:route %)) entries))))
+
+(deftest ^:integration report-logs-a-failing-check-once-and-lets-it-through
+  (let [h      (handler :report)
+        errors (atom 0)]
+    (with-redefs [clojure.tools.logging/log* (fn [_ level _ message]
+                                                (when (and (= :error level) (re-find #"report failed" (str message)))
+                                                  (swap! errors inc)))]
+      (dotimes [_ 3] (is (= 200 (status h :get "/api/v1/orders" "boom")))))
+    (is (= 1 @errors) "a repeat within the minute is not logged again"))
+  (testing ":enforce lets it fail"
+    (is (= 500 (status (handler :enforce) :get "/api/v1/orders" "boom")))))
+
+(deftest ^:integration the-report-lists-each-endpoint-and-the-unruled-first
+  (let [text (authz-report/report
+              {:wagoe/permission-registry {:declarations {:wagoe/orders {:permissions {:orders/refund {:label "Refund"}}
+                                                                         :scopes {:domain-id {:label "Domain"}}}}}
+               :wagoe/http-handler        {:module-routes       [{:wagoe/module :wagoe/orders :contribution orders-routes}
+                                                                 unowned-routes]
+                                           :permission-registry (ig/ref :wagoe/permission-registry)
+                                           :router              {}
+                                           :config              {:active {:wagoe/settings {:name "t"}}}}})
+        [unruled all] (str/split text #"All \d+ endpoint")]
+    (is (re-find #":mode :off" text) "built and reported under :off too")
+    (is (re-find #"1 endpoint\(s\) no rule covers" unruled))
+    (is (re-find #"GET\s+/api/v1/loose\s+none" unruled))
+    (is (not (re-find #"/api/v1/orders" unruled)))
+    (testing "each endpoint with its rule and permission"
+      (is (re-find #"POST\s+/api/v1/orders\s+module\s+orders/write" all))
+      (is (re-find #"GET\s+/api/v1/orders\s+module\s+orders/read" all))
+      (is (re-find #"POST\s+/api/v1/orders/:id/refund\s+permission\s+orders/refund" all))
+      (is (re-find #"GET\s+/api/v1/me\s+signed-in" all))
+      (is (re-find #"GET\s+/api/v1/domains/:domain-id/orders\s+module\s+orders/read  scope \{:domain-id :path/domain-id\}" all)))))
 
 (deftest ^:integration off-checks-nothing
   (doseq [mode [nil :off]]
