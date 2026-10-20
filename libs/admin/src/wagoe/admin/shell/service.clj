@@ -314,10 +314,9 @@
 
 (defn- scope-where
   "The rows inside `scopes` (ADR-041 §4), each key's field under the entity's
-   `:scope` as its column, or its relation condition as it is."
-  [entity-config field-aliases scopes]
-  (scope/scope-filter scopes (update-vals (:scope entity-config)
-                                          #(if (keyword? %) (get field-aliases % %) %))))
+   `:scope` as `column` gives it, or its relation condition as it is."
+  [entity-config column scopes]
+  (scope/scope-filter scopes (update-vals (:scope entity-config) #(if (keyword? %) (column %) %))))
 
 (defn- list-where
   "The WHERE a list applies for `options`: its search, its filters and, for a
@@ -336,7 +335,7 @@
        (when (:soft-delete entity-config false)
          [:= (get field-aliases :deleted-at :deleted_at) nil])
        (when-let [scopes (:scopes options)]
-         (scope-where entity-config field-aliases scopes))
+         (scope-where entity-config #(get field-aliases % %) scopes))
        (when-let [ids (:ids options)]
          (if (seq ids)
            [:in (get field-aliases :id (:primary-key entity-config :id))
@@ -679,14 +678,28 @@
   (count (filter (set (map (juxt :entity :id) removed))
                  (distinct (map #(vector entity-name (str %)) ids)))))
 
+(defn- inside-scopes
+  "Those of `ids` of `entity-config` that lie inside `scopes`."
+  [tx entity-config ids scopes]
+  (let [{:keys [from-clause join-clause] :as qc} (resolve-query-config entity-config)
+        col (qualified-column qc)
+        pk  (col (:primary-key entity-config :id))]
+    (mapv (comp str :id)
+          (db/execute-query! tx (cond-> {:select [[pk :id]]
+                                         :from   from-clause
+                                         :where  [:and [:in pk (mapv str ids)] (scope-where entity-config col scopes)]}
+                                  join-clause (assoc :join join-clause))))))
+
 (defn- sync-links!
   "Make the links of record `id` in each relation of `links` exactly those
    ids, on `tx`: the missing join rows added, the others removed. A link to
    a soft-deleted record stays: the form cannot show it, so its absence from
-   `ids` is no choice to remove it."
+   `ids` is no choice to remove it. Nor does one outside the relation's
+   scopes in `links`' `:scopes` metadata, the records its user may read."
   [tx schema-provider entity-config id links]
   (let [id-str (str id)
-        now    (Instant/now)]
+        now    (Instant/now)
+        scopes (:scopes (meta links))]
     (doseq [[k ids] links
             :let  [{:keys [table foreign-key other-key through entity]} (display/link-rel entity-config k)
                    tcfg    (ports/get-entity-config schema-provider entity)
@@ -698,10 +711,13 @@
                                      (db/execute-query! tx {:select [[oth-col :other]] :from [table]
                                                             :where  [:= fk-col id-str]})))
                    wanted  (set ids)
-                   gone    (let [g (vec (remove wanted current))]
-                             (if (and (seq g) (:soft-delete tcfg false))
-                               (mapv #(str (get % (:primary-key tcfg :id)))
-                                     (live-records tx schema-provider entity g))
+                   gone    (let [g (vec (remove wanted current))
+                                 g (if (and (seq g) (:soft-delete tcfg false))
+                                     (mapv #(str (get % (:primary-key tcfg :id)))
+                                           (live-records tx schema-provider entity g))
+                                     g)]
+                             (if (and (seq g) (contains? scopes k))
+                               (inside-scopes tx tcfg g (get scopes k))
                                g))
                    added   (remove current wanted)]]
       (try
@@ -910,8 +926,7 @@
           owner (link-column (:foreign-key rel))
           where (cond-> [:and [:in owner (mapv str owner-ids)]]
                   (:soft-delete tcfg false) (conj [:= (col :deleted-at) nil])
-                  scopes                    (conj (scope/scope-filter scopes (update-vals (:scope tcfg)
-                                                                                          #(if (keyword? %) (col %) %)))))
+                  scopes                    (conj (scope-where tcfg col scopes)))
           base  (fn [select]
                   (-> {:select select}
                       (with-from qc where)
@@ -961,10 +976,12 @@
 
 (defn- links-of
   "`data` as [data links]: the record's own fields, and its `:admin/links`
-   with blank ids dropped."
+   with blank ids dropped, carrying its `:admin/link-scopes` as `:scopes`
+   metadata for `sync-links!`."
   [data]
-  [(dissoc data :admin/links)
-   (update-vals (:admin/links data) #(into [] (comp (map str) (remove str/blank?) (distinct)) %))])
+  [(dissoc data :admin/links :admin/link-scopes)
+   (with-meta (update-vals (:admin/links data) #(into [] (comp (map str) (remove str/blank?) (distinct)) %))
+              {:scopes (:admin/link-scopes data)})])
 
 ;; =============================================================================
 ;; List Overview (ADR-040)

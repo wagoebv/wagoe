@@ -4,7 +4,8 @@
    outside them is not found; a write that would leave a record outside them
    is refused. Built per request around the shared service, so every list the
    handlers ask for, a foreign key's options included, is scoped."
-  (:require [wagoe.admin.core.permissions :as permissions]
+  (:require [wagoe.admin.core.display :as display]
+            [wagoe.admin.core.permissions :as permissions]
             [wagoe.admin.ports :as ports]
             [wagoe.platform.core.scope :as scope]))
 
@@ -53,29 +54,20 @@
   (let [records (inside! inner schema-provider user entity-name :write [id])]
     (delay (or (first records) (ports/get-entity inner entity-name id)))))
 
+(defn- link-scope
+  "The scopes in which `user` may read what many-to-many `rel` links to; nil
+   when everywhere."
+  [schema-provider user rel]
+  (let [scopes (scopes-of schema-provider user (:entity rel) :read)]
+    (when-not (scope/everywhere? scopes) scopes)))
+
 (defn- link-scopes
   "{relation-key scopes} for each many-to-many of `entity-name` whose linked
    records `user` may read only inside scopes."
   [schema-provider user entity-name]
   (into {}
-        (keep (fn [{k :key target :entity}]
-                (let [scopes (scopes-of schema-provider user target :read)]
-                  (when-not (scope/everywhere? scopes) [k scopes]))))
+        (keep (fn [rel] (some->> (link-scope schema-provider user rel) (vector (:key rel)))))
         (:many-to-many (ports/get-entity-config schema-provider entity-name))))
-
-(defn- with-hidden-links
-  "`data` keeping, in each relation its `:admin/links` replaces, the links to
-   records `user` may not read: the form never showed them to unlink."
-  [inner schema-provider user entity-name id data]
-  (let [hidden (select-keys (link-scopes schema-provider user entity-name) (keys (:admin/links data)))
-        ids-of (fn [k opts]
-                 (map :id (:items (get (ports/linked-records inner entity-name k [id] opts) (str id)))))]
-    (reduce-kv (fn [data k scopes]
-                 (let [visible (set (ids-of k {:scopes scopes}))]
-                   (update-in data [:admin/links k]
-                              #(vec (distinct (concat % (remove visible (ids-of k {}))))))))
-               data
-               (if (satisfies? ports/ILinks inner) hidden {}))))
 
 (defrecord ScopedAdminService [inner schema-provider user]
   ports/IListOverview
@@ -89,7 +81,8 @@
   ports/ILinks
   (linked-records [_ entity-name rel-key ids opts]
     (if (satisfies? ports/ILinks inner)
-      (let [scopes (get (link-scopes schema-provider user entity-name) rel-key)]
+      (let [rel    (display/link-rel (ports/get-entity-config schema-provider entity-name) rel-key)
+            scopes (some->> rel (link-scope schema-provider user))]
         (ports/linked-records inner entity-name rel-key ids (cond-> opts scopes (assoc :scopes scopes))))
       {}))
 
@@ -134,7 +127,11 @@
   (update-entity [_ entity-name id data]
     (let [record (stored inner schema-provider user entity-name id)]
       (writable! schema-provider user entity-name (delay (merge @record data))))
-    (ports/update-entity inner entity-name id (with-hidden-links inner schema-provider user entity-name id data)))
+    ;; Replacing the links leaves those to records the user may not read
+    (ports/update-entity inner entity-name id
+                         (cond-> data
+                           (:admin/links data)
+                           (assoc :admin/link-scopes (link-scopes schema-provider user entity-name)))))
 
   (update-entity-field [_ entity-name id field value]
     (let [record (stored inner schema-provider user entity-name id)]

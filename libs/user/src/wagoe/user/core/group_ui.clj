@@ -183,7 +183,7 @@
                             (list [:p [:t :user.groups/scope-keys-hint]]
                                   (map (partial scope-key-input (:form opts)) scope-keys)
                                   ;; For a key whose value a field cannot hold
-                                  [:details {:open (some? (not-empty (get-in opts [:form "scope"])))}
+                                  [:details {:open (boolean (seq (get-in opts [:form "scope"])))}
                                    [:summary [:t :user.groups/scope-as-edn]]
                                    (scope-edn-input (:form opts))])
                             (scope-edn-input (:form opts)))

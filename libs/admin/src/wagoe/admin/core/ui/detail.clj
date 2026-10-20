@@ -512,10 +512,10 @@
         record-id (get record primary-key)
         ;; One who may read but not write sees the record, and nothing to save
         read-only? (and (some? record) (false? (:can-edit permissions)))
-        entity-config (cond-> entity-config
-                        (nil? record)     introspection/for-create
-                        read-only?        (update :fields update-vals #(assoc % :readonly true))
-                        (not read-only?)  (with-live-validation entity-name record-id))
+        entity-config (as-> (cond-> entity-config (nil? record) introspection/for-create) c
+                        (if read-only?
+                          (update c :fields update-vals #(assoc % :readonly true))
+                          (with-live-validation c entity-name record-id)))
         editable-fields (:editable-fields entity-config)
         values (or record prefill)
         field-groups (compute-field-groups entity-config)

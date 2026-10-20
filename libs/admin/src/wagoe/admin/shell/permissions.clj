@@ -52,6 +52,15 @@
                        (assoc explanation :type :forbidden)))))
    true))
 
+(defn assert-can-read-some-entity!
+  "Under :enforce, throw :forbidden unless `entities`, those `user` may view,
+   has one: read held only in scopes no entity checks admits nothing."
+  [user entities]
+  (when (and (= :enforce (core-permissions/mode user)) (empty? entities))
+    (throw (ex-info "User may read no entity in the admin"
+                    {:type :forbidden :user-id (:id user) :required-permission :admin.<entity>/read})))
+  true)
+
 (defn assert-can-view-entity!
   "Assert user can view entity, throw exception if not.
 

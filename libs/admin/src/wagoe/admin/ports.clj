@@ -515,7 +515,9 @@
   "The records a many-to-many relation links, through its join table. The
    links are written with the record: `create-entity` and `update-entity`
    take `:admin/links {relation-key [id ...]}` in their data and replace the
-   links of each relation named, in the write's transaction."
+   links of each relation named, in the write's transaction. With
+   `:admin/link-scopes {relation-key scopes}`, a link to a record outside
+   them stays."
 
   (linked-records [this entity-name rel-key ids opts]
     "{id-string {:items [{:id :title}] :total n}} for the records `ids` of

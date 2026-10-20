@@ -50,11 +50,7 @@
           available (ports/list-available-entities schema-provider)
           all-configs (into {} (map (fn [e] [e (ports/get-entity-config schema-provider e)])) available)
           entities (permissions/filter-visible-entities user available all-configs)
-          _ (when (and (= :enforce (permissions/mode user)) (empty? entities))
-              (throw (ex-info "User may read no entity in the admin"
-                              {:type                :forbidden
-                               :user-id             (:id user)
-                               :required-permission :admin.<entity>/read})))
+          _ (shell-permissions/assert-can-read-some-entity! user entities)
           entity-configs (select-keys all-configs entities)
           stats (into {} (map (fn [e] [e {:count (ports/count-entities admin-service e {})}])) entities)]
       (support/html-response request

@@ -406,6 +406,7 @@
     (str "  :wagoe/admin\n"
          "  {:enabled?         true\n"
          "   :base-path        \"/web/admin\"\n"
+         "   :require-role     :admin\n"
          "   :entity-discovery {:mode      :allowlist\n"
          "                      :allowlist #{:users}}\n"
          "   :entities         #merge [#include \"admin/users.edn\"]\n"

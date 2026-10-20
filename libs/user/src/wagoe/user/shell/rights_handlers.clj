@@ -169,20 +169,17 @@
 
 (defn- resolve-sources
   "Each user source `grants` take a scope value from, resolved for `user` and
-   expanded by its key's `:expand`, as enforcement reads it:
-   {[key source] values}, :error when its resolver or expand throws, absent
-   when nothing registers the source."
+   expanded by its key, as enforcement reads it: {[key source] values},
+   :error when that throws, absent when nothing registers the source."
   [group-service user grants]
   (let [registry  (:registry group-service)
         resolvers (some-> registry authz/scope-sources)
         keys-info (some-> registry authz/scopes)]
     (into {}
           (for [[k src] (distinct (filter (comp scope/source? val) (mapcat :scope grants)))
-                :let  [resolver (get-in resolvers [src :resolve])
-                       expand   (get-in keys-info [k :expand])]
+                :let  [resolver (get-in resolvers [src :resolve])]
                 :when resolver]
-            [[k src] (try (let [values (into #{} (remove nil?) (resolver user))]
-                            (if (and expand (seq values)) (set (expand values)) values))
+            [[k src] (try (scope/scope-values keys-info (fn [_] (into #{} (remove nil?) (resolver user))) k src)
                           (catch Exception e
                             (log/warn e "A scope source failed to resolve for the rights page" {:key k :source src})
                             :error))]))))

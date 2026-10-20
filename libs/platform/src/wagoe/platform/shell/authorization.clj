@@ -78,14 +78,6 @@
                       {:source source})
            #{})))))
 
-(defn- scope-values
-  "What `v`, the value of scope key `k`, stands for: a source resolved, then
-   `k`'s `:expand`."
-  [scopes resolve-source k v]
-  (let [values (if (scope/source? v) (resolve-source v) #{v})
-        expand (get-in scopes [k :expand])]
-    (if (and expand (seq values)) (set (expand values)) values)))
-
 (defn resolve-rights
   "`rights` as the user module hands them over for `user`
    ([{:permission :scope}], see `core.scope`), each scope as {key #{value}}:
@@ -98,7 +90,7 @@
     (into []
           (keep (fn [{:keys [scope] :as right}]
                   (when-let [resolved (reduce-kv (fn [acc k v]
-                                                   (let [values (scope-values scopes resolve-source k v)]
+                                                   (let [values (scope/scope-values scopes resolve-source k v)]
                                                      (if (seq values) (assoc acc k values) (reduced nil))))
                                                  {}
                                                  scope)]

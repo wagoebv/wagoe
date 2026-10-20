@@ -45,6 +45,14 @@
           [k (cond-> {:optional true} entity (assoc :wagoe/entity entity))
            (if (seq sources) [:or value (into [:enum] (sort sources))] value)])))
 
+(defn scope-values
+  "What `v`, the value of scope key `k`, stands for: a source resolved by
+   `resolve-source`, then `k`'s `:expand` in the registry's `scopes`."
+  [scopes resolve-source k v]
+  (let [values (if (source? v) (resolve-source v) #{v})
+        expand (get-in scopes [k :expand])]
+    (if (and expand (seq values)) (set (expand values)) values)))
+
 (defn scopes-for
   "The distinct scopes in which resolved `rights` hold `permission`, `{}` for
    everywhere. None when they do not hold it."

@@ -33,7 +33,7 @@ clojure -M:migrate up    # run pending migrations
 
 # Users
 bb create-admin          # create the first admin account (interactive)
-# A new project has no users. Anything that needs a signed-in admin — the admin UI at
+# A new project has no users. Anything behind :require-role — the admin UI at
 # /web/admin/ in particular — redirects to a login you cannot pass until this
 # has been run at least once.
 
