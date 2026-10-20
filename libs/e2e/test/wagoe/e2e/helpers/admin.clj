@@ -25,26 +25,26 @@
 
 (defn login-as-admin!
   "Navigate to /web/login, fill seed admin credentials, wait for redirect
-   to /web/admin/users. Returns the page for chaining."
+   to the dashboard. Returns the page for chaining."
   [pg seed]
   (page/navigate pg (str base-url "/web/login"))
   (page/wait-for-load-state pg)
   (loc/fill (page/locator pg "input[name='email']") (-> seed :admin :email))
   (loc/fill (page/locator pg "input[name='password']") (-> seed :admin :password))
   (loc/click (page/locator pg "form.form-card button[type='submit']"))
-  (page/wait-for-url pg #".*/web/admin/users.*" {:timeout 10000.0})
+  (page/wait-for-url pg #".*/web/admin/$" {:timeout 10000.0})
   pg)
 
 (defn login-as-user!
   "Navigate to /web/login, fill seed user credentials, wait for redirect
-   to /web/dashboard. Returns the page for chaining."
+   to the dashboard. Returns the page for chaining."
   [pg seed]
   (page/navigate pg (str base-url "/web/login"))
   (page/wait-for-load-state pg)
   (loc/fill (page/locator pg "input[name='email']") (-> seed :user :email))
   (loc/fill (page/locator pg "input[name='password']") (-> seed :user :password))
   (loc/click (page/locator pg "form.form-card button[type='submit']"))
-  (page/wait-for-url pg #".*/web/dashboard.*" {:timeout 10000.0})
+  (page/wait-for-url pg #".*/web/admin/$" {:timeout 10000.0})
   pg)
 
 (def ^:private stale-marker

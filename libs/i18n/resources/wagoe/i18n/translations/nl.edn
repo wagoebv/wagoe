@@ -36,7 +36,6 @@
  :common/option-no          "Nee"
 
  :common/status-enabled     "Ingeschakeld"
- :common/status-disabled    "Uitgeschakeld"
 
  :common/audit-success      "Geslaagd"
  :common/audit-failure      "Mislukt"
@@ -228,24 +227,9 @@
  :user/page-audit-title        "Auditlogboeken"
  :user/page-audit-heading      "Audittrail"
 
- :user/page-dashboard-title    "Dashboard"
- :user/dashboard-welcome       "Welkom, {name}"
- :user/dashboard-subtitle      "U bent ingelogd op Wagoe Framework"
- :user/stat-member-since       "Lid sinds"
- :user/stat-total-logins       "Totaal aanmeldingen"
- :user/stat-last-login         "Laatste aanmelding"
- :user/stat-mfa                "Tweestapsverificatie"
-
- :user/dashboard-card-profile-title       "Profiel & beveiliging"
- :user/dashboard-card-profile-description "Beheer uw profiel, wachtwoord, tweestapsverificatie en voorkeuren"
- :user/button-view-profile                "Profiel bekijken"
- :user/dashboard-card-sessions-title      "Actieve sessies"
- :user/dashboard-card-sessions-description {:one   "U heeft {n} actieve sessie"
-                                            :many  "U heeft {n} actieve sessies"}
+ :user/nav-profile-title       "Profiel & beveiliging"
+ :user/nav-profile-description "Beheer uw profiel, wachtwoord, tweestapsverificatie en voorkeuren"
  :user/button-manage-sessions             "Sessies beheren"
- :user/dashboard-card-admin-title         "Admin"
- :user/dashboard-card-admin-description   "Gebruikers, audittrails en systeeminstellingen"
- :user/button-admin-panel                 "Naar admin"
 
  :user/page-welcome-title      "Welkom"
  :user/page-welcome-heading    "Welkom bij Wagoe"
@@ -427,10 +411,10 @@
  :admin/header-welcome             "Welkom, {name}"
  :admin/button-logout              "Uitloggen"
  :admin/page-title                 "Admin - {label}"
- :admin/page-title-dashboard       "Admin dashboard"
+ :admin/page-title-dashboard       "Dashboard"
  :admin/page-kicker                "Controlecentrum"
- :admin/page-heading               "Admin dashboard"
- :admin/page-description           "Uw applicatie-entiteiten."
+ :admin/page-heading               "Dashboard"
+ :admin/page-description           "Uw applicatie in één oogopslag."
  :admin/filter-placeholder-search  "Zoek in {fields}..."
  :admin/button-clear-search        "Zoekopdracht wissen"
  :admin/select-placeholder         "Selecteer..."

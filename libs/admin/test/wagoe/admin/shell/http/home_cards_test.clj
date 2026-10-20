@@ -31,14 +31,18 @@
   (r/router (:web (wiring/module-route-contributions (contributions config)))
             {:conflicts nil}))
 
-(defn- home [config user]
+(defn- home [config user & [entities]]
   (let [schema  (reify admin-ports/ISchemaProvider
                   (fetch-table-metadata [_ _] nil)
-                  (get-entity-config [_ _] nil)
-                  (list-available-entities [_] [])
+                  (get-entity-config [_ e] {:label (name e)})
+                  (list-available-entities [_] (vec entities))
                   (get-entity-label [_ _] nil)
                   (validate-entity-exists [_ _] false))
-        handler (list-handlers/admin-home-handler (reify admin-ports/IAdminService) schema {})]
+        service #_{:clj-kondo/ignore [:missing-protocol-method]}
+                (reify admin-ports/IAdminService
+                  (count-entities [_ e _]
+                    (if (= :admin (:role user :admin)) 7 (throw (ex-info "counted for a non-admin" {:entity e})))))
+        handler (list-handlers/admin-home-handler service schema {})]
     ;; Through the pipeline every route runs, which binds what is mounted,
     ;; inside the navigation the platform binds.
     (str (:body ((interceptors/wrap-nav
@@ -76,3 +80,16 @@
   (let [body (home nil {:tenant-id (random-uuid)})]
     (is (str/includes? body "href=\"/web/admin/groups\""))
     (is (not (str/includes? body "/web/audit")))))
+
+(deftest ^:unit a-plain-user-sees-only-what-they-may-open
+  (testing "an admin: entity tiles with counts"
+    (let [body (home nil nil [:orders])]
+      (is (str/includes? body "href=\"/web/admin/orders\""))
+      (is (str/includes? body "entity-card-count"))))
+  (testing "a user: the profile card, no entities, counts or admin pages"
+    (let [body (home nil {:role :user} [:orders])]
+      (is (str/includes? body "href=\"/web/profile\""))
+      (is (not (str/includes? body "/web/admin/orders")))
+      (is (not (str/includes? body "entity-card-count")))
+      (is (not (str/includes? body "/web/admin/groups")))
+      (is (not (str/includes? body "/web/audit"))))))

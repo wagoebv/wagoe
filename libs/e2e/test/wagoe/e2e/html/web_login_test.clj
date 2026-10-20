@@ -86,10 +86,11 @@
                      (-> fx/*seed* :user :email)
                      (-> fx/*seed* :user :password))
       ;; Wait for the server redirect to complete at the dashboard
-      (page/wait-for-url pg #".*/web/dashboard$" {:timeout 10000.0})
-      ;; The user should land on the dashboard, NOT be bounced back to login
-      (is (str/ends-with? (page/url pg) "/web/dashboard")
-          "User should land on /web/dashboard after login")
+      (page/wait-for-url pg #".*/web/admin/$" {:timeout 10000.0})
+      (is (loc/is-visible? (page/locator pg ".admin-shell .entity-card-link[href='/web/profile']"))
+          "a plain user's dashboard, in the shell, links to their profile")
+      (is (zero? (loc/count-elements (page/locator pg ".entity-card-count")))
+          "and shows no entity counts")
       ;; Session cookie must be set
       (let [cookie (find-cookie pg "session-token")]
         (is (some? cookie)
@@ -97,19 +98,20 @@
         (is (true? (:httpOnly cookie))
             "session-token cookie should be HttpOnly")))))
 
-(deftest ^:integration ^:e2e happy-admin-redirects-to-admin-users
-  (testing "Admin credentials set session cookie and land on /web/admin/users"
+(deftest ^:integration ^:e2e happy-admin-redirects-to-dashboard
+  (testing "Admin credentials set session cookie and land on the dashboard"
     (spel/with-testing-page [pg]
       (page/navigate pg (str base-url "/web/login"))
       (page/wait-for-load-state pg)
       (submit-login! pg
                      (-> fx/*seed* :admin :email)
                      (-> fx/*seed* :admin :password))
-      ;; Wait for the server redirect to complete at the admin users page
-      (page/wait-for-url pg #".*/web/admin/users$" {:timeout 10000.0})
-      ;; Admin should land on /web/admin/users, NOT be bounced back to login
-      (is (str/ends-with? (page/url pg) "/web/admin/users")
-          "Admin should land on /web/admin/users after login")
+      (page/wait-for-url pg #".*/web/admin/$" {:timeout 10000.0})
+      (is (pos? (loc/count-elements (page/locator pg ".entity-card-count")))
+          "an admin's dashboard has the entity tiles")
+      (testing "the old dashboard redirects to it"
+        (page/navigate pg (str base-url "/web/dashboard"))
+        (is (str/ends-with? (page/url pg) "/web/admin/")))
       (is (some? (find-cookie pg "session-token"))
           "session-token cookie should be set after admin login"))))
 

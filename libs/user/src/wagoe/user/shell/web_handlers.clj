@@ -287,23 +287,6 @@
 ;; Page Handlers (Full HTML)
 ;; =============================================================================
 
-(defn home-page-handler
-  "Handler for the home/landing page (GET /).
-
-   Redirects authenticated users to /web/dashboard, unauthenticated to /web.
-
-   Args:
-     config: Application configuration map
-
-   Returns:
-     Ring handler function"
-  [_config]
-  (fn [request]
-    (let [user (:user request)]
-      (if user
-        (response/redirect "/web/dashboard")
-        (response/redirect "/web")))))
-
 (defn- login-context [request]
   {:ip-address (client-ip/request-ip request)
    :user-agent (get-in request [:headers "user-agent"])})
@@ -348,40 +331,6 @@
         (if session
           (response/redirect (landing-path config (:user session) request))
           (html-response request (user-ui/web-root-page {})))))))
-
-(defn dashboard-page-handler
-  "Handler for the dashboard page (GET /web/dashboard).
-   
-   Shows a welcome page with quick links and account statistics.
-   
-   Args:
-     user-service: User service instance  
-     mfa-service: MFA service instance
-     config: Application configuration map
-     
-   Returns:
-     Ring handler function"
-  [user-service mfa-service config]
-  (fn [request]
-    (try
-      (let [user (:user request)
-            user-id (:id user)
-            ;; Fetch dashboard data
-            sessions (user-ports/get-user-sessions user-service user-id)
-            active-sessions (count (filter #(nil? (:revoked-at %)) sessions))
-            mfa-status (mfa/get-mfa-status mfa-service user-id)
-            mfa-enabled? (:enabled mfa-status false)
-            dashboard-data {:active-sessions-count active-sessions
-                            :mfa-enabled mfa-enabled?}
-            extra-cards (:dashboard-extra-cards config)
-            page-opts (cond-> {:user user
-                               :current-time (current-time)
-                               :zone-id (current-zone-id)
-                               :flash (get request :flash)}
-                        extra-cards (assoc :extra-cards extra-cards))]
-        (html-response request (user-ui/dashboard-page user dashboard-data page-opts)))
-      (catch Exception e
-        (server-error-page request e "Error in dashboard-page-handler")))))
 
 (defn users-page-handler
   "Handler for the users listing page (GET /web/users).

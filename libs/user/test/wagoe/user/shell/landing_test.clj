@@ -2,6 +2,7 @@
   "Where a user lands after signing in, and who serves /web/dashboard."
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
+            [wagoe.platform.core.http.pages :as pages]
             [wagoe.platform.shell.http.reitit-router :as reitit-router]
             [wagoe.platform.shell.system.wiring :as wiring]
             [wagoe.shared.ui.core.home :as home]
@@ -39,15 +40,21 @@
 
 (def not-a-fn "/web/x")
 
-(deftest ^:contract defaults-are-unchanged
-  (is (= "/web/admin/users" (login-location {} :admin)))
-  (is (= "/web/dashboard" (login-location {} :user))))
+(defn custom-dashboard [_request]
+  {:status 200 :body "custom"})
+
+(deftest ^:contract everyone-lands-on-the-dashboard
+  (is (= "/web/admin/" (login-location {} :admin)))
+  (is (= "/web/admin/" (login-location {} :user)))
+  (testing "unless the app serves /web/dashboard itself"
+    (is (= "/web/dashboard" (login-location (config {:dashboard false}) :user)))
+    (is (= "/web/dashboard" (login-location (config {:dashboard {:handler `custom-dashboard}}) :user)))))
 
 (deftest ^:contract per-role-redirect
   (let [cfg (config {:login-redirect {:user "/web/overzicht" :default "/web/start"}})]
     (is (= "/web/overzicht" (login-location cfg :user)))
     (is (= "/web/start" (login-location cfg :viewer)))
-    (is (= "/web/admin/users" (login-location cfg :admin)) "unnamed admin keeps its default")
+    (is (= "/web/start" (login-location cfg :admin)) "unnamed admin takes :default")
     (testing "a safe return-to still wins"
       (is (= "/web/profile" (login-location cfg :user "/web/profile")))
       (is (= "/web/overzicht" (login-location cfg :user "https://evil.example"))))))
@@ -56,12 +63,12 @@
   (testing "a symbol, resolved at boot"
     (let [cfg (config {:login-redirect `landing-of})]
       (is (= "/web/beheer" (login-location cfg :admin)))
-      (is (= "/web/dashboard" (login-location cfg :user)) "nil means the default")
-      (is (= "/web/dashboard" (login-location cfg :viewer)) "an off-site answer is refused")))
+      (is (= "/web/admin/" (login-location cfg :user)) "nil means the default")
+      (is (= "/web/admin/" (login-location cfg :viewer)) "an off-site answer is refused")))
   (testing "a function value"
     (is (= "/web/x" (login-location (config {:login-redirect (constantly "/web/x")}) :user))))
   (testing "a function that throws means the default"
-    (is (= "/web/dashboard"
+    (is (= "/web/admin/"
            (login-location (config {:login-redirect (fn [_ _] (throw (ex-info "boom" {})))}) :user)))))
 
 (deftest ^:contract password-mfa-lands-per-config
@@ -138,17 +145,23 @@
   (is (= "app dashboard"
          (:body ((mounted {:dashboard false} app-dashboard) {:request-method :get :uri "/web/dashboard"})))))
 
-(deftest ^:contract default-dashboard-still-claims-the-path
-  (is (some? (dashboard-route {})))
+(deftest ^:contract default-dashboard-redirects-to-the-admin-home
+  (is (= "/web/admin/"
+         (get-in ((get-in (dashboard-route {}) [1 :get :handler]) {}) [:headers "Location"])))
   (is (= :wagoe/ambiguous-routes
          (:type (ex-data (try (mounted {} app-dashboard) nil (catch Exception e e)))))))
-
-(defn custom-dashboard [_request]
-  {:status 200 :body "custom"})
 
 (deftest ^:contract custom-dashboard-handler-is-served
   (let [handler (get-in (dashboard-route {:dashboard {:handler `custom-dashboard}}) [1 :get :handler])]
     (is (= "custom" (:body (handler {}))))))
+
+(deftest ^:contract without-the-admin-the-dashboard-is-the-profile
+  (let [cfg      (landing/prepare (config {}))
+        redirect #(get-in ((landing/dashboard-handler cfg) {}) [:headers "Location"])]
+    (is (= "/web/admin/" (redirect)))
+    (binding [pages/*mounted?* (complement #{"/web/admin/"})]
+      (is (= "/web/profile" (redirect)))
+      (is (= "/web/profile" (landing/path-for cfg {:role :user} {}))))))
 
 ;; =============================================================================
 ;; :home — what the layouts link to
@@ -160,7 +173,8 @@
    {}))
 
 (deftest ^:contract home-path-reaches-the-layouts
-  (is (= "/web/dashboard" (home-under {})))
+  (is (= "/web/dashboard" (home-under {})) "which redirects to the dashboard")
+  (is (= "/web/dashboard" (home-under {:dashboard {:handler `custom-dashboard}})))
   (is (= "/web" (home-under {:dashboard false}))
       "the app owns /web/dashboard, so home is /web, which sends a user to their landing")
   (is (= "/app" (home-under {:dashboard false :home "/app"})))
@@ -184,7 +198,7 @@
 
 (deftest ^:contract landing-unset-keeps-the-defaults
   (is (= 200 (:status (web-root {} nil))) "the welcome page")
-  (is (= "/web/dashboard" (get-in (web-root {} {:user {:role :user}}) [:headers "Location"])))
+  (is (= "/web/admin/" (get-in (web-root {} {:user {:role :user}}) [:headers "Location"])))
   (is (nil? (root-location {})) "the platform's / stays"))
 
 (deftest ^:contract landing-sends-everyone-there

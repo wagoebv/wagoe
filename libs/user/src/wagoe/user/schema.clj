@@ -500,7 +500,8 @@
 
 (def Dashboard
   "`false` leaves /web/dashboard to the application; `{:handler sym}` serves
-   that Ring handler there instead of the built-in page."
+   that Ring handler there. Either way users land there, not on the admin's
+   dashboard, which /web/dashboard redirects to by default."
   [:multi {:dispatch map?}
    [true [:map {:closed true} [:handler [:or qualified-symbol? fn?]]]]
    [false [:boolean {:error/message "should be false, or {:handler my.app/page}"}]]])

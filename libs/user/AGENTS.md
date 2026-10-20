@@ -331,13 +331,15 @@ Five `:wagoe/user` keys, all checked at boot; a bad value fails it.
 ```clojure
 :wagoe/user
 {;; Where a signed-in user lands: paths by role, `:default` for the rest,
- ;; merged over {:admin "/web/admin/users" :default "/web/dashboard"}.
+ ;; `:default` defaults to the dashboard, the admin's home at /web/admin/.
  :login-redirect {:user "/web/overzicht" :default "/web/overzicht"}
  ;; or a (fn [user login-context]), resolved at boot; nil or an off-site path
  ;; means the default:   :login-redirect my.app.web/landing
 
- ;; false: /web/dashboard is not mounted, so the app can route it.
- ;; {:handler my.app.web/dashboard}: that Ring handler serves it, signed in.
+ ;; /web/dashboard redirects to the dashboard (/web/profile without the
+ ;; admin module). false: it is not mounted, so
+ ;; the app can route it. {:handler my.app.web/dashboard}: that Ring handler
+ ;; serves it, signed in. Either way users then land on /web/dashboard.
  :dashboard false
 
  ;; Where the layouts' logo, "back" and dashboard links point. Defaults to
@@ -501,7 +503,7 @@ Kept:
 - `/api/v1/auth/login`, `/api/v1/sessions`, `/api/v1/sessions/:token`
 - `/api/v1/users/**`, `/api/v1/auth/mfa/**`
 - OIDC sign-in under `/web/auth/oidc/**`, when providers are configured. It lands
-  on `/web/dashboard` by default; point `:login-redirect` elsewhere.
+  on the admin's dashboard by default; point `:login-redirect` elsewhere.
 - Not this module: the platform's `/` redirect still points at `/web/login`, and
   the admin UI (`:wagoe/admin`) stays mounted; leave it out of `:active` too.
 - Groups have no API; manage them through `IUserGroupService`.
