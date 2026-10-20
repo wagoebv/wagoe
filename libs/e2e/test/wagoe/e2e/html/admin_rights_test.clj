@@ -76,7 +76,8 @@
       (page/navigate pg (admin/admin-url (str "/users/" (-> fx/*seed* :user :id))))
       (page/wait-for-selector pg "nav.record-tabs" {:timeout 10000.0})
       (loc/click (page/locator pg "nav.record-tabs a:has-text('Rights')"))
-      (page/wait-for-url pg #".*/web/users/.*/rights$" {:timeout 10000.0}))
+      (page/wait-for-url pg #".*/web/users/.*/rights$" {:timeout 10000.0})
+      (is (str/ends-with? (page/url pg) (str "/web/users/" (-> fx/*seed* :user :id) "/rights"))))
 
     (testing "it lists the group, and the permission with its role and group"
       (is (shown? pg "tr.rights-group"))
