@@ -268,6 +268,61 @@ Read the registry through `wagoe.platform.ports.authorization`:
 
 The registry does not yet change who may do what.
 
+=== Scopes
+
+A scope narrows a right to part of the data: `{:domain-id 42}`. Declare each
+scope key under `:scopes`; it replaces the `:scope` schema under
+`:wagoe/user :groups`, which is read in as scope keys until 2.0.
+
+[source,clojure]
+----
+{:scopes        {:domain-id     {:label "Domain" :entity :domains :schema :int}
+                 :department-id {:label   "Department"
+                                 :sources #{:user/department}
+                                 :expand  with-descendants}}
+ :scope-sources {:user/department {:label   "The member's department"
+                                   :resolve (fn [user] #{(:department-id user)})}}}
+----
+
+* A right with no scope holds everywhere. Rights add up: a permission held in
+  two scopes is held in both.
+* A value may come from the user: `{:department-id :user/department}`. Each
+  member resolves to their own value, per request. A resolver that returns
+  nothing gives no rights. A key naming a source nothing resolves fails boot.
+* `:expand` turns values into them plus everything beneath them, after a
+  source is resolved, so a department added later is covered.
+
+A route says how its scope is checked. A scoped right never passes where
+nothing checks the scope:
+
+[source,clojure]
+----
+["/orders"                   {:get {:handler list-all}}]            ; unscoped holders only
+["/domains/:domain-id/orders" {:scope {:domain-id :path/domain-id}  ; the platform checks the parameter
+                               :get   {:handler list-domain}}]
+["/my-orders"                {:get {:scope :handler :handler mine}}] ; the handler filters
+----
+
+A parameter outside the caller's scope is a 404. A `:scope :handler` handler
+reads the scopes from `:wagoe/scopes` on the request and filters with
+`scope-filter`, a HoneySQL `WHERE`:
+
+[source,clojure]
+----
+(require '[wagoe.platform.core.scope :as scope])
+
+{:select [:*] :from [:orders]
+ :where  (scope/scope-filter (:wagoe/scopes request)
+                             {:domain-id :domain_id
+                              ;; a scope on a related record
+                              :category-id (fn [ids] [:in :product_id {:select [:id] :from [:products]
+                                                                       :where [:in :category_id ids]}])})}
+----
+
+A scope key `scope-filter` is not given a field for admits nothing.
+`scope/in-scope?` checks one record. Until the authorization interceptor
+lands, nothing mounts the route check, so routes behave as before.
+
 == Data export and retention
 
 A module exports the data it holds about a person, and expires what it keeps,
