@@ -37,8 +37,9 @@ covers them as such.
 
 | `wagoe.shared.ui.core.table`
 | `data-table` (sortable headers, filter inputs, infinite scroll),
-  `filter-input`, `pagination`, and `parse-table-params` / `list-url` for the
-  query string that holds the table's state
+  `filter-input`, `pagination`, `bulk-bar` for actions on selected rows, and
+  `parse-table-params` / `list-url` for the query string that holds the
+  table's state
 
 | `wagoe.shared.ui.core.validation`
 | Turning Malli explain output into per-field messages: `explain->field-errors`,

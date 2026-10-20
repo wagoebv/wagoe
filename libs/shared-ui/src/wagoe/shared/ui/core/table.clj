@@ -2,6 +2,7 @@
   "Shared table UI helpers (sorting, paging) for Hiccup-based web UIs."
   (:require [wagoe.core.utils.type-conversion :as tc]
             [wagoe.shared.ui.core.htmx :as htmx]
+            [wagoe.shared.ui.core.modal :as modal]
             [clojure.string :as str]))
 
 ;; ---------------------------------------------------------------------------
@@ -88,8 +89,10 @@
         qs-map   (merge base-q (search-filters->params extra-params))
         query-str (encode-query-params qs-map)
         url      (str base-url "?" query-str)
-        push-url (when hx-push-url?
-                   (str (or push-url-base base-url) "?" query-str))]
+        ;; "false", not absent: htmx inherits hx-push-url from an ancestor
+        push-url (if hx-push-url?
+                   (str (or push-url-base base-url) "?" query-str)
+                   "false")]
     [:th
      {:hx-get     url
       :hx-target  hx-target
@@ -140,15 +143,16 @@
    opts:
    - :table-query   normalized TableQuery map
    - :total-count   total number of items
-   - :base-url      base URL for hx-get links (e.g. \"/web/users/table\")
+   - :base-url      base URL for hx-get links (e.g. \"/web/users\")
    - :hx-target     HTMX target selector
    - :hx-swap       default \"outerHTML\"; see `sortable-th`
    - :push-url-base optional path used for browser URL updates (defaults to :base-url)
+   - :push-url?     default true; false leaves the address bar alone
    - :extra-params  map of additional query params (filters, etc.)
 
    Returns nil when a single page is sufficient."
-  [{:keys [table-query total-count base-url push-url-base hx-target hx-swap extra-params]
-    :or {hx-swap "outerHTML"}}]
+  [{:keys [table-query total-count base-url push-url-base push-url? hx-target hx-swap extra-params]
+    :or {hx-swap "outerHTML" push-url? true}}]
   (let [{:keys [page page-size]} table-query
         total-count  (long (or total-count 0))
         page-size    (long (max 1 (or page-size 20)))
@@ -170,11 +174,13 @@
                              qs   (merge base extra-q)]
                          (str base-url "?" (encode-query-params qs))))
         mk-push-url  (fn [page*]
-                       (let [tq   (assoc table-query :page page*)
-                             base (table-query->params tq)
-                             qs   (merge base extra-q)]
-                         (str (or push-url-base base-url) "?"
-                              (encode-query-params qs))))
+                       (if push-url?
+                         (let [tq   (assoc table-query :page page*)
+                               base (table-query->params tq)
+                               qs   (merge base extra-q)]
+                           (str (or push-url-base base-url) "?"
+                                (encode-query-params qs)))
+                         "false"))
         prev-page    (max 1 (dec page))
         next-page    (min total-pages (inc page))
         page-btn     (fn [p]
@@ -342,15 +348,16 @@
    - :hx-target  the table container selector
    - :hx-swap    default \"outerHTML\"
    - :hx-include other inputs to send along, default \"this\"
+   - :push-url?  default true; false leaves the address bar alone
    - :attrs      merged last, for classes or a different :type"
-  [{:keys [name value label placeholder options url hx-target hx-swap hx-include attrs]
-    :or   {hx-swap "outerHTML" hx-include "this"}}]
+  [{:keys [name value label placeholder options url hx-target hx-swap hx-include push-url? attrs]
+    :or   {hx-swap "outerHTML" hx-include "this" push-url? true}}]
   (let [base {:name        name
               :aria-label  label
               :hx-get      url
               :hx-target   hx-target
               :hx-swap     hx-swap
-              :hx-push-url "true"
+              :hx-push-url (str (boolean push-url?))
               :hx-include  hx-include}]
     (if options
       [:select (merge base {:class "select w-full" :hx-trigger "change"} attrs)
@@ -397,7 +404,7 @@
     [:input {:type "hidden" :name k :value v}]))
 
 (defn- filter-cell
-  [{:keys [field filter label]} {:keys [filter-url hx-target hx-swap filters]}]
+  [{:keys [field filter label]} {:keys [filter-url hx-target hx-swap filters push-url?]}]
   ;; The swap replaces the input being typed in; htmx refocuses it by id
   [:th {:class (str "filter-cell field-" (name field))}
    (when filter
@@ -410,6 +417,7 @@
                     :hx-target   hx-target
                     :hx-swap     hx-swap
                     :hx-include  "closest tr"
+                    :push-url?   push-url?
                     :attrs       {:id (str (str/replace (str hx-target) #"^#" "") "-filter-" (name field))}}))])
 
 (defn data-table
@@ -419,6 +427,8 @@
 
    opts:
    - :url          the list URL the controls request and push
+   - :push-url?    default true; false for a table whose URL is not a page,
+                   so its controls leave the address bar alone
    - :rows-url     what the last row requests with :infinite?, answered with
                    just the next rows; no :rows-url, no loading
    - :hx-target    the container the handler re-renders, e.g. \"#orders\"
@@ -431,15 +441,15 @@
    - :total-count  needed by :infinite?, with :rows-url
    - :head-before, :head-after  seqs of extra [:th] cells, e.g. a select-all box
    - :colgroup, :tfoot, :class  passed through"
-  [{:keys [url rows-url hx-target hx-swap columns rows table-query filters total-count
+  [{:keys [url push-url? rows-url hx-target hx-swap columns rows table-query filters total-count
            infinite? head-before head-after colgroup tfoot class]
-    :or   {hx-swap "outerHTML"}}]
+    :or   {hx-swap "outerHTML" push-url? true}}]
   (let [{:keys [sort dir page page-size]} table-query
         head-before (keep identity head-before)
         head-after  (keep identity head-after)
         ;; Page one, sorted as now; the filter values come from the row
         ctx  {:filter-url (list-url url (dissoc table-query :page) nil)
-              :hx-target hx-target :hx-swap hx-swap :filters filters}
+              :hx-target hx-target :hx-swap hx-swap :filters filters :push-url? push-url?}
         rows (cond-> rows
                (and infinite? rows-url) (infinite-rows (next-page-url rows-url table-query filters total-count)))]
     [:table.data-table {:class (str "table" (when class (str " " class)))}
@@ -451,7 +461,7 @@
          (if sortable?
            (update (sortable-th {:label label :field field :current-sort sort :current-dir dir
                                  :base-url url :page page :page-size page-size
-                                 :hx-target hx-target :hx-swap hx-swap :hx-push-url? true
+                                 :hx-target hx-target :hx-swap hx-swap :hx-push-url? push-url?
                                  :extra-params (cond-> (or filters {})
                                                  (:search table-query) (assoc :search (:search table-query)))})
                    1 update :class str " field-" (name field) (when col-class (str " " col-class)))
@@ -464,3 +474,29 @@
          (for [_ head-after] [:th])])]
      [:tbody rows]
      tfoot]))
+
+(defn bulk-bar
+  "The bar that appears once rows are selected: how many, what to do with
+   them, and how to stop. Inside an Alpine bulk-selection scope (see
+   `alpine/bulk-selection-attrs`).
+
+   opts:
+   - :form-attrs  the htmx request of #bulk-action-form, e.g. :hx-post
+   - :controls    what goes in the form: the action select, the submit button
+   - :confirm     `modal/confirm-modal` opts; the form waits for its answer"
+  [{:keys [form-attrs controls confirm]}]
+  [:div {:class      "bulk-bar"
+         :role       "region"
+         :aria-label [:t :admin/bulk-bar-label]
+         :x-show     "selectedIds.length > 0"
+         :x-cloak    true}
+   [:span {:class "bulk-count"}
+    [:span {:x-text "selectedIds.length"}] " " [:t :admin/bulk-selected]]
+   ;; htmx asks the form, not the button, to confirm a submit
+   (into [:form#bulk-action-form (merge (modal/confirm-attrs (:id confirm)) form-attrs)]
+         controls)
+   ;; Outside the form: the modal holds forms of its own
+   (modal/confirm-modal confirm)
+   [:button {:type "button" :class "button bulk-clear" :x-on:click "clearSelection()"}
+    [:t :admin/bulk-clear]
+    [:kbd "q"]]])

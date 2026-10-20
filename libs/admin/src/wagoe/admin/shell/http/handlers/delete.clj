@@ -8,21 +8,8 @@
    [wagoe.admin.shell.permissions :as shell-permissions]
    [wagoe.admin.shell.http.support :as support]
    [wagoe.shared.ui.core.toast :as toast]
-   [clojure.string :as str]
    [ring.util.response :as ring-response])
   (:import [java.util UUID]))
-
-(defn- escape-json-string
-  "Escape a string for safe embedding in a JSON string value.
-   Prevents injection via entity labels or user-controlled text."
-  [s]
-  (-> (str s)
-      (str/replace "\\" "\\\\")
-      (str/replace "\"" "\\\"")
-      (str/replace "\n" "\\n")
-      (str/replace "\r" "\\r")
-      (str/replace "\t" "\\t")
-      (str/replace "</" "<\\/")))
 
 (defn- refused
   "A refused delete: 409 and an error toast."
@@ -30,9 +17,7 @@
   (-> (ring-response/response "")
       (ring-response/status 409)
       (ring-response/header "HX-Reswap" "none")
-      (ring-response/header "HX-Trigger"
-                            (str "{\"showToast\":{\"type\":\"error\",\"message\":\""
-                                 (escape-json-string (support/refusal-message request e)) "\"}}"))))
+      (toast/with-error-toast (support/refusal-message request e))))
 
 (defn delete-entity-handler
   "Handler for deleting entity.
@@ -66,15 +51,11 @@
 
         deleted?
         ; Success - redirect back to return_to (parent context) or entity list
-        (let [redirect-url (or safe-return-to
-                               (str "/web/admin/" (name entity-name)))
-              message ((support/t-fn request) :admin/toast-deleted
-                                              {:label (introspection/singular-label entity-config entity-name)})
-              toast-json (str "{\"type\":\"success\",\"message\":\"" (escape-json-string message) "\"}")]
-          (-> (ring-response/response "")
-              (ring-response/status 200)
-              (ring-response/header "X-Toast" toast-json)
-              (ring-response/header "HX-Redirect" redirect-url)))
+        (toast/redirect-with-toast
+         (or safe-return-to (str "/web/admin/" (name entity-name)))
+         :success
+         ((support/t-fn request) :admin/toast-deleted
+                                 {:label (introspection/singular-label entity-config entity-name)}))
 
         ; Failed to delete
         :else

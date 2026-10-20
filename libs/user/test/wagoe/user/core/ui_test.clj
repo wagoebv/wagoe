@@ -94,7 +94,7 @@
       (is (= :div#users-table-container (first table)))
       (is (map? (second table)))
       (is (contains? (second table) :hx-get))
-      (is (= "/web/users/table" (:hx-get (second table))))))
+      (is (= "/web/users" (:hx-get (second table))))))
 
   (testing "shows empty state when no users"
     (let [table (ui/users-table [])]
@@ -105,7 +105,7 @@
   (testing "includes HTMX attributes for dynamic updates"
     (let [table (ui/users-table sample-users)
           attrs (second table)]
-      (is (= "/web/users/table" (:hx-get attrs)))
+      (is (= "/web/users" (:hx-get attrs)))
       (is (= "#users-table-container" (:hx-target attrs)))
       (is (= "userCreated from:body, userUpdated from:body, userDeleted from:body" (:hx-trigger attrs))))))
 
@@ -136,6 +136,13 @@
                                          1 {:action "login"}))]
       (is (re-find #":hx-get \"/web/audit\?sort=created-at&dir=asc[^\"]*action=login" html))
       (is (not (re-find #"/web/audit/table" html)))))
+
+  (testing "a filter value with & and = is encoded, so it stays one value"
+    (let [html (str (ui/audit-logs-table (repeat 2 {:action :login :result :success})
+                                         {:sort :created-at :dir :desc :page 1 :page-size 1}
+                                         2 {:actor-email "a&b=c@x.org"}))]
+      (is (str/includes? html "actor-email=a%26b%3Dc%40x.org"))
+      (is (not (str/includes? html "a&b=c")))))
 
   (testing "an empty list says whether the filters emptied it"
     (let [tq {:sort :created-at :dir :desc :page 1 :page-size 50}]
@@ -246,6 +253,30 @@
       (is (re-find #"label-email" form-content))
       (is (re-find #"label-role" form-content))
       (is (re-find #"field-active" form-content)))))
+
+(defn- nodes
+  "Every element in `tree` whose tag starts with `tag`, e.g. :button#deactivate-user."
+  [tree tag]
+  (filter #(and (vector? %) (keyword? (first %)) (str/starts-with? (name (first %)) (name tag)))
+          (tree-seq coll? seq tree)))
+
+(deftest ^:unit deactivate-asks-the-confirm-modal-test
+  (let [form     (ui/user-detail-form (assoc sample-user :active true))
+        [button] (nodes form :button#deactivate-user)
+        attrs    (second button)]
+    (testing "the button sends the update itself, active false, once confirmed"
+      (is (= "deactivate-confirm" (:data-confirm-modal attrs)))
+      (is (= "/web/users/123" (:hx-put attrs)))
+      (is (= "{\"active\":\"false\"}" (:hx-vals attrs)))
+      (is (not (re-find #"confirm\(" (str form)))))
+    (testing "the modal is outside the form: it holds forms of its own"
+      (is (seq (nodes form :dialog)))
+      (is (empty? (nodes (first (nodes form :form)) :dialog)))))
+  (testing "an inactive user gets Reactivate, which needs no confirming"
+    (let [form     (ui/user-detail-form (assoc sample-user :active false))
+          [button] (nodes form :button#reactivate-user)]
+      (is (= "{\"active\":\"true\"}" (:hx-vals (second button))))
+      (is (empty? (nodes form :dialog))))))
 
 (deftest ^:unit create-user-form-test
   (testing "generates form with correct structure"
