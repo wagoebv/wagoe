@@ -7,7 +7,6 @@
   {:id (java.util.UUID/randomUUID)
    :email "test@example.com"
    :name "Test User"
-   :role :user
    :active true
    :user-id (java.util.UUID/randomUUID)
    :created-at (java.time.Instant/now)})

@@ -278,9 +278,13 @@
   (group-persistence/create-group-repository ctx))
 
 (defmethod ig/init-key :wagoe/user-group-service
-  [_ {:keys [group-repository user-repository audit-repository settings permission-registry]}]
-  (group-service/create-group-service group-repository user-repository audit-repository
-                                      (group-service/with-registry-scopes settings permission-registry)))
+  [_ {:keys [group-repository user-repository audit-repository settings permission-registry hooks]}]
+  (let [svc (group-service/create-group-service group-repository user-repository audit-repository
+                                                (group-service/with-registry-scopes settings permission-registry)
+                                                {:registry   permission-registry
+                                                 :membership (:group-membership hooks)})]
+    (group-service/migrate! svc)
+    svc))
 
 (defmethod ig/init-key :wagoe/user-group-routes
   [_ {:keys [user-service group-service config]}]
@@ -352,8 +356,11 @@
     :wagoe/user-group-service {:group-repository (ig/ref :wagoe/user-group-repository)
                                :user-repository  (ig/ref :wagoe/user-repository)
                                :audit-repository (ig/ref :wagoe/audit-repository)
-                               :settings         group-settings
-                               :permission-registry (ig/ref :wagoe/permission-registry)}
+                               :permission-registry (ig/ref :wagoe/permission-registry)
+                               :hooks            (ig/ref :wagoe/auth-hooks)
+                               ;; Its tables exist before the migration runs.
+                               :db-schema        (ig/ref :wagoe/user-db-schema)
+                               :settings         group-settings}
     :wagoe/user-group-routes  {:user-service  (ig/ref :wagoe/user-service)
                                :group-service (ig/ref :wagoe/user-group-service)
                                :config        config}

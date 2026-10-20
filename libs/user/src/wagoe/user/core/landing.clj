@@ -9,7 +9,7 @@
   "The landing path for `user` from a role map, merged over the defaults."
   [paths user]
   (let [paths (merge default-paths paths)]
-    (get paths (:role user) (:default paths))))
+    (get paths (or (:role user) :user) (:default paths))))
 
 (defn home-path
   "The path the layouts link to as home, or nil for their default. With the

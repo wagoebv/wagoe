@@ -40,9 +40,9 @@
     :validate [#(re-matches #"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$" %)
                "Must be a valid email address"]]
    [nil "--name NAME" "User full name (required)"]
-   [nil "--role ROLE" "User role: admin, user, or viewer (required)"
+   [nil "--role ROLE" "User role: admin, or user for none (required)"
     :parse-fn keyword
-    :validate [#(contains? #{:admin :user :viewer} %) "Must be admin, user, or viewer"]]
+    :validate [#(contains? #{:admin :user} %) "Must be admin or user"]]
    [nil "--password PASSWORD" "User password (optional, will be hashed according to policy)"]
    [nil "--password-prompt" "Prompt for password (hidden input; avoids putting password in shell history)"]
    [nil "--active BOOL" "User active status (default: true)"
@@ -59,9 +59,9 @@
     :default 0
     :parse-fn #(Integer/parseInt %)
     :validate [#(>= % 0) "Must be non-negative"]]
-   [nil "--role ROLE" "Filter by role: admin, user, or viewer"
+   [nil "--role ROLE" "Filter by role: admin, or user for none"
     :parse-fn keyword
-    :validate [#(contains? #{:admin :user :viewer} %) "Must be admin, user, or viewer"]]
+    :validate [#(contains? #{:admin :user} %) "Must be admin or user"]]
    [nil "--active BOOL" "Filter by active status"
     :parse-fn type-conv/parse-bool
     :validate [some? "Must be true, false, yes, no, 1, or 0"]]])
@@ -79,9 +79,9 @@
     :parse-fn type-conv/parse-uuid-string
     :validate [some? "Must be a valid UUID"]]
    [nil "--name NAME" "User full name"]
-   [nil "--role ROLE" "User role: admin, user, or viewer"
+   [nil "--role ROLE" "User role: admin, or user for none"
     :parse-fn keyword
-    :validate [#(contains? #{:admin :user :viewer} %) "Must be admin, user, or viewer"]]
+    :validate [#(contains? #{:admin :user} %) "Must be admin or user"]]
    [nil "--active BOOL" "User active status"
     :parse-fn type-conv/parse-bool
     :validate [some? "Must be true, false, yes, no, 1, or 0"]]])

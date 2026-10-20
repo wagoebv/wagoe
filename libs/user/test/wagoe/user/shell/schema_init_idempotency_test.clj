@@ -13,6 +13,7 @@
             [wagoe.user.ports :as ports]
             [wagoe.user.shell.persistence :as persistence]
             [clojure.test :refer [deftest is testing]]
+            [next.jdbc :as jdbc]
             [next.jdbc.connection :as connection])
   (:import [com.zaxxer.hikari HikariDataSource]
            [java.util UUID]))
@@ -66,13 +67,8 @@
               ;; role has to be rejected, proving repair didn't drop it or make
               ;; it permissive.
               (is (thrown? Exception
-                           (ports/create-user
-                            repo
-                            {:email (str "invalid-" (UUID/randomUUID) "@example.com")
-                             :name "Invalid Role User"
-                             :role :superuser
-                             :active true
-                             :password-hash "x"}))
+                           (jdbc/execute! ds2 ["UPDATE users SET role = 'superuser' WHERE id = ?"
+                                               (str (:id created))]))
                   "out-of-enum role is still rejected after repair")))
           (finally (.close ds2)))))))
 

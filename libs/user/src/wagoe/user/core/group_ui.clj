@@ -1,5 +1,5 @@
 (ns wagoe.user.core.group-ui
-  "Admin pages for groups, their members and their grants. Pure Hiccup; plain
+  "Admin pages for groups, their members and their roles. Pure Hiccup; plain
    forms that post and redirect."
   (:require [wagoe.platform.core.csrf :as csrf]
             [wagoe.shared.ui.core.combobox :as combobox]
@@ -16,7 +16,7 @@
   (str (group-path group-id) "/members/options"))
 
 (defn scope-lookup-field
-  "The form field a grant's scope key `k` is chosen in, when the application
+  "The form field an assignment's scope key `k` is chosen in, when the application
    says which entity the key points at."
   [k]
   (keyword (str "scope-" (name k))))
@@ -59,14 +59,14 @@
                 [:th [:t :user.groups/field-name]]
                 [:th [:t :user.groups/field-description]]
                 [:th [:t :user.groups/column-members]]
-                [:th [:t :user.groups/column-grants]]]]
+                [:th [:t :user.groups/column-roles]]]]
        [:tbody
-        (for [{:keys [id name description member-count grant-count]} groups]
+        (for [{:keys [id name description member-count role-count]} groups]
           [:tr
            [:td [:a {:href (group-path id)} name]]
            [:td description]
-           [:td member-count]
-           [:td grant-count]])]]
+           [:td (when-not (group/everyone? id) member-count)]
+           [:td role-count]])]]
       [:p.empty-state [:t :user.groups/empty]])
     [:form.group-create-form {:method "post" :action base-path}
      (csrf/hidden-field)
@@ -75,16 +75,10 @@
      [:button {:type "submit"} [:t :user.groups/button-create]]])
    opts))
 
-(defn- permission-input
-  "A select over the declared permissions, or a text input when the
-   application declares no fixed set."
-  [options]
-  (if (seq options)
-    [:select#grant-permission {:name "permission" :required true}
-     (for [p options]
-       (let [v (group/permission-str p)] [:option {:value v} v]))]
-    [:input#grant-permission {:type "text" :name "permission" :required true
-                              :placeholder "invoice/approve"}]))
+(defn- role-input [roles]
+  [:select#group-role {:name "role" :required true}
+   (for [{:keys [name description]} roles]
+     (let [v (group/permission-str name)] [:option {:value v :title description} v]))])
 
 (defn- scope-lookup-input [{:keys [key url]}]
   (let [field (scope-lookup-field key)]
@@ -92,11 +86,11 @@
           (combobox/combobox field {:url (str url "?field=" (name field)) :placeholder [:t :user.groups/scope-placeholder]}))))
 
 (defn group-page
-  "One group: its name, members and grants, with the forms that change them.
-   `permission-options` lists the declared permissions, or is nil.
-   `(:scope-lookups opts)`, [{:key :url}], are the scope keys a grant chooses
-   through a lookup, beside the EDN."
-  [{:keys [id name members grants] :as group} permission-options opts]
+  "One group: its name, members and roles, with the forms that change them.
+   `roles` are those it may be assigned, as `list-roles` gives them.
+   `(:scope-lookups opts)`, [{:key :url}], are the scope keys an assignment
+   chooses through a lookup, beside the EDN."
+  [{:keys [id name members roles everyone?] :as group} assignable opts]
   (let [path (group-path id)]
     (page
      [:t :user.groups/group-page-title {:name name}]
@@ -104,57 +98,60 @@
       [:nav {:aria-label [:t :common/aria-breadcrumb]}
        [:a {:href base-path} [:t :user.groups/breadcrumb]] " / " name]
       (notice opts)
-      [:section
-       [:form.group-edit-form {:method "post" :action path}
-        (csrf/hidden-field)
-        (group-fields group)
-        [:button {:type "submit"} [:t :user.groups/button-save]]]
-       [:form.group-delete-form {:method "post" :action (str path "/delete")}
-        (csrf/hidden-field)
-        [:button.danger {:type "submit"} [:t :user.groups/button-delete]]]]
+      (if everyone?
+        [:p [:t :user.groups/everyone-note]]
+        (list
+         [:section
+          [:form.group-edit-form {:method "post" :action path}
+           (csrf/hidden-field)
+           (group-fields group)
+           [:button {:type "submit"} [:t :user.groups/button-save]]]
+          [:form.group-delete-form {:method "post" :action (str path "/delete")}
+           (csrf/hidden-field)
+           [:button.danger {:type "submit"} [:t :user.groups/button-delete]]]]
 
-      [:section.group-members
-       [:h2 [:t :user.groups/members-heading]]
-       (if (seq members)
-         [:table.table
-          [:tbody
-           (for [m members]
-             [:tr
-              [:td (:email m)]
-              [:td (:name m)]
-              [:td (remove-button (str path "/members/" (:id m) "/remove"))]])]]
-         [:p.empty-state [:t :user.groups/members-empty]])
-       [:form.group-member-form {:method "post" :action (str path "/members")}
-        (csrf/hidden-field)
-        [:label {:for "user-id"} [:t :user.groups/field-member]]
-        (combobox/combobox :user-id {:url         (member-options-path id)
-                                     :required    true
-                                     :placeholder [:t :user.groups/member-placeholder]})
-        [:button {:type "submit"} [:t :user.groups/button-add-member]]]]
+         [:section.group-members
+          [:h2 [:t :user.groups/members-heading]]
+          (if (seq members)
+            [:table.table
+             [:tbody
+              (for [m members]
+                [:tr
+                 [:td (:email m)]
+                 [:td (:name m)]
+                 [:td (remove-button (str path "/members/" (:id m) "/remove"))]])]]
+            [:p.empty-state [:t :user.groups/members-empty]])
+          [:form.group-member-form {:method "post" :action (str path "/members")}
+           (csrf/hidden-field)
+           [:label {:for "user-id"} [:t :user.groups/field-member]]
+           (combobox/combobox :user-id {:url         (member-options-path id)
+                                        :required    true
+                                        :placeholder [:t :user.groups/member-placeholder]})
+           [:button {:type "submit"} [:t :user.groups/button-add-member]]]]))
 
-      [:section.group-grants
-       [:h2 [:t :user.groups/grants-heading]]
-       (if (seq grants)
+      [:section.group-roles
+       [:h2 [:t :user.groups/roles-heading]]
+       (if (seq roles)
          [:table.table
           [:thead [:tr
-                   [:th [:t :user.groups/field-permission]]
+                   [:th [:t :user.groups/field-role]]
                    [:th [:t :user.groups/field-scope]]
                    [:th]]]
           [:tbody
-           (for [g grants]
+           (for [a roles]
              [:tr
-              [:td [:code (group/permission-str (:permission g))]]
-              [:td [:code (pr-str (:scope g))]]
-              [:td (remove-button (str path "/grants/" (:id g) "/remove"))]])]]
-         [:p.empty-state [:t :user.groups/grants-empty]])
-       [:form.group-grant-form {:method "post" :action (str path "/grants")}
+              [:td [:code (group/permission-str (:role a))]]
+              [:td [:code (pr-str (:scope a))]]
+              [:td (remove-button (str path "/roles/" (:id a) "/remove"))]])]]
+         [:p.empty-state [:t :user.groups/roles-empty]])
+       [:form.group-role-form {:method "post" :action (str path "/roles")}
         (csrf/hidden-field)
-        [:label {:for "grant-permission"} [:t :user.groups/field-permission]]
-        (permission-input permission-options)
+        [:label {:for "group-role"} [:t :user.groups/field-role]]
+        (role-input assignable)
         (map scope-lookup-input (:scope-lookups opts))
-        [:label {:for "grant-scope"} [:t :user.groups/field-scope]]
-        [:textarea#grant-scope {:name "scope" :rows 3 :placeholder "{:domain-id 42}"}
+        [:label {:for "group-scope"} [:t :user.groups/field-scope]]
+        [:textarea#group-scope {:name "scope" :rows 3 :placeholder "{:domain-id 42}"}
          (get-in opts [:form :scope])]
         [:small [:t :user.groups/scope-hint]]
-        [:button {:type "submit"} [:t :user.groups/button-add-grant]]]])
+        [:button {:type "submit"} [:t :user.groups/button-add-role]]]])
      opts)))

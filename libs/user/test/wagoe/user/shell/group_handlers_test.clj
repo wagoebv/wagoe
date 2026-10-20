@@ -1,10 +1,12 @@
 (ns wagoe.user.shell.group-handlers-test
   "The admin's group pages, through their routes, on H2: create a group, add
-   a member and a grant, see them, remove them. Admins only."
+   a member and a role, see them, remove them. Admins only."
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [reitit.ring :as ring]
             [support.test-db :as test-db]
+            [wagoe.platform.shell.authorization :as authz]
+            [wagoe.user.core.group :as group]
             [wagoe.user.ports :as ports]
             [wagoe.user.shell.group-persistence :as group-persistence]
             [wagoe.user.shell.group-service :as group-service]
@@ -20,7 +22,8 @@
             audit  (persistence/create-audit-repository ctx {:default-limit 50 :max-limit 100})
             usvc   (user-service/->UserService users nil audit {} nil)
             gsvc   (group-service/create-group-service (group-persistence/create-group-repository ctx)
-                                                       users audit (group-service/prepare-settings settings))
+                                                       users audit (group-service/prepare-settings settings)
+                                                       {:registry (authz/create-registry {:wagoe/invoice nil})})
             routes (http/group-routes usvc gsvc nil)
             app    (ring/ring-handler (ring/router [(:web-prefix routes) (:web routes)]))
             admin  (ports/create-user users {:email "admin@example.com" :name "Admin" :role :admin
@@ -54,31 +57,31 @@
           (let [r (app (req admin :post (str path "/members") {"email" "nobody@example.com"}))]
             (is (= 422 (:status r)))))
 
-        (testing "a grant, its permission picked from the declared set"
+        (testing "a role, picked from the code and managed ones"
           (let [page (:body (app (req admin :get path)))]
-            (is (str/includes? page "<option value=\"invoice/approve\">")))
-          (is (= 303 (:status (app (req admin :post (str path "/grants")
-                                        {"permission" "invoice/approve" "scope" "{:domain-id 7}"}))))))
-        (testing "refused grants: undeclared, not EDN, not a map"
-          (doseq [form [{"permission" "invoice/delete" "scope" ""}
-                        {"permission" "report/view" "scope" "{:domain-id"}
-                        {"permission" "report/view" "scope" "[1 2]"}]]
-            (is (= 422 (:status (app (req admin :post (str path "/grants") form)))) (pr-str form))))
+            (is (str/includes? page "value=\"invoice/editor\"")))
+          (is (= 303 (:status (app (req admin :post (str path "/roles")
+                                        {"role" "invoice/editor" "scope" "{:domain-id 7}"}))))))
+        (testing "refused: no such role, not EDN, not a map"
+          (doseq [form [{"role" "invoice/boss" "scope" ""}
+                        {"role" "invoice/viewer" "scope" "{:domain-id"}
+                        {"role" "invoice/viewer" "scope" "[1 2]"}]]
+            (is (= 422 (:status (app (req admin :post (str path "/roles") form)))) (pr-str form))))
 
         (let [page (:body (app (req admin :get path)))]
           (is (str/includes? page "ada@example.com"))
           (is (str/includes? page "{:domain-id 7}")))
-        (is (= [:invoice/approve] (map :permission (ports/user-grants gsvc ada))))
+        (is (= #{:invoice/read :invoice/write} (set (map :permission (ports/user-grants gsvc ada)))))
 
         (testing "the signed-in admin is the actor"
           (is (= #{(:id admin)}
                  (set (map :actor-id (ports/find-audit-logs-by-user audit (:id ada) {:limit 50}))))))
 
-        (testing "renaming, removing the grant and the member, deleting the group"
+        (testing "renaming, removing the role and the member, deleting the group"
           (is (= 303 (:status (app (req admin :post path {"name" "Treasury" "description" ""})))))
           (is (= "Treasury" (:name (ports/get-group gsvc gid))))
-          (let [grant (first (:grants (ports/get-group gsvc gid)))]
-            (is (= 303 (:status (app (req admin :post (str path "/grants/" (:id grant) "/remove")))))))
+          (let [a (first (:roles (ports/get-group gsvc gid)))]
+            (is (= 303 (:status (app (req admin :post (str path "/roles/" (:id a) "/remove")))))))
           (is (= 303 (:status (app (req admin :post (str path "/members/" (:id ada) "/remove"))))))
           (is (empty? (ports/user-grants gsvc ada)))
           (is (= 303 (:status (app (req admin :post (str path "/delete"))))))
@@ -121,10 +124,10 @@
           (is (str/includes? page "name=\"scope-domain-id\""))
           (is (not (str/includes? page "scope-region"))))
         (testing "the chosen value is read as the schema says, beside the typed EDN"
-          (is (= 303 (:status (app (req admin :post (str path "/grants")
-                                        {"permission" "report/view" "scope" "{:region \"north\"}"
+          (is (= 303 (:status (app (req admin :post (str path "/roles")
+                                        {"role" "invoice/viewer" "scope" "{:region \"north\"}"
                                          "scope-domain-id" "42"})))))
-          (is (= [{:domain-id 42 :region "north"}] (map :scope (:grants (ports/get-group gsvc gid))))))))))
+          (is (= [{:domain-id 42 :region "north"}] (map :scope (:roles (ports/get-group gsvc gid))))))))))
 
 (deftest ^:integration ^:security only-admins-reach-the-pages
   (with-app nil
@@ -149,3 +152,12 @@
       (is (empty? (:web (http/group-routes usvc nil off))))
       (is (empty? (:web (http/user-routes usvc nil off))))
       (is (seq (:api (http/user-routes usvc nil off)))))))
+
+(deftest ^:integration everyone-shows-its-roles-not-its-members
+  (with-app nil
+    (fn [{:keys [app gsvc admin]}]
+      (group-service/migrate! gsvc)
+      (let [page (:body (app (req admin :get (str "/web/admin/groups/" group/everyone-id))))]
+        (is (str/includes? page "everyone-note"))
+        (is (not (str/includes? page "group-member-form")))
+        (is (str/includes? page "group-role-form"))))))

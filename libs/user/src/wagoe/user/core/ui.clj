@@ -60,7 +60,7 @@
    Returns:
      Vector of cell values for table row (some as Hiccup structures)"
   [user]
-  (let [role (:role user)
+  (let [role (or (:role user) :user)
         active? (boolean (:active user))
         badge (fn [text tone class]
                 (update-in (ui/tone-badge text tone) [1 :class] str " " class))]
@@ -326,9 +326,8 @@
         (ui/form-field :role [:t :common/label-role]
                        (ui/select-field :role
                                         [[:admin [:t :common/role-admin]]
-                                         [:user [:t :common/role-user]]
-                                         [:viewer [:t :common/role-viewer]]]
-                                        (:role user))
+                                         [:user [:t :common/role-user]]]
+                                        (or (:role user) :user))
                        (:role errors))
         (ui/form-field :active [:t :user/field-active]
                        (ui/checkbox :active active?)
@@ -424,9 +423,8 @@
         (ui/form-field :role [:t :common/label-role]
                        (ui/select-field :role
                                         [[:user [:t :common/role-user]]
-                                         [:admin [:t :common/role-admin]]
-                                         [:viewer [:t :common/role-viewer]]]
-                                        (:role data))
+                                         [:admin [:t :common/role-admin]]]
+                                        (or (:role data) :user))
                        (:role errors))
         (ui/form-field :send-welcome [:t :user/checkbox-send-welcome]
                        (ui/checkbox :send-welcome (get data :send-welcome true))
@@ -494,7 +492,7 @@
     [:h3 [:t :user/message-updated]]
     [:p [:t :user/message-updated-details {:name (:name user) :email (:email user)}]]
     [:div.user-details
-     [:p [:t :user/updated-role {:role (text/upper-case (name (:role user)))}]]]
+     [:p [:t :user/updated-role {:role (text/upper-case (name (or (:role user) :user)))}]]]
     [:a.button {:href (str "/web/users/" (:id user))} [:t :user/button-view-user]]]))
 (defn user-deleted-success
   "Generate success message for user deletion.
@@ -645,8 +643,7 @@
                    :label       [:t :common/label-role]
                    :placeholder [:t :common/filter-all-roles]
                    :options     [["user" [:t :common/role-user]]
-                                 ["admin" [:t :common/role-admin]]
-                                 ["viewer" [:t :common/role-viewer]]]
+                                 ["admin" [:t :common/role-admin]]]
                    :attrs       {:id "users-role-filter" :class "select select-sm"}}))]
          [:div.toolbar-actions
           [:a.button.primary {:href "/web/users/new" :class "gap-2"}
