@@ -34,6 +34,9 @@ curl -i localhost:3000/api/products     # => 307 to /api/v1/products
 ```
 
 `scripts/example-smoke.sh` asserts exactly those, in CI, on every commit.
+The API needs a signed-in user, and the app runs `:wagoe/authorization
+:enforce`: only an admin made with `bb create-admin`, or a user whose group
+holds a product role, reaches `/api/v1/products`. The smoke shows both.
 
 For a database that survives a restart, `WAG_ENV=dev` uses SQLite — copy
 `.env.example` to `.env` first, and run `clojure -M:migrate up`.

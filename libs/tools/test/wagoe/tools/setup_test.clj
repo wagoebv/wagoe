@@ -86,6 +86,12 @@
 
 (def ^:private h2-spec (assoc minimal-spec :database :h2))
 
+(deftest ^:unit authorization-mode-only-for-a-new-project
+  (testing "a new project starts on :enforce, in prod too"
+    (is (re-find #":wagoe/authorization\s+\{:mode :enforce\}" (setup/build-config minimal-spec "prod"))))
+  (testing "an existing project's prod takes dev's mode by carry-over, not :enforce"
+    (is (not (re-find #":wagoe/authorization" (setup/build-config (assoc minimal-spec :existing? true) "prod"))))))
+
 (deftest ^:unit h2-dev-config-is-file-backed
   (testing "dev H2 is a file, so separate processes share one database"
     (let [config (setup/build-config h2-spec "dev")]

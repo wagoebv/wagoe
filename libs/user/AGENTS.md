@@ -416,6 +416,10 @@ assignment is group + role + scope (`{}` is everywhere). A user's grants,
 pages are `/web/admin/groups` (`group-routes`, mounted beside the admin UI, admins
 only).
 
+The user module's own routes say `:public`, `:signed-in` or `:self`, so
+`:wagoe/authorization :enforce` asks none of them a permission. Guide:
+`docs/modules/guides/pages/authorization.adoc`.
+
 - Roles: code roles come from the permission registry (`:permission-registry`);
   managed roles (`create-role`, `update-role`, `delete-role`) are stored in
   `user_roles` and may name only registry permissions and no code role's name.
@@ -439,7 +443,7 @@ only).
   (`core.user/admin-change-refusal`, checked in the service against the bound
   actor); without an actor (CLI) it is allowed.
 - Migration (`group-service/migrate!`, at group-service init, idempotent): the
-  first boot creates Everyone and, when users exist, gives it every module's
+  first boot creates Everyone and, when users other than admins exist, gives it every module's
   `editor` code role except the admin's; users stored as `viewer` join `Readers`
   with every module's `viewer` role and keep no role. Neither gets a role holding
   a permission already checked as a grant (`core.group/gated-permissions`:

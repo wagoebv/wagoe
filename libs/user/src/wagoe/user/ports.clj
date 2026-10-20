@@ -244,8 +244,9 @@
   (clear-legacy-roles [this])
   ;; Stores no role for every "viewer". Returns the count.
 
-  (any-users? [this])
-  ;; Whether any user exists.
+  (any-non-admin-users? [this])
+  ;; Whether a user without role admin exists. An admin passes every check,
+  ;; so the Everyone migration does not count one.
 
   (ensure-tables [this])
   ;; Creates the group tables, and the audit actions they record, where
