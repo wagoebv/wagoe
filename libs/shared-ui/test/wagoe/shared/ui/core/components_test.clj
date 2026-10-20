@@ -428,3 +428,12 @@
 (deftest ^:unit tone-badge-test
   (is (= [:span {:class "badge ui-badge ui-badge-info c-badge tone-info"} "On hold"]
          (components/tone-badge "On hold" :info))))
+
+(deftest ^:unit tabs-test
+  (testing "the active tab is marked; the others are plain links"
+    (let [[_ attrs items] (components/tabs [{:label "Details" :href "/a" :active? true}
+                                            {:label "Rights" :href "/b"}])]
+      (is (= "tablist" (:role attrs)))
+      (is (= [{:class "tab tab-active" :role "tab" :href "/a" :aria-current "page" :aria-selected "true"}
+              {:class "tab" :role "tab" :href "/b"}]
+             (map second items))))))

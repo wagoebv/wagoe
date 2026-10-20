@@ -25,7 +25,7 @@
                                                        users audit (group-service/prepare-settings settings)
                                                        {:registry (authz/create-registry {:wagoe/invoice nil})})
             routes (http/group-routes usvc gsvc nil)
-            app    (ring/ring-handler (ring/router [(:web-prefix routes) (:web routes)]))
+            app    (ring/ring-handler (ring/router ["/web" (:web routes)]))
             admin  (ports/create-user users {:email "admin@example.com" :name "Admin" :role :admin
                                              :active true :password-hash "x"})]
         (f {:app app :users users :audit audit :gsvc gsvc :admin admin})))))
@@ -70,7 +70,7 @@
 
         (let [page (:body (app (req admin :get path)))]
           (is (str/includes? page "ada@example.com"))
-          (is (str/includes? page "{:domain-id 7}")))
+          (is (str/includes? page "domain-id: <strong class=\"scope-value\">7</strong>")))
         (is (= #{:invoice/read :invoice/write} (set (map :permission (ports/user-grants gsvc ada)))))
 
         (testing "the signed-in admin is the actor"
@@ -119,13 +119,14 @@
       (let [path (get-in (app (req admin :post "/web/admin/groups" {"name" "Finance"})) [:headers "Location"])
             gid  (parse-uuid (last (str/split path #"/")))
             page (:body (app (req admin :get path)))]
-        (testing "the declared key reads its options from the entity's admin lookup; the other stays EDN"
+        (testing "the key pointing at an entity reads its options from the entity's admin lookup; the other is typed"
           (is (str/includes? page "hx-get=\"/web/admin/domains/lookup?field=scope-domain-id\""))
           (is (str/includes? page "name=\"scope-domain-id\""))
-          (is (not (str/includes? page "scope-region"))))
-        (testing "the chosen value is read as the schema says, beside the typed EDN"
+          (is (str/includes? page "name=\"scope-region\""))
+          (is (not (str/includes? page "name=\"scope\""))))
+        (testing "each value is read as the schema says"
           (is (= 303 (:status (app (req admin :post (str path "/roles")
-                                        {"role" "invoice/viewer" "scope" "{:region \"north\"}"
+                                        {"role" "invoice/viewer" "scope-region" "north"
                                          "scope-domain-id" "42"})))))
           (is (= [{:domain-id 42 :region "north"}] (map :scope (:roles (ports/get-group gsvc gid))))))))))
 
@@ -161,3 +162,11 @@
         (is (str/includes? page "everyone-note"))
         (is (not (str/includes? page "group-member-form")))
         (is (str/includes? page "group-role-form"))))))
+
+(deftest ^:integration provider-members-are-shown-when-asked
+  (with-app nil
+    (fn [{:keys [app admin]}]
+      (let [path (get-in (app (req admin :post "/web/admin/groups" {"name" "Newsroom"})) [:headers "Location"])]
+        (is (str/includes? (:body (app (req admin :get path))) (str "hx-get=\"" path "/provider-members\"")))
+        (is (str/includes? (:body (app (req admin :get (str path "/provider-members")))) "provider-members-empty"))
+        (is (= 404 (:status (app (req admin :get (str "/web/admin/groups/" (random-uuid) "/provider-members"))))))))))

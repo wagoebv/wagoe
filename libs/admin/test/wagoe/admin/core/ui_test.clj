@@ -1835,3 +1835,15 @@
              (ui/render-field-value :created-at (str millis) cfg))))
     (testing "in a datetime input"
       (is (= "2026-09-01T09:00" (ui/format-for-datetime-input millis utc utc))))))
+
+(deftest ^:unit detail-tabs-link-the-records-other-pages
+  (let [config (assoc sample-entity-config :detail-tabs [{:label "Rights" :href "/web/users/{id}/rights"}])
+        id     (:id sample-record)
+        links  #(->> (tree-seq coll? seq %) (filter map?) (keep :href) set)]
+    (testing "an edit page: the form is the active tab, then each one with the record's id"
+      (let [page (ui/entity-detail-page :users config sample-record nil sample-permissions nil)]
+        (is (contains? (links page) (str "/web/users/" id "/rights")))
+        (is (contains? (links page) (str "/web/admin/users/" id)))))
+    (testing "a create form has no record, so no tabs"
+      (is (not-any? #(str/includes? (str %) "/rights")
+                    (links (ui/entity-detail-page :users config nil nil sample-permissions nil)))))))

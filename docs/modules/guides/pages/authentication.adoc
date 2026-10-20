@@ -316,7 +316,11 @@ means no role.
 Everyone is a built-in group: every signed-in user is in it, including users who sign
 up later. Give it the roles any user should have.
 
-Administrators manage groups at `/web/admin/groups`. Joining or leaving a group, a
+Administrators manage groups at `/web/admin/groups` and roles at `/web/admin/roles`,
+where a code role can be duplicated into a managed one to adapt it.
+`/web/admin/permissions` and each role page show who holds what, and a user's Rights
+tab lists their groups and every permission with the group, role and scope it comes
+from. Joining or leaving a group, a
 changed role assignment and a changed managed role are written to the audit trail of
 each user whose rights change; a change to Everyone is written once, for the
 administrator who made it.
@@ -462,7 +466,7 @@ does the same. It defaults to on.
 | `/web/users/**` (user management, sessions), `/web/audit`
 | `/api/v1/users/**`
 
-| `/web/admin/groups/**`
+| `/web/admin/groups/**`, `/web/admin/roles/**`, `/web/admin/permissions/**`
 | OpenID Connect sign-in (`/web/auth/oidc/**`), when providers are configured
 |===
 

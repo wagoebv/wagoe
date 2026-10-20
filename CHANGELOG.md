@@ -33,6 +33,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **`clojure -M:run authz-report`** (BOU-786) prints each route's authorization rule and permission, and what
   `:enforce` would refuse, without serving. Generated apps get it in `main.clj`; older ones can copy it from there.
+- **Admin pages for roles, permissions and a user's rights** (BOU-775): `/web/admin/roles`, `/web/admin/permissions`
+  and a Rights tab per user. Add `:detail-tabs` to your `admin/users.edn` to get the tab.
 - **The admin reads `admin.<entity>/read|write` and scopes under `:wagoe/authorization :enforce`** (BOU-774): entities
   map scope keys with `:scope`. Under `:off` it still admits role `:admin`; try `:report` first.
 - **Route authorization, off by default** (BOU-772): `:wagoe/authorization {:mode :report}` logs what `:enforce` would

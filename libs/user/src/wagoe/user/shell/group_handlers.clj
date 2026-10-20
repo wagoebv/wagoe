@@ -8,6 +8,7 @@
             [malli.core :as m]
             [malli.transform :as mt]
             [ring.util.response :as response]
+            [wagoe.platform.ports.authorization :as authz]
             [wagoe.shared.ui.core.combobox :as combobox]
             [wagoe.user.core.group :as group-core]
             [wagoe.user.core.group-ui :as group-ui]
@@ -15,29 +16,43 @@
             [wagoe.user.shell.web-handlers :refer [html-response]]))
 
 
-(defn- page-opts [request]
+(defn page-opts [request]
   {:user  (:user request)
    :flash (:flash request)})
 
-(defn- redirect [path flash-key]
+(defn redirect [path flash-key]
   (assoc (response/redirect path :see-other) :flash {:success flash-key}))
 
 (defn- path-uuid [request k]
   (parse-uuid (str (get-in request [:path-params k]))))
 
-(defn- form [request k]
+(defn form [request k]
   (some-> (get-in request [:form-params k]) str str/trim))
 
-(defn- scope-lookups
-  "The scope keys an assignment chooses through a lookup: those the declared scope
-   map says point at an admin entity, `[:domain-id {:wagoe/entity :domains} :int]`."
+(defn scope-keys
+  "The scope keys an assignment may set, as the declared scope map has them,
+   each with its registry label, a lookup when it points at an admin entity
+   (`[:domain-id {:wagoe/entity :domains} :int]`), and the user sources it takes."
   [group-service]
-  (let [schema (get-in group-service [:settings :scope-schema])]
+  (let [schema   (get-in group-service [:settings :scope-schema])
+        registry (:registry group-service)
+        scopes   (some-> registry authz/scopes)
+        sources  (some-> registry authz/scope-sources)]
     (when (and schema (= :map (m/type schema)))
-      (for [[k props] (m/children schema)
-            :let  [entity (:wagoe/entity props)]
-            :when entity]
-        {:key k :url (str "/web/admin/" (name entity) "/lookup")}))))
+      (vec (for [[k props] (m/children schema)
+                 :let  [entity (:wagoe/entity props)]]
+             {:key     k
+              :label   (get-in scopes [k :label])
+              :url     (when entity (str "/web/admin/" (name entity) "/lookup"))
+              :sources (vec (for [src (sort (get-in scopes [k :sources]))]
+                              [src (or (get-in sources [src :label]) (group-core/permission-str src))]))})))))
+
+(defn scope-info
+  "What `rights-ui/scope-view` reads to label a scope's keys and sources."
+  [group-service]
+  (let [registry (:registry group-service)]
+    {:labels  (some-> registry authz/scopes (update-vals :label))
+     :sources (some-> registry authz/scope-sources (update-vals :label))}))
 
 (defn- error-text
   "What to show for a refused change: the field's message, and the schema's
@@ -59,7 +74,10 @@
   (if-let [group (ports/get-group group-service group-id)]
     (html-response request
           (group-ui/group-page group (ports/list-roles group-service)
-                               (merge (page-opts request) {:scope-lookups (scope-lookups group-service)} opts))
+                               (merge (page-opts request)
+                                      {:scope-keys       (scope-keys group-service)
+                                       :scope-info       (scope-info group-service)}
+                                      opts))
           status)
     (not-found request)))
 
@@ -161,6 +179,14 @@
                        200))
       (not-found request))))
 
+(defn provider-members
+  "GET /:id/provider-members — the users the membership hook puts in the group."
+  [group-service]
+  (fn [request]
+    (if-let [group-id (some->> (path-uuid request :id) (ports/get-group group-service) :id)]
+      (html-response request (group-ui/provider-members (ports/provider-members group-service group-id)) 200)
+      (not-found request))))
+
 (defn remove-member [group-service]
   (fn [request]
     (change group-service request :user.groups/flash-member-removed
@@ -177,19 +203,25 @@
            (throw (ex-info "The scope is not EDN" {:type :validation-error :field :scope}))))))
 
 (defn- form-scope
-  "The assignment's scope: the EDN typed, with each key chosen through a lookup
-   added, read as the declared scope schema reads it from a string."
+  "The assignment's scope: the EDN typed, with each key's user source or fixed
+   value added, a value read as the declared scope schema reads it from a
+   string. A source wins over a value typed beside it."
   [group-service request]
-  (let [scope  (parse-scope (form request "scope"))
-        chosen (into {}
-                     (keep (fn [{:keys [key]}]
-                             (some->> (form request (name (group-ui/scope-lookup-field key)))
-                                      not-empty
-                                      (vector key))))
-                     (scope-lookups group-service))]
+  (let [scope (parse-scope (form request "scope"))
+        {:keys [sources values]}
+        (reduce (fn [acc {:keys [key]}]
+                  (if-let [src (group-core/parse-name (form request (name (group-ui/scope-source-field key))))]
+                    (assoc-in acc [:sources key] src)
+                    (if-let [v (not-empty (form request (name (group-ui/scope-lookup-field key))))]
+                      (assoc-in acc [:values key] v)
+                      acc)))
+                {}
+                (scope-keys group-service))]
     ;; `nil` typed is no scope: a key picked beside it is still the scope
-    (if (and (seq chosen) (or (nil? scope) (map? scope)))
-      (merge scope (m/decode (get-in group-service [:settings :scope-schema]) chosen (mt/string-transformer)))
+    (if (and (or values sources) (or (nil? scope) (map? scope)))
+      (merge scope
+             (when values (m/decode (get-in group-service [:settings :scope-schema]) values (mt/string-transformer)))
+             sources)
       scope)))
 
 (defn add-role [group-service]
