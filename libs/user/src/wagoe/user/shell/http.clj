@@ -252,7 +252,7 @@
   (let [{:keys [type message retry-after]} (:error result)]
     (if (= :account-locked type)
       (user-interceptors/lockout-response
-       retry-after {:correlation-id (access/correlation-id request (str (java.util.UUID/randomUUID)))})
+       retry-after {:correlation-id (access/correlation-id request (str (random-uuid)))})
       {:status  (if (mfa-failures type) 500 400)
        :headers {"Content-Type" "application/json"}
        :body    (json/generate-string

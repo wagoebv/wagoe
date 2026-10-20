@@ -12,8 +12,15 @@
   [user-repository auth-config user-id n current-time]
   (let [lockout (auth-core/failed-login-lockout auth-config current-time)
         claim   (ports/claim-login-attempts user-repository user-id n lockout)]
-    (if (:claimed? claim)
+    (cond
+      ;; Deleted since it was read: nothing to count, and no lockout to report.
+      (nil? claim)
+      {:claimed? true :locked? false}
+
+      (:claimed? claim)
       {:claimed? true :locked? (>= (:failed-login-count claim) (:max-attempts lockout))}
+
+      :else
       {:claimed? false :retry-after (or (:lockout-until claim) (:until lockout))})))
 
 (defn release-attempt!
