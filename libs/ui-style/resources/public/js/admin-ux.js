@@ -388,6 +388,21 @@ document.addEventListener('alpine:init', function () {
       }
     });
 
+    // An audit row's details, from the button's data attributes, in the
+    // audit page's modal
+    document.addEventListener('click', function (event) {
+      var trigger = event.target.closest('.audit-detail-trigger');
+      var modal = document.getElementById('audit-detail-modal');
+      if (!trigger || !modal) return;
+      ['timestamp', 'action', 'actor', 'target', 'ip', 'userAgent', 'error'].forEach(function (key) {
+        var node = document.getElementById('audit-detail-' + key.replace(/[A-Z]/g, '-$&').toLowerCase());
+        if (node) node.textContent = trigger.dataset[key] || '-';
+      });
+      var errorRow = document.getElementById('audit-detail-error-row');
+      if (errorRow) errorRow.hidden = !trigger.dataset.error;
+      modal.showModal();
+    });
+
     // Close, previous and next inside the drawer
     document.addEventListener('click', function (event) {
       var control = event.target.closest('[data-drawer]');

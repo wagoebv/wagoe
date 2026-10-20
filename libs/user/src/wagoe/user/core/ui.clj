@@ -6,7 +6,9 @@
    user-specific business logic for display and forms."
   (:require [wagoe.core.utils.text :as text]
             [wagoe.shared.ui.core.components :as ui]
+            [wagoe.shared.ui.core.htmx :as htmx]
             [wagoe.shared.ui.core.layout :as layout]
+            [wagoe.shared.ui.core.shell :as shell]
             [wagoe.shared.ui.core.table :as table-ui]
             [wagoe.shared.ui.core.icons :as icons]
             [wagoe.platform.core.csrf :as csrf]
@@ -1265,12 +1267,14 @@
         created-at (:created-at audit-log)
         error-msg (:error-message audit-log)]
     [:tr
-     [:td (format-audit-timestamp created-at)]
-     [:td (action-badge action)]
-     [:td (or (:actor-email audit-log) [:em [:t :user/audit-actor-system]])]
-     [:td (or (:target-user-email audit-log) "-")]
-     [:td (result-badge result)]
-     [:td (or (:ip-address audit-log) "-")]
+     ;; The labels head a cell when a narrow screen shows rows as cards
+     [:td {:data-label [:t :common/audit-timestamp]} (format-audit-timestamp created-at)]
+     [:td {:data-label [:t :common/audit-action]} (action-badge action)]
+     [:td {:data-label [:t :common/audit-actor]}
+      (or (:actor-email audit-log) [:em [:t :user/audit-actor-system]])]
+     [:td {:data-label [:t :user/audit-column-target]} (or (:target-user-email audit-log) "-")]
+     [:td {:data-label [:t :user/audit-column-result]} (result-badge result)]
+     [:td {:data-label [:t :common/column-ip-address]} (or (:ip-address audit-log) "-")]
      [:td.actions-cell
       [:button.button.small.secondary.audit-detail-trigger
        {:type "button"
@@ -1309,217 +1313,153 @@
      [:div.audit-detail-row
       [:span.audit-detail-label [:t :user/audit-user-agent]]
       [:span#audit-detail-user-agent.audit-detail-value "-"]]
-     [:div#audit-detail-error-row.audit-detail-row.hidden
+     [:div#audit-detail-error-row.audit-detail-row {:hidden true}
       [:span.audit-detail-label [:t :common/audit-error]]
       [:code#audit-detail-error.audit-detail-value "-"]]]
     [:div.modal-action
      [:form {:method "dialog"}
       [:button.button.secondary {:type "submit"} [:t :common/button-close]]]]]])
 
-(defn audit-detail-modal-script
-  "Script for wiring audit detail buttons to modal."
-  []
-  [:script
-   "(() => {
-      if (window.__wagoeAuditModalInit) return;
-      window.__wagoeAuditModalInit = true;
-      document.addEventListener('click', (event) => {
-        const trigger = event.target.closest('.audit-detail-trigger');
-        if (!trigger) return;
-        const modal = document.getElementById('audit-detail-modal');
-        if (!modal) return;
-        const setText = (id, value) => {
-          const node = document.getElementById(id);
-          if (node) node.textContent = value || '-';
-        };
-        setText('audit-detail-timestamp', trigger.dataset.timestamp);
-        setText('audit-detail-action', trigger.dataset.action);
-        setText('audit-detail-actor', trigger.dataset.actor);
-        setText('audit-detail-target', trigger.dataset.target);
-        setText('audit-detail-ip', trigger.dataset.ip);
-        setText('audit-detail-user-agent', trigger.dataset.userAgent);
-        setText('audit-detail-error', trigger.dataset.error);
-        const errorRow = document.getElementById('audit-detail-error-row');
-        if (errorRow) {
-          if (trigger.dataset.error) {
-            errorRow.classList.remove('hidden');
-          } else {
-            errorRow.classList.add('hidden');
-          }
-        }
-        modal.showModal();
-      });
-    })();"])
+(def ^:private audit-url "/web/audit")
+(def ^:private audit-target "#audit-table-container")
+
+(defn audit-count-badge
+  "The toolbar's entry count. The table fragment carries it out of band, so
+   it follows the filters."
+  [total-count]
+  [:span {:id "audit-record-count" :class "record-count-badge"} (str total-count)])
 
 (defn audit-logs-table
-  "Generate audit logs table.
-   
+  "The audit table, its pagination or an empty state, in the container the
+   page's controls re-render. They request `/web/audit` and push it, so the
+   address bar holds sort, filters and page.
+
    Args:
      audit-logs - collection of audit log entity maps
      table-query - normalized TableQuery
      total-count - total number of audit logs
      filters - optional map of parsed search filters
-     
-   Returns:
-     Hiccup structure for audit logs table
-     
+
    Pure: true"
   ([audit-logs table-query total-count]
    (audit-logs-table audit-logs table-query total-count {}))
   ([audit-logs table-query total-count filters]
-   (let [{:keys [sort dir page page-size]} table-query
-         base-url "/web/audit/table"
-         hx-target "#audit-table-container"
-         table-params (table-query->params table-query)
-         filter-params (search-filters->params filters)
-         qs-map (merge table-params filter-params)
-         hx-url (str base-url "?" (encode-query-params qs-map))]
-     (if (empty? audit-logs)
-       [:div#audit-table-container
-        {:hx-get hx-url
-         :hx-trigger "auditRefresh from:body"
-         :hx-target hx-target
-         :hx-swap "outerHTML"}
-        [:div.empty-state [:t :user/audit-empty-state]]]
-       [:div#audit-table-container
-        {:hx-get hx-url
-         :hx-trigger "auditRefresh from:body"
-         :hx-target hx-target
-         :hx-swap "outerHTML"}
-        (ui/table-wrapper
-         [:table {:class "data-table" :id "audit-table"}
-          [:thead
-           [:tr
-            (table-ui/sortable-th {:label [:t :common/audit-timestamp]
-                                   :field :created-at
-                                   :current-sort sort
-                                   :current-dir dir
-                                   :base-url base-url
-                                   :push-url-base "/web/audit"
-                                   :page page
-                                   :page-size page-size
-                                   :hx-target hx-target
-                                   :hx-push-url? true
-                                   :extra-params filters})
-            [:th [:t :common/audit-action]]
-            [:th [:t :common/audit-actor]]
-            [:th [:t :user/audit-column-target]]
-            [:th [:t :user/audit-column-result]]
-            [:th [:t :common/column-ip-address]]
-            [:th.actions-header [:t :common/column-actions]]]]
-          [:tbody
-           (for [audit-log audit-logs]
-             (audit-log-row audit-log))]]
-         (table-ui/pagination
-          {:table-query table-query
-           :total-count total-count
-           :base-url base-url
-           :push-url-base "/web/audit"
-           :hx-target hx-target
-           :extra-params filter-params}))]))))
+   [:div#audit-table-container
+    {:hx-get     (table-ui/list-url audit-url table-query filters)
+     :hx-trigger "auditRefresh from:body"
+     :hx-target  audit-target
+     :hx-swap    "outerHTML"}
+    ;; The sort the toolbar filters send along: they sit outside this swap
+    [:div {:class "table-state" :hidden true}
+     (table-ui/hidden-inputs (select-keys (table-ui/table-query->params table-query)
+                                          ["sort" "dir" "page-size"]))]
+    (cond
+      (and (empty? audit-logs) (seq filters))
+      [:div.empty-state {:class "empty-state-filtered"}
+       [:div.empty-state-icon (icons/icon :filter {:size 32})]
+       [:p [:t :user/audit-empty-state-filtered]]
+       [:a.button.secondary {:href audit-url} [:t :common/button-clear]]]
+
+      (empty? audit-logs)
+      [:div.empty-state {:class "p-10 text-center"}
+       [:div.empty-state-icon (icons/icon :inbox {:size 48})]
+       [:p [:t :user/audit-empty-state]]]
+
+      :else
+      (let [pagination (table-ui/pagination {:table-query  table-query
+                                             :total-count  total-count
+                                             :base-url     audit-url
+                                             :hx-target    audit-target
+                                             :extra-params filters})]
+        [:div {:class (when pagination "table-and-pagination")}
+         [:div.table-wrapper
+          (table-ui/data-table
+           {:url         audit-url
+            :hx-target   audit-target
+            :table-query table-query
+            :filters     filters
+            :class       "audit-table"
+            :columns     [{:field :created-at :label [:t :common/audit-timestamp]}
+                          {:field :action :label [:t :common/audit-action] :sortable? false}
+                          {:field :actor :label [:t :common/audit-actor] :sortable? false}
+                          {:field :target :label [:t :user/audit-column-target] :sortable? false}
+                          {:field :result :label [:t :user/audit-column-result] :sortable? false}
+                          {:field :ip-address :label [:t :common/column-ip-address] :sortable? false}]
+            :head-after  [[:th {:class "actions-header"} [:span.sr-only [:t :common/column-actions]]]]
+            :rows        (map audit-log-row audit-logs)})]
+         pagination]))]))
+
+(defn audit-table-fragment
+  "What the table's controls get back: the table, and the count out of band."
+  [audit-logs table-query total-count filters]
+  (list (audit-logs-table audit-logs table-query total-count filters)
+        (htmx/oob (audit-count-badge total-count))))
+
+(def ^:private audit-actions
+  [["create" :common/audit-create] ["update" :common/audit-update]
+   ["delete" :common/audit-delete] ["permanent-delete" :common/audit-permanent-delete]
+   ["activate" :common/audit-activate] ["deactivate" :common/audit-deactivate]
+   ["login" :common/audit-login] ["logout" :common/audit-logout]
+   ["session-revoked" :common/audit-session-revoked] ["role-change" :common/audit-role-change]
+   ["bulk-action" :common/audit-bulk-action]
+   ["group-join" :common/audit-group-join] ["group-leave" :common/audit-group-leave]
+   ["grant-add" :common/audit-grant-add] ["grant-remove" :common/audit-grant-remove]
+   ["data-export" :common/audit-data-export]])
 
 (defn audit-filters
-  "Generate filter form for audit logs.
-   
-   Args:
-     filters - current filter values
-     
-   Returns:
-     Hiccup form for filtering
-     
+  "The toolbar's filters. Each re-queries the table as it changes, sending
+   the others and the table's sort along, and pushes the URL.
+
    Pure: true"
   [filters]
-  [:div.filters-panel.audit-filters-card
-   [:h3 [:t :user/audit-filters-title]]
-   [:form.audit-filters-form {:hx-get "/web/audit/table"
-                              :hx-target "#audit-table-container"
-                              :hx-swap "outerHTML"
-                              :hx-push-url "true"}
-    [:div.filter-group
-     [:label {:for "action"} [:t :common/audit-action]]
-     [:select {:name "action" :id "action"}
-      [:option {:value ""} [:t :common/audit-all-actions]]
-      [:option {:value "create" :selected (= "create" (:action filters))} [:t :common/audit-create]]
-      [:option {:value "update" :selected (= "update" (:action filters))} [:t :common/audit-update]]
-      [:option {:value "delete" :selected (= "delete" (:action filters))} [:t :common/audit-delete]]
-      [:option {:value "permanent-delete" :selected (= "permanent-delete" (:action filters))} [:t :common/audit-permanent-delete]]
-      [:option {:value "activate" :selected (= "activate" (:action filters))} [:t :common/audit-activate]]
-      [:option {:value "deactivate" :selected (= "deactivate" (:action filters))} [:t :common/audit-deactivate]]
-      [:option {:value "login" :selected (= "login" (:action filters))} [:t :common/audit-login]]
-      [:option {:value "logout" :selected (= "logout" (:action filters))} [:t :common/audit-logout]]
-      [:option {:value "session-revoked" :selected (= "session-revoked" (:action filters))} [:t :common/audit-session-revoked]]
-      [:option {:value "role-change" :selected (= "role-change" (:action filters))} [:t :common/audit-role-change]]
-      [:option {:value "bulk-action" :selected (= "bulk-action" (:action filters))} [:t :common/audit-bulk-action]]
-      (for [[action k] [["group-join" :common/audit-group-join] ["group-leave" :common/audit-group-leave]
-                        ["grant-add" :common/audit-grant-add] ["grant-remove" :common/audit-grant-remove]
-                        ["data-export" :common/audit-data-export]]]
-        [:option {:value action :selected (= action (:action filters))} [:t k]])]]
-
-    [:div.filter-group
-     [:label {:for "result"} [:t :user/audit-filter-result-label]]
-     [:select {:name "result" :id "result"}
-      [:option {:value ""} [:t :common/audit-all-results]]
-      [:option {:value "success" :selected (= "success" (:result filters))} [:t :common/audit-success]]
-      [:option {:value "failure" :selected (= "failure" (:result filters))} [:t :common/audit-failure]]]]
-
-    [:div.filter-group
-     [:label {:for "target-email"} [:t :user/audit-filter-target-email]]
-     [:input {:type "text"
-              :name "target-email"
-              :id "target-email"
-              :placeholder "user@example.com"
-              :value (:target-email filters)}]]
-
-    [:div.filter-group
-     [:label {:for "actor-email"} [:t :user/audit-filter-actor-email]]
-     [:input {:type "text"
-              :name "actor-email"
-              :id "actor-email"
-              :placeholder "admin@example.com"
-              :value (:actor-email filters)}]]
-
-    [:div.form-actions
-     [:button.button.primary {:type "submit"} [:t :common/button-apply]]
-     [:button.button.secondary
-      {:type "button"
-       :onclick "window.location.href='/web/audit'"}
-      [:t :common/button-clear]]]]])
+  (let [input (fn [k label opts]
+                (table-ui/filter-input
+                 (merge {:name       (name k)
+                         :value      (get filters k)
+                         :label      label
+                         :url        audit-url
+                         :hx-target  audit-target
+                         :hx-include "#audit-filters [name], #audit-table-container .table-state input"
+                         :attrs      {:id (str "audit-filter-" (name k))}}
+                        opts)))]
+    [:div#audit-filters.audit-filters
+     (input :action [:t :common/audit-action]
+            {:placeholder [:t :common/audit-all-actions]
+             :options     (for [[v k] audit-actions] [v [:t k]])})
+     (input :result [:t :user/audit-filter-result-label]
+            {:placeholder [:t :common/audit-all-results]
+             :options     [["success" [:t :common/audit-success]]
+                           ["failure" [:t :common/audit-failure]]]})
+     (input :target-email [:t :user/audit-filter-target-email]
+            {:placeholder [:t :user/audit-filter-target-email]})
+     (input :actor-email [:t :user/audit-filter-actor-email]
+            {:placeholder [:t :user/audit-filter-actor-email]})]))
 
 (defn audit-page
-  "Full audit logs page with layout.
-   
+  "The audit trail in the admin shell: a toolbar of filters over the table.
+
    Args:
      audit-logs - collection of audit log entity maps
      table-query - normalized TableQuery
      total-count - total number of audit logs
      filters - optional map of parsed search filters
-     opts - page options (user context, flash messages, etc.)
-     
-   Returns:
-     Complete page hiccup
-     
-   Pure: false"
+     opts - :user and :flash
+
+   Pure: true"
   ([audit-logs table-query total-count opts]
    (audit-page audit-logs table-query total-count {} opts))
   ([audit-logs table-query total-count filters opts]
-   (page-layout
+   (shell/shell-page
     [:t :user/page-audit-title]
-    [:div.audit-page
-     [:div.page-header
-      [:div
-       [:h1 [:t :user/page-audit-heading]]
-       [:p [:t :user/page-audit-description]]]]
-
-     [:div.audit-content.audit-layout
-      [:div.filters-sidebar
-       (audit-filters filters)]
-
-      [:div.audit-main
-       [:div.audit-table-card
-        (audit-logs-table audit-logs table-query total-count filters)]]
-      (audit-detail-modal)
-      (audit-detail-modal-script)]]
-    opts)))
+    [:div.audit-page.entity-list-page {:class "space-y-4"}
+     [:div.table-toolbar-container
+      [:div.toolbar-row-actions
+       [:div.record-meta (audit-count-badge total-count)]
+       (audit-filters filters)]]
+     (audit-logs-table audit-logs table-query total-count filters)
+     ;; admin-ux.js fills it from a row's detail button
+     (audit-detail-modal)]
+    (assoc opts :page-title [:t :user/page-audit-heading]))))
 
 ;; =============================================================================
 ;; Dashboard Page
