@@ -2280,7 +2280,6 @@
   color: var(--status-error);
 }
 
-.success-banner,
 .alert-success {
   background: var(--status-success-bg);
   border-left: 3px solid var(--status-success);

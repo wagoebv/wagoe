@@ -1244,10 +1244,11 @@
             {:keys [invalidated]} (user-ports/revoke-user-session
                                    user-service
                                    (UUID/fromString user-id)
-                                   (UUID/fromString (get-in request [:path-params :session-id])))]
+                                   (UUID/fromString (get-in request [:path-params :session-id])))
+            sessions-url (str "/web/users/" user-id "/sessions")]
         (if invalidated
-          (redirect-with-toast (str "/web/users/" user-id "/sessions") :success "Session revoked successfully")
-          (redirect-with-toast (str "/web/users/" user-id "/sessions") :error "Session not found or already ended")))
+          (redirect-with-toast sessions-url :success "Session revoked successfully")
+          (redirect-with-toast sessions-url :error "Session not found or already ended")))
       (catch IllegalArgumentException _
         (html-response request (ui/error-message "Invalid session") 400))
       (catch Exception e

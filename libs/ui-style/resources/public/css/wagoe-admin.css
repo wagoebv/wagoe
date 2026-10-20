@@ -743,10 +743,10 @@ time.tone-danger  { color: var(--tone-danger-fg);  font-weight: 600; }
   color: var(--text-muted) !important;
 }
 .bulk-bar .bulk-clear:hover { color: var(--text-primary) !important; }
-/* The users page picks its bulk action and role filter with a select */
-.users-page :is(.bulk-bar, .toolbar-filter) select { width: auto; min-height: 0; padding: 0 28px 0 10px; font-size: 13px; }
-.users-page .bulk-bar select { height: 28px; font-size: 12px; }
-.users-page .toolbar-filter select { height: 32px; }
+/* A select in the bulk bar or beside the toolbar search */
+:is(.bulk-bar, .toolbar-filter) select { width: auto; min-height: 0; padding: 0 28px 0 10px; font-size: 13px; }
+.bulk-bar select { height: 28px; font-size: 12px; }
+.toolbar-filter select { height: 32px; }
 .bulk-bar kbd,
 .save-bar kbd {
   font-family: var(--font-mono);

@@ -135,12 +135,10 @@
   ([users table-query total-count filters]
    (let [base-url      "/web/users/table"
          hx-target     "#users-table-container"
-         table-params  (table-query->params table-query)
-         filter-params (search-filters->params filters)
-         qs-map        (merge table-params filter-params)
-         hx-url        (str base-url "?" (encode-query-params qs-map))]
+         table-params  (table-ui/table-query->params table-query)
+         filter-params (table-ui/search-filters->params filters)]
      [:div#users-table-container
-      {:hx-get     hx-url
+      {:hx-get     (table-ui/list-url base-url table-query filters)
        :hx-trigger "userCreated from:body, userUpdated from:body, userDeleted from:body"
        :hx-target  hx-target
        :hx-swap    "outerHTML"}
@@ -165,12 +163,11 @@
             :rows        (for [user users
                                :when (nil? (:deleted-at user))]
                            (user-table-row user))})]
-         (table-ui/pagination {:table-query   table-query
-                               :total-count   total-count
-                               :base-url      base-url
-                               :push-url-base "/web/users"
-                               :hx-target     hx-target
-                               :extra-params  filters})])])))
+         (table-ui/pagination {:table-query  table-query
+                               :total-count  total-count
+                               :base-url     base-url
+                               :hx-target    hx-target
+                               :extra-params filters})])])))
 
 (defn users-table
   "Generate a table displaying users based on User schema.
@@ -329,13 +326,11 @@
    Args:
      user:   User entity map (from User schema)
      errors: Optional validation errors map, field keyword -> messages
-     opts:   Optional map; :notice is rendered at the top of the form
 
    Returns:
      Hiccup structure for user detail form"
-  ([user] (user-detail-form user nil nil))
-  ([user errors] (user-detail-form user errors nil))
-  ([user errors opts]
+  ([user] (user-detail-form user nil))
+  ([user errors]
    (let [active? (boolean (:active user))]
      [:div#user-detail
       ;; outerHTML: the response is itself a #user-detail, so an innerHTML swap
@@ -344,7 +339,6 @@
               :hx-target "#user-detail"
               :hx-swap   "outerHTML"
               :class     "entity-form"}
-       (:notice opts)
        (form-section
         [:t :user/form-detail-title]
         (ui/form-field :name [:t :common/label-name]
@@ -1161,7 +1155,7 @@
   [sessions current-session-id user-id current-time zone-id]
   (if (empty? sessions)
     [:div.empty-state.card [:t :user/sessions-empty-state]]
-    [:div.table-wrapper
+    (ui/table-wrapper
      [:table {:class "data-table table"}
       [:thead
        [:tr
@@ -1172,7 +1166,7 @@
         [:th.actions-header [:t :common/column-actions]]]]
       [:tbody
        (for [session sessions]
-         (session-row session current-session-id user-id current-time zone-id))]]]))
+         (session-row session current-session-id user-id current-time zone-id))]])))
 
 (defn user-sessions-page
   "Complete page for managing user sessions.

@@ -229,13 +229,6 @@
       (is (re-find #"Name is required" form-str))
       (is (re-find #"field-errors" form-str))))
 
-  (testing "renders a notice inside the swapped element, not around it"
-    (let [form (ui/user-detail-form sample-user nil {:notice [:div.success-banner "Saved"]})]
-      ;; An outerHTML swap replaces #user-detail, so a wrapper around it would
-      ;; accumulate on every save.
-      (is (= :div#user-detail (first form)))
-      (is (re-find #"Saved" (str form)))))
-
   (testing "pre-fills form fields with user data"
     (let [form (ui/user-detail-form sample-user)
           form-str (str form)]
