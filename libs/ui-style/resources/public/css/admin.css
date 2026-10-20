@@ -1088,11 +1088,11 @@
   background: var(--color-primary-faint);
 }
 
-.admin-content .data-table tbody tr:nth-child(even) td:nth-child(2) {
+.admin-content .data-table tbody tr:nth-child(even) .checkbox-cell + td {
   background: rgba(0,0,0,0.015);
 }
 
-.admin-content .data-table tbody tr:hover td:nth-child(2) {
+.admin-content .data-table tbody tr:hover .checkbox-cell + td {
   background: inherit;
 }
 
@@ -1131,30 +1131,28 @@
   font-size: var(--text-xs);
 }
 
-/* Checkbox column */
-.admin-content .data-table th:first-child,
-.admin-content .data-table td:first-child,
+/* Checkbox column: by class, as not every table has one */
 .admin-content .data-table th.checkbox-header,
 .admin-content .data-table td.checkbox-cell {
   width: 48px;
   text-align: center;
 }
 
-/* Sticky identifier column (second column) */
-.admin-content .data-table th:nth-child(2),
-.admin-content .data-table td:nth-child(2) {
+/* Sticky identifier column (the one after the checkboxes) */
+.admin-content .data-table .checkbox-header + th,
+.admin-content .data-table .checkbox-cell + td {
   position: sticky;
   left: 48px;
   background: inherit;
   z-index: 2;
 }
 
-.admin-content .data-table th:nth-child(2) {
+.admin-content .data-table .checkbox-header + th {
   z-index: 3;
   box-shadow: inset -1px 0 0 var(--border-default);
 }
 
-.admin-content .data-table td:nth-child(2) {
+.admin-content .data-table .checkbox-cell + td {
   box-shadow: inset -1px 0 0 rgba(148, 163, 184, 0.2);
 }
 
@@ -1557,8 +1555,8 @@
    ============================================================================= */
 
 @media (max-width: 768px) {
-  .admin-content .data-table th:nth-child(2),
-  .admin-content .data-table td:nth-child(2) {
+  .admin-content .data-table .checkbox-header + th,
+  .admin-content .data-table .checkbox-cell + td {
     position: static;
     box-shadow: none;
   }
