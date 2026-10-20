@@ -20,10 +20,15 @@
             [wagoe.platform.core.http.pages :as pages]
             [clojure.string :as str]))
 
+(defn- nav-text
+  "A label that truncates with an ellipsis; the title shows all of it."
+  [label]
+  [:span.nav-text {:title label} label])
+
 (defn- nav-link [attrs icon label]
   [:a (merge attrs (alpine/sidebar-nav-link-attrs))
    (icons/icon icon {:size 20})
-   [:span.nav-text {:title label} label]])
+   (nav-text label)])
 
 (defn- nav-items [items & [title]]
   [:ul.entity-list
@@ -44,8 +49,7 @@
                                        :type          "button"
                                        :aria-expanded (str (boolean open?)))
       (icons/icon (or icon :folder) {:size 20})
-      ;; A long label truncates with an ellipsis; the title shows all of it
-      [:span.nav-text {:title label} label]
+      (nav-text label)
       (icons/icon :chevron-down {:size 14 :class "nav-chevron"})]
      (nav-items items label)]
     (list

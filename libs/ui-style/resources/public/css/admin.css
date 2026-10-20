@@ -222,11 +222,14 @@
 }
 
 .entity-list a:hover,
-.nav-module-toggle:hover {
+.entity-list a:focus-visible,
+.nav-module-toggle:hover,
+.nav-module-toggle:focus-visible {
   color: var(--text-primary);
 }
 
-.entity-list a:hover::after {
+.entity-list a:hover::after,
+.entity-list a:focus-visible::after {
   transform: scaleX(1);
 }
 
@@ -296,7 +299,8 @@
   cursor: pointer;
 }
 
-.nav-module-toggle:hover {
+.nav-module-toggle:hover,
+.nav-module-toggle:focus-visible {
   background: var(--surface-2);
 }
 
@@ -402,7 +406,8 @@
   transition: background-color var(--transition-fast), color var(--transition-fast);
 }
 
-.admin-sidebar-footer a:hover {
+.admin-sidebar-footer a:hover,
+.admin-sidebar-footer a:focus-visible {
   background: var(--surface-2);
   color: var(--text-primary);
 }
