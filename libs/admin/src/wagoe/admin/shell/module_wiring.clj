@@ -163,28 +163,26 @@
   [entity]
   (authorization/derived-roles (entity-ns entity)))
 
-(defn- resolve-symbol
-  "`v` under entity key `k`; a symbol, how config.edn names code, resolved to
-   its var's value. Throws :configuration-error on a symbol that resolves to
-   nothing."
-  [k v]
+(defn- resolve-condition
+  "`v`, a scope's field or relation condition; a symbol, how config.edn names
+   a condition, resolved to its fn. Throws :configuration-error on a symbol
+   that resolves to nothing."
+  [v]
   (if (symbol? v)
     (or (some-> (try (requiring-resolve v) (catch Exception _ nil)) deref)
-        (throw (ex-info (str "Admin entity " k " names " v ", which resolves to nothing")
+        (throw (ex-info (str "Admin entity :scope names " v ", which resolves to nothing")
                         {:type :configuration-error :symbol v})))
     v))
 
-(defn- resolve-symbols
-  "`settings` with every entity's `:scope` conditions and `:detail-tabs`
-   resolved."
+(defn- resolve-scope-fns
+  "`settings` with every entity's `:scope` conditions resolved."
   [settings]
   (cond-> settings
     (map? (:entities settings))
     (update :entities update-vals
             (fn [entity]
               (cond-> entity
-                (map? (:scope entity))           (update :scope update-vals (partial resolve-symbol :scope))
-                (symbol? (:detail-tabs entity)) (update :detail-tabs (partial resolve-symbol :detail-tabs)))))))
+                (map? (:scope entity)) (update :scope update-vals resolve-condition))))))
 
 (defn- authorization-mode
   "`:wagoe/authorization :mode`, `:off` when unset. The platform refuses any
@@ -213,7 +211,7 @@
                         (log/warn (str "DEPRECATED :require-role in the admin config — under :wagoe/authorization"
                                        " :mode " mode " the admin reads admin.<entity>/read|write instead."
                                        " Drop it; removed in 2.0.")))
-        settings      (resolve-symbols (with-defaults settings))
+        settings      (resolve-scope-fns (with-defaults settings))
         ;; Optional and one-way: wagoe.workflow depends on the admin, and
         ;; builds the port only when both are on (BOU-563).
         workflows?    (contains? (:enabled ctx) :wagoe/workflow)

@@ -196,13 +196,13 @@
      identical. See `reset-cache!` to invalidate (e.g. after a migration)."
     (or (get @config-cache entity-name)
         (let [all           (introspection/with-declared-parents
-                             (into {entity-name (compute-entity-config this entity-name)}
-                                   (keep (fn [e] (some->> (base-entity-config this e) (vector e))))
+                              (into {entity-name (compute-entity-config this entity-name)}
+                                    (keep (fn [e] (some->> (base-entity-config this e) (vector e))))
                                    ;; Only :allowlist discovery lists entities; the other
                                    ;; modes throw, and must not take this entity down.
-                                   (remove #{entity-name}
-                                           (try (ports/list-available-entities this)
-                                                (catch clojure.lang.ExceptionInfo _ [])))))
+                                    (remove #{entity-name}
+                                            (try (ports/list-available-entities this)
+                                                 (catch clojure.lang.ExceptionInfo _ [])))))
               own           (get all entity-name)
               ;; Roles last: a has-many column needs the inverse relations, and
               ;; the default columns need the roles (ADR-040).
@@ -275,6 +275,23 @@
 ;; Factory Function
 ;; =============================================================================
 
+(defn- resolve-detail-tabs
+  "`config` with each entity's `:detail-tabs` symbol resolved to its var's
+   value: the module owning the pages keeps the one list of them. Throws
+   :configuration-error on a symbol that resolves to nothing."
+  [config]
+  (cond-> config
+    (map? (:entities config))
+    (update :entities update-vals
+            (fn [entity]
+              (let [tabs (:detail-tabs entity)]
+                (cond-> entity
+                  (symbol? tabs)
+                  (assoc :detail-tabs
+                         (or (some-> (try (requiring-resolve tabs) (catch Exception _ nil)) deref)
+                             (throw (ex-info (str "Admin entity :detail-tabs names " tabs ", which resolves to nothing")
+                                             {:type :configuration-error :symbol tabs}))))))))))
+
 (defn create-schema-repository
   "Create new SchemaRepository instance.
 
@@ -310,7 +327,7 @@
      (throw (ex-info (str "Admin entity config: "
                           (str/join "; " (map #(str (:problem %) " at " (pr-str (:path %))) errors)))
                      {:type :configuration-error :errors (vec errors)})))
-   (->SchemaRepository db-ctx config (or malli-schemas {}) (atom {}))))
+   (->SchemaRepository db-ctx (resolve-detail-tabs config) (or malli-schemas {}) (atom {}))))
 
 (defn reset-cache!
   "Clear the repository's cached entity configurations.

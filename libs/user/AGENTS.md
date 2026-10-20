@@ -460,12 +460,14 @@ only).
   the hook for every active user). Each declared
   scope key is a field: a lookup reading `/web/admin/<entity>/lookup` when it
   has `:wagoe/entity`, and a choice of the key's user sources; its value is
-  decoded with the scope schema. Without declared keys the scope is typed as EDN.
+  decoded with the scope schema. The scope can be typed as EDN too, merged with the keys; a refused
+  assignment comes back filled in.
 - `/web/admin/roles` (code roles locked, managed ones a checklist of the
   registry, a code role duplicated), `/web/admin/permissions` and
   `/web/users/:id/rights` (`shell.rights-handlers`, `core.rights-ui`): role and
   permission names travel as `?name=`, since they hold a slash. Each shows who
-  holds it (`role-holders`); the Rights tab resolves a user-sourced scope.
+  holds it (`role-holders`); the Rights tab resolves a user-sourced scope and its key's `:expand`, as
+  enforcement does. `core.rights-ui/detail-tabs` is the one list of a user's tabs; `admin/users.edn` names it.
 - The group service takes `:permission-registry`. When the registry declares
   scope keys, the scope schema is `wagoe.platform.core.scope/scope-schema` of
   them (`with-registry-scopes`); a `:map` `:groups :scope` is declared into the

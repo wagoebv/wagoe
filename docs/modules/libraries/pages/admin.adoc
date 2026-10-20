@@ -81,9 +81,10 @@ users with role `:admin`. Under `:enforce` it reads permissions instead: every
 entity has `admin.<entity>/read` and `admin.<entity>/write`, and the code roles
 `admin.<entity>/viewer` and `admin.<entity>/editor` holding them. The admin
 needs read on one entity, the sidebar lists what the user may read, and actions
-they may not take are not shown. A platform admin holds everything; a tenant
-`:admin` holds what their groups give them. `:report` keeps the role rule and
-logs what `:enforce` would refuse.
+they may not take are not shown: a viewer opens a record read-only. A platform
+admin holds everything; a tenant `:admin` holds what their groups give them.
+`:report` keeps the role rule and logs what `:enforce` would refuse, once a
+minute per user and permission.
 
 A right held in a scope admits only records inside it. The entity maps each
 scope key to a field, or to a function from the allowed values to a HoneySQL
@@ -95,7 +96,8 @@ condition when the scope lies on a related record:
  :lines  {:scope {:domain-id myapp.admin/line-domain}}}  ; (fn [ids] [:in :order_id {...}])
 ----
 
-Lists, counts and search show only rows inside the scope. A record outside it
+Lists, counts and search show only rows inside the scope, and a many-to-many
+shows only the linked records the user may read. A record outside it
 is a 404; a create or edit that would put one outside it is refused on the
 field. A relation condition cannot be checked on a record's new values, so
 creating and editing there needs the right unscoped. An entity that maps no
