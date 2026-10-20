@@ -42,6 +42,18 @@
       (is (= "failure" (loc/input-value (page/locator pg "#audit-filter-result"))))
       (is (loc/is-visible? (page/locator pg ".empty-state-filtered"))))
 
+    (testing "back shows the previous filter in its input, not the one chosen since"
+      ;; The page as rendered selects no action, so only the URL knows login
+      (loc/select-option (page/locator pg "#audit-filter-action") "login")
+      (await! pg "location.search.includes('action=login')")
+      (loc/select-option (page/locator pg "#audit-filter-action") "create")
+      (await! pg "location.search.includes('action=create')")
+      (page/go-back pg)
+      (await! pg "location.search.includes('action=login')")
+      (await! pg "document.getElementById('audit-filter-action').value === 'login'")
+      (loc/select-option (page/locator pg "#audit-filter-action") "")
+      (await! pg "location.search.includes('action=&')"))
+
     (testing "a row's details open in the modal"
       (loc/select-option (page/locator pg "#audit-filter-result") "")
       (await! pg "!!document.querySelector('#audit-table-container table.data-table')")

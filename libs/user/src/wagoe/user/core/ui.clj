@@ -1214,7 +1214,7 @@
                   (:group-leave :grant-remove) :warning
                   :neutral)]
     (ui/badge (text/capitalize (str/replace action-name "-" " ")) {:variant variant
-                                            :class "audit-action-badge"})))
+                                                                   :class "audit-action-badge"})))
 
 (defn result-badge
   "Display result status with appropriate styling.
@@ -1346,15 +1346,11 @@
      audit-logs - collection of audit log entity maps
      table-query - normalized TableQuery
      total-count - total number of audit logs
-     filters - optional map of parsed search filters
+     filters - map of parsed search filters
 
    Pure: true"
   [audit-logs table-query total-count filters]
   [:div#audit-table-container
-   {:hx-get     (table-ui/list-url audit-url table-query filters)
-    :hx-trigger "auditRefresh from:body"
-    :hx-target  audit-target
-    :hx-swap    "outerHTML"}
    ;; The sort the toolbar filters send along: they sit outside this swap
    [:div {:class "table-state" :hidden true}
     (table-ui/hidden-inputs (select-keys (table-ui/table-query->params table-query)
@@ -1443,10 +1439,10 @@
      audit-logs - collection of audit log entity maps
      table-query - normalized TableQuery
      total-count - total number of audit logs
-     filters - optional map of parsed search filters
+     filters - map of parsed search filters
      opts - :user and :flash
 
-   Pure: true"
+   Pure: false (the shell reads the request's navigation)"
   [audit-logs table-query total-count filters opts]
   (shell/shell-page
    [:t :user/page-audit-title]

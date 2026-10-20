@@ -401,6 +401,15 @@ document.addEventListener('alpine:init', function () {
       if (errorRow) errorRow.hidden = !trigger.dataset.error;
     });
 
+    // Back and forward restore a snapshot whose filter inputs show what the
+    // server rendered, not what was chosen since; the URL holds the truth
+    document.addEventListener('htmx:historyRestore', function () {
+      var params = new URLSearchParams(window.location.search);
+      document.querySelectorAll('select[hx-push-url], input[hx-push-url]').forEach(function (el) {
+        if (el.name) el.value = params.get(el.name) || '';
+      });
+    });
+
     // Close, previous and next inside the drawer
     document.addEventListener('click', function (event) {
       var control = event.target.closest('[data-drawer]');
