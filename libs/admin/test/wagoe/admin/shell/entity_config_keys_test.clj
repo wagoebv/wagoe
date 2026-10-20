@@ -32,7 +32,8 @@
                             :parent-context  {:label "Customer" :fields [:name]}
                             :permissions     {:create false :create-hint "elsewhere"}
                             :workflow        {:entity-type :invoice}
-                            :ui              {:field-grouping {:other-label "More"}}}))))
+                            :module          :billing
+                            :ui             {:field-grouping {:other-label "More"}}}))))
 
 (deftest ^:unit an-unknown-key-fails-at-startup-with-its-path
   (testing "a misplaced :has-many inside :fields"

@@ -13,11 +13,11 @@
   (testing "admin off"
     (is (not (contains? (:components (wiring/ig-config {} {:enabled #{:wagoe/workflow}}))
                         :wagoe/workflow-admin))))
-  (testing "the pages get the admin's sidebar only with the admin on"
+  (testing "the pages get the admin's logo only with the admin on"
     (let [on  (wiring/ig-config {} {:enabled #{:wagoe/workflow :wagoe/admin}
                                     :config  {:active {:wagoe/admin {:logo-url "/l.png"}}}})
           off (wiring/ig-config {} {:enabled #{:wagoe/workflow}})]
-      (is (= {:schema-provider (ig/ref :wagoe/admin-schema-provider) :logo-url "/l.png"}
+      (is (= {:logo-url "/l.png"}
              (get-in on [:components :wagoe/workflow-routes :admin])))
       (is (not (contains? (get-in off [:components :wagoe/workflow-routes]) :admin)))))
   (testing "the component satisfies the admin's port"

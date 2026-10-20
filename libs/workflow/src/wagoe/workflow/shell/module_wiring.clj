@@ -22,9 +22,8 @@
      {:workflow-service (ig/ref :wagoe/workflow)
       :user-service     (ig/ref :wagoe/user-service)
       :group-service    (ig/ref :wagoe/user-group-service)   ; for the :workflow/read grant
-      ;; With the admin on, for the admin shell's sidebar:
-      :admin            {:schema-provider (ig/ref :wagoe/admin-schema-provider)
-                         :logo-url        <the admin's :logo-url>}}
+      ;; With the admin on, for the admin shell's brand:
+      :admin            {:logo-url <the admin's :logo-url>}}
 
      Returns {:api [...] :web [...] :static []} for composition
      by the HTTP handler."
@@ -106,7 +105,11 @@
    :static []
    ;; Mounted alongside the admin UI rather than at /web, because that is where
    ;; a reader looks for it. Platform used to hold this fact (BOU-330).
-   :web-prefix "/web/admin"})
+   :web-prefix "/web/admin"
+   :nav        {:workflow {:label [:t :workflow/nav-title]
+                           :icon  :clipboard
+                           :items [{:href "/web/admin/workflows" :icon :layout-list :access :admin
+                                    :label [:t :workflow/page-instances-heading]}]}}})
 
 (defmethod ig/halt-key! :wagoe/workflow-routes
   [_ _routes]
@@ -159,5 +162,4 @@
     (contains? (or enabled #{}) :wagoe/admin)
     (-> (assoc-in [:components :wagoe/workflow-admin] {:workflow (ig/ref :wagoe/workflow)})
         (assoc-in [:components :wagoe/workflow-routes :admin]
-                  {:schema-provider (ig/ref :wagoe/admin-schema-provider)
-                   :logo-url        (get-in config [:active :wagoe/admin :logo-url])}))))
+                  {:logo-url (get-in config [:active :wagoe/admin :logo-url])}))))

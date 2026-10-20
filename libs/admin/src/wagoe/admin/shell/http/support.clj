@@ -385,7 +385,6 @@
                           (admin-ui/create-config-error entity-name entity-config)
                           {:user           user
                            :current-entity entity-name
-                           :entities       entities
                            :entity-configs entity-configs
                            :logo-url       (:logo-url config)}))
           (ring-response/status 500)))))
@@ -903,7 +902,6 @@
    Shared between entity-detail-handler and update-entity-handler.
 
    Returns a map with:
-     :entities       - all available entity names
      :entity-configs - map of entity-name -> entity-config
      :page-opts      - opts map for entity-detail-page
                        (related-records, return-to, parent-context, sibling-nav,
@@ -975,8 +973,7 @@
                                 (> idx 0)                (assoc :prev-url (nav-url (nth ids (dec idx))))
                                 (< idx (dec (count ids))) (assoc :next-url (nav-url (nth ids (inc idx))))))))))]
 
-    {:entities       entities
-     :entity-configs entity-configs
+    {:entity-configs entity-configs
      :page-opts      {:related-records related-records
                       :return-to       return-to
                       :parent-context  parent-context

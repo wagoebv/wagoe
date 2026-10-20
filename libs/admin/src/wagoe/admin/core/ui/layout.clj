@@ -1,61 +1,47 @@
 (ns wagoe.admin.core.ui.layout
-  "Admin sidebar nav, error pages, and URL utilities.
+  "Admin nav contribution, page layout, error pages, and URL utilities.
 
-   Pure Hiccup generators for the admin chrome: the sidebar navigation for the
-   shell in `wagoe.shared.ui.core.shell`, the dashboard home, 403/404 error
-   pages and the `build-table-url` helper."
-  (:require [wagoe.core.utils.text :as text]
+   Pure Hiccup generators for the admin chrome: the admin's contribution to
+   the sidebar of the shell in `wagoe.shared.ui.core.shell`, the dashboard
+   home, 403/404 error pages and the `build-table-url` helper."
+  (:require [wagoe.admin.core.schema-introspection :as introspection]
             [wagoe.shared.ui.core.home :as home]
             [wagoe.shared.ui.core.icons :as icons]
             [wagoe.shared.ui.core.layout :as layout]
             [wagoe.shared.ui.core.table :as table-ui]
-            [wagoe.shared.ui.core.shell :as shell]
-            [wagoe.platform.core.http.pages :as pages]))
+            [wagoe.shared.ui.core.shell :as shell]))
 
 ;; =============================================================================
 ;; Admin Layout Components
 ;; =============================================================================
 
-(defn entity-nav
-  "The shell's sidebar navigation for the admin's entities: one group, an item
-   per entity not marked :sidebar-hidden. No group, so no heading, when no
-   entity is listed."
-  [entities entity-configs current-entity]
-  (when-let [items (seq (for [entity entities
-                              :let  [entity-config (get entity-configs entity)]
-                              :when (not (:sidebar-hidden entity-config))]
-                          {:href    (str "/web/admin/" (name entity))
-                           :label   (:label entity-config (text/capitalize (name entity)))
-                           :icon    (keyword (or (:icon entity-config) "database"))
-                           :active? (= entity current-entity)}))]
-    [{:label [:t :admin/sidebar-entities-title]
-      :items items}]))
+(defn nav
+  "The admin's sidebar contribution (`wagoe.platform.core.http.nav`): an item
+   per entity not marked :sidebar-hidden, which the platform places in the
+   group of its module."
+  [entities entity-configs]
+  {:admin {:label [:t :admin/nav-title]
+           :icon  :settings
+           :items (vec (for [entity entities
+                             :let  [entity-config (get entity-configs entity)]
+                             :when (not (:sidebar-hidden entity-config))]
+                         {:entity entity
+                          :module (some-> (:module entity-config) keyword)
+                          :href   (str "/web/admin/" (name entity))
+                          :label  (introspection/plural-label entity-config entity)
+                          :icon   (keyword (or (:icon entity-config) "database"))
+                          :access :admin}))}})
 
-(defn admin-sidebar
-  "The shell's sidebar listing `entities`. `opts` supports :logo-url."
-  ([entities entity-configs current-entity]
-   (admin-sidebar entities entity-configs current-entity {}))
-  ([entities entity-configs current-entity opts]
-   (shell/sidebar (entity-nav entities entity-configs current-entity) opts)))
-
-(defn- with-nav
-  "`opts` with the shell's :nav built from its :entities."
-  [{:keys [entities entity-configs current-entity] :as opts}]
-  (assoc opts :nav (entity-nav entities entity-configs current-entity)))
-
-(defn admin-shell
-  "`content` in the shell, its sidebar listing the admin's entities.
-   `opts`: :user, :current-entity, :entities, :entity-configs, :page-title,
-   :logo-url."
-  [content opts]
-  (shell/admin-shell content (with-nav opts)))
+(def admin-shell
+  "`content` in the shell. `opts`: :user, :page-title, :logo-url."
+  shell/admin-shell)
 
 (defn admin-layout
   "A complete admin page: `content` in the shell.
 
    Args:
      content: Main content (Hiccup structure)
-     opts: Map with :user, :current-entity, :entities, :entity-configs, :flash
+     opts: Map with :user, :current-entity, :entity-configs, :flash
 
    Returns:
      Complete HTML page structure with new admin shell"
@@ -66,26 +52,17 @@
                 [:t :admin/page-title-dashboard])
         page-title (when current-entity
                      (:label (get entity-configs current-entity)))]
-    (shell/shell-page title content
-                      (assoc (with-nav opts) :page-title page-title))))
-
-(def page-cards
-  "Dashboard cards for pages other modules serve; a card is shown only when its
-   page is mounted and the user may open it. The audit trail's guard admits
-   platform admins only."
-  [{:href "/web/audit" :icon :file-text :visible? layout/platform-admin?
-    :title [:t :admin/audit-trail-title] :description [:t :admin/audit-trail-description]}
-   {:href "/web/admin/groups" :icon :users
-    :title [:t :admin/groups-title] :description [:t :admin/groups-description]}])
+    (shell/shell-page title content (assoc opts :page-title page-title))))
 
 (defn admin-home
-  "Admin dashboard home page content.
+  "Admin dashboard home page content: a card per entity, and one per page a
+   module put in the navigation with a :description, if `user` may open it.
 
    Args:
      entities: Vector of available entity names
      entity-configs: Map of entity configurations
      stats: Optional map of dashboard statistics
-     user: Optional signed-in user, for the cards of `page-cards` it may open
+     user: Optional signed-in user
 
    Returns:
      Hiccup structure for dashboard"
@@ -113,13 +90,12 @@
             [:div.entity-card-description description])
           [:div.entity-card-meta
            [:span.entity-card-count [:t :admin/entity-card-count {:count count}]]]]]))
-    (for [{:keys [href icon title description visible?]} page-cards
-          :when (and (pages/mounted? href)
-                     (or (nil? visible?) (visible? user)))]
+    (for [{:keys [href icon label description]} (mapcat :items (shell/user-nav user))
+          :when description]
       [:div.entity-card
        [:a {:href href :class "entity-card-link"}
         [:div.entity-card-icon (icons/icon icon {:size 20})]
-        [:div.entity-card-title title]
+        [:div.entity-card-title label]
         [:div.entity-card-description description]]])]])
 
 ;; =============================================================================

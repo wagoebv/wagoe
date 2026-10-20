@@ -1,12 +1,14 @@
 (ns wagoe.admin.shell.http.home-cards-test
   "The dashboard links only to pages that are mounted and the user may open:
    with the user module's web UI switched off, the Groups and Audit cards went
-   to a 404 (BOU-713); a tenant admin's Audit card to a 403 (BOU-724)."
+   to a 404 (BOU-713); a tenant admin's Audit card to a 403 (BOU-724). The
+   cards come from the navigation modules contribute."
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [reitit.core :as r]
             [wagoe.admin.ports :as admin-ports]
             [wagoe.admin.shell.http.handlers.list :as list-handlers]
+            [wagoe.platform.core.http.nav :as nav]
             [wagoe.platform.shell.http.interceptors :as interceptors]
             [wagoe.platform.shell.http.pages :as pages]
             [wagoe.platform.shell.system.wiring :as wiring]
@@ -15,17 +17,19 @@
 
 (def ^:private off {:active {:wagoe/settings {:features {:user-web-ui {:enabled? false}}}}})
 
-(defn- router
-  "The user module's contributions as the platform mounts them, beside the
-   admin's catch-all entity route."
+(defn- contributions
+  "The user module's contributions, beside the admin's catch-all entity route."
   [config]
-  (let [usvc  (reify user-ports/IUserService)
-        admin {:web-prefix "/web/admin" :web [["/:entity" {:get identity}]]}]
-    (r/router (:web (wiring/module-route-contributions
-                     [admin
-                      (user-http/user-routes usvc nil config)
-                      (user-http/group-routes usvc nil config)]))
-              {:conflicts nil})))
+  (let [usvc (reify user-ports/IUserService)]
+    [{:web-prefix "/web/admin" :web [["/:entity" {:get identity}]]}
+     (user-http/user-routes usvc nil config)
+     (user-http/group-routes usvc nil config)]))
+
+(defn- router
+  "The contributions as the platform mounts them."
+  [config]
+  (r/router (:web (wiring/module-route-contributions (contributions config)))
+            {:conflicts nil}))
 
 (defn- home [config user]
   (let [schema  (reify admin-ports/ISchemaProvider
@@ -35,13 +39,16 @@
                   (get-entity-label [_ _] nil)
                   (validate-entity-exists [_ _] false))
         handler (list-handlers/admin-home-handler (reify admin-ports/IAdminService) schema {})]
-    ;; Through the pipeline every route runs, which binds what is mounted.
-    (str (:body (interceptors/run-http-interceptors
-                 handler []
+    ;; Through the pipeline every route runs, which binds what is mounted,
+    ;; inside the navigation the platform binds.
+    (str (:body ((interceptors/wrap-nav
+                  #(interceptors/run-http-interceptors handler [] % {})
+                  (constantly
+                   (nav/collect (keep :nav (contributions config)) nil
+                                (partial pages/mounted? {::r/router (router config)}))))
                  {:request-method :get :uri "/web/admin/"
                   :user (merge {:id (random-uuid) :role :admin :active true} user)
-                  ::r/router (router config)}
-                 {})))))
+                  ::r/router (router config)})))))
 
 (deftest ^:unit mounted-reads-the-route-table
   (let [on-req  {::r/router (router nil)}

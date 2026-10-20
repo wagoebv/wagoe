@@ -224,6 +224,12 @@ that attaches the security stack, interceptors, coercion and the OpenAPI docs.
 
 Health checks and the OpenAPI document (`/openapi.json`, UI at `/api-docs/`) are mounted for you.
 
+A contribution may also carry `:nav`, the module's group in the admin sidebar:
+`{:orders {:label "Orders" :icon :briefcase :entities [:orders] :items [{:href "/web/orders" :label "Orders" :access :admin}]}}`.
+`:entities` claims admin entities for the group. The platform binds the merged
+navigation per request (`wagoe.platform.core.http.nav`), so any page in the
+shell renders it; `:wagoe/settings :nav-order` orders the groups.
+
 ### Adding components and middleware to an app module
 
 Discovery builds a scaffolded module's four keys (`:wagoe/<name>`, `-repository`,

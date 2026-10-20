@@ -14,7 +14,7 @@
             [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing use-fixtures]]
-            [wagoe.admin.ports :as admin-ports]
+            [wagoe.platform.core.http.nav :as nav]
             [wagoe.platform.shell.http.reitit-router :as reitit]
             [wagoe.user.ports :as user-ports]
             [wagoe.user.shell.auth :as auth-shell]
@@ -534,32 +534,28 @@
         (is (= 404 (:status response)) id)
         (is (re-find #"not found" (:body response)) id)))))
 
-(def ^:private schema-provider
-  (reify admin-ports/ISchemaProvider
-    (fetch-table-metadata [_ _] nil)
-    (get-entity-config [_ e] {:label (str "Label " (name e))})
-    (list-available-entities [_] [:invoices])
-    (get-entity-label [_ _] nil)
-    (validate-entity-exists [_ _] true)))
-
 (deftest ^:unit the-admin-pages-sit-in-the-admin-shell
-  ;; With the sidebar listing the admin's entities, like every other admin page.
-  (let [store (service-test/create-memory-store)
-        reg   (registry/create-workflow-registry)
-        admin {:schema-provider schema-provider :logo-url "/logo.png"}
-        req   {:user {:role :admin}}
-        body  (:body (sut/handle-list-instances-web store reg admin req))]
+  ;; With the sidebar the platform binds, like every other admin page.
+  (let [store  (service-test/create-memory-store)
+        reg    (registry/create-workflow-registry)
+        groups (nav/collect [{:admin {:items [{:entity :invoices :href "/web/admin/invoices"
+                                               :label "Label invoices" :access :admin}]}}
+                             {:workflow {:label "Workflows"
+                                         :items [{:href "/web/admin/workflows" :label "Instances"
+                                                  :access :admin}]}}]
+                            nil (constantly true))
+        page   (fn [admin user]
+                 (binding [nav/*nav* {:groups groups :uri "/web/admin/workflows"}]
+                   (:body (sut/handle-list-instances-web store reg admin {:user user}))))
+        body   (page {:logo-url "/logo.png"} {:role :admin})]
     (is (str/includes? body "admin-sidebar"))
     (is (str/includes? body "href=\"/web/admin/invoices\""))
     (is (str/includes? body "Label invoices"))
     (is (str/includes? body "/logo.png"))
-    (testing "without the admin the shell lists no entities"
-      (let [body (:body (sut/handle-list-instances-web store reg nil req))]
-        (is (str/includes? body "admin-sidebar"))
-        (is (not (str/includes? body "/web/admin/invoices")))))
+    (testing "the workflow item is the active one"
+      (is (re-find #"<li class=\"active\"><a [^>]*href=\"/web/admin/workflows\"" body)))
     (testing "nor to a user the admin would not admit"
-      (let [body (:body (sut/handle-list-instances-web store reg admin {:user {:role :user}}))]
-        (is (not (str/includes? body "/web/admin/invoices")))))))
+      (is (not (str/includes? (page nil {:role :user}) "/web/admin/invoices"))))))
 
 (deftest ^:unit the-state-filter-takes-the-badge-label
   ;; The badge shows :on-hold as "On hold"; the filter took only the id.

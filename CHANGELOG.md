@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **Admin sidebar grouped by module** (BOU-777): modules contribute `:nav` in their routes. Set `:module` on an admin
+  entity to move it out of "Other", and `:wagoe/settings :nav-order` to order the groups.
 - **Admin many-to-many through a join table** (BOU-778): detected, edited with checkboxes or a multiple combobox, shown
   as chips, filterable. Allowlist the join table; `:join-table` overrides detection.
 - **Scope keys, route `:scope` and `scope-filter`** (BOU-773): declare scope keys under `:authorization :scopes`, which

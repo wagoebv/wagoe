@@ -414,7 +414,12 @@
  ;; =============================================================================
  :admin/sidebar-toggle-button      "Toggle sidebar"
  :admin/sidebar-pin-button         "Pin sidebar"
- :admin/sidebar-entities-title     "Entities"
+ :admin/nav-title                  "Admin"
+ :common/nav-other                 "Other"
+ :user/nav-title                   "Users"
+ :tenant/nav-title                 "Tenants"
+ :workflow/nav-title               "Workflows"
+ :search/nav-title                 "Search"
  :admin/sidebar-dashboard          "Dashboard"
  :admin/sidebar-main-site          "Main Site"
  :admin/menu-open-button           "Open menu"
