@@ -51,6 +51,9 @@ Also add the entity keyword to `:entity-discovery :allowlist`.
 A `wagoe new` app runs `:enforce`, so its admin admits the platform admin and holders of an
 `admin.<entity>/viewer` or `/editor` role. Moving an app there: `docs/modules/guides/pages/authorization.adoc`.
 
+**Tabs on the edit page**: `:detail-tabs [{:label … :href "/web/users/{id}/rights"}]` links a record's other
+pages as tabs beside the form; `{id}` is the record's key. `admin/users.edn` uses it for Sessions and Rights.
+
 ---
 
 ## Column Widths in List View

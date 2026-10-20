@@ -461,10 +461,17 @@ Everyone included. The user module's own routes say `:public`, `:signed-in` or
 - `:wagoe/user {:groups {:permissions <schema> :scope <schema>}}`, Malli or a
   symbol naming one, resolved in `ig-config`; a bad one fails boot. The
   permissions enum is declared into the registry until 2.0.
-- The group page adds a member through a user lookup (`/:id/members/options`).
-  A `:scope` map key with `{:wagoe/entity :domains}` gets a lookup reading the
-  admin's `/web/admin/domains/lookup`; its value is decoded with the scope schema
-  and merged into the EDN typed beside it.
+- The group page adds a member through a user lookup (`/:id/members/options`)
+  and lists the hook's members read-only on request (`provider-members` runs
+  the hook for every active user). Each declared
+  scope key is a field: a lookup reading `/web/admin/<entity>/lookup` when it
+  has `:wagoe/entity`, and a choice of the key's user sources; its value is
+  decoded with the scope schema. Without declared keys the scope is typed as EDN.
+- `/web/admin/roles` (code roles locked, managed ones a checklist of the
+  registry, a code role duplicated), `/web/admin/permissions` and
+  `/web/users/:id/rights` (`shell.rights-handlers`, `core.rights-ui`): role and
+  permission names travel as `?name=`, since they hold a slash. Each shows who
+  holds it (`role-holders`); the Rights tab resolves a user-sourced scope.
 - The group service takes `:permission-registry`. When the registry declares
   scope keys, the scope schema is `wagoe.platform.core.scope/scope-schema` of
   them (`with-registry-scopes`); a `:map` `:groups :scope` is declared into the

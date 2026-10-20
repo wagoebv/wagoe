@@ -81,12 +81,16 @@
 (defn push-routes
   "Every route but the callback requires a signed-in user, which the platform
    enforces. The callback is public: a device posts it, and the HMAC in its body
-   is the credential (BOU-568)."
+   is the credential (BOU-568). The device routes act on the caller's own
+   devices; the stats ask `:push/read`."
   [deps]
   ["/api/push"
-   ["/devices"      {:post   {:handler (partial register-device-handler deps)}
+   ["/devices"      {:authorization :self
+                     :post   {:handler (partial register-device-handler deps)}
                      :get    {:handler (partial list-devices-handler deps)}}]
-   ["/devices/:token" {:delete {:handler (partial unregister-device-handler deps)}}]
+   ["/devices/:token" {:authorization :self
+                       :delete {:handler (partial unregister-device-handler deps)}}]
    ["/callback"      {:post   {:handler (partial analytics-callback-handler deps)
                                :public  true}}]
-   ["/stats/:notification-id" {:get {:handler (partial push-stats-handler deps)}}]])
+   ["/stats/:notification-id" {:permission :push/read
+                               :get {:handler (partial push-stats-handler deps)}}]])

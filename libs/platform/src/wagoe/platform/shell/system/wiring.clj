@@ -736,7 +736,9 @@
                :api-versioning-enabled true
                :request-capture-enabled (boolean request-capture?)})
     ;; The router, for whoever reads the route table off the system.
-    (vary-meta final-handler assoc :reitit/router (:reitit/router (meta handler)))))
+    (vary-meta final-handler assoc
+               :reitit/router (:reitit/router (meta handler))
+               :wagoe/authorization-mode mode)))
 
 (defmethod ig/halt-key! :wagoe/http-handler
   [_ _handler]

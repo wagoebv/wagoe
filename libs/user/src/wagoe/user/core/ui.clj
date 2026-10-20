@@ -14,6 +14,7 @@
             [wagoe.shared.ui.core.icons :as icons]
             [wagoe.shared.ui.core.alpine :as alpine]
             [wagoe.platform.core.csrf :as csrf]
+            [wagoe.user.core.rights-ui :as rights-ui]
             [clojure.string :as str]))
 
 (defn- page-layout
@@ -534,14 +535,7 @@
   "Breadcrumbs (`crumbs`, [label href] pairs, the last without href), the
    page's `actions` and `heading`, as the admin's detail pages have them."
   [crumbs actions heading]
-  [:div.page-header
-   [:div.page-header-row
-    [:div.page-breadcrumbs
-     (interpose " / "
-                (for [[label href] crumbs]
-                  (if href [:a {:href href} label] [:span label])))]
-    (into [:div.page-header-actions {:class "flex flex-wrap items-center gap-2"}] actions)]
-   [:h1.page-title heading]])
+  (apply rights-ui/header crumbs heading actions))
 
 (defn- bulk-bar
   "The bar that appears once users are selected: the action and how to stop.
@@ -1161,6 +1155,7 @@
                    :hx-vals "{\"keep-current\": \"true\"}"})
            [:t :user/button-revoke-all-others]])]
        [:t :user/sessions-manage-for {:name (:name user)}])
+      (when admin? (rights-ui/user-tabs (:id user) :sessions))
       (sessions-list sessions current-session-id (:id user) current-time zone-id)
       (modal/confirm-modal {:id            "revoke-session-confirm"
                             :title         [:t :user/button-revoke]

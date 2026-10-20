@@ -33,6 +33,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **`wagoe new` apps run `:wagoe/authorization :enforce`** (BOU-776): users reach module routes through their groups'
   roles. Existing apps stay `:off`; the Authorization guide takes them there via `:report`.
+- **`clojure -M:run authz-report`** (BOU-786) prints each route's authorization rule and permission, and what
+  `:enforce` would refuse, without serving. Generated apps get it in `main.clj`; older ones can copy it from there.
+- **Admin pages for roles, permissions and a user's rights** (BOU-775): `/web/admin/roles`, `/web/admin/permissions`
+  and a Rights tab per user. Add `:detail-tabs` to your `admin/users.edn` to get the tab.
 - **The admin reads `admin.<entity>/read|write` and scopes under `:wagoe/authorization :enforce`** (BOU-774): entities
   map scope keys with `:scope`. Under `:off` it still admits role `:admin`; try `:report` first.
 - **Route authorization, off by default** (BOU-772): `:wagoe/authorization {:mode :report}` logs what `:enforce` would
@@ -251,6 +255,9 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Push routes had no authorization rule, so `:enforce` refused them** (BOU-786): device routes are `:self`, stats
+  need `push/read`. Grant it to whoever reads push stats before switching to `:enforce`.
+- **A check that throws under `:report` logged an ERROR on every request** (BOU-786); now once a minute per route.
 - **Wrong current passwords on change-password did not count towards the lockout, and parallel attempts exceeded it**
   (BOU-785). Custom `IUserRepository`s implement `claim-login-attempts` and `release-login-attempt` instead of `increment-failed-login-count`.
 - **Flash messages were never shown** (BOU-783): a response's `:flash` now reaches the next request, in a `wagoe-flash`
