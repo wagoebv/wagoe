@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **`wagoe.test/sign-in-as!` and `create-user!`** (BOU-788) sign in a test user holding roles, scoped or not. Use them
+  where a test signs in under `:enforce`; a user without a role gets 403.
 - **`clojure -M:run authz-report`** (BOU-786) prints each route's authorization rule and permission, and what
   `:enforce` would refuse, without serving. Generated apps get it in `main.clj`; older ones can copy it from there.
 - **Admin pages for roles, permissions and a user's rights** (BOU-775): `/web/admin/roles`, `/web/admin/permissions`

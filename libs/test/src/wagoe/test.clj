@@ -5,7 +5,7 @@
 
      (with-test-system [sys my-app.system-config/ig-config]
        (let [c (client sys)]
-         (sign-in! c \"a@example.com\" \"Secret-pass-123\")
+         (sign-in-as! c {:roles [:orders/editor]})
          (request c :post \"/web/orders\" {:form {:sku \"x\"}})
          (run-pending-jobs! sys)
          (drain-events! sys :orders)))
@@ -22,7 +22,8 @@
             ;; The init-keys every app has: database, HTTP, router, observability.
             [wagoe.platform.shell.system.wiring]
             [wagoe.realtime.ports :as realtime-ports]
-            [wagoe.tenant.ports :as tenant-ports])
+            [wagoe.tenant.ports :as tenant-ports]
+            [wagoe.user.ports :as user-ports])
   (:import [java.net URLDecoder URLEncoder]
            [java.security SecureRandom]
            [java.sql DriverManager]))
@@ -170,6 +171,7 @@
   ([system] (client system {}))
   ([system {:keys [headers]}]
    {:handler (:wagoe/http-handler system)
+    :system  system
     :headers (or headers {})
     :cookies (atom {})}))
 
@@ -249,3 +251,39 @@
       (throw (ex-info (str "Sign-in as " email " failed with status " (:status response))
                       {:type :unauthorized :email email :status (:status response)})))
     response))
+
+;; =============================================================================
+;; Users and their rights
+;; =============================================================================
+
+(defn create-user!
+  "Register a user and give them `:roles` through a group of their own.
+   Each role is a keyword, or {:role kw :scope map} to narrow it. Opts:
+   :roles, :email, :name, :password, :role (`:admin` for a platform admin).
+   Returns the user with its :password."
+  [system {:keys [roles] :as opts}]
+  (let [password (or (:password opts) (str "Test-Passw0rd-" (random-uuid)))
+        user     (user-ports/register-user
+                  (:wagoe/user-service system)
+                  (merge {:email (str "test-" (subs (str (random-uuid)) 0 8) "@example.com")
+                          :name  "Test user"
+                          :role  :user}
+                         (select-keys opts [:email :name :role])
+                         {:password password}))
+        groups   (:wagoe/user-group-service system)]
+    (when (seq roles)
+      (let [group (user-ports/create-group groups {:name (str "test-" (:id user))})]
+        (doseq [role roles]
+          (user-ports/add-group-role groups (:id group) (if (map? role) role {:role role})))
+        (user-ports/add-group-member groups (:id group) (:id user))))
+    (assoc user :password password)))
+
+(defn sign-in-as!
+  "Create a user as `create-user!` does and sign `c` in as them. Returns the
+   user.
+
+     (sign-in-as! c {:roles [:orders/editor]})"
+  [c opts]
+  (let [user (create-user! (:system c) opts)]
+    (sign-in! c (:email user) (:password user))
+    user))
