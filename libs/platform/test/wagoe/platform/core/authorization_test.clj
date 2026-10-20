@@ -164,3 +164,11 @@
   (is (= [{:path "/x" :authorization :signedin}]
          (sut/invalid-route-markers [["/x" {:get {:authorization :signedin}}]
                                      ["/y" {:authorization :self}]]))))
+
+(deftest ^:unit a-scope-on-a-route-that-checks-none-is-reported
+  (is (= [{:path "/me" :method :get :scope :handler}
+          {:path "/ping" :method :get :scope {:domain-id :path/domain-id}}]
+         (sut/unchecked-route-scopes
+          [["/me" {:authorization :signed-in :get {:handler identity :scope :handler}}]
+           ["/ping" {:scope {:domain-id :path/domain-id} :get {:handler identity :public true}}]
+           ["/orders" {:wagoe/module :wagoe/orders :scope :handler :get {:handler identity}}]]))))

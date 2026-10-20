@@ -338,7 +338,7 @@
 
   `:authentication` in `config`, when present, is `{:middleware [..]}`: what
   sets `:user`, followed by the default-deny guard, then `:authorization`,
-  a vector of middleware deciding what that user may do. Both run before the body
+  a vector of middleware deciding what that user may do. All run before the body
   is decoded and coerced, so an anonymous caller is told 401 rather than
   what was wrong with a body it may not send.
 

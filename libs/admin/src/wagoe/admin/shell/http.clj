@@ -149,7 +149,7 @@
    JSON API for it yet."
   [admin-service schema-provider config user-service]
   {:api []  ; Week 2+: JSON API endpoints
-:web (handler-checks (web-routes admin-service schema-provider config user-service))
+   :web (handler-checks (web-routes admin-service schema-provider config user-service))
    :static []  ; Week 2+: Admin-specific static assets
 
    ;; Its entities, for the sidebar, asked per page: whether one is a join

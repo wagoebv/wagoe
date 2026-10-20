@@ -566,7 +566,7 @@
   "`:wagoe/authorization :mode`, `:off` when unset. Throws on any other value:
    a typo must not switch checks off."
   [config]
-  (let [mode (get-in config [:active :wagoe/authorization :mode] :off)]
+  (let [mode (or (get-in config [:active :wagoe/authorization :mode]) :off)]
     (if (contains? authorization-core/modes mode)
       mode
       (throw (ex-info (str ":wagoe/authorization :mode is " (pr-str mode) "; it takes :off, :report or :enforce.")
@@ -652,6 +652,10 @@
         ;; keyword throws.
         settings      (if (map? router) router {})
         mode          (authorization-mode config)
+        _             (when (and (not= :off mode) (nil? permission-registry))
+                        (throw (ex-info (str ":wagoe/authorization is " mode " but no permission registry is wired;"
+                                             " nothing would be checked.")
+                                        {:type :configuration-error :key :wagoe/authorization :value mode})))
         _             (when (and (not= :off mode) (nil? rights))
                         (log/warn (str ":wagoe/authorization is " mode " but no module supplies rights"
                                        " (no user module?); only a platform admin holds a permission.")))
@@ -669,7 +673,7 @@
                               ;; it is `:public true` (BOU-568). Installed
                               ;; here, not per module, so none can forget it.
                               :authentication {:middleware (vec auth-middleware)}
-                              :authorization  (when (and permission-registry (not= :off mode))
+                              :authorization  (when (not= :off mode)
                                                 [(authorization/authorization-middleware
                                                   permission-registry rights {:mode mode})])}
                              ;; select-keys keeps a key set to nil: Reitit reads `:conflicts nil` as

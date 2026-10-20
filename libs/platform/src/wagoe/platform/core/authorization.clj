@@ -16,6 +16,7 @@
   (:require [clojure.string :as str]
             [malli.core :as m]
             [malli.error :as me]
+            [wagoe.platform.core.http.access :as access]
             [wagoe.platform.core.scope :as scope]))
 
 (def ^:private Source
@@ -247,7 +248,7 @@
   [data]
   (let [marker (:authorization data)]
     (cond
-      (true? (:public data))  {:rule :public}
+      (access/public? data)   {:rule :public}
       (= :signed-in marker)   {:rule :signed-in}
       (= :self marker)        {:rule :self}
       (:permission data)      {:rule :permission :permission (:permission data)}
@@ -294,3 +295,13 @@
              a (route-values :authorization data)
              :when (and (some? a) (not (markers a)))]
          {:path path :authorization a})))
+
+(defn unchecked-route-scopes
+  "The endpoints of `routes` that say a `:scope` under a rule that checks
+   none, `:public`, `:signed-in` or `:self`, as [{:path :method :scope}]: the
+   scope would be ignored and `:wagoe/scopes` never set."
+  [routes]
+  (vec (for [[path data] routes
+             [method d] (endpoints data)
+             :when (and (some? (:scope d)) (#{:public :signed-in :self} (:rule (route-rule d))))]
+         {:path path :method method :scope (:scope d)})))

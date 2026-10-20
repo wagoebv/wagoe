@@ -34,8 +34,9 @@
 
 (defn assert-route-permissions!
   "Throw :configuration-error when a route's `:permission` is not in
-   `registry`, its `:scope` is not one `core.scope` reads, or its
-   `:authorization` is neither `:signed-in` nor `:self`. `routes` are a
+   `registry`, its `:scope` is not one `core.scope` reads or sits on a route
+   that checks none, or its `:authorization` is neither `:signed-in` nor
+   `:self`. `routes` are a
    router's flattened [path data] pairs."
   [registry routes]
   (when-let [unknown (seq (core/unknown-route-permissions (ports/permissions registry) routes))]
@@ -53,7 +54,12 @@
     (config-error! {:type    :configuration-error
                     :message (str "Routes say an :authorization other than :signed-in or :self: "
                                   (pr-str (mapv (juxt :path :authorization) invalid)))
-                    :routes  (vec invalid)})))
+                    :routes  (vec invalid)}))
+  (when-let [unchecked (seq (core/unchecked-route-scopes routes))]
+    (config-error! {:type    :configuration-error
+                    :message (str "Routes say a :scope under :public or an :authorization marker, which"
+                                  " check no scope: " (pr-str (mapv (juxt :path :method :scope) unchecked)))
+                    :routes  (vec unchecked)})))
 
 ;; =============================================================================
 ;; Scopes
@@ -102,7 +108,7 @@
   "The scope check of a route whose data says `route-scope`, for a caller
    holding the route's permission in `scopes` (`core.scope/scopes-for`).
    `{:request r}`, the scopes on it as `:wagoe/scopes` for
-   `core.scope/scope-filter`, or `{:response r}`: 403, or 404 for a
+   `core.scope/scope-filter`, or `{:response r :error e}`: 403, or 404 for a
    parameter outside their scope."
   [request scopes route-scope]
   (let [{:keys [error] :as decision} (scope/route-decision scopes route-scope (:path-params request))]
