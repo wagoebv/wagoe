@@ -283,6 +283,18 @@
    :user-agent user-agent
    :result :success})
 
+(defn mfa-disabled-audit-entry
+  "Audit log entry for a user turning off their own second factor."
+  [user-id user-email ip-address user-agent]
+  {:action :mfa-disabled
+   :actor-id user-id
+   :actor-email user-email
+   :target-user-id user-id
+   :target-user-email user-email
+   :ip-address ip-address
+   :user-agent user-agent
+   :result :success})
+
 (defn sessions-revoked-audit-entry
   "One audit entry for ending `n` of the user's sessions at once, every one
    but `kept-session-id` when there is one (BOU-708)."

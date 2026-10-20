@@ -249,13 +249,15 @@
    type as the reason; a 500 when mfa.clj caught an exception, which it logged
    (BOU-586)."
   [result]
-  (let [{:keys [type message]} (:error result)
-        body (if (mfa-failures type)
-               (errors/body :internal-error "Internal Server Error")
-               (errors/body :validation-error message {:details {:reason (errors/type-name type)}}))]
-    {:status  (if (mfa-failures type) 500 400)
-     :headers {"Content-Type" "application/json"}
-     :body    (json/generate-string body)}))
+  (let [{:keys [type message retry-after]} (:error result)]
+    (if (= :account-locked type)
+      (user-interceptors/lockout-response retry-after {})
+      {:status  (if (mfa-failures type) 500 400)
+       :headers {"Content-Type" "application/json"}
+       :body    (json/generate-string
+                 (if (mfa-failures type)
+                   (errors/body :internal-error "Internal Server Error")
+                   (errors/body :validation-error message {:details {:reason (errors/type-name type)}})))})))
 
 ;; Untyped exceptions are not caught here: the platform's http-error-handler
 ;; logs them and answers a generic 500 (BOU-557).
@@ -298,13 +300,16 @@
         (mfa-refusal result)))))
 
 (defn mfa-disable-handler
-  "POST /api/auth/mfa/disable - Disable MFA for authenticated user."
+  "POST /api/auth/mfa/disable - Disable MFA for the authenticated user, who
+   confirms with `password` or a current TOTP or backup `code`."
   [mfa-service]
   (fn [request]
     (let [user-id (get-in request [:user :id])
           _ (when-not user-id
               (throw (ex-info "User not authenticated" {:type :unauthorized})))
-          result (mfa/disable-mfa mfa-service user-id)]
+          result (mfa/disable-mfa mfa-service user-id
+                                  (select-keys (:body-params request) [:password :code])
+                                  (user-svc/request-audit-context request))]
       (if (:success? result)
         {:status 200
          :headers {"Content-Type" "application/json"}
@@ -481,7 +486,11 @@
        :middleware [(user-middleware/flexible-authentication-middleware user-service)]
        :post {:handler    (mfa-disable-handler mfa-service)
               :summary    "Disable MFA"
-              :tags       ["mfa"]}}]
+              :tags       ["mfa"]
+              :description "Needs the current password or a TOTP/backup code; wrong ones count towards the lockout"
+              :parameters {:body [:map {:closed true}
+                                  [:password {:optional true} :string]
+                                  [:code {:optional true} :string]]}}}]
      ["/auth/mfa/status"
       {:authorization :signed-in
        :middleware [(user-middleware/flexible-authentication-middleware user-service)]

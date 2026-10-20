@@ -476,7 +476,9 @@
 ;; =============================================================================
 
 (defn mfa-disable-confirm-page
-  "Display MFA disable confirmation page with password verification.
+  "Display MFA disable confirmation page: the password or an authentication
+   code confirms it. A user who signs in through OIDC knows no password, so
+   the code is always offered.
    
    Args:
      errors: Validation errors map (optional)
@@ -498,8 +500,11 @@
        [:form {:method "POST" :action "/web/profile/mfa/disable"}
         (csrf/hidden-field)
         (ui/form-field :password [:t :user/password-field-current]
-                       (ui/password-input :password "" {:required true})
+                       (ui/password-input :password "" {:autocomplete "current-password"})
                        (:password errors))
+        (ui/form-field :code [:t :user/mfa-disable-code-label]
+                       (ui/text-input :code "" {:autocomplete "one-time-code"})
+                       (:code errors))
         [:div.form-actions
          [:button.button.danger {:type "submit"}
           (icons/icon :unlock {:size 16})

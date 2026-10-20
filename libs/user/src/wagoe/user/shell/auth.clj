@@ -12,7 +12,6 @@
    is delegated to wagoe.user.core.authentication."
   (:require [wagoe.user.core.authentication :as auth-core]
             [wagoe.user.core.mfa :as mfa-core]
-            [wagoe.user.ports :as ports]
             [wagoe.user.shell.hooks :as hooks]
             [wagoe.user.shell.mfa :as mfa-shell]
             [buddy.hashers :as hashers]
@@ -221,36 +220,6 @@
                                                 :ip-address    (:ip-address login-context)})]
                   (assoc session :jwt-token (create-jwt-token user hours))))}))
 
-(defn record-failed-login!
-  "Count a failed attempt for `user-id`, locking the account in the same write
-   when the count reaches the limit, so parallel failures each count and a
-   lockout cannot follow a login that reset it (BOU-696)."
-  [user-repository auth-config user-id current-time]
-  (ports/increment-failed-login-count user-repository user-id
-                                      (auth-core/failed-login-lockout auth-config current-time)))
-
-(defn- spend-backup-code!
-  "Spend hash `h`. The write is conditional on the codes being as read; when a
-   parallel login changed them, it is tried again against a fresh read, unless
-   that login spent `h`, which makes the code wrong here (BOU-708). Each lost
-   write means another code was spent, so it ends within one try per code."
-  [user-repository user h]
-  (loop [user user, tries (count (:mfa-backup-codes user))]
-    (or (ports/consume-backup-code user-repository user h)
-        (when-let [fresh (and (pos? tries) (ports/find-user-by-id user-repository (:id user)))]
-          (and (= (:mfa-backup-codes fresh) (:mfa-backup-codes user))
-               (not (some #{h} (:mfa-backup-codes-used fresh)))
-               (recur fresh (dec tries)))))))
-
-(defn- check-code!
-  "Verify `code`, spending it when it is a backup code."
-  [{:keys [user-repository mfa-service]} user code]
-  (let [check (mfa-shell/verify-mfa-code mfa-service user code)]
-    (if (or (not (:used-backup-code? check))
-            (spend-backup-code! user-repository user (:code-hash check)))
-      check
-      {:valid? false :used-backup-code? false})))
-
 (defn verify-second-factor!
   "Check the TOTP or backup `code` for `user`, spending a backup code. A wrong
    or blank one counts as a failed login, the same counter as a wrong password,
@@ -258,9 +227,9 @@
    `mfa-shell/verify-mfa-code`'s map."
   [auth-service user code current-time]
   (let [{:keys [user-repository auth-config]} auth-service
-        check (when-not (str/blank? code) (check-code! auth-service user code))]
+        check (when-not (str/blank? code) (mfa-shell/check-code! user-repository user code))]
     (when-not (:valid? check)
-      (record-failed-login! user-repository auth-config (:id user) current-time))
+      (mfa-shell/record-failed-login! user-repository auth-config (:id user) current-time))
     check))
 
 (defn authenticate-user
@@ -354,7 +323,7 @@
                    ;; Password verification failed
                    (not password-valid?)
                    (do
-                     (record-failed-login! user-repository auth-config (:id user) current-time)
+                     (mfa-shell/record-failed-login! user-repository auth-config (:id user) current-time)
                      (log/warn "Authentication failed - invalid password" {:email email})
                      {:success? false
                       :error {:type    :authentication-failed

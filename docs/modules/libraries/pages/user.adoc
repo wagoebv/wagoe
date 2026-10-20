@@ -57,7 +57,7 @@ curl -X POST http://localhost:3000/api/auth/login \
 # Disable MFA
 curl -X POST http://localhost:3000/api/auth/mfa/disable \
   -H "Authorization: Bearer <token>" \
-  -d '{"verificationCode": "123456"}'
+  -d '{"code": "123456"}'
 ----
 
 == Sessions
