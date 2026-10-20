@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **shared-ui: `toast/redirect-with-toast`, `toast/with-error-toast`, `table/bulk-bar`, and `:push-url?` on
+  `data-table`** (BOU-784), used by admin and user. Nothing to change.
 - **User list, detail, create and sessions pages in the admin shell** (BOU-766), with its table, toasts and confirm dialogs.
   `POST /web/users/bulk` takes `ids[]` instead of `user-ids`.
 - **Roles on groups, the Everyone group and provider memberships** (BOU-771): groups hold code or managed roles in a
@@ -239,6 +241,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Saving a user's detail form deactivated them, Reactivate did nothing, and the users table added a history entry on
+  each refresh** (BOU-784). Deactivate asks in the confirm modal now. Nothing to do.
 - **Admin sidebar: a long group name pushed its icon and chevron out, and hovered items were white on white** in the
   light theme (BOU-780). Long names truncate with the full name as a tooltip. Nothing to do.
 - **Turning off two-factor authentication on the profile refused every password** (BOU-768). Nothing to do.

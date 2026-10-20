@@ -262,3 +262,27 @@
   (is (= {:filters {:name {:op :contains :value ""}}}
          (table-ui/parse-table-params {"filters[name][op]" "contains" "filters[name][value]" ""}
                                       {:keep-blank-filters? true}))))
+
+(deftest ^:unit push-url-option-test
+  (let [opts  {:url "/o" :hx-target "#o" :table-query {:page 1 :page-size 1}
+               :columns [{:field :a :label "A" :filter {}}] :rows []}
+        push  (fn [table] (map #(get-in % [1 :hx-push-url]) (requesting-elements table)))]
+    (testing "the controls push by default"
+      (is (every? #(and % (not= "false" %)) (push (table-ui/data-table opts)))))
+    (testing ":push-url? false leaves the address bar alone"
+      (is (every? #(contains? #{nil "false"} %) (push (table-ui/data-table (assoc opts :push-url? false)))))
+      (is (every? nil? (push (table-ui/pagination {:table-query {:page 1 :page-size 1} :total-count 3
+                                                   :base-url "/o" :hx-target "#o" :push-url? false})))))))
+
+(deftest ^:unit bulk-bar-test
+  (let [bar  (table-ui/bulk-bar {:form-attrs {:hx-post "/o/bulk"}
+                                 :controls   [[:button {:type "submit"} "Go"]]
+                                 :confirm    {:id "bulk-confirm" :message "Sure?"}})
+        form (first (tagged :form#bulk-action-form bar))]
+    (testing "the form asks the confirm modal, and carries the controls"
+      (is (= "bulk-confirm" (get-in form [1 :data-confirm-modal])))
+      (is (= "/o/bulk" (get-in form [1 :hx-post])))
+      (is (= [:button {:type "submit"} "Go"] (nth form 2))))
+    (testing "the modal sits beside the form, not in it"
+      (is (seq (tagged :dialog bar)))
+      (is (empty? (tagged :dialog form))))))

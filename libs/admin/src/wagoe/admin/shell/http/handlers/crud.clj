@@ -9,6 +9,7 @@
    [wagoe.admin.shell.permissions :as shell-permissions]
    [wagoe.admin.shell.http.support :as support]
    [wagoe.shared.ui.core.combobox :as combobox]
+   [wagoe.shared.ui.core.toast :as toast]
    [clojure.tools.logging :as log]
    [ring.util.response :as ring-response]))
 
@@ -364,23 +365,22 @@
                                 (support/build-entity-detail-opts admin-service schema-provider config entity-name entity-config updated-record request))]
 
           (if then-list?
-            (let [message ((support/t-fn request) :admin/flash-updated
-                                                  {:label (introspection/singular-label entity-config entity-name)})]
-              (-> (ring-response/response "")
-                  (ring-response/header "X-Toast" (str "{\"type\":\"success\",\"message\":" (pr-str (str message)) "}"))
-                  (ring-response/header "HX-Redirect" (or (support/safe-return-to request)
-                                                          (str "/web/admin/" (name entity-name))))))
-          (support/html-response request
-                                 (admin-ui/admin-layout
-                                  (admin-ui/entity-detail-page entity-name entity-config updated-record {} permissions
-                                                               (:page-opts ctx))
-                                  {:user user
-                                   :current-entity entity-name
-                                   :entity-configs (:entity-configs ctx)
-                                   :logo-url (:logo-url config)
+            (toast/redirect-with-toast
+             (or (support/safe-return-to request) (str "/web/admin/" (name entity-name)))
+             :success
+             ((support/t-fn request) :admin/flash-updated
+                                     {:label (introspection/singular-label entity-config entity-name)}))
+            (support/html-response request
+                                   (admin-ui/admin-layout
+                                    (admin-ui/entity-detail-page entity-name entity-config updated-record {} permissions
+                                                                 (:page-opts ctx))
+                                    {:user user
+                                     :current-entity entity-name
+                                     :entity-configs (:entity-configs ctx)
+                                     :logo-url (:logo-url config)
                                    ;; A toast in the new page's region: out of band it would go with the body
-                                   :flash {:type :success
-                                           :message [:t :admin/flash-updated {:label (introspection/singular-label entity-config entity-name)}]}}))))
+                                     :flash {:type :success
+                                             :message [:t :admin/flash-updated {:label (introspection/singular-label entity-config entity-name)}]}}))))
 
         ; Validation errors - re-render form with flash inside page content
         (let [permissions (permissions/get-entity-permissions user entity-name entity-config)
