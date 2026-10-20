@@ -318,7 +318,9 @@
                              404 {:description "Membership not found"}}}}]
 
       ["/memberships/:id/accept"
-       {:post {:handler   (accept-invitation-handler membership-service)
+       ;; The invitee, who holds no tenant right yet; the handler checks.
+       {:authorization :self
+        :post {:handler   (accept-invitation-handler membership-service)
                :summary   "Accept membership invitation"
                :tags      ["memberships"]
                :responses {200 {:description "Invitation accepted"}

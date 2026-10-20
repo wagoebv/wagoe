@@ -67,16 +67,19 @@
   "This feature's `:api` routes. Every one needs a signed-in user."
   [ctx]
   [["/me/export-jobs"
-    {:post {:handler (request-handler ctx)
+    {:authorization :signed-in
+     :post {:handler (request-handler ctx)
             :summary "Ask for your data export as a background job"
             :tags    ["users"]}}]
    ["/me/export-jobs/:id"
     (merge id-parameter
-           {:get {:handler (status-handler ctx)
+           {:authorization :signed-in
+            :get {:handler (status-handler ctx)
                   :summary "Your export job's status"
                   :tags    ["users"]}})]
    ["/me/export-jobs/:id/download"
     (merge id-parameter
-           {:get {:handler (download-handler ctx)
+           {:authorization :signed-in
+            :get {:handler (download-handler ctx)
                   :summary "Download your finished export"
                   :tags    ["users"]}})]])

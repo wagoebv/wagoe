@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **Route authorization, off by default** (BOU-772): `:wagoe/authorization {:mode :report}` logs what `:enforce` would
+  refuse. Tag routes `:public`, `:authorization :signed-in`/`:self` or `:permission`, then switch to `:enforce`.
 - **shared-ui: `toast/redirect-with-toast`, `toast/with-error-toast`, `table/bulk-bar`, and `:push-url?` on
   `data-table`** (BOU-784), used by admin and user. Nothing to change.
 - **User list, detail, create and sessions pages in the admin shell** (BOU-766), with its table, toasts and confirm dialogs.
