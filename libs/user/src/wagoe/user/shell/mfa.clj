@@ -13,6 +13,7 @@
             [wagoe.user.core.authentication :as auth-core]
             [wagoe.user.core.mfa :as mfa-core]
             [wagoe.user.ports :as ports]
+            [wagoe.user.shell.lockout :as lockout]
             [wagoe.user.shell.mfa-crypto :as mfa-crypto]
             [buddy.hashers :as hashers]
             [one-time.core :as otp]
@@ -328,31 +329,6 @@
       check
       {:valid? false :used-backup-code? false})))
 
-(defn claim-attempts!
-  "Count `n` attempts for `user-id` before checking them, unless the account is
-   locked: the count is the lockout check, so parallel attempts cannot exceed
-   the limit (BOU-785). Returns {:claimed? true :locked? b}, :locked? when this
-   claim reached the limit, or {:claimed? false :retry-after inst}."
-  [user-repository auth-config user-id n current-time]
-  (let [lockout (auth-core/failed-login-lockout auth-config current-time)
-        claim   (ports/claim-login-attempts user-repository user-id n lockout)]
-    (if (:claimed? claim)
-      {:claimed? true :locked? (>= (:failed-login-count claim) (:max-attempts lockout))}
-      {:claimed? false :retry-after (or (:lockout-until claim) (:until lockout))})))
-
-(defn release-attempt!
-  "Take back an attempt `claim-attempts!` counted whose password was right,
-   and the lockout it set, if it set one."
-  [user-repository user-id claim]
-  (ports/release-login-attempt user-repository user-id (:locked? claim)))
-
-(defn locked-error
-  "The ADR-036 refusal for an account locked until `retry-after`."
-  [retry-after]
-  {:type        :account-locked
-   :message     "Too many failed attempts, try again later"
-   :retry-after retry-after})
-
 (defn- proof-holds?
   "Whether `password` is the user's, or `code` a current TOTP or unused backup
    code, which it spends. The password goes first so a backup code is not
@@ -398,7 +374,7 @@
           {:success? false :error {:type :cannot-disable :message (:reason can)}}
 
           (:retry-after allowed)
-          {:success? false :error (locked-error (:retry-after allowed))}
+          {:success? false :error (lockout/locked-error (:retry-after allowed))}
 
           (not (:allowed? allowed))
           {:success? false :error {:type :cannot-disable :message (:reason allowed)}}
@@ -409,12 +385,12 @@
 
           :else
           ;; One attempt per field given: a request is not two guesses for one.
-          (let [claim (claim-attempts! user-repository auth-config user-id
+          (let [claim (lockout/claim-attempts! user-repository auth-config user-id
                                        (count (remove str/blank? [(:password proof) (:code proof)]))
                                        now)]
             (cond
               (not (:claimed? claim))
-              {:success? false :error (locked-error (:retry-after claim))}
+              {:success? false :error (lockout/locked-error (:retry-after claim))}
 
               (not (proof-holds? user-repository user proof))
               {:success? false :error {:type :invalid-proof :message "Incorrect password or code"}}

@@ -13,6 +13,7 @@
   (:require [wagoe.user.core.authentication :as auth-core]
             [wagoe.user.core.mfa :as mfa-core]
             [wagoe.user.shell.hooks :as hooks]
+            [wagoe.user.shell.lockout :as lockout]
             [wagoe.user.shell.mfa :as mfa-shell]
             [buddy.hashers :as hashers]
             [buddy.sign.jwt :as jwt]
@@ -222,7 +223,7 @@
 
 (defn verify-second-factor!
   "Check the TOTP or backup `code` for `user`, spending a backup code. The
-   caller has claimed the attempt with `mfa-shell/claim-attempts!`, so a wrong
+   caller has claimed the attempt with `lockout/claim-attempts!`, so a wrong
    or blank code stays counted, the same counter as a wrong password (BOU-698).
    Returns `mfa-shell/verify-mfa-code`'s map, or nil for a blank code."
   [auth-service user code]
@@ -245,9 +246,9 @@
      ADR-036 §3 decided — a wrong password is an answer, not an exceptional
      condition, and a caller that wants to escalate can rethrow the `:error`
      map as a typed `ex-info` without inventing a taxonomy. `:type` is one of
-     `:validation-error`, `:authentication-failed`, `:mfa-required`,
-     `:mfa-enrolment-required`, `:mfa-verification-failed`; the authentication-failed case may carry
-     `:retry-after`.
+     `:validation-error`, `:authentication-failed`, `:account-locked`, `:mfa-required`,
+     `:mfa-enrolment-required`, `:mfa-verification-failed`; `:account-locked`, and
+     an authentication-failed lockout, carry `:retry-after`.
 
      `:requires-mfa?` stays at the top level: it is not part of why the attempt
      failed, it is what the caller does next."
@@ -279,7 +280,7 @@
           ;; Step 4: Count the attempt, then verify the password. Counting
           ;; first is the lockout check parallel attempts cannot race (BOU-785).
           claim (when (and user (:allowed? login-allowed?))
-                  (mfa-shell/claim-attempts! user-repository auth-config (:id user) 1 current-time))
+                  (lockout/claim-attempts! user-repository auth-config (:id user) 1 current-time))
           password-valid? (when (:claimed? claim)
                             (verify-password password (:password-hash user)))
 
@@ -322,7 +323,7 @@
 
                    (not (:claimed? claim))
                    {:success? false
-                    :error    (assoc (mfa-shell/locked-error (:retry-after claim)) :type :authentication-failed)}
+                    :error    (lockout/locked-error (:retry-after claim))}
 
                    ;; Password verification failed; the claim counted it
                    (not password-valid?)
@@ -335,7 +336,7 @@
                    ;; Required, but the user has no second factor to give
                    (:requires-enrolment? mfa-requirement)
                    (do
-                     (mfa-shell/release-attempt! user-repository (:id user) claim)
+                     (lockout/release-attempt! user-repository (:id user) claim)
                      (log/warn "MFA required but not enrolled" {:email email})
                      {:success? false
                       :error {:type    :mfa-enrolment-required
@@ -345,7 +346,7 @@
                    (and (:requires-mfa? mfa-requirement)
                         (nil? mfa-code))
                    (do
-                     (mfa-shell/release-attempt! user-repository (:id user) claim)
+                     (lockout/release-attempt! user-repository (:id user) claim)
                      {:success? false
                       :requires-mfa? true
                       :error {:type    :mfa-required

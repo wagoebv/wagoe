@@ -23,7 +23,7 @@
             [wagoe.user.core.oidc :as oidc]
             [wagoe.user.ports :as ports]
             [wagoe.user.shell.auth :as auth]
-            [wagoe.user.shell.mfa :as mfa-shell])
+            [wagoe.user.shell.lockout :as lockout])
   (:import (java.net URLEncoder)
            (java.nio.charset StandardCharsets)
            (java.time Instant)))
@@ -365,10 +365,10 @@
       {:error {:type :oidc/account-unavailable :message (:reason allowed)}}
 
       :else
-      (let [claim (mfa-shell/claim-attempts! user-repository auth-config (:id user) 1 (Instant/now))]
+      (let [claim (lockout/claim-attempts! user-repository auth-config (:id user) 1 (Instant/now))]
         (cond
           (not (:claimed? claim))
-          {:error {:type :oidc/account-unavailable :message "Too many failed attempts, try again later"}}
+          {:error (assoc (lockout/locked-error (:retry-after claim)) :type :oidc/account-unavailable)}
 
           (:valid? (auth/verify-second-factor! (:auth-service client) user code))
           (finish! client user sign-in login-context)
