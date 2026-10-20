@@ -339,14 +339,18 @@
     (assoc user-data :role nil)
     user-data))
 
+(defn admin-changes?
+  "Whether `after` sets or clears `before`'s :admin. A key `after` leaves out
+   is kept; `before` is nil for a new user."
+  [before after]
+  (and (contains? after :role)
+       (not= (= :admin (:role before)) (= :admin (:role after)))))
+
 (defn admin-change-refusal
   "A :forbidden error when `after` sets or clears `before`'s :admin and the
-   actor is not a platform admin, else nil. A key `after` leaves out is kept;
-   `before` is nil for a new user."
+   actor is not a platform admin, else nil."
   [actor-platform-admin? before after]
-  (when (and (contains? after :role)
-             (not= (= :admin (:role before)) (= :admin (:role after)))
-             (not actor-platform-admin?))
+  (when (and (admin-changes? before after) (not actor-platform-admin?))
     {:error {:type    :forbidden
              :field   :role
              :message "Only a platform admin sets or clears the admin role"}}))

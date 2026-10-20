@@ -9,6 +9,7 @@
             [malli.transform :as mt]
             [ring.util.response :as response]
             [wagoe.shared.ui.core.combobox :as combobox]
+            [wagoe.user.core.group :as group-core]
             [wagoe.user.core.group-ui :as group-ui]
             [wagoe.user.ports :as ports]
             [wagoe.user.shell.web-handlers :refer [html-response]]))
@@ -196,10 +197,7 @@
   (fn [request]
     (change group-service request :user.groups/flash-role-added
             #(ports/add-group-role group-service %
-                                   {:role  (some-> (form request "role")
-                                                   (str/replace #"^:" "")
-                                                   not-empty
-                                                   keyword)
+                                   {:role  (group-core/parse-name (form request "role"))
                                     :scope (form-scope group-service request)}))))
 
 (defn remove-role [group-service]

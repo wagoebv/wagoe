@@ -164,19 +164,18 @@
   "Whether `after` changes `before`'s access: gaining or losing :admin
    (BOU-191) or a deactivation (BOU-665). A role `after` leaves out is kept."
   [before after]
-  (or (and (contains? after :role) (not= (= :admin (:role before)) (= :admin (:role after))))
+  (or (user-core/admin-changes? before after)
       (user-core/deactivates? before after)))
 
 (defn- check-admin-change!
   "Throw :forbidden when the bound actor, not a platform admin, sets or clears
    :admin. Without an actor (the CLI, a migration) it is allowed."
   [user-repository before after]
-  (when-let [actor-id (:actor-id *audit-context*)]
-    (when (user-core/admin-change-refusal false before after)
-      (when-let [{:keys [error]} (user-core/admin-change-refusal
-                                  (access/platform-admin? (.find-user-by-id user-repository actor-id))
-                                  before after)]
-        (throw (ex-info (:message error) error))))))
+  (when-let [actor-id (and (user-core/admin-changes? before after) (:actor-id *audit-context*))]
+    (when-let [{:keys [error]} (user-core/admin-change-refusal
+                                (access/platform-admin? (.find-user-by-id user-repository actor-id))
+                                before after)]
+      (throw (ex-info (:message error) error)))))
 
 (defn- touches-access?
   "Whether `after` sets a key the admin guard and session ending judge."

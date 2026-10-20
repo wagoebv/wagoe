@@ -172,11 +172,16 @@
     (when-let [user (if (map? user) user (ports/find-user-by-id user-repository user))]
       (set (membership user)))))
 
+(defn- find-role
+  "The managed role named `role-name`, or nil."
+  [repo role-name]
+  (some #(when (= role-name (:name %)) %) (ports/find-roles repo)))
+
 (defn- role-data
   "`role` trimmed and checked against the registry. Throws :validation-error."
   [registry role]
   (let [data (cond-> (select-keys role [:name :description :permissions])
-               (string? (:name role)) (update :name #(keyword (str/replace (str/trim %) #"^:" "")))
+               (string? (:name role)) (update :name group-core/parse-name)
                (sequential? (:permissions role)) (update :permissions set))]
     (when-let [explanation (m/explain user-schema/RoleRequest data)]
       (throw (refused "Invalid role" {:errors (me/humanize explanation)})))
@@ -234,8 +239,8 @@
    the order the single changes would: leaving, roles removed, roles added,
    joining. Audit failures throw, so the import rolls back."
   [repo registry audit-repository existing {:keys [members roles grants] :as spec} replace?]
-  (when (and existing (group-core/everyone? (:id existing)) (seq members))
-    (throw (refused "Everyone is built in: every signed-in user is a member" {:group (:name existing)})))
+  (when (and existing (seq members))
+    (not-everyone! (:id existing)))
   (doseq [{:keys [permission]} grants] (legacy-role! repo registry permission))
   (let [data      (select-keys spec [:name :description])
         group     (cond
@@ -276,18 +281,17 @@
 ;; Migration
 ;; =============================================================================
 
-(defn- assign-once! [repo group-id role]
-  (when-not (some #(= [role {}] (group-core/assignment-key %)) (ports/find-assignments repo group-id))
-    (ports/insert-assignment repo {:group-id group-id :role role :scope {}})))
+(defn- assign-once! [repo group-id role scope]
+  (when-not (some #(= [role scope] (group-core/assignment-key %)) (ports/find-assignments repo group-id))
+    (ports/insert-assignment repo {:group-id group-id :role role :scope scope})))
 
 (defn- migrate-grants!
   "Each grant becomes an assignment of the managed role of its permission."
   [repo registry]
   (doseq [{:keys [id group-id] :as grant} (ports/find-legacy-grants repo)
-          :let [{:keys [role scope] :as a} (group-core/grant->assignment grant)]]
+          :let [{:keys [role scope]} (group-core/grant->assignment grant)]]
     (legacy-role! repo registry role)
-    (when-not (some #(= [role scope] (group-core/assignment-key %)) (ports/find-assignments repo group-id))
-      (ports/insert-assignment repo (assoc a :group-id group-id)))
+    (assign-once! repo group-id role scope)
     (ports/remove-legacy-grant repo id)))
 
 (defn- migrate-viewers!
@@ -299,7 +303,7 @@
                       (ports/insert-group repo {:name "Readers" :description "Read-only users"}))]
       (doseq [id viewers] (ports/insert-member repo (:id readers) id))
       (doseq [role (group-core/module-roles (code-roles registry) "viewer")]
-        (assign-once! repo (:id readers) role))
+        (assign-once! repo (:id readers) role {}))
       (ports/clear-legacy-roles repo))))
 
 (defn- assert-sources!
@@ -332,7 +336,7 @@
                           (fn [repo]
                             (when (and (ports/ensure-everyone repo) (ports/any-users? repo))
                               (doseq [role (group-core/module-roles (code-roles registry) "editor")]
-                                (assign-once! repo group-core/everyone-id role)))
+                                (assign-once! repo group-core/everyone-id role {})))
                             (migrate-viewers! repo registry)
                             (migrate-grants! repo registry)))
     (catch clojure.lang.ExceptionInfo e
@@ -411,7 +415,7 @@
 
   (update-role [_ role]
     (let [data   (role-data registry role)
-          before (some #(when (= (:name data) (:name %)) %) (ports/find-roles group-repository))]
+          before (find-role group-repository (:name data))]
       (when-not before
         (throw (not-found "No such role" {:role (:name data)})))
       (ports/modify-role group-repository data)
@@ -419,7 +423,7 @@
       (assoc before :description (:description data) :permissions (:permissions data))))
 
   (delete-role [_ role-name]
-    (if-let [role (some #(when (= role-name (:name %)) %) (ports/find-roles group-repository))]
+    (if-let [role (find-role group-repository role-name)]
       (do (audit-role-change! group-repository audit-repository role-name (:permissions role) #{})
           (ports/remove-role group-repository role-name))
       false))
@@ -456,25 +460,28 @@
 
   (user-grants [_ user]
     (if-let [id (user-id-of user)]
-      (group-core/user-grants
-       (ports/find-user-assignments group-repository id (provider-groups membership user-repository user))
-       (all-roles group-repository registry))
+      ;; One query: the assignments carry their managed role's permissions.
+      (let [assignments (ports/find-user-assignments group-repository id
+                                                     (provider-groups membership user-repository user))]
+        (group-core/user-grants assignments
+                                (merge (into {} (keep (fn [{:keys [role permissions]}]
+                                                        (when permissions [role {:permissions permissions}])))
+                                             assignments)
+                                       (code-roles registry))))
       []))
 
   (user-groups [_ user]
-    (if-let [id (user-id-of user)]
-      (let [stored   (ports/find-user-groups group-repository id)
+    ;; None for an unknown or soft-deleted user, as find-user-groups gives.
+    (if-let [user (if (map? user) user (some->> user (ports/find-user-by-id user-repository)))]
+      (let [stored   (ports/find-user-groups group-repository (:id user))
             provided (provider-groups membership user-repository user)
             ids      (set (map :id stored))]
-        ;; None for a soft-deleted user, as find-user-groups gives.
-        (if (and (empty? stored) (nil? (ports/find-user-by-id user-repository id)))
-          []
-          (into (mapv #(assoc % :source :member) stored)
-                (for [g (ports/find-groups group-repository)
-                      :when (and (not (ids (:id g)))
-                                 (or (group-core/everyone? (:id g)) (contains? provided (:name g))))]
-                  (assoc (dissoc g :member-count :role-count)
-                         :source (if (group-core/everyone? (:id g)) :everyone :provider))))))
+        (into (mapv #(assoc % :source :member) stored)
+              (for [g (ports/find-groups group-repository)
+                    :when (and (not (ids (:id g)))
+                               (or (group-core/everyone? (:id g)) (contains? provided (:name g))))]
+                (assoc (dissoc g :member-count :role-count)
+                       :source (if (group-core/everyone? (:id g)) :everyone :provider)))))
       []))
 
   (permission-holders [_ permission]

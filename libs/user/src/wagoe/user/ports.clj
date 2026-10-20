@@ -211,8 +211,8 @@
 
   (find-user-assignments [this user-id group-names])
   ;; The assignments of every group the user was added to, of Everyone, and
-  ;; of the groups named in `group-names`, each with :group-name. None for a
-  ;; soft-deleted user.
+  ;; of the groups named in `group-names`, each with :group-name, and with
+  ;; :permissions when the role is a managed one. None for a soft-deleted user.
 
   (find-role-holders [this role-names])
   ;; {:user-id :role :scope} for each active, not soft-deleted user holding

@@ -227,7 +227,7 @@
   (db/create-index-if-not-exists! ctx "uk_user_group_members_group_user" :user_group_members
                                   [:group_id :user_id] {:unique? true})
   (unique-group-names! ctx)
-  ;; For `find-permission-holders`. user_id and group_id are indexed already,
+  ;; For the grants the migration moves onto roles. user_id and group_id are indexed already,
   ;; as every -id column is.
   (db/create-index-if-not-exists! ctx "idx_user_group_grants_permission" :user_group_grants [:permission])
   (db/create-index-if-not-exists! ctx "uk_user_roles_name" :user_roles [:name] {:unique? true})

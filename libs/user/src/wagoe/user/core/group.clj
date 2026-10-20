@@ -17,6 +17,11 @@
 
 (def everyone-name "Everyone")
 
+(defn parse-name
+  "A permission or role name as typed, `invoice/approve` or `:invoice/approve`."
+  [s]
+  (some-> s str str/trim (str/replace #"^:" "") not-empty keyword))
+
 (defn everyone? [group-id]
   (= (str everyone-id) (str group-id)))
 
@@ -134,21 +139,14 @@
   [roles permission]
   (into #{} (keep (fn [[k {:keys [permissions]}]] (when (contains? permissions permission) k))) roles))
 
-(defn- admin-permission? [p]
-  (let [ns (namespace p)]
-    (or (= "admin" ns) (str/starts-with? (str ns) "admin."))))
-
 (defn module-roles
-  "The code roles named `<module>/<kind>` (\"editor\", \"viewer\"), leaving
-   out the admin module's and any holding an admin permission, so a migration
-   that hands them out makes nobody an admin."
+  "The code roles named `<module>/<kind>` (\"editor\", \"viewer\") but the
+   admin module's, so a migration that hands them out makes nobody an admin:
+   the registry lets no other module's role hold an `admin.*` permission."
   [code-roles kind]
   (into (sorted-set)
-        (keep (fn [[k {:keys [module permissions]}]]
-                (when (and (= kind (name k))
-                           (not= :wagoe/admin module)
-                           (not-any? admin-permission? permissions))
-                  k)))
+        (keep (fn [[k {:keys [module]}]]
+                (when (and (= kind (name k)) (not= :wagoe/admin module)) k)))
         code-roles))
 
 (defn users-with-permission
