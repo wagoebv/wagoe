@@ -348,8 +348,8 @@
 
 (def response-shape-cli
   "Shapes a `:result` (`:status` / `:data` / `:errors`) into a CLI response
-   with an exit code. A response already set is left alone: an error response
-   set before this interceptor stops the enter chain, so its :leave never sees it."
+   with an exit code. A response already set, by an op interceptor or error
+   handling, passes through unchanged."
   {:name :response-shape-cli
    :leave (fn [ctx]
             (if (:response ctx)

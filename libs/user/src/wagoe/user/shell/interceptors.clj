@@ -624,7 +624,7 @@
                                 :cli (:id (:opts context)))
                   update-data (case interface-type
                                 :http (get-in context [:request :parameters :body])
-                                :cli (select-keys (:opts context) [:name :role :active]))]
+                                :cli (dissoc (:opts context) :id))]
 
               (cond
                 (nil? user-id-str)

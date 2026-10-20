@@ -355,7 +355,8 @@
                  :user-update
                  service
                  []
-                 opts)
+                 ;; --format is an output option; left in, it counts as a field
+                 (dissoc opts :format))
         pipeline (user-interceptors/create-user-update-pipeline :cli)
         result-context (interceptor/run-pipeline context pipeline)]
     (:response result-context)))
