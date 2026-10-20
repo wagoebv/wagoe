@@ -303,8 +303,8 @@
 
 (def ^:private registry
   (authorization/create-registry {:wagoe/orders  nil
-                          :wagoe/reports nil
-                          :wagoe/admin   {:permissions (authz-core/read-write-permissions "admin.users" "users")}}))
+                                  :wagoe/reports nil
+                                  :wagoe/admin   {:permissions (authz-core/read-write-permissions "admin.users" "users")}}))
 
 (defn- permissions-of [grants]
   (set (map :permission grants)))
@@ -435,6 +435,16 @@
       (sut/migrate! svc)
       (is (empty? (:roles (ports/get-group svc group/everyone-id)))
           "a later boot does not hand the editor roles out again"))))
+
+(deftest ^:integration an-app-with-only-an-admin-gives-everyone-nothing
+  ;; A new app's bb create-admin runs before its first start; that admin
+  ;; passes every check, so it is no reason to open the modules to every signup.
+  (with-service nil {:registry registry}
+    (fn [{:keys [svc users]}]
+      (ports/create-user users {:email "root@example.com" :name "Root" :role :admin :active true
+                                :password-hash "x"})
+      (sut/migrate! svc)
+      (is (empty? (:roles (ports/get-group svc group/everyone-id)))))))
 
 (deftest ^:integration only-a-platform-admin-sets-or-clears-admin
   (with-service nil

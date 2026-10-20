@@ -33,9 +33,9 @@ clojure -M:migrate up    # run pending migrations
 
 # Users
 bb create-admin          # create the first admin account (interactive)
-# A new project has no users. Anything behind :require-role — the admin UI at
-# /web/admin/ in particular — redirects to a login you cannot pass until this
-# has been run at least once.
+# A new project has no users, and runs :wagoe/authorization :enforce: only
+# this admin passes every route; others need a role on a group, given at
+# /web/admin/groups.
 
 # Modules
 wagoe add <module>          # add an optional module
