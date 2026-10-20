@@ -357,6 +357,16 @@
                    true (conj text))]
     (into [:span {:class classes}] children)))
 
+(defn tabs
+  "Links to a record's pages as daisyUI tabs, `items` [{:label :href :active?}].
+   Each tab is its own page, so they work without JavaScript."
+  [items]
+  [:nav {:class "tabs record-tabs" :role "tablist"}
+   (for [{:keys [label href active?]} items]
+     [:a (cond-> {:class (if active? "tab tab-active" "tab") :role "tab" :href href}
+           active? (assoc :aria-current "page" :aria-selected "true"))
+      label])])
+
 (defn tone-badge
   "A badge in `tone` (:neutral :info :success :warning :danger), styled as the
    admin's enum cells are (`c-badge tone-*` in wagoe-admin.css)."

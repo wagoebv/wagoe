@@ -1,0 +1,159 @@
+(ns wagoe.user.shell.rights-handlers-test
+  "The admin's role, permission and rights pages, through their routes, on H2."
+  (:require [clojure.string :as str]
+            [clojure.test :refer [deftest is testing]]
+            [reitit.ring :as ring]
+            [support.test-db :as test-db]
+            [wagoe.platform.shell.authorization :as authz]
+            [wagoe.user.ports :as ports]
+            [wagoe.user.shell.group-persistence :as group-persistence]
+            [wagoe.user.shell.group-service :as group-service]
+            [wagoe.user.shell.http :as http]
+            [wagoe.user.shell.persistence :as persistence]
+            [wagoe.user.shell.service :as user-service]))
+
+(def ^:private registry
+  (authz/create-registry
+   {:wagoe/invoice {:permissions {:invoice/approve {:label "Approve invoices"}}}
+    :wagoe/app     {:scopes        {:department-id {:label "Department" :sources #{:user/department}}
+                                    :domain-id     {:label "Domain" :schema :int}}
+                    :scope-sources {:user/department {:label "department" :resolve (constantly #{7})}}}}))
+
+(defn- with-app [f]
+  (test-db/with-db "user_rights_pages"
+    (fn [ctx]
+      (persistence/initialize-user-schema! ctx)
+      (let [users  (persistence/create-user-repository ctx)
+            audit  (persistence/create-audit-repository ctx {:default-limit 50 :max-limit 100})
+            usvc   (user-service/->UserService users nil audit {} nil)
+            gsvc   (group-service/create-group-service (group-persistence/create-group-repository ctx)
+                                                       users audit
+                                                       (group-service/with-registry-scopes
+                                                         (group-service/prepare-settings nil) registry)
+                                                       {:registry registry})
+            routes (http/group-routes usvc gsvc nil)
+            app    (ring/ring-handler (ring/router (into [[(:web-prefix routes) (:web routes)]] (:extra-web routes))))
+            admin  (ports/create-user users {:email "admin@example.com" :name "Admin" :role :admin
+                                             :active true :password-hash "x"})]
+        (f {:app app :users users :gsvc gsvc :admin admin})))))
+
+(defn- req
+  ([user method uri] (req user method uri {}))
+  ([user method uri form]
+   {:request-method method :uri uri :user user :form-params form :headers {}
+    :query-params (some-> (second (str/split uri #"\?")) (str/split #"=") ((fn [[k v]] {k (java.net.URLDecoder/decode v "UTF-8")})))}))
+
+(defn- path-of [uri] (first (str/split uri #"\?")))
+
+(defn- get-page [app user uri]
+  (app (update (req user :get uri) :uri path-of)))
+
+(deftest ^:integration an-admin-composes-duplicates-and-deletes-roles
+  (with-app
+    (fn [{:keys [app gsvc admin]}]
+      (testing "code roles are listed locked"
+        (let [page (:body (get-page app admin "/web/admin/roles"))]
+          (is (str/includes? page "invoice/editor"))
+          (is (str/includes? page "role-locked"))
+          (is (str/includes? page "value=\"invoice/approve\"") "the registry's permissions are offered")))
+
+      (testing "a managed role from ticked permissions"
+        (let [r (app (req admin :post "/web/admin/roles" {"name" "invoice/clerk" "description" "Enters"
+                                                          "permissions" ["invoice/read" "invoice/write"]}))]
+          (is (= 303 (:status r)))
+          (is (= "/web/admin/roles/view?name=invoice%2Fclerk" (get-in r [:headers "Location"]))))
+        (is (= #{:invoice/read :invoice/write}
+               (:permissions (some #(when (= :invoice/clerk (:name %)) %) (ports/list-roles gsvc))))))
+
+      (testing "refused on the page: a code role's name, no permission, one nobody declares"
+        (doseq [[form text] [[{"name" "invoice/editor" "permissions" "invoice/read"} "error-name-code"]
+                             [{"name" "invoice/empty"} "error-invalid"]
+                             [{"name" "invoice/odd" "permissions" "invoice/fly"} "error-permissions"]]]
+          (let [r (app (req admin :post "/web/admin/roles" form))]
+            (is (= 422 (:status r)) (pr-str form))
+            (is (str/includes? (:body r) text) (pr-str form)))))
+
+      (testing "a code role is duplicated into a managed one, then changed"
+        (let [r (app (req admin :post "/web/admin/roles/duplicate" {"name" "invoice/viewer" "new-name" "invoice/reader"}))]
+          (is (= "/web/admin/roles/view?name=invoice%2Freader" (get-in r [:headers "Location"]))))
+        (is (= 303 (:status (app (req admin :post "/web/admin/roles/save"
+                                      {"name" "invoice/reader" "permissions" ["invoice/read" "invoice/approve"]})))))
+        (is (= #{:invoice/read :invoice/approve}
+               (:permissions (some #(when (= :invoice/reader (:name %)) %) (ports/list-roles gsvc))))))
+
+      (testing "a code role is not saved or deleted"
+        (is (= 422 (:status (app (req admin :post "/web/admin/roles/save"
+                                      {"name" "invoice/viewer" "permissions" "invoice/read"})))))
+        (is (= 404 (:status (app (req admin :post "/web/admin/roles/delete" {"name" "invoice/viewer"}))))))
+
+      (testing "a managed role is deleted"
+        (is (= 303 (:status (app (req admin :post "/web/admin/roles/delete" {"name" "invoice/reader"})))))
+        (is (= 404 (:status (get-page app admin "/web/admin/roles/view?name=invoice/reader"))))))))
+
+(deftest ^:integration a-role-and-a-permission-show-who-holds-them
+  (with-app
+    (fn [{:keys [app users gsvc admin]}]
+      (let [ada (ports/create-user users {:email "ada@example.com" :name "Ada" :role :user
+                                          :active true :password-hash "x"})
+            g   (ports/create-group gsvc {:name "Finance"})]
+        (ports/add-group-member gsvc (:id g) (:id ada))
+        (ports/add-group-role gsvc (:id g) {:role :invoice/editor :scope {:domain-id 4}})
+        (doseq [uri ["/web/admin/roles/view?name=invoice/editor" "/web/admin/permissions/view?name=invoice/write"]]
+          (let [page (:body (get-page app admin uri))]
+            (is (str/includes? page "Finance") uri)
+            (is (str/includes? page "ada@example.com") uri)
+            (is (str/includes? page "Domain: <strong class=\"scope-value\">4</strong>") uri)))
+        (is (str/includes? (:body (get-page app admin "/web/admin/permissions")) "invoice/approve"))
+        (is (= 404 (:status (get-page app admin "/web/admin/permissions/view?name=invoice/fly"))))))))
+
+(deftest ^:integration the-rights-tab-shows-where-each-right-comes-from
+  (with-app
+    (fn [{:keys [app users gsvc admin]}]
+      (let [ada (ports/create-user users {:email "ada@example.com" :name "Ada" :role :user
+                                          :active true :password-hash "x"})
+            g   (ports/create-group gsvc {:name "Finance"})]
+        (ports/add-group-member gsvc (:id g) (:id ada))
+        (ports/add-group-role gsvc (:id g) {:role :invoice/viewer :scope {:department-id :user/department}})
+        (let [page (:body (get-page app admin (str "/web/users/" (:id ada) "/rights")))]
+          (is (str/includes? page "Finance"))
+          (is (str/includes? page "invoice/read"))
+          (is (str/includes? page "invoice/viewer"))
+          (testing "a scope from the user shows its source and resolved value"
+            (is (str/includes? page "Department: "))
+            (is (str/includes? page "scope-from-source"))
+            (is (str/includes? page "<strong class=\"scope-value\">7</strong>")))
+          (is (not (str/includes? page "platform-admin-note"))))
+        (is (str/includes? (:body (get-page app admin (str "/web/users/" (:id admin) "/rights")))
+                           "platform-admin-note"))
+        (is (= 404 (:status (get-page app admin (str "/web/users/" (random-uuid) "/rights")))))))))
+
+(deftest ^:integration ^:security only-admins-reach-the-rights-pages
+  (with-app
+    (fn [{:keys [app users]}]
+      (let [user (ports/create-user users {:email "u@example.com" :name "U" :role :user
+                                           :active true :password-hash "x"})]
+        (doseq [[method uri] [[:get "/web/admin/roles"] [:post "/web/admin/roles"]
+                              [:post "/web/admin/roles/duplicate"] [:get "/web/admin/permissions"]
+                              [:get (str "/web/users/" (:id user) "/rights")]]]
+          (let [r (app (req user method uri {"name" "x/y"}))]
+            (is (= 302 (:status r)) (str method " " uri))
+            (is (str/starts-with? (get-in r [:headers "Location"]) "/web/login") (str method " " uri))))))))
+
+(deftest ^:integration an-assignment-takes-a-scope-value-from-the-member
+  (with-app
+    (fn [{:keys [app gsvc admin]}]
+      (let [path (get-in (app (req admin :post "/web/admin/groups" {"name" "Desks"})) [:headers "Location"])
+            gid  (parse-uuid (last (str/split path #"/")))
+            page (:body (get-page app admin path))]
+        (testing "each declared key is a field; a key taking a source offers it"
+          (is (str/includes? page "name=\"scope-domain-id\""))
+          (is (str/includes? page "name=\"scope-source-department-id\""))
+          (is (str/includes? page "value=\"user/department\""))
+          (is (not (str/includes? page "name=\"scope-source-domain-id\""))))
+        (is (= 303 (:status (app (req admin :post (str path "/roles")
+                                      {"role" "invoice/viewer" "scope-domain-id" "4"
+                                       "scope-source-department-id" "user/department"})))))
+        (is (= [{:domain-id 4 :department-id :user/department}] (map :scope (:roles (ports/get-group gsvc gid)))))
+        (testing "a source the key does not take is refused"
+          (is (= 422 (:status (app (req admin :post (str path "/roles")
+                                        {"role" "invoice/viewer" "scope-source-department-id" "user/boss"}))))))))))

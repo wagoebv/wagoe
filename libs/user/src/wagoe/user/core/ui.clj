@@ -14,6 +14,7 @@
             [wagoe.shared.ui.core.icons :as icons]
             [wagoe.shared.ui.core.alpine :as alpine]
             [wagoe.platform.core.csrf :as csrf]
+            [wagoe.user.core.rights-ui :as rights-ui]
             [clojure.string :as str]))
 
 (defn- page-layout
@@ -1161,6 +1162,7 @@
                    :hx-vals "{\"keep-current\": \"true\"}"})
            [:t :user/button-revoke-all-others]])]
        [:t :user/sessions-manage-for {:name (:name user)}])
+      (when admin? (rights-ui/user-tabs (:id user) :sessions))
       (sessions-list sessions current-session-id (:id user) current-time zone-id)
       (modal/confirm-modal {:id            "revoke-session-confirm"
                             :title         [:t :user/button-revoke]

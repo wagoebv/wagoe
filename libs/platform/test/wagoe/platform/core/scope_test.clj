@@ -70,6 +70,8 @@
     (is (m/validate schema {:domain-id 42}))
     (is (m/validate schema {:department-id :user/department}))
     (is (m/validate schema {:department-id 7}))
+    (is (not (m/validate schema {:department-id :user/boss})) "a source the key does not take")
+    (is (not (m/validate schema {:domain-id :user/department})))
     (is (not (m/validate schema {:domain-id "42"})))
     (is (not (m/validate schema {:area-id 1})))
     (is (= {:optional true :wagoe/entity :domains}

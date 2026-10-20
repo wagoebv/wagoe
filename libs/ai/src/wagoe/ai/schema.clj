@@ -159,6 +159,9 @@
    [:soft-delete     {:optional true} :boolean]
    [:create-redirect-url {:optional true} :any]
    [:writer          {:optional true} :keyword]
+   [:detail-tabs     {:optional true} [:vector [:map {:closed true}
+                                                [:label {:optional true} :any]
+                                                [:href {:optional true} :string]]]]
    [:module          {:optional true} [:or :keyword :string]]
    [:join-table      {:optional true} :boolean]
    [:permissions     {:optional true} [:map {:closed true}

@@ -172,6 +172,16 @@
     (when-let [user (if (map? user) user (ports/find-user-by-id user-repository user))]
       (set (membership user)))))
 
+(defn- active-users
+  "Every active user, by email, read a page at a time."
+  [user-repository]
+  (let [page 500]
+    (loop [offset 0 acc []]
+      (let [users (:users (ports/find-users user-repository {:limit page :offset offset :filter-active true
+                                                             :sort-by :email :sort-direction :asc}))
+            acc   (into acc users)]
+        (if (< (count users) page) acc (recur (+ offset page) acc))))))
+
 (defn- find-role
   "The managed role named `role-name`, or nil."
   [repo role-name]
@@ -510,6 +520,25 @@
     (let [roles (group-core/roles-holding (all-roles group-repository registry) permission)]
       (into [] (comp (map #(-> % (dissoc :role) (assoc :permission permission))) (distinct))
             (ports/find-role-holders group-repository roles))))
+
+  (role-holders [_ role-names]
+    (->> (mapcat #(ports/find-role-assignments group-repository %) (distinct role-names))
+         (map (fn [{:keys [group-id] :as a}]
+                (let [everyone? (group-core/everyone? group-id)]
+                  (assoc (select-keys a [:id :role :group-id :group-name :scope])
+                         :everyone? everyone?
+                         :members (if everyone? [] (ports/find-members group-repository group-id))))))
+         (sort-by (juxt :group-name (comp str :role)))
+         vec))
+
+  (provider-members [_ group-id]
+    (let [group (ports/find-group group-repository group-id)]
+      (if (and membership group (not (group-core/everyone? group-id)))
+        (into []
+              (comp (filter #(contains? (set (membership %)) (:name group)))
+                    (map #(select-keys % [:id :email :name])))
+              (active-users user-repository))
+        [])))
 
   (import-groups! [_ groups {:keys [replace?]}]
     (ports/ensure-tables group-repository)

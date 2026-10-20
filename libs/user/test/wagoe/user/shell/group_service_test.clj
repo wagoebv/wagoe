@@ -472,3 +472,30 @@
       (is (= #{} (set (map :role (:roles (ports/get-group svc group/everyone-id)))))
           "a declared permission, the groups schema's and a granted one each keep their module's role out")
       (is (not (group/holds? (ports/user-grants svc (user! "bob@example.com")) :workflow/read))))))
+
+(deftest ^:integration provider-members-and-role-holders
+  (with-service nil {:registry registry :membership (fn [user] (when (= "ada@example.com" (:email user))
+                                                                 #{"Newsroom"}))}
+    (fn [{:keys [svc user!]}]
+      (sut/migrate! svc)
+      (let [ada      (user! "ada@example.com")
+            bob      (user! "bob@example.com")
+            newsroom (ports/create-group svc {:name "Newsroom"})
+            desk     (ports/create-group svc {:name "Desk"})]
+        (ports/add-group-member svc (:id desk) (:id bob))
+        (ports/add-group-role svc (:id desk) {:role :orders/editor :scope {:domain-id 4}})
+        (ports/add-group-role svc group/everyone-id {:role :orders/editor})
+        (testing "the hook's members of a group, not stored ones"
+          (is (= [(:id ada)] (map :id (ports/provider-members svc (:id newsroom)))))
+          (is (= [] (ports/provider-members svc (:id desk))))
+          (is (= [] (ports/provider-members svc group/everyone-id))))
+        (testing "each group holding the role, with its scope and members; Everyone without"
+          (is (= [["Desk" {:domain-id 4} false [(:id bob)]] ["Everyone" {} true []]]
+                 (map (juxt :group-name :scope :everyone? (comp (partial map :id) :members))
+                      (ports/role-holders svc [:orders/editor :orders/viewer])))))))))
+
+(deftest ^:integration no-hook-no-provider-members
+  (with-service nil
+    (fn [{:keys [svc user!]}]
+      (user! "ada@example.com")
+      (is (= [] (ports/provider-members svc (:id (ports/create-group svc {:name "Newsroom"}))))))))

@@ -32,11 +32,12 @@
 (defn scope-schema
   "The Malli form a stored scope fits, from the registry's `scopes`: a closed
    map of the declared keys, each a value of its `:schema` (any without one)
-   or one of its `:sources`. A key's `:entity` is kept as `:wagoe/entity`."
+   or one of its `:sources`; a source it does not take is refused. A key's
+   `:entity` is kept as `:wagoe/entity`."
   [scopes]
   (into [:map {:closed true}]
         (for [[k {:keys [entity schema sources]}] (sort-by key scopes)
-              :let [value (or schema :any)]]
+              :let [value (or schema [:not [:fn source?]])]]
           [k (cond-> {:optional true} entity (assoc :wagoe/entity entity))
            (if (seq sources) [:or value (into [:enum] (sort sources))] value)])))
 
