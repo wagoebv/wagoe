@@ -28,7 +28,8 @@ Authentication and authorization domain: user lifecycle, credentials, sessions/t
 User web pages must use shared layout functions that already apply the central bundle contract from `wagoe.ui-style`.
 
 Rules:
-- Use `layout/pilot-page-layout` for user/profile/audit pages.
+- Pages a signed-in user reaches render in the admin shell (`wagoe.shared.ui.core.shell/shell-page`);
+  `layout/pilot-page-layout` is for sign-in, registration and error pages.
 - Do not pass module-local hardcoded `:css [...]` lists from user feature namespaces.
 - Keep form/table/badge visuals on shared classes and token variables (no per-page color overrides).
 

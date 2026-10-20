@@ -18,6 +18,8 @@
             [wagoe.shared.ui.core.components :as ui]
             [wagoe.shared.ui.core.layout :as layout]
             [wagoe.shared.ui.core.form :as form]
+            [wagoe.shared.ui.core.table :as table-ui]
+            [wagoe.shared.ui.core.toast :as toast]
             [wagoe.platform.core.http.client-ip :as client-ip]
             [wagoe.platform.shell.web.table :as web-table]
             [wagoe.user.core.oidc :as oidc-core]
@@ -33,6 +35,7 @@
             [wagoe.user.shell.middleware :as user-middleware]
             [wagoe.user.shell.mfa :as mfa]
             [wagoe.user.shell.oidc :as oidc]
+            [cheshire.core :as cheshire]
             [clojure.edn :as edn]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
@@ -232,6 +235,14 @@
   (reduce (fn [m {:keys [field message]}]
             (update m (if (sequential? field) (first field) field) (fnil conj []) message))
           {} errors))
+
+(defn- redirect-with-toast
+  "Sends htmx to `location` with a toast to show there: components.js keeps
+   the X-Toast across the redirect. A flash would not, nothing renders it."
+  [location type message]
+  (-> (response/response "")
+      (response/header "HX-Redirect" location)
+      (response/header "X-Toast" (cheshire/generate-string {:type type :message message}))))
 
 (def ^:private htmx-no-cache-headers
   {"Cache-Control" "no-store, no-cache, must-revalidate, max-age=0"
@@ -856,12 +867,16 @@
             filters     (web-table/parse-search-filters qp)
             list-opts   (build-user-list-opts table-query filters)
             users-result (user-ports/list-users user-service list-opts)]
-        (html-response request
-                       (user-ui/users-table-fragment
-                        (:users users-result)
-                        table-query
-                        (:total-count users-result)
-                        filters)))
+        (cond-> (html-response request
+                               (user-ui/users-table-fragment
+                                (:users users-result)
+                                table-query
+                                (:total-count users-result)
+                                filters))
+          ;; The address bar shows the page, not this fragment, whichever
+          ;; control asked: sort, page, search or role
+          (get-in request [:headers "hx-request"])
+          (assoc-in [:headers "HX-Push-Url"] (table-ui/list-url "/web/users" table-query filters))))
       (catch Exception e
         (server-error request e "Error in users-table-fragment-handler")))))
 
@@ -875,7 +890,7 @@
   (fn [request]
     (try
       (let [form-params (:form-params request)
-            ids-param   (get form-params "user-ids")
+            ids-param   (get form-params "ids[]")
             action      (get form-params "action")
             ids         (cond
                           (nil? ids-param) []
@@ -1096,16 +1111,11 @@
                                       (remove (comp nil? val))
                                       (select-keys prepared-data [:name :email :role :active]))
                       user-result (user-ports/update-user-profile user-service user-data)]
-                  ;; Re-render the form with updated user data and a success
-                  ;; indicator. The banner goes inside the form's own
-                  ;; #user-detail: the swap is outerHTML, so a wrapper around it
-                  ;; would be left behind on every save.
+                  ;; The form re-rendered, and the toast out of band
                   (html-response
                    request
-                   (user-ui/user-detail-form
-                    user-result nil
-                    {:notice [:div.success-banner {:style "background: #d4edda; color: #155724; padding: 10px; margin-bottom: 15px; border-radius: 4px;"}
-                              "✓ User updated successfully"]})
+                   (list (user-ui/user-detail-form user-result nil)
+                         (toast/oob-toast {:type :success :message [:t :user/message-updated]}))
                    200
                    {"HX-Trigger" "userUpdated"}))))
             (catch Exception e
@@ -1169,8 +1179,7 @@
                          403)
           (do
             (user-ports/permanently-delete-user user-service uuid)
-            (-> (response/redirect "/web/users")
-                (assoc :flash {:success "User permanently deleted"})))))
+            (redirect-with-toast "/web/users" :success "User permanently deleted"))))
       (catch IllegalArgumentException _
         (html-response request (ui/error-message "Invalid user ID") 400))
       (catch Exception e
@@ -1236,10 +1245,9 @@
                                    user-service
                                    (UUID/fromString user-id)
                                    (UUID/fromString (get-in request [:path-params :session-id])))]
-        (-> (response/redirect (str "/web/users/" user-id "/sessions"))
-            (assoc :flash (if invalidated
-                            {:success "Session revoked successfully"}
-                            {:error "Session not found or already ended"}))))
+        (if invalidated
+          (redirect-with-toast (str "/web/users/" user-id "/sessions") :success "Session revoked successfully")
+          (redirect-with-toast (str "/web/users/" user-id "/sessions") :error "Session not found or already ended")))
       (catch IllegalArgumentException _
         (html-response request (ui/error-message "Invalid session") 400))
       (catch Exception e
@@ -1264,8 +1272,7 @@
             keep-current? (= "true" (get-in request [:form-params "keep-current"]))]
         (user-ports/logout-user-everywhere user-service uuid
                                            (when keep-current? (get-in request [:session :id])))
-        (-> (response/redirect (str "/web/users/" user-id "/sessions"))
-            (assoc :flash {:success "Sessions revoked successfully"})))
+        (redirect-with-toast (str "/web/users/" user-id "/sessions") :success "Sessions revoked successfully"))
       (catch IllegalArgumentException _
         (html-response request (ui/error-message "Invalid user ID") 400))
       (catch Exception e
