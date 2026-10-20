@@ -251,8 +251,9 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
-- **Push routes had no authorization rule, so `:enforce` refused them** (BOU-786); a check that throws under `:report`
-  now logs once a minute. Nothing to do.
+- **Push routes had no authorization rule, so `:enforce` refused them** (BOU-786): device routes are `:self`, stats
+  need `push/read`. Grant it to whoever reads push stats before switching to `:enforce`.
+- **A check that throws under `:report` logged an ERROR on every request** (BOU-786); now once a minute per route.
 - **Wrong current passwords on change-password did not count towards the lockout, and parallel attempts exceeded it**
   (BOU-785). Custom `IUserRepository`s implement `claim-login-attempts` and `release-login-attempt` instead of `increment-failed-login-count`.
 - **Flash messages were never shown** (BOU-783): a response's `:flash` now reaches the next request, in a `wagoe-flash`

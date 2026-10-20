@@ -152,7 +152,9 @@
 (deftest ^:integration report-logs-a-failing-check-once-and-lets-it-through
   (let [h      (handler :report)
         errors (atom 0)]
-    (with-redefs [clojure.tools.logging/log* (fn [_ level _ _] (when (= :error level) (swap! errors inc)))]
+    (with-redefs [clojure.tools.logging/log* (fn [_ level _ message]
+                                                (when (and (= :error level) (re-find #"report failed" (str message)))
+                                                  (swap! errors inc)))]
       (dotimes [_ 3] (is (= 200 (status h :get "/api/v1/orders" "boom")))))
     (is (= 1 @errors) "a repeat within the minute is not logged again"))
   (testing ":enforce lets it fail"

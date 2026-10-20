@@ -235,7 +235,8 @@
   (println)
   (println (dim "Those tasks are still there, and CI calls them directly."))
   (println (dim "For code quality rather than setup, run `bb check`."))
-  (println (dim "For the routes :wagoe/authorization :enforce would refuse, `clojure -M:run authz-report`.")))
+  (println (dim "For the routes :wagoe/authorization :enforce would refuse, `clojure -M:run authz-report`"))
+  (println (dim "(a project whose main.clj predates it boots and serves instead; see the CHANGELOG).")))
 
 (defn run
   "Run the stages against `dir`. Returns {:results :stopped-at :errors}."
