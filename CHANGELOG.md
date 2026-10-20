@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **User list, detail, create and sessions pages in the admin shell** (BOU-766), with its table, toasts and confirm dialogs.
+  `POST /web/users/bulk` takes `ids[]` instead of `user-ids`.
 - **Roles on groups, the Everyone group and provider memberships** (BOU-771): groups hold code or managed roles in a
   scope; grants and `:viewer` users move over at first boot. Narrow Everyone's editor roles when ready.
 - **Profile and two-factor pages in the admin shell** (BOU-768), reached from the user menu. Nothing to change.

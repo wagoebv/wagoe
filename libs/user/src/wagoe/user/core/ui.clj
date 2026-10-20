@@ -12,35 +12,9 @@
             [wagoe.shared.ui.core.shell :as shell]
             [wagoe.shared.ui.core.table :as table-ui]
             [wagoe.shared.ui.core.icons :as icons]
+            [wagoe.shared.ui.core.alpine :as alpine]
             [wagoe.platform.core.csrf :as csrf]
             [clojure.string :as str]))
-
-;; ---------------------------------------------------------------------------
-;; Table query helpers (inlined from platform to avoid core→shell dependency)
-;; ---------------------------------------------------------------------------
-
-(defn- table-query->params
-  "Convert a TableQuery map into a string-keyed param map for query strings."
-  [{:keys [sort dir page page-size]}]
-  {"sort"      (when sort (name sort))
-   "dir"       (when dir (name dir))
-   "page"      (str page)
-   "page-size" (str page-size)})
-
-(defn- encode-query-params
-  "Turn a string-keyed map into a query string (nil values are omitted)."
-  [m]
-  (->> m
-       (remove (comp nil? val))
-       (map (fn [[k v]] (str k "=" v)))
-       (str/join "&")))
-
-(defn- search-filters->params
-  "Convert parsed search/filter map back into a string-keyed param map."
-  [filters]
-  (into {}
-        (for [[k v] filters]
-          [(name k) (str v)])))
 
 (defn- page-layout
   "User module page layout with daisyUI pilot styling."
@@ -77,32 +51,51 @@
 ;; =============================================================================
 
 (defn user-row
-  "Generate user table row data based on User schema.
-   
+  "The cells of a user's row: name, email, role and status, the badges
+   styled as the admin's enum cells.
+
    Args:
      user: User entity map (from User schema)
-     
+
    Returns:
      Vector of cell values for table row (some as Hiccup structures)"
   [user]
   (let [role (or (:role user) :user)
-        active? (boolean (:active user))]
-    [(:id user)
-     (:name user)
+        active? (boolean (:active user))
+        badge (fn [text tone class]
+                (update-in (ui/tone-badge text tone) [1 :class] str " " class))]
+    [(:name user)
      (:email user)
-     (ui/badge (-> role name text/capitalize)
-               {:variant (case role
-                           :admin :info
-                           :user :neutral
-                           :neutral)
-                :class "user-role-badge"})
-     (ui/badge (if active? [:t :user/badge-active] [:t :user/badge-inactive])
-               {:variant (if active? :success :warning)
-                :class "user-status-badge"})]))
+     (badge (-> role name text/capitalize) (if (= :admin role) :info :neutral) "user-role-badge")
+     (badge (if active? [:t :user/badge-active] [:t :user/badge-inactive])
+            (if active? :success :warning)
+            "user-status-badge")]))
+
+(def ^:private user-columns
+  ;; The columns of `user-row`, in its order
+  [{:field :name :label [:t :common/column-name] :class "c-title"}
+   {:field :email :label [:t :common/column-email]}
+   {:field :role :label [:t :common/column-role] :sortable? false}
+   {:field :status :label [:t :common/column-status] :sortable? false}])
+
+(defn- user-table-row
+  "A row that opens the user (admin-ux.js), with a box for bulk actions."
+  [user]
+  (let [href (str "/web/users/" (:id user))]
+    [:tr {:class "clickable-row" :data-href href}
+     [:td.checkbox-cell [:input (alpine/row-checkbox-attrs (:id user))]]
+     (map (fn [{:keys [field] col-class :class} cell]
+            [:td {:class (str "field-" (name field) (when col-class (str " " col-class)))}
+             (if (= :name field) [:a {:href href} cell] cell)])
+          user-columns
+          (user-row user))
+     [:td.actions-cell
+      [:a.row-nav-hint {:href href :aria-label [:t :user/button-view-user]}
+       (icons/icon :chevron-right {:size 14})]]]))
 
 (defn users-table-fragment
   "Generate just the users table container fragment (for HTMX refresh).
-   
+
    Args:
      users:       Collection of User entity maps
      table-query: Normalized TableQuery (see wagoe.platform.shell.web.table)
@@ -114,94 +107,43 @@
   ([users table-query total-count]
    (users-table-fragment users table-query total-count {}))
   ([users table-query total-count filters]
-   (let [{:keys [sort dir page page-size]} table-query
-         base-url      "/web/users/table"
+   (let [base-url      "/web/users/table"
          hx-target     "#users-table-container"
-         table-params  (table-query->params table-query)
-         filter-params (search-filters->params filters)
-         qs-map        (merge table-params filter-params)
-         hx-url        (str base-url "?" (encode-query-params qs-map))]
-     (if (empty? users)
-       [:div#users-table-container
-        {:hx-get     hx-url
-         :hx-trigger "userCreated from:body, userUpdated from:body, userDeleted from:body"
-         :hx-target  hx-target
-         :hx-swap    "outerHTML"}
-        [:div.empty-state [:t :user/empty-state-no-users]]]
-       [:div#users-table-container
-        {:hx-get     hx-url
-         :hx-trigger "userCreated from:body, userUpdated from:body, userDeleted from:body"
-         :hx-target  hx-target
-         :hx-swap    "outerHTML"}
-        [:form#bulk-action-form {:hx-post   "/web/users/bulk"
-                                 :hx-target "#users-table-container"
-                                 :hx-swap   "outerHTML"
-                                 :onchange  "const count = this.querySelectorAll('input[name=\"user-ids\"]:checked').length; document.getElementById('bulk-action-btn').disabled = !count;"}
-          ;; Preserve current table state and filters when posting bulk actions
-         (for [[k v] table-params]
-           [:input {:type "hidden" :name k :value v}])
-         (for [[k v] filter-params]
-           [:input {:type "hidden" :name k :value v}])
-          ;; Action selector for bulk operations (moved to header for better UX)
-         [:input#bulk-action-input {:type "hidden" :name "action" :value "deactivate"}]
+         table-params  (table-ui/table-query->params table-query)
+         filter-params (table-ui/search-filters->params filters)]
+     [:div#users-table-container
+      {:hx-get     (table-ui/list-url base-url table-query filters)
+       :hx-trigger "userCreated from:body, userUpdated from:body, userDeleted from:body"
+       :hx-target  hx-target
+       :hx-swap    "outerHTML"}
+      ;; What the toolbar's search, role filter and bulk form send along: they
+      ;; sit outside this swap, so their own copies would go stale
+      [:div {:class "table-state" :hidden true}
+       [:div {:class "table-sort"}
+        (table-ui/hidden-inputs (dissoc table-params "page"))]
+       ;; Outside .table-sort: a filter starts at page one, a bulk action stays
+       (table-ui/hidden-inputs (select-keys table-params ["page"]))
+       (table-ui/hidden-inputs filter-params)]
+      (if (empty? users)
+        [:div.empty-state [:t :user/empty-state-no-users]]
+        [:div.table-and-pagination
          [:div.table-wrapper
-          [:table {:class "data-table" :id "users-table"}
-           [:thead
-            [:tr
-             [:th.checkbox-header ""]
-             (table-ui/sortable-th {:label        [:t :common/column-id]
-                                    :field        :id
-                                    :current-sort sort
-                                    :current-dir  dir
-                                    :base-url     base-url
-                                    :push-url-base "/web/users"
-                                    :page         page
-                                    :page-size    page-size
-                                    :hx-target    hx-target
-                                    :hx-push-url? true
-                                    :extra-params filters})
-             (table-ui/sortable-th {:label        [:t :common/column-name]
-                                    :field        :name
-                                    :current-sort sort
-                                    :current-dir  dir
-                                    :base-url     base-url
-                                    :push-url-base "/web/users"
-                                    :page         page
-                                    :page-size    page-size
-                                    :hx-target    hx-target
-                                    :hx-push-url? true
-                                    :extra-params filters})
-             (table-ui/sortable-th {:label        [:t :common/column-email]
-                                    :field        :email
-                                    :current-sort sort
-                                    :current-dir  dir
-                                    :base-url     base-url
-                                    :push-url-base "/web/users"
-                                    :page         page
-                                    :page-size    page-size
-                                    :hx-target    hx-target
-                                    :hx-push-url? true
-                                    :extra-params filters})
-             [:th [:t :common/column-role]]
-             [:th [:t :common/column-status]]]]
-           [:tbody
-            (for [user users
-                  :when (nil? (:deleted-at user))
-                  :let [row (user-row user)]]
-              [:tr {:onclick (str "window.location.href='/web/users/" (:id user) "'")}
-               [:td.checkbox-cell
-                [:input {:type    "checkbox"
-                         :name    "user-ids"
-                         :value   (str (:id user))
-                         :onclick "event.stopPropagation();"}]]
-               (for [cell row]
-                 [:td cell])])]]
-          (table-ui/pagination {:table-query  table-query
-                                :total-count total-count
-                                :base-url    base-url
-                                :push-url-base "/web/users"
-                                :hx-target   hx-target
-                                :extra-params filters})]]]))))
+          (table-ui/data-table
+           {:url         base-url
+            :hx-target   hx-target
+            :table-query table-query
+            :filters     filters
+            :columns     user-columns
+            :head-before [[:th.checkbox-header [:input (alpine/select-all-checkbox-attrs)]]]
+            :head-after  [[:th.actions-header [:span.sr-only [:t :common/column-actions]]]]
+            :rows        (for [user users
+                               :when (nil? (:deleted-at user))]
+                           (user-table-row user))})]
+         (table-ui/pagination {:table-query  table-query
+                               :total-count  total-count
+                               :base-url     base-url
+                               :hx-target    hx-target
+                               :extra-params filters})])])))
 
 (defn users-table
   "Generate a table displaying users based on User schema.
@@ -346,65 +288,72 @@
 ;; User Form Components  
 ;; =============================================================================
 
+(defn- form-section
+  "`fields` under `title`, laid out as the admin's forms are."
+  [title & fields]
+  [:div.form-card
+   [:div.form-section
+    [:div.form-section-header [:h3.form-section-title title]]
+    (into [:div.form-fields] fields)]])
+
 (defn user-detail-form
   "Generate a form for viewing/editing user details based on User schema.
 
    Args:
      user:   User entity map (from User schema)
      errors: Optional validation errors map, field keyword -> messages
-     opts:   Optional map; :notice is rendered at the top of the form
 
    Returns:
      Hiccup structure for user detail form"
-  ([user] (user-detail-form user nil nil))
-  ([user errors] (user-detail-form user errors nil))
-  ([user errors opts]
+  ([user] (user-detail-form user nil))
+  ([user errors]
    (let [active? (boolean (:active user))]
      [:div#user-detail
-      [:h2 [:t :user/form-detail-title]]
       ;; outerHTML: the response is itself a #user-detail, so an innerHTML swap
       ;; nests one inside the other and leaves a duplicate id behind (BOU-381).
       [:form {:hx-put    (str "/web/users/" (:id user))
               :hx-target "#user-detail"
               :hx-swap   "outerHTML"
-              :class     "form-card"}
-       (:notice opts)
-       (ui/form-field :name [:t :common/label-name]
-                      (ui/text-input :name (:name user) {:required true})
-                      (:name errors))
-       (ui/form-field :email [:t :common/label-email]
-                      (ui/email-input :email (:email user) {:required true})
-                      (:email errors))
-       (ui/form-field :role [:t :common/label-role]
-                      (ui/select-field :role
-                                       [[:admin [:t :common/role-admin]]
-                                        [:user [:t :common/role-user]]]
-                                       (or (:role user) :user))
-                      (:role errors))
-       (ui/form-field :active [:t :user/field-active]
-                      (ui/checkbox :active active?)
-                      (:active errors))
-       [:div.form-actions
-        (ui/submit-button [:t :user/button-update] {:loading-text [:t :user/button-update-loading]})
+              :class     "entity-form"}
+       (form-section
+        [:t :user/form-detail-title]
+        (ui/form-field :name [:t :common/label-name]
+                       (ui/text-input :name (:name user) {:required true})
+                       (:name errors))
+        (ui/form-field :email [:t :common/label-email]
+                       (ui/email-input :email (:email user) {:required true})
+                       (:email errors))
+        (ui/form-field :role [:t :common/label-role]
+                       (ui/select-field :role
+                                        [[:admin [:t :common/role-admin]]
+                                         [:user [:t :common/role-user]]]
+                                        (or (:role user) :user))
+                       (:role errors))
+        (ui/form-field :active [:t :user/field-active]
+                       (ui/checkbox :active active?)
+                       (:active errors)))
+       [:div.form-actions.save-bar
+        [:div.save-actions
         ;; Show appropriate action button based on active status
-        (if active?
+         (if active?
           ;; An update, like Reactivate: DELETE on this URL soft-deletes (BOU-681).
-          [:button.button.danger
-           {:type "button"
-            :onclick (str "if(confirm('Are you sure you want to deactivate this user?')) {"
-                          "const form = this.closest('form');"
-                          "form.querySelector('input[name=active]').checked = false;"
-                          "form.requestSubmit();"
-                          "}")}
-           [:t :user/button-deactivate]]
+           [:button.button.danger
+            {:type "button"
+             :onclick (str "if(confirm('Are you sure you want to deactivate this user?')) {"
+                           "const form = this.closest('form');"
+                           "form.querySelector('input[name=active]').checked = false;"
+                           "form.requestSubmit();"
+                           "}")}
+            [:t :user/button-deactivate]]
           ;; Reactivate button for inactive users - uses the same update endpoint but sets active=true
-          [:button.button.primary
-           {:type "button"
-            :onclick (str "const form = this.closest('form');"
-                          "const activeCheckbox = form.querySelector('input[name=active]');"
-                          "activeCheckbox.checked = true;"
-                          "form.requestSubmit();")}
-           [:t :user/button-reactivate]])]]])))
+           [:button.button.primary
+            {:type "button"
+             :onclick (str "const form = this.closest('form');"
+                           "const activeCheckbox = form.querySelector('input[name=active]');"
+                           "activeCheckbox.checked = true;"
+                           "form.requestSubmit();")}
+            [:t :user/button-reactivate]])
+         (ui/submit-button [:t :user/button-update] {:loading-text [:t :user/button-update-loading]})]]]])))
 
 (defn create-user-form
   "Generate a form for creating new users based on CreateUserRequest schema.
@@ -435,7 +384,7 @@
       [:form {:hx-post   "/web/users"
               :hx-target "#create-user-form"
               :hx-swap   "outerHTML"
-              :class     "form-card"}
+              :class     "entity-form"}
        (when-let [return-to (:return-to opts)]
          [:input {:type "hidden" :name "return-to" :value return-to}])
        ;; Errors the service reported against no particular field. Without this
@@ -445,40 +394,44 @@
          [:div.validation-errors {:role "alert"}
           (for [err (:form errors)]
             [:p err])])
-       (ui/form-field :name [:t :common/label-name]
-                      (ui/text-input :name (:name data) {:required true})
-                      (:name errors))
-       (ui/form-field :email [:t :common/label-email]
-                      (ui/email-input :email (:email data) {:required true})
-                      (:email errors))
-       ;; Password field with validation feedback
-       [:div {:class "form-field"}
-        [:label {:for "password"} [:t :user/field-password]]
-        (cond-> (ui/password-input :password rendered-password {:required true})
-          (seq (:password errors))
-          (ui/describe-input :password (ui/field-error-id :password)))
-        ;; Passed straight through: with a blank field and no violations to go
-        ;; on, the rules render as neither met nor unmet. What was wrong with
-        ;; the submitted password is said by the error below, not by ticks
-        ;; against a box the user has to fill in again (BOU-381).
-        (when policy
-          (password-requirements-list password-violations policy))
-        ;; `.field-errors`, the same shape `ui/form-field` gives every other
-        ;; field — `.validation-errors` is the form-level style used above for
-        ;; errors that belong to no field, and rendering a password error in it
-        ;; put a full-width panel under the field while the email error beside
-        ;; it was a line of small red text (BOU-393).
-        (ui/field-errors (ui/field-error-id :password) (:password errors))]
-       (ui/form-field :role [:t :common/label-role]
-                      (ui/select-field :role
-                                       [[:user [:t :common/role-user]]
-                                        [:admin [:t :common/role-admin]]]
-                                       (or (:role data) :user))
-                      (:role errors))
-       (ui/form-field :send-welcome [:t :user/checkbox-send-welcome]
-                      (ui/checkbox :send-welcome (get data :send-welcome true))
-                      nil)
-       (ui/submit-button [:t :user/button-create] {:loading-text [:t :user/button-create-loading]})]]))
+       (form-section
+        [:t :user/form-detail-title]
+        (ui/form-field :name [:t :common/label-name]
+                       (ui/text-input :name (:name data) {:required true})
+                       (:name errors))
+        (ui/form-field :email [:t :common/label-email]
+                       (ui/email-input :email (:email data) {:required true})
+                       (:email errors))
+        ;; Password field with validation feedback
+        [:div {:class "form-field"}
+         [:label {:for "password"} [:t :user/field-password]]
+         (cond-> (ui/password-input :password rendered-password {:required true})
+           (seq (:password errors))
+           (ui/describe-input :password (ui/field-error-id :password)))
+         ;; Passed straight through: with a blank field and no violations to go
+         ;; on, the rules render as neither met nor unmet. What was wrong with
+         ;; the submitted password is said by the error below, not by ticks
+         ;; against a box the user has to fill in again (BOU-381).
+         (when policy
+           (password-requirements-list password-violations policy))
+         ;; `.field-errors`, the same shape `ui/form-field` gives every other
+         ;; field — `.validation-errors` is the form-level style used above for
+         ;; errors that belong to no field, and rendering a password error in it
+         ;; put a full-width panel under the field while the email error beside
+         ;; it was a line of small red text (BOU-393).
+         (ui/field-errors (ui/field-error-id :password) (:password errors))]
+        (ui/form-field :role [:t :common/label-role]
+                       (ui/select-field :role
+                                        [[:user [:t :common/role-user]]
+                                         [:admin [:t :common/role-admin]]]
+                                        (or (:role data) :user))
+                       (:role errors))
+        (ui/form-field :send-welcome [:t :user/checkbox-send-welcome]
+                       (ui/checkbox :send-welcome (get data :send-welcome true))
+                       nil))
+       [:div.form-actions.save-bar
+        [:div.save-actions
+         (ui/submit-button [:t :user/button-create] {:loading-text [:t :user/button-create-loading]})]]]]))
   ([data errors password-violations policy]
    (create-user-form data errors password-violations policy nil))
   ([data errors]
@@ -575,6 +528,60 @@
 ;; User Page Templates
 ;; =============================================================================
 
+(defn- admin-page
+  "`content` in the admin shell, `heading` in its topbar."
+  [title heading content opts]
+  (shell/shell-page title content (assoc opts :page-title heading)))
+
+(defn- page-header
+  "Breadcrumbs (`crumbs`, [label href] pairs, the last without href), the
+   page's `actions` and `heading`, as the admin's detail pages have them."
+  [crumbs actions heading]
+  [:div.page-header
+   [:div.page-header-row
+    [:div.page-breadcrumbs
+     (interpose " / "
+                (for [[label href] crumbs]
+                  (if href [:a {:href href} label] [:span label])))]
+    (into [:div.page-header-actions {:class "flex flex-wrap items-center gap-2"}] actions)]
+   [:h1.page-title heading]])
+
+(defn- bulk-bar
+  "The bar that appears once users are selected: the action and how to stop.
+   Inside the bulkSelection scope of the users page."
+  []
+  [:div {:class      "bulk-bar"
+         :role       "region"
+         :aria-label [:t :admin/bulk-bar-label]
+         :x-show     "selectedIds.length > 0"
+         :x-cloak    true}
+   [:span {:class "bulk-count"}
+    [:span {:x-text "selectedIds.length"}] " " [:t :admin/bulk-selected]]
+   ;; htmx asks the form, not the button, to confirm a submit
+   [:form#bulk-action-form
+    (merge (modal/confirm-attrs "bulk-action-confirm")
+           {:hx-post    "/web/users/bulk"
+            :hx-target  "#users-table-container"
+            :hx-swap    "outerHTML"
+            :hx-include "[name='ids[]'], #users-table-container .table-state input"
+            :class      "flex flex-wrap items-center gap-2"
+            ;; The rows it acted on are gone or changed: start over
+            "hx-on::after-request" "if (event.detail.successful) window.dispatchEvent(new CustomEvent('bulk-clear'))"})
+    [:select#bulk-action-select {:name "action" :class "select select-sm"
+                                 :aria-label [:t :user/bulk-action-apply-title]}
+     [:option {:value "deactivate"} [:t :user/bulk-action-deactivate]]
+     [:option {:value "activate"} [:t :user/bulk-action-activate]]
+     [:option {:value "delete"} [:t :user/bulk-action-delete]]
+     [:option {:value "role-admin"} [:t :user/bulk-action-role-admin]]
+     [:option {:value "role-user"} [:t :user/bulk-action-role-user]]]
+    [:button#bulk-action-btn.button {:type "submit"} [:t :user/button-apply-bulk]]]
+   (modal/confirm-modal {:id      "bulk-action-confirm"
+                         :title   [:t :user/bulk-action-apply-title]
+                         :message [:t :user/confirm-bulk-action]})
+   [:button {:type "button" :class "button bulk-clear" :x-on:click "clearSelection()"}
+    [:t :admin/bulk-clear]
+    [:kbd "q"]]])
+
 (defn users-page
   "Complete users listing page.
 
@@ -604,89 +611,86 @@
                           :page-size 20
                           :offset    0
                           :limit     20})
-         filters     (or (:filters opts) {})]
-     (page-layout
+         filters     (or (:filters opts) {})
+         ;; Page one, sorted as now, with the other filter's value
+         filter-opts (fn [other]
+                       {:url        "/web/users/table"
+                        :hx-target  "#users-table-container"
+                        :hx-include (str "#users-table-container .table-sort input, " other)})]
+     (admin-page
       [:t :user/page-users-title]
-      [:div.users-page
-       [:div.page-header
-        [:h1 [:t :user/page-users-title]]
-        [:div.page-actions
-            ;; Bulk action selector and button
-         [:div.bulk-action-controls
-          [:select#bulk-action-select
-           {:onchange "document.getElementById('bulk-action-input').value = this.value;"}
-           [:option {:value "deactivate"} [:t :user/bulk-action-deactivate]]
-           [:option {:value "activate"} [:t :user/bulk-action-activate]]
-           [:option {:value "delete"} [:t :user/bulk-action-delete]]
-           [:option {:value "role-admin"} [:t :user/bulk-action-role-admin]]
-           [:option {:value "role-user"} [:t :user/bulk-action-role-user]]]
-          [:button#bulk-action-btn.icon-button.danger
-           {:disabled true
-            :title [:t :user/bulk-action-apply-title]
-            :onclick "const action = document.getElementById('bulk-action-select').value; const count = document.querySelectorAll('input[name=\"user-ids\"]:checked').length; if(confirm(`Are you sure you want to ${action} ${count} selected user(s)?`)) { document.getElementById('bulk-action-form').submit(); }"}
-           [:t :user/button-apply-bulk]]]
-           ;; Inline compact search/filter with overlay
-         [:details#search-filter-details.search-filter-inline
-          [:summary.search-toggle
-           (icons/icon :search {:size 16})
-           [:span [:t :user/button-filters-label]]]
-          [:div.search-filter-overlay
-           {:onclick "if(event.target === this) document.getElementById('search-filter-details').open = false;"}
-           [:form.search-filter-form
-            {:method "get"
-             :action "/web/users"
-             :onsubmit "setTimeout(() => document.getElementById('search-filter-details').open = false, 100);"}
-            [:div.filter-header
-             [:h3 [:t :user/filters-search-title]]
-             [:button.close-button
-              {:type "button"
-               :onclick "document.getElementById('search-filter-details').open = false;"
-               :aria-label [:t :common/button-close]}
-              "×"]]
-            [:input {:type        "search"
-                     :name        "q"
-                     :placeholder [:t :user/filter-placeholder-email]
-                     :value       (get filters :q "")}]
-            [:select {:name "role"}
-             [:option {:value "" :selected (nil? (:role filters))} [:t :common/filter-all-roles]]
-             [:option {:value "user" :selected (= "user" (:role filters))} [:t :common/role-user]]
-             [:option {:value "admin" :selected (= "admin" (:role filters))} [:t :common/role-admin]]]
-            [:div.filter-actions
-             [:button.button.small {:type "submit"} [:t :common/button-apply]]
-             [:a.button.small.secondary {:href "/web/users"} [:t :common/button-clear]]]]]]
-         [:a.button.primary {:href "/web/users/new"} [:t :user/button-create]]]]
+      [:t :user/page-users-title]
+      [:div.users-page (merge (alpine/bulk-selection-attrs)
+                              {:class "space-y-4"
+                               ;; Escape clears the selection (keyboard.js)
+                               :x-on:bulk-clear.window "clearSelection()"})
+       [:div.table-toolbar-container
+        [:div.toolbar-row-actions
+         [:div.toolbar-search
+          (table-ui/filter-input
+           (merge (filter-opts "#users-role-filter")
+                  {:name        "q"
+                   :value       (:q filters)
+                   :label       [:t :user/filter-placeholder-email]
+                   :placeholder [:t :user/filter-placeholder-email]
+                   :attrs       {:type "text" :class "search-input" :id "users-search"}}))
+          [:span {:class "search-icon" :aria-hidden "true"} (icons/icon :search {:size 15})]]
+         [:div.toolbar-filter
+          (table-ui/filter-input
+           (merge (filter-opts "#users-search")
+                  {:name        "role"
+                   :value       (:role filters)
+                   :label       [:t :common/label-role]
+                   :placeholder [:t :common/filter-all-roles]
+                   :options     [["user" [:t :common/role-user]]
+                                 ["admin" [:t :common/role-admin]]]
+                   :attrs       {:id "users-role-filter" :class "select select-sm"}}))]
+         [:div.toolbar-actions
+          [:a.button.primary {:href "/web/users/new" :class "gap-2"}
+           (icons/icon :plus {:size 18})
+           [:t :user/button-create]]]]]
+       (bulk-bar)
        (users-table users table-query total-count filters)]
       opts))))
 
 (defn user-detail-page
   "Complete user detail page.
-   
+
    Args:
      user: User entity
      opts: Optional page options (user context, flash messages, etc.)
-     
+
    Returns:
      Complete HTML page for user details"
   [user & [opts]]
   (let [current-user (:user opts)
         is-admin? (= :admin (:role current-user))]
-    (page-layout
+    (admin-page
      [:t :user/detail-page-title {:name (:name user)}]
-     [:div.user-detail-page
-      [:div.page-header
-       [:h1 (:name user)]
-       [:div.page-actions
-         ;; Admin-only hard delete button
+     [:t :user/page-users-title]
+     [:div.entity-detail-page.user-detail-page
+      (page-header
+       [[[:t :user/page-users-title] "/web/users"] [(:name user)]]
+       [[:a.button.secondary {:href (str "/web/users/" (:id user) "/sessions") :class "gap-2"}
+         (icons/icon :key {:size 14})
+         [:t :user/button-view-sessions]]
+        ;; Only an inactive user, and only an admin: there is no undo
         (when (and is-admin? (not (:active user)))
-          [:form.hard-delete-form {:method "post"
-                                   :action (str "/web/users/" (:id user) "/hard-delete")
-                                   :onsubmit "return confirm('⚠️  PERMANENT DELETE\\n\\nThis will IRREVERSIBLY delete this user and ALL related data.\\n\\nThis action cannot be undone.\\n\\nAre you absolutely sure?');"}
-           (csrf/hidden-field)
-           [:button.button.danger {:type "submit"}
-            (icons/icon :trash {:size 16})
-            [:span [:t :user/button-delete-permanently]]]])
-        [:a.button.secondary {:href (str "/web/users/" (:id user) "/sessions")} [:t :user/button-view-sessions]]
-        [:a.button {:href "/web/users"} [:t :user/button-back-to-users]]]]
+          (list
+           [:button.button.ghost.button-danger-text
+            (merge (modal/confirm-attrs "hard-delete-confirm")
+                   ;; The handler sends the browser to the list (HX-Redirect)
+                   {:type    "button"
+                    :class   "gap-2"
+                    :hx-post (str "/web/users/" (:id user) "/hard-delete")})
+            (icons/icon :trash {:size 14})
+            [:t :user/button-delete-permanently]]
+           (modal/confirm-modal {:id            "hard-delete-confirm"
+                                 :title         [:t :user/button-delete-permanently]
+                                 :message       [:t :user/confirm-delete-permanently]
+                                 :confirm-label [:t :user/button-delete-permanently]
+                                 :danger?       true})))]
+       (:name user))
       (user-detail-form user)]
      opts)))
 
@@ -707,13 +711,13 @@
   [& [data errors opts]]
   (let [return-to (or (:return-to opts) "/web/admin/users")
         policy    (or (:password-policy opts) default-password-policy)]
-    (page-layout
+    (admin-page
      [:t :user/page-create-user-title]
-     [:div.create-user-page
-      [:div.page-header
-       [:h1 [:t :user/form-create-title]]
-       [:div.page-actions
-        [:a.button {:href return-to} [:t :user/button-back-to-users]]]]
+     [:t :user/page-users-title]
+     [:div.entity-detail-page.create-user-page
+      (page-header [[[:t :user/page-users-title] return-to] [[:t :user/form-create-title]]]
+                   nil
+                   [:t :user/form-create-title])
       (create-user-form data errors nil policy {:return-to return-to})]
      opts)))
 
@@ -1080,15 +1084,15 @@
 
 (defn session-row
   "Single row in the sessions table.
-   
+
    Args:
      session            - session map with :id, :ip-address, :user-agent, :created-at, :last-accessed-at
      current-session-id - id of the session making the request (marked current)
      user-id            - user ID for action URLs
-     
+
    Returns:
      Hiccup table row
-     
+
    Pure: true"
   [session current-session-id user-id current-time zone-id]
   (let [is-current? (and (some? current-session-id) (= (:id session) current-session-id))]
@@ -1102,14 +1106,12 @@
      [:td (format-relative-time* (:created-at session) current-time zone-id)]
      [:td.actions-cell
       (when-not is-current?
-        [:form {:method "post"
-                :action (str "/web/users/" user-id "/sessions/" (:id session) "/revoke")
-                :class "session-revoke-form"}
-         (csrf/hidden-field)
-         [:button.button.secondary.small
-          {:type "submit"
-           :onclick "return confirm('Revoke this session? The device will need to sign in again.');"}
-          [:t :user/button-revoke]]])]]))
+        ;; Asks the page's revoke-session-confirm; the handler reloads the page
+        [:button.button.secondary.small
+         (merge (modal/confirm-attrs "revoke-session-confirm")
+                {:type    "button"
+                 :hx-post (str "/web/users/" user-id "/sessions/" (:id session) "/revoke")})
+         [:t :user/button-revoke]])]]))
 
 (defn sessions-list
   "Table displaying all user sessions.
@@ -1126,55 +1128,65 @@
   [sessions current-session-id user-id current-time zone-id]
   (if (empty? sessions)
     [:div.empty-state.card [:t :user/sessions-empty-state]]
-    [:div.sessions-table-shell
-     (ui/table-wrapper
-      [:table {:class "data-table"}
-       [:thead
-        [:tr
-         [:th [:t :user/column-device]]
-         [:th [:t :common/column-ip-address]]
-         [:th [:t :user/column-last-active]]
-         [:th [:t :common/column-created]]
-         [:th.actions-header [:t :common/column-actions]]]]
-       [:tbody
-        (for [session sessions]
-          (session-row session current-session-id user-id current-time zone-id))]])]))
+    (ui/table-wrapper
+     [:table {:class "data-table table"}
+      [:thead
+       [:tr
+        [:th [:t :user/column-device]]
+        [:th [:t :common/column-ip-address]]
+        [:th [:t :user/column-last-active]]
+        [:th [:t :common/column-created]]
+        [:th.actions-header [:t :common/column-actions]]]]
+      [:tbody
+       (for [session sessions]
+         (session-row session current-session-id user-id current-time zone-id))]])))
 
 (defn user-sessions-page
   "Complete page for managing user sessions.
-   
+
    Args:
      user          - user map
      sessions      - collection of session maps
      current-session-id - id of the session making the request
      opts          - page options (user context, flash messages, etc.)
-     
+
    Returns:
      Complete page hiccup
-     
+
    Pure: false"
   [user sessions current-session-id opts]
   (let [current-time (:current-time opts)
-        zone-id (:zone-id opts)]
-    (page-layout
+        zone-id (:zone-id opts)
+        ;; The user pages behind the crumbs are for admins; a user viewing
+        ;; their own sessions gets the crumbs without links
+        admin? (= :admin (:role (:user opts)))]
+    (admin-page
      [:t :user/page-sessions-title {:name (:name user)}]
-     [:div.user-sessions-page
-      [:div.page-header
-       [:div
-        [:h1 [:t :user/sessions-title]]
-        [:p [:t :user/sessions-manage-for {:name (:name user)}]]]
-       [:div.page-actions
-        [:a.button.secondary {:href (str "/web/admin/users/" (:id user))} [:t :user/button-back-to-user]]
-        (when (> (count sessions) 1)
-          [:form.session-revoke-all-form {:method "post"
-                                          :action (str "/web/users/" (:id user) "/sessions/revoke-all")}
-           (csrf/hidden-field)
-           [:input {:type "hidden" :name "keep-current" :value "true"}]
-           [:button.button.danger
-            {:type "submit"
-             :onclick "return confirm('Revoke all other sessions? This will log out all other devices.');"}
-            [:t :user/button-revoke-all-others]]])]]
-      (sessions-list sessions current-session-id (:id user) current-time zone-id)]
+     [:t :user/sessions-title]
+     [:div.entity-detail-page.user-sessions-page
+      (page-header
+       [[[:t :user/page-users-title] (when admin? "/web/admin/users")]
+        [(:name user) (when admin? (str "/web/admin/users/" (:id user)))]
+        [[:t :user/sessions-title]]]
+       [(when (> (count sessions) 1)
+          [:button.button.ghost.button-danger-text
+           (merge (modal/confirm-attrs "revoke-all-confirm")
+                  {:type    "button"
+                   :hx-post (str "/web/users/" (:id user) "/sessions/revoke-all")
+                   :hx-vals "{\"keep-current\": \"true\"}"})
+           [:t :user/button-revoke-all-others]])]
+       [:t :user/sessions-manage-for {:name (:name user)}])
+      (sessions-list sessions current-session-id (:id user) current-time zone-id)
+      (modal/confirm-modal {:id            "revoke-session-confirm"
+                            :title         [:t :user/button-revoke]
+                            :message       [:t :user/confirm-revoke-session]
+                            :confirm-label [:t :user/button-revoke]
+                            :danger?       true})
+      (modal/confirm-modal {:id            "revoke-all-confirm"
+                            :title         [:t :user/button-revoke-all-others]
+                            :message       [:t :user/confirm-revoke-all-sessions]
+                            :confirm-label [:t :user/button-revoke-all-others]
+                            :danger?       true})]
      opts)))
 
 ;; =============================================================================

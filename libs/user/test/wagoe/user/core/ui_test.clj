@@ -47,21 +47,20 @@
   (testing "generates correct table row for active user"
     (let [row (ui/user-row sample-user)]
       (is (vector? row))
-      (is (= 5 (count row)))
-      (is (= 123 (nth row 0)))
-      (is (= "John Doe" (nth row 1)))
-      (is (= "john@example.com" (nth row 2)))
+      (is (= 4 (count row)))
+      (is (= "John Doe" (nth row 0)))
+      (is (= "john@example.com" (nth row 1)))
 
-      ;; Role badge cell
-      (let [role-cell (nth row 3)]
+      ;; Role badge cell, styled as the admin's enum cells
+      (let [role-cell (nth row 2)]
         (is (vector? role-cell))
         (is (= :span (first role-cell)))
         (is (str/includes? (get-in role-cell [1 :class]) "user-role-badge"))
-        (is (str/includes? (get-in role-cell [1 :class]) "ui-badge"))
+        (is (str/includes? (get-in role-cell [1 :class]) "c-badge tone-info"))
         (is (= "Admin" (nth role-cell 2))))
 
       ;; Status badge cell
-      (let [status-cell (nth row 4)]
+      (let [status-cell (nth row 3)]
         (is (vector? status-cell))
         (is (= :span (first status-cell)))
         (is (str/includes? (get-in status-cell [1 :class]) "user-status-badge"))
@@ -71,11 +70,11 @@
   (testing "generates correct table row for inactive user"
     (let [row (ui/user-row inactive-user)]
       ;; Role badge: user
-      (let [role-cell (nth row 3)]
+      (let [role-cell (nth row 2)]
         (is (= "User" (nth role-cell 2))))
 
       ;; Status badge: inactive
-      (let [status-cell (nth row 4)]
+      (let [status-cell (nth row 3)]
         (is (= [:t :user/badge-inactive] (nth status-cell 2)))
         (is (str/includes? (get-in status-cell [1 :class]) "user-status-badge"))
         (is (str/includes? (get-in status-cell [1 :class]) "ui-badge-warning")))))
@@ -83,7 +82,7 @@
   (testing "handles different role types"
     (let [viewer-user (assoc sample-user :role :viewer)
           row         (ui/user-row viewer-user)
-          role-cell   (nth row 3)]
+          role-cell   (nth row 2)]
       ;; Capitalized label for viewer role
       (is (= "Viewer" (nth role-cell 2))))))
 
@@ -215,11 +214,11 @@
       (is (vector? form))
       ;; New structure: div with ID instead of class
       (is (= :div#user-detail (first form)))
-      (is (= [:h2 [:t :user/form-detail-title]] (second form)))))
+      (is (re-find #"form-section-title \[:t :user/form-detail-title\]" (str form)))))
 
   (testing "includes HTMX form attributes"
     (let [form (ui/user-detail-form sample-user)
-          form-element (nth form 2)]
+          form-element (nth form 1)]
       (is (= :form (first form-element)))
       (let [attrs (second form-element)]
         ;; New URLs: /web/users/*
@@ -233,13 +232,6 @@
     (let [form-str (str (ui/user-detail-form sample-user {:name ["Name is required"]}))]
       (is (re-find #"Name is required" form-str))
       (is (re-find #"field-errors" form-str))))
-
-  (testing "renders a notice inside the swapped element, not around it"
-    (let [form (ui/user-detail-form sample-user nil {:notice [:div.success-banner "Saved"]})]
-      ;; An outerHTML swap replaces #user-detail, so a wrapper around it would
-      ;; accumulate on every save.
-      (is (= :div#user-detail (first form)))
-      (is (re-find #"Saved" (str form)))))
 
   (testing "pre-fills form fields with user data"
     (let [form (ui/user-detail-form sample-user)
@@ -526,7 +518,8 @@
         ;; parameter and the sentence lives in the catalogue.
         (is (re-find #":user/detail-page-title" content))
         (is (re-find #"John Doe" content))
-        (is (re-find #"button-back-to-users" content)))))
+        (is (re-find #"\[:a \{:href \"/web/users\"\} \[:t :user/page-users-title\]\]" content)
+            "the breadcrumb leads back to the list"))))
 
   (testing "accepts optional parameters"
     (let [opts {:flash {:info "User updated"}}
@@ -546,7 +539,8 @@
       (let [content (str page)]
         (is (re-find #"page-create-user-title" content))
         (is (re-find #"form-create-title" content))
-        (is (re-find #"button-back-to-users" content)))))
+        (is (re-find #"\[:a \{:href \"/web/admin/users\"\} \[:t :user/page-users-title\]\]" content)
+            "the breadcrumb leads back to return-to"))))
 
   (testing "accepts data parameter"
     (let [page (ui/create-user-page create-user-data)]
@@ -566,6 +560,48 @@
           content (str page)]
       (is (re-find #"form-create-title" content))
       (is (re-find #"field-password" content)))))
+
+(defn- attrs-of
+  "The attribute maps of the elements in `h` whose attributes satisfy `pred`."
+  [h pred]
+  (->> (tree-seq #(or (vector? %) (seq? %)) seq h)
+       (keep #(when (vector? %) (second %)))
+       (filter #(and (map? %) (pred %)))))
+
+(deftest ^:unit user-pages-render-in-the-admin-shell-test
+  (let [sessions [{:id (java.util.UUID/randomUUID)} {:id (java.util.UUID/randomUUID)}]
+        opts     {:current-time (java.time.Instant/now) :zone-id (java.time.ZoneId/of "UTC")}]
+    (doseq [[label page] [["users" (ui/users-page sample-users)]
+                          ["detail" (ui/user-detail-page sample-user)]
+                          ["create" (ui/create-user-page)]
+                          ["sessions" (ui/user-sessions-page sample-user sessions nil opts)]]]
+      (testing label
+        (is (re-find #":div.admin-shell" (str page)))
+        (is (re-find #":aside.admin-sidebar" (str page))))))
+
+  (testing "every confirmed action names a confirm modal on its page"
+    (let [sessions [{:id (java.util.UUID/randomUUID)} {:id (java.util.UUID/randomUUID)}]
+          pages [(ui/users-page sample-users)
+                 (ui/user-detail-page inactive-user {:user {:role :admin}})
+                 (ui/user-sessions-page sample-user sessions nil {})]]
+      (doseq [page pages
+              :let [asks (keep :data-confirm-modal (attrs-of page :data-confirm-modal))
+                    ids  (set (keep :id (attrs-of page :id)))]]
+        (is (seq asks))
+        (is (every? ids asks) (pr-str asks)))))
+
+  (testing "the users table selects rows for the bulk form"
+    (let [boxes (attrs-of (ui/users-table sample-users) #(= "ids[]" (:name %)))]
+      (is (= #{"123" "456"} (set (map :value boxes))))))
+
+  (testing "a bulk action keeps the page; a filter, which reads only .table-sort, does not"
+    (let [table      (ui/users-table sample-users {:sort :name :dir :asc :page 3 :page-size 20} 60 {})
+          table-sort (->> (tree-seq #(or (vector? %) (seq? %)) seq table)
+                          (filter #(and (vector? %) (= "table-sort" (:class (second %)))))
+                          first)]
+      (is (= ["3"] (map :value (attrs-of table #(= "page" (:name %))))))
+      (is (some? table-sort))
+      (is (empty? (attrs-of table-sort #(= "page" (:name %))))))))
 
 ;; =============================================================================
 ;; Integration Tests
