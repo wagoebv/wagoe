@@ -8,6 +8,11 @@
             [clojure.string :as str]
             [hiccup2.core :as h]))
 
+(defn- section-edn
+  "The editor's text for a section already passed through strip-unreadable."
+  [value]
+  (cfg-edit/format-edn (secrets/redact value)))
+
 (defn- config-section
   "Render a single top-level config section as a card — editable with Preview
    and Apply when `editable?`, a read-only textarea otherwise.
@@ -16,9 +21,9 @@
    the functions back."
   [section-key section-val editable?]
   (let [key-str   (pr-str section-key)
-        {:keys [value hidden]} (cfg-edit/strip-unreadable (cfg-edit/strip-refs section-val))
+        {:keys [value hidden]} (cfg-edit/strip-unreadable section-val)
         editable? (and editable? (not (some empty? hidden)))
-        val-str   (cfg-edit/format-edn (secrets/redact value))]
+        val-str   (section-edn value)]
     (c/card {:title key-str}
             [:div
              [:textarea.code-block
@@ -116,7 +121,7 @@
                  [:p [:strong "Affected components: "]
                   (str/join ", " (map pr-str (cfg-edit/affected-components diff)))]
                  [:pre.code-block
-                  (str "Current:\n" (cfg-edit/format-edn (secrets/redact (:value (cfg-edit/strip-unreadable (cfg-edit/strip-refs old-val))))) "\n\nProposed:\n" new-val-str)]])))))))
+                  (str "Current:\n" (section-edn (:value (cfg-edit/strip-unreadable old-val))) "\n\nProposed:\n" new-val-str)]])))))))
 
 (defn render-apply-result
   "Render the result of a config apply operation as an HTML fragment."
