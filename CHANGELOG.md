@@ -226,6 +226,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Admin `:writer` entities could save a record without its many-to-many links, and kept join rows on hard delete**
+  (BOU-779). The writer now runs in the admin's transaction. Nothing to do.
 - **The admin sidebar forgot its pin and collapsed on every page** (BOU-761): the pin, and a pinned sidebar's
   collapsed state, now survive navigation and reload. Nothing to do.
 - **Admin showed a column with a digit in its name as empty** (BOU-760), e.g. `e2e_customer_id` in lists and forms.

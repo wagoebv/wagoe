@@ -264,8 +264,10 @@ Example subscriber that starts a workflow: see "Lifecycle Events" in
   `:sidebar-hidden` to the join entity. `inverse-has-many` skips join tables.
 - **Writes.** `:admin/links {key [id]}` in the data of `create-entity` /
   `update-entity`; `sync-links!` diffs the join rows in the write's
-  transaction (a writer's update links after it). Unknown keys or records are
-  a `:validation-error` on the key. Hard deletes remove join rows.
+  transaction; a writer is called inside it (`with-writer-transaction`, its
+  nested transactions joined). Unknown keys or records are a
+  `:validation-error` on the key. Hard deletes remove join rows, a writer's
+  too. A link to a soft-deleted record survives an update.
 - **Reads.** `ports/ILinks` `linked-records`; the list overview's `:links`
   uses ROW_NUMBER for the first three per row. Filters `{key {:op :has|:has-not
   :value id}}` become EXISTS in `list-where`.

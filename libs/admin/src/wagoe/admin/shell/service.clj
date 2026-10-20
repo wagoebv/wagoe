@@ -25,7 +25,8 @@
    [wagoe.events.core.event :as event]
    [wagoe.events.ports :as events]
    [clojure.string :as str]
-   [clojure.tools.logging :as log])
+   [clojure.tools.logging :as log]
+   [next.jdbc.transaction :as jdbc-tx])
   (:import [java.util UUID]
            [java.time Instant]))
 
@@ -581,6 +582,15 @@
 ;; the rows already visited.
 (defrecord ^:private Deletion [tx soft? now priors? seen])
 
+(defn- remove-links!
+  "Delete the join rows of records `ids` of `entity-config`, on `tx`."
+  [tx entity-config ids]
+  (when (seq ids)
+    (doseq [{:keys [table foreign-key]} (:many-to-many entity-config)]
+      (db/execute-update! tx {:delete-from table
+                              :where [:in (case-conversion/kebab-case->snake-case-keyword foreign-key)
+                                      (mapv str ids)]}))))
+
 (defn- delete-tree!
   "Delete `id` of `entity-name` and, first, its cascading has-many children,
    which follow the parent: removed with a hard delete, given a deleted_at with
@@ -616,9 +626,7 @@
               prior    (when priors? (first (live-records tx schema-provider entity-name [id-str])))]
           ;; Its links go with a hard delete, as cascaded children do (BOU-778)
           (when-not soft?
-            (doseq [{:keys [table foreign-key]} (:many-to-many cfg)]
-              (db/execute-update! tx {:delete-from table
-                                      :where [:= (case-conversion/kebab-case->snake-case-keyword foreign-key) id-str]})))
+            (remove-links! tx cfg [id-str]))
           (if (delete-row! tx cfg id-str soft? now)
             (conj (vec children) {:entity entity-name :id id-str :prior prior})
             children))))))
@@ -668,6 +676,16 @@
         (throw (ex-info (str "No admin writer " k " is wired")
                         {:type :configuration-error :writer k})))))
 
+(defn- with-writer-transaction
+  "Call (f tx) in a transaction on `db-ctx` that a writer's own transactions
+   join rather than commit early, so its write and the admin's commit or roll
+   back together."
+  [db-ctx f]
+  (db/with-transaction* db-ctx
+    (fn [tx]
+      (binding [jdbc-tx/*nested-tx* :ignore]
+        (f tx)))))
+
 (defn- writable-data
   "`data` without the read-only fields and the primary key."
   [entity-config data]
@@ -687,11 +705,19 @@
   "Delete `ids` through `writer`, all or none (BOU-673). Returns
    {:entity :id :prior} per record deleted, like delete-records!."
   [{:keys [db-ctx schema-provider]} writer entity-config entity-name ids priors?]
-  (let [priors (when priors?
-                 (into {} (map (juxt #(str (get % (:primary-key entity-config :id))) identity))
-                       (live-records db-ctx schema-provider entity-name ids)))]
+  (let [soft?   (:soft-delete entity-config false)
+        priors  (when priors?
+                  (into {} (map (juxt #(str (get % (:primary-key entity-config :id))) identity))
+                        (live-records db-ctx schema-provider entity-name ids)))
+        delete! #(ports/delete-records! writer ids {:soft? soft?})]
     (mapv (fn [id] {:entity entity-name :id id :prior (get priors id)})
-          (ports/delete-records! writer ids {:soft? (:soft-delete entity-config false)}))))
+          (if (or soft? (empty? (:many-to-many entity-config)))
+            (delete!)
+            ;; A hard delete takes the links, as the SQL path does (BOU-779)
+            (with-writer-transaction db-ctx
+              (fn [tx]
+                (remove-links! tx entity-config ids)
+                (delete!)))))))
 
 ;; =============================================================================
 ;; Admin Service Implementation
@@ -1234,11 +1260,14 @@
           [data links]  (links-of data)
           _             (assert-links! db-ctx schema-provider entity-config links)]
       (if-let [writer (entity-writer writers entity-config)]
-        ;; The writer owns its transaction; the links follow it
-        (let [record (written-update! this writer entity-config entity-name id data)]
-          (when (seq links)
-            (db/with-transaction* db-ctx #(sync-links! % schema-provider entity-config id links)))
-          record)
+        (if (seq links)
+          ;; The links in the writer's transaction: both or neither (BOU-779)
+          (with-writer-transaction db-ctx
+            (fn [tx]
+              (let [record (written-update! this writer entity-config entity-name id data)]
+                (sync-links! tx schema-provider entity-config id links)
+                record)))
+          (written-update! this writer entity-config entity-name id data))
         (persist-interceptors/execute-persistence-operation
          :admin-update-entity
          {:entity (name entity-name) :id id}

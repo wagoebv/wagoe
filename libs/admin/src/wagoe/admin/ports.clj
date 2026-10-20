@@ -465,7 +465,12 @@
 
 (defprotocol IEntityWriter
   "Updates and deletes for an entity whose config names this writer under
-   :writer, so another module's rules apply. Refusals are typed ex-infos."
+   :writer, so another module's rules apply. Refusals are typed ex-infos.
+
+   When the admin writes links with an update, or removes join rows with a
+   hard delete, it calls the writer inside its own transaction. A writer that
+   writes through wagoe.platform.database joins it; any other write commits
+   on its own."
 
   (update-record! [this id changes]
     "Apply `changes`, read-only fields removed.")
