@@ -86,6 +86,7 @@
                    (db/with-transaction [tx ctx]
                      (db/with-transaction [inner tx]
                        (db/execute-update! inner {:insert-into :ac :values [{:k "nested"}]}))
-                     (is (= ["nested"] (committed-keys tx)) "written, in the outer transaction")
+                     (db/execute-batch! tx [{:insert-into :ac :values [{:k "batch"}]}])
+                     (is (= ["batch" "nested"] (committed-keys tx)) "written, in the outer transaction")
                      (throw (ex-info "boom" {:type :internal-error})))))
       (is (= [] (committed-keys ctx)) "the nested write did not commit early"))))

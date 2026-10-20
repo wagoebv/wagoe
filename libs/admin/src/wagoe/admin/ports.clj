@@ -468,9 +468,9 @@
    :writer, so another module's rules apply. Refusals are typed ex-infos.
 
    When the admin writes links with an update, or removes join rows with a
-   hard delete, it calls the writer inside its own transaction. A writer that
-   writes through wagoe.platform.database joins it; any other write commits
-   on its own."
+   hard delete, it calls the writer inside its own transaction. A writer joins
+   it by writing through wagoe.platform.database on the admin's database; a
+   delete on any other connection waits on the join rows already removed."
 
   (update-record! [this id changes]
     "Apply `changes`, read-only fields removed.")
