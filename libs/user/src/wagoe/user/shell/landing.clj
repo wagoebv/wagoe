@@ -8,7 +8,7 @@
             [wagoe.core.utils.redirect :as redirect]
             [wagoe.config :as wagoe-config]
             [wagoe.core.validation :as cv]
-            [wagoe.platform.shell.http.pages :as pages]
+            [wagoe.platform.core.http.pages :as pages]
             [wagoe.shared.ui.core.home :as home]
             [wagoe.user.core.landing :as landing]
             [wagoe.user.shell.hooks :as hooks]
@@ -63,9 +63,10 @@
           hooks/config-hooks))
 
 (defn- dashboard
-  "The admin's dashboard, or the profile in an application without the admin."
-  [request]
-  (if (pages/mounted? request home/default) home/default "/web/profile"))
+  "The admin's dashboard, or the profile in an application without the admin.
+   Asked inside a handler, where the platform binds what is mounted."
+  []
+  (if (pages/mounted? landing/dashboard-path) landing/dashboard-path "/web/profile"))
 
 (defn path-for
   "Where `user` lands after signing in. A function gets the user and
@@ -76,7 +77,7 @@
   (let [s       (settings config)
         r       (:login-redirect s)
         default (if (= :built-in (landing/dashboard-mode s))
-                  (dashboard (:request login-context))
+                  (dashboard)
                   landing/app-dashboard-path)]
     (if (and r (not (map? r)))
       (let [path (try (r user login-context)
@@ -124,14 +125,15 @@
     (case (landing/dashboard-mode s)
       :off      nil
       :app      (get-in s [:dashboard :handler])
-      :built-in #(response/redirect (dashboard %)))))
+      :built-in (fn [_] (response/redirect (dashboard))))))
 
 (defn wrap-home
-  "Middleware binding the layouts' home path for each request: the configured
-   one, else the dashboard."
+  "Middleware binding the layouts' home path for each request. Identity when
+   the settings leave it at the default."
   [config]
-  (let [path (landing/home-path (settings config))]
+  (if-let [path (landing/home-path (settings config))]
     (fn [handler]
       (fn [request]
-        (binding [home/*path* (or path (dashboard request))]
-          (handler request))))))
+        (binding [home/*path* path]
+          (handler request))))
+    identity))

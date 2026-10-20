@@ -247,8 +247,8 @@ that Ring handler there instead, behind the same sign-in check. Either way, user
 land on `/web/dashboard`.
 
 `:home` is where the logo, "back" and dashboard links in the built-in layouts point. It
-defaults to the dashboard, to `/web/dashboard` with a dashboard handler, or to `/web`
-with `:dashboard false`, which sends a signed-in user on to their landing page.
+defaults to `/web/dashboard`, or to `/web` with `:dashboard false`, which sends a
+signed-in user on to their landing page.
 
 `:landing` gives the application its own front page. `/` and `/web` then redirect there
 for everyone, signed in or not, instead of to the login page and the built-in welcome

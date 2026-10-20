@@ -2,7 +2,7 @@
   "Where a user lands after signing in, and who serves /web/dashboard."
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
-            [reitit.core :as r]
+            [wagoe.platform.core.http.pages :as pages]
             [wagoe.platform.shell.http.reitit-router :as reitit-router]
             [wagoe.platform.shell.system.wiring :as wiring]
             [wagoe.shared.ui.core.home :as home]
@@ -155,20 +155,13 @@
   (let [handler (get-in (dashboard-route {:dashboard {:handler `custom-dashboard}}) [1 :get :handler])]
     (is (= "custom" (:body (handler {}))))))
 
-(defn- serving
-  "A request routed by a router that mounts `paths`."
-  [& paths]
-  {::r/router (r/router (mapv (fn [p] [p {:get identity}]) paths))})
-
 (deftest ^:contract without-the-admin-the-dashboard-is-the-profile
   (let [cfg      (landing/prepare (config {}))
-        redirect #(get-in ((landing/dashboard-handler cfg) %) [:headers "Location"])
-        home     #(((landing/wrap-home cfg) (fn [_] home/*path*)) %)]
-    (is (= "/web/admin/" (redirect (serving "/web/admin/" "/web/profile"))))
-    (is (= "/web/profile" (redirect (serving "/web/profile"))))
-    (is (= "/web/profile" (landing/path-for cfg {:role :user} {:request (serving "/web/profile")})))
-    (is (= "/web/profile" (home (serving "/web/profile"))))
-    (is (= "/web/admin/" (home (serving "/web/admin/"))))))
+        redirect #(get-in ((landing/dashboard-handler cfg) {}) [:headers "Location"])]
+    (is (= "/web/admin/" (redirect)))
+    (binding [pages/*mounted?* (complement #{"/web/admin/"})]
+      (is (= "/web/profile" (redirect)))
+      (is (= "/web/profile" (landing/path-for cfg {:role :user} {}))))))
 
 ;; =============================================================================
 ;; :home — what the layouts link to
@@ -180,7 +173,7 @@
    {}))
 
 (deftest ^:contract home-path-reaches-the-layouts
-  (is (= "/web/admin/" (home-under {})))
+  (is (= "/web/dashboard" (home-under {})) "which redirects to the dashboard")
   (is (= "/web/dashboard" (home-under {:dashboard {:handler `custom-dashboard}})))
   (is (= "/web" (home-under {:dashboard false}))
       "the app owns /web/dashboard, so home is /web, which sends a user to their landing")

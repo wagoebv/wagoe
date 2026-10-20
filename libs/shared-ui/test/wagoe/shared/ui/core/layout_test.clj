@@ -57,15 +57,15 @@
 (deftest ^:unit navigation-links-only-to-mounted-pages
   (testing "all mounted"
     (is (= #{"/" "/web/login"} (hrefs {})))
-    (is (= #{"/web/admin/" "/web/audit" "/web/profile" "/web/logout"} (hrefs {:user platform-admin})))
-    (is (= #{"/web/admin/" "/web/profile" "/web/logout"} (hrefs {:user tenant-admin}))
+    (is (= #{"/web/dashboard" "/web/audit" "/web/profile" "/web/logout"} (hrefs {:user platform-admin})))
+    (is (= #{"/web/dashboard" "/web/profile" "/web/logout"} (hrefs {:user tenant-admin}))
         "the audit trail admits platform admins only")
     (is (contains? (hrefs {:user (assoc platform-admin :role "admin")}) "/web/audit")
         "a string role, as an older session holds it"))
   (testing "the user web UI switched off"
     (binding [pages/*mounted?* (constantly false)]
       (is (= #{"/"} (hrefs {})))
-      (is (= #{"/web/admin/"} (hrefs {:user platform-admin})))
+      (is (= #{"/web/dashboard"} (hrefs {:user platform-admin})))
       (is (str/includes? (str (layout/main-navigation {:user platform-admin})) "P")))))
 
 ;; =============================================================================
@@ -77,7 +77,7 @@
        (some #(when (and (vector? %) (= :a.logo (first %))) (:href (second %))))))
 
 (deftest ^:unit logo-links-to-the-configured-home
-  (is (= "/web/admin/" (logo-href {:user {:name "A"}})))
+  (is (= "/web/dashboard" (logo-href {:user {:name "A"}})))
   (is (= "/" (logo-href {})) "signed out, the logo goes to the site root")
   (binding [home/*path* "/app"]
     (is (= "/app" (logo-href {:user {:name "A"}})))

@@ -1,6 +1,10 @@
 (ns wagoe.user.core.landing
   "Where a user lands after signing in.")
 
+(def dashboard-path
+  "The one dashboard: the admin's home, open to every signed-in user."
+  "/web/admin/")
+
 (def app-dashboard-path
   "The path `:dashboard` hands to the application."
   "/web/dashboard")
@@ -22,12 +26,10 @@
   (get paths (:role user) (get paths :default default)))
 
 (defn home-path
-  "The path the layouts link to as home, or nil for their default, the
-   dashboard. With the dashboard switched off it is /web, which sends a
-   signed-in user on to their landing path."
+  "The path the layouts link to as home, or nil for their default,
+   /web/dashboard, which redirects to the dashboard. With the dashboard
+   switched off it is /web, which sends a signed-in user on to their landing
+   path."
   [settings]
   (or (:home settings)
-      (case (dashboard-mode settings)
-        :off      "/web"
-        :app      app-dashboard-path
-        :built-in nil)))
+      (when (= :off (dashboard-mode settings)) "/web")))

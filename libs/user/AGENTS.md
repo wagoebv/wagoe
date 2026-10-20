@@ -342,7 +342,7 @@ Five `:wagoe/user` keys, all checked at boot; a bad value fails it.
  :dashboard false
 
  ;; Where the layouts' logo, "back" and dashboard links point. Defaults to
- ;; the dashboard; /web with :dashboard false, /web/dashboard with a handler.
+ ;; /web/dashboard, or /web with :dashboard false.
  :home "/web/overzicht"
 
  ;; Where / and /web redirect everyone, signed in or not. Unset: / goes to
