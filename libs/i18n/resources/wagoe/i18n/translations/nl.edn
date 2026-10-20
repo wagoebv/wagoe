@@ -380,6 +380,7 @@
  :user.roles/button-delete "Rol verwijderen"
  :user.roles/groups-heading "Groepen met deze rol"
  :user.roles/users-heading "Gebruikers met deze rol"
+ :user.roles/users-provider-note "Leden die een identiteitsprovider in een groep zet, staan hier niet; zie de pagina van de groep."
  :user.roles/no-holders "Niemand heeft deze."
  :user.roles/every-user "Elke aangemelde gebruiker"
  :user.roles/error-invalid "Een rol heeft een naam en minstens één recht nodig."

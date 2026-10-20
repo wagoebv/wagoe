@@ -128,10 +128,11 @@
    (for [[module ps] (permission-groups registry held)]
      [:fieldset.fieldset.permission-module
       [:legend.fieldset-legend (or module [:t :user.roles/undeclared-permissions])]
-      (for [[p label checked?] ps
-            :let [id (str "perm-" (str/replace (group/permission-str p) #"[^A-Za-z0-9_-]" "-"))]]
-        [:label.permission-option {:for id :class "flex items-center gap-2"}
-         [:input {:type "checkbox" :class "checkbox checkbox-sm" :id id :name "permissions"
+      ;; The label wraps its checkbox, so no id is needed (one made from the
+      ;; name could collide)
+      (for [[p label checked?] ps]
+        [:label.permission-option {:class "flex items-center gap-2"}
+         [:input {:type "checkbox" :class "checkbox checkbox-sm" :name "permissions"
                   :value (group/permission-str p) :checked checked? :disabled disabled?}]
          (code p)
          (when label [:span.permission-label label])])])])
@@ -154,6 +155,7 @@
                         [:td (scope-view scope scope-info)]]))
               [:p.empty-state [:t :user.roles/no-holders]]))
    (section [:t :user.roles/users-heading]
+            [:p [:t :user.roles/users-provider-note]]
             (let [rows (for [{:keys [group-id group-name role scope everyone? members]} holders
                              m (if everyone? [::everyone] members)]
                          [:tr

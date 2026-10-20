@@ -173,13 +173,14 @@
       (set (membership user)))))
 
 (defn- active-users
-  "Every active user, by email, read a page at a time."
-  [user-repository]
+  "Every active user, by email, through `xf`, read a page at a time so only
+   what `xf` keeps is held."
+  [user-repository xf]
   (let [page 500]
     (loop [offset 0 acc []]
       (let [users (:users (ports/find-users user-repository {:limit page :offset offset :filter-active true
                                                              :sort-by :email :sort-direction :asc}))
-            acc   (into acc users)]
+            acc   (into acc xf users)]
         (if (< (count users) page) acc (recur (+ offset page) acc))))))
 
 (defn- find-role
@@ -531,10 +532,9 @@
   (provider-members [_ group-id]
     (let [group (ports/find-group group-repository group-id)]
       (if (and membership group (not (group-core/everyone? group-id)))
-        (into []
-              (comp (filter #(some #{(:name group)} (membership %)))
-                    (map #(select-keys % [:id :email :name])))
-              (active-users user-repository))
+        (active-users user-repository
+                      (comp (filter #(some #{(:name group)} (membership %)))
+                            (map #(select-keys % [:id :email :name]))))
         [])))
 
   (import-groups! [_ groups {:keys [replace?]}]

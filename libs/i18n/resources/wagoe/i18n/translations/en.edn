@@ -380,6 +380,7 @@
  :user.roles/button-delete "Delete role"
  :user.roles/groups-heading "Groups holding it"
  :user.roles/users-heading "Users holding it"
+ :user.roles/users-provider-note "Members an identity provider puts in a group are not listed here; see the group's page."
  :user.roles/no-holders "Nobody holds it."
  :user.roles/every-user "Every signed-in user"
  :user.roles/error-invalid "A role needs a name and at least one permission."

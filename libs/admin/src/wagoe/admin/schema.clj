@@ -336,7 +336,7 @@
               :default-sort-dir :soft-delete :create-redirect-url
               [:writer :keyword]
               ;; Links beside the edit page, as tabs; `{id}` in :href is the record's key
-              [:detail-tabs [:sequential (closed-map :label [:href :string])]]
+              [:detail-tabs [:sequential [:map {:closed true} [:label :any] [:href :string]]]]
               ;; The sidebar group the entity sits in (BOU-777)
               [:module [:or :keyword :string]]
               ;; true: a join table whatever its keys and columns; false: never
