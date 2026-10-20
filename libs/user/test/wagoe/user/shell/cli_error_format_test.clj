@@ -74,7 +74,7 @@
 (deftest ^:unit find-prints-the-error-it-failed-with
   (let [{:keys [status message]} (cli/dispatch-command
                                   :find
-                                  {:user-id (str (random-uuid))}
+                                  {:id (str (random-uuid))}
                                   (failing-service (ex-info "User not found"
                                                             {:type :user-not-found})))]
     (is (= 1 status))

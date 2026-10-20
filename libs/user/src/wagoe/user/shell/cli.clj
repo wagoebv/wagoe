@@ -14,6 +14,7 @@
             [wagoe.core.utils.type-conversion :as type-conv]
             [wagoe.core.interceptor :as interceptor]
             [wagoe.core.interceptor-context :as interceptor-context]
+            [wagoe.platform.core.http.errors :as errors]
             [wagoe.user.shell.interceptors :as user-interceptors]
             [wagoe.user.shell.service :as user-svc]
             [cheshire.core :as json]
@@ -233,8 +234,9 @@
    pipeline's error body, `{:error {:type :message :details}}`."
   [format-type error-data]
   (let [[body error-data] (if-let [e (when (map? (:error error-data)) (:error error-data))]
-                            [error-data (merge (when (map? (:details e)) (:details e))
-                                               (dissoc e :details))]
+                            (let [d (:details e)]
+                              [error-data (merge (if (map? d) d {:details d})
+                                                 (dissoc e :details))])
                             [{:error error-data} error-data])
         message (or (:message error-data) (:detail error-data) "Unknown error")
         ;; The violations, then whatever is genuinely absent. Every validation
@@ -319,13 +321,8 @@
         pipeline (user-interceptors/create-user-creation-pipeline :cli)
 
         ;; Execute the pipeline
-        result-context (interceptor/run-pipeline context pipeline)
-        response (:response result-context)]
-
-    ;; Errors arrive as an error body, which dispatch-command formats.
-    (or response
-        {:body {:error {:type "internal-error"
-                        :message "No response received from operation"}}})))
+        result-context (interceptor/run-pipeline context pipeline)]
+    (:response result-context)))
 
 (defn execute-user-get
   "Execute user get command using interceptor pipeline."
@@ -383,17 +380,18 @@
   "Run the user command `verb` with `opts`. Returns a map with :status and
    :entity-type and :data, or :message."
   [verb opts service]
-  (let [result (case verb
-                 :create (execute-user-create service nil opts)
-                 :list (execute-user-list service nil opts)
-                 :find (execute-user-get service nil opts) ; Note: find -> get mapping
-                 :update (execute-user-update service nil opts)
-                 :delete (execute-user-delete service nil opts)
-                 (throw (ex-info (str "Unknown user command: " (name verb))
-                                 {:type :unknown-command
-                                  :message (str "Unknown command: user " (name verb))})))]
+  (let [result (or (case verb
+                     :create (execute-user-create service nil opts)
+                     :list (execute-user-list service nil opts)
+                     :find (execute-user-get service nil opts) ; Note: find -> get mapping
+                     :update (execute-user-update service nil opts)
+                     :delete (execute-user-delete service nil opts)
+                     (throw (ex-info (str "Unknown user command: " (name verb))
+                                     {:type :unknown-command
+                                      :message (str "Unknown command: user " (name verb))})))
+                   {:body (errors/body :internal-error "No response received from operation")})]
     ;; A failed pipeline answers with an error body, which printed as nothing.
-    (if (get-in result [:body :error])
+    (if (errors/error-body? (:body result))
       {:status 1
        :message (format-error (keyword (get opts :format "table")) (:body result))}
       result)))
@@ -547,8 +545,15 @@ Examples:
                                             :details (str/join ", " errors)})))
                   1)
                 (let [result (dispatch-command verb opts service)]
-                  (if (:message result)
+                  (cond
+                    (= 1 (:status result))
+                    (binding [*out* *err*]
+                      (println (:message result)))
+
+                    (:message result)
                     (println (:message result))
+
+                    :else
                     (println (format-success format-type
                                              (:entity-type result)
                                              (:data result))))
