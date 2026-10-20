@@ -81,7 +81,7 @@
     (is (str/includes? html "localhost") "everything else is still shown")
     (testing "the placeholder an edit sends back is the value again"
       (is (= {:url dsn :host "localhost"}
-             (config-page/parse-edited-value "{:url \"<secret test:dsn>\" :host \"localhost\"}" nil))))
+             (config-page/parse-edited-value "{:url \"<secret test:dsn>\" :host \"localhost\"}" (:wagoe/db cfg) nil))))
     (testing "the preview does not print it either"
       (is (not (str/includes? (config-page/render-preview-fragment
                                :wagoe/db (:wagoe/db cfg) "{:url \"<secret test:dsn>\" :host \"other\"}")
@@ -92,3 +92,26 @@
                                                      :aliases ["a" "b"]}}
                                   :config-editable? true})]
     (is (str/includes? html "{:aliases [&quot;a&quot; &quot;b&quot;]\n :url"))))
+
+(deftest ^:unit a-function-in-a-section-is-left-out-and-kept-on-apply
+  ;; :wagoe/dashboard can carry :ig-config-fn. Shown as #object[...] it is not
+  ;; EDN, so Apply on that section always failed to parse.
+  (let [f    (fn [] {})
+        cfg  {:wagoe/dashboard {:port 9999 :ig-config-fn f}}
+        html (config-page/render {:config cfg :config-editable? true})]
+    (is (not (str/includes? html "#object")))
+    (is (str/includes? html ":port 9999"))
+    (is (str/includes? html "Not shown, as EDN cannot represent them: [:ig-config-fn]"))
+    (is (str/includes? html "config-apply") "the section stays editable")
+    (testing "the edited text parses, and the function comes back"
+      (is (= {:port 1234 :ig-config-fn f}
+             (config-page/parse-edited-value "{:port 1234}" (:wagoe/dashboard cfg) nil))))
+    (testing "and the preview sees only the edit"
+      (let [preview (config-page/render-preview-fragment
+                     :wagoe/dashboard (:wagoe/dashboard cfg) "{:port 9999}")]
+        (is (str/includes? preview "No changes detected"))))))
+
+(deftest ^:unit a-section-that-is-itself-a-function-is-read-only
+  (let [html (config-page/render {:config {::thunk (fn [] 1)} :config-editable? true})]
+    (is (not (str/includes? html "#object")))
+    (is (not (str/includes? html "config-apply")))))
