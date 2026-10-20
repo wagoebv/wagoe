@@ -227,8 +227,8 @@
  :user/page-audit-heading      "Audittrail"
  :user/page-audit-description  "Volledige geschiedenis van alle gebruikersgerelateerde acties en systeemgebeurtenissen"
 
- :user/dashboard-card-profile-title       "Profiel & beveiliging"
- :user/dashboard-card-profile-description "Beheer uw profiel, wachtwoord, tweestapsverificatie en voorkeuren"
+ :user/nav-profile-title       "Profiel & beveiliging"
+ :user/nav-profile-description "Beheer uw profiel, wachtwoord, tweestapsverificatie en voorkeuren"
  :user/button-manage-sessions             "Sessies beheren"
 
  :user/page-welcome-title      "Welkom"

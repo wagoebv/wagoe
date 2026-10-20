@@ -1,16 +1,19 @@
 (ns wagoe.user.core.landing
   "Where a user lands after signing in.")
 
-(def dashboard-path
-  "The one dashboard: the admin's home, open to every signed-in user."
-  "/web/admin/")
+(def app-dashboard-path
+  "The path `:dashboard` hands to the application."
+  "/web/dashboard")
 
-(defn default-path
-  "Where a user lands when no role path names them: the dashboard, or
-   /web/dashboard when `:dashboard` gives that path to the application."
+(defn dashboard-mode
+  "`:off` when `:dashboard false` leaves /web/dashboard to the application,
+   `:app` when a handler of its own serves it, else `:built-in`: a redirect to
+   the admin's dashboard."
   [settings]
   (let [d (:dashboard settings)]
-    (if (or (false? d) (map? d)) "/web/dashboard" dashboard-path)))
+    (cond (false? d) :off
+          (map? d)   :app
+          :else      :built-in)))
 
 (defn role-path
   "The landing path for `user` from a role map, `:default` falling back to
@@ -24,6 +27,7 @@
    signed-in user on to their landing path."
   [settings]
   (or (:home settings)
-      (let [d (:dashboard settings)]
-        (cond (false? d) "/web"
-              (map? d)   "/web/dashboard"))))
+      (case (dashboard-mode settings)
+        :off      "/web"
+        :app      app-dashboard-path
+        :built-in nil)))

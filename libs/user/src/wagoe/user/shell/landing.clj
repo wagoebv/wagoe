@@ -69,7 +69,7 @@
   [config user login-context]
   (let [s       (settings config)
         r       (:login-redirect s)
-        default (landing/default-path s)]
+        default (if (= :built-in (landing/dashboard-mode s)) home/default landing/app-dashboard-path)]
     (if (and r (not (map? r)))
       (let [path (try (r user login-context)
                       (catch Exception e
@@ -111,11 +111,11 @@
   "The handler to mount at /web/dashboard: nil for `:dashboard false`, the
    configured one, or a redirect to the admin's dashboard."
   [config]
-  (let [d (:dashboard (settings config))]
-    (cond
-      (false? d) nil
-      (map? d)   (:handler d)
-      :else      (constantly (response/redirect landing/dashboard-path)))))
+  (let [s (settings config)]
+    (case (landing/dashboard-mode s)
+      :off      nil
+      :app      (get-in s [:dashboard :handler])
+      :built-in (constantly (response/redirect home/default)))))
 
 (defn wrap-home
   "Middleware binding the layouts' home path for each request. Identity when

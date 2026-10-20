@@ -227,8 +227,8 @@
  :user/page-audit-heading      "Audit Trail"
  :user/page-audit-description  "Complete history of all user-related actions and system events"
 
- :user/dashboard-card-profile-title       "Profile & Security"
- :user/dashboard-card-profile-description "Manage your profile, password, two-factor authentication, and preferences"
+ :user/nav-profile-title       "Profile & Security"
+ :user/nav-profile-description "Manage your profile, password, two-factor authentication, and preferences"
  :user/button-manage-sessions             "Manage Sessions"
 
  :user/page-welcome-title      "Welcome"
