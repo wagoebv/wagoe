@@ -443,7 +443,7 @@ The user module's own routes say `:public`, `:signed-in` or `:self`, so
   (`core.user/admin-change-refusal`, checked in the service against the bound
   actor); without an actor (CLI) it is allowed.
 - Migration (`group-service/migrate!`, at group-service init, idempotent): the
-  first boot creates Everyone and, when users exist, gives it every module's
+  first boot creates Everyone and, when users other than admins exist, gives it every module's
   `editor` code role except the admin's; users stored as `viewer` join `Readers`
   with every module's `viewer` role and keep no role. Neither gets a role holding
   a permission already checked as a grant (`core.group/gated-permissions`:

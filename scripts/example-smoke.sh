@@ -42,13 +42,19 @@ grep -qE '(^|[^0-9])1 tests,' /tmp/shop-test.log \
   || { log_excerpt /tmp/shop-test.log 30; fail "the generated system test did not run"; }
 ok "the generated integration test passes through wagoe.test"
 
-# A shop-dev.db already there is put back afterwards.
-DEV_DB=shop-dev.db
-if [ -e "$DEV_DB" ]; then mv "$DEV_DB" "$DEV_DB.smoke-backup"; fi
+# A shop-dev.db already there is put back afterwards, with its WAL files: the
+# database runs in WAL mode, so committed rows can still be in -wal.
+BACKUP=shop-dev.smoke-backup
+if [ -e "$BACKUP.db" ]; then fail "$BACKUP.db is left from an interrupted run; restore or delete it"; fi
+for ext in db db-wal db-shm; do
+  if [ -e "shop-dev.$ext" ]; then mv "shop-dev.$ext" "$BACKUP.$ext"; fi
+done
 # shellcheck disable=SC2317
 restore_dev_db() {
-  rm -f "$DEV_DB" "$DEV_DB-shm" "$DEV_DB-wal"
-  if [ -e "$DEV_DB.smoke-backup" ]; then mv "$DEV_DB.smoke-backup" "$DEV_DB"; fi
+  for ext in db db-wal db-shm; do
+    rm -f "shop-dev.$ext"
+    if [ -e "$BACKUP.$ext" ]; then mv "$BACKUP.$ext" "shop-dev.$ext"; fi
+  done
 }
 
 WAG_ENV=dev clojure -M:run > /tmp/shop-smoke.log 2>&1 &
@@ -67,8 +73,7 @@ CODE=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H "Content-Type: applicat
 [ "$CODE" = "401" ] || fail "POST /api/v1/products without signing in answered $CODE, expected 401"
 ok "the scaffolded API refuses a request without a signed-in user"
 
-# Sign up through the web form, then log in over the API for a token. The
-# session cookie the form sets is Secure, which curl keeps off plain HTTP.
+# Sign up through the web form, then log in over the API for a bearer token.
 CODE=$(curl -s -o /dev/null -w '%{http_code}' -X POST \
             --data-urlencode "name=Smoke" --data-urlencode "email=smoke@example.test" \
             --data-urlencode "password=Example-pass-1" "http://localhost:$PORT/web/register")

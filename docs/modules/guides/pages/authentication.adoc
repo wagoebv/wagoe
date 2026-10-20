@@ -435,7 +435,7 @@ nobody becomes an admin:
   during a rolling upgrade; a grant one of them adds moves over at the next start.
   Rights are read from the assignments only. `add-group-grant`, `remove-group-grant`
   and an import's `:grants` still work this way, and are deprecated.
-* When there are users, Everyone gets every module's `editor` role. That is what every
+* When there are users other than admins, Everyone gets every module's `editor` role. That is what every
   signed-in user could do; narrow it when you are ready. A role holding a permission
   something already checks as a grant, such as `:workflow/read`, is left out, so the
   upgrade gives nobody a right they did not have.

@@ -52,8 +52,9 @@ with the code and are read-only in the UI. An administrator composes managed
 roles from the registry at `/web/admin/roles`, or duplicates a code role there
 to adapt it.
 
-The boot fails when a role or a route names a permission no module declares,
-so a typo is caught before a request is.
+The boot fails when a code role or a route names a permission no module
+declares, so a typo is caught before a request is. A managed role holding one
+only logs a warning.
 
 == Giving routes a rule
 
@@ -130,10 +131,6 @@ bb create-admin
 Every other user signs in to a 403 on the module routes until an
 administrator gives one of their groups a role, say `product/viewer` on
 Everyone.
-
-Run `bb create-admin` after the app has started once. If users exist at the
-first start, it gives Everyone every module's `editor` role, as an upgrade
-does; narrow it at `/web/admin/groups`.
 
 == Moving an existing app to `:enforce`
 
