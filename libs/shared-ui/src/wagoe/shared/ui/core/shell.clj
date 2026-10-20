@@ -137,6 +137,10 @@
               [:span [:t :admin/header-welcome {:name who}]]
               (when (and (:display-name user) (:email user))
                 [:span {:class "user-menu-email"} (:email user)])]
+             (when (pages/mounted? "/web/profile")
+               [:a {:href "/web/profile" :class "user-menu-item"}
+                (icons/icon :user {:size 14})
+                [:span [:t :admin/user-menu-profile]]])
              (when (pages/mounted? "/web/logout")
                [:form {:method "POST" :action "/web/logout" :class "logout-form"}
                 (csrf/hidden-field)

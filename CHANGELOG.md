@@ -31,6 +31,7 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **Profile and two-factor pages in the admin shell** (BOU-768), reached from the user menu. Nothing to change.
 - **Admin sidebar grouped by module** (BOU-777): modules contribute `:nav` in their routes. Set `:module` on an admin
   entity to move it out of "Other", and `:wagoe/settings :nav-order` to order the groups.
 - **Admin many-to-many through a join table** (BOU-778): detected, edited with checkboxes or a multiple combobox, shown
@@ -226,6 +227,7 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Turning off two-factor authentication on the profile refused every password** (BOU-768). Nothing to do.
 - **The admin sidebar forgot its pin and collapsed on every page** (BOU-761): the pin, and a pinned sidebar's
   collapsed state, now survive navigation and reload. Nothing to do.
 - **Admin showed a column with a digit in its name as empty** (BOU-760), e.g. `e2e_customer_id` in lists and forms.

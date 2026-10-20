@@ -1081,20 +1081,32 @@ time.tone-danger  { color: var(--tone-danger-fg);  font-weight: 600; }
 }
 .user-menu-email { font-size: 12px; color: var(--text-muted); }
 .user-menu .logout-form { margin: 0; }
-.user-menu .logout-button {
+/* Menu rows; .admin-topbar-actions outranks the topbar's icon-button rules */
+.admin-topbar-actions .user-menu .logout-button,
+.admin-topbar-actions .user-menu .user-menu-item {
   display: flex;
   align-items: center;
+  justify-content: flex-start;
   gap: 8px;
   width: 100%;
+  height: auto;
+  margin: 0;
   padding: 6px 8px;
   border: 0;
   border-radius: 4px;
   background: none;
   color: var(--text-primary);
   font-size: 13px;
+  line-height: normal;
+  text-decoration: none;
   cursor: pointer;
 }
-.user-menu .logout-button:hover { background: var(--surface-2); }
+.admin-topbar-actions .user-menu .logout-button svg,
+.admin-topbar-actions .user-menu .user-menu-item svg { width: 14px; height: 14px; }
+.admin-topbar-actions .user-menu .logout-button span,
+.admin-topbar-actions .user-menu .user-menu-item span { color: inherit; font-size: 13px; }
+.admin-topbar-actions .user-menu .logout-button:hover,
+.admin-topbar-actions .user-menu .user-menu-item:hover { background: var(--surface-2); }
 
 /* Search: the magnifier inside the field, `/` as its hint */
 .admin-content .toolbar-search { position: relative; display: flex; align-items: center; }
