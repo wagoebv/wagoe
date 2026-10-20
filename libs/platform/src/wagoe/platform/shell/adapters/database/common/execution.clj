@@ -19,7 +19,8 @@
             [clojure.string :as str]
             [clojure.tools.logging :as log]
             [next.jdbc :as jdbc]
-            [next.jdbc.result-set :as rs])
+            [next.jdbc.result-set :as rs]
+            [next.jdbc.transaction :as jdbc-tx])
   (:import [com.zaxxer.hikari HikariDataSource]
            [java.sql Connection SQLException]
            [java.util Collections WeakHashMap]
@@ -578,14 +579,17 @@
     (add-database-breadcrumb "transaction" :start operation-details)
 
     ;; A nested call joins the outer transaction, so only the outermost runs
-    ;; the after-commit hooks.
+    ;; the after-commit hooks, and commits. Any next.jdbc transaction opened
+    ;; inside, execute-batch! included, joins too: next.jdbc would commit it
+    ;; early on the shared connection.
     (let [outermost? (nil? *tx-state*)
           state      (or *tx-state* (atom {:hooks [] :memo {}}))
           result
           (binding [*tx-state* state]
             (jdbc/with-transaction [tx-conn (current-datasource ctx)]
               (binding [*transaction-datasource* tx-conn
-                        *outside-datasource*     (or *outside-datasource* (current-datasource ctx))]
+                        *outside-datasource*     (or *outside-datasource* (current-datasource ctx))
+                        jdbc-tx/*nested-tx*      :ignore]
                 (try
                   (let [tx-ctx (assoc ctx :datasource tx-conn)
                         result (f tx-ctx)

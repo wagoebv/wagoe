@@ -18,6 +18,7 @@
             [wagoe.shared.ui.core.components :as ui]
             [wagoe.shared.ui.core.layout :as layout]
             [wagoe.shared.ui.core.form :as form]
+            [wagoe.shared.ui.core.htmx :as htmx]
             [wagoe.platform.core.http.client-ip :as client-ip]
             [wagoe.platform.shell.web.table :as web-table]
             [wagoe.user.core.oidc :as oidc-core]
@@ -1278,76 +1279,60 @@
       (:actor-email filters)
       (assoc :filter-actor-email (:actor-email filters)))))
 
+(defn- audit-list
+  "The audit page's table query, filters, entries and their total for a
+   request."
+  [user-service request]
+  (let [qp          (:query-params request)
+        table-query (web-table/parse-table-query
+                     qp
+                     {:default-sort      :created-at
+                      :default-dir       :desc
+                      :default-page-size 50})
+        filters     (parse-audit-filters qp)
+        result      (user-ports/list-audit-logs user-service
+                                                (build-audit-list-opts table-query filters))]
+    [(:audit-logs result) table-query (:total-count result) filters]))
+
 (defn audit-page-handler
-  "Handler for the audit trail page (GET /web/audit).
-   
-   Displays audit logs in a table with filtering, sorting, and pagination.
-   Supports filters for action type, result, target email, and actor email.
-   
+  "Handler for the audit trail page (GET /web/audit). Its own controls
+   request this URL and push it, so the address bar holds sort, filters and
+   page; they get the table fragment back.
+
    Args:
      user-service: User service instance
      config: Application configuration map
-     
+
    Returns:
      Ring handler function"
   [user-service _config]
   (fn [request]
     (try
-      (let [qp          (:query-params request)
-            table-query (web-table/parse-table-query
-                         qp
-                         {:default-sort      :created-at
-                          :default-dir       :desc
-                          :default-page-size 50})
-            filters     (parse-audit-filters qp)
-            list-opts   (build-audit-list-opts table-query filters)
-            audit-result (user-ports/list-audit-logs user-service list-opts)
-            page-opts    {:user        (get request :user)
-                          :flash       (get request :flash)
-                          :table-query table-query
-                          :filters     filters}]
-        (html-response request
-                       (user-ui/audit-page
-                        (:audit-logs audit-result)
-                        table-query
-                        (:total-count audit-result)
-                        filters
-                        page-opts)))
+      (let [args (audit-list user-service request)]
+        ;; One URL, two bodies: a cache must not answer one with the other
+        (-> (html-response request
+                           (if (htmx/fragment-request? (:headers request) ["audit-table-container"])
+                             (apply user-ui/audit-table-fragment args)
+                             (apply user-ui/audit-page (conj args {:user  (:user request)
+                                                                   :flash (:flash request)}))))
+            (response/header "Vary" "HX-Request, HX-Target")))
       (catch Exception e
         (server-error-page request e "Error in audit-page-handler")))))
 
 (defn audit-table-fragment-handler
-  "Handler for the audit table fragment (GET /web/audit/table).
-   
-   Returns only the audit table HTML for HTMX refresh when filters change.
-   This enables client-side filtering without full page reload.
-   
+  "Handler for the audit table fragment (GET /web/audit/table), for callers
+   that ask for the table alone.
+
    Args:
      user-service: User service instance
      config: Application configuration map
-     
+
    Returns:
      Ring handler function"
   [user-service _config]
   (fn [request]
     (try
-      (let [qp          (:query-params request)
-            table-query (web-table/parse-table-query
-                         qp
-                         {:default-sort      :created-at
-                          :default-dir       :desc
-                          :default-page-size 50})
-            filters     (parse-audit-filters qp)
-            list-opts   (build-audit-list-opts table-query filters)
-            audit-result (user-ports/list-audit-logs user-service list-opts)
-            _page-opts    {:table-query table-query
-                           :filters     filters}]
-        (html-response request
-                       (user-ui/audit-logs-table
-                        (:audit-logs audit-result)
-                        table-query
-                        (:total-count audit-result)
-                        filters)))
+      (html-response request (apply user-ui/audit-table-fragment (audit-list user-service request)))
       (catch Exception e
         (server-error request e "Error in audit-table-fragment-handler")))))
 
