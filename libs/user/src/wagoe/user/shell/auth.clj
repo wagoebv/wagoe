@@ -12,7 +12,6 @@
    is delegated to wagoe.user.core.authentication."
   (:require [wagoe.user.core.authentication :as auth-core]
             [wagoe.user.core.mfa :as mfa-core]
-            [wagoe.user.ports :as ports]
             [wagoe.user.shell.hooks :as hooks]
             [wagoe.user.shell.mfa :as mfa-shell]
             [buddy.hashers :as hashers]
@@ -221,14 +220,6 @@
                                                 :ip-address    (:ip-address login-context)})]
                   (assoc session :jwt-token (create-jwt-token user hours))))}))
 
-(defn record-failed-login!
-  "Count a failed attempt for `user-id`, locking the account in the same write
-   when the count reaches the limit, so parallel failures each count and a
-   lockout cannot follow a login that reset it (BOU-696)."
-  [user-repository auth-config user-id current-time]
-  (ports/increment-failed-login-count user-repository user-id
-                                      (auth-core/failed-login-lockout auth-config current-time)))
-
 (defn verify-second-factor!
   "Check the TOTP or backup `code` for `user`, spending a backup code. A wrong
    or blank one counts as a failed login, the same counter as a wrong password,
@@ -238,7 +229,7 @@
   (let [{:keys [user-repository auth-config]} auth-service
         check (when-not (str/blank? code) (mfa-shell/check-code! user-repository user code))]
     (when-not (:valid? check)
-      (record-failed-login! user-repository auth-config (:id user) current-time))
+      (mfa-shell/record-failed-login! user-repository auth-config (:id user) current-time))
     check))
 
 (defn authenticate-user
@@ -332,7 +323,7 @@
                    ;; Password verification failed
                    (not password-valid?)
                    (do
-                     (record-failed-login! user-repository auth-config (:id user) current-time)
+                     (mfa-shell/record-failed-login! user-repository auth-config (:id user) current-time)
                      (log/warn "Authentication failed - invalid password" {:email email})
                      {:success? false
                       :error {:type    :authentication-failed

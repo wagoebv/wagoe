@@ -6,7 +6,6 @@
   {:kaocha.testable/meta {:integration true :user true}}
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest testing is use-fixtures]]
-            [wagoe.user.shell.auth :as auth-shell]
             [wagoe.user.shell.mfa :as mfa-shell]
             [wagoe.user.shell.mfa-crypto :as mfa-crypto]
             [wagoe.user.ports :as ports]
@@ -98,7 +97,7 @@
     (let [secret (mfa-shell/generate-totp-secret)]
 
       (testing "rejects invalid TOTP code"
-        (let [wrong (format "%06d" (mod (inc (parse-long (totp-clock/code secret))) 1000000))]
+        (let [wrong (format "%06d" (mod (inc (parse-long (totp-clock/code mem/mfa-secret))) 1000000))]
           (is (false? (mfa-shell/verify-totp-code wrong secret)))))
 
       (testing "rejects nil code"
@@ -347,17 +346,11 @@
 ;; Disabling needs proof (BOU-782): a stolen session alone must not be able to
 ;; remove the second factor, nor guess the proof without locking the account.
 
-(def ^:private secret "JBSWY3DPEHPK3PXP")
-
 (defn- disable-fixture
   "A user with MFA on, in memory: `password` nil makes them OIDC-only."
   [password]
   (let [id    (UUID/randomUUID)
-        users (atom {id (cond-> {:id id :email "mfa@example.com" :active true
-                                 :mfa-enabled true :mfa-secret secret
-                                 :mfa-backup-codes [(mfa-crypto/hash-backup-code "AAAA-BBBB-CCCC")]
-                                 :mfa-backup-codes-used []}
-                          password (assoc :password-hash (auth-shell/hash-password password)))})
+        users (atom {id (mem/mfa-user id password)})
         audit (atom [])]
     {:id id :users users :audit audit
      :svc (mfa-shell/create-mfa-service (mem/->MemoryUserRepository users) {}
@@ -377,7 +370,7 @@
 (deftest ^:unit ^:security disable-mfa-with-a-code-needs-no-password
   (testing "a current TOTP code, the proof an OIDC-only user has"
     (let [{:keys [users id] :as fx} (disable-fixture nil)]
-      (is (= {:success? true} (disable fx {:code (totp-clock/code secret)})))
+      (is (= {:success? true} (disable fx {:code (totp-clock/code mem/mfa-secret)})))
       (is (false? (get-in @users [id :mfa-enabled])))))
   (testing "a backup code"
     (let [{:keys [users id] :as fx} (disable-fixture nil)]
@@ -408,11 +401,3 @@
 (deftest ^:unit ^:security an-oidc-only-user-cannot-disable-with-a-password
   (let [fx (disable-fixture nil)]
     (is (= :invalid-proof (get-in (disable fx {:password "anything"}) [:error :type])))))
-
-(deftest ^:unit has-password-reads-the-hash-from-the-repository
-  ;; The user service drops the hash, so the profile cannot tell from its user.
-  (let [{:keys [svc id]} (disable-fixture "Right-Pass-1!")]
-    (is (true? (mfa-shell/has-password? svc id)))
-    (is (false? (mfa-shell/has-password? svc (UUID/randomUUID)))))
-  (let [{:keys [svc id]} (disable-fixture nil)]
-    (is (false? (mfa-shell/has-password? svc id)))))

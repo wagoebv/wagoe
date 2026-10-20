@@ -477,8 +477,8 @@
 
 (defn mfa-disable-confirm-page
   "Display MFA disable confirmation page: the password or an authentication
-   code confirms it; a user without a password (OIDC only) gets only the code.
-   opts may carry :has-password? (default true).
+   code confirms it. A user who signs in through OIDC knows no password, so
+   the code is always offered.
    
    Args:
      errors: Validation errors map (optional)
@@ -487,7 +487,7 @@
    Returns:
      Complete HTML page for MFA disable confirmation"
   ([errors] (mfa-disable-confirm-page errors {}))
-  ([errors {:keys [has-password?] :or {has-password? true} :as opts}]
+  ([errors opts]
    (page-layout
     [:t :user/mfa-disable-title]
     [:div.profile-content.profile-grid
@@ -496,16 +496,14 @@
       " " [:t :user/mfa-disable-warning]]
      [:div.profile-card
       [:div.card-body
-       [:p [:t (if has-password? :user/mfa-disable-prompt :user/mfa-disable-prompt-code)]]
+       [:p [:t :user/mfa-disable-prompt]]
        [:form {:method "POST" :action "/web/profile/mfa/disable"}
         (csrf/hidden-field)
-        (when has-password?
-          (ui/form-field :password [:t :user/password-field-current]
-                         (ui/password-input :password "" {:autocomplete "current-password"})
-                         (:password errors)))
+        (ui/form-field :password [:t :user/password-field-current]
+                       (ui/password-input :password "" {:autocomplete "current-password"})
+                       (:password errors))
         (ui/form-field :code [:t :user/mfa-disable-code-label]
-                       (ui/text-input :code "" {:autocomplete "one-time-code"
-                                                :required (not has-password?)})
+                       (ui/text-input :code "" {:autocomplete "one-time-code"})
                        (:code errors))
         [:div.form-actions
          [:button.button.danger {:type "submit"}

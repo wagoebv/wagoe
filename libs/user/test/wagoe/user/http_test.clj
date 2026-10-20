@@ -556,9 +556,7 @@
   ;; It turned MFA off for any signed-in caller, so a stolen token could remove
   ;; the second factor (BOU-782).
   (let [id      (UUID/randomUUID)
-        users   (atom {id {:id id :email "m@example.com" :active true :mfa-enabled true
-                           :mfa-secret "JBSWY3DPEHPK3PXP" :mfa-backup-codes [] :mfa-backup-codes-used []
-                           :password-hash (auth/hash-password "Right-Pass-1!")}})
+        users   (atom {id (mem/mfa-user id "Right-Pass-1!")})
         handler (user-http/mfa-disable-handler
                  (mfa/create-mfa-service (mem/->MemoryUserRepository users) {}
                                          {:auth-config {:max-failed-attempts 2}}))

@@ -1800,24 +1800,22 @@
 
     Returns:
      Ring handler function"
-  [mfa-service _config]
+  [_mfa-service _config]
   (fn [request]
     (try
-      (let [user (:user request)
-            page-opts {:user user
-                       :flash (:flash request)
-                       :has-password? (mfa/has-password? mfa-service (:id user))}]
+      (let [page-opts {:user (:user request)
+                       :flash (:flash request)}]
         (html-response request (profile-ui/mfa-disable-confirm-page {} page-opts)))
       (catch Exception e
         (server-error-page request e "Error in mfa-disable-page-handler")))))
 
-(defn- mfa-disable-errors
-  "The form errors for a refused disable."
+(defn- mfa-disable-refusal
+  "[status form-errors] for a refused disable."
   [result]
   (case (get-in result [:error :type])
-    (:invalid-proof :proof-required) {:code [[:t :user/mfa-disable-wrong-proof]]}
-    :account-locked {:code [[:t :user/mfa-disable-locked]]}
-    {:code [(mfa-error-message result)]}))
+    (:invalid-proof :proof-required) [400 {:code [[:t :user/mfa-disable-wrong-proof]]}]
+    :account-locked                  [429 {:code [[:t :user/mfa-disable-locked]]}]
+    [400 {:code [(mfa-error-message result)]}]))
 
 (defn mfa-disable-handler
   "Handler for MFA disable submission (POST /web/profile/mfa/disable).
@@ -1842,11 +1840,9 @@
         (if (:success? result)
           (-> (response/redirect "/web/profile")
               (assoc :flash {:success "Two-factor authentication has been disabled"}))
-          (html-response request
-                         (profile-ui/mfa-disable-confirm-page
-                          (mfa-disable-errors result)
-                          {:user current-user
-                           :has-password? (mfa/has-password? mfa-service user-id)})
-                         (if (= :account-locked (get-in result [:error :type])) 429 400))))
+          (let [[status errors] (mfa-disable-refusal result)]
+            (html-response request
+                           (profile-ui/mfa-disable-confirm-page errors {:user current-user})
+                           status))))
       (catch Exception e
         (server-error request e "Error in mfa-disable-handler")))))

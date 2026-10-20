@@ -10,7 +10,6 @@
   (:require [wagoe.user.shell.web-handlers :as web-handlers]
             [wagoe.user.ports :as ports]
             [wagoe.user.shell.service :as service]
-            [wagoe.user.shell.auth :as auth]
             [wagoe.user.shell.mfa :as mfa]
             [wagoe.user.shell.in-memory-repository-test :as mem]
             [wagoe.email.ports :as email-ports]
@@ -1177,16 +1176,9 @@
         (is (= 400 (:status resp)))
         (is (re-find #"\"showToast\".*Invalid session" (get-in resp [:headers "HX-Trigger"])))))))
 
-(defn- mfa-user-service
-  "An MFA service over one user with MFA on; `password` nil makes them
-   OIDC-only."
-  [id password]
-  (mfa/create-mfa-service
-   (mem/->MemoryUserRepository
-    (atom {id (cond-> {:id id :email "m@example.com" :active true :mfa-enabled true
-                       :mfa-secret "JBSWY3DPEHPK3PXP" :mfa-backup-codes [] :mfa-backup-codes-used []}
-                password (assoc :password-hash (auth/hash-password password)))}))
-   {} {:auth-config {:max-failed-attempts 2}}))
+(defn- mfa-user-service [id password]
+  (mfa/create-mfa-service (mem/->MemoryUserRepository (atom {id (mem/mfa-user id password)}))
+                          {} {:auth-config {:max-failed-attempts 2}}))
 
 (deftest ^:contract ^:security mfa-disable-form-needs-proof-and-locks-out
   ;; It checked the password, but did not count wrong ones, so a session
@@ -1209,9 +1201,9 @@
     (is (= 302 (:status resp)))
     (is (has-header? resp "Location" "/web/profile"))))
 
-(deftest ^:contract mfa-disable-page-asks-an-oidc-only-user-for-a-code
+(deftest ^:contract mfa-disable-page-offers-the-password-and-a-code
+  ;; A user who signs in through OIDC knows no password, so the code is there too.
   (let [id   (UUID/randomUUID)
-        page #((web-handlers/mfa-disable-page-handler (mfa-user-service id %) {}) {:user {:id id}})]
-    (is (not (html-contains? (page nil) "name=\"password\"")))
-    (is (html-contains? (page nil) "name=\"code\""))
-    (is (html-contains? (page "Right-Pass-1!") "name=\"password\""))))
+        page ((web-handlers/mfa-disable-page-handler (mfa-user-service id nil) {}) {:user {:id id}})]
+    (is (html-contains? page "name=\"password\""))
+    (is (html-contains? page "name=\"code\""))))

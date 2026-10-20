@@ -328,6 +328,14 @@
       check
       {:valid? false :used-backup-code? false})))
 
+(defn record-failed-login!
+  "Count a failed attempt for `user-id`, locking the account in the same write
+   when the count reaches the limit, so parallel failures each count and a
+   lockout cannot follow a login that reset it (BOU-696)."
+  [user-repository auth-config user-id current-time]
+  (ports/increment-failed-login-count user-repository user-id
+                                      (auth-core/failed-login-lockout auth-config current-time)))
+
 (defn- proof-holds?
   "Whether `password` is the user's, or `code` a current TOTP or unused backup
    code, which it spends. The password goes first so a backup code is not
@@ -380,13 +388,12 @@
           (not (:allowed? allowed))
           {:success? false :error {:type :cannot-disable :message (:reason allowed)}}
 
-          (every? str/blank? ((juxt :password :code) proof))
+          (and (str/blank? (:password proof)) (str/blank? (:code proof)))
           {:success? false :error {:type    :proof-required
                                    :message "Confirm with your password or an authentication code"}}
 
           (not (proof-holds? user-repository user proof))
-          (do (ports/increment-failed-login-count user-repository user-id
-                                                  (auth-core/failed-login-lockout auth-config now))
+          (do (record-failed-login! user-repository auth-config user-id now)
               {:success? false :error {:type :invalid-proof :message "Incorrect password or code"}})
 
           :else
@@ -399,12 +406,6 @@
         {:success? false
          :error {:type    :mfa-disable-failed
                  :message "Disabling MFA failed"}}))))
-
-(defn has-password?
-  "Whether `user-id` can sign in with a password; a user who signs in only
-   through OIDC has none. Read from the repository, which keeps the hash."
-  [mfa-service user-id]
-  (boolean (:password-hash (ports/find-user-by-id (:user-repository mfa-service) user-id))))
 
 (defn get-mfa-status
   "Get MFA status for a user.
