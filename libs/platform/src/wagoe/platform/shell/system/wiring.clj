@@ -650,6 +650,8 @@
                                                        :i18n-middleware  i18n-middleware}))
                                                 (:middleware settings))
                               :system system
+                              ;; For the flash cookie, as the user module's auth cookies
+                              :secure-cookies? (get-in config [:active :wagoe/settings :secure-cookies?] true)
                               ;; Every route requires a signed-in user unless
                               ;; it is `:public true` (BOU-568). Installed
                               ;; here, not per module, so none can forget it.

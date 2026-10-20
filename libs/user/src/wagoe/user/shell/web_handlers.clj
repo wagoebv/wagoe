@@ -216,7 +216,7 @@
 
 (defn- redirect-with-toast
   "Sends htmx to `location` with a toast to show there: components.js keeps
-   the X-Toast across the redirect. A flash would not, nothing renders it."
+   the X-Toast across the redirect."
   [request location type message]
   (-> (response/response "")
       (response/header "HX-Redirect" location)

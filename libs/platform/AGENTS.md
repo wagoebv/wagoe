@@ -191,8 +191,9 @@ Disabled or secretless config makes it a pass-through.
 
 A response's `:flash` is the next request's `:flash`, so a redirect after an
 action can carry its message: `{:success "Saved"}` or
-`{:type :success :message "Saved"}`, values a string or an i18n keyword. Pass
-`(:flash request)` to the page layout and it renders as a toast.
+`{:type :success :message "Saved"}`, values a string or a catalogue key; any
+other shape is logged and dropped. Pass `(:flash request)` to the page layout
+and it renders as a toast. `:secure-cookies?` marks the cookie Secure.
 `wagoe.platform.shell.http.flash` keeps it in a `wagoe-flash` cookie rather
 than the Ring session, which the platform does not have (`:session` is the user
 module's database session). An htmx response that swaps part of the page uses

@@ -882,7 +882,7 @@
           ;; (create-default-middleware) — a global wrap-params here would
           ;; parse them a second time for every request.
         handler (-> (ring/ring-handler router default-handler)
-                    (flash/wrap-flash)
+                    (flash/wrap-flash {:secure? (get config :secure-cookies? true)})
                     (wrap-gzip)
                     (wrap-static-resources)
                     (wrap-cookies))]

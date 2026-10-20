@@ -9,7 +9,8 @@
 (def ^:private types [:success :info :warning :error])
 
 (defn toast
-  "One toast. `:type` is :success, :info (default), :warning or :error.
+  "One toast. `:type` is :success, :info (default), :warning or :error; a
+   keyword `:message` is a catalogue key.
    It goes after five seconds; an error stays until it is closed, since a
    message that leaves on its own may go unread."
   [{:keys [type message]}]
@@ -19,7 +20,7 @@
                    :x-data (if error? "toast(0)" "toast(5000)")}
             ;; Assertive, unlike the polite region around it
             error? (assoc :role "alert"))
-     [:span message]
+     [:span (if (keyword? message) [:t message] message)]
      [:button (merge {:type "button" :class "btn btn-ghost btn-xs btn-circle"
                       :aria-label "Dismiss"}
                      (alpine/x-on :click "dismiss()"))

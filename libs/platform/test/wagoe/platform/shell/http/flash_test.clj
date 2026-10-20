@@ -33,6 +33,16 @@
                "#=(java.lang.System/exit 0)"]]
       (is (nil? (:body (echo (with-cookie v)))) v))))
 
+(deftest ^:unit a-flash-the-next-request-would-drop-is-not-written
+  (let [handler (flash/wrap-flash (fn [_] {:status 303 :flash {:success [:t :x/y {:n 1}]}}))]
+    (is (nil? (:cookies (handler {}))))))
+
+(deftest ^:unit secure-follows-the-setting
+  (let [set-flash (fn [_] {:status 303 :flash {:success "Saved"}})
+        secure    (fn [opts] (get-in ((flash/wrap-flash set-flash opts) {}) [:cookies flash/cookie-name :secure]))]
+    (is (true? (secure {})))
+    (is (false? (secure {:secure? false})))))
+
 (deftest ^:unit no-cookie-no-flash-no-set-cookie
   (let [response (echo {})]
     (is (nil? (:body response)))
