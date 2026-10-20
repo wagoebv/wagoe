@@ -4,13 +4,12 @@
   (:require [wagoe.platform.core.csrf :as csrf]
             [wagoe.shared.ui.core.combobox :as combobox]
             [wagoe.shared.ui.core.components :as ui]
-            [wagoe.shared.ui.core.shell :as shell]
             [wagoe.user.core.group :as group]
             [wagoe.user.core.rights-ui :as rights-ui]))
 
-(def base-path "/web/admin/groups")
+(def base-path rights-ui/groups-path)
 
-(defn group-path [group-id] (str base-path "/" group-id))
+(def group-path rights-ui/group-path)
 
 (defn- member-options-path
   "Where the member combobox of a group's page reads its options."
@@ -29,8 +28,7 @@
   (keyword (str "scope-source-" (name k))))
 
 (defn- page [title content opts]
-  (shell/shell-page title [:div.entity-detail-page.user-groups-page {:class "space-y-4"} content]
-                    (assoc opts :page-title title)))
+  (rights-ui/page title [:div.user-groups-page {:class "space-y-4"} content] opts))
 
 (defn- remove-button [action]
   [:form {:method "post" :action action}
@@ -102,13 +100,20 @@
      [:td (:name m)]
      [:td.actions-cell (action m)]]))
 
+(defn provider-members
+  "The users an identity provider puts in a group, read-only."
+  [members]
+  (if (seq members)
+    (rights-ui/table [[:t :user.rights/column-user] [:t :user.groups/field-name] [:t :user.roles/column-source]]
+                     (member-rows members (constantly (ui/badge [:t :user.rights/source-provider] {:variant :warning}))))
+    [:p.empty-state [:t :user.groups/provider-members-empty]]))
+
 (defn group-page
   "One group: its name, members and roles, with the forms that change them.
    `roles` are those it may be assigned, as `list-roles` gives them.
    `(:scope-keys opts)`, [{:key :label :url :sources [[source label]]}], are
    the declared scope keys, each chosen through a lookup when it has a :url;
-   without any the scope is typed as EDN. `(:provider-members opts)` are the
-   users an identity provider puts in it."
+   without any the scope is typed as EDN."
   [{:keys [id name members roles everyone?] :as group} assignable opts]
   (let [path (group-path id)]
     (page
@@ -140,13 +145,14 @@
                                                           :required    true
                                                           :placeholder [:t :user.groups/member-placeholder]})
                              [:button.button.primary {:type "submit"} [:t :user.groups/button-add-member]]])
-         (when-let [provided (seq (:provider-members opts))]
-           (rights-ui/section [:t :user.groups/provider-members-heading] {:class "group-provider-members"}
-                              [:p [:t :user.groups/provider-members-note]]
-                              (rights-ui/table [[:t :user.rights/column-user] [:t :user.groups/field-name]
-                                                [:t :user.roles/column-source]]
-                                               (member-rows provided (constantly (ui/badge [:t :user.rights/source-provider]
-                                                                                           {:variant :warning}))))))))
+         ;; Asked for: listing them runs the membership hook for every user
+         (rights-ui/section [:t :user.groups/provider-members-heading] {:class "group-provider-members"}
+                            [:p [:t :user.groups/provider-members-note]]
+                            [:div#provider-members
+                             [:button.button.secondary.small
+                              {:type "button" :hx-get (str path "/provider-members")
+                               :hx-target "#provider-members" :hx-swap "innerHTML"}
+                              [:t :user.groups/button-show-provider-members]]])))
       (rights-ui/section [:t :user.groups/roles-heading] {:class "group-roles"}
                          (if (seq roles)
                            (rights-ui/action-table [[:t :user.groups/field-role] [:t :user.groups/field-scope] ""]

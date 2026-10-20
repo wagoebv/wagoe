@@ -8,25 +8,28 @@
             [wagoe.shared.ui.core.components :as ui]
             [wagoe.shared.ui.core.icons :as icons]
             [wagoe.shared.ui.core.shell :as shell]
+            [wagoe.shared.ui.core.table :as table-ui]
             [wagoe.user.core.group :as group]))
 
 (def roles-path "/web/admin/roles")
 (def permissions-path "/web/admin/permissions")
 
-(defn- query-path [base k v]
-  (str base "?" (name k) "=" (java.net.URLEncoder/encode (str v) "UTF-8")))
+(defn- view-path [base n]
+  (str base "/view?" (table-ui/encode-query-params {"name" (group/permission-str n)})))
 
-(defn role-path [role-name]
-  (query-path (str roles-path "/view") :name (group/permission-str role-name)))
+(defn role-path [role-name] (view-path roles-path role-name))
 
-(defn permission-path [permission]
-  (query-path (str permissions-path "/view") :name (group/permission-str permission)))
+(defn permission-path [permission] (view-path permissions-path permission))
 
-(defn group-path [group-id] (str "/web/admin/groups/" group-id))
+(def groups-path "/web/admin/groups")
+
+(defn group-path [group-id] (str groups-path "/" group-id))
 
 (defn user-rights-path [user-id] (str "/web/users/" user-id "/rights"))
 
-(defn- page [title content opts]
+(defn page
+  "`content` in the admin shell, `title` in its topbar."
+  [title content opts]
   (shell/shell-page title [:div.entity-detail-page.rights-page {:class "space-y-4"} content]
                     (assoc opts :page-title title)))
 
@@ -46,10 +49,11 @@
 (defn section
   "`content` in a card under `title`. A map first is the section's attributes."
   [title & content]
-  [:section.form-card (when (map? (first content)) (first content))
-   [:div.form-section
-    [:div.form-section-header [:h2.form-section-title title]]
-    (into [:div.form-section-body {:class "space-y-3"}] (if (map? (first content)) (rest content) content))]])
+  (let [[attrs content] (if (map? (first content)) [(first content) (rest content)] [nil content])]
+    [:section.form-card attrs
+     [:div.form-section
+      [:div.form-section-header [:h2.form-section-title title]]
+      (into [:div.form-section-body {:class "space-y-3"}] content)]]))
 
 (defn- table-of [class headers rows]
   (ui/table-wrapper

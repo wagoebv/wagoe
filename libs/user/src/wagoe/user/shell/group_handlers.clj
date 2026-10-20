@@ -16,21 +16,18 @@
             [wagoe.user.shell.web-handlers :refer [html-response]]))
 
 
-(defn- page-opts [request]
+(defn page-opts [request]
   {:user  (:user request)
    :flash (:flash request)})
 
-(defn- redirect [path flash-key]
+(defn redirect [path flash-key]
   (assoc (response/redirect path :see-other) :flash {:success flash-key}))
 
 (defn- path-uuid [request k]
   (parse-uuid (str (get-in request [:path-params k]))))
 
-(defn- form [request k]
+(defn form [request k]
   (some-> (get-in request [:form-params k]) str str/trim))
-
-(defn- registry-of [group-service]
-  (:registry group-service))
 
 (defn scope-keys
   "The scope keys an assignment may set, as the declared scope map has them,
@@ -38,7 +35,7 @@
    (`[:domain-id {:wagoe/entity :domains} :int]`), and the user sources it takes."
   [group-service]
   (let [schema   (get-in group-service [:settings :scope-schema])
-        registry (registry-of group-service)
+        registry (:registry group-service)
         scopes   (some-> registry authz/scopes)
         sources  (some-> registry authz/scope-sources)]
     (when (and schema (= :map (m/type schema)))
@@ -53,7 +50,7 @@
 (defn scope-info
   "What `rights-ui/scope-view` reads to label a scope's keys and sources."
   [group-service]
-  (let [registry (registry-of group-service)]
+  (let [registry (:registry group-service)]
     {:labels  (some-> registry authz/scopes (update-vals :label))
      :sources (some-> registry authz/scope-sources (update-vals :label))}))
 
@@ -79,8 +76,7 @@
           (group-ui/group-page group (ports/list-roles group-service)
                                (merge (page-opts request)
                                       {:scope-keys       (scope-keys group-service)
-                                       :scope-info       (scope-info group-service)
-                                       :provider-members (ports/provider-members group-service group-id)}
+                                       :scope-info       (scope-info group-service)}
                                       opts))
           status)
     (not-found request)))
@@ -183,6 +179,14 @@
                        200))
       (not-found request))))
 
+(defn provider-members
+  "GET /:id/provider-members — the users the membership hook puts in the group."
+  [group-service]
+  (fn [request]
+    (if-let [group-id (some->> (path-uuid request :id) (ports/get-group group-service) :id)]
+      (html-response request (group-ui/provider-members (ports/provider-members group-service group-id)) 200)
+      (not-found request))))
+
 (defn remove-member [group-service]
   (fn [request]
     (change group-service request :user.groups/flash-member-removed
@@ -203,26 +207,20 @@
    value added, a value read as the declared scope schema reads it from a
    string. A source wins over a value typed beside it."
   [group-service request]
-  (let [scope   (parse-scope (form request "scope"))
-        ks      (scope-keys group-service)
-        sources (into {}
-                      (keep (fn [{:keys [key]}]
-                              (some->> (form request (name (group-ui/scope-source-field key)))
-                                       group-core/parse-name
-                                       (vector key))))
-                      ks)
-        chosen  (into {}
-                      (keep (fn [{:keys [key]}]
-                              (when-not (contains? sources key)
-                                (some->> (form request (name (group-ui/scope-lookup-field key)))
-                                         not-empty
-                                         (vector key)))))
-                      ks)]
+  (let [scope (parse-scope (form request "scope"))
+        {:keys [sources values]}
+        (reduce (fn [acc {:keys [key]}]
+                  (if-let [src (group-core/parse-name (form request (name (group-ui/scope-source-field key))))]
+                    (assoc-in acc [:sources key] src)
+                    (if-let [v (not-empty (form request (name (group-ui/scope-lookup-field key))))]
+                      (assoc-in acc [:values key] v)
+                      acc)))
+                {}
+                (scope-keys group-service))]
     ;; `nil` typed is no scope: a key picked beside it is still the scope
-    (if (and (or (seq chosen) (seq sources)) (or (nil? scope) (map? scope)))
+    (if (and (or values sources) (or (nil? scope) (map? scope)))
       (merge scope
-             (when (seq chosen)
-               (m/decode (get-in group-service [:settings :scope-schema]) chosen (mt/string-transformer)))
+             (when values (m/decode (get-in group-service [:settings :scope-schema]) values (mt/string-transformer)))
              sources)
       scope)))
 

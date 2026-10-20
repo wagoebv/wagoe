@@ -3,7 +3,6 @@
    go through the group service, so they are checked and audited."
   (:require [clojure.string :as str]
             [clojure.tools.logging :as log]
-            [ring.util.response :as response]
             [wagoe.platform.core.http.access :as access]
             [wagoe.platform.core.scope :as scope]
             [wagoe.platform.ports.authorization :as authz]
@@ -13,11 +12,9 @@
             [wagoe.user.shell.group-handlers :as group-handlers]
             [wagoe.user.shell.web-handlers :refer [html-response]]))
 
-(defn- page-opts [request]
-  {:user (:user request) :flash (:flash request)})
-
-(defn- form [request k]
-  (some-> (get-in request [:form-params k]) str str/trim))
+(def ^:private page-opts group-handlers/page-opts)
+(def ^:private form group-handlers/form)
+(def ^:private redirect group-handlers/redirect)
 
 (defn- form-permissions
   "The permissions ticked in the form: one value arrives as a string, several as a vector."
@@ -27,9 +24,6 @@
 
 (defn- registry-permissions [group-service]
   (some-> (:registry group-service) authz/permissions))
-
-(defn- redirect [path flash-key]
-  (assoc (response/redirect path :see-other) :flash {:success flash-key}))
 
 (defn- not-found [request message-key]
   (html-response request [:p [:t message-key]] 404))

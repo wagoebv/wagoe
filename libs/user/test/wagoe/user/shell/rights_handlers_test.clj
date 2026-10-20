@@ -32,7 +32,7 @@
                                                          (group-service/prepare-settings nil) registry)
                                                        {:registry registry})
             routes (http/group-routes usvc gsvc nil)
-            app    (ring/ring-handler (ring/router (into [[(:web-prefix routes) (:web routes)]] (:extra-web routes))))
+            app    (ring/ring-handler (ring/router ["/web" (:web routes)]))
             admin  (ports/create-user users {:email "admin@example.com" :name "Admin" :role :admin
                                              :active true :password-hash "x"})]
         (f {:app app :users users :gsvc gsvc :admin admin})))))

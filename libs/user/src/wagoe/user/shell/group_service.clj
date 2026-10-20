@@ -201,22 +201,26 @@
     data))
 
 (defn- role-holders
-  "The users who hold the managed role `role-name` through a stored group, and
-   the groups that hold it, for auditing a change to it."
-  [repo role-name]
-  (for [a (ports/find-role-assignments repo role-name)]
-    {:group   {:id (:group-id a) :name (:group-name a)}
-     :scope   (:scope a)
-     :members (when-not (group-core/everyone? (:group-id a)) (ports/find-members repo (:group-id a)))}))
+  "Every assignment of one of `role-names`, with its group's members; Everyone
+   lists none."
+  [repo role-names]
+  (->> (mapcat #(ports/find-role-assignments repo %) (distinct role-names))
+       (map (fn [{:keys [group-id] :as a}]
+              (let [everyone? (group-core/everyone? group-id)]
+                (assoc (select-keys a [:role :group-id :group-name :scope])
+                       :everyone? everyone?
+                       :members (if everyone? [] (ports/find-members repo group-id))))))
+       (sort-by (juxt :group-name (comp str :role)))
+       vec))
 
 (defn- audit-role-change!
   "Audit what changing managed role `role-name` from `before` to `after`
    permissions does to every group holding it."
   [repo audit-repository role-name before after]
-  (doseq [{:keys [group scope members]} (role-holders repo role-name)
+  (doseq [{:keys [group-id group-name scope members]} (role-holders repo [role-name])
           [action ps] [[:grant-remove (remove (set after) before)] [:grant-add (remove (set before) after)]]
           :when (seq ps)]
-    (audit! audit-repository action group members
+    (audit! audit-repository action {:id group-id :name group-name} members
             (for [p (sort ps)] {:permission p :scope scope :role role-name}))))
 
 ;; =============================================================================
@@ -522,20 +526,13 @@
             (ports/find-role-holders group-repository roles))))
 
   (role-holders [_ role-names]
-    (->> (mapcat #(ports/find-role-assignments group-repository %) (distinct role-names))
-         (map (fn [{:keys [group-id] :as a}]
-                (let [everyone? (group-core/everyone? group-id)]
-                  (assoc (select-keys a [:id :role :group-id :group-name :scope])
-                         :everyone? everyone?
-                         :members (if everyone? [] (ports/find-members group-repository group-id))))))
-         (sort-by (juxt :group-name (comp str :role)))
-         vec))
+    (role-holders group-repository role-names))
 
   (provider-members [_ group-id]
     (let [group (ports/find-group group-repository group-id)]
       (if (and membership group (not (group-core/everyone? group-id)))
         (into []
-              (comp (filter #(contains? (set (membership %)) (:name group)))
+              (comp (filter #(some #{(:name group)} (membership %)))
                     (map #(select-keys % [:id :email :name])))
               (active-users user-repository))
         [])))

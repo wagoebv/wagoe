@@ -353,6 +353,8 @@
  :user.groups/details-heading "Gegevens"
  :user.groups/provider-members-heading "Via de identiteitsprovider"
  :user.groups/provider-members-note "Deze gebruikers zijn lid omdat de identiteitsprovider dat zegt. Wijzig het daar."
+ :user.groups/button-show-provider-members "Toon ze"
+ :user.groups/provider-members-empty "De identiteitsprovider zet niemand in deze groep."
  :user.groups/scope-keys-hint "Laat een sleutel leeg om de rol daarvoor overal te hebben. Neem een waarde van het lid over om voor elk lid diens eigen waarde te laten tellen."
  :user.groups/scope-fixed-value "Vaste waarde"
  :user.groups/scope-source-label "Waar {key} vandaan komt"

@@ -456,7 +456,8 @@ only).
   symbol naming one, resolved in `ig-config`; a bad one fails boot. The
   permissions enum is declared into the registry until 2.0.
 - The group page adds a member through a user lookup (`/:id/members/options`)
-  and lists the hook's members read-only (`provider-members`). Each declared
+  and lists the hook's members read-only on request (`provider-members` runs
+  the hook for every active user). Each declared
   scope key is a field: a lookup reading `/web/admin/<entity>/lookup` when it
   has `:wagoe/entity`, and a choice of the key's user sources; its value is
   decoded with the scope schema. Without declared keys the scope is typed as EDN.

@@ -799,11 +799,10 @@
   (let [guard [(user-middleware/flexible-authentication-middleware user-service)
                user-middleware/require-admin-middleware]
         route (fn [path methods] [path (assoc methods :no-doc true :authorization :self :middleware guard)])]
-    {:api        []
-     :static     []
-     :web-prefix "/web/admin"
-     :web        (when (web-ui-enabled? config)
-                   [["/groups"
+    {:api    []
+     :static []
+     :web    (when (web-ui-enabled? config)
+               [["/admin/groups"
                     (route ""
                            {:get  {:handler (group-handlers/list-page group-service)}
                             :post {:handler (group-handlers/create group-service)}})
@@ -816,6 +815,8 @@
                            {:post {:handler (group-handlers/add-member user-service group-service)}})
                     (route "/:id/members/options"
                            {:get {:handler (group-handlers/member-options user-service group-service)}})
+                    (route "/:id/provider-members"
+                           {:get {:handler (group-handlers/provider-members group-service)}})
                     (route "/:id/members/:user-id/remove"
                            {:post {:handler (group-handlers/remove-member group-service)}})
                     (route "/:id/roles"
@@ -824,7 +825,7 @@
                            {:post {:handler (group-handlers/remove-role group-service)}})]
                    ;; A role or permission name holds a slash, so it travels as
                    ;; a query or form parameter rather than in the path.
-                   ["/roles"
+                   ["/admin/roles"
                     (route ""
                            {:get  {:handler (rights-handlers/list-roles group-service)}
                             :post {:handler (rights-handlers/create-role group-service)}})
@@ -836,14 +837,13 @@
                            {:post {:handler (rights-handlers/delete-role group-service)}})
                     (route "/duplicate"
                            {:post {:handler (rights-handlers/duplicate-role group-service)}})]
-                   ["/permissions"
+                   ["/admin/permissions"
                     (route ""
                            {:get {:handler (rights-handlers/list-permissions group-service)}})
                     (route "/view"
-                           {:get {:handler (rights-handlers/show-permission group-service)}})]])
-     :extra-web  (when (web-ui-enabled? config)
-                   [(route "/web/users/:id/rights"
-                           {:get {:handler (rights-handlers/user-rights user-service group-service)}})])}))
+                           {:get {:handler (rights-handlers/show-permission group-service)}})]
+                   (route "/users/:id/rights"
+                          {:get {:handler (rights-handlers/user-rights user-service group-service)}})])}))
 
 (defn- export-response
   "`doc`, a user's data export, as a download, logged with who asked."

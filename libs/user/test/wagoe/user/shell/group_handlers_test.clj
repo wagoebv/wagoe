@@ -25,7 +25,7 @@
                                                        users audit (group-service/prepare-settings settings)
                                                        {:registry (authz/create-registry {:wagoe/invoice nil})})
             routes (http/group-routes usvc gsvc nil)
-            app    (ring/ring-handler (ring/router (into [[(:web-prefix routes) (:web routes)]] (:extra-web routes))))
+            app    (ring/ring-handler (ring/router ["/web" (:web routes)]))
             admin  (ports/create-user users {:email "admin@example.com" :name "Admin" :role :admin
                                              :active true :password-hash "x"})]
         (f {:app app :users users :audit audit :gsvc gsvc :admin admin})))))
@@ -162,3 +162,11 @@
         (is (str/includes? page "everyone-note"))
         (is (not (str/includes? page "group-member-form")))
         (is (str/includes? page "group-role-form"))))))
+
+(deftest ^:integration provider-members-are-shown-when-asked
+  (with-app nil
+    (fn [{:keys [app admin]}]
+      (let [path (get-in (app (req admin :post "/web/admin/groups" {"name" "Newsroom"})) [:headers "Location"])]
+        (is (str/includes? (:body (app (req admin :get path))) (str "hx-get=\"" path "/provider-members\"")))
+        (is (str/includes? (:body (app (req admin :get (str path "/provider-members")))) "provider-members-empty"))
+        (is (= 404 (:status (app (req admin :get (str "/web/admin/groups/" (random-uuid) "/provider-members"))))))))))
