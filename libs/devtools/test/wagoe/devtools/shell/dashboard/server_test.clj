@@ -8,6 +8,7 @@
             ;; integrant.repl). Without them Apply stops at an earlier
             ;; "cannot resolve" branch and the case below is never reached.
             [integrant.repl]
+            [integrant.repl.state]
             [wagoe.devtools.shell.repl]
             [clj-http.lite.client :as http])
   (:import [java.net ServerSocket]))
@@ -105,9 +106,8 @@
   ;; "not found" and returns nil without throwing, which Apply used to count as
   ;; a restart: the response said "Config applied successfully" and nothing
   ;; changed. It must refuse, and say why.
-  (let [{:keys [port] :as started}
-        (ig/init-key :wagoe/dashboard {:port         (free-port)
-                                       :ig-config-fn (fn [] {:wagoe/http {:port 3000}})})]
+  ;; No prep fn either, as wagoe.main leaves none: (go) is still the answer.
+  (let [{:keys [port] :as started} (ig/init-key :wagoe/dashboard {:port (free-port)})]
     (try
       (let [resp (http/post (str "http://localhost:" port "/dashboard/fragments/config-apply")
                             {:form-params      {"config-:wagoe/http" "{:port 3001}"}
@@ -137,6 +137,35 @@
         (is (str/includes? (:body resp) "applied successfully"))
         (is (= {:n 2} (get @state-sys ::probe)) "the live component was replaced"))
       (finally
+        (alter-var-root state-sys (constantly nil))
+        (alter-var-root state-cfg (constantly nil))
+        (wagoe.devtools.shell.dashboard.server/clear-config-overrides!)
+        (ig/halt-key! :wagoe/dashboard started)))))
+
+(deftest ^:integration config-apply-rebuilds-with-the-repl-prep-fn
+  ;; No :ig-config-fn: the prep fn the app gave set-prep! is what rebuilds.
+  ;; Apply wraps it, so a second Apply must find the app's fn under the wrapper
+  ;; rather than wrap the wrapper.
+  (let [state-sys  (resolve 'integrant.repl.state/system)
+        state-cfg  (resolve 'integrant.repl.state/config)
+        app-prep   (fn [] {::probe {:n 1}})
+        prev-prep  integrant.repl.state/preparer
+        {:keys [port] :as started} (ig/init-key :wagoe/dashboard {:port (free-port)})
+        apply!     (fn [edn]
+                     (:body (http/post (str "http://localhost:" port "/dashboard/fragments/config-apply")
+                                       {:form-params      {(str "config-" ::probe) edn}
+                                        :throw-exceptions false})))]
+    (try
+      (integrant.repl/set-prep! app-prep)
+      (alter-var-root state-cfg (constantly {::probe {:n 1}}))
+      (alter-var-root state-sys (constantly {::probe {:n 1}}))
+      (is (str/includes? (apply! "{:n 2}") "applied successfully"))
+      (is (str/includes? (apply! "{:n 3}") "applied successfully"))
+      (is (= {:n 3} (get @state-sys ::probe)))
+      (is (= {::probe {:n 3}} (integrant.repl.state/preparer))
+          "the prep fn is the app's own with the edits on top")
+      (finally
+        (integrant.repl/set-prep! prev-prep)
         (alter-var-root state-sys (constantly nil))
         (alter-var-root state-cfg (constantly nil))
         (wagoe.devtools.shell.dashboard.server/clear-config-overrides!)
