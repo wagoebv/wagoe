@@ -236,13 +236,28 @@
             (update m (if (sequential? field) (first field) field) (fnil conj []) message))
           {} errors))
 
+(defn- toast-json
+  "A toast for components.js as header-safe JSON; `message` a string or a
+   catalogue key, translated for `request`."
+  [request type message]
+  (let [t (or (i18n-middleware/resolve-t-fn request) (:i18n/t request) name)]
+    (cheshire/generate-string {:type type :message (if (keyword? message) (t message) message)}
+                              {:escape-non-ascii true})))
+
 (defn- redirect-with-toast
   "Sends htmx to `location` with a toast to show there: components.js keeps
    the X-Toast across the redirect. A flash would not, nothing renders it."
-  [location type message]
+  [request location type message]
   (-> (response/response "")
       (response/header "HX-Redirect" location)
-      (response/header "X-Toast" (cheshire/generate-string {:type type :message message}))))
+      (response/header "X-Toast" (toast-json request type message))))
+
+(defn- with-error-toast
+  "Failed `response` with `message` as a toast: htmx swaps no 4xx/5xx body,
+   so a button's request would fail silently."
+  [response request message]
+  (assoc-in response [:headers "HX-Trigger"]
+            (str "{\"showToast\":" (toast-json request :error message) "}")))
 
 (def ^:private htmx-no-cache-headers
   {"Cache-Control" "no-store, no-cache, must-revalidate, max-age=0"
@@ -949,17 +964,22 @@
               get-request      {:query-params qp}]
           (fragment-handler get-request)))
       (catch IllegalArgumentException _
-        (html-response request (ui/error-message "Invalid user ID in bulk operation") 400))
+        (-> (html-response request (ui/error-message "Invalid user ID in bulk operation") 400)
+            (with-error-toast request "Invalid user ID in bulk operation")))
 
       (catch clojure.lang.ExceptionInfo e
         (let [data (ex-data e)]
           (cond
-            (= :bad-request (:type data)) (html-response request (ui/error-message (user-facing-message e)) 400)
-            (user-core/refusal? e)        (refused request e)
-            :else                         (server-error request e "Bulk user operation failed"))))
+            (= :bad-request (:type data)) (-> (html-response request (ui/error-message (user-facing-message e)) 400)
+                                              (with-error-toast request (user-facing-message e)))
+            (user-core/refusal? e)        (-> (refused request e)
+                                              (with-error-toast request (or (:message-key data) (ex-message e))))
+            :else                         (-> (server-error request e "Bulk user operation failed")
+                                              (with-error-toast request :common/error-generic)))))
 
       (catch Exception e
-        (server-error request e "Unexpected error in bulk-update-users-htmx-handler")))))
+        (-> (server-error request e "Unexpected error in bulk-update-users-htmx-handler")
+            (with-error-toast request :common/error-generic))))))
 
 (defn- send-welcome-email!
   "Send welcome email to a newly created user through the email lib.
@@ -1173,17 +1193,20 @@
             current-user (:user request)]
         ;; Check if current user is admin
         (if-not (= :admin (:role current-user))
-          (html-response request
-                         (layout/error-layout 403 "Access Denied"
-                                              "Only administrators can permanently delete users.")
-                         403)
+          (-> (html-response request
+                             (layout/error-layout 403 "Access Denied"
+                                                  "Only administrators can permanently delete users.")
+                             403)
+              (with-error-toast request "Only administrators can permanently delete users."))
           (do
             (user-ports/permanently-delete-user user-service uuid)
-            (redirect-with-toast "/web/users" :success "User permanently deleted"))))
+            (redirect-with-toast request "/web/users" :success :user/toast-user-deleted))))
       (catch IllegalArgumentException _
-        (html-response request (ui/error-message "Invalid user ID") 400))
+        (-> (html-response request (ui/error-message "Invalid user ID") 400)
+            (with-error-toast request "Invalid user ID")))
       (catch Exception e
-        (server-error request e "Error permanently deleting user")))))
+        (-> (server-error request e "Error permanently deleting user")
+            (with-error-toast request :common/error-generic))))))
 
 ;; =============================================================================
 ;; Session Management Handlers
@@ -1247,12 +1270,14 @@
                                    (UUID/fromString (get-in request [:path-params :session-id])))
             sessions-url (str "/web/users/" user-id "/sessions")]
         (if invalidated
-          (redirect-with-toast sessions-url :success "Session revoked successfully")
-          (redirect-with-toast sessions-url :error "Session not found or already ended")))
+          (redirect-with-toast request sessions-url :success :user/toast-session-revoked)
+          (redirect-with-toast request sessions-url :error :user/toast-session-not-found)))
       (catch IllegalArgumentException _
-        (html-response request (ui/error-message "Invalid session") 400))
+        (-> (html-response request (ui/error-message "Invalid session") 400)
+            (with-error-toast request "Invalid session")))
       (catch Exception e
-        (server-error request e "Error revoking session")))))
+        (-> (server-error request e "Error revoking session")
+            (with-error-toast request :common/error-generic))))))
 
 (defn revoke-all-sessions-handler
   "Handler for revoking all user sessions (POST /web/users/:id/sessions/revoke-all).
@@ -1273,11 +1298,13 @@
             keep-current? (= "true" (get-in request [:form-params "keep-current"]))]
         (user-ports/logout-user-everywhere user-service uuid
                                            (when keep-current? (get-in request [:session :id])))
-        (redirect-with-toast (str "/web/users/" user-id "/sessions") :success "Sessions revoked successfully"))
+        (redirect-with-toast request (str "/web/users/" user-id "/sessions") :success :user/toast-sessions-revoked))
       (catch IllegalArgumentException _
-        (html-response request (ui/error-message "Invalid user ID") 400))
+        (-> (html-response request (ui/error-message "Invalid user ID") 400)
+            (with-error-toast request "Invalid user ID")))
       (catch Exception e
-        (server-error request e "Error revoking all sessions")))))
+        (-> (server-error request e "Error revoking all sessions")
+            (with-error-toast request :common/error-generic))))))
 
 ;; =============================================================================
 ;; Audit Trail Handlers

@@ -210,6 +210,10 @@
  :user/confirm-revoke-all-sessions "Revoke all other sessions? This signs out every other device."
  :user/confirm-bulk-action     "Apply this action to the selected users?"
  :user/confirm-delete-permanently "This irreversibly deletes the user and all related data. Delete permanently?"
+ :user/toast-user-deleted "User permanently deleted"
+ :user/toast-session-revoked "Session revoked"
+ :user/toast-session-not-found "Session not found or already ended"
+ :user/toast-sessions-revoked "Other sessions revoked"
  :user/page-sessions-title     "Sessions for {name}"
 
  :user/audit-actor-system      "System"

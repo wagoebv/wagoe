@@ -1149,6 +1149,8 @@
         (is (= (str "/web/users/" uid "/sessions") (get-in resp [:headers "HX-Redirect"])))
         (is (re-find #"\"type\":\"success\"" (get-in resp [:headers "X-Toast"])))
         (is (= [[uid (first others)]] @revoked))))
-    (testing "a malformed id is a 400"
-      (is (= 400 (:status ((web-handlers/revoke-session-handler svc {})
-                           {:path-params {:id (str uid) :session-id "nope"}})))))))
+    (testing "a malformed id is a 400, said in a toast: htmx swaps no 400 body"
+      (let [resp ((web-handlers/revoke-session-handler svc {})
+                  {:path-params {:id (str uid) :session-id "nope"}})]
+        (is (= 400 (:status resp)))
+        (is (re-find #"\"showToast\".*Invalid session" (get-in resp [:headers "HX-Trigger"])))))))

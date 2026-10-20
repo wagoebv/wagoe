@@ -210,6 +210,10 @@
  :user/confirm-revoke-all-sessions "Alle andere sessies intrekken? Elk ander apparaat wordt uitgelogd."
  :user/confirm-bulk-action     "Deze actie uitvoeren op de geselecteerde gebruikers?"
  :user/confirm-delete-permanently "Dit verwijdert de gebruiker en alle bijbehorende gegevens onherroepelijk. Definitief verwijderen?"
+ :user/toast-user-deleted "Gebruiker definitief verwijderd"
+ :user/toast-session-revoked "Sessie ingetrokken"
+ :user/toast-session-not-found "Sessie niet gevonden of al beëindigd"
+ :user/toast-sessions-revoked "Andere sessies ingetrokken"
  :user/page-sessions-title     "Sessies voor {name}"
 
  :user/audit-actor-system      "Systeem"

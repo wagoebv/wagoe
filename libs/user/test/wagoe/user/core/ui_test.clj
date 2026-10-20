@@ -588,7 +588,16 @@
 
   (testing "the users table selects rows for the bulk form"
     (let [boxes (attrs-of (ui/users-table sample-users) #(= "ids[]" (:name %)))]
-      (is (= #{"123" "456"} (set (map :value boxes)))))))
+      (is (= #{"123" "456"} (set (map :value boxes))))))
+
+  (testing "a bulk action keeps the page; a filter, which reads only .table-sort, does not"
+    (let [table      (ui/users-table sample-users {:sort :name :dir :asc :page 3 :page-size 20} 60 {})
+          table-sort (->> (tree-seq #(or (vector? %) (seq? %)) seq table)
+                          (filter #(and (vector? %) (= "table-sort" (:class (second %)))))
+                          first)]
+      (is (= ["3"] (map :value (attrs-of table #(= "page" (:name %))))))
+      (is (some? table-sort))
+      (is (empty? (attrs-of table-sort #(= "page" (:name %))))))))
 
 ;; =============================================================================
 ;; Integration Tests

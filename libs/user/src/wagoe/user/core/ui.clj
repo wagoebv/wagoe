@@ -89,7 +89,7 @@
   (let [role (:role user)
         active? (boolean (:active user))
         badge (fn [text tone class]
-                (ui/badge text {:variant tone :class (str "c-badge tone-" (name tone) " " class)}))]
+                (update-in (ui/tone-badge text tone) [1 :class] str " " class))]
     [(:name user)
      (:email user)
      (badge (-> role name text/capitalize) (if (= :admin role) :info :neutral) "user-role-badge")
@@ -147,6 +147,8 @@
       [:div {:class "table-state" :hidden true}
        [:div {:class "table-sort"}
         (table-ui/hidden-inputs (dissoc table-params "page"))]
+       ;; Outside .table-sort: a filter starts at page one, a bulk action stays
+       (table-ui/hidden-inputs (select-keys table-params ["page"]))
        (table-ui/hidden-inputs filter-params)]
       (if (empty? users)
         [:div.empty-state [:t :user/empty-state-no-users]]
@@ -1183,14 +1185,17 @@
    Pure: false"
   [user sessions current-session-id opts]
   (let [current-time (:current-time opts)
-        zone-id (:zone-id opts)]
+        zone-id (:zone-id opts)
+        ;; The user pages behind the crumbs are for admins; a user viewing
+        ;; their own sessions gets the crumbs without links
+        admin? (= :admin (:role (:user opts)))]
     (admin-page
      [:t :user/page-sessions-title {:name (:name user)}]
      [:t :user/sessions-title]
      [:div.entity-detail-page.user-sessions-page
       (page-header
-       [[[:t :user/page-users-title] "/web/admin/users"]
-        [(:name user) (str "/web/admin/users/" (:id user))]
+       [[[:t :user/page-users-title] (when admin? "/web/admin/users")]
+        [(:name user) (when admin? (str "/web/admin/users/" (:id user)))]
         [[:t :user/sessions-title]]]
        [(when (> (count sessions) 1)
           [:button.button.ghost.button-danger-text
@@ -1246,7 +1251,7 @@
                   (:group-leave :grant-remove) :warning
                   :neutral)]
     (ui/badge (text/capitalize (str/replace action-name "-" " ")) {:variant variant
-                                            :class "audit-action-badge"})))
+                                                                   :class "audit-action-badge"})))
 
 (defn result-badge
   "Display result status with appropriate styling.
