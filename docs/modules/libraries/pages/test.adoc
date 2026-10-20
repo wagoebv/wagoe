@@ -37,7 +37,7 @@ Test-only, so it goes in the `:test` alias:
 (deftest placing-an-order
   (t/with-test-system [sys app/ig-config]
     (let [c (t/client sys)]
-      (t/sign-in! c "ann@example.com" "Passw0rd-for-Ann!")
+      (t/sign-in-as! c {:roles [:orders/editor]})
       (is (= 201 (:status (t/request c :post "/api/v1/orders" {:json {:sku "x"}}))))
       (is (= 1 (t/run-pending-jobs! sys)))
       (is (= [:order/placed] (map :type (t/drain-events! sys :orders)))))))
@@ -61,6 +61,12 @@ Test-only, so it goes in the `:test` alias:
 
 | `sign-in!`
 | Signs in through `/web/login`, as a browser does. Throws if no session came back.
+
+| `create-user!`, `sign-in-as!`
+| Registers a user with `:roles` on a group of their own, each a keyword or
+  `{:role kw :scope map}`, and returns it with its `:password`. `sign-in-as!`
+  signs the client in as them. A new app runs `:wagoe/authorization :enforce`,
+  so a user without a role gets 403.
 
 | `with-test-tenant`, `call-with-tenant`
 | A tenant for the body, deleted with its schema afterwards. Send

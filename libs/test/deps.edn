@@ -8,7 +8,8 @@
          wagoe/jobs           {:local/root "../jobs"}
          wagoe/events         {:local/root "../events"}
          wagoe/realtime       {:local/root "../realtime"}
-         wagoe/tenant         {:local/root "../tenant"}}
+         wagoe/tenant         {:local/root "../tenant"}
+         wagoe/user           {:local/root "../user"}}
 
  :aliases
  {:test      {:extra-paths ["test"]

@@ -93,3 +93,21 @@
                                      (:id tenant)))]
       (is (nil? (tenant-ports/find-tenant-by-id repo id)))
       (is (nil? (tenant-ports/find-tenant-by-id repo acme))))))
+
+(deftest ^:integration signs-in-as-a-user-holding-roles
+  (t/with-test-system [sys {:ig-config app/ig-config
+                            :config (with-modules {:wagoe/authorization {:mode :enforce}})}]
+    (testing "under :enforce, signed in is not enough"
+      (let [c (t/client sys)]
+        (t/sign-in-as! c {})
+        (is (= 403 (:status (t/request c :get "/web/admin/"))))))
+    (testing "a role on the user's group lets them in"
+      (let [c    (t/client sys)
+            user (t/sign-in-as! c {:roles [:admin.users/viewer]})]
+        (is (= 200 (:status (t/request c :get "/web/admin/"))))
+        (is (= #{:admin.users/read}
+               (set (map :permission (user-ports/user-grants (:wagoe/user-group-service sys) user)))))))
+    (testing "a role narrowed by a scope"
+      (let [user (t/create-user! sys {:roles [{:role :admin.users/viewer :scope {:domain-id 42}}]})]
+        (is (= [{:domain-id 42}]
+               (map :scope (user-ports/user-grants (:wagoe/user-group-service sys) user))))))))
