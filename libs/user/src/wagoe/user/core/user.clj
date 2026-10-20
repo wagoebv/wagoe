@@ -352,6 +352,7 @@
   [actor-platform-admin? before after]
   (when (and (admin-changes? before after) (not actor-platform-admin?))
     {:error {:type    :forbidden
+             :reason  :platform-admin-only
              :field   :role
              :message "Only a platform admin sets or clears the admin role"}}))
 

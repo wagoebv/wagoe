@@ -243,7 +243,11 @@
         (let [start   (promise)
               results [(demote a b start) (demote b a start)]]
           (deliver start true)
-          (is (= #{:demoted :last-admin} (set (map deref results))))
+          ;; The loser is refused as the last admin, or, when the other
+          ;; demotion committed first, as no longer an admin at all.
+          (let [outcomes (map deref results)]
+            (is (= 1 (count (filter #{:demoted} outcomes))) (pr-str outcomes))
+            (is (some #{:last-admin :platform-admin-only} outcomes) (pr-str outcomes)))
           (is (= 1 (count (:users (user-ports/list-users users {:filter-role :admin :filter-active true}))))
               "one admin remains")
           ;; Promote both back for the next round.
