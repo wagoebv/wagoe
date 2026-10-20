@@ -233,7 +233,8 @@
   transform: scaleX(1);
 }
 
-.entity-list a:hover::before {
+.entity-list a:hover::before,
+.entity-list a:focus-visible::before {
   height: 40%;
 }
 
@@ -260,7 +261,6 @@
 /* A long label truncates, rather than pushing the icon and chevron out */
 .nav-text,
 .nav-flyout-title {
-  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
