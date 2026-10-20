@@ -34,14 +34,17 @@
              (sut/resolve-rights registry {:departments #{10}} assignment)))
       (is (= #{11} (get-in (sut/resolve-rights registry {:departments #{11}} assignment) [0 :scope :department-id]))))
     (testing "nothing resolved is no rights, not rights everywhere"
-      (is (= [] (sut/resolve-rights registry {:departments #{}} assignment))))
+      (is (= [] (sut/resolve-rights registry {:departments #{}} assignment)))
+      (is (= [] (sut/resolve-rights registry {:departments #{nil}} assignment)) "a nil is no department"))
     (testing "a source nothing resolves gives no rights"
       (is (= [] (sut/resolve-rights registry {} [{:permission :orders/read :scope {:domain-id :user/domain}}]))))
     (testing "expand runs after the source, and covers departments added later"
       (let [user {:departments #{1}}]
         (is (= #{1 10 11} (get-in (sut/resolve-rights registry user assignment) [0 :scope :department-id])))
         (swap! org-tree update 1 conj 12)
-        (is (contains? (get-in (sut/resolve-rights registry user assignment) [0 :scope :department-id]) 12))))
+        (try
+          (is (contains? (get-in (sut/resolve-rights registry user assignment) [0 :scope :department-id]) 12))
+          (finally (swap! org-tree update 1 disj 12)))))
     (testing "a fixed value, and no scope"
       (is (= [{:permission :orders/read :scope {:domain-id #{42}}}
               {:permission :orders/write :scope {}}]

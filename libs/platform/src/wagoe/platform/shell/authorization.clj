@@ -45,7 +45,7 @@
   (when-let [invalid (seq (core/invalid-route-scopes (ports/scopes registry) routes))]
     (config-error! {:type    :configuration-error
                     :message (str "Routes say a :scope that is neither :handler nor a map of declared"
-                                  " scope keys to :path/<param>: "
+                                  " scope keys to :path/<param> parameters of the route: "
                                   (pr-str (mapv (juxt :path :scope) invalid)))
                     :routes  (vec invalid)})))
 
@@ -53,18 +53,23 @@
 ;; Scopes
 ;; =============================================================================
 
+(defn- source-resolver
+  "A fn from a source to its values for `user`, each source resolved once.
+   No values when nothing resolves it, or a member has none: a nil is no value."
+  [sources user]
+  (memoize
+   (fn [source]
+     (if-let [resolver (get-in sources [source :resolve])]
+       (into #{} (remove nil?) (resolver user))
+       (do (log/error "A right's scope names a source nothing resolves; it gives no rights"
+                      {:source source})
+           #{})))))
+
 (defn- scope-values
-  "What `v`, the value of scope key `k`, stands for for `user`: a source
-   resolved, then `k`'s `:expand`. Empty when a source resolves to nothing or
-   has no resolver."
-  [{:keys [scopes sources]} user k v]
-  (let [values (if (scope/source? v)
-                 (if-let [resolver (get-in sources [v :resolve])]
-                   (set (resolver user))
-                   (do (log/error "A right's scope names a source nothing resolves; it gives no rights"
-                                  {:scope-key k :source v})
-                       #{}))
-                 #{v})
+  "What `v`, the value of scope key `k`, stands for: a source resolved, then
+   `k`'s `:expand`."
+  [scopes resolve-source k v]
+  (let [values (if (scope/source? v) (resolve-source v) #{v})
         expand (get-in scopes [k :expand])]
     (if (and expand (seq values)) (set (expand values)) values)))
 
@@ -75,11 +80,12 @@
    added later counts. A right whose scope resolves to nothing for a key is
    dropped: it gives no rights, not rights everywhere."
   [registry user rights]
-  (let [declared {:scopes (ports/scopes registry) :sources (ports/scope-sources registry)}]
+  (let [scopes         (ports/scopes registry)
+        resolve-source (source-resolver (ports/scope-sources registry) user)]
     (into []
           (keep (fn [{:keys [scope] :as right}]
                   (when-let [resolved (reduce-kv (fn [acc k v]
-                                                   (let [values (scope-values declared user k v)]
+                                                   (let [values (scope-values scopes resolve-source k v)]
                                                      (if (seq values) (assoc acc k values) (reduced nil))))
                                                  {}
                                                  scope)]
@@ -100,14 +106,9 @@
       {:request (assoc request :wagoe/scopes (:scopes decision))})))
 
 (defn scope-middleware
-  "Reitit middleware running `authorize-scope` on every endpoint not
-   `:public true`, with the endpoint's `:scope`. A platform admin holds every
-   permission everywhere.
-
-   `rights-of` is (fn [request]) -> the caller's rights as the user module
-   hands them over; `permission-of` (fn [request]) -> the permission the
-   route needs. The authorization interceptor supplies both; until it does,
-   nothing mounts this and routes behave as before."
+  "Reitit middleware running `authorize-scope` on every non-public endpoint; a
+   platform admin holds everywhere. `rights-of` and `permission-of` take the
+   request. Unmounted until the authorization interceptor supplies both."
   [registry {:keys [rights-of permission-of]}]
   {:name    ::scope
    :compile (fn [data _opts]

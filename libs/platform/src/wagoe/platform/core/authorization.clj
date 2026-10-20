@@ -66,10 +66,15 @@
 (defn- if-equal [have entry]
   (when (= (dissoc have :module) (dissoc entry :module)) have))
 
-(defn- by-rank-or-equal
-  "As `by-rank`, except that two of equal rank stand when they are the same."
+(defn- scope-by-rank
+  "As `by-rank`, except that two of equal rank stand when they are the same.
+   The loser's `:schema` is kept when the winner names none, so a key the
+   groups schema typed `:int` still decodes a lookup's string."
   [have entry]
-  (if (= (rank have) (rank entry)) (if-equal have entry) (by-rank have entry)))
+  (if (= (rank have) (rank entry))
+    (if-equal have entry)
+    (let [kept (by-rank have entry)]
+      (merge (select-keys (if (identical? kept have) entry have) [:schema]) kept))))
 
 (defn- add-entries
   "`entries` of `module-key` into `acc` under `part`. Where a key is already
@@ -148,7 +153,7 @@
                                         (add-entries :permissions by-rank k
                                                      (update-vals permissions #(merge {:source :declared} %)))
                                         (add-entries :roles if-equal k roles)
-                                        (add-entries :scopes by-rank-or-equal k
+                                        (add-entries :scopes scope-by-rank k
                                                      (update-vals scopes #(merge {:source :declared} %)))
                                         (add-entries :scope-sources if-equal k scope-sources))]
                             (cond-> acc (:error acc) reduced)))
@@ -174,11 +179,25 @@
              :when (and (some? p) (not (contains? permissions p)))]
          {:path path :permission p})))
 
+(defn- path-param-names
+  "The parameter names in a Reitit `path`: `:id`, `*rest`, `{id}`, `{*rest}`."
+  [path]
+  (into #{} (map (fn [[_ bare braced]] (or bare braced)))
+        (re-seq #"[:*]([^/{}:*]+)|\{\*?([^}]+)\}" (str path))))
+
+(defn- unknown-param?
+  "Whether route scope `s` names a `:path/<param>` the route's `path` lacks,
+   which would answer 404 to every scoped holder."
+  [path s]
+  (and (map? s)
+       (not-every? (comp (path-param-names path) name) (vals s))))
+
 (defn invalid-route-scopes
   "The `:scope`s in `routes` that `core.scope/route-scope?` refuses for the
-   registry's `scopes`, as [{:path :scope}]. Like `:permission`."
+   registry's `scopes`, or that name a path parameter the route lacks, as
+   [{:path :scope}]. Like `:permission`."
   [scopes routes]
   (vec (for [[path data] routes
              s (route-values :scope data)
-             :when (not (scope/route-scope? scopes s))]
+             :when (or (not (scope/route-scope? scopes s)) (unknown-param? path s))]
          {:path path :scope s})))

@@ -81,10 +81,13 @@
            (sut/unknown-route-permissions permissions routes)))))
 
 (deftest ^:unit a-scope-key-from-the-groups-schema-yields-to-a-declared-one
-  (is (= :wagoe/orders
-         (get-in (sut/build-registry {:wagoe/orders {:scopes {:domain-id {:label "Domain"}}}
-                                      :wagoe/user   {:scopes {:domain-id {:label "domain-id" :source :groups-schema}}}})
-                 [:scopes :domain-id :module]))))
+  (let [scope (get-in (sut/build-registry {:wagoe/orders {:scopes {:domain-id {:label "Domain"}}}
+                                           :wagoe/user   {:scopes {:domain-id {:label "domain-id" :schema :int
+                                                                               :source :groups-schema}}}})
+                      [:scopes :domain-id])]
+    (is (= :wagoe/orders (:module scope)))
+    (is (= "Domain" (:label scope)))
+    (is (= :int (:schema scope)) "keeping the type the groups schema gave it")))
 
 (deftest ^:unit scope-sources-need-a-resolver
   (let [dept (fn [_] #{7})]
@@ -110,8 +113,11 @@
                 ["/c/:domain-id" {:scope {:domain-id :path/domain-id} :get {:handler identity}}]
                 ["/d/:id" {:get {:handler identity :scope {:area-id :path/id}}}]
                 ["/e/:id" {:get {:handler identity :scope {:domain-id :id}}}]
-                ["/f" {:get {:handler identity :scope :everywhere}}]]]
+                ["/f" {:get {:handler identity :scope :everywhere}}]
+                ["/g/:domian-id" {:get {:handler identity :scope {:domain-id :path/domain-id}}}]
+                ["/h/{domain-id}" {:get {:handler identity :scope {:domain-id :path/domain-id}}}]]]
     (is (= [{:path "/d/:id" :scope {:area-id :path/id}}
             {:path "/e/:id" :scope {:domain-id :id}}
-            {:path "/f" :scope :everywhere}]
+            {:path "/f" :scope :everywhere}
+            {:path "/g/:domian-id" :scope {:domain-id :path/domain-id}}]
            (sut/invalid-route-scopes scopes routes)))))
