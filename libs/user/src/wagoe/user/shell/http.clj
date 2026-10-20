@@ -721,16 +721,29 @@
   [config]
   (get-in config [:active :wagoe/settings :features :user-web-ui :enabled?] true))
 
+(def nav
+  "This module's sidebar group: the admin's users and its own admin pages."
+  {:user {:label    [:t :user/nav-title]
+          :icon     :users
+          :entities [:users]
+          :items    [{:href "/web/admin/groups" :icon :shield :access :admin
+                      :label [:t :admin/groups-title] :description [:t :admin/groups-description]}
+                     {:href "/web/audit" :icon :file-text :access :platform-admin
+                      :label [:t :admin/audit-trail-title] :description [:t :admin/audit-trail-description]}]}})
+
 (defn user-routes
   "This module's contribution to the application's route table.
 
    :api    versioned, mounted under /api/v1
    :web    mounted under /web, and absent when the web UI is switched off
-   :static `/` when `:landing` is set; user's assets are served at handler level"
+   :static `/` when `:landing` is set; user's assets are served at handler level
+   :nav    its sidebar group, with the web UI"
   [user-service mfa-service config]
-  {:api    (api-routes user-service mfa-service)
-   :web    (when (web-ui-enabled? config) (web-routes user-service mfa-service config))
-   :static (landing/root-routes config)})
+  (let [web? (web-ui-enabled? config)]
+    {:api    (api-routes user-service mfa-service)
+     :web    (when web? (web-routes user-service mfa-service config))
+     :static (landing/root-routes config)
+     :nav    (when web? nav)}))
 
 (defn group-routes
   "Group management, mounted under /web/admin beside the admin UI: admins only.

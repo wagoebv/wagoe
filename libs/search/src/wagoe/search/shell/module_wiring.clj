@@ -55,7 +55,11 @@
    :static []
    ;; Mounted alongside the admin UI rather than at /web, because that is where
    ;; a reader looks for it. Platform used to hold this fact (BOU-330).
-   :web-prefix "/web/admin"})
+   :web-prefix "/web/admin"
+   :nav        {:search {:label [:t :search/nav-title]
+                         :icon  :search
+                         :items [{:href "/web/admin/search" :icon :database :access :admin
+                                  :label [:t :search/page-indices-heading]}]}}})
 
 (defmethod ig/halt-key! :wagoe/search-routes
   [_ _routes]

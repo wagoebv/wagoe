@@ -33,6 +33,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **Roles on groups, the Everyone group and provider memberships** (BOU-771): groups hold code or managed roles in a
   scope; grants and `:viewer` users move over at first boot. Narrow Everyone's editor roles when ready.
+- **Admin sidebar grouped by module** (BOU-777): modules contribute `:nav` in their routes. Set `:module` on an admin
+  entity to move it out of "Other", and `:wagoe/settings :nav-order` to order the groups.
 - **Admin many-to-many through a join table** (BOU-778): detected, edited with checkboxes or a multiple combobox, shown
   as chips, filterable. Allowlist the join table; `:join-table` overrides detection.
 - **Scope keys, route `:scope` and `scope-filter`** (BOU-773): declare scope keys under `:authorization :scopes`, which
@@ -230,6 +232,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Admin `:writer` entities could save a record without its many-to-many links, and kept join rows on hard delete**
+  (BOU-779). The writer now runs in the admin's transaction. Nothing to do.
+- **A nested `db/with-transaction` committed its writes early**, so an outer rollback kept them (BOU-779). It now joins
+  the outer transaction. Nothing to do.
 - **The admin sidebar forgot its pin and collapsed on every page** (BOU-761): the pin, and a pinned sidebar's
   collapsed state, now survive navigation and reload. Nothing to do.
 - **Admin showed a column with a digit in its name as empty** (BOU-760), e.g. `e2e_customer_id` in lists and forms.

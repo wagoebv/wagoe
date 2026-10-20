@@ -230,7 +230,6 @@
                                                                  {:display (support/display-options config request)})
                                       {:user user
                                        :current-entity entity-name
-                                       :entities entities
                                        :entity-configs entity-configs
                                        :logo-url (:logo-url config)
                                        :flash {:type :success
@@ -260,7 +259,6 @@
                                        (admin-ui/entity-detail-page entity-name entity-config nil (or field-errors {}) permissions (rejected-create-opts admin-service config entity-configs entity-name request form-data nested))
                                        {:user user
                                         :current-entity entity-name
-                                        :entities entities
                                         :entity-configs entity-configs
                                         :logo-url (:logo-url config)
                                         :flash {:type :error
@@ -291,7 +289,6 @@
                                       (admin-ui/entity-detail-page entity-name entity-config nil errors permissions (rejected-create-opts admin-service config entity-configs entity-name request form-data nested))
                                       {:user user
                                        :current-entity entity-name
-                                       :entities entities
                                        :entity-configs entity-configs
                                        :logo-url (:logo-url config)
                                        :flash {:type :error
@@ -379,7 +376,6 @@
                                                                (:page-opts ctx))
                                   {:user user
                                    :current-entity entity-name
-                                   :entities (:entities ctx)
                                    :entity-configs (:entity-configs ctx)
                                    :logo-url (:logo-url config)
                                    ;; A toast in the new page's region: out of band it would go with the body
@@ -403,7 +399,6 @@
                                                                                       [:t :admin/flash-validation-errors])}))
                                       {:user user
                                        :current-entity entity-name
-                                       :entities (:entities ctx)
                                        :entity-configs (:entity-configs ctx)
                                        :logo-url (:logo-url config)}))
               (assoc :status (if conflict 409 422))))))))

@@ -251,8 +251,7 @@
 
 (defn- admin-page
   "`content` in the admin shell under `heading` in the topbar. `opts` carries
-   the shell's :nav and :logo-url, which come from the admin; without them the
-   sidebar lists no entities."
+   the admin's :logo-url; the sidebar is the navigation the platform binds."
   [title heading content opts]
   (shell/shell-page title [:div.workflow-page content]
                     (assoc opts :page-title heading)))
@@ -272,7 +271,7 @@
      instances - vector of WorkflowInstance maps
      params    - query-params map (string keys from ring request)
      opts      - map with :user, :flash, :states (for the filter), and the
-                 admin shell's :nav and :logo-url
+                 admin's :logo-url
 
    Returns:
      Complete HTML page structure (doctype + html)"

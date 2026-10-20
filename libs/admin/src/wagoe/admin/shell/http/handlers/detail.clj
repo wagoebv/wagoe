@@ -74,7 +74,6 @@
                               (admin-ui/entity-detail-page entity-name entity-config record {} permissions (:page-opts ctx))
                               {:user user
                                :current-entity entity-name
-                               :entities (:entities ctx)
                                :entity-configs (:entity-configs ctx)
                                :logo-url (:logo-url config)}))))))
 
@@ -139,7 +138,6 @@
                                                                                              entity-name nil {})})
                                    {:user user
                                     :current-entity entity-name
-                                    :entities entities
                                     :entity-configs entity-configs
                                     :logo-url (:logo-url config)}))))))))
 

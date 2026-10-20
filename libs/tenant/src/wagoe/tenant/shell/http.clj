@@ -235,7 +235,8 @@
 
 (defn tenant-routes
   "This module's contribution to the route table: Reitit route data under
-   :api, at paths relative to /api/v1. Every route requires the admin role."
+   :api, at paths relative to /api/v1, and its sidebar group. Every route
+   requires the admin role."
   [tenant-service db-context _config]
   {:api
    (mapv
@@ -300,7 +301,9 @@
               :tags ["tenants"]
               :responses {200 {:description "Tenant provisioned successfully"}
                           404 {:description "Tenant not found"}
-                          501 {:description "Not supported (requires PostgreSQL)"}}}}]])})
+                          501 {:description "Not supported (requires PostgreSQL)"}}}}]])
+   ;; The sidebar group for the admin's tenants
+   :nav {:tenant {:label [:t :tenant/nav-title] :icon :building-2 :entities [:tenants]}}})
 
 ;; =============================================================================
 ;; Data export

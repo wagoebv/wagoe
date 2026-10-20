@@ -20,6 +20,8 @@
    [wagoe.admin.shell.http.handlers.detail :as detail]
    [wagoe.admin.shell.http.handlers.inline :as inline]
    [wagoe.admin.shell.http.handlers.list :as list-handlers]
+   [wagoe.admin.core.ui.layout :as layout]
+   [wagoe.admin.ports :as ports]
    [wagoe.user.shell.middleware :as user-middleware]))
 
 ;; Facade re-export: consumers (e.g. http_test) resolve
@@ -119,6 +121,19 @@
        :delete {:handler (delete/delete-entity-handler admin-service schema-provider config)
                 :summary "Delete entity"}}]]))
 
+(defn- nav-contribution
+  "The admin's sidebar items, from each entity's resolved config, or its own
+   config when that cannot be resolved (its table is missing). Only :allowlist
+   discovery lists; the other modes throw, and must fail the admin's pages,
+   not every page's sidebar."
+  [schema-provider config]
+  (let [entities (try (ports/list-available-entities schema-provider)
+                      (catch clojure.lang.ExceptionInfo _ []))]
+    (layout/nav entities
+                (into {} (map (fn [e] [e (try (ports/get-entity-config schema-provider e)
+                                              (catch Exception _ (get-in config [:entities e])))]))
+                      entities))))
+
 (defn admin-routes
   "Admin's contribution to the application's route table.
 
@@ -128,6 +143,10 @@
   {:api []  ; Week 2+: JSON API endpoints
    :web (web-routes admin-service schema-provider config user-service)
    :static []  ; Week 2+: Admin-specific static assets
+
+   ;; Its entities, for the sidebar, asked per page: whether one is a join
+   ;; table, and so hidden, needs its table, which may come after boot.
+   :nav #(nav-contribution schema-provider config)
 
    ;; Where these mount. Platform held this for six modules and a seventh could
    ;; not contribute routes without editing it (BOU-330).

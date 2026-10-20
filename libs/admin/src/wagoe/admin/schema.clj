@@ -335,6 +335,8 @@
               :hide-fields :readonly-fields :field-order :default-sort
               :default-sort-dir :soft-delete :create-redirect-url
               [:writer :keyword]
+              ;; The sidebar group the entity sits in (BOU-777)
+              [:module [:or :keyword :string]]
               ;; true: a join table whatever its keys and columns; false: never
               [:join-table :boolean]
               [:fields [:map-of :keyword FieldOverride]]
