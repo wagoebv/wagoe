@@ -239,6 +239,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Flash messages were never shown** (BOU-783): a response's `:flash` now reaches the next request, in a `wagoe-flash`
+  cookie. Group changes and the welcome after registration show their toast; nothing to do.
 - **Admin sidebar: a long group name pushed its icon and chevron out, and hovered items were white on white** in the
   light theme (BOU-780). Long names truncate with the full name as a tooltip. Nothing to do.
 - **Turning off two-factor authentication on the profile refused every password** (BOU-768). Nothing to do.
