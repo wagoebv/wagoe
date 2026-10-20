@@ -163,6 +163,7 @@
    apart is the whole point of it. An application names its own settings blocks
    in `:wagoe/config-keys`."
   {:wagoe/api-versioning "wagoe.platform.shell.http.versioning"
+   :wagoe/authorization  "wagoe.platform.shell.system.wiring, for the authorization interceptor"
    :wagoe/pagination     "wagoe.user.shell.module-wiring, for the audit repository"
    :wagoe/session-pruner "wagoe.user.shell.module-wiring"
    :wagoe/privacy        "wagoe.platform.shell.system.config, for retention"

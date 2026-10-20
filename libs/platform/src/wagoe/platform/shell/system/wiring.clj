@@ -51,6 +51,7 @@
             [wagoe.platform.shell.utils.port-manager :as port-manager]
             [wagoe.platform.shell.rpc.server :as rpc-server]
             [wagoe.platform.shell.privacy :as privacy]
+            [wagoe.platform.core.authorization :as authorization-core]
             [wagoe.platform.shell.authorization :as authorization]
             [wagoe.platform.ports.authorization :as ports.authorization]
             [reitit.core]
@@ -561,8 +562,18 @@
                                                       "")})
                                :summary "Prometheus metrics scrape endpoint"})}]]))
 
+(defn- authorization-mode
+  "`:wagoe/authorization :mode`, `:off` when unset. Throws on any other value:
+   a typo must not switch checks off."
+  [config]
+  (let [mode (or (get-in config [:active :wagoe/authorization :mode]) :off)]
+    (if (contains? authorization-core/modes mode)
+      mode
+      (throw (ex-info (str ":wagoe/authorization :mode is " (pr-str mode) "; it takes :off, :report or :enforce.")
+                      {:type :configuration-error :key :wagoe/authorization :value mode})))))
+
 (defmethod ig/init-key :wagoe/http-handler
-  [_ {:keys [module-routes logger metrics-emitter tracer error-reporter error-enricher config tenant-service db-context cache i18n i18n-middleware user-service request-capture? auth-middleware module-middleware extra-middleware router permission-registry]}]
+  [_ {:keys [module-routes logger metrics-emitter tracer error-reporter error-enricher config tenant-service db-context cache i18n i18n-middleware user-service request-capture? auth-middleware module-middleware extra-middleware router permission-registry rights]}]
   (log/info "Initializing top-level HTTP handler")
   (when (empty? auth-middleware)
     (log/warn (str "No authentication middleware is wired (no user module?). "
@@ -640,6 +651,14 @@
         ;; system; tests hand this key a placeholder, and `contains?` on a
         ;; keyword throws.
         settings      (if (map? router) router {})
+        mode          (authorization-mode config)
+        _             (when (and (not= :off mode) (nil? permission-registry))
+                        (throw (ex-info (str ":wagoe/authorization is " mode " but no permission registry is wired;"
+                                             " nothing would be checked.")
+                                        {:type :configuration-error :key :wagoe/authorization :value mode})))
+        _             (when (and (not= :off mode) (nil? rights))
+                        (log/warn (str ":wagoe/authorization is " mode " but no module supplies rights"
+                                       " (no user module?); only a platform admin holds a permission.")))
         router-config (merge {;; The application's own global middleware runs
                               ;; after the framework's pipeline, so it sees a
                               ;; request the framework has already prepared.
@@ -655,7 +674,10 @@
                               ;; Every route requires a signed-in user unless
                               ;; it is `:public true` (BOU-568). Installed
                               ;; here, not per module, so none can forget it.
-                              :authentication {:middleware (vec auth-middleware)}}
+                              :authentication {:middleware (vec auth-middleware)}
+                              :authorization  (when (not= :off mode)
+                                                [(authorization/authorization-middleware
+                                                  permission-registry rights {:mode mode})])}
                              ;; select-keys keeps a key set to nil: Reitit reads `:conflicts nil` as
                              ;; "do not check" (BOU-356).
                              (select-keys settings [:coercion :muuntaja :multipart :conflicts]))
@@ -665,6 +687,10 @@
         ;; Checked on the router's flattened routes, where data is inherited.
         _ (when-let [router (and permission-registry (:reitit/router (meta handler)))]
             (authorization/assert-route-permissions! permission-registry (reitit.core/routes router)))
+        _ (when-let [router (and (not= :off mode) (:reitit/router (meta handler)))]
+            (when-let [unruled (seq (authorization-core/unruled-routes (reitit.core/routes router)))]
+              (log/warn "Routes no authorization rule covers; :enforce refuses them to all but a platform admin"
+                        {:mode mode :routes (vec unruled)})))
 
         ;; Wrap handler with version headers middleware
         versioned-handler (http-versioning/wrap-handler-with-version-headers handler config)
@@ -709,7 +735,8 @@
                :system-services (keys system)
                :api-versioning-enabled true
                :request-capture-enabled (boolean request-capture?)})
-    final-handler))
+    ;; The router, for whoever reads the route table off the system.
+    (vary-meta final-handler assoc :reitit/router (:reitit/router (meta handler)))))
 
 (defmethod ig/halt-key! :wagoe/http-handler
   [_ _handler]
