@@ -233,6 +233,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Admin sidebar: a long group name pushed its icon and chevron out, and hovered items were white on white** in the
+  light theme (BOU-780). Long names truncate with the full name as a tooltip. Nothing to do.
 - **Turning off two-factor authentication on the profile refused every password** (BOU-768). Nothing to do.
 - **Dev dashboard config editor: saving a section holding a function failed, and Apply needed `:ig-config-fn`** (BOU-781).
   Functions are left out of the editor and kept; Apply rebuilds with your `set-prep!` fn, so `:ig-config-fn` can go.
