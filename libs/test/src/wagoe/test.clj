@@ -114,13 +114,15 @@
 ;; Tenants
 ;; =============================================================================
 
+(defn- short-id [] (subs (str (random-uuid)) 0 8))
+
 (defn call-with-tenant
   "Create a tenant from `input` merged over a random slug and a name, call
    (f tenant), then delete it and its schema."
   [system input f]
   (let [tenant (tenant-ports/create-new-tenant
                 (:wagoe/tenant-service system)
-                (merge {:slug (str "test-" (subs (str (random-uuid)) 0 8))
+                (merge {:slug (str "test-" (short-id))
                         :name "Test tenant"}
                        input))
         repo   (:wagoe/tenant-repository system)]
@@ -262,20 +264,22 @@
    :roles, :email, :name, :password, :role (`:admin` for a platform admin).
    Returns the user with its :password."
   [system {:keys [roles] :as opts}]
-  (let [password (or (:password opts) (str "Test-Passw0rd-" (random-uuid)))
+  ;; The `!` passes a policy that requires a special character.
+  (let [password (or (:password opts) (str "Test-Passw0rd!-" (random-uuid)))
         user     (user-ports/register-user
                   (:wagoe/user-service system)
-                  (merge {:email (str "test-" (subs (str (random-uuid)) 0 8) "@example.com")
+                  (merge {:email (str "test-" (short-id) "@example.com")
                           :name  "Test user"
                           :role  :user}
                          (select-keys opts [:email :name :role])
-                         {:password password}))
-        groups   (:wagoe/user-group-service system)]
+                         {:password password}))]
     (when (seq roles)
-      (let [group (user-ports/create-group groups {:name (str "test-" (:id user))})]
-        (doseq [role roles]
-          (user-ports/add-group-role groups (:id group) (if (map? role) role {:role role})))
-        (user-ports/add-group-member groups (:id group) (:id user))))
+      ;; One call checks every role before writing anything.
+      (user-ports/import-groups! (:wagoe/user-group-service system)
+                                 [{:name    (str "test-" (:id user))
+                                   :members [(:id user)]
+                                   :roles   (mapv #(if (map? %) % {:role %}) roles)}]
+                                 {}))
     (assoc user :password password)))
 
 (defn sign-in-as!
