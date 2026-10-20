@@ -521,13 +521,12 @@
         :post {:middleware [auth-middleware]
                :handler    (web-handlers/logout-handler user-service config)
                :summary    "Logout current user"}}]
-      (when-let [handler (landing/dashboard-handler
-                          config #(web-handlers/dashboard-page-handler user-service mfa-service config))]
+      (when-let [handler (landing/dashboard-handler config)]
         ["/dashboard"
          {:no-doc     true
           :middleware [auth-middleware]
           :get {:handler handler
-                :summary "User dashboard page"}}])
+                :summary "Dashboard, or a redirect to it"}}])
       ;; User creation routes (admin-only). The admin panel delegates to this flow
       ;; for split-table entities like :users where the generic admin create cannot
       ;; write both auth_users and users atomically.
@@ -722,11 +721,13 @@
   (get-in config [:active :wagoe/settings :features :user-web-ui :enabled?] true))
 
 (def nav
-  "This module's sidebar group: the admin's users and its own admin pages."
+  "This module's sidebar group: the admin's users, the profile and its admin pages."
   {:user {:label    [:t :user/nav-title]
           :icon     :users
           :entities [:users]
-          :items    [{:href "/web/admin/groups" :icon :shield :access :admin
+          :items    [{:href "/web/profile" :icon :user
+                      :label [:t :user/nav-profile-title] :description [:t :user/nav-profile-description]}
+                     {:href "/web/admin/groups" :icon :shield :access :admin
                       :label [:t :admin/groups-title] :description [:t :admin/groups-description]}
                      {:href "/web/audit" :icon :file-text :access :platform-admin
                       :label [:t :admin/audit-trail-title] :description [:t :admin/audit-trail-description]}]}})

@@ -38,11 +38,12 @@
 ;; =============================================================================
 
 (defn admin-home-handler
-  "Handler for admin home page — shows dashboard with entity tiles."
+  "The dashboard, for every signed-in user: a tile per entity they may view,
+   and a card per page they may open."
   [admin-service schema-provider config]
   (fn [request]
-    (let [user (support/require-admin-user! request)
-          entities (ports/list-available-entities schema-provider)
+    (let [user (support/get-current-user request)
+          entities (permissions/filter-visible-entities user (ports/list-available-entities schema-provider))
           entity-configs (into {} (map (fn [e] [e (ports/get-entity-config schema-provider e)])) entities)
           stats (into {} (map (fn [e] [e {:count (ports/count-entities admin-service e {})}])) entities)]
       (support/html-response request

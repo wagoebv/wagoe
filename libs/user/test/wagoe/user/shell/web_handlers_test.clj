@@ -332,7 +332,7 @@
           request {:cookies {"session-token" {:value "valid-token"}}}
           response (handler request)]
       (is (= 302 (:status response)))
-      (is (= "/web/dashboard" (get-in response [:headers "Location"]))))))
+      (is (= "/web/admin/" (get-in response [:headers "Location"]))))))
 
 (deftest ^:contract user-detail-page-handler-test
   (testing "renders user detail page for existing user"
@@ -1007,15 +1007,15 @@
                                        "return-to" return-to}})
                        (get-in [:headers "Location"])))]
     (doseq [[return-to expected]
-            [["/\\evil.com"        "/web/dashboard"]
-             ["/%5Cevil.com"      "/web/dashboard"]
-             ["/%5cevil.com"      "/web/dashboard"]
-             ["//evil.com"        "/web/dashboard"]
-             ["/%2F%2Fevil.com"   "/web/dashboard"]
-             ["https://evil.com"  "/web/dashboard"]
-             ["/web/x\ty"        "/web/dashboard"]
-             ["/web/x\ny"        "/web/dashboard"]
-             [""                  "/web/dashboard"]
+            [["/\\evil.com"        "/web/admin/"]
+             ["/%5Cevil.com"      "/web/admin/"]
+             ["/%5cevil.com"      "/web/admin/"]
+             ["//evil.com"        "/web/admin/"]
+             ["/%2F%2Fevil.com"   "/web/admin/"]
+             ["https://evil.com"  "/web/admin/"]
+             ["/web/x\ty"        "/web/admin/"]
+             ["/web/x\ny"        "/web/admin/"]
+             [""                  "/web/admin/"]
              ["/web/x?y=1"        "/web/x?y=1"]
              ["/web/x#frag"       "/web/x#frag"]]]
       (is (= expected (location return-to)) (pr-str return-to)))))

@@ -221,9 +221,9 @@ client.
 
 == Landing page and dashboard
 
-After signing in, an administrator lands on `/web/admin/users` and everyone else on
-`/web/dashboard`, a generic page the user module serves. Both are configurable under
-`:wagoe/user`:
+After signing in, everyone lands on the dashboard, the admin's home at `/web/admin/`.
+Each user sees a card for each entity and page they may open. `/web/dashboard` redirects
+there. Without the admin module, the dashboard is `/web/profile`. This is configurable under `:wagoe/user`:
 
 [source,clojure]
 ----
@@ -236,7 +236,7 @@ After signing in, an administrator lands on `/web/admin/users` and everyone else
 ----
 
 `:login-redirect` is a map of role to path (`:default` covers roles it does not name,
-and unnamed keys keep the defaults above), or a symbol naming a function of the user
+and without it they land on the dashboard), or a symbol naming a function of the user
 and the login context (`:ip-address`, `:user-agent`, `:request`) that returns a path.
 An application module can contribute it as `:auth {:login-redirect (ig/ref …)}`, a
 function or a `wagoe.user.ports/ILoginRedirect`, the same way as `:mfa-required?`. A
@@ -244,7 +244,8 @@ function that returns nil or a path off this site sends the user to the default.
 `/web` for someone already signed in, unless `:landing` is set. A `return-to` on this site still wins.
 
 `:dashboard false` leaves `/web/dashboard` to the application; `{:handler sym}` serves
-that Ring handler there instead, behind the same sign-in check.
+that Ring handler there instead, behind the same sign-in check. Either way, users then
+land on `/web/dashboard`.
 
 `:home` is where the logo, "back" and dashboard links in the built-in layouts point. It
 defaults to `/web/dashboard`, or to `/web` with `:dashboard false`, which sends a
@@ -465,7 +466,7 @@ Other modules are not affected: `/` still redirects to `/web/login`, and the adm
 stays mounted while `:wagoe/admin` is active. Groups have no API; manage them through
 `:wagoe/user-group-service`.
 
-OpenID Connect sign-in lands on `/web/dashboard` by default; point `:login-redirect`
+OpenID Connect sign-in lands on the admin's dashboard by default; point `:login-redirect`
 at a page that exists.
 
 == Session management
