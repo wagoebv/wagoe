@@ -205,12 +205,13 @@
   ;; rendered raw database timestamps (BOU-382). Copied in rather than handing
   ;; the whole application config to the routes, which would let any handler
   ;; reach anything.
-  (let [settings      (resolve-scope-fns (with-defaults settings))
-        mode          (authorization-mode ctx)
+  (let [mode          (authorization-mode ctx)
+        ;; Before the defaults, which carry :require-role themselves
         _             (when (and (:require-role settings) (not= :off mode))
                         (log/warn (str "DEPRECATED :require-role in the admin config — under :wagoe/authorization"
                                        " :mode " mode " the admin reads admin.<entity>/read|write instead."
                                        " Drop it; removed in 2.0.")))
+        settings      (resolve-scope-fns (with-defaults settings))
         ;; Optional and one-way: wagoe.workflow depends on the admin, and
         ;; builds the port only when both are on (BOU-563).
         workflows?    (contains? (:enabled ctx) :wagoe/workflow)

@@ -337,9 +337,11 @@
          [:= (get field-aliases :deleted-at :deleted_at) nil])
        (when-let [scopes (:scopes options)]
          (scope-where entity-config field-aliases scopes))
-       (when-let [ids (seq (:ids options))]
-         [:in (get field-aliases :id (:primary-key entity-config :id))
-          (mapv type-conversion/uuid->string ids)])]
+       (when-let [ids (:ids options)]
+         (if (seq ids)
+           [:in (get field-aliases :id (:primary-key entity-config :id))
+            (mapv type-conversion/uuid->string ids)]
+           [:= 1 0]))]
       links))))
 
 ;; =============================================================================

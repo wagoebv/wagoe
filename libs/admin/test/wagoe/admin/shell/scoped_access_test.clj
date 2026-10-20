@@ -7,7 +7,10 @@
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest is testing use-fixtures]]
             [reitit.ring :as ring]
+            [wagoe.admin.core.permissions :as permissions]
+            [wagoe.admin.ports :as ports]
             [wagoe.admin.shell.http :as admin-http]
+            [wagoe.admin.shell.scoped-service :as scoped-service]
             [wagoe.admin.shell.schema-repository :as schema-repo]
             [wagoe.admin.shell.service :as service]
             [wagoe.i18n.shell.catalogue :as i18n-catalogue]
@@ -203,3 +206,13 @@
     (is (= #{"/web/admin/orders"} (hrefs viewer)))
     (is (= #{} (hrefs tenant-admin)))
     (is (= #{"/web/admin/orders" "/web/admin/notes" "/web/admin/lines"} (hrefs platform-admin)))))
+
+(deftest ^:integration a-parents-children-show-only-where-their-own-read-admits-them
+  (let [{:keys [service provider]} @state
+        rel      {:entity :lines :table :lines :foreign-key :order-id :label "Lines" :fields [:sku]}
+        children (fn [rights]
+                   (let [user (permissions/with-access editor {:mode :enforce :platform-admin? false :rights rights})]
+                     (mapv :sku (ports/list-related-entities (scoped-service/for-user service provider user)
+                                                             :orders o1 rel))))]
+    (is (= [] (children (get rights (:id editor)))) "no read on lines")
+    (is (= ["SKU-42-A"] (children [{:permission :admin.lines/read :scope in-42}])))))

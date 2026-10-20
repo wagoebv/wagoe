@@ -54,7 +54,7 @@
         auth-middleware (user-middleware/flexible-authentication-middleware user-service)
         ;; Under :report and :enforce the user carries their rights, and under
         ;; :enforce each request gets the service scoped to them (ADR-041 §6).
-        ;; Under :off neither: the handlers are built once, as before.
+        ;; Otherwise the handlers are built once, as before.
         access          (:access config)
         auth-middleware (if access
                           (fn [handler]
@@ -62,7 +62,7 @@
                              (fn [request]
                                (handler (update request :user (partial with-access config))))))
                           auth-middleware)
-        h               (if access
+        h               (if (and access (= :enforce (:authorization-mode config)))
                           (fn [ctor]
                             (fn [request]
                               ((ctor (scoped-service/for-user admin-service schema-provider (:user request))
@@ -159,7 +159,7 @@
   (let [entities (try (ports/list-available-entities schema-provider)
                       (catch clojure.lang.ExceptionInfo _ []))
         configs  (into {} (map (fn [e] [e (try (ports/get-entity-config schema-provider e)
-                                              (catch Exception _ (get-in config [:entities e])))]))
+                                               (catch Exception _ (get-in config [:entities e])))]))
                        entities)
         nav      (layout/nav entities configs)]
     (if (= :enforce (:authorization-mode config))

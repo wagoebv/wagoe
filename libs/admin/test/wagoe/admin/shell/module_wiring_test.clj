@@ -169,7 +169,11 @@
     (is (not (log-test/logged? 'wagoe.admin.shell.module-wiring :warn #":require-role")) ":off says nothing"))
   (log-test/with-log
     (wiring/ig-config {:require-role :admin} (with-mode :enforce))
-    (is (log-test/logged? 'wagoe.admin.shell.module-wiring :warn #"DEPRECATED :require-role.*removed in 2\.0"))))
+    (is (log-test/logged? 'wagoe.admin.shell.module-wiring :warn #"DEPRECATED :require-role.*removed in 2\.0")))
+  (log-test/with-log
+    (wiring/ig-config {} (with-mode :enforce))
+    (is (not (log-test/logged? 'wagoe.admin.shell.module-wiring :warn #":require-role"))
+        "the defaults carry it; a config without it is not warned")))
 
 (defn order-domain
   "A relation condition, named by symbol as config.edn would."

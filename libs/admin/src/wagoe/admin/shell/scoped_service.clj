@@ -75,15 +75,25 @@
         (:total-count (ports/list-entities inner entity-name options))
         (ports/count-entities inner entity-name filters))))
 
+  ;; nil outside the scopes, as for a missing record: the port's contract
   (get-entity [_ entity-name id]
-    (inside! inner schema-provider user entity-name :read [id])
-    (ports/get-entity inner entity-name id))
+    (let [options (scoped schema-provider user entity-name :read {:ids [id] :limit 1})]
+      (if (contains? options :scopes)
+        (first (:records (ports/list-entities inner entity-name options)))
+        (ports/get-entity inner entity-name id))))
 
   (validate-entity-data [_ entity-name data]
     (ports/validate-entity-data inner entity-name data))
 
   (list-related-entities [_ parent-entity-name parent-id relationship]
-    (ports/list-related-entities inner parent-entity-name parent-id relationship))
+    ;; A parent's children show only where their own entity's read admits them
+    (let [child   (:entity relationship)
+          rows    (ports/list-related-entities inner parent-entity-name parent-id relationship)
+          options (scoped schema-provider user child :read {:ids (mapv :id rows) :limit (max 1 (count rows))})]
+      (if (and (seq rows) (contains? options :scopes))
+        (let [inside (set (map (comp str :id) (:records (ports/list-entities inner child options))))]
+          (filterv #(contains? inside (str (:id %))) rows))
+        rows)))
 
   (create-entity [_ entity-name data]
     (writable! schema-provider user entity-name data)
