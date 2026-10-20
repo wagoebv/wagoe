@@ -140,7 +140,7 @@
              (when (pages/mounted? "/web/profile")
                [:a {:href "/web/profile" :class "user-menu-item"}
                 (icons/icon :user {:size 14})
-                [:span [:t :admin/user-menu-profile]]])
+                [:span [:t :user/profile-page-title]]])
              (when (pages/mounted? "/web/logout")
                [:form {:method "POST" :action "/web/logout" :class "logout-form"}
                 (csrf/hidden-field)

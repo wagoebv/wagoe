@@ -1866,7 +1866,7 @@
               (assoc :flash {:success "Two-factor authentication has been disabled"}))
           (html-response request
                          (profile-ui/mfa-disable-confirm-page
-                          {:password [(if (:error result) (mfa-error-message result) "Incorrect password")]}
+                          {:password [(if (:error result) (mfa-error-message result) [:t :user/mfa-disable-wrong-password])]}
                           {:user current-user})
                          400)))
       (catch Exception e

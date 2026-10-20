@@ -547,12 +547,6 @@
   margin: 10px 0;
 }
 
-.admin-topbar-actions > span {
-  font-size: var(--text-sm);
-  color: var(--text-muted);
-  white-space: nowrap;
-}
-
 /* User dropdown */
 .user-menu {
   position: relative;
@@ -1691,7 +1685,6 @@
   width: 100% !important;
   height: 100% !important;
 }
-
 
   /* Hide breadcrumbs on mobile, show page title */
   .admin-breadcrumbs {
