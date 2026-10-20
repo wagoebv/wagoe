@@ -153,7 +153,10 @@
      :wagoe/workflow-routes    {:workflow-service (ig/ref :wagoe/workflow)
                                 :user-service     (ig/ref :wagoe/user-service)
                                 :group-service    (ig/ref :wagoe/user-group-service)}}
-    :routes [(ig/ref :wagoe/workflow-routes)]}
+    :routes [(ig/ref :wagoe/workflow-routes)]
+    ;; Declared, not only derived: the API checks it as a group grant, so no
+    ;; role handed to every user may hold it.
+    :authorization {:permissions {:workflow/read {:label "Read workflow instances and their audit"}}}}
     ;; What the admin reads an entity's workflow state through and removes its
     ;; instances with (BOU-563); the admin's wiring refs it when workflow is on.
     (contains? (or enabled #{}) :wagoe/admin)

@@ -423,7 +423,9 @@ nobody becomes an admin:
   `add-group-grant`, `remove-group-grant` and an import's `:grants` still work this
   way, and are deprecated.
 * When there are users, Everyone gets every module's `editor` role. That is what every
-  signed-in user could do; narrow it when you are ready.
+  signed-in user could do; narrow it when you are ready. A role holding a permission
+  something already checks as a grant, such as `:workflow/read`, is left out, so the
+  upgrade gives nobody a right they did not have.
 * Users with `:viewer` join a group called Readers, which gets every module's `viewer`
   role, and keep no role. OIDC's `:default-role` no longer gives a role.
 

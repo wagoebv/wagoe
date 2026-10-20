@@ -205,7 +205,7 @@
 
   (insert-assignment [_ assignment]
     (let [stored (assoc (select-keys assignment [:group-id :role :scope])
-                        :id (UUID/randomUUID) :created-at (Instant/now))]
+                        :id (or (:id assignment) (UUID/randomUUID)) :created-at (Instant/now))]
       (db/execute-update! ctx {:insert-into :user_group_roles
                                :values      [{:id         (tc/uuid->string (:id stored))
                                               :group_id   (id-str (:group-id stored))
@@ -245,16 +245,18 @@
                          :role    (keyword (:role row))
                          :scope   (db->scope row)})
               (db/execute-query!
-               ctx {:union [{:select [:m.user_id :r.role :r.scope]
-                             :from   [[:user_group_roles :r]]
-                             :join   [[:user_group_members :m] [:= :m.group_id :r.group_id]
-                                      [:auth_users :a] [:= :a.id :m.user_id]]
-                             :where  [:and roles [:= :a.deleted_at nil] active]}
-                            ;; Everyone: every user, without a membership row.
-                            {:select [[:a.id :user_id] :r.role :r.scope]
-                             :from   [[:user_group_roles :r]]
-                             :join   [[:auth_users :a] [:= :r.group_id (str group/everyone-id)]]
-                             :where  [:and roles [:= :a.deleted_at nil] active]}]})))))
+               ;; UNION ALL: a scope is TEXT, which not every engine compares;
+               ;; permission-holders makes them distinct.
+               ctx {:union-all [{:select [:m.user_id :r.role :r.scope]
+                                 :from   [[:user_group_roles :r]]
+                                 :join   [[:user_group_members :m] [:= :m.group_id :r.group_id]
+                                          [:auth_users :a] [:= :a.id :m.user_id]]
+                                 :where  [:and roles [:= :a.deleted_at nil] active]}
+                                ;; Everyone: every user, without a membership row.
+                                {:select [[:a.id :user_id] :r.role :r.scope]
+                                 :from   [[:user_group_roles :r]]
+                                 :join   [[:auth_users :a] [:= :r.group_id (str group/everyone-id)]]
+                                 :where  [:and roles [:= :a.deleted_at nil] active]}]})))))
 
   (ensure-everyone [_]
     (if (db/execute-one! ctx {:select [:id] :from [:user_groups] :where [:= :id (str group/everyone-id)]})

@@ -438,7 +438,10 @@ only).
 - Migration (`group-service/migrate!`, at group-service init, idempotent): the
   first boot creates Everyone and, when users exist, gives it every module's
   `editor` code role except the admin's; users stored as `viewer` join `Readers`
-  with every module's `viewer` role and keep no role; each `user_group_grants`
+  with every module's `viewer` role and keep no role. Neither gets a role holding
+  a permission already checked as a grant (`core.group/gated-permissions`:
+  declared by a module, in the groups schema, or granted), such as
+  `:workflow/read`; each `user_group_grants`
   row becomes an assignment of a managed role named after its permission, then is
   deleted. Permissions no module declares stay in their roles and are logged.
 - `add-group-grant` / `remove-group-grant` and import `:grants` are deprecated:

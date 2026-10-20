@@ -444,3 +444,19 @@
         (ports/add-group-role svc (:id g) {:role :orders/viewer :scope {:department-id :user/department}})
         (is (= {:type :configuration-error :sources [:user/department]}
                (refusal #(sut/migrate! svc))))))))
+
+(deftest ^:integration the-migration-widens-no-grant-check
+  ;; Workflow reads :workflow/read as a grant; an app may check its own
+  ;; permissions the same way. Everyone must not get them.
+  (with-service {:permissions [:enum :reports/write]}
+    {:registry (authorization/create-registry
+                {:wagoe/orders   nil
+                 :wagoe/reports  nil
+                 :wagoe/workflow {:permissions {:workflow/read {:label "Read workflow instances"}}}})}
+    (fn [{:keys [svc ctx user!]}]
+      (user! "ada@example.com")
+      (legacy-grant! ctx (:id (ports/create-group svc {:name "Ops"})) :orders/write {})
+      (sut/migrate! svc)
+      (is (= #{} (set (map :role (:roles (ports/get-group svc group/everyone-id)))))
+          "a declared permission, the groups schema's and a granted one each keep their module's role out")
+      (is (not (group/holds? (ports/user-grants svc (user! "bob@example.com")) :workflow/read))))))

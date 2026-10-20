@@ -140,14 +140,28 @@
   (into #{} (keep (fn [[k {:keys [permissions]}]] (when (contains? permissions permission) k))) roles))
 
 (defn module-roles
-  "The code roles named `<module>/<kind>` (\"editor\", \"viewer\") but the
-   admin module's, so a migration that hands them out makes nobody an admin:
-   the registry lets no other module's role hold an `admin.*` permission."
-  [code-roles kind]
+  "The code roles named `<module>/<kind>` (\"editor\", \"viewer\") that hold
+   none of the `gated` permissions, and not the admin module's: a migration
+   that hands them out must widen no check that already reads grants, and make
+   nobody an admin (the registry lets no other module's role hold an
+   `admin.*` permission)."
+  [code-roles kind gated]
   (into (sorted-set)
-        (keep (fn [[k {:keys [module]}]]
-                (when (and (= kind (name k)) (not= :wagoe/admin module)) k)))
+        (keep (fn [[k {:keys [module permissions]}]]
+                (when (and (= kind (name k))
+                           (not= :wagoe/admin module)
+                           (not-any? gated permissions))
+                  k)))
         code-roles))
+
+(defn gated-permissions
+  "The permissions something already checks as grants: those a module
+   declares itself, the groups schema's, and those `grants` hold."
+  [registry-permissions groups-permissions grants]
+  (into (set (map :permission grants))
+        (keep (fn [[p {:keys [source]}]]
+                (when (#{:declared :groups-schema} source) p)))
+        (merge registry-permissions groups-permissions)))
 
 (defn users-with-permission
   "The distinct user ids among `holders`, as `permission-holders` returns

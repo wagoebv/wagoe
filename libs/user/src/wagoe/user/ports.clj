@@ -204,7 +204,8 @@
   ;; Every assignment of the role, each with :group-name.
 
   (insert-assignment [this assignment])
-  ;; assignment: {:group-id :role :scope}. Returns the stored assignment.
+  ;; assignment: {:group-id :role :scope}, and :id to keep one. Returns the
+  ;; stored assignment.
 
   (remove-assignment [this group-id assignment-id])
   ;; Returns boolean.
