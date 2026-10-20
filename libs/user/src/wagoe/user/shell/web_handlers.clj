@@ -206,36 +206,6 @@
                  (layout/pilot-page-layout "Error" (ui/error-message [:t :common/error-generic]))
                  500))
 
-(defn- user-facing-message
-  "The message of an ex-info whose type says its text was written for the
-   user; nil for anything else."
-  [e]
-  (when (contains? #{:bad-request :user-exists} (:type (ex-data e)))
-    (ex-message e)))
-
-(defn- refused
-  "A refused write (BOU-665): 409, saying why."
-  [request e]
-  (html-response request
-                 (ui/error-message (if-let [k (:message-key (ex-data e))] [:t k] (ex-message e)))
-                 409))
-
-(defn- mfa-error-message
-  "What to show for a failed MFA result. `:cannot-*` carries the core's reason;
-   the `:mfa-*-failed` types mean an exception, which mfa.clj has logged."
-  [result]
-  (let [{:keys [type message]} (:error result)]
-    (if (contains? #{:cannot-enable :cannot-disable} type)
-      message
-      [:t :common/error-generic])))
-
-(defn- field-errors
-  "`{field [message …]}` from a :validation-error's `:errors`, for a form."
-  [errors]
-  (reduce (fn [m {:keys [field message]}]
-            (update m (if (sequential? field) (first field) field) (fnil conj []) message))
-          {} errors))
-
 (defn- toast-json
   "A toast for components.js as header-safe JSON; `message` a string or a
    catalogue key, translated for `request`."
@@ -258,6 +228,37 @@
   [response request message]
   (assoc-in response [:headers "HX-Trigger"]
             (str "{\"showToast\":" (toast-json request :error message) "}")))
+
+(defn- user-facing-message
+  "The message of an ex-info whose type says its text was written for the
+   user; nil for anything else."
+  [e]
+  (when (contains? #{:bad-request :user-exists} (:type (ex-data e)))
+    (ex-message e)))
+
+(defn- refused
+  "A refused write (BOU-665): 409, saying why, in the body and as a toast
+   for a request whose body htmx does not swap."
+  [request e]
+  (let [why (or (:message-key (ex-data e)) (ex-message e))]
+    (-> (html-response request (ui/error-message (if (keyword? why) [:t why] why)) 409)
+        (with-error-toast request why))))
+
+(defn- mfa-error-message
+  "What to show for a failed MFA result. `:cannot-*` carries the core's reason;
+   the `:mfa-*-failed` types mean an exception, which mfa.clj has logged."
+  [result]
+  (let [{:keys [type message]} (:error result)]
+    (if (contains? #{:cannot-enable :cannot-disable} type)
+      message
+      [:t :common/error-generic])))
+
+(defn- field-errors
+  "`{field [message …]}` from a :validation-error's `:errors`, for a form."
+  [errors]
+  (reduce (fn [m {:keys [field message]}]
+            (update m (if (sequential? field) (first field) field) (fnil conj []) message))
+          {} errors))
 
 (def ^:private htmx-no-cache-headers
   {"Cache-Control" "no-store, no-cache, must-revalidate, max-age=0"
@@ -972,8 +973,7 @@
           (cond
             (= :bad-request (:type data)) (-> (html-response request (ui/error-message (user-facing-message e)) 400)
                                               (with-error-toast request (user-facing-message e)))
-            (user-core/refusal? e)        (-> (refused request e)
-                                              (with-error-toast request (or (:message-key data) (ex-message e))))
+            (user-core/refusal? e)        (refused request e)
             :else                         (-> (server-error request e "Bulk user operation failed")
                                               (with-error-toast request :common/error-generic)))))
 
