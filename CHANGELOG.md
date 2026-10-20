@@ -186,6 +186,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Changed
 
+- **`response-shape-cli` leaves a response already set alone** (BOU-790); it no longer rewrites an HTTP error response
+  to `{:exit :stderr}`. In `create-cli-pipeline` it never saw one.
 - **`POST /api/auth/mfa/disable` needs `password` or a TOTP/backup `code`** (BOU-782); wrong ones count towards the
   lockout. Send one from your API clients.
 - **One dashboard, the admin's home, for every signed-in user** (BOU-765): everyone lands on `/web/admin/`, and
@@ -255,6 +257,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **`user list`, `update` and `delete` exited 1 on success, and `update` with no fields wrote an empty update** (BOU-790).
+  They exit 0 now, `list` prints its table, and a field-less `update` is refused.
 - **`bb create-admin` printed "Error: Unknown error" for a rejected password** (BOU-789); it prints the rule now, and
   the other `user` CLI commands print their errors to stderr instead of nothing, and `user find --id` works.
 - **Push routes had no authorization rule, so `:enforce` refused them** (BOU-786): device routes are `:self`, stats

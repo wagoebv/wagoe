@@ -461,10 +461,9 @@
                                            :response-format :json})))
 
                 :cli
-                (let [response {:status :success
-                                :data {:users users
-                                       :total-count total-count}
-                                :message (str "Found " (count users) " users")}]
+                (let [response {:status 0
+                                :entity-type :user-list
+                                :data users}]
                   (-> context
                       (assoc :response response)
                       (ctx/add-breadcrumb :operation :user-list-formatted
@@ -583,7 +582,7 @@
                                            :response-format :json})))
 
                 :cli
-                (let [response {:status :success
+                (let [response {:status 0
                                 :data {:user-id user-id}
                                 :message "User deactivated successfully"}]
                   (-> context
@@ -625,7 +624,7 @@
                                 :cli (:id (:opts context)))
                   update-data (case interface-type
                                 :http (get-in context [:request :parameters :body])
-                                :cli (dissoc (:opts context) :id))]
+                                :cli (select-keys (:opts context) [:name :role :active]))]
 
               (cond
                 (nil? user-id-str)
@@ -769,7 +768,7 @@
                                            :response-format :json})))
 
                 :cli
-                (let [response {:status :success
+                (let [response {:status 0
                                 :data (select-keys updated-user [:id :email :name :role :active])
                                 :message (str "User " (:email updated-user) " updated successfully")}]
                   (-> context

@@ -8,8 +8,7 @@
             [wagoe.observability.errors.ports :as error-reporting]
             [wagoe.platform.core.http.errors :as errors]
             [wagoe.observability.core.sql-redaction :as redaction]
-            [wagoe.platform.shell.reported-errors :as reported-errors]
-            [clojure.string :as str])
+            [wagoe.platform.shell.reported-errors :as reported-errors])
   (:import [java.util UUID]
            [java.time Instant]))
 ;; Context Management Interceptors
@@ -348,56 +347,13 @@
                                           {:correlation-id (:correlation-id ctx)}))))))})
 
 (def response-shape-cli
-  "Shapes results into CLI response format with exit codes.
-   
-   This interceptor handles both :result format (with :status/:data/:errors)
-   and :response format (direct CLI response) to maintain compatibility.
-   
-   For error responses already set by error handling interceptors, converts
-   HTTP-style responses to CLI format with detailed error messages."
+  "Shapes a `:result` (`:status` / `:data` / `:errors`) into a CLI response
+   with an exit code. A response already set is left alone: an error response
+   set before this interceptor stops the enter chain, so its :leave never sees it."
   {:name :response-shape-cli
    :leave (fn [ctx]
-            (if-let [response (:response ctx)]
-              ;; Response already set - check if it needs CLI formatting
-              (if (and (contains? response :status) (contains? response :body))
-                ;; HTTP-style error response - convert to CLI format
-                (let [body (:body response)
-                      status (:status response)
-                      exit-code (if (>= status 400) 1 0)]
-                  (if (>= status 400)
-                    ;; Error response - extract detailed error info
-                    (let [error-details (get-in body [:error :message])
-                          details (get-in body [:error :details])
-                          missing-fields (seq (:missing-fields details))
-                          field-errors (seq (:field-errors details))
-                          provided-fields (:provided-fields details)
-                          interface-type (:interface-type details)
-
-                          ;; Build detailed error message
-                          detailed-message (str error-details
-                                                (when missing-fields
-                                                  (str "\nMissing required fields: " (str/join ", " missing-fields)))
-                                                ;; The violation itself, which
-                                                ;; a bare field name never said.
-                                                (when field-errors
-                                                  (str "\n"
-                                                       (str/join "\n"
-                                                                 (for [{:keys [field message]} field-errors]
-                                                                   (str "  " field ": " message)))))
-                                                (when provided-fields
-                                                  (str "\nProvided fields: " (str/join ", " provided-fields)))
-                                                (when interface-type
-                                                  (str "\nInterface: " (name interface-type))))]
-                      (assoc ctx :response
-                             {:exit exit-code
-                              :stderr detailed-message}))
-                    ;; Success response
-                    (assoc ctx :response
-                           {:exit exit-code
-                            :stdout (str "Success: " (pr-str body))})))
-                ;; Already CLI format - pass through
-                ctx)
-              ;; Shape result for CLI (fallback)
+            (if (:response ctx)
+              ctx
               (let [result (:result ctx)]
                 (case (:status result)
                   :success
