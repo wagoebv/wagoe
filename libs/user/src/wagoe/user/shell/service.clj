@@ -830,8 +830,8 @@
                            {:type :user-not-found
                             :user-id user-id})))
 
-         ;; 2. Validate new password against policy
-         (let [password-validation (auth-core/meets-password-policy? new-password
+         ;; 2. Validate new password against policy; a missing one fails it.
+         (let [password-validation (auth-core/meets-password-policy? (str new-password)
                                                                      (:password-policy validation-config)
                                                                      user)]
            (when-not (:valid? password-validation)
