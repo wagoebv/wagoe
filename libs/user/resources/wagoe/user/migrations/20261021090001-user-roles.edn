@@ -1,0 +1,6 @@
+;; user_roles and user_group_roles, the roles that replace group grants, on a
+;; database created before. The same idempotent definition; boot moves the
+;; grants onto them.
+{:ns      wagoe.user.shell.user-tables
+ :up-fn   "up"
+ :down-fn "down"}

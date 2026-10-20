@@ -87,8 +87,8 @@
   (let [{:keys [admin users] :as sys} (system)
         boss (user! sys "boss@example.com" :admin)
         u    (user! sys "u@example.com" :user)]
-    (as boss #(ports/update-entity admin :users (:id u) {:role "viewer"}))
-    (is (= :viewer (:role (user-ports/get-user-by-id users (:id u)))))
+    (as boss #(ports/update-entity admin :users (:id u) {:role "admin"}))
+    (is (= :admin (:role (user-ports/get-user-by-id users (:id u)))))
     (is (zero? (live-sessions sys u)) "a role change ends the user's sessions (BOU-191)")
     (let [entry (first (user-ports/get-audit-logs-for-user users (:id u) {}))]
       (is (= :update (:action entry)))
@@ -129,7 +129,7 @@
            (:reason (refusal #(as boss (fn [] (ports/delete-entity admin :users (:id boss))))))))
     (testing "another admin can be demoted while one remains"
       (as boss #(ports/update-entity admin :users (:id other) {:role "user"}))
-      (is (= :user (:role (user-ports/get-user-by-id users (:id other))))))))
+      (is (nil? (:role (user-ports/get-user-by-id users (:id other))))))))
 
 (deftest ^:integration fields-the-user-module-writes-are-read-only
   (let [{:keys [admin repo] :as sys} (system)
@@ -243,7 +243,11 @@
         (let [start   (promise)
               results [(demote a b start) (demote b a start)]]
           (deliver start true)
-          (is (= #{:demoted :last-admin} (set (map deref results))))
+          ;; The loser is refused as the last admin, or, when the other
+          ;; demotion committed first, as no longer an admin at all.
+          (let [outcomes (map deref results)]
+            (is (= 1 (count (filter #{:demoted} outcomes))) (pr-str outcomes))
+            (is (some #{:last-admin :platform-admin-only} outcomes) (pr-str outcomes)))
           (is (= 1 (count (:users (user-ports/list-users users {:filter-role :admin :filter-active true}))))
               "one admin remains")
           ;; Promote both back for the next round.

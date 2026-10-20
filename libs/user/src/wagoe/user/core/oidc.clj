@@ -306,7 +306,6 @@
       {:action :create
        :user-data {:email  email
                    :name   (display-name claims email)
-                   :role   (:default-role provider)
                    :active true}}
 
       :else

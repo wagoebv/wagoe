@@ -367,7 +367,7 @@
                                     [:email :string]
                                     [:name :string]
                                     [:password {:optional true} :string]
-                                    [:role [:enum "admin" "user" "viewer"]]
+                                    [:role [:enum "admin" "user"]]
                                     [:active {:optional true} :boolean]
                                     ;; Preferences (flattened into user entity)
                                     [:notificationsEmail {:optional true} :boolean]
@@ -388,7 +388,7 @@
               :parameters {:query [:map
                                    [:limit {:optional true} :int]
                                    [:offset {:optional true} :int]
-                                   [:role {:optional true} [:enum "admin" "user" "viewer"]]
+                                   [:role {:optional true} [:enum "admin" "user"]]
                                    [:active {:optional true} :boolean]]}}}]
      ["/users/:id"
       {:middleware [auth-middleware]
@@ -413,7 +413,7 @@
                              :body [:map {:closed true}
                                     [:name {:optional true} :string]
                                     [:email {:optional true} :string]
-                                    [:role {:optional true} [:enum "admin" "user" "viewer"]]
+                                    [:role {:optional true} [:enum "admin" "user"]]
                                     [:active {:optional true} :boolean]
                                     ;; Preferences (flattened into user entity)
                                     [:notificationsEmail {:optional true} :boolean]
@@ -771,10 +771,10 @@
                            {:get {:handler (group-handlers/member-options user-service group-service)}})
                     (route "/:id/members/:user-id/remove"
                            {:post {:handler (group-handlers/remove-member group-service)}})
-                    (route "/:id/grants"
-                           {:post {:handler (group-handlers/add-grant group-service)}})
-                    (route "/:id/grants/:grant-id/remove"
-                           {:post {:handler (group-handlers/remove-grant group-service)}})]])}))
+                    (route "/:id/roles"
+                           {:post {:handler (group-handlers/add-role group-service)}})
+                    (route "/:id/roles/:assignment-id/remove"
+                           {:post {:handler (group-handlers/remove-role group-service)}})]])}))
 
 (defn- export-response
   "`doc`, a user's data export, as a download, logged with who asked."

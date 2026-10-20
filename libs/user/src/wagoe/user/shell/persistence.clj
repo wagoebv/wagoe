@@ -75,8 +75,8 @@
   [ctx]
   (db/with-transaction [tx ctx]
     (doseq [{:keys [id session-token]} (db/execute-query! tx {:select [:id :session_token]
-                                                               :from   [:user_sessions]
-                                                               :where  [:<> [:length :session_token] 64]})]
+                                                              :from   [:user_sessions]
+                                                              :where  [:<> [:length :session_token] 64]})]
       (db/execute-update! tx {:update :user_sessions
                               :set    {:session_token (session-token-hash session-token)}
                               :where  [:and [:= :id id] [:= :session_token session-token]]}))))
@@ -180,7 +180,9 @@
    "user_identities" user-schema/UserIdentity
    "user_groups"        user-schema/UserGroup
    "user_group_members" user-schema/UserGroupMember
-   "user_group_grants"  user-schema/UserGroupGrant})
+   "user_group_grants"  user-schema/UserGroupGrant
+   "user_roles"         user-schema/UserRole
+   "user_group_roles"   user-schema/UserGroupRole})
 
 (defn initialize-user-schema!
   "Initialize database schema for user entities using Malli schema definitions.
@@ -191,7 +193,9 @@
    - user_sessions: User authentication sessions
    - user_audit_log: Audit trail for user operations
    - user_identities: OpenID Connect (issuer, subject) links to users
-   - user_groups, user_group_members, user_group_grants: groups and their grants
+   - user_groups, user_group_members: groups
+   - user_roles, user_group_roles: managed roles and the roles of groups
+   - user_group_grants: what groups held before roles, kept until 2.0
 
    Includes indexes for:
    - Foreign keys (user_id)
@@ -223,9 +227,11 @@
   (db/create-index-if-not-exists! ctx "uk_user_group_members_group_user" :user_group_members
                                   [:group_id :user_id] {:unique? true})
   (unique-group-names! ctx)
-  ;; For `find-permission-holders`. user_id and group_id are indexed already,
+  ;; For the grants the migration moves onto roles. user_id and group_id are indexed already,
   ;; as every -id column is.
   (db/create-index-if-not-exists! ctx "idx_user_group_grants_permission" :user_group_grants [:permission])
+  (db/create-index-if-not-exists! ctx "uk_user_roles_name" :user_roles [:name] {:unique? true})
+  (db/create-index-if-not-exists! ctx "idx_user_group_roles_role" :user_group_roles [:role])
   (widen-audit-action-check! ctx)
   (hash-plaintext-session-tokens! ctx)
 
@@ -246,6 +252,12 @@
 ;; Entity Transformations
 ;; =============================================================================
 
+(defn- db->role
+  "Superuser or nothing: \"user\", and \"viewer\" before the migration, are
+   no role."
+  [s]
+  (when (= "admin" s) :admin))
+
 (defn- db->user-entity
   "Transform database record to user domain entity."
   [ctx db-record]
@@ -258,7 +270,7 @@
           ;; Type conversions
           (update :id type-conversion/string->uuid)
           (update :tenant-id type-conversion/string->uuid)
-          (update :role type-conversion/string->keyword)
+          (update :role db->role)
           (update :active #(protocols/db->boolean adapter %))
           (update :created-at type-conversion/string->instant)
           (update :updated-at type-conversion/string->instant)
@@ -277,6 +289,11 @@
           ;; Deserialize MFA vector fields from JSON
           (update :mfa-backup-codes #(when % (vec (cheshire.core/parse-string % true))))
           (update :mfa-backup-codes-used #(when % (vec (cheshire.core/parse-string % true))))))))
+
+(defn- role->db
+  "The column stores \"user\" for no role, which the previous version reads."
+  [role]
+  (if (= :admin role) "admin" "user"))
 
 (defn- update-present
   "`update` only when `m` has `k`: a key a partial update leaves out must not
@@ -655,7 +672,7 @@
            (let [db-profile (-> profile-fields
                                 (update :id type-conversion/uuid->string)
                                 (update :tenant-id type-conversion/uuid->string)
-                                (update :role type-conversion/keyword->string)
+                                (update :role role->db)
                                 (update :notifications-email #(protocols/boolean->db adapter %))
                                 (update :notifications-push #(protocols/boolean->db adapter %))
                                 (update :notifications-sms #(protocols/boolean->db adapter %))
@@ -738,7 +755,7 @@
              (when has-profile-updates?
                (let [db-profile (-> profile-updates
                                     (update-present :tenant-id type-conversion/uuid->string)
-                                    (update-present :role type-conversion/keyword->string)
+                                    (update-present :role role->db)
                                     (update-present :notifications-email #(when (some? %) (protocols/boolean->db adapter %)))
                                     (update-present :notifications-push #(when (some? %) (protocols/boolean->db adapter %)))
                                     (update-present :notifications-sms #(when (some? %) (protocols/boolean->db adapter %)))
@@ -790,7 +807,7 @@
              has-profile-updates?
              (let [db-profile (-> profile-updates
                                   (update-present :tenant-id type-conversion/uuid->string)
-                                  (update-present :role type-conversion/keyword->string)
+                                  (update-present :role role->db)
                                   (update-present :notifications-email #(when (some? %) (protocols/boolean->db adapter %)))
                                   (update-present :notifications-push #(when (some? %) (protocols/boolean->db adapter %)))
                                   (update-present :notifications-sms #(when (some? %) (protocols/boolean->db adapter %)))

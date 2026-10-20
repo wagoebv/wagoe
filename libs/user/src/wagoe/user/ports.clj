@@ -147,16 +147,18 @@
   ;; Removes the link. Returns boolean.
 
 (defprotocol IUserGroupRepository
-  "Groups, their members and their grants. A group is {:id :name :description
-   :created-at :updated-at}; a grant {:id :group-id :permission :scope
-   :created-at}. Deleting a group or a user removes their memberships and,
-   with a group, its grants."
+  "Groups, their members, managed roles and the roles assigned to groups. A
+   group is {:id :name :description :created-at :updated-at}; a managed role
+   {:id :name kw :description :permissions #{kw} :created-at :updated-at}; an
+   assignment {:id :group-id :role kw :scope map :created-at}. Deleting a
+   group or a user removes their memberships and, with a group, its
+   assignments."
 
   (find-group [this group-id])
   ;; Returns the group, or nil.
 
   (find-groups [this])
-  ;; Every group by name, each with :member-count and :grant-count.
+  ;; Every group by name, each with :member-count and :role-count.
 
   (insert-group [this group])
   ;; Generates :id and :created-at. Returns the stored group.
@@ -166,7 +168,7 @@
   ;; stored group, or nil.
 
   (remove-group [this group-id])
-  ;; Removes the group, its memberships and grants. Returns boolean.
+  ;; Removes the group, its memberships and assignments. Returns boolean.
 
   (find-members [this group-id])
   ;; The group's users, {:id :email :name}, by email. Soft-deleted users are
@@ -178,26 +180,65 @@
   (remove-member [this group-id user-id])
   ;; Returns boolean.
 
-  (find-grants [this group-id])
-  ;; The group's grants, oldest first.
+  (find-user-groups [this user-id])
+  ;; The groups the user was added to, by name. None for a soft-deleted user.
 
-  (insert-grant [this grant])
-  ;; grant: {:group-id :permission :scope}. Generates :id and :created-at.
-  ;; Returns the stored grant.
+  (find-roles [this])
+  ;; Every managed role, by name.
 
-  (remove-grant [this group-id grant-id])
+  (insert-role [this role])
+  ;; role: {:name :description :permissions}. Returns the stored role. Throws
+  ;; :conflict on :name when another role has it.
+
+  (modify-role [this role])
+  ;; Sets the :description and :permissions of the role named :name. Returns
+  ;; boolean.
+
+  (remove-role [this role-name])
+  ;; Removes the managed role and every assignment of it. Returns boolean.
+
+  (find-assignments [this group-id])
+  ;; The group's assignments, oldest first.
+
+  (find-role-assignments [this role-name])
+  ;; Every assignment of the role, each with :group-name.
+
+  (insert-assignment [this assignment])
+  ;; assignment: {:group-id :role :scope}, and :id to keep one. Returns the
+  ;; stored assignment.
+
+  (remove-assignment [this group-id assignment-id])
   ;; Returns boolean.
 
-  (find-user-grants [this user-id])
-  ;; The grants of every group the user is in, each with :group-name. None for
-  ;; a soft-deleted user.
+  (find-user-assignments [this user-id group-names])
+  ;; The assignments of every group the user was added to, of Everyone, and
+  ;; of the groups named in `group-names`, each with :group-name, and with
+  ;; :permissions when the role is a managed one. None for a soft-deleted user.
 
-  (find-user-groups [this user-id])
-  ;; The groups the user is in, by name. None for a soft-deleted user.
+  (find-role-holders [this role-names])
+  ;; {:user-id :role :scope} for each active, not soft-deleted user holding
+  ;; one of the roles through a stored membership or Everyone.
 
-  (find-permission-holders [this permission])
-  ;; {:user-id :permission :scope} for each active, not soft-deleted user
-  ;; holding `permission` through a group, distinct, by user id.
+  (ensure-everyone [this])
+  ;; Creates the Everyone group when it is missing, renaming a group already
+  ;; called that. Returns true when it created it.
+
+  (find-legacy-grants [this])
+  ;; The rows of user_group_grants, which roles replaced: {:id :group-id
+  ;; :permission :scope :migrated-at}. Kept until 2.0 for nodes on the
+  ;; previous version; rights are read from assignments only.
+
+  (mark-legacy-grant-migrated [this grant-id])
+  ;; Sets the grant's :migrated-at. Returns boolean.
+
+  (find-legacy-viewers [this])
+  ;; The ids of live users whose stored role is still "viewer".
+
+  (clear-legacy-roles [this])
+  ;; Stores no role for every "viewer". Returns the count.
+
+  (any-users? [this])
+  ;; Whether any user exists.
 
   (ensure-tables [this])
   ;; Creates the group tables, and the audit actions they record, where
@@ -319,17 +360,22 @@
   ;; Throws :user-not-found, :invalid-current-password, :password-policy-violation.
 
 (defprotocol IUserGroupService
-  "Groups of users and the permissions they grant. Joining, leaving and a
-   changed grant are audited for each user whose rights change. Nothing is
-   cached: `user-grants` reads the database, so a change applies to the next
-   request. The :admin role is separate and needs no group. Throws ex-infos
-   carrying :type: :validation-error, :not-found, :conflict."
+  "Groups of users and the roles assigned to them (ADR-041). A user's grants
+   are the permissions of the roles of their groups: those they were added
+   to, the built-in Everyone, and those the `:group-membership` hook names.
+   Joining, leaving, a changed assignment and a changed managed role are
+   audited for each user whose rights change; a change to Everyone once, for
+   the actor. Nothing is cached: `user-grants` reads the database, so a change
+   applies to the next request. The :admin role is separate and needs no
+   group. Throws ex-infos carrying :type: :validation-error, :not-found,
+   :conflict."
 
   (list-groups [this])
-  ;; Every group by name, with :member-count and :grant-count.
+  ;; Every group by name, with :member-count and :role-count.
 
   (get-group [this group-id])
-  ;; The group with its :members and :grants, or nil.
+  ;; The group with its :members, its :roles (assignments) and :everyone?, or
+  ;; nil. Everyone lists no members.
 
   (create-group [this group])
   ;; group: {:name :description}. Returns the stored group.
@@ -346,29 +392,55 @@
   (remove-group-member [this group-id user-id])
   ;; Returns boolean.
 
-  (add-group-grant [this group-id grant])
-  ;; grant: {:permission kw :scope map}, checked against the declared
-  ;; `:wagoe/user :groups` schemas. Returns the stored grant.
+  (list-roles [this])
+  ;; Code and managed roles, {:name :description :permissions :source
+  ;; (:code or :managed) :module}, by name.
 
-  (remove-group-grant [this group-id grant-id])
+  (create-role [this role])
+  ;; role: {:name kw :description :permissions #{kw}}, permissions from the
+  ;; registry. Returns the stored managed role.
+
+  (update-role [this role])
+  ;; Changes a managed role's description and permissions. Returns it.
+
+  (delete-role [this role-name])
+  ;; Removes a managed role and its assignments. Returns boolean.
+
+  (add-group-role [this group-id assignment])
+  ;; assignment: {:role kw :scope map}, the scope checked against the declared
+  ;; `:wagoe/user :groups :scope`. Returns the stored assignment.
+
+  (remove-group-role [this group-id assignment-id])
   ;; Returns boolean.
 
+  (add-group-grant [this group-id grant])
+  ;; Deprecated: use add-group-role. Assigns the managed role named after the
+  ;; grant's permission, creating it. Returns the assignment.
+
+  (remove-group-grant [this group-id grant-id])
+  ;; Deprecated: use remove-group-role.
+
   (user-grants [this user])
-  ;; user: a user map or id. The grants the user holds through their groups,
-  ;; for wagoe.user.core.group/holds?, grants-for and authorized?.
+  ;; user: a user map or id. {:permission :scope :group-id :group-name :role}
+  ;; for each right the user holds, for wagoe.user.core.group/holds?,
+  ;; grants-for and authorized?.
 
   (user-groups [this user])
-  ;; user: a user map or id. The groups the user is in.
+  ;; user: a user map or id. The groups the user is in, each with :source:
+  ;; :member, :everyone or :provider.
 
   (permission-holders [this permission])
-  ;; {:user-id :permission :scope} for each active user holding `permission`,
-  ;; in one query. Judge the scope with wagoe.user.core.group/users-with-permission.
+  ;; {:user-id :permission :scope} for each active user holding `permission`
+  ;; through a group they were added to or Everyone; the hook's groups are
+  ;; not stored, so not listed. Judge the scope with
+  ;; wagoe.user.core.group/users-with-permission.
 
   (import-groups! [this groups opts]))
-  ;; groups: [{:name :description :members [user-id …] :grants [{:permission :scope}]}].
+  ;; groups: [{:name :description :members [user-id …] :roles [{:role :scope}]}];
+  ;; :grants [{:permission :scope}] is read as roles, as add-group-grant does.
   ;; Checks all, then upserts by name in one audited transaction; additive
   ;; unless opts {:replace? true}. Returns per group {:group :created? :joined
-  ;; :left :grants-added :grants-removed}.
+  ;; :left :roles-added :roles-removed}.
 
 ;; =============================================================================
 ;; Sign-in hooks
@@ -387,6 +459,12 @@
   (login-path [this user login-context]))
   ;; login-context: :ip-address, :user-agent and the Ring :request.
   ;; Returns a path on this site, or nil for the default.
+
+(defprotocol IGroupMembership
+  (group-names [this user]))
+  ;; The names of the Wagoe groups an identity provider puts `user` in, such
+  ;; as Entra or LDAP groups mapped by name. They count as membership and are
+  ;; not stored; a name no group has gives nothing.
 
 (defprotocol ILoginLayout
   (login-page [this title body opts]))

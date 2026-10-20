@@ -121,7 +121,7 @@
         exp (.plus now (Duration/ofHours session-duration-hours))
         claims {:sub (str (:id user))
                 :email (:email user)
-                :role (name (:role user))
+                :role (name (or (:role user) :user))
                 :iat (.getEpochSecond now)
                 :exp (.getEpochSecond exp)}]
     (jwt/sign claims (get-jwt-secret) {:alg jwt-alg})))

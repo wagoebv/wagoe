@@ -103,7 +103,7 @@
             ":password-hash must not be exposed by production register-user"))
       (testing "regular user created with plaintext password re-attached"
         (is (= "user@acme.test" (:email user)))
-        (is (= :user (:role user)))
+        (is (nil? (:role user)) "no role: rights come from groups")
         (is (string? (:password user)) ":password re-attached for test consumers")
         (is (not (contains? user :password-hash))
             ":password-hash must not be exposed by production register-user"))

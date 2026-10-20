@@ -1,10 +1,15 @@
 (ns wagoe.user.shell.group-service-test
   "The group service on a real database: declared schemas refuse bad grants,
-   every change to a user's rights is audited, and a change applies to the
-   next request."
-  (:require [clojure.test :refer [deftest is testing]]
+   every change to a user's rights is audited, a change applies to the next
+   request, and the migration from grants and the :viewer role keeps
+   everyone's reach."
+  (:require [clojure.set :as set]
+            [clojure.test :refer [deftest is testing]]
             [malli.core :as m]
+            [next.jdbc :as jdbc]
+            [next.jdbc.result-set :as rs]
             [support.test-db :as test-db]
+            [wagoe.platform.core.authorization :as authz-core]
             [wagoe.platform.shell.authorization :as authorization]
             [wagoe.user.core.group :as group]
             [wagoe.user.ports :as ports]
@@ -17,17 +22,19 @@
   "Named by a symbol in the test's settings, as an application would."
   [:enum :invoice/approve :report/view])
 
-(defn- with-service [settings f]
-  (test-db/with-db "user_group_service"
-    (fn [ctx]
-      (persistence/initialize-user-schema! ctx)
-      (let [users (persistence/create-user-repository ctx)
-            audit (persistence/create-audit-repository ctx {:default-limit 50 :max-limit 100})
-            svc   (sut/create-group-service (group-persistence/create-group-repository ctx)
-                                            users audit (sut/prepare-settings settings))
-            user! #(ports/create-user users {:email % :name "Member" :role :user :active true
-                                             :password-hash "x"})]
-        (f {:svc svc :users users :audit audit :user! user!})))))
+(defn- with-service
+  ([settings f] (with-service settings {} f))
+  ([settings opts f]
+   (test-db/with-db "user_group_service"
+     (fn [ctx]
+       (persistence/initialize-user-schema! ctx)
+       (let [users (persistence/create-user-repository ctx)
+             audit (persistence/create-audit-repository ctx {:default-limit 50 :max-limit 100})
+             svc   (sut/create-group-service (group-persistence/create-group-repository ctx)
+                                             users audit (sut/prepare-settings settings) opts)
+             user! #(ports/create-user users {:email % :name "Member" :role :user :active true
+                                              :password-hash "x"})]
+         (f {:svc svc :users users :audit audit :user! user! :ctx ctx}))))))
 
 (defn- actions [audit user]
   (->> (ports/find-audit-logs-by-user audit (:id user) {:limit 50 :sort-by :created-at :sort-direction :asc})
@@ -49,7 +56,7 @@
                        (catch clojure.lang.ExceptionInfo e e))]
             (is (= :validation-error (:type (ex-data e))) (pr-str grant))
             (is (= field (:field (ex-data e))) (pr-str grant))))
-        (is (= 2 (count (:grants (ports/get-group svc (:id g))))) "a refused grant is not stored")))))
+        (is (= 2 (count (:roles (ports/get-group svc (:id g))))) "a refused grant is not stored")))))
 
 (deftest ^:unit bad-declarations-fail-boot
   (doseq [bad [{:permissions 'no.such/schema}
@@ -123,7 +130,8 @@
           (is (= admin (:actor-id join)))
           (is (= "admin@example.com" (:actor-email join)))
           (is (= "Finance" (get-in join [:metadata :group-name])))
-          (is (= [{:permission "invoice/approve" :scope "{:domain-id 1}"}] (get-in join [:changes :grants]))))))))
+          (is (= [{:permission "invoice/approve" :scope "{:domain-id 1}" :role "invoice/approve"}]
+                 (get-in join [:changes :grants]))))))))
 
 (deftest ^:integration a-change-applies-to-the-next-request
   ;; What an application handler does on each request: read the grants, check
@@ -195,7 +203,7 @@
                        (fn [] (ports/import-groups! svc %1 %2)))
             group  #(ports/get-group svc (:id (first (filter (comp #{"Finance"} :name) (ports/list-groups svc)))))
             shape  (fn [g] {:members (set (map :email (:members g)))
-                            :grants  (set (map (juxt :permission :scope) (:grants g)))})]
+                            :grants  (set (map (juxt :role :scope) (:roles g)))})]
         (let [[result] (import! [finance] {})]
           (is (true? (:created? result)))
           (is (= [(:id ada)] (:joined result))))
@@ -213,7 +221,7 @@
         (testing "replace: what is not listed goes"
           (let [[result] (import! [(assoc finance :members [(:id bob)])] {:replace? true})]
             (is (= [(:id ada)] (:left result)))
-            (is (= [:report/view] (map :permission (:grants-removed result)))))
+            (is (= [:report/view] (map :role (:roles-removed result)))))
           (is (= {:members #{"bob@example.com"} :grants #{[:invoice/approve {:domain-id 1}]}} (shape (group)))))
 
         (is (= [:grant-add :group-join :group-leave] (actions audit ada)))
@@ -288,3 +296,179 @@
                                           (persistence/create-audit-repository ctx {:default-limit 50 :max-limit 100})
                                           (sut/prepare-settings nil))]
         (is (= ["Finance"] (map (comp :name :group) (ports/import-groups! svc [{:name "Finance"}] {}))))))))
+
+;; =============================================================================
+;; Roles, Everyone, provider groups and the migration
+;; =============================================================================
+
+(def ^:private registry
+  (authorization/create-registry {:wagoe/orders  nil
+                          :wagoe/reports nil
+                          :wagoe/admin   {:permissions (authz-core/read-write-permissions "admin.users" "users")}}))
+
+(defn- permissions-of [grants]
+  (set (map :permission grants)))
+
+(deftest ^:integration roles-are-assigned-to-groups
+  (with-service nil {:registry registry}
+    (fn [{:keys [svc audit user!]}]
+      (let [ada (user! "ada@example.com")
+            g   (ports/create-group svc {:name "Sales"})]
+        (ports/add-group-member svc (:id g) (:id ada))
+        (testing "a code role"
+          (ports/add-group-role svc (:id g) {:role :orders/editor})
+          (is (= #{:orders/read :orders/write} (permissions-of (ports/user-grants svc ada))))
+          (is (= #{:orders/editor} (set (map :role (ports/user-grants svc ada))))))
+        (testing "a managed role, from the registry's permissions"
+          (is (= :conflict
+                 (:type (refusal #(do (ports/create-role svc {:name :sales/lead :permissions #{:reports/read}})
+                                      (ports/create-role svc {:name :sales/lead :permissions #{:reports/read}}))))))
+          (is (= :permissions (:field (refusal #(ports/create-role svc {:name :x/y :permissions #{:orders/refnud}})))))
+          (is (= :name (:field (refusal #(ports/create-role svc {:name :orders/viewer :permissions #{:orders/read}}))))
+              "a code role's name")
+          (let [a (ports/add-group-role svc (:id g) {:role :sales/lead :scope {:domain-id 4}})]
+            (is (contains? (set (map (juxt :permission :scope) (ports/user-grants svc ada)))
+                           [:reports/read {:domain-id 4}]))
+            (ports/update-role svc {:name :sales/lead :permissions #{:reports/read :reports/write}})
+            (is (contains? (permissions-of (ports/user-grants svc ada)) :reports/write)
+                "a changed role applies to the next request")
+            (is (= :role (:field (refusal #(ports/add-group-role svc (:id g) {:role :no/such})))))
+            (is (true? (ports/remove-group-role svc (:id g) (:id a))))
+            (is (true? (ports/delete-role svc :sales/lead)))
+            (is (= #{:orders/read :orders/write} (permissions-of (ports/user-grants svc ada))))))
+        (is (= [:grant-add :grant-add :grant-add :grant-remove :group-join] (actions audit ada))
+            "assigning, changing and unassigning a role are audited for the member; deleting it
+             once unassigned changes nobody's rights")
+        (is (some #(= {:name :orders/editor :source :code} (select-keys % [:name :source]))
+                  (ports/list-roles svc)))))))
+
+(deftest ^:integration everyone-and-provider-groups-count-as-membership
+  (with-service nil {:registry registry :membership (fn [user] (when (= "ada@example.com" (:email user))
+                                                                 #{"Newsroom" "No such group"}))}
+    (fn [{:keys [svc user!] :as env}]
+      (sut/migrate! svc)
+      (let [ada      (user! "ada@example.com")
+            newsroom (ports/create-group svc {:name "Newsroom"})]
+        (ports/add-group-role svc group/everyone-id {:role :reports/viewer})
+        (ports/add-group-role svc (:id newsroom) {:role :orders/editor})
+        (let [bob (user! "bob@example.com")]
+          (is (= #{:reports/read} (permissions-of (ports/user-grants svc bob)))
+              "a user created after the role was given is in Everyone")
+          (is (= #{:reports/read :orders/read :orders/write} (permissions-of (ports/user-grants svc (:id ada))))
+              "the provider's group counts, looked up by id too")
+          (is (= {"Everyone" :everyone "Newsroom" :provider}
+                 (into {} (map (juxt :name :source)) (ports/user-groups svc ada))))
+          (is (= :validation-error (:type (refusal #(ports/add-group-member svc group/everyone-id (:id bob))))))
+          (is (= :validation-error (:type (refusal #(ports/delete-group svc group/everyone-id)))))
+          (is (= #{(:id ada) (:id bob)}
+                 (set (map :user-id (ports/permission-holders svc :reports/read)))))
+          (ports/soft-delete-user (:users env) (:id bob))
+          (is (= [] (ports/user-grants svc bob)) "a soft-deleted user is in no group"))))))
+
+(defn- legacy-grant! [ctx group-id permission scope]
+  (jdbc/execute! (:datasource ctx)
+                 ["INSERT INTO user_group_grants (id, group_id, permission, scope, created_at) VALUES (?, ?, ?, ?, ?)"
+                  (str (random-uuid)) (str group-id) (group/permission-str permission) (pr-str scope)
+                  (java.sql.Timestamp/from (java.time.Instant/now))]))
+
+(defn- stored-role [ctx user]
+  (:role (jdbc/execute-one! (:datasource ctx) ["SELECT role FROM users WHERE id = ?" (str (:id user))]
+                            {:builder-fn rs/as-unqualified-lower-maps})))
+
+(deftest ^:integration the-migration-keeps-everyones-reach
+  ;; Under :off every signed-in user reaches every module route, and a group
+  ;; grant is held in its scope. After the migration the same rights come from
+  ;; roles, and no former :user or :viewer holds an admin permission.
+  (with-service nil {:registry registry}
+    (fn [{:keys [svc users ctx user!]}]
+      (let [admin   (ports/create-user users {:email "root@example.com" :name "Root" :role :admin :active true
+                                              :password-hash "x"})
+            ada     (user! "ada@example.com")
+            vic     (user! "vic@example.com")
+            finance (ports/create-group svc {:name "Finance"})
+            module  #{:orders/read :orders/write :reports/read :reports/write}]
+        (jdbc/execute! (:datasource ctx) ["UPDATE users SET role = 'viewer' WHERE id = ?" (str (:id vic))])
+        (ports/add-group-member svc (:id finance) (:id ada))
+        (legacy-grant! ctx (:id finance) :invoice/approve {:domain-id 1})
+        (legacy-grant! ctx (:id finance) :invoice/approve {:domain-id 2})
+        (sut/migrate! svc)
+        (sut/migrate! svc)
+        (doseq [u [ada vic]]
+          (let [grants (ports/user-grants svc u)]
+            (is (set/subset? module (permissions-of grants)) (:email u))
+            (is (not-any? #(re-find #"^admin" (str (namespace (:permission %)))) grants) (:email u))
+            (is (nil? (:role (ports/find-user-by-id users (:id u)))))))
+        (is (= #{{:domain-id 1} {:domain-id 2}} (set (group/grants-for (ports/user-grants svc ada) :invoice/approve)))
+            "each grant is an assignment of the role named after its permission")
+        (is (= :admin (:role (ports/find-user-by-id users (:id admin)))))
+        (is (= "user" (stored-role ctx vic)) "the column keeps \"user\" for no role")
+        (let [readers (some #(when (= "Readers" (:name %)) %) (ports/list-groups svc))]
+          (is (= ["vic@example.com"] (map :email (:members (ports/get-group svc (:id readers))))))
+          (is (= #{:orders/viewer :reports/viewer}
+                 (set (map :role (:roles (ports/get-group svc (:id readers))))))))
+        (is (= #{:orders/editor :reports/editor}
+               (set (map :role (:roles (ports/get-group svc group/everyone-id)))))
+            "Everyone gets every module's editor role but the admin's, once")
+        (is (= 2 (count (:roles (ports/get-group svc (:id finance))))) "run twice, nothing doubled")
+        (is (= 2 (:n (jdbc/execute-one! (:datasource ctx)
+                                        ["SELECT COUNT(*) AS n FROM user_group_grants WHERE migrated_at IS NOT NULL"]
+                                        {:builder-fn rs/as-unqualified-lower-maps})))
+            "the grant rows stay, marked, for nodes on the previous version")
+        (testing "an assignment removed after the migration is not made again"
+          (ports/remove-group-role svc (:id finance) (:id (first (:roles (ports/get-group svc (:id finance))))))
+          (sut/migrate! svc)
+          (is (= 1 (count (:roles (ports/get-group svc (:id finance)))))))
+        (testing "a grant the previous version writes during the rollout moves at the next boot"
+          (legacy-grant! ctx (:id finance) :report/approve {})
+          (sut/migrate! svc)
+          (is (group/holds? (ports/user-grants svc ada) :report/approve))
+          (is (= 1 (count (group/grants-for (ports/user-grants svc ada) :report/approve)))
+              "rights come from assignments only, so the kept row is not counted twice"))))))
+
+(deftest ^:integration everyone-narrowed-stays-narrowed
+  (with-service nil {:registry registry}
+    (fn [{:keys [svc user!]}]
+      (user! "ada@example.com")
+      (sut/migrate! svc)
+      (doseq [a (:roles (ports/get-group svc group/everyone-id))]
+        (ports/remove-group-role svc group/everyone-id (:id a)))
+      (sut/migrate! svc)
+      (is (empty? (:roles (ports/get-group svc group/everyone-id)))
+          "a later boot does not hand the editor roles out again"))))
+
+(deftest ^:integration only-a-platform-admin-sets-or-clears-admin
+  (with-service nil
+    (fn [{:keys [users user!]}]
+      (let [svc     (user-service/create-user-service users nil nil {} nil)
+            ada     (user! "ada@example.com")
+            tenant  (ports/create-user users {:email "t@example.com" :name "T" :role :admin :active true
+                                              :tenant-id (random-uuid) :password-hash "x"})
+            as      (fn [actor f] (user-service/with-audit-context {:actor-id (:id actor)} f))]
+        (is (= :forbidden
+               (:type (refusal #(as tenant (fn [] (ports/update-user-profile svc {:id (:id ada) :role :admin})))))))
+        (is (= :forbidden
+               (:type (refusal #(as ada (fn [] (ports/update-user-profile svc {:id (:id ada) :role :admin})))))))))))
+
+(deftest ^:integration an-assignment-from-an-unregistered-source-fails-boot
+  (with-service nil {:registry registry}
+    (fn [{:keys [svc]}]
+      (let [g (ports/create-group svc {:name "Departments"})]
+        (ports/add-group-role svc (:id g) {:role :orders/viewer :scope {:department-id :user/department}})
+        (is (= {:type :configuration-error :sources [:user/department]}
+               (refusal #(sut/migrate! svc))))))))
+
+(deftest ^:integration the-migration-widens-no-grant-check
+  ;; Workflow reads :workflow/read as a grant; an app may check its own
+  ;; permissions the same way. Everyone must not get them.
+  (with-service {:permissions [:enum :reports/write]}
+    {:registry (authorization/create-registry
+                {:wagoe/orders   nil
+                 :wagoe/reports  nil
+                 :wagoe/workflow {:permissions {:workflow/read {:label "Read workflow instances"}}}})}
+    (fn [{:keys [svc ctx user!]}]
+      (user! "ada@example.com")
+      (legacy-grant! ctx (:id (ports/create-group svc {:name "Ops"})) :orders/write {})
+      (sut/migrate! svc)
+      (is (= #{} (set (map :role (:roles (ports/get-group svc group/everyone-id)))))
+          "a declared permission, the groups schema's and a granted one each keep their module's role out")
+      (is (not (group/holds? (ports/user-grants svc (user! "bob@example.com")) :workflow/read))))))

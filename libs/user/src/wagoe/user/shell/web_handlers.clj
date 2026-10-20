@@ -751,7 +751,6 @@
     :invalid-characters            [:t :user/error-name-invalid-characters]
     :invalid-domain                [:t :user/error-email-domain]
     :admin-email-domain-restricted [:t :user/error-email-admin-domain]
-    :viewer-must-be-active         [:t :user/error-viewer-must-be-active]
     message))
 
 (defn- service-errors->field-errors
@@ -1067,6 +1066,7 @@
   (fn [request]
     (try
       (let [user-id (get-in request [:path-params :id])
+            uuid (UUID/fromString user-id)
             form-data (:form-params request)
             _ (log/info "Update user form data" {:fields (keys form-data)})
             ;; Prepare data with kebab-case keyword keys for validation
@@ -1081,13 +1081,12 @@
           ;; The errors were discarded here, so the form swapped back in said
           ;; nothing about why the save was refused (BOU-381).
           (html-response request
-                         (user-ui/user-detail-form (assoc prepared-data :id (UUID/fromString user-id))
+                         (user-ui/user-detail-form (assoc prepared-data :id uuid)
                                                    validation-errors)
                          400)
           (try
             ;; Fetch existing user and merge updates
-            (let [uuid (UUID/fromString user-id)
-                  existing-user (user-ports/get-user-by-id user-service uuid)]
+            (let [existing-user (user-ports/get-user-by-id user-service uuid)]
               (if-not existing-user
                 (html-response request (ui/error-message "User not found") 404)
                 (let [;; Only the submitted fields: writing back the rest of a

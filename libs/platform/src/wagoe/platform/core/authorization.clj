@@ -10,7 +10,9 @@
                                        :resolve (fn [user] #{7})}}}
 
   `<module>/read` and `<module>/write` exist for every module without being
-  declared. What a scope means is ADR-041 §4, `core.scope`."
+  declared, and so do the code roles `<module>/viewer` and `<module>/editor`
+  holding them, unless the module declares its own. What a scope means is
+  ADR-041 §4, `core.scope`."
   (:require [clojure.string :as str]
             [malli.core :as m]
             [malli.error :as me]
@@ -49,6 +51,14 @@
   {(keyword ns "read")  {:label (str "Read " noun) :source :derived}
    (keyword ns "write") {:label (str "Change " noun) :source :derived}})
 
+(defn- derived-roles
+  "`<ns>/viewer` and `<ns>/editor`, over `<ns>/read` and `<ns>/write`."
+  [ns]
+  {(keyword ns "viewer") {:description (str "Reads " ns) :source :derived
+                          :permissions #{(keyword ns "read")}}
+   (keyword ns "editor") {:description (str "Reads and changes " ns) :source :derived
+                          :permissions #{(keyword ns "read") (keyword ns "write")}}})
+
 (defn- error [message data]
   {:error (merge {:type :configuration-error :message message} data)})
 
@@ -66,6 +76,17 @@
 (defn- if-equal [have entry]
   (when (= (dissoc have :module) (dissoc entry :module)) have))
 
+(defn- derived? [entry] (= :derived (:source entry)))
+
+(defn- over-derived
+  "A declared role stands over a derived one of the same name."
+  [have entry]
+  (if (derived? have) entry (if-equal have entry)))
+
+(defn- under-declared
+  "A derived role yields to a declared one; two derived ones clash."
+  [have _]
+  (when-not (derived? have) have))
 (defn- scope-by-rank
   "As `by-rank`, except that two of equal rank stand when they are the same.
    The loser's `:schema` is kept when the winner names none, so a key the
@@ -152,7 +173,8 @@
                                         (add-entries :permissions by-rank k (read-write-permissions (name k) (name k)))
                                         (add-entries :permissions by-rank k
                                                      (update-vals permissions #(merge {:source :declared} %)))
-                                        (add-entries :roles if-equal k roles)
+                                        (add-entries :roles under-declared k (derived-roles (name k)))
+                                        (add-entries :roles over-derived k roles)
                                         (add-entries :scopes scope-by-rank k
                                                      (update-vals scopes #(merge {:source :declared} %)))
                                         (add-entries :scope-sources if-equal k scope-sources))]

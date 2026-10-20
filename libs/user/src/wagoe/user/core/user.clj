@@ -12,8 +12,7 @@
   (:require [wagoe.user.schema :as schema]
             [wagoe.user.core.validation :as validation]
             [malli.core :as m]
-            [clojure.string :as str]
-            [clojure.set :as set])
+            [clojure.string :as str])
   (:import (java.time LocalDate ZoneOffset)
            (java.time.temporal ChronoUnit)))
 
@@ -309,25 +308,6 @@
       (>= years-member 1) :silver
       :else :bronze)))
 
-(defn calculate-user-permissions
-  "Pure function: Calculate user permissions based on role.
-
-       Args:
-         user: User entity with role information
-
-       Returns:
-         Set of permission keywords
-
-       Pure - permission calculation based on input data."
-  [user]
-  (let [base-permissions #{:read-profile :update-profile}
-        role-permissions (case (:role user)
-                           :admin #{:read-all-users :create-user :update-user :delete-user}
-                           :moderator #{:read-users :update-user}
-                           :user #{}
-                           #{})]
-    (set/union base-permissions role-permissions)))
-
 (defn should-require-password-reset?
   "Pure function: Determine if user should be required to reset password.
 
@@ -351,36 +331,30 @@
 ;; User Validation Business Rules
 ;; =============================================================================
 
-(defn validate-user-role-transition
-  "Pure function: Validate if role transition is allowed by business rules.
+(defn normalize-role
+  "`user-data` with the role it is stored with: `:admin` or none. `:user`
+   meant none and is read so until 2.0."
+  [user-data]
+  (if (= :user (some-> (:role user-data) keyword))
+    (assoc user-data :role nil)
+    user-data))
 
-       Args:
-         current-role: Current user role keyword
-         new-role: Proposed new role keyword
-         requesting-user-role: Role of user making the request
+(defn admin-changes?
+  "Whether `after` sets or clears `before`'s :admin. A key `after` leaves out
+   is kept; `before` is nil for a new user."
+  [before after]
+  (and (contains? after :role)
+       (not= (= :admin (:role before)) (= :admin (:role after)))))
 
-       Returns:
-         {:valid? true} or {:valid? false :reason string}
-
-       Pure - business rule evaluation for role transitions."
-  [current-role new-role requesting-user-role]
-  (let [role-hierarchy {:user 1 :moderator 2 :admin 3}
-        current-level (role-hierarchy current-role 0)
-        new-level (role-hierarchy new-role 0)
-        requester-level (role-hierarchy requesting-user-role 0)]
-    (cond
-      ;; Can't promote to a level higher than your own
-      (> new-level requester-level)
-      {:valid? false :reason "Cannot promote user to a role higher than your own"}
-
-      ;; Can't demote someone at your level or higher (unless demoting yourself)
-      (and (>= current-level requester-level)
-           (not= current-role requesting-user-role))
-      {:valid? false :reason "Cannot modify user at your role level or higher"}
-
-      ;; Valid transition
-      :else
-      {:valid? true})))
+(defn admin-change-refusal
+  "A :forbidden error when `after` sets or clears `before`'s :admin and the
+   actor is not a platform admin, else nil."
+  [actor-platform-admin? before after]
+  (when (and (admin-changes? before after) (not actor-platform-admin?))
+    {:error {:type    :forbidden
+             :reason  :platform-admin-only
+             :field   :role
+             :message "Only a platform admin sets or clears the admin role"}}))
 
 (defn validate-email-domain
   "Pure function: Validate email domain against allowed domains.

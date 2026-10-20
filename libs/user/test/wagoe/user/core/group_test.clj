@@ -78,11 +78,11 @@
 
 (deftest ^:unit what-an-import-changes
   (let [[a b c] (map (fn [_] {:id (random-uuid)}) (range 3))
-        kept    {:id 1 :permission :invoice/approve :scope {:domain-id 1}}
-        extra   {:id 2 :permission :report/view :scope {}}
-        new     {:permission :invoice/approve :scope {:domain-id 2}}
+        kept    {:id 1 :role :invoice/approver :scope {:domain-id 1}}
+        extra   {:id 2 :role :report/viewer :scope {}}
+        new     {:role :invoice/approver :scope {:domain-id 2}}
         current {:members [a b] :held [kept extra]}
-        wanted  {:members [b c c] :grants [(dissoc kept :id) new new]}]
+        wanted  {:members [b c c] :roles [(dissoc kept :id) new new]}]
     (testing "additive: only what is missing is added"
       (is (= {:join [c] :leave [] :stay [a b] :add [new] :remove []}
              (sut/import-changes current wanted false))))
@@ -91,4 +91,4 @@
              (sut/import-changes current wanted true))))
     (testing "importing what is there changes nothing"
       (is (= {:join [] :leave [] :stay [a b] :add [] :remove []}
-             (sut/import-changes current {:members [a b] :grants (map #(dissoc % :id) [kept extra])} true))))))
+             (sut/import-changes current {:members [a b] :roles (map #(dissoc % :id) [kept extra])} true))))))

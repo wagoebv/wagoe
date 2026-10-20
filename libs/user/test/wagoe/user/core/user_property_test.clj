@@ -101,7 +101,7 @@
 
 (def role-gen
   "Generator for valid user roles."
-  (gen/elements [:admin :user :viewer]))
+  (gen/elements [:admin :user]))
 
 (def valid-user-data-gen
   "Generator for valid user creation data."

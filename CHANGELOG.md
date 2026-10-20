@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **Roles on groups, the Everyone group and provider memberships** (BOU-771): groups hold code or managed roles in a
+  scope; grants and `:viewer` users move over at first boot. Narrow Everyone's editor roles when ready.
 - **Profile and two-factor pages in the admin shell** (BOU-768), reached from the user menu. Nothing to change.
 - **Admin sidebar grouped by module** (BOU-777): modules contribute `:nav` in their routes. Set `:module` on an admin
   entity to move it out of "Other", and `:wagoe/settings :nav-order` to order the groups.
@@ -170,6 +172,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Changed
 
+- **`:role` is `:admin` or none** (BOU-771): rights come from groups, and only a platform admin sets or clears
+  `:admin`. Give former viewers' rights through the Readers group the upgrade creates.
 - **`:export-requests-per-hour 0` means no limit** (BOU-759); it refused every request. Anything but a whole number
   now fails boot.
 - **The devtools config editor shows pretty-printed EDN** (BOU-21): one key per line, keys sorted.
@@ -205,6 +209,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Deprecated
 
+- **Group grants, `:role :user` and OIDC `:default-role`** (BOU-771): grants move onto managed roles, their rows kept
+  until 2.0 for rolling deploys. Use `add-group-role` and import `:roles`; `:user` means no role.
 - **`shared-ui` `alpine/sidebar-store-init`** (BOU-761): a second copy of the sidebar store that needs the unbundled
   Persist plugin; goes in 2.0. Load the `:admin-pilot` bundle, which registers the store.
 - **Kebab-case keys in the login response's `user` and `session`** (BOU-737): each now has a camelCase twin with the same

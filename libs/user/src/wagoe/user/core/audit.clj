@@ -41,7 +41,7 @@
    :target-user-id (:id target-user)
    :target-user-email (:email target-user)
    :changes {:created true}
-   :metadata {:role (name (:role target-user))
+   :metadata {:role (some-> (:role target-user) name)
               :active (:active target-user)}
    :ip-address ip-address
    :user-agent user-agent
@@ -341,9 +341,10 @@
 ;; Groups
 ;; =============================================================================
 
-(defn- grant-record [{:keys [permission scope]}]
-  {:permission (group/permission-str permission)
-   :scope      (pr-str scope)})
+(defn- grant-record [{:keys [permission scope role]}]
+  (cond-> {:permission (group/permission-str permission)
+           :scope      (pr-str scope)}
+    role (assoc :role (group/permission-str role))))
 
 (defn group-audit-entries
   "An entry for each of `members` whose rights changed: on :group-join or

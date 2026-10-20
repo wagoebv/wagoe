@@ -85,7 +85,7 @@
    Returns:
      Vector of cell values for table row (some as Hiccup structures)"
   [user]
-  (let [role (:role user)
+  (let [role (or (:role user) :user)
         active? (boolean (:active user))]
     [(:id user)
      (:name user)
@@ -94,7 +94,6 @@
                {:variant (case role
                            :admin :info
                            :user :neutral
-                           :viewer :outline
                            :neutral)
                 :class "user-role-badge"})
      (ui/badge (if active? [:t :user/badge-active] [:t :user/badge-inactive])
@@ -379,9 +378,8 @@
        (ui/form-field :role [:t :common/label-role]
                       (ui/select-field :role
                                        [[:admin [:t :common/role-admin]]
-                                        [:user [:t :common/role-user]]
-                                        [:viewer [:t :common/role-viewer]]]
-                                       (:role user))
+                                        [:user [:t :common/role-user]]]
+                                       (or (:role user) :user))
                       (:role errors))
        (ui/form-field :active [:t :user/field-active]
                       (ui/checkbox :active active?)
@@ -474,9 +472,8 @@
        (ui/form-field :role [:t :common/label-role]
                       (ui/select-field :role
                                        [[:user [:t :common/role-user]]
-                                        [:admin [:t :common/role-admin]]
-                                        [:viewer [:t :common/role-viewer]]]
-                                       (:role data))
+                                        [:admin [:t :common/role-admin]]]
+                                       (or (:role data) :user))
                       (:role errors))
        (ui/form-field :send-welcome [:t :user/checkbox-send-welcome]
                       (ui/checkbox :send-welcome (get data :send-welcome true))
@@ -542,7 +539,7 @@
     [:h3 [:t :user/message-updated]]
     [:p [:t :user/message-updated-details {:name (:name user) :email (:email user)}]]
     [:div.user-details
-     [:p [:t :user/updated-role {:role (text/upper-case (name (:role user)))}]]]
+     [:p [:t :user/updated-role {:role (text/upper-case (name (or (:role user) :user)))}]]]
     [:a.button {:href (str "/web/users/" (:id user))} [:t :user/button-view-user]]]))
 (defn user-deleted-success
   "Generate success message for user deletion.
@@ -653,8 +650,7 @@
             [:select {:name "role"}
              [:option {:value "" :selected (nil? (:role filters))} [:t :common/filter-all-roles]]
              [:option {:value "user" :selected (= "user" (:role filters))} [:t :common/role-user]]
-             [:option {:value "admin" :selected (= "admin" (:role filters))} [:t :common/role-admin]]
-             [:option {:value "viewer" :selected (= "viewer" (:role filters))} [:t :common/role-viewer]]]
+             [:option {:value "admin" :selected (= "admin" (:role filters))} [:t :common/role-admin]]]
             [:div.filter-actions
              [:button.button.small {:type "submit"} [:t :common/button-apply]]
              [:a.button.small.secondary {:href "/web/users"} [:t :common/button-clear]]]]]]

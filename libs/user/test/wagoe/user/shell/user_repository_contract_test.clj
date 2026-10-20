@@ -144,13 +144,13 @@
           updated (ports/update-user @user-repo (assoc created
                                                        :name "Ada B. Lovelace"
                                                        :password-hash "$2a$10$rotatedHashValue000001"
-                                                       :role :user))
+                                                       :role nil))
           fetched (ports/find-user-by-id @user-repo (:id created))]
       (is (some? updated))
       (is (= "Ada B. Lovelace" (:name fetched)) "profile change persisted")
       (is (= "$2a$10$rotatedHashValue000001" (:password-hash fetched))
           "credential change persisted")
-      (is (= :user (:role fetched))))))
+      (is (nil? (:role fetched)) "no role"))))
 
 (deftest ^:contract soft-delete-excludes-from-finds
   (testing "soft-delete-user hides the user from find-user-by-id"
