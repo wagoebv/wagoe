@@ -61,10 +61,8 @@
    the component by hand, which a generated project has no reason to do
    (BOU-477).
 
-   `:ig-config-fn` is deliberately absent. Rebuilding the Integrant config
-   means knowing which components the application runs, which a library cannot
-   — an application that wants the dashboard's config editor merges it in. The
-   dashboard says so when it is missing rather than failing."
+   `:ig-config-fn` is deliberately absent: the config editor rebuilds with
+   the prep fn the application gave `integrant.repl/set-prep!`."
   [settings profile]
   ;; Required here, not at the top: it starts a Jetty of its own, and a project
   ;; that wants only the error enricher should not pay for loading it.
