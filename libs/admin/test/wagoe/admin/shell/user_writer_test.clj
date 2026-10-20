@@ -87,8 +87,8 @@
   (let [{:keys [admin users] :as sys} (system)
         boss (user! sys "boss@example.com" :admin)
         u    (user! sys "u@example.com" :user)]
-    (as boss #(ports/update-entity admin :users (:id u) {:role "viewer"}))
-    (is (= :viewer (:role (user-ports/get-user-by-id users (:id u)))))
+    (as boss #(ports/update-entity admin :users (:id u) {:role "admin"}))
+    (is (= :admin (:role (user-ports/get-user-by-id users (:id u)))))
     (is (zero? (live-sessions sys u)) "a role change ends the user's sessions (BOU-191)")
     (let [entry (first (user-ports/get-audit-logs-for-user users (:id u) {}))]
       (is (= :update (:action entry)))
@@ -129,7 +129,7 @@
            (:reason (refusal #(as boss (fn [] (ports/delete-entity admin :users (:id boss))))))))
     (testing "another admin can be demoted while one remains"
       (as boss #(ports/update-entity admin :users (:id other) {:role "user"}))
-      (is (= :user (:role (user-ports/get-user-by-id users (:id other))))))))
+      (is (nil? (:role (user-ports/get-user-by-id users (:id other))))))))
 
 (deftest ^:integration fields-the-user-module-writes-are-read-only
   (let [{:keys [admin repo] :as sys} (system)

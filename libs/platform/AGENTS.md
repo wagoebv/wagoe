@@ -282,7 +282,9 @@ module: a `def authorization` in its wiring namespace):
 ```
 
 - Derived, never declared: `<module>/read` and `<module>/write` for every enabled
-  module, and `admin.<entity>/read|write` for every admin entity.
+  module, and `admin.<entity>/read|write` for every admin entity. So are the code
+  roles `<module>/viewer` and `<module>/editor` over them; a declared role of the
+  same name stands instead.
 - The `:wagoe/user :groups :permissions` enum is read in too, until 2.0.
 - Two modules declaring one permission, role or differing scope key fail boot.
   So do a role or a route `:permission` naming something outside the registry,

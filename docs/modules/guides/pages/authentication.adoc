@@ -195,8 +195,9 @@ Which account a sign-in belongs to:
 . Otherwise, with `:link-by-email?`, the account with the token's email, and only when
   the provider marks that email verified. The link is stored from then on. An
   administrator account is never linked this way; the sign-in is refused.
-. Otherwise, with `:auto-create?`, a new account with role `:default-role` (`:user`, or
-  `:viewer`; never `:admin`) and no usable password.
+. Otherwise, with `:auto-create?`, a new account with no role and no usable password. Its
+  rights come from Everyone and the identity provider's groups. `:default-role` is
+  ignored.
 . Otherwise the sign-in is refused.
 
 Some providers, Microsoft Entra among them, send no `email_verified` claim, so no email
@@ -294,57 +295,100 @@ Wagoe's, so the layout cannot weaken them. Wagoe's logo and subtitle are left ou
 module can contribute it as `:auth {:login-layout (ig/ref …)}`, a function or a
 `wagoe.user.ports/ILoginLayout`. Without it the pages are unchanged.
 
-== Groups and permissions
+== Groups, roles and permissions
 
-A group has a name, members and grants. A grant is a permission, a keyword your
-application defines, and a scope, a map of whatever narrows it. A member holds the
-grants of every group they are in. Wagoe stores and checks them; what a scope means is
-up to the application. The `:admin` role needs no group.
+A permission is a keyword such as `:invoice/approve`; every module has `<module>/read`
+and `<module>/write`, and declares the rest (see the platform library's permission
+registry). A role bundles permissions. Modules ship code roles, at least
+`<module>/viewer` and `<module>/editor`; administrators compose managed roles from the
+registry. A group holds roles, each with an optional scope, a map that narrows it. A
+member holds the permissions of every role of every group they are in.
 
-Administrators manage groups at `/web/admin/groups`. Joining or leaving a group and a
-changed grant are written to the audit trail of each user whose rights change.
+The `:admin` role makes a platform admin and needs no group; a user has it or no role
+at all. Only a platform admin can give or take it. `:role :user` is still accepted and
+means no role.
 
-Declare what a grant may name, so a bad one is refused. Each is a Malli schema or a
+Everyone is a built-in group: every signed-in user is in it, including users who sign
+up later. Give it the roles any user should have.
+
+Administrators manage groups at `/web/admin/groups`. Joining or leaving a group, a
+changed role assignment and a changed managed role are written to the audit trail of
+each user whose rights change; a change to Everyone is written once, for the
+administrator who made it.
+
+[source,clojure]
+----
+(require '[wagoe.user.ports :as user-ports])
+
+;; group-service is :wagoe/user-group-service
+(user-ports/create-role group-service {:name        :invoice/clerk
+                                       :description "Enters and approves invoices"
+                                       :permissions #{:invoice/read :invoice/write :invoice/approve}})
+(user-ports/add-group-role group-service finance-id {:role :invoice/clerk :scope {:domain-id 4}})
+(user-ports/add-group-role group-service wagoe.user.core.group/everyone-id {:role :invoice/viewer})
+----
+
+=== Memberships from an identity provider
+
+When users sign in through Entra ID or LDAP, map the provider's groups to Wagoe group
+names with a `:group-membership` hook. Those memberships count as if added by hand and
+are not stored, so they follow the provider. A name with no Wagoe group gives nothing.
+
+[source,clojure]
+----
+:wagoe/user {:group-membership my.app.auth/wagoe-groups}
+
+(defn wagoe-groups [user]
+  #{"Newsroom"})
+----
+
+A module can contribute it instead, as `:auth {:group-membership (ig/ref …)}`, a
+function or a `wagoe.user.ports/IGroupMembership`.
+
+=== Scopes
+
+Declare what a scope may hold, so a bad one is refused. It is a Malli schema or a
 symbol naming one:
 
 [source,clojure]
 ----
 :wagoe/user
-{:groups {:permissions [:enum :invoice/approve :invoice/view]
-          :scope       [:map {:closed true}
-                        [:domain-id {:optional true :wagoe/entity :domains} :int]
-                        [:director-general-id {:optional true} :uuid]]}}
+{:groups {:scope [:map {:closed true}
+                  [:domain-id {:optional true :wagoe/entity :domains} :int]
+                  [:director-general-id {:optional true} :uuid]]}}
 ----
 
-Without them any keyword and any map of EDN values is accepted. A scope is stored as
-EDN, so a uuid or keyword in it reads back as one. A scope key with `:wagoe/entity`
-names the admin entity it points at: the group page offers a lookup of its rows for
-that key, and the rest of the scope stays EDN.
+Without it any map of EDN values is accepted. A scope is stored as EDN, so a uuid or
+keyword in it reads back as one. A scope key with `:wagoe/entity` names the admin
+entity it points at: the group page offers a lookup of its rows for that key, and the
+rest of the scope stays EDN.
 
 The `:scope` schema is being replaced by scope keys a module declares under
 `:authorization :scopes` (see the platform library's Scopes section). A `:map` schema
-here is read in as those keys until 2.0; once any key is declared, a grant's scope is
-checked against the declared keys.
+here is read in as those keys until 2.0; once any key is declared, a scope is checked
+against the declared keys. An assignment taking a value from a `:user/<name>` source
+that no module registers stops the application from starting.
 
-Check grants on each request; nothing is cached, so a change applies to the next one:
+=== Checking rights
+
+Check rights on each request; nothing is cached, so a change applies to the next one:
 
 [source,clojure]
 ----
-(require '[wagoe.user.ports :as user-ports]
-         '[wagoe.user.core.group :as group])
+(require '[wagoe.user.core.group :as group])
 
-;; group-service is :wagoe/user-group-service
 (let [grants (user-ports/user-grants group-service (:user request))]
-  (group/holds? grants :invoice/view)                          ; in any scope
+  (group/holds? grants :invoice/read)                          ; in any scope
   (group/grants-for grants :invoice/approve)                   ; => [{:domain-id 4} …]
   (group/authorized? grants :invoice/approve #(= domain-id (:domain-id %))))
 ----
 
-A soft-deleted user holds no grants. Deleting a user or a group removes the
-memberships, and a group's grants go with it.
+A soft-deleted user holds nothing. Deleting a user or a group removes the memberships,
+and a group's role assignments go with it.
 
 To ask who holds a permission, say for a notification, use one query rather than
-walking the groups. Inactive users are left out:
+walking the groups. Inactive users, and memberships from an identity provider, are left
+out:
 
 [source,clojure]
 ----
@@ -352,21 +396,36 @@ walking the groups. Inactive users are left out:
     (group/users-with-permission #(= domain-id (:domain-id %))))  ; => [user-id …]
 ----
 
-To move existing grants onto groups, import them. Each group is matched by name and
-created when missing; every group, member and grant is checked before anything is
-written, and the import runs in one transaction, audited as the single changes are.
-It adds what is missing and removes nothing unless you pass `{:replace? true}`, so
-running it twice is harmless. It creates the group tables itself, so it can run from
-your own migration:
+=== Importing groups
+
+Each group is matched by name and created when missing; every group, member and role
+is checked before anything is written, and the import runs in one transaction, audited
+as the single changes are. It adds what is missing and removes nothing unless you pass
+`{:replace? true}`, so running it twice is harmless. It creates the group tables
+itself, so it can run from your own migration:
 
 [source,clojure]
 ----
 (user-ports/import-groups! group-service
                            [{:name    "Finance"
                              :members [ada-id bob-id]
-                             :grants  [{:permission :invoice/approve :scope {:domain-id 4}}]}]
+                             :roles   [{:role :invoice/clerk :scope {:domain-id 4}}]}]
                            {})
 ----
+
+=== Upgrading from grants and the user and viewer roles
+
+Groups used to hold grants, a permission and a scope, and users had the role `:user` or
+`:viewer`. The first start after upgrading moves them over, so nobody can do less and
+nobody becomes an admin:
+
+* Each grant becomes an assignment of a managed role named after its permission.
+  `add-group-grant`, `remove-group-grant` and an import's `:grants` still work this
+  way, and are deprecated.
+* When there are users, Everyone gets every module's `editor` role. That is what every
+  signed-in user could do; narrow it when you are ready.
+* Users with `:viewer` join a group called Readers, which gets every module's `viewer`
+  role, and keep no role. OIDC's `:default-role` no longer gives a role.
 
 [#web-ui-off]
 == Turning the web UI off
