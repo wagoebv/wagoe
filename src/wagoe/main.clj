@@ -261,7 +261,12 @@
       (run-cli! remaining-args)
 
       "authz-report"
-      (System/exit (authz-report/print-report! (sys-config/ig-config (config/load-config))))
+      (try
+        (println (authz-report/report (sys-config/ig-config (config/load-config))))
+        (System/exit 0)
+        (catch Exception e
+          (log/error (startup-failure-summary e))
+          (System/exit 1)))
 
       ("help" "-h" "--help")
       (do

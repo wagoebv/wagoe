@@ -1,5 +1,6 @@
 (ns wagoe.push.shell.handlers-test
   (:require [clojure.test :refer [deftest use-fixtures is]]
+            [wagoe.platform.core.authorization :as authorization]
             [wagoe.push.shell.handlers :as handlers]
             [wagoe.push.shell.persistence :as p]
             [wagoe.push.shell.persistence-test :as pt]
@@ -115,17 +116,12 @@
 
 (deftest ^:unit every-route-has-an-authorization-rule
   ;; Mounted by hand, so no module tags them: without a rule of their own,
-  ;; :wagoe/authorization :enforce refuses them.
-  (let [[_ & children] (handlers/push-routes {})
-        rules (into {} (for [[path data] children
-                             [method endpoint] data
-                             :when (map? endpoint)]
-                         [[path method] (or (when (:public endpoint) :public)
-                                            (:authorization data)
-                                            (:permission data))]))]
-    (is (= {["/devices" :post]               :self
-            ["/devices" :get]                :self
-            ["/devices/:token" :delete]      :self
-            ["/callback" :post]              :public
-            ["/stats/:notification-id" :get] :push/read}
-           rules))))
+  ;; :wagoe/authorization :enforce refuses them. No parent data to inherit.
+  (let [[_ & children] (handlers/push-routes {})]
+    (is (= {["/devices" :get]                [:self []]
+            ["/devices" :post]               [:self []]
+            ["/devices/:token" :delete]      [:self []]
+            ["/callback" :post]              [:public []]
+            ["/stats/:notification-id" :get] [:permission [:push/read]]}
+           (into {} (map (juxt (juxt :path :method) (juxt :rule :permissions)))
+                 (authorization/route-report children))))))

@@ -33,10 +33,12 @@
 
 (defn -main
   [& args]
-  (when (= "authz-report" (first args))
-    (System/exit (authz-report/print-report! (config/ig-config (config/load-config)))))
   (try
-    (let [system (ig/init (config/ig-config (config/load-config)))]
+    (let [ig-config (config/ig-config (config/load-config))
+          _         (when (= "authz-report" (first args))
+                      (println (authz-report/report ig-config))
+                      (System/exit 0))
+          system    (ig/init ig-config)]
       (log/info "shop started — press Ctrl+C to stop")
       ;; Halt on SIGTERM/SIGINT so a container stop closes the database pool and
       ;; drains the HTTP server rather than having them killed mid-request.

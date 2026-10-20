@@ -190,24 +190,21 @@
                   (when-not (or (= :off mode) (#{:public :signed-in :self} (:rule rule)))
                     (fn [handler]
                       (fn [request]
-                        (let [route (or (:template (:reitit.core/match request)) (:uri request))
+                        (let [route  (or (:template (:reitit.core/match request)) (:uri request))
+                              method (:request-method request)
                               {admitted :request :keys [response error permission]}
                               (try (check registry rights-source rule route-scope request)
                                    (catch Exception e
                                      (when-not (= :report mode) (throw e))
-                                     (throttled [::failed route (:request-method request) (class e)]
+                                     (throttled [::failed route method (class e)]
                                                 #(log/error e "Authorization report failed; the request goes through"
-                                                            {:route route :method (:request-method request)}))
+                                                            {:route route :method method}))
                                      {:request request}))]
                           (when error
-                            (let [entry {:mode       mode
-                                         :user-id    (get-in request [:user :id])
-                                         :route      route
-                                         :method     (:request-method request)
-                                         :permission permission
-                                         :reason     (:type error)}]
-                              (throttled (select-keys entry [:user-id :route :method :permission])
-                                         #(log-refusal! entry))))
+                            (let [user-id (get-in request [:user :id])]
+                              (throttled [user-id route method permission]
+                                         #(log-refusal! {:mode mode :user-id user-id :route route :method method
+                                                         :permission permission :reason (:type error)}))))
                           (cond admitted         (handler admitted)
                                 (= :report mode) (handler request)
                                 :else            response)))))))}))

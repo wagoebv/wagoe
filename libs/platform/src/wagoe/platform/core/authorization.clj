@@ -279,17 +279,6 @@
     (cond-> (mapv (fn [m] [m (merge shared (get data m))]) methods)
       (:handler data) (conj [:any shared]))))
 
-(defn unruled-routes
-  "The endpoints of `routes`, a router's flattened [path data] pairs, that no
-   rule covers, as [{:path :methods}]: what `:enforce` refuses to everyone
-   but a platform admin."
-  [routes]
-  (vec (for [[path data] routes
-             :let [methods (into [] (comp (filter #(= :none (:rule (route-rule (second %))))) (map first))
-                                 (endpoints data))]
-             :when (seq methods)]
-         {:path path :methods methods})))
-
 (defn invalid-route-markers
   "The `:authorization` values in `routes` other than `:signed-in` and
    `:self`, as [{:path :authorization}]. Like `:permission`."
@@ -315,15 +304,14 @@
    `:permissions` holds what the rule asks, both read and write for a module
    route answering `:any` method."
   [routes]
-  (vec (for [[path data] (sort-by first routes)
+  (vec (for [[path data] routes
              [method d] (endpoints data)
              :let [rule (route-rule d)]]
          (cond-> {:path        path
                   :method      method
                   :rule        (:rule rule)
-                  :permissions (if (and (= :any method) (= :module (:rule rule)))
-                                 [(required-permission rule :get) (required-permission rule :post)]
-                                 (vec (some-> (required-permission rule method) list)))}
+                  :permissions (into [] (comp (keep #(required-permission rule %)) (distinct))
+                                     (if (= :any method) [:get :post] [method]))}
            (some? (:scope d)) (assoc :scope (:scope d))))))
 
 (defn- report-line [{:keys [path method rule permissions scope]}]
@@ -336,7 +324,8 @@
   "`report` (`route-report`) as text for a terminal: the endpoints no rule
    covers first, then every endpoint with its rule and permission."
   [mode report]
-  (let [unruled (filter #(= :none (:rule %)) report)]
+  (let [report  (sort-by :path report)
+        unruled (filter #(= :none (:rule %)) report)]
     (str/join
      "\n"
      (concat [(str "Route authorization (:wagoe/authorization :mode " mode ")") ""]
@@ -347,3 +336,12 @@
                ["Every endpoint has a rule."])
              ["" (str "All " (count report) " endpoint(s):")]
              (map report-line report)))))
+
+(defn unruled-routes
+  "The endpoints of `routes` that no rule covers, as [{:path :methods}]: what
+   `:enforce` refuses to everyone but a platform admin."
+  [routes]
+  (->> (route-report routes)
+       (filter #(= :none (:rule %)))
+       (partition-by :path)
+       (mapv (fn [rows] {:path (:path (first rows)) :methods (mapv :method rows)}))))
