@@ -74,7 +74,7 @@
     [:div.admin-sidebar-header
      ;; One row the height of the topbar: the mark at full height and the
      ;; wordmark. The text is nav-text, so a collapsed sidebar keeps the mark.
-     [:a {:class "sidebar-brand" :href "/web/admin/"}
+     [:a {:class "sidebar-brand" :href home/*path*}
       (if-let [logo-url (:logo-url opts)]
         [:img.sidebar-brand-logo {:src logo-url :alt ""}]
         (list

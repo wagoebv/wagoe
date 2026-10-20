@@ -25,6 +25,7 @@
 (deftest ^:integration ^:e2e the-sidebar-groups-pages-by-module
   (spel/with-testing-page [pg]
     (admin/login-as-admin! pg fx/*seed*)
+    (page/navigate pg (admin/admin-url "/users"))
     (await! pg "!!window.Alpine && !!document.querySelector('.nav-module')")
 
     (testing "the current page's module is open, its page marked; the rest closed"

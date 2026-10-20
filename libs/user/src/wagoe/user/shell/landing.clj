@@ -8,6 +8,7 @@
             [wagoe.core.utils.redirect :as redirect]
             [wagoe.config :as wagoe-config]
             [wagoe.core.validation :as cv]
+            [wagoe.platform.core.http.pages :as pages]
             [wagoe.shared.ui.core.home :as home]
             [wagoe.user.core.landing :as landing]
             [wagoe.user.shell.hooks :as hooks]
@@ -61,13 +62,23 @@
           config
           hooks/config-hooks))
 
+(defn- dashboard
+  "The admin's dashboard, or the profile in an application without the admin.
+   Asked inside a handler, where the platform binds what is mounted."
+  []
+  (if (pages/mounted? landing/dashboard-path) landing/dashboard-path "/web/profile"))
+
 (defn path-for
   "Where `user` lands after signing in. A function gets the user and
    `login-context` (`:ip-address`, `:user-agent`, `:request`). Its answer that
    is not a path on this site — nil included — falls back to the defaults, as
    does one that throws: by then the session exists, and a 500 would strand it."
   [config user login-context]
-  (let [r (:login-redirect (settings config))]
+  (let [s       (settings config)
+        r       (:login-redirect s)
+        default (if (= :built-in (landing/dashboard-mode s))
+                  (dashboard)
+                  landing/app-dashboard-path)]
     (if (and r (not (map? r)))
       (let [path (try (r user login-context)
                       (catch Exception e
@@ -78,8 +89,8 @@
           (do (when (some? path)
                 (log/warn ":login-redirect returned a path not on this site; using the default"
                           {:path path}))
-              (landing/role-path nil user))))
-      (landing/role-path r user))))
+              default)))
+      (landing/role-path r default user))))
 
 (defn front-page
   "Where `/` and `/web` send everyone, or nil to keep the defaults."
@@ -107,13 +118,14 @@
 
 (defn dashboard-handler
   "The handler to mount at /web/dashboard: nil for `:dashboard false`, the
-   configured one, or what `default` builds."
-  [config default]
-  (let [d (:dashboard (settings config))]
-    (cond
-      (false? d) nil
-      (map? d)   (:handler d)
-      :else      (default))))
+   configured one, or a redirect to the admin's dashboard (the profile without
+   the admin)."
+  [config]
+  (let [s (settings config)]
+    (case (landing/dashboard-mode s)
+      :off      nil
+      :app      (get-in s [:dashboard :handler])
+      :built-in (fn [_] (response/redirect (dashboard))))))
 
 (defn wrap-home
   "Middleware binding the layouts' home path for each request. Identity when

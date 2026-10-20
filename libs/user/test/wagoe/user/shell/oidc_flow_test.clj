@@ -207,7 +207,7 @@
         ada  (add-user! a)
         resp (sign-in! a)]
     (is (= 200 (:status resp)))
-    (is (= "0;url=/web/dashboard" (get-in resp [:headers "Refresh"])))
+    (is (= "0;url=/web/admin/" (get-in resp [:headers "Refresh"])))
     (is (= :strict (get-in resp [:cookies "session-token" :same-site])))
     (is (= "ada@example.com" (authenticated-as a (session-token resp))))
     (testing "linked by verified email to (iss, sub)"
@@ -246,7 +246,7 @@
 (deftest ^:integration ^:security return-to-is-kept-and-must-be-local
   (let [a (app)]
     (add-user! a)
-    (doseq [[asked landed] [["/web/profile" "/web/profile"] ["https://evil.example" "/web/dashboard"]]]
+    (doseq [[asked landed] [["/web/profile" "/web/profile"] ["https://evil.example" "/web/admin/"]]]
       (let [resp ((:start a) (request {:path-params {:provider "fake"} :query-params {"return-to" asked}}))
             cb   (callback! a (get-in resp [:cookies "oidc-pending" :value])
                             (authorize! (get-in resp [:headers "Location"])))]
