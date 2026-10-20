@@ -133,6 +133,14 @@ scope.
 * A record or parameter outside the user's scope is a 404, in the admin and on
   routes alike, so its existence does not leak.
 
+Between the user module and the platform, a user's rights are
+`[{:permission kw :scope nil-or-{key value}}]`: the user module reads them
+from the assignments, a value fixed or a `:user/<name>` source. The platform
+resolves sources and expands (`resolve-rights`) into `{key #{value}}` per
+request, `{}` meaning everywhere. A key declares the sources it takes
+(`:sources`), and resolvers are declared beside the keys (`:scope-sources`),
+so a missing resolver fails boot.
+
 === 5. One interceptor enforces it, behind a mode
 
 Route contributions today are anonymous maps, merged and reordered by
