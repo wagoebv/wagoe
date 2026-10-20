@@ -444,6 +444,15 @@
   ;; not stored, so not listed. Judge the scope with
   ;; wagoe.user.core.group/users-with-permission.
 
+  (role-holders [this role-names])
+  ;; Every assignment of one of the roles, {:role :group-id :group-name :scope
+  ;; :everyone? :members}, by group name. Everyone lists no members.
+
+  (provider-members [this group-id])
+  ;; The active users the `:group-membership` hook puts in the group,
+  ;; {:id :email :name}, by email. Runs the hook for every active user; none
+  ;; without a hook.
+
   (import-groups! [this groups opts]))
   ;; groups: [{:name :description :members [user-id …] :roles [{:role :scope}]}];
   ;; :grants [{:permission :scope}] is read as roles, as add-group-grant does.

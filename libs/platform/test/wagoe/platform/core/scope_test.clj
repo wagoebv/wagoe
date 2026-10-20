@@ -70,6 +70,12 @@
     (is (m/validate schema {:domain-id 42}))
     (is (m/validate schema {:department-id :user/department}))
     (is (m/validate schema {:department-id 7}))
+    (is (not (m/validate schema {:department-id :user/boss})) "a source the key does not take")
+    (is (not (m/validate schema {:domain-id :user/department})))
+    (let [kw (m/schema (sut/scope-schema {:team {:schema :keyword :sources #{:user/team}}}))]
+      (is (m/validate kw {:team :red}))
+      (is (m/validate kw {:team :user/team}))
+      (is (not (m/validate kw {:team :user/boss})) "a schema that admits keywords does not let any source in"))
     (is (not (m/validate schema {:domain-id "42"})))
     (is (not (m/validate schema {:area-id 1})))
     (is (= {:optional true :wagoe/entity :domains}

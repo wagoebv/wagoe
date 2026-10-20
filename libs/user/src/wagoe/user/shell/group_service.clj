@@ -172,6 +172,17 @@
     (when-let [user (if (map? user) user (ports/find-user-by-id user-repository user))]
       (set (membership user)))))
 
+(defn- active-users
+  "Every active user, by email, through `xf`, read a page at a time so only
+   what `xf` keeps is held."
+  [user-repository xf]
+  (let [page 500]
+    (loop [offset 0 acc []]
+      (let [users (:users (ports/find-users user-repository {:limit page :offset offset :filter-active true
+                                                             :sort-by :email :sort-direction :asc}))
+            acc   (into acc xf users)]
+        (if (< (count users) page) acc (recur (+ offset page) acc))))))
+
 (defn- find-role
   "The managed role named `role-name`, or nil."
   [repo role-name]
@@ -191,22 +202,26 @@
     data))
 
 (defn- role-holders
-  "The users who hold the managed role `role-name` through a stored group, and
-   the groups that hold it, for auditing a change to it."
-  [repo role-name]
-  (for [a (ports/find-role-assignments repo role-name)]
-    {:group   {:id (:group-id a) :name (:group-name a)}
-     :scope   (:scope a)
-     :members (when-not (group-core/everyone? (:group-id a)) (ports/find-members repo (:group-id a)))}))
+  "Every assignment of one of `role-names`, with its group's members; Everyone
+   lists none."
+  [repo role-names]
+  (->> (mapcat #(ports/find-role-assignments repo %) (distinct role-names))
+       (map (fn [{:keys [group-id] :as a}]
+              (let [everyone? (group-core/everyone? group-id)]
+                (assoc (select-keys a [:role :group-id :group-name :scope])
+                       :everyone? everyone?
+                       :members (if everyone? [] (ports/find-members repo group-id))))))
+       (sort-by (juxt :group-name (comp str :role)))
+       vec))
 
 (defn- audit-role-change!
   "Audit what changing managed role `role-name` from `before` to `after`
    permissions does to every group holding it."
   [repo audit-repository role-name before after]
-  (doseq [{:keys [group scope members]} (role-holders repo role-name)
+  (doseq [{:keys [group-id group-name scope members]} (role-holders repo [role-name])
           [action ps] [[:grant-remove (remove (set after) before)] [:grant-add (remove (set before) after)]]
           :when (seq ps)]
-    (audit! audit-repository action group members
+    (audit! audit-repository action {:id group-id :name group-name} members
             (for [p (sort ps)] {:permission p :scope scope :role role-name}))))
 
 ;; =============================================================================
@@ -510,6 +525,17 @@
     (let [roles (group-core/roles-holding (all-roles group-repository registry) permission)]
       (into [] (comp (map #(-> % (dissoc :role) (assoc :permission permission))) (distinct))
             (ports/find-role-holders group-repository roles))))
+
+  (role-holders [_ role-names]
+    (role-holders group-repository role-names))
+
+  (provider-members [_ group-id]
+    (let [group (ports/find-group group-repository group-id)]
+      (if (and membership group (not (group-core/everyone? group-id)))
+        (active-users user-repository
+                      (comp (filter #(some #{(:name group)} (membership %)))
+                            (map #(select-keys % [:id :email :name]))))
+        [])))
 
   (import-groups! [_ groups {:keys [replace?]}]
     (ports/ensure-tables group-repository)

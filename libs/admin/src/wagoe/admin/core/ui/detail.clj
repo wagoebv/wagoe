@@ -755,6 +755,14 @@
            (when (contains? off-form field) (list " " [:t :admin/form-error-not-on-form]))
            ": " (str message)])]])))
 
+(defn detail-tabs
+  "The edit page as the first of the record's tabs, then `:detail-tabs`, each
+   :href with `{id}` replaced by `id`."
+  [entity-name entity-config id]
+  (ui/tabs (into [{:label [:t :admin/tab-details] :href (str "/web/admin/" (name entity-name) "/" id) :active? true}]
+                 (for [{:keys [label href]} (:detail-tabs entity-config)]
+                   {:label label :href (str/replace href "{id}" (str id))}))))
+
 (defn entity-detail-page
   "Entity detail/edit page.
 
@@ -863,6 +871,8 @@
         [:div.workflow-state-row
          [:span.workflow-state-label [:t :admin/column-workflow]] " "
          (base/workflow-state-link workflow)])]
+     (when (and is-edit? (seq (:detail-tabs entity-config)))
+       (detail-tabs entity-name entity-config (get record pk)))
      (when-let [ctx (:parent-context opts)]
        (parent-context-banner ctx))
      (error-summary entity-config errors)
