@@ -2,7 +2,6 @@
  ;; Gemeenschappelijk — gedeeld over alle modules
  ;; =============================================================================
  :common/error-generic      "Er ging iets mis. Probeer het later opnieuw."
- :common/column-id          "ID"
  :common/column-name        "Naam"
  :common/column-email       "E-mail"
  :common/column-role        "Rol"
@@ -109,10 +108,7 @@
  :user/field-active            "Actief"
  :user/field-password          "Wachtwoord"
  :user/field-remember          "Onthoud mij"
- :user/button-filters-label    "Filters"
  :user/page-create-user-title  "Gebruiker aanmaken"
- :user/button-back-to-users    "← Terug naar gebruikers"
- :user/button-back-to-user     "← Terug naar gebruiker"
  :user/button-back-to-login    "Terug naar inloggen"
  :user/login-subtitle          "Inloggen om gebruikers te beheren"
  :user/mfa-subtitle            "Tweestapsverificatie vereist"
@@ -162,7 +158,6 @@
  :user/bulk-action-role-user    "Rol wijzigen naar gebruiker"
  :user/button-apply-bulk        "Toepassen op geselecteerde"
 
- :user/filters-search-title     "Zoeken & filteren"
  :user/filter-placeholder-email "E-mail zoeken..."
 
  :user/mfa-title               "Tweestapsverificatie"
@@ -208,6 +203,14 @@
  :user/sessions-empty-state    "Geen actieve sessies."
  :user/sessions-manage-for     "Beheer actieve sessies voor {name}"
  :user/button-revoke-all-others "Alle andere intrekken"
+ :user/confirm-revoke-session  "Deze sessie intrekken? Het apparaat moet dan opnieuw inloggen."
+ :user/confirm-revoke-all-sessions "Alle andere sessies intrekken? Elk ander apparaat wordt uitgelogd."
+ :user/confirm-bulk-action     "Deze actie uitvoeren op de geselecteerde gebruikers?"
+ :user/confirm-delete-permanently "Dit verwijdert de gebruiker en alle bijbehorende gegevens onherroepelijk. Definitief verwijderen?"
+ :user/toast-user-deleted "Gebruiker definitief verwijderd"
+ :user/toast-session-revoked "Sessie ingetrokken"
+ :user/toast-session-not-found "Sessie niet gevonden of al beëindigd"
+ :user/toast-sessions-revoked "Andere sessies ingetrokken"
  :user/page-sessions-title     "Sessies voor {name}"
 
  :user/audit-actor-system      "Systeem"

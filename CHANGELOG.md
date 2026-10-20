@@ -33,6 +33,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **Route authorization, off by default** (BOU-772): `:wagoe/authorization {:mode :report}` logs what `:enforce` would
   refuse. Tag routes `:public`, `:authorization :signed-in`/`:self` or `:permission`, then switch to `:enforce`.
+- **User list, detail, create and sessions pages in the admin shell** (BOU-766), with its table, toasts and confirm dialogs.
+  `POST /web/users/bulk` takes `ids[]` instead of `user-ids`.
 - **Roles on groups, the Everyone group and provider memberships** (BOU-771): groups hold code or managed roles in a
   scope; grants and `:viewer` users move over at first boot. Narrow Everyone's editor roles when ready.
 - **Profile and two-factor pages in the admin shell** (BOU-768), reached from the user menu. Nothing to change.

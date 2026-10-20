@@ -510,6 +510,14 @@
       (is (re-find #"^\s*<div [^>]*\bid=\"audit-table-container\""
                    (:body ((web-handlers/audit-table-fragment-handler service config) {}))))))
 
+  (testing "htmx shows the page's URL, not the fragment's"
+    (let [handler (web-handlers/users-table-fragment-handler (create-mock-service) {})]
+      (is (= "/web/users?sort=email&dir=asc&page=1&page-size=20&q=ann"
+             (get-in (handler {:headers {"hx-request" "true"}
+                               :query-params {"sort" "email" "dir" "asc" "q" "ann"}})
+                     [:headers "HX-Push-Url"])))
+      (is (nil? (get-in (handler {}) [:headers "HX-Push-Url"])))))
+
   (testing "handles errors"
     (let [service (reify ports/IUserService
                     (register-or-authenticate-user [_ _ _] {:user nil :created? false :authenticated? false :auth-result nil})
@@ -722,9 +730,9 @@
       (is (= 200 (:status response)))
       (is (= "text/html; charset=utf-8" (get-in response [:headers "Content-Type"])))
       (is (has-header? response "HX-Trigger" "userUpdated"))
-      ;; Now returns success banner and form instead of separate success page
-      (is (html-contains? response "User updated successfully"))
-      (is (html-contains? response "success-banner"))
+      ;; The form, and a toast out of band
+      (is (html-contains? response "hx-swap-oob=\"beforeend:#toasts\""))
+      (is (html-contains? response "message-updated"))
       (is (html-contains? response "Updated Name"))))
 
   (testing "returns validation errors for invalid data"
@@ -1068,14 +1076,14 @@
                   (deactivate-user [_ _]
                     (throw (ex-info "jdbc password=hunter2" {:type :internal-error}))))
             response ((web-handlers/bulk-update-users-htmx-handler svc {})
-                      {:form-params {"user-ids" (str (UUID/randomUUID))
+                      {:form-params {"ids[]" (str (UUID/randomUUID))
                                      "action" "deactivate"}})]
         (is (= 500 (:status response)))
         (is (not (html-contains? response "hunter2")))
         (is (html-contains? response "error-generic"))))
     (testing "a curated bad-request message is still shown"
       (let [response ((web-handlers/bulk-update-users-htmx-handler (create-mock-service) {})
-                      {:form-params {"user-ids" (str (UUID/randomUUID))
+                      {:form-params {"ids[]" (str (UUID/randomUUID))
                                      "action" "explode"}})]
         (is (= 400 (:status response)))
         (is (html-contains? response "Unsupported bulk action"))))
@@ -1158,8 +1166,11 @@
       (reset! revoked [])
       (let [resp ((web-handlers/revoke-session-handler svc {})
                   {:path-params {:id (str uid) :session-id (str (first others))}})]
-        (is (= 302 (:status resp)))
+        (is (= (str "/web/users/" uid "/sessions") (get-in resp [:headers "HX-Redirect"])))
+        (is (re-find #"\"type\":\"success\"" (get-in resp [:headers "X-Toast"])))
         (is (= [[uid (first others)]] @revoked))))
-    (testing "a malformed id is a 400"
-      (is (= 400 (:status ((web-handlers/revoke-session-handler svc {})
-                           {:path-params {:id (str uid) :session-id "nope"}})))))))
+    (testing "a malformed id is a 400, said in a toast: htmx swaps no 400 body"
+      (let [resp ((web-handlers/revoke-session-handler svc {})
+                  {:path-params {:id (str uid) :session-id "nope"}})]
+        (is (= 400 (:status resp)))
+        (is (re-find #"\"showToast\".*Invalid session" (get-in resp [:headers "HX-Trigger"])))))))

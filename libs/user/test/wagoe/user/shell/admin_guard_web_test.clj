@@ -34,7 +34,7 @@
   ((web-handlers/bulk-update-users-htmx-handler svc {})
    {:request-method :post
     :uri            "/web/users/bulk"
-    :form-params    {"user-ids" (mapv str ids) "action" action}}))
+    :form-params    {"ids[]" (mapv str ids) "action" action}}))
 
 (deftest ^:integration a-bulk-role-change-sends-only-the-role
   ;; Writing back the whole cached user failed validation on its empty fields.

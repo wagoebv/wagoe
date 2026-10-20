@@ -2,7 +2,6 @@
  ;; Common — shared across all modules
  ;; =============================================================================
  :common/error-generic      "Something went wrong. Please try again later."
- :common/column-id          "ID"
  :common/column-name        "Name"
  :common/column-email       "Email"
  :common/column-role        "Role"
@@ -109,10 +108,7 @@
  :user/field-active            "Active"
  :user/field-password          "Password"
  :user/field-remember          "Remember me"
- :user/button-filters-label    "Filters"
  :user/page-create-user-title  "Create User"
- :user/button-back-to-users    "← Back to Users"
- :user/button-back-to-user     "← Back to User"
  :user/button-back-to-login    "Back to Login"
  :user/login-subtitle          "Sign in to manage users"
  :user/mfa-subtitle            "Two-factor authentication required"
@@ -162,7 +158,6 @@
  :user/bulk-action-role-user    "Change Role to User"
  :user/button-apply-bulk        "Apply to Selected"
 
- :user/filters-search-title     "Search & Filter"
  :user/filter-placeholder-email "Search email..."
 
  :user/mfa-title               "Two-Factor Authentication"
@@ -208,6 +203,14 @@
  :user/sessions-empty-state    "No active sessions."
  :user/sessions-manage-for     "Manage active sessions for {name}"
  :user/button-revoke-all-others "Revoke All Others"
+ :user/confirm-revoke-session  "Revoke this session? The device will need to sign in again."
+ :user/confirm-revoke-all-sessions "Revoke all other sessions? This signs out every other device."
+ :user/confirm-bulk-action     "Apply this action to the selected users?"
+ :user/confirm-delete-permanently "This irreversibly deletes the user and all related data. Delete permanently?"
+ :user/toast-user-deleted "User permanently deleted"
+ :user/toast-session-revoked "Session revoked"
+ :user/toast-session-not-found "Session not found or already ended"
+ :user/toast-sessions-revoked "Other sessions revoked"
  :user/page-sessions-title     "Sessions for {name}"
 
  :user/audit-actor-system      "System"
