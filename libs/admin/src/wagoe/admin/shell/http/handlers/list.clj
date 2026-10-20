@@ -41,7 +41,7 @@
 (defn admin-home-handler
   "The dashboard: a tile per entity the user may view, and a card per page
    they may open. For every signed-in user, except under :enforce, where it
-   needs read on one entity (ADR-041 §6)."
+   needs read on one entity in a scope that entity can check (ADR-041 §6)."
   [admin-service schema-provider config]
   (fn [request]
     (let [user (support/get-current-user request)
@@ -50,6 +50,7 @@
           available (ports/list-available-entities schema-provider)
           all-configs (into {} (map (fn [e] [e (ports/get-entity-config schema-provider e)])) available)
           entities (permissions/filter-visible-entities user available all-configs)
+          _ (shell-permissions/assert-can-read-some-entity! user entities)
           entity-configs (select-keys all-configs entities)
           stats (into {} (map (fn [e] [e {:count (ports/count-entities admin-service e {})}])) entities)]
       (support/html-response request

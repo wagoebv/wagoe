@@ -502,7 +502,9 @@
      `options` are the list's: search and filters narrow facets and summary
      the way they narrow the rows. With `:overview/fields`, the titles and
      counts are for those fields of `records` instead of the list columns, and
-     there are no facets or summary: the record drawer asks this way. A part whose query fails is left out; the
+     there are no facets or summary: the record drawer asks this way.
+     `:overview/link-scopes {column scopes}` keeps a many-to-many column's
+     items inside its scopes. A part whose query fails is left out; the
      page still renders."))
 
 ;; =============================================================================
@@ -513,10 +515,13 @@
   "The records a many-to-many relation links, through its join table. The
    links are written with the record: `create-entity` and `update-entity`
    take `:admin/links {relation-key [id ...]}` in their data and replace the
-   links of each relation named, in the write's transaction."
+   links of each relation named, in the write's transaction. With
+   `:admin/link-scopes {relation-key scopes}`, a link to a record outside
+   them stays, and a new one is refused as unknown."
 
   (linked-records [this entity-name rel-key ids opts]
     "{id-string {:items [{:id :title}] :total n}} for the records `ids` of
      `entity-name`: what relation `rel-key` links each to, by title. opts
      `{:per-owner n}` keeps the first n items of each; :total still counts
-     them all. A record without links is left out."))
+     them all. `{:scopes scopes}` keeps only linked records inside them. A
+     record without links is left out."))

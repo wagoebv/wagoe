@@ -35,8 +35,7 @@
   :create-redirect-url "/web/users/new"
 
   ;; The user module's pages for a user, as tabs beside the edit page
-  :detail-tabs [{:label [:t :user/tab-sessions] :href "/web/users/{id}/sessions"}
-                {:label [:t :user.rights/tab] :href "/web/users/{id}/rights"}]
+  :detail-tabs wagoe.user.core.rights-ui/detail-tabs
 
   ;; Field filter config — drives the "Add filter" dropdown in the admin list view.
   ;; Fields not listed here (e.g. :email, :name) are covered by the free-text search.

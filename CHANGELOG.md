@@ -257,6 +257,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Admin under `:enforce`** (BOU-787): many-to-many titles are scoped, a viewer opens records read-only, and the
+  home answers 403 when no entity is readable. `:report` logs each refusal once a minute.
+- **Rights pages** (BOU-787): sources show expanded, scope EDN beside declared keys, refused assignments keep
+  their input. `admin/users.edn` may name `wagoe.user.core.rights-ui/detail-tabs` instead of listing the tabs.
 - **`bb create-admin` printed "Error: Unknown error" for a rejected password** (BOU-789); it prints the rule now, and
   the other `user` CLI commands print their errors to stderr instead of nothing, and `user find --id` works.
 - **Push routes had no authorization rule, so `:enforce` refused them** (BOU-786): device routes are `:self`, stats

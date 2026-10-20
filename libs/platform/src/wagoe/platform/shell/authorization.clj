@@ -10,7 +10,8 @@
             [wagoe.platform.core.authorization :as core]
             [wagoe.platform.core.http.access :as access]
             [wagoe.platform.core.scope :as scope]
-            [wagoe.platform.ports.authorization :as ports]))
+            [wagoe.platform.ports.authorization :as ports]
+            [wagoe.platform.throttle :as throttle]))
 
 (defrecord PermissionRegistry [registry]
   ports/IPermissionRegistry
@@ -77,14 +78,6 @@
                       {:source source})
            #{})))))
 
-(defn- scope-values
-  "What `v`, the value of scope key `k`, stands for: a source resolved, then
-   `k`'s `:expand`."
-  [scopes resolve-source k v]
-  (let [values (if (scope/source? v) (resolve-source v) #{v})
-        expand (get-in scopes [k :expand])]
-    (if (and expand (seq values)) (set (expand values)) values)))
-
 (defn resolve-rights
   "`rights` as the user module hands them over for `user`
    ([{:permission :scope}], see `core.scope`), each scope as {key #{value}}:
@@ -97,7 +90,7 @@
     (into []
           (keep (fn [{:keys [scope] :as right}]
                   (when-let [resolved (reduce-kv (fn [acc k v]
-                                                   (let [values (scope-values scopes resolve-source k v)]
+                                                   (let [values (scope/scope-values scopes resolve-source k v)]
                                                      (if (seq values) (assoc acc k values) (reduced nil))))
                                                  {}
                                                  scope)]
@@ -121,23 +114,6 @@
 ;; =============================================================================
 ;; The interceptor (ADR-041 §5)
 ;; =============================================================================
-
-(def ^:private report-interval-ms
-  "How long one log line, by its key, stays quiet after it was logged."
-  60000)
-
-(defn- once-per-interval
-  "A fn of a key and a thunk that calls the thunk at most once per
-   `report-interval-ms` for the same key."
-  []
-  (let [seen (atom {})]
-    (fn [k f]
-      (let [now       (System/currentTimeMillis)
-            fresh     (fn [m] (let [m (if (> (count m) 10000) {} m)]
-                                (if (< (- now (get m k 0)) report-interval-ms) m (assoc m k now))))
-            [old new] (swap-vals! seen fresh)]
-        (when (not= (get old k) (get new k))
-          (f))))))
 
 (defn- log-refusal! [{:keys [mode] :as entry}]
   (if (= :report mode)
@@ -182,7 +158,7 @@
    read once per request. `mode`: `:report` logs what `:enforce` refuses and
    lets it through, as it does a check that throws; `:off` mounts nothing."
   [registry rights-source {:keys [mode]}]
-  (let [throttled (once-per-interval)]
+  (let [throttled (throttle/once-per-interval)]
     {:name    ::authorization
      :compile (fn [data _opts]
                 (let [rule        (core/route-rule data)

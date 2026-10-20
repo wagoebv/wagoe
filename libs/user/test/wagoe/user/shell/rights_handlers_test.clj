@@ -10,12 +10,15 @@
             [wagoe.user.shell.group-service :as group-service]
             [wagoe.user.shell.http :as http]
             [wagoe.user.shell.persistence :as persistence]
+            [wagoe.user.shell.rights-handlers :as rights-handlers]
             [wagoe.user.shell.service :as user-service]))
 
 (def ^:private registry
   (authz/create-registry
    {:wagoe/invoice {:permissions {:invoice/approve {:label "Approve invoices"}}}
-    :wagoe/app     {:scopes        {:department-id {:label "Department" :sources #{:user/department}}
+    :wagoe/app     {:scopes        {:department-id {:label "Department" :sources #{:user/department}
+                                                    ;; A department and the one beneath it
+                                                    :expand (fn [ids] (into ids (map #(* 10 %)) ids))}
                                     :domain-id     {:label "Domain" :schema :int}}
                     :scope-sources {:user/department {:label "department" :resolve (constantly #{7})}}}}))
 
@@ -35,7 +38,7 @@
             app    (ring/ring-handler (ring/router ["/web" (:web routes)]))
             admin  (ports/create-user users {:email "admin@example.com" :name "Admin" :role :admin
                                              :active true :password-hash "x"})]
-        (f {:app app :users users :gsvc gsvc :admin admin})))))
+        (f {:app app :users users :usvc usvc :gsvc gsvc :admin admin})))))
 
 (defn- req
   ([user method uri] (req user method uri {}))
@@ -118,14 +121,27 @@
           (is (str/includes? page "Finance"))
           (is (str/includes? page "invoice/read"))
           (is (str/includes? page "invoice/viewer"))
-          (testing "a scope from the user shows its source and resolved value"
+          (testing "a scope from the user shows its source and resolved value, expanded as enforcement does"
             (is (str/includes? page "Department: "))
             (is (str/includes? page "scope-from-source"))
-            (is (str/includes? page "<strong class=\"scope-value\">7</strong>")))
+            (is (str/includes? page "<strong class=\"scope-value\">7, 70</strong>")))
           (is (not (str/includes? page "platform-admin-note"))))
         (is (str/includes? (:body (get-page app admin (str "/web/users/" (:id admin) "/rights")))
                            "platform-admin-note"))
         (is (= 404 (:status (get-page app admin (str "/web/users/" (random-uuid) "/rights")))))))))
+
+(deftest ^:integration the-rights-page-asks-the-membership-hook-once
+  (with-app
+    (fn [{:keys [users usvc gsvc admin]}]
+      (let [ada     (ports/create-user users {:email "ada@example.com" :name "Ada" :role :user
+                                              :active true :password-hash "x"})
+            _       (ports/create-group gsvc {:name "Finance"})
+            calls   (atom 0)
+            handler (rights-handlers/user-rights usvc (assoc gsvc :membership (fn [_] (swap! calls inc) #{"Finance"})))
+            page    (handler (assoc (req admin :get "/") :path-params {:id (str (:id ada))}))]
+        (is (= 200 (:status page)))
+        (is (str/includes? (:body page) "Finance") "the hook's group")
+        (is (= 1 @calls))))))
 
 (deftest ^:integration ^:security only-admins-reach-the-rights-pages
   (with-app
