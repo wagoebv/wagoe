@@ -55,6 +55,12 @@
    :wagoe/session-pruner
    {:enable-pruning true :retention-days 30 :interval-hours 6}
 
+   ;; A new app starts closed: a route without a rule answers 403, and a user
+   ;; needs a role on one of their groups. `clojure -M:run authz-report` lists
+   ;; each route's rule; the Authorization guide has the rest.
+   :wagoe/authorization
+   {:mode :enforce}
+
    :wagoe/logging
    {:provider :slf4j :level :debug}}
 

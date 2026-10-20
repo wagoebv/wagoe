@@ -307,7 +307,9 @@ and `<module>/write`, and declares the rest (see the platform library's permissi
 registry). A role bundles permissions. Modules ship code roles, at least
 `<module>/viewer` and `<module>/editor`; administrators compose managed roles from the
 registry. A group holds roles, each with an optional scope, a map that narrows it. A
-member holds the permissions of every role of every group they are in.
+member holds the permissions of every role of every group they are in. How routes
+and the admin enforce them, and how to switch an app on, is in
+xref:authorization.adoc[Authorization].
 
 The `:admin` role makes a platform admin and needs no group; a user has it or no role
 at all. Only a platform admin can give or take it. `:role :user` is still accepted and
@@ -433,7 +435,7 @@ nobody becomes an admin:
   during a rolling upgrade; a grant one of them adds moves over at the next start.
   Rights are read from the assignments only. `add-group-grant`, `remove-group-grant`
   and an import's `:grants` still work this way, and are deprecated.
-* When there are users, Everyone gets every module's `editor` role. That is what every
+* When there are users other than admins, Everyone gets every module's `editor` role. That is what every
   signed-in user could do; narrow it when you are ready. A role holding a permission
   something already checks as a grant, such as `:workflow/read`, is left out, so the
   upgrade gives nobody a right they did not have.

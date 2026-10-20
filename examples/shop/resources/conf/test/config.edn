@@ -19,6 +19,12 @@
     :migrate-on-start? true
     :pool              {:minimum-idle 1 :maximum-pool-size 5}}
 
+   ;; A new app starts closed: a route without a rule answers 403, and a user
+   ;; needs a role on one of their groups. `clojure -M:run authz-report` lists
+   ;; each route's rule; the Authorization guide has the rest.
+   :wagoe/authorization
+   {:mode :enforce}
+
    ;; INFO, not quieter: the port the app bound is logged at INFO, and
    ;; scripts/example-smoke.sh reads it from there.
    :wagoe/logging
