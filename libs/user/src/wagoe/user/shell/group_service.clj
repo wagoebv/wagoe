@@ -349,7 +349,8 @@
   "ADR-041's migration: under :enforce nobody may do less than under :off, and
    nobody becomes an admin. Idempotent; runs at boot.
 
-   The first time, Everyone is created and, when there are users, given every
+   The first time, Everyone is created and, when there are users other than
+   admins, given every
    module's editor role. Viewers join Readers. Group grants become
    assignments of a managed role named after their permission. Neither group
    gets a role holding a permission something already checks as a grant
@@ -363,7 +364,7 @@
                                          (when registry (authz/permissions registry))
                                          (:permissions (declared-permissions settings))
                                          (ports/find-legacy-grants repo))]
-                              (when (and (ports/ensure-everyone repo) (ports/any-users? repo))
+                              (when (and (ports/ensure-everyone repo) (ports/any-non-admin-users? repo))
                                 (doseq [role (group-core/module-roles (code-roles registry) "editor" gated)]
                                   (assign-once! repo group-core/everyone-id role {})))
                               (migrate-viewers! repo registry gated)

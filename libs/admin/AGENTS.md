@@ -47,7 +47,8 @@ Also add the entity keyword to `:entity-discovery :allowlist`.
 `admin.<entity>/read|write` in the user's scopes under `:enforce`, the scoped service
 (`shell.scoped-service`) filtering lists and refusing records outside them. An entity maps scope keys with
 `:scope {:domain-id :domain-id}` (a field) or a symbol naming `(fn [ids] honeysql-condition)`.
-`:require-role` is deprecated and read by nothing.
+`:require-role` is deprecated and read by nothing; `wagoe add admin` and `bb setup` no longer write it.
+Moving an app to `:enforce`: `docs/modules/guides/pages/authorization.adoc`.
 
 **Tabs on the edit page**: `:detail-tabs [{:label … :href "/web/users/{id}/rights"}]` links a record's other
 pages as tabs beside the form; `{id}` is the record's key. `admin/users.edn` uses it for Sessions and Rights.
