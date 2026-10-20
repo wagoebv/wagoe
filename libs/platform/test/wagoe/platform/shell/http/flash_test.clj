@@ -24,10 +24,21 @@
     (is (= (pr-str {:success :user/group-saved})
            (get-in response [:cookies flash/cookie-name :value])))))
 
+(deftest ^:unit a-redirect-passes-the-flash-on
+  (let [redirect (flash/wrap-flash (fn [_] {:status 302 :headers {"Location" "/landing"}}))]
+    (is (nil? (:cookies (redirect (with-cookie (pr-str {:success "Welcome"})))))
+        "a redirect without a flash leaves the cookie for the page it lands on")))
+
+(deftest ^:unit an-empty-flash-is-no-flash
+  (is (nil? (:cookies ((flash/wrap-flash (fn [_] {:status 303 :flash {}})) {})))))
+
 (deftest ^:unit only-a-flash-shape-is-read
   (testing "markup, unknown keys and unreadable values are dropped"
     (doseq [v [(pr-str {:success [:script "x"]})
                (pr-str {:mfa-backup-codes ["a"]})
+               (pr-str {:type :success})
+               (pr-str {:type :nope :message "x"})
+               (pr-str {:message "x" :success "y"})
                (pr-str ["not" "a" "map"])
                "{:unclosed"
                "#=(java.lang.System/exit 0)"]]

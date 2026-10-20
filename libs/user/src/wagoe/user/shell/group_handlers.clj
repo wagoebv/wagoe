@@ -14,6 +14,7 @@
             [wagoe.user.ports :as ports]
             [wagoe.user.shell.web-handlers :refer [html-response]]))
 
+
 (defn- page-opts [request]
   {:user  (:user request)
    :flash (:flash request)})
@@ -57,9 +58,9 @@
 (defn- group-page [request group-service group-id status opts]
   (if-let [group (ports/get-group group-service group-id)]
     (html-response request
-                   (group-ui/group-page group (ports/list-roles group-service)
-                                        (merge (page-opts request) {:scope-lookups (scope-lookups group-service)} opts))
-                   status)
+          (group-ui/group-page group (ports/list-roles group-service)
+                               (merge (page-opts request) {:scope-lookups (scope-lookups group-service)} opts))
+          status)
     (not-found request)))
 
 (defn- refused?
@@ -81,9 +82,9 @@
         (catch clojure.lang.ExceptionInfo e
           (if (refused? e)
             (html-response request
-                           (group-ui/groups-page (ports/list-groups group-service)
-                                                 (assoc (page-opts request) :error (error-text e) :form data))
-                           422)
+                  (group-ui/groups-page (ports/list-groups group-service)
+                                        (assoc (page-opts request) :error (error-text e) :form data))
+                  422)
             (throw e)))))))
 
 (defn show [group-service]

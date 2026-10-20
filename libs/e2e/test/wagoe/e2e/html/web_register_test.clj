@@ -72,9 +72,9 @@
             "session-token cookie should be set after registration"))
       ;; The welcome is a flash on the redirect, shown as a toast on the page
       ;; it lands on
-      (page/wait-for-selector pg "#toasts .alert.alert-success" {:timeout 10000.0})
-      (is (str/includes? (loc/text-content (page/locator pg "#toasts .alert.alert-success"))
-                         "Welcome to Wagoe, New Test User")))))
+      ;; One wait: the toast leaves after five seconds
+      (is (some? (page/wait-for-selector pg "#toasts .alert-success:has-text('Welcome to Wagoe, New Test User')"
+                                         {:timeout 10000.0}))))))
 
 (deftest ^:integration ^:e2e weak-password-shows-validation-errors
   (testing "Weak password stays on /web/register with validation errors"
