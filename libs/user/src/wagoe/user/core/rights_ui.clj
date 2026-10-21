@@ -310,18 +310,18 @@
 (def detail-tabs
   "This module's pages for a user, beside the admin's edit page. The admin's
    `:users` config names this var as its `:detail-tabs`; `{id}` is the user's."
-  [{:label [:t :user/tab-sessions] :href "/web/users/{id}/sessions"}
-   {:label [:t :user.rights/tab] :href "/web/users/{id}/rights"}])
+  [{:key :sessions :label [:t :user/tab-sessions] :href "/web/users/{id}/sessions"}
+   {:key :rights :label [:t :user.rights/tab] :href "/web/users/{id}/rights"}])
 
 (defn user-tabs
   "A user's pages as tabs: the admin's edit page, then `detail-tabs`, the one
-   ending in `active` (:sessions, :rights) marked."
+   whose :key is `active` marked."
   [user-id active]
   (ui/tabs (into [{:label [:t :admin/tab-details] :href (str "/web/admin/users/" user-id)}]
-                 (for [{:keys [label href]} detail-tabs]
+                 (for [{:keys [key label href]} detail-tabs]
                    {:label   label
                     :href    (str/replace href "{id}" (str user-id))
-                    :active? (str/ends-with? href (str "/" (name active)))}))))
+                    :active? (= active key)}))))
 
 (defn- group-source-badge [source]
   (case source

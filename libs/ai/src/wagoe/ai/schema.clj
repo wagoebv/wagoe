@@ -160,6 +160,7 @@
    [:create-redirect-url {:optional true} :any]
    [:writer          {:optional true} :keyword]
    [:detail-tabs     {:optional true} [:or :symbol [:vector [:map {:closed true}
+                                                            [:key {:optional true} :keyword]
                                                             [:label :any]
                                                             [:href :string]]]]]
    [:module          {:optional true} [:or :keyword :string]]

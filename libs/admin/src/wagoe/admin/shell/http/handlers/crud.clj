@@ -155,7 +155,7 @@
    Validates form data, creates entity, redirects to list with flash message."
   [admin-service schema-provider config]
   (fn [request]
-    (let [user (support/require-admin-user! request)
+    (let [user (support/require-admin-user! request schema-provider)
           entity-name (support/get-entity-name request)
 
           ; Verify entity is accessible
@@ -305,7 +305,7 @@
    Validates form data, updates entity, redirects to list with flash message."
   [admin-service schema-provider config]
   (fn [request]
-    (let [user (support/require-admin-user! request)
+    (let [user (support/require-admin-user! request schema-provider)
           entity-name (support/get-entity-name request)
           id (support/get-entity-id request)
 
@@ -410,7 +410,7 @@
    that field comes back, to replace itself. Nothing is written."
   [admin-service schema-provider config]
   (fn [request]
-    (let [user          (support/require-admin-user! request)
+    (let [user          (support/require-admin-user! request schema-provider)
           entity-name   (support/get-entity-name request)
           _             (when-not (ports/validate-entity-exists schema-provider entity-name)
                           (throw (ex-info "Unknown entity" {:type :not-found :entity-name entity-name})))

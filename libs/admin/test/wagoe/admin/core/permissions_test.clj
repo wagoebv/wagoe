@@ -321,14 +321,16 @@
   (let [read-42 [{:permission :admin.orders/read :scope {:domain-id #{42}}}]]
     (testing ":enforce: read in a scope the entity maps"
       (let [u (holding :enforce regular-user read-42)]
-        (is (permissions/can-access-admin? u))
+        (is (permissions/can-access-admin? u {:orders orders-config :notes {}}))
+        (is (not (permissions/can-access-admin? u {:orders {} :notes {}}))
+            "read only in a scope no entity maps admits nothing")
         (is (permissions/can-view-entity? u :orders orders-config))
         (is (not (permissions/can-edit-entity? u :orders orders-config)))
         (is (not (permissions/can-view-entity? u :orders {})) "an entity mapping no scope admits only unscoped holders")
         (is (not (permissions/can-view-entity? u :notes orders-config)))))
     (testing ":enforce: the :admin role alone holds nothing"
       (let [u (holding :enforce admin-user [])]
-        (is (not (permissions/can-access-admin? u)))
+        (is (not (permissions/can-access-admin? u {:orders orders-config})))
         (is (not (permissions/can-view-entity? u :orders orders-config)))))
     (testing ":enforce: a platform admin holds everything"
       (let [u (permissions/with-access admin-user {:mode :enforce :platform-admin? true :rights []})]
@@ -345,9 +347,12 @@
   (is (nil? (permissions/report-refusal (holding :report regular-user []) :orders :write {}))
       "the role refuses already")
   (is (nil? (permissions/report-refusal (holding :enforce admin-user []) :orders :write {})))
-  (is (permissions/report-access-refusal (holding :report admin-user [])))
+  (is (permissions/report-access-refusal (holding :report admin-user []) {:orders orders-config}))
   (is (not (permissions/report-access-refusal
-            (holding :report admin-user [{:permission :admin.orders/read}])))))
+            (holding :report admin-user [{:permission :admin.orders/read}]) {:orders orders-config})))
+  (is (permissions/report-access-refusal
+       (holding :report admin-user [{:permission :admin.orders/read :scope {:region #{"north"}}}]) {:orders orders-config})
+      "a scope the entity does not map"))
 
 (deftest ^:unit a-relation-scope-admits-reads-and-deletes-not-writes
   (let [cfg {:scope {:domain-id (fn [ids] [:in :order_id ids])}}

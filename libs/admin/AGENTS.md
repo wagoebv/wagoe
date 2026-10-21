@@ -46,14 +46,16 @@ Also add the entity keyword to `:entity-discovery :allowlist`.
 **Access** (`wagoe.admin.core.permissions`): role `:admin` under `:wagoe/authorization :mode :off`;
 `admin.<entity>/read|write` in the user's scopes under `:enforce`, the scoped service
 (`shell.scoped-service`) filtering lists and refusing records outside them. An entity maps scope keys with
-`:scope {:domain-id :domain-id}` (a field) or a symbol naming `(fn [ids] honeysql-condition)`.
+`:scope {:domain-id :domain-id}` (a field) or a symbol naming `(fn [ids] honeysql-condition)`, its bare columns
+the entity's own table's (it runs as `pk IN (SELECT pk FROM table WHERE …)`). Every page, the home too, needs read
+on one entity in a scope that entity maps.
 Read opens the detail page; without write it renders read-only. Many-to-many titles are scoped by the linked
 entity's read, and a save keeps the links the user could not see.
 `:require-role` is deprecated and read by nothing; `wagoe add admin` and `bb setup` no longer write it.
 Moving an app to `:enforce`: `docs/modules/guides/pages/authorization.adoc`.
 
-**Tabs on the edit page**: `:detail-tabs [{:label … :href "/web/users/{id}/rights"}]` links a record's other
-pages as tabs beside the form; `{id}` is the record's key. A symbol names a var holding the list:
+**Tabs on the edit page**: `:detail-tabs [{:key :rights :label … :href "/web/users/{id}/rights"}]` links a record's
+other pages as tabs beside the form; `{id}` is the record's key, and the optional `:key` is what that page marks active. A symbol names a var holding the list:
 `admin/users.edn` says `wagoe.user.core.rights-ui/detail-tabs`, which the user module's pages render too.
 
 ---
