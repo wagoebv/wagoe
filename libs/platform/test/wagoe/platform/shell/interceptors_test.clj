@@ -362,7 +362,12 @@
           result-ctx ((:leave interceptors/response-shape-cli) ctx)]
 
       (is (= 1 (get-in result-ctx [:response :exit])))
-      (is (string? (get-in result-ctx [:response :stderr]))))))
+      (is (string? (get-in result-ctx [:response :stderr])))))
+
+  (testing "response-shape-cli leaves a response already set alone"
+    (let [existing {:status 400 :body {:error {:type "validation-error" :message "Bad"}}}
+          result-ctx ((:leave interceptors/response-shape-cli) {:response existing})]
+      (is (= existing (:response result-ctx))))))
 
 ;; Pipeline Assembly Tests
 

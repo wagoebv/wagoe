@@ -461,10 +461,9 @@
                                            :response-format :json})))
 
                 :cli
-                (let [response {:status :success
-                                :data {:users users
-                                       :total-count total-count}
-                                :message (str "Found " (count users) " users")}]
+                (let [response {:status 0
+                                :entity-type :user-list
+                                :data users}]
                   (-> context
                       (assoc :response response)
                       (ctx/add-breadcrumb :operation :user-list-formatted
@@ -583,14 +582,21 @@
                                            :response-format :json})))
 
                 :cli
-                (let [response {:status :success
-                                :data {:user-id user-id}
-                                :message "User deactivated successfully"}]
-                  (-> context
-                      (assoc :response response)
-                      (ctx/add-breadcrumb :operation :user-delete-formatted
-                                          {:user-id user-id
-                                           :response-format :cli}))))))})
+                ;; false: no such user, or already deleted. HTTP answers 204
+                ;; either way; a CLI exiting 0 would hide a mistyped id.
+                (if-not (:deactivation-result context)
+                  (ctx/fail-with-exception context
+                                           (ex-info "User not found"
+                                                    {:type :user-not-found
+                                                     :user-id user-id}))
+                  (let [response {:status 0
+                                  :data {:user-id user-id}
+                                  :message "User deactivated successfully"}]
+                    (-> context
+                        (assoc :response response)
+                        (ctx/add-breadcrumb :operation :user-delete-formatted
+                                            {:user-id user-id
+                                             :response-format :cli})))))))})
 
 (defn create-user-delete-pipeline
   "Creates pipeline for deleting (deactivating) a user."
@@ -615,8 +621,8 @@
 (def validate-user-update-input
   "Validates input for updating a user.
    
-   HTTP: Validates path has id parameter and body has update fields
-   CLI: Validates opts has id and update fields"
+   HTTP: Validates path has id parameter
+   CLI: Validates opts has id"
   {:name ::validate-user-update-input
    :enter (fn [context]
             (let [interface-type (ctx/get-interface-type context)
@@ -627,8 +633,7 @@
                                 :http (get-in context [:request :parameters :body])
                                 :cli (dissoc (:opts context) :id))]
 
-              (cond
-                (nil? user-id-str)
+              (if (nil? user-id-str)
                 (ctx/fail-with-exception context
                                          (ex-info "User ID is required"
                                                   {:type :validation-error
@@ -637,15 +642,6 @@
                                                               :http "User ID is required in path"
                                                               :cli "User ID is required (--id)")
                                                    :interface-type interface-type}))
-
-                (empty? update-data)
-                (ctx/fail-with-exception context
-                                         (ex-info "No update fields provided"
-                                                  {:type :validation-error
-                                                   :message "At least one field to update is required"
-                                                   :interface-type interface-type}))
-
-                :else
                 (-> context
                     (assoc :raw-user-id user-id-str
                            :raw-update-data update-data)
@@ -682,13 +678,21 @@
                                 (:dateFormat raw-data) (assoc :date-format (keyword (:dateFormat raw-data)))
                                 (:timeFormat raw-data) (assoc :time-format (keyword (:timeFormat raw-data))))]
 
-              (-> context
-                  (assoc :user-id user-id
-                         :update-data update-data)
-                  (ctx/add-breadcrumb :operation :user-update-transform-complete
-                                      {:user-id user-id
-                                       :update-fields (keys update-data)
-                                       :interface-type interface-type}))))})
+              ;; Checked on what survives the transform: an option or key it
+              ;; does not know, --format say, is not a field to write.
+              (if (empty? update-data)
+                (ctx/fail-with-exception context
+                                         (ex-info "No update fields provided"
+                                                  {:type :validation-error
+                                                   :message "At least one field to update is required"
+                                                   :interface-type interface-type}))
+                (-> context
+                    (assoc :user-id user-id
+                           :update-data update-data)
+                    (ctx/add-breadcrumb :operation :user-update-transform-complete
+                                        {:user-id user-id
+                                         :update-fields (keys update-data)
+                                         :interface-type interface-type})))))})
 
 (def fetch-current-user-for-update
   "Fetches the current user for update validation."
@@ -769,7 +773,7 @@
                                            :response-format :json})))
 
                 :cli
-                (let [response {:status :success
+                (let [response {:status 0
                                 :data (select-keys updated-user [:id :email :name :role :active])
                                 :message (str "User " (:email updated-user) " updated successfully")}]
                   (-> context

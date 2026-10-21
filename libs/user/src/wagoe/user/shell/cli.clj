@@ -550,7 +550,8 @@ Examples:
                     (binding [*out* *err*]
                       (println (:message result)))
 
-                    (:message result)
+                    ;; JSON output is for scripts; a sentence is not JSON.
+                    (and (:message result) (not= :json format-type))
                     (println (:message result))
 
                     :else
