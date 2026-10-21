@@ -188,6 +188,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Changed
 
+- **`response-shape-cli` leaves a response already set alone** (BOU-790); it no longer rewrites an HTTP error response
+  to `{:exit :stderr}`. In `create-cli-pipeline` it never saw one.
 - **`POST /api/auth/mfa/disable` needs `password` or a TOTP/backup `code`** (BOU-782); wrong ones count towards the
   lockout. Send one from your API clients.
 - **One dashboard, the admin's home, for every signed-in user** (BOU-765): everyone lands on `/web/admin/`, and
@@ -257,6 +259,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **`user list`, `update` and `delete` exited 1 on success, and `update` with no fields wrote an empty update** (BOU-790).
+  They exit 0 now, deleting a missing user exits 1, and an update with no known field is refused, over HTTP too (400).
 - **Admin under `:enforce`** (BOU-787): many-to-many titles are scoped, a viewer opens records read-only, and the
   home answers 403 when no entity is readable. `:report` logs each refusal once a minute.
 - **Rights pages** (BOU-787): sources show expanded, scope EDN beside declared keys, refused assignments keep
