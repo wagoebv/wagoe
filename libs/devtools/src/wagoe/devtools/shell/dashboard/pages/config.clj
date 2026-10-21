@@ -124,23 +124,25 @@
                   (str "Current:\n" (section-edn (:value (cfg-edit/strip-unreadable old-val))) "\n\nProposed:\n" new-val-str)]])))))))
 
 (def ^:private follow-script
-  "Wait for the restarted dashboard to answer at the panel's data-url, then go
-   there. Polls a static asset with a no-cors HEAD, which rejects only when
-   nothing listens, so it works across ports and renders no page. The first poll waits out the restart, so it does not find the old server."
-  "(function(){var el=document.getElementById('dashboard-follow'),u=el.dataset.url,n=0;
-function poll(){fetch(new URL('/assets/dashboard.css',u),{method:'HEAD',mode:'no-cors',cache:'no-store'}).then(function(){location.href=u},
-function(){if(++n<40){setTimeout(poll,500)}else{el.querySelector('.follow-status').textContent=
-'Nothing answers there. The REPL log says why; a failed restart puts the old config back.'}})}
-setTimeout(poll,1500)})()")
+  "Go to the panel's data-url once a dashboard answers there that is not this
+   one. On the same port the old server answers until it stops, so its
+   instance header tells them apart; across ports a no-cors HEAD suffices."
+  "(function(){var el=document.currentScript.parentElement,u=el.dataset.url,old=el.dataset.instance,
+same=new URL(u).origin===location.origin,n=0;
+function retry(){if(++n<40){setTimeout(poll,500)}else{el.querySelector('.follow-status').textContent=
+'Nothing answers there. The REPL log says why; a failed restart puts the old config back.'}}
+function poll(){fetch(new URL('/assets/dashboard.css',u),{method:'HEAD',mode:same?'same-origin':'no-cors',cache:'no-store'})
+.then(function(r){if(!same||r.headers.get('X-Dashboard-Instance')!==old){location.href=u}else{retry()}},retry)}
+setTimeout(poll,500)})()")
 
 (defn render-apply-result
   "Render the result of a config apply operation as an HTML fragment."
-  [{:keys [success? restarted follow-url error]}]
+  [{:keys [success? restarted follow-url instance error]}]
   (str (h/html
         (cond
           follow-url
-          [:div.detail-panel {:id "dashboard-follow" :data-url follow-url}
-           [:p {:style "color:var(--accent-green)"} "✓ Config valid, restarting"]
+          [:div.detail-panel {:data-url follow-url :data-instance instance}
+           [:p {:style "color:var(--accent-green)"} "✓ Accepted, restarting"]
            [:p (str "Restarting: " (str/join ", " (map pr-str restarted)))]
            [:p.follow-status "The dashboard moves to " [:a {:href follow-url} follow-url]]
            [:script (h/raw follow-script)]]

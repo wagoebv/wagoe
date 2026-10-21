@@ -203,6 +203,9 @@
                              {:form-params      {"config-:wagoe/dashboard" edn}
                               :throw-exceptions false}))))
       (finally
+        ;; The deferred apply may still be running; halting under it leaks a
+        ;; Jetty, and the next test's Apply would be refused as in progress.
+        (eventually #(not @@#'wagoe.devtools.shell.dashboard.server/deferred-apply-running?))
         (some->> (repl-dashboard) (ig/halt-key! :wagoe/dashboard))
         (ig/halt-key! :wagoe/dashboard started)
         (alter-var-root state-sys (constantly nil))

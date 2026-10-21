@@ -42,8 +42,9 @@
 (deftest ^:unit a-deferred-dashboard-restart-links-to-where-it-went
   (let [url  "http://localhost:9998/dashboard/config"
         html (config-page/render-apply-result
-              {:success? true :restarted [:wagoe/dashboard] :follow-url url})]
+              {:success? true :restarted [:wagoe/dashboard] :follow-url url :instance "old-id"})]
     (is (str/includes? html (str "data-url=\"" url "\"")) "the script follows this")
+    (is (str/includes? html "data-instance=\"old-id\"") "and waits for a server that is not this one")
     (is (str/includes? html (str "href=\"" url "\"")) "and the reader can")
     (is (str/includes? html "fetch(new URL('") "the script is not escaped")))
 

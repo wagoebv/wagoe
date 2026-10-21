@@ -200,8 +200,8 @@
 
 (defn- apply-section!
   "Put `new-val` under `section-key` and restart `order`, stopping at the
-   first failure. A failure rolls the config back and restarts what had
-   already restarted with it."
+   first failure. A failure rolls the config back and restarts all of `order`:
+   the ones past the failure still hold instances it halted."
   [{:keys [section-key new-val cfg-var sys-var set-prep-fn restart-fn ig-config-fn order]}]
   (let [prev-override (get @config-overrides* section-key ::absent)
         prev-cfg-val  (get @cfg-var section-key)]
@@ -210,14 +210,14 @@
     (swap! config-overrides* assoc section-key new-val)
     (set-prep-fn (override-preparer ig-config-fn))
     (alter-var-root cfg-var assoc section-key new-val)
-    (let [{:keys [succeeded failed-key failed-error]}
+    (let [{:keys [failed-key failed-error]}
           (reduce (fn [acc k]
                     (try (restart-fn sys-var @cfg-var k)
-                         (update acc :succeeded conj k)
+                         acc
                          (catch Exception e
                            (log/warn "Failed to restart" {:key k :error (.getMessage e)})
-                           (reduced (assoc acc :failed-key k :failed-error (.getMessage e))))))
-                  {:succeeded []}
+                           (reduced {:failed-key k :failed-error (.getMessage e)}))))
+                  {}
                   order)]
       (if-not failed-key
         {:success? true :restarted order}
@@ -226,18 +226,15 @@
               (swap! config-overrides* assoc section-key prev-override))
             (alter-var-root cfg-var assoc section-key prev-cfg-val)
             (set-prep-fn (override-preparer ig-config-fn))
-            (doseq [k succeeded]
-              (try (restart-fn sys-var @cfg-var k)
-                   (catch Exception e
-                     (log/warn "Rollback restart failed" {:key k :error (.getMessage e)}))))
             ;; The failed component was already halted by restart-component
             ;; before init-key threw — the system map still holds the old
             ;; (halted) instance. Set it to nil so restart-component's
             ;; halt-key! is a no-op, then re-init with old config.
             (alter-var-root sys-var assoc failed-key nil)
-            (try (restart-fn sys-var @cfg-var failed-key)
-                 (catch Exception e
-                   (log/warn "Rollback re-init failed" {:key failed-key :error (.getMessage e)})))
+            (doseq [k order]
+              (try (restart-fn sys-var @cfg-var k)
+                   (catch Exception e
+                     (log/warn "Rollback restart failed" {:key k :error (.getMessage e)}))))
             {:success? false
              :error {:type    :restart-failed
                      :message (str "Failed to restart " failed-key " (" failed-error
@@ -247,19 +244,30 @@
   "How long a deferred restart waits, so the response announcing it gets out."
   300)
 
+;; Set while a deferred apply runs, so a second Apply cannot rewrite the same
+;; config and system vars from a request thread at the same time.
+(defonce ^:private deferred-apply-running? (atom false))
+
+(def ^:private apply-in-progress
+  {:success? false
+   :error {:type    :conflict
+           :message "The previous Apply is still restarting. Try again in a moment."}})
+
 (defn- apply-later!
   "Run `apply!` on its own thread. Restarting the dashboard from one of its
    request threads stops the Jetty serving that request: the response is
    lost and a rollback runs on a server that is shutting down."
   [apply!]
   (let [run (fn []
-              (Thread/sleep (long restart-delay-ms))
-              (try (let [result (apply!)]
+              (try (Thread/sleep (long restart-delay-ms))
+                   (let [result (apply!)]
                      (if (:success? result)
                        (log/info "Dashboard config applied" {:restarted (:restarted result)})
                        (log/error "Dashboard config apply failed" (:error result))))
-                   (catch Exception e
-                     (log/error e "Dashboard config apply failed"))))]
+                   (catch Throwable e
+                     (log/error e "Dashboard config apply failed"))
+                   (finally
+                     (reset! deferred-apply-running? false))))]
     (doto (Thread. ^Runnable run "wagoe-dashboard-config-apply")
       (.setDaemon true)
       (.start))))
@@ -272,6 +280,13 @@
     {:success? false
      :error {:type    :validation-error
              :message (str ":port must be a TCP port, 1–" max-tcp-port ", not " (pr-str port))}}))
+
+(defn- wrap-instance
+  "Tag every response with this server's id, so the page following a restart
+   can tell the new dashboard from the old one on the same port."
+  [handler id]
+  (fn [req]
+    (some-> (handler req) (assoc-in [:headers "X-Dashboard-Instance"] id))))
 
 (defn- make-handler [config]
   (-> (ring/router
@@ -378,12 +393,23 @@
                                                        "has no prep fn. Call (integrant.repl/set-prep! ...) with a "
                                                        "zero-argument function returning your Integrant config.")}}
 
+                                @deferred-apply-running?
+                                apply-in-progress
+
                                 (and set-prep-fn sys-var cfg-var restart-fn)
                                 (let [old-cfg   @cfg-var
                                       new-cfg   (assoc old-cfg section-key new-val)
                                       order     (restart-order (resolve 'wagoe.devtools.shell.repl/find-dependents)
                                                                old-cfg new-cfg section-key)
-                                      port      (or (get-in new-cfg [:wagoe/dashboard :port]) default-port)
+                                      cfg-port  (get-in new-cfg [:wagoe/dashboard :port])
+                                      port      (or cfg-port default-port)
+                                      ;; Port unchanged: the restart lands where this one is
+                                      ;; bound, which is not the configured port when that
+                                      ;; was busy and Jetty moved on.
+                                      bound     (get-in @sys-var [:wagoe/dashboard :port])
+                                      follow    (if (and bound (= cfg-port (get-in old-cfg [:wagoe/dashboard :port])))
+                                                  bound
+                                                  port)
                                       apply!    #(apply-section! {:section-key  section-key
                                                                   :new-val      new-val
                                                                   :cfg-var      cfg-var
@@ -395,11 +421,14 @@
                                   (if-not (some #{:wagoe/dashboard} order)
                                     (apply!)
                                     (or (dashboard-port-error port)
-                                        (do (apply-later! apply!)
-                                            {:success?   true
-                                             :restarted  order
-                                             :follow-url (str (name (:scheme req)) "://" (:server-name req) ":"
-                                                              port "/dashboard/config")}))))
+                                        (if-not (compare-and-set! deferred-apply-running? false true)
+                                          apply-in-progress
+                                          (do (apply-later! apply!)
+                                              {:success?   true
+                                               :restarted  order
+                                               :instance   (::instance config)
+                                               :follow-url (str (name (:scheme req)) "://" (:server-name req) ":"
+                                                                follow "/dashboard/config")})))))
                                 :else
                                 {:success? false
                                  :error {:type    :system-not-running
@@ -486,7 +515,8 @@
       (wrap-resource "dashboard")
       (wrap-resource "public")
       wrap-content-type
-      wrap-params))
+      wrap-params
+      (wrap-instance (::instance config))))
 
 (defn- bind-failure?
   "Whether `e` is Jetty failing to bind — it wraps `BindException` in a plain
@@ -535,7 +565,8 @@
 (defmethod ig/init-key :wagoe/dashboard [_ {:keys [port host] :as config}]
   (let [port   (or port default-port)
         host   (or host "127.0.0.1")
-        result (try-start-jetty (make-handler config) host port)]
+        result (try-start-jetty (make-handler (assoc config ::instance (str (random-uuid))))
+                                host port)]
     (if result
       (do
         (log/infof "Dev dashboard started on http://%s:%d/dashboard" host (:port result))
