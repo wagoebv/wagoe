@@ -330,7 +330,7 @@
         (is (not (permissions/can-view-entity? u :notes orders-config)))))
     (testing ":enforce: the :admin role alone holds nothing"
       (let [u (holding :enforce admin-user [])]
-        (is (not (permissions/can-access-admin? u)))
+        (is (not (permissions/can-access-admin? u {:orders orders-config})))
         (is (not (permissions/can-view-entity? u :orders orders-config)))))
     (testing ":enforce: a platform admin holds everything"
       (let [u (permissions/with-access admin-user {:mode :enforce :platform-admin? true :rights []})]

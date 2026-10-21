@@ -314,19 +314,23 @@
 
 (defn- own-rows
   "Relation condition `f` as the rows of the entity's own table it admits, so
-   its bare columns mean that table's even where the query joins another."
-  [entity-config column f]
+   its bare columns mean that table's even where the query joins another. A
+   condition of nil admits nothing, not every row."
+  [entity-config f]
   (let [pk     (:primary-key entity-config :id)
-        pk-col (case-conversion/kebab-case->snake-case-keyword pk)]
+        pk-col (case-conversion/kebab-case->snake-case-keyword pk)
+        own-pk ((qualified-column (resolve-query-config entity-config)) pk)]
     (fn [values]
-      [:in (column pk) {:select [pk-col] :from [(:table-name entity-config)] :where (f values)}])))
+      [:in own-pk {:select [pk-col] :from [(:table-name entity-config)] :where (or (f values) [:= 1 0])}])))
 
 (defn- scope-where
   "The rows inside `scopes` (ADR-041 §4), each key's field under the entity's
    `:scope` as `column` gives it, or its relation condition."
   [entity-config column scopes]
   (scope/scope-filter scopes (update-vals (:scope entity-config)
-                                          #(if (keyword? %) (column %) (own-rows entity-config column %)))))
+                                          #(cond (keyword? %) (column %)
+                                                 (fn? %)      (own-rows entity-config %)
+                                                 :else        %))))
 
 (defn- list-where
   "The WHERE a list applies for `options`: its search, its filters and, for a
