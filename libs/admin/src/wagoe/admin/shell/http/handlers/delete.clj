@@ -26,7 +26,7 @@
    Returns HTMX fragment triggering table refresh."
   [admin-service schema-provider _config]
   (fn [request]
-    (let [user (support/require-admin-user! request)
+    (let [user (support/require-admin-user! request schema-provider)
           entity-name (support/get-entity-name request)
           id (support/get-entity-id request)
 
@@ -98,7 +98,7 @@
    Returns HTMX fragment triggering table refresh."
   [admin-service schema-provider config]
   (fn [request]
-    (let [user (support/require-admin-user! request)
+    (let [user (support/require-admin-user! request schema-provider)
           entity-name (support/get-entity-name request)
 
           ; Verify entity is accessible

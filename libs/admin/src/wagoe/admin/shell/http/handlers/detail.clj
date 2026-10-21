@@ -32,7 +32,7 @@
    entity, read-only for a user who may read it but not write."
   [admin-service schema-provider config]
   (fn [request]
-    (let [user (support/require-admin-user! request)
+    (let [user (support/require-admin-user! request schema-provider)
           entity-name (support/get-entity-name request)
           id (support/get-entity-id request)
 
@@ -90,7 +90,7 @@
    entities that need a dedicated create flow)."
   [admin-service schema-provider config]
   (fn [request]
-    (let [user (support/require-admin-user! request)
+    (let [user (support/require-admin-user! request schema-provider)
           entity-name (support/get-entity-name request)
 
           ; Verify entity is accessible
@@ -158,7 +158,7 @@
    `:entity`, which HTMX appends (BOU-570)."
   [_admin-service schema-provider config]
   (fn [request]
-    (let [user        (support/require-admin-user! request)
+    (let [user        (support/require-admin-user! request schema-provider)
           entity-name (support/get-entity-name request)
           _           (when-not (ports/validate-entity-exists schema-provider entity-name)
                         (throw (ex-info "Unknown entity"

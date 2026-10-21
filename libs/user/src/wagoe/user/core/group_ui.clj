@@ -21,6 +21,12 @@
   [k]
   (keyword (str "scope-" (name k))))
 
+(defn- scope-label-field
+  "The form field the lookup of scope key `k` submits its shown title as, so a
+   refused assignment shows the title again rather than the id."
+  [k]
+  (keyword (str "scope-label-" (name k))))
+
 (defn scope-source-field
   "The form field naming the user source an assignment's scope key `k` takes
    its value from instead."
@@ -83,12 +89,14 @@
   (let [field  (scope-lookup-field key)
         source (scope-source-field key)
         value  (get form (name field))
+        title  (get form (name (scope-label-field key)) value)
         picked (get form (name source))]
     [:div.scope-key {:class "space-y-1"}
      [:label {:for (name field)} (or label (name key))]
      (if url
        (combobox/combobox field {:url (str url "?field=" (name field)) :placeholder [:t :user.groups/scope-placeholder]
-                                 :value value :label value})
+                                 :value value :label title
+                                 :attrs {:name (name (scope-label-field key))}})
        [:input {:type "text" :id (name field) :name (name field) :class "input" :value value}])
      (when (seq sources)
        [:select {:id (name source) :name (name source) :class "select"

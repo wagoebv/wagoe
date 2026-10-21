@@ -13,7 +13,7 @@
    Returns HTMX fragment with form widget for editing a single field."
   [admin-service schema-provider config]
   (fn [request]
-    (let [user (support/require-admin-user! request)
+    (let [user (support/require-admin-user! request schema-provider)
           entity-name (support/get-entity-name request)
           id (support/get-entity-id request)
           field (keyword (get-in request [:path-params :field]))
@@ -57,7 +57,7 @@
    Validates and updates single field, returns updated cell HTML."
   [admin-service schema-provider config]
   (fn [request]
-    (let [user (support/require-admin-user! request)
+    (let [user (support/require-admin-user! request schema-provider)
           entity-name (support/get-entity-name request)
           id (support/get-entity-id request)
           field (keyword (get-in request [:path-params :field]))
@@ -134,7 +134,7 @@
    Returns the original cell HTML without changes."
   [admin-service schema-provider config]
   (fn [request]
-    (let [_user (support/require-admin-user! request)
+    (let [_user (support/require-admin-user! request schema-provider)
           entity-name (support/get-entity-name request)
           id (support/get-entity-id request)
           field (keyword (get-in request [:path-params :field]))

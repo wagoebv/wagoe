@@ -45,12 +45,11 @@
   [admin-service schema-provider config]
   (fn [request]
     (let [user (support/get-current-user request)
-          _ (when (= :enforce (permissions/mode user))
-              (support/require-admin-user! request))
           available (ports/list-available-entities schema-provider)
           all-configs (into {} (map (fn [e] [e (ports/get-entity-config schema-provider e)])) available)
+          _ (when (= :enforce (permissions/mode user))
+              (shell-permissions/assert-can-access-admin! user all-configs))
           entities (permissions/filter-visible-entities user available all-configs)
-          _ (shell-permissions/assert-can-read-some-entity! user entities)
           entity-configs (select-keys all-configs entities)
           stats (into {} (map (fn [e] [e {:count (ports/count-entities admin-service e {})}])) entities)]
       (support/html-response request
@@ -118,7 +117,7 @@
    state; they get the table fragment back."
   [admin-service schema-provider config]
   (fn [request]
-    (let [user (support/require-admin-user! request)
+    (let [user (support/require-admin-user! request schema-provider)
           entity-name (support/get-entity-name request)
           state (list-state admin-service schema-provider config request user entity-name)]
       ;; One URL, two bodies: a cache must not answer one with the other
@@ -145,7 +144,7 @@
    directly. A browser navigating here is sent to the list page."
   [admin-service schema-provider config]
   (fn [request]
-    (let [user (support/require-admin-user! request)
+    (let [user (support/require-admin-user! request schema-provider)
           entity-name (support/get-entity-name request)]
       (when-not (get-in request [:headers "hx-request"])
         (throw (ex-info "Redirect to full page"

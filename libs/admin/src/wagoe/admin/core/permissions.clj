@@ -9,8 +9,7 @@
 
    The shell puts the request's rights on the user map under `::access`
    (`with-access`); a user without it is decided by the role."
-  (:require [wagoe.platform.core.authorization :as authorization]
-            [wagoe.platform.core.scope :as scope]))
+  (:require [wagoe.platform.core.scope :as scope]))
 
 ;; =============================================================================
 ;; Role-Based Permission Checks
@@ -148,18 +147,20 @@
              (not (by-rights? user entity-name action entity-config)))
     (entity-permission entity-name action)))
 
-(defn- reads-any-entity? [user]
-  (let [{:keys [platform-admin? rights]} (::access user)]
-    (boolean (or platform-admin?
-                 (some (fn [{:keys [permission]}]
-                         (and (authorization/admin-permission? permission) (= "read" (name permission))))
-                       rights)))))
+(defn- reads-any-entity?
+  "Whether `user` may read one of `entity-configs`, {entity-name config}, in a
+   scope that entity can check: read held only in scopes no entity maps
+   admits nothing. A platform admin needs no entity."
+  [user entity-configs]
+  (boolean (or (get-in user [::access :platform-admin?])
+               (some (fn [[entity-name config]] (by-rights? user entity-name :read config))
+                     entity-configs))))
 
 (defn report-access-refusal
   "Under `:report`, whether `:enforce` would keep `user` out of the admin
-   where the role lets them in."
-  [user]
-  (and (= :report (mode user)) (is-admin? user) (not (reads-any-entity? user))))
+   where the role lets them in. `entity-configs` as `can-access-admin?`."
+  [user entity-configs]
+  (and (= :report (mode user)) (is-admin? user) (not (reads-any-entity? user entity-configs))))
 
 (defn record-in-scope?
   "Whether `record` (or the record a write would leave behind) lies inside
@@ -178,13 +179,12 @@
 (defn can-access-admin?
   "Determine if user can access the admin interface at all.
 
-   Under :enforce, `admin.<entity>/read` on at least one entity; else the
-   :admin role.
+   Under :enforce, `admin.<entity>/read` on one of `entity-configs` in a
+   scope that entity can check; else the :admin role.
 
    Args:
      user: User entity map
-     admin-config: Optional admin configuration map
-                   (unused)
+     entity-configs: {entity-name entity-config}, the admin's entities
 
    Returns:
      Boolean true if user can access admin
@@ -195,9 +195,9 @@
      (can-access-admin? nil nil)               ;=> false"
   ([user]
    (can-access-admin? user nil))
-  ([user _admin-config]
+  ([user entity-configs]
    (if (= :enforce (mode user))
-     (reads-any-entity? user)
+     (reads-any-entity? user entity-configs)
      (is-admin? user))))
 
 (defn explain-admin-access-denial
@@ -205,6 +205,7 @@
 
    Args:
      user: User entity map
+     entity-configs: as `can-access-admin?`
 
    Returns:
      Map with denial reason and suggested action:
@@ -216,36 +217,38 @@
    Examples:
      (explain-admin-access-denial {:role :user})
      (explain-admin-access-denial nil)"
-  [user]
-  (cond
-    (not user)
-    {:denied true
-     :reason "User not authenticated"
-     :required-role :admin}
+  ([user]
+   (explain-admin-access-denial user nil))
+  ([user entity-configs]
+   (cond
+     (not user)
+     {:denied true
+      :reason "User not authenticated"
+      :required-role :admin}
 
-    (= :enforce (mode user))
-    (if (reads-any-entity? user)
-      {:denied false :reason "Access granted"}
-      {:denied true
-       :reason "User may read no entity in the admin"
-       :user-id (:id user)
-       :required-permission :admin.<entity>/read})
+     (= :enforce (mode user))
+     (if (reads-any-entity? user entity-configs)
+       {:denied false :reason "Access granted"}
+       {:denied true
+        :reason "User may read no entity in the admin"
+        :user-id (:id user)
+        :required-permission :admin.<entity>/read})
 
-    (not (:role user))
-    {:denied true
-     :reason "User has no assigned role"
-     :user-id (:id user)
-     :required-role :admin}
+     (not (:role user))
+     {:denied true
+      :reason "User has no assigned role"
+      :user-id (:id user)
+      :required-role :admin}
 
-    (not (is-admin? user))
-    {:denied true
-     :reason "User does not have admin role"
-     :user-role (:role user)
-     :required-role :admin}
+     (not (is-admin? user))
+     {:denied true
+      :reason "User does not have admin role"
+      :user-role (:role user)
+      :required-role :admin}
 
-    :else
-    {:denied false
-     :reason "Access granted"}))
+     :else
+     {:denied false
+      :reason "Access granted"})))
 
 ;; =============================================================================
 ;; Entity-Level Permissions
@@ -466,7 +469,7 @@
 
    Args:
      user: User entity map
-     admin-config: Optional admin configuration map
+     entity-configs: as `can-access-admin?`
 
    Returns:
      Map with global permission flags:
@@ -479,8 +482,8 @@
      ;=> {:can-access-admin true}"
   ([user]
    (get-admin-permissions user nil))
-  ([user admin-config]
-   {:can-access-admin (can-access-admin? user admin-config)
+  ([user entity-configs]
+   {:can-access-admin (can-access-admin? user entity-configs)
     ; Week 2+ features
     :can-view-audit-log false
     :can-manage-users false}))

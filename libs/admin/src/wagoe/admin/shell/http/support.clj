@@ -250,20 +250,33 @@
   [request]
   (:user request))
 
+(defn- readable-entity-configs
+  "{entity-name config} for the admin's entities. Only :allowlist discovery
+   lists, and an entity whose config cannot be resolved cannot be read."
+  [schema-provider]
+  (into {}
+        (keep (fn [e] (try [e (ports/get-entity-config schema-provider e)]
+                           (catch Exception _ nil))))
+        (try (ports/list-available-entities schema-provider)
+             (catch clojure.lang.ExceptionInfo _ []))))
+
 (defn require-admin-user!
-  "Assert current user is an admin, throw if not.
+  "Assert current user may use the admin, throw if not. Under :enforce and
+   :report that reads `schema-provider`'s entities.
 
    Args:
      request: Ring request map
+     schema-provider: the admin's ISchemaProvider
 
    Returns:
      User entity map if admin
 
    Throws:
      ExceptionInfo with :type :forbidden if not admin"
-  [request]
+  [request schema-provider]
   (let [user (get-current-user request)]
-    (shell-permissions/assert-can-access-admin! user)
+    (shell-permissions/assert-can-access-admin!
+     user (when (not= :off (core-permissions/mode user)) (readable-entity-configs schema-provider)))
     user))
 
 (defn get-entity-name
@@ -698,7 +711,7 @@
   "[user entity-name entity-config] for the entity in the path, which the
    signed-in admin may view. Throws :not-found or :forbidden."
   [schema-provider request]
-  (let [user        (require-admin-user! request)
+  (let [user        (require-admin-user! request schema-provider)
         entity-name (get-entity-name request)]
     (when-not (ports/validate-entity-exists schema-provider entity-name)
       (throw (ex-info "Unknown entity" {:type :not-found :entity-name entity-name})))
