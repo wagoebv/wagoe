@@ -12,7 +12,7 @@
 //    an offset, so daylight saving is right for any date.
 // 5. Admin sidebar: puts the stored open/closed state on <html> as
 //    data-sidebar before first paint, so the page never shows the other state
-//    first. A browser that pinned a collapsed sidebar before 1.x keeps it closed.
+//    first. The old pin keys (BOU-761) are read once: pinned and collapsed is closed.
 
 try{var t=localStorage.getItem('wagoe-theme')||((window.matchMedia&&window.matchMedia('(prefers-color-scheme:dark)').matches)?'dark':'light');document.documentElement.setAttribute('data-theme',t)}catch(e){}
 document.addEventListener('DOMContentLoaded',function(){for(var l=document.querySelectorAll('link[media=print]'),i=0;i<l.length;i++)l[i].media='all'})

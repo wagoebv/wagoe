@@ -32,11 +32,11 @@
 
 (defn- nav-items [items & [title]]
   [:ul.entity-list
-   ;; A collapsed sidebar shows a module's items in a flyout, under its name
+   ;; A closed sidebar shows a module's items in a flyout, under its name
    (when title [:li.nav-flyout-title {:title title} title])
    (for [item items]
      [:li {:class (when (:active? item) "active")}
-      ;; Always an icon: a collapsed sidebar hides the label
+      ;; Always an icon: a closed sidebar hides the label
       (nav-link {:href (:href item)} (:icon item :file) (:label item))])])
 
 (defn- nav-group [{:keys [id label icon items open?]}]

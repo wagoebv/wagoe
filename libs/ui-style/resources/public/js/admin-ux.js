@@ -35,34 +35,34 @@ document.addEventListener('alpine:init', function () {
   // drawer instead, closed on every page, without touching the stored state.
   var SIDEBAR_KEY = 'wagoe-admin-sidebar';
   var root = document.documentElement;
-  var small = window.matchMedia('(max-width: 768px)');
-  var stored = function () {
+  var smallScreen = window.matchMedia('(max-width: 768px)');
+  // Stored raw ('open' / 'closed'), as init.js reads it.
+  var storedOpen = function () {
     try {
       return window.localStorage.getItem(SIDEBAR_KEY) !== 'closed';
     } catch (e) {
-      return root.getAttribute('data-sidebar') !== 'closed';
+      return true;
     }
   };
 
   window.Alpine.store('sidebar', {
     open: root.getAttribute('data-sidebar') !== 'closed',
-    small: small.matches,
+    small: smallScreen.matches,
     mobileOpen: false,
 
     init: function () {
       var self = this;
-      small.addEventListener('change', function (e) {
+      smallScreen.addEventListener('change', function (e) {
         self.small = e.matches;
         self.mobileOpen = false;
       });
       // Another tab, or this page back from the bfcache, may hold an older
       // state than the one last chosen.
-      var sync = function () { self.show(stored()); };
       window.addEventListener('storage', function (e) {
-        if (e.key === SIDEBAR_KEY) sync();
+        if (e.key === SIDEBAR_KEY) self.show(e.newValue !== 'closed');
       });
       window.addEventListener('pageshow', function (e) {
-        if (e.persisted) sync();
+        if (e.persisted) self.show(storedOpen());
       });
     },
 
@@ -85,10 +85,6 @@ document.addEventListener('alpine:init', function () {
       try {
         window.localStorage.setItem(SIDEBAR_KEY, this.open ? 'open' : 'closed');
       } catch (e) { /* this page only */ }
-    },
-
-    toggleMobile: function () {
-      this.mobileOpen = !this.mobileOpen;
     },
 
     closeMobile: function () {

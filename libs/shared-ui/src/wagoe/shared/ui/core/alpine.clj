@@ -184,8 +184,8 @@
      String expression using Alpine.$persist
 
    Example:
-     (x-persist \"sidebar-state\" \"expanded\")
-     => \"Alpine.$persist('expanded').as('sidebar-state')\""
+     (x-persist \"tab\" \"general\")
+     => \"Alpine.$persist('general').as('tab')\""
   [key initial]
   (str "Alpine.$persist(" (pr-str initial) ").as('" key "')"))
 
@@ -296,9 +296,8 @@
   nil)
 
 (defn sidebar-shell-attrs
-  "Admin shell attributes: the small-screen drawer's state, and Ctrl+B to
-   toggle the sidebar. The desktop open/closed state is on <html>
-   (data-sidebar), put there by init.js before first paint."
+  "The small-screen drawer's state and Ctrl+B. The desktop state is
+   data-sidebar on <html>, set by init.js."
   []
   {:x-data "empty"
    :x-bind:data-sidebar-open "$store.sidebar.mobileOpen"
@@ -324,7 +323,7 @@
    Returns:
      Map of attributes for mobile menu toggle"
   []
-  {(keyword "@click") "$store.sidebar.toggleMobile()"
+  {(keyword "@click") "$store.sidebar.toggle()"
    :x-bind:aria-expanded "$store.sidebar.mobileOpen"})
 
 (defn sidebar-overlay-attrs
