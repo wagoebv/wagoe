@@ -51,6 +51,13 @@ with an `admin.<entity>/viewer` or `/editor` role. Run `:report` first; it logs
 each refusal `:enforce` would make. Map scope keys on an entity with `:scope`
 (see the admin docs). `:require-role` is deprecated and goes in 2.0; drop it.
 
+### 3. Moving an existing app to `:enforce`
+
+`bb upgrade authorization check|prepare|report|enforce` (or `wagoe upgrade
+authorization`) moves an app from `:off` to `:enforce` and names each user who
+would lose access. See
+[Upgrading an existing app to permissions](docs/modules/guides/pages/upgrade-authorization.adoc).
+
 ## beta-5 → beta-6 (error shapes)
 
 ### 1. `wagoe.user.shell.auth/authenticate-user` and the MFA shell return `:error` as a map (BOU-323)

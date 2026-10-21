@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **`bb upgrade authorization check|prepare|report|enforce`** (BOU-794) moves an existing app from `:off` to `:enforce`
+  and names each user who would lose access. Older apps copy the `upgrade` task from a new app's `bb.edn`.
 - **`:detail-tabs` entries take a `:key`** (BOU-791), the tab a module's own page marks active.
 - **`wagoe.test/sign-in-as!` and `create-user!`** (BOU-788) sign in a test user holding roles, scoped or not. Use them
   where a test signs in under `:enforce`; a user without a role gets 403.

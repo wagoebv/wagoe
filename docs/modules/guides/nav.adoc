@@ -4,6 +4,7 @@
 ** xref:guides:validation.adoc[Validation]
 ** xref:guides:authentication.adoc[Authentication & JWT]
 ** xref:guides:authorization.adoc[Authorization]
+** xref:guides:upgrade-authorization.adoc[Upgrading to Permissions]
 ** xref:guides:background-jobs.adoc[Background Jobs]
 ** xref:guides:file-storage.adoc[File Storage]
 ** xref:guides:multi-tenancy.adoc[Multi-Tenancy]

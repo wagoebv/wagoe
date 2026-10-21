@@ -8,6 +8,13 @@
             [reitit.core]
             [wagoe.platform.core.authorization :as core]))
 
+(defn handler-routes
+  "`handler`'s endpoints as `core/route-report` gives them, and the mode it
+   was built under: {:mode :report}."
+  [handler]
+  {:mode   (:wagoe/authorization-mode (meta handler))
+   :report (core/route-report (reitit.core/routes (:reitit/router (meta handler))))})
+
 (defn report
   "The report text for `ig-config`, an application's Integrant config. The
    system is halted before it returns; a system that does not build throws,
@@ -21,7 +28,7 @@
     (try
       (let [handler (or (:wagoe/http-handler system)
                         (throw (ex-info "This config has no :wagoe/http-handler, so no routes to report."
-                                        {:type :configuration-error})))]
-        (core/format-route-report (:wagoe/authorization-mode (meta handler))
-                                  (core/route-report (reitit.core/routes (:reitit/router (meta handler))))))
+                                        {:type :configuration-error})))
+            {:keys [mode report]} (handler-routes handler)]
+        (core/format-route-report mode report))
       (finally (ig/halt! system)))))

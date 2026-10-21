@@ -127,6 +127,12 @@
                      :requires ([wagoe.cli.agents-update :as agents-update])
                      :task (agents-update/-main *command-line-args*)}
 
+  ;; `wagoe upgrade` at the version wagoe-tools pins, like agents:update.
+  ;; `bb upgrade authorization check` starts the move to :wagoe/authorization :enforce.
+  upgrade           {:doc "Rewrite deprecated config and code (--apply); `authorization <step>` moves to :enforce"
+                     :requires ([wagoe.cli.upgrade :as upgrade])
+                     :task (upgrade/-main *command-line-args*)}
+
   ;; i18n tooling
   i18n:find         {:doc "Find a translation key by substring or exact keyword"
                      :task (apply i18n/-main "find" *command-line-args*)}

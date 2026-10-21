@@ -345,6 +345,23 @@
                            ", which no module registers under :scope-sources")
                       {:type :configuration-error :sources (vec unknown)})))))
 
+(defn migration-plan
+  "What `migrate!` would change, read without writing: {:everyone-roles
+   (nil when Everyone exists or only admins do) :viewers [user-id]
+   :readers-roles :grants [legacy grant not yet migrated]}."
+  [{:keys [group-repository registry settings]}]
+  (let [grants (ports/find-legacy-grants group-repository)
+        gated  (group-core/gated-permissions (when registry (authz/permissions registry))
+                                             (:permissions (declared-permissions settings))
+                                             grants)
+        viewers (ports/find-legacy-viewers group-repository)]
+    {:everyone-roles (when (and (nil? (ports/find-group group-repository group-core/everyone-id))
+                                (ports/any-non-admin-users? group-repository))
+                       (vec (group-core/module-roles (code-roles registry) "editor" gated)))
+     :viewers        viewers
+     :readers-roles  (when (seq viewers) (vec (group-core/module-roles (code-roles registry) "viewer" gated)))
+     :grants         (filterv (comp nil? :migrated-at) grants)}))
+
 (defn migrate!
   "ADR-041's migration: under :enforce nobody may do less than under :off, and
    nobody becomes an admin. Idempotent; runs at boot.
