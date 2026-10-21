@@ -226,10 +226,10 @@
       return true;
     }
 
-    // Close mobile sidebar
-    const shell = document.querySelector('.admin-shell[data-sidebar-open="true"]');
-    if (shell) {
-      shell.setAttribute('data-sidebar-open', 'false');
+    // Close the small-screen drawer, through the store that owns it
+    const sidebar = window.Alpine && window.Alpine.store('sidebar');
+    if (sidebar && sidebar.mobileOpen) {
+      sidebar.closeMobile();
       return true;
     }
 

@@ -1,5 +1,5 @@
 (ns wagoe.shared.ui.core.shell
-  "The admin shell: collapsible sidebar, topbar and user menu around a page.
+  "The admin shell: a sidebar that opens and closes, topbar and user menu around a page.
 
    Here rather than in admin so that modules admin depends on (user) can
    render in it. The sidebar shows the navigation modules contribute
@@ -69,29 +69,16 @@
   ([nav]
    (sidebar nav {}))
   ([nav opts]
-   ;; Alpine.js sidebar - hover expand/collapse via $store.sidebar
-   [:aside.admin-sidebar (alpine/sidebar-attrs)
+   [:aside.admin-sidebar {:id "admin-sidebar"}
     [:div.admin-sidebar-header
      ;; One row the height of the topbar: the mark at full height and the
-     ;; wordmark. The text is nav-text, so a collapsed sidebar keeps the mark.
+     ;; wordmark. The text is nav-text, so a closed sidebar keeps the mark.
      [:a {:class "sidebar-brand" :href home/*path*}
       (if-let [logo-url (:logo-url opts)]
         [:img.sidebar-brand-logo {:src logo-url :alt ""}]
         (list
          (icons/brand-logo {:size 48 :variant :icon :class "sidebar-brand-mark"})
-         [:span {:class "nav-text sidebar-wordmark"} "wagoe"]))]
-     [:div.sidebar-controls
-      [:button.sidebar-pin {:type "button"
-                            :aria-label [:t :admin/sidebar-pin-button]
-                            :title [:t :admin/sidebar-pin-hint]
-                            (keyword "@click") "$store.sidebar.togglePin()"
-                            :x-bind:aria-pressed "$store.sidebar.pinned"}
-       (icons/icon :pin {:size 16})]
-      [:button.sidebar-toggle {:type "button"
-                               :aria-label [:t :admin/sidebar-toggle-button]
-                               :title [:t :admin/sidebar-toggle-hint]
-                               (keyword "@click") "$store.sidebar.toggle()"}
-       (icons/icon :panel-left-close {:size 16})]]]
+         [:span {:class "nav-text sidebar-wordmark"} "wagoe"]))]]
     [:nav.admin-sidebar-nav
      (map nav-group nav)]
     [:div.admin-sidebar-footer
@@ -117,17 +104,20 @@
   [content opts]
   (let [{:keys [user nav page-title]} opts]
     ;; A wrapper div rather than a fragment, for Alpine's initialisation. The
-    ;; sidebar store is initialised in admin-ux.js (external script, CSP-safe).
+    ;; sidebar store is in admin-ux.js; its open/closed state is on <html>.
     [:div.hiccup-fragment-wrapper
      [:div.admin-shell (alpine/sidebar-shell-attrs)
       (sidebar (or nav (user-nav user)) opts)
       [:div.admin-overlay (alpine/sidebar-overlay-attrs)]
       [:div.admin-main
        [:header.admin-topbar
-        [:button.mobile-menu-toggle (merge {:type "button"
-                                            :aria-label [:t :admin/menu-open-button]}
-                                           (alpine/mobile-menu-toggle-attrs))
-         (icons/icon :menu {:size 24})]
+        ;; The one control for the sidebar, at every width
+        [:button.sidebar-toggle (merge {:type          "button"
+                                        :aria-controls "admin-sidebar"
+                                        :aria-label    [:t :admin/sidebar-toggle-button]
+                                        :title         [:t :admin/sidebar-toggle-hint]}
+                                       (alpine/sidebar-toggle-attrs))
+         (icons/icon :panel-left {:size 20})]
         [:h1 {:class "admin-topbar-title"} (or page-title [:t :admin/page-heading])]
         [:div.admin-topbar-actions
          (icons/theme-toggle-button)

@@ -541,7 +541,7 @@
 
       ;; Alpine.js sidebar store is initialized in external admin-ux.js
       ;; Shell should have Alpine state bindings
-      (is (str/includes? (str shell) "$store.sidebar.state")))))
+      (is (str/includes? (str shell) "$store.sidebar.toggle()")))))
 
 (deftest ^:unit admin-layout-test
   (testing "Complete admin page layout"
@@ -1312,13 +1312,9 @@
         (is (not (str/includes? page-str ":common/button-search")))
         (is (str/includes? page-str "search-icon"))))
 
-    (testing "Sidebar buttons have aria-label"
-      (let [sidebar (shell/sidebar [])
-            sidebar-str (str sidebar)]
-        ;; Toggle and pin buttons should have aria-label (i18n keys)
-        (is (str/includes? sidebar-str "aria-label"))
-        (is (str/includes? sidebar-str ":admin/sidebar-toggle-button"))
-        (is (str/includes? sidebar-str ":admin/sidebar-pin-button"))))
+    (testing "The sidebar toggle has an aria-label"
+      (let [shell-str (str (shell/admin-shell [:p] {:nav []}))]
+        (is (str/includes? shell-str ":admin/sidebar-toggle-button"))))
 
     (testing "Table row has navigation hint"
       (let [row (ui/entity-table-row :users sample-record sample-entity-config

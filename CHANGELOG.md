@@ -238,6 +238,8 @@ for what is public API, what is internal, and how deprecations are announced.
   Drop it.
 - **Group grants, `:role :user` and OIDC `:default-role`** (BOU-771): grants move onto managed roles, their rows kept
   until 2.0 for rolling deploys. Use `add-group-role` and import `:roles`; `:user` means no role.
+- **`shared-ui` `alpine/sidebar-attrs` and `mobile-menu-toggle-attrs`** (BOU-796): the first returns nothing, the
+  second is `sidebar-toggle-attrs`, which works at every width; both go in 2.0.
 - **`shared-ui` `alpine/sidebar-store-init`** (BOU-761): a second copy of the sidebar store that needs the unbundled
   Persist plugin; goes in 2.0. Load the `:admin-pilot` bundle, which registers the store.
 - **Kebab-case keys in the login response's `user` and `session`** (BOU-737): each now has a camelCase twin with the same
@@ -262,6 +264,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **The admin sidebar fell back to closed** (BOU-796): it is now open or closed, changed only by its one toggle; the pin
+  and hover-expand are gone. A browser that pinned it closed keeps it closed.
 - **Dev dashboard: Apply on `:wagoe/dashboard` stopped the dashboard mid-request** (BOU-792). It answers first, then
   restarts and follows to the new port; a failed restart is logged and rolled back. Nothing to change.
 - **Admin scope leftovers** (BOU-791): every admin page refuses read held only in scopes no entity maps, a relation

@@ -473,8 +473,7 @@
  ;; =============================================================================
  ;; Admin module
  ;; =============================================================================
- :admin/sidebar-toggle-button      "Zijbalk in-/uitschakelen"
- :admin/sidebar-pin-button         "Zijbalk vastzetten"
+ :admin/sidebar-toggle-button      "Menu"
  :admin/nav-title                  "Beheer"
  :common/nav-other                 "Overig"
  :user/nav-title                   "Gebruikers"
@@ -483,7 +482,6 @@
  :search/nav-title                 "Zoeken"
  :admin/sidebar-dashboard          "Dashboard"
  :admin/sidebar-main-site          "Hoofdsite"
- :admin/menu-open-button           "Menu openen"
  :admin/header-welcome             "Welkom, {name}"
  :admin/button-logout              "Uitloggen"
  :admin/page-title                 "Admin - {label}"
@@ -596,8 +594,7 @@
  :admin/flash-bulk-deleted         "{count} {label} succesvol verwijderd"
  :admin/flash-bulk-deleted-partial "{count} verwijderd, {failed} mislukt"
  :admin/breadcrumb-admin           "Admin"
- :admin/sidebar-toggle-hint        "Zijbalk in-/uitschakelen (Ctrl+B)"
- :admin/sidebar-pin-hint           "Zijbalk vastzetten"
+ :admin/sidebar-toggle-hint        "Menu tonen of verbergen (Ctrl+B)"
  :admin/audit-trail-title          "Audittrail"
  :admin/audit-trail-description    "Bekijk systeemactiviteit en auditlogboeken."
  :admin/groups-title "Groepen"

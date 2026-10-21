@@ -58,10 +58,9 @@
       (await! pg "!!window.Alpine && !!document.querySelector('.nav-module')")
       (is (= "true" (expanded pg "other"))))
 
-    (testing "collapsed, a module's pages open in a flyout"
-      (loc/click (page/locator pg "button.sidebar-pin"))
+    (testing "closed, a module's pages open in a flyout"
       (loc/click (page/locator pg "button.sidebar-toggle"))
-      (await! pg "document.querySelector('.admin-shell')?.dataset.sidebarState === 'collapsed'")
+      (await! pg "document.documentElement.dataset.sidebar === 'closed'")
       (is (not (loc/is-visible? (link pg "/web/admin/groups"))))
       (loc/hover (toggle pg "user"))
       (is (loc/is-visible? (link pg "/web/admin/groups"))))))

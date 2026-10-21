@@ -77,3 +77,16 @@
     (is (= 1 (count (profile-links))))
     (binding [pages/*mounted?* (complement #{"/web/profile"})]
       (is (empty? (profile-links))))))
+
+(deftest ^:unit one-toggle-opens-and-closes-the-sidebar
+  (let [page    (shell/admin-shell [:p] {:nav nav})
+        toggles (tagged page :button.sidebar-toggle)
+        attrs   (second (first toggles))]
+    (is (= 1 (count toggles)) "in the topbar, at every width")
+    (is (= "admin-sidebar" (:aria-controls attrs) (:id (second (first (tagged page :aside.admin-sidebar))))))
+    (is (= [:t :admin/sidebar-toggle-button] (:aria-label attrs)))
+    (is (= "$store.sidebar.expanded()" (:x-bind:aria-expanded attrs)))
+    (testing "no pin, and hovering the sidebar does nothing"
+      (is (empty? (tagged page :button.sidebar-pin)))
+      (is (not-any? #(contains? (second %) (keyword "@mouseleave"))
+                    (tagged page :aside.admin-sidebar))))))

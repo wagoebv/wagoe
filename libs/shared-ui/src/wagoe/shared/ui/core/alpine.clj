@@ -16,8 +16,7 @@
    - x-model: Two-way data binding
    - $persist: LocalStorage persistence (needs the Persist plugin)
    - $store: Global reactive stores"
-  (:require [clojure.string :as str]
-            [hiccup2.core :as h]))
+  (:require [clojure.string :as str]))
 
 ;; =============================================================================
 ;; Core Attribute Helpers
@@ -291,89 +290,36 @@
 ;; =============================================================================
 
 (defn ^:deprecated sidebar-store-init
-  "DEPRECATED: the ui-style :admin-pilot bundle's admin-ux.js registers this
-   store and persists it; this copy needs the unbundled Persist plugin.
-
-   Generate Alpine store initialization script for sidebar state.
-
-   This creates a global Alpine store that:
-   - Handles collapse/expand on hover
-   - Manages mobile drawer open/close
-   - Supports keyboard shortcuts (Ctrl+B)
-
-   Returns:
-     Hiccup script element with store initialization"
+  "DEPRECATED: renders nothing. The ui-style :admin-pilot bundle's admin-ux.js
+   registers the one sidebar store."
   []
-  [:script
-   (h/raw
-    "document.addEventListener('alpine:init', () => {
-       const persist = (value, key) => {
-         if (Alpine.$persist) {
-           return Alpine.$persist(value).as(key);
-         }
-         console.warn('Alpine.js $persist plugin not found; sidebar state will not be persisted.');
-         return value;
-       };
-
-       Alpine.store('sidebar', {
-         state: persist('expanded', 'wagoe-admin-sidebar-state'),
-         pinned: persist(false, 'wagoe-admin-sidebar-pinned'),
-         mobileOpen: false,
-
-         toggle() {
-           this.state = this.state === 'expanded' ? 'collapsed' : 'expanded';
-         },
-
-         togglePin() {
-           this.pinned = !this.pinned;
-         },
-
-         expand() {
-           if (!this.pinned && window.innerWidth > 768) {
-             this.state = 'expanded';
-           }
-         },
-
-         collapse() {
-           if (!this.pinned && window.innerWidth > 768) {
-             this.state = 'collapsed';
-           }
-         },
-
-         toggleMobile() {
-           this.mobileOpen = !this.mobileOpen;
-         },
-
-         closeMobile() {
-           this.mobileOpen = false;
-         }
-       });
-     });")])
+  nil)
 
 (defn sidebar-shell-attrs
-  "Admin shell attributes for sidebar state binding.
-
-   Returns:
-     Map of Alpine attributes for admin-shell div"
+  "Admin shell attributes: the small-screen drawer's state, and Ctrl+B to
+   toggle the sidebar. The desktop open/closed state is on <html>
+   (data-sidebar), put there by init.js before first paint."
   []
   {:x-data "empty"
-   :x-bind:data-sidebar-state "$store.sidebar.state"
-   :x-bind:data-sidebar-pinned "$store.sidebar.pinned"
    :x-bind:data-sidebar-open "$store.sidebar.mobileOpen"
-   (keyword "@keydown.ctrl.b.window.prevent") "$store.sidebar.toggle()"
-   (keyword "@keydown.escape.window") "$store.sidebar.closeMobile()"})
+   (keyword "@keydown.ctrl.b.window.prevent") "$store.sidebar.toggle()"})
 
-(defn sidebar-attrs
-  "Sidebar element attributes for hover expand/collapse.
-
-   Returns:
-     Map of Alpine attributes for sidebar aside element"
+(defn ^:deprecated sidebar-attrs
+  "DEPRECATED: the sidebar no longer expands on hover; returns no attributes."
   []
-  {(keyword "@mouseenter") "$store.sidebar.expand()"
-   (keyword "@mouseleave") "$store.sidebar.collapse()"})
+  {})
 
-(defn mobile-menu-toggle-attrs
-  "Mobile menu toggle button attributes.
+(defn sidebar-toggle-attrs
+  "The sidebar's toggle button: opens and closes it on a desktop, the drawer
+   on a small screen."
+  []
+  {(keyword "@click") "$store.sidebar.toggle()"
+   :x-bind:aria-expanded "$store.sidebar.expanded()"})
+
+(defn ^:deprecated mobile-menu-toggle-attrs
+  "DEPRECATED: use `sidebar-toggle-attrs`, which also works on small screens.
+
+   Mobile menu toggle button attributes.
 
    Returns:
      Map of attributes for mobile menu toggle"

@@ -15,8 +15,8 @@
 // =========================================================================
 document.addEventListener('alpine:init', function () {
   // Plain localStorage rather than Alpine's Persist plugin: alpine.min.js is
-  // the core build, and two keys do not justify vendoring a second plugin.
-  // Storage can throw (disabled, private mode); then state lives per page.
+  // the core build. Storage can throw (disabled, private mode); then state
+  // lives per page.
   var load = function (key) {
     try {
       return JSON.parse(window.localStorage.getItem(key));
@@ -29,43 +29,62 @@ document.addEventListener('alpine:init', function () {
       window.localStorage.setItem(key, JSON.stringify(value));
     } catch (e) { /* not persisted */ }
   };
-  var STATE_KEY = 'wagoe-admin-sidebar-state';
-  var PINNED_KEY = 'wagoe-admin-sidebar-pinned';
-  var pinned = load(PINNED_KEY) === true;
+  // The sidebar is open or closed and changes only when the user toggles it.
+  // init.js puts the stored state on <html> as data-sidebar before first
+  // paint; CSS reads it there. Small screens show the sidebar as an overlay
+  // drawer instead, closed on every page, without touching the stored state.
+  var SIDEBAR_KEY = 'wagoe-admin-sidebar';
+  var root = document.documentElement;
+  var small = window.matchMedia('(max-width: 768px)');
+  var stored = function () {
+    try {
+      return window.localStorage.getItem(SIDEBAR_KEY) !== 'closed';
+    } catch (e) {
+      return root.getAttribute('data-sidebar') !== 'closed';
+    }
+  };
 
   window.Alpine.store('sidebar', {
-    // Only a pinned sidebar keeps its state. Unpinned, state follows the
-    // mouse, so restoring it would animate a collapse on every page load.
-    state: pinned && load(STATE_KEY) === 'collapsed' ? 'collapsed' : 'expanded',
-    pinned: pinned,
+    open: root.getAttribute('data-sidebar') !== 'closed',
+    small: small.matches,
     mobileOpen: false,
 
     init: function () {
       var self = this;
-      window.Alpine.effect(function () { save(PINNED_KEY, self.pinned); });
-      window.Alpine.effect(function () {
-        if (self.pinned) save(STATE_KEY, self.state);
+      small.addEventListener('change', function (e) {
+        self.small = e.matches;
+        self.mobileOpen = false;
+      });
+      // Another tab, or this page back from the bfcache, may hold an older
+      // state than the one last chosen.
+      var sync = function () { self.show(stored()); };
+      window.addEventListener('storage', function (e) {
+        if (e.key === SIDEBAR_KEY) sync();
+      });
+      window.addEventListener('pageshow', function (e) {
+        if (e.persisted) sync();
       });
     },
 
+    show: function (open) {
+      this.open = open;
+      root.setAttribute('data-sidebar', open ? 'open' : 'closed');
+    },
+
+    // What the toggle button controls at this width.
+    expanded: function () {
+      return this.small ? this.mobileOpen : this.open;
+    },
+
     toggle: function () {
-      this.state = this.state === 'expanded' ? 'collapsed' : 'expanded';
-    },
-
-    togglePin: function () {
-      this.pinned = !this.pinned;
-    },
-
-    expand: function () {
-      if (!this.pinned && window.innerWidth > 768) {
-        this.state = 'expanded';
+      if (this.small) {
+        this.mobileOpen = !this.mobileOpen;
+        return;
       }
-    },
-
-    collapse: function () {
-      if (!this.pinned && window.innerWidth > 768) {
-        this.state = 'collapsed';
-      }
+      this.show(!this.open);
+      try {
+        window.localStorage.setItem(SIDEBAR_KEY, this.open ? 'open' : 'closed');
+      } catch (e) { /* this page only */ }
     },
 
     toggleMobile: function () {
@@ -77,9 +96,7 @@ document.addEventListener('alpine:init', function () {
     },
 
     handleNavLinkClick: function () {
-      if (window.innerWidth <= 768) {
-        this.closeMobile();
-      }
+      this.closeMobile();
     }
   });
 

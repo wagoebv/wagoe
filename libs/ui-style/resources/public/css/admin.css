@@ -49,11 +49,6 @@
   transition: width var(--transition-normal);
 }
 
-/* Collapsed sidebar — icon-only */
-.admin-shell[data-sidebar-state="collapsed"] .admin-sidebar {
-  width: var(--sidebar-width-collapsed);
-}
-
 /* =============================================================================
    Sidebar Header
    ============================================================================= */
@@ -87,61 +82,6 @@
 /* Spacing utilities */
 .ml-1 { margin-left: 0.25rem; }
 .ml-2 { margin-left: 0.5rem; }
-
-
-/* Sidebar collapse controls */
-.sidebar-controls {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  margin-left: auto;
-}
-
-.sidebar-toggle,
-.sidebar-pin {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border: none;
-  background: transparent;
-  color: var(--text-muted);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  padding: 0;
-}
-
-.sidebar-toggle:hover,
-.sidebar-pin:hover {
-  background: var(--surface-2);
-  color: var(--text-primary);
-}
-
-.sidebar-pin[aria-pressed="true"] {
-  color: var(--color-primary);
-}
-
-/* Collapsed header — hide logo and pin, show only toggle centered */
-.admin-shell[data-sidebar-state="collapsed"] .sidebar-brand,
-.admin-shell[data-sidebar-state="collapsed"] .sidebar-pin {
-  display: none;
-}
-
-.admin-shell[data-sidebar-state="collapsed"] .admin-sidebar-header {
-  justify-content: center;
-  padding: var(--space-2);
-}
-
-.admin-shell[data-sidebar-state="collapsed"] .sidebar-controls {
-  margin-left: 0;
-}
-
-/* Mirror icon when collapsed (points right = expand) */
-.admin-shell[data-sidebar-state="collapsed"] .sidebar-toggle svg {
-  transform: scaleX(-1);
-}
 
 /* =============================================================================
    Sidebar Navigation
@@ -266,29 +206,6 @@
   white-space: nowrap;
 }
 
-/* Collapsed state — hide text, center icons */
-.admin-shell[data-sidebar-state="collapsed"] .nav-text,
-.admin-shell[data-sidebar-state="collapsed"] .admin-sidebar-nav h3 {
-  opacity: 0;
-  width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  transition: opacity var(--transition-fast);
-}
-
-.admin-shell[data-sidebar-state="collapsed"] .entity-list a,
-.admin-shell[data-sidebar-state="collapsed"] .nav-module-toggle {
-  justify-content: center;
-  padding: var(--space-2);
-  margin: 2px var(--space-1);
-}
-
-.admin-shell[data-sidebar-state="collapsed"] .entity-list a svg,
-.admin-shell[data-sidebar-state="collapsed"] .nav-module-toggle svg {
-  width: 20px;
-  height: 20px;
-}
-
 /* Module groups: a toggle button styled as a link, its items indented */
 .nav-module-toggle {
   width: calc(100% - 2 * var(--space-2));
@@ -324,63 +241,6 @@
 .nav-flyout-title {
   display: none;
 }
-
-/* Collapsed: the module's icon; its items in a flyout on hover or focus */
-.admin-shell[data-sidebar-state="collapsed"] .nav-module-toggle {
-  width: calc(100% - 2 * var(--space-1));
-}
-
-.admin-shell[data-sidebar-state="collapsed"] .nav-chevron {
-  display: none;
-}
-
-/* Fixed escapes the sidebar's overflow; with top left auto it stays level
-   with its group, pulled up beside the toggle */
-.admin-shell[data-sidebar-state="collapsed"] .nav-module > .entity-list {
-  display: none;
-  position: fixed;
-  left: var(--sidebar-width-collapsed);
-  margin-top: -40px;
-  min-width: 200px;
-  max-width: 280px;
-  padding: var(--space-1);
-  background: var(--surface-0);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-lg);
-  z-index: var(--z-sidebar);
-}
-
-.admin-shell[data-sidebar-state="collapsed"] .nav-module:hover > .entity-list,
-.admin-shell[data-sidebar-state="collapsed"] .nav-module:focus-within > .entity-list {
-  display: block;
-}
-
-.admin-shell[data-sidebar-state="collapsed"] .nav-module .nav-text {
-  opacity: 1;
-  width: auto;
-}
-
-.admin-shell[data-sidebar-state="collapsed"] .nav-module .entity-list a {
-  justify-content: flex-start;
-  padding: var(--space-2) var(--space-3);
-}
-
-.admin-shell[data-sidebar-state="collapsed"] .nav-module .entity-list a svg {
-  width: 16px;
-  height: 16px;
-}
-
-.admin-shell[data-sidebar-state="collapsed"] .nav-flyout-title {
-  display: block;
-  padding: var(--space-2) var(--space-3);
-  font-size: var(--text-xs);
-  font-weight: var(--font-semibold);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--text-muted);
-}
-
 
 /* =============================================================================
    Sidebar Footer
@@ -418,24 +278,6 @@
   flex-shrink: 0;
 }
 
-/* Collapsed footer — hide text, center icons */
-.admin-shell[data-sidebar-state="collapsed"] .admin-sidebar-footer a .nav-text {
-  opacity: 0;
-  width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-}
-
-.admin-shell[data-sidebar-state="collapsed"] .admin-sidebar-footer a {
-  justify-content: center;
-  padding: var(--space-2);
-}
-
-.admin-shell[data-sidebar-state="collapsed"] .admin-sidebar-footer svg {
-  width: 20px;
-  height: 20px;
-}
-
 /* =============================================================================
    Main Content Area
    ============================================================================= */
@@ -450,8 +292,119 @@
   transition: margin-left var(--transition-normal);
 }
 
-.admin-shell[data-sidebar-state="collapsed"] .admin-main {
-  margin-left: var(--sidebar-width-collapsed);
+/* A closed sidebar is a rail of icons. Desktop only: on a small screen the
+   sidebar is an overlay drawer, shown in full whatever the desktop state. */
+@media (min-width: 769px) {
+  :root[data-sidebar="closed"] .admin-shell .admin-sidebar-header {
+    justify-content: center;
+    padding: var(--space-2);
+  }
+
+  :root[data-sidebar="closed"] .admin-shell .sidebar-brand-logo {
+    display: none;
+  }
+
+  :root[data-sidebar="closed"] .admin-shell .admin-sidebar {
+    width: var(--sidebar-width-collapsed);
+  }
+
+  :root[data-sidebar="closed"] .admin-shell .nav-text,
+  :root[data-sidebar="closed"] .admin-shell .admin-sidebar-nav h3 {
+    opacity: 0;
+    width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    transition: opacity var(--transition-fast);
+  }
+
+  :root[data-sidebar="closed"] .admin-shell .entity-list a,
+  :root[data-sidebar="closed"] .admin-shell .nav-module-toggle {
+    justify-content: center;
+    padding: var(--space-2);
+    margin: 2px var(--space-1);
+  }
+
+  :root[data-sidebar="closed"] .admin-shell .entity-list a svg,
+  :root[data-sidebar="closed"] .admin-shell .nav-module-toggle svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  :root[data-sidebar="closed"] .admin-shell .nav-module-toggle {
+    width: calc(100% - 2 * var(--space-1));
+  }
+
+  :root[data-sidebar="closed"] .admin-shell .nav-chevron {
+    display: none;
+  }
+
+  /* A module's items in a flyout on hover or focus. Fixed escapes the
+     sidebar's overflow; with top left auto it stays level with its group */
+  :root[data-sidebar="closed"] .admin-shell .nav-module > .entity-list {
+    display: none;
+    position: fixed;
+    left: var(--sidebar-width-collapsed);
+    margin-top: -40px;
+    min-width: 200px;
+    max-width: 280px;
+    padding: var(--space-1);
+    background: var(--surface-0);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    z-index: var(--z-sidebar);
+  }
+
+  :root[data-sidebar="closed"] .admin-shell .nav-module:hover > .entity-list,
+  :root[data-sidebar="closed"] .admin-shell .nav-module:focus-within > .entity-list {
+    display: block;
+  }
+
+  :root[data-sidebar="closed"] .admin-shell .nav-module .nav-text {
+    opacity: 1;
+    width: auto;
+  }
+
+  :root[data-sidebar="closed"] .admin-shell .nav-module .entity-list a {
+    justify-content: flex-start;
+    padding: var(--space-2) var(--space-3);
+  }
+
+  :root[data-sidebar="closed"] .admin-shell .nav-module .entity-list a svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  :root[data-sidebar="closed"] .admin-shell .nav-flyout-title {
+    display: block;
+    padding: var(--space-2) var(--space-3);
+    font-size: var(--text-xs);
+    font-weight: var(--font-semibold);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+  }
+
+  :root[data-sidebar="closed"] .admin-shell .admin-sidebar-footer a .nav-text {
+    opacity: 0;
+    width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+
+  :root[data-sidebar="closed"] .admin-shell .admin-sidebar-footer a {
+    justify-content: center;
+    padding: var(--space-2);
+  }
+
+  :root[data-sidebar="closed"] .admin-shell .admin-sidebar-footer svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  :root[data-sidebar="closed"] .admin-shell .admin-main {
+    margin-left: var(--sidebar-width-collapsed);
+  }
 }
 
 /* =============================================================================
@@ -622,13 +575,15 @@
   color: var(--text-primary);
 }
 
+.sidebar-toggle:focus-visible,
 .admin-topbar-actions .theme-toggle:focus-visible {
   outline: 2px solid var(--accent-primary);
   outline-offset: 2px;
 }
 
-.mobile-menu-toggle {
-  display: none;
+.sidebar-toggle {
+  display: flex;
+  flex-shrink: 0;
   background: transparent;
   border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
@@ -640,7 +595,7 @@
   color: var(--text-muted);
 }
 
-.mobile-menu-toggle:hover {
+.sidebar-toggle:hover {
   background: var(--surface-2);
   color: var(--text-primary);
 }
@@ -1585,31 +1540,20 @@
   .toolbar-actions {
     width: 100%;
   }
-  /* Sidebar becomes a drawer — override collapsed width */
-  .admin-sidebar,
-  .admin-shell[data-sidebar-state="collapsed"] .admin-sidebar {
+  /* Sidebar becomes a drawer */
+  .admin-sidebar {
     width: 280px;
     transform: translateX(-100%);
     transition: transform var(--transition-normal);
   }
 
-  .admin-shell[data-sidebar-open="true"] .admin-sidebar,
-  .admin-shell[data-sidebar-open="true"][data-sidebar-state="collapsed"] .admin-sidebar {
+  .admin-shell[data-sidebar-open="true"] .admin-sidebar {
     transform: translateX(0);
   }
 
   /* Main content takes full width */
   .admin-main {
     margin-left: 0;
-  }
-
-  .admin-shell[data-sidebar-state="collapsed"] .admin-main {
-    margin-left: 0;
-  }
-
-  /* Show mobile menu toggle */
-  .mobile-menu-toggle {
-    display: flex;
   }
 
   /* Smaller padding */
@@ -1625,7 +1569,7 @@
   }
 
   /* Unified icon button style for mobile header - applies to all icon buttons */
-  .mobile-menu-toggle,
+  .sidebar-toggle,
   .admin-topbar-actions .theme-toggle {
     width: 44px !important;
     height: 44px !important;
@@ -1646,14 +1590,14 @@
                 border-color var(--transition-fast);
   }
 
-  .mobile-menu-toggle:hover,
+  .sidebar-toggle:hover,
   .admin-topbar-actions .theme-toggle:hover {
     background: var(--surface-2) !important;
     color: var(--text-primary) !important;
     border-color: var(--border-strong) !important;
   }
 
-  .mobile-menu-toggle svg,
+  .sidebar-toggle svg,
   .admin-topbar-actions .theme-toggle svg {
     display: block;
     margin: auto;
@@ -2970,7 +2914,7 @@ button.htmx-request::after,
 @media print {
   .admin-sidebar,
   .admin-topbar,
-  .mobile-menu-toggle {
+  .sidebar-toggle {
     display: none;
   }
 
