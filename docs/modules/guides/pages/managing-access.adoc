@@ -100,7 +100,7 @@ Your part is the `:report` phase. Run the app as usual for a few days; each
 refusal is logged as a warning, at most once a minute per user and route:
 
 ----
-Authorization would refuse this request under :enforce {:user-id … :route "/api/v1/orders" :method :post :permission :orders/write :reason :forbidden}
+Authorization would refuse this request under :enforce {:mode :report :user-id … :route "/api/v1/orders" :method :post :permission :orders/write :reason :forbidden}
 Admin authorization would refuse this under :enforce {:user-id … :entity :orders :permission :admin.orders/write}
 Admin authorization would keep this user out of the admin under :enforce {:user-id …}
 ----
