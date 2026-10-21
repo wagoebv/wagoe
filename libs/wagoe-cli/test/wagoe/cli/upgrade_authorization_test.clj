@@ -84,6 +84,8 @@
   (let [dir (project!)]
     (try
       (is (= "acme.system-config" (sut/config-ns dir {:aliases {:run {:main-opts ["-m" "acme.main"]}}})))
+      (is (nil? (sut/config-ns dir {:aliases {:run {:main-opts ["-m" "acme.core"]}}}))
+          "a main namespace not ending in .main names no system config")
       (testing "check and a dry-run prepare write nothing"
         (let [[code calls out] (run dir {} "check")]
           (is (= 0 code))
@@ -101,6 +103,13 @@
         (let [[code calls] (run dir {} "prepare")]
           (is (= [0 [["dev" "prepare"]]] [code calls]))
           (is (= :report (:mode (sut/config-facts (config-of dir)))))))
+      (testing "a report step that crashed never switches, even forced"
+        (is (= 137 (first (run dir {"report" 137} "enforce" "--force"))))
+        (is (= :report (:mode (sut/config-facts (config-of dir))))))
+      (testing "a flag without its value is refused"
+        (let [[code _ out] (run dir {} "enforce" "--log")]
+          (is (= 1 code))
+          (is (str/includes? out "--log needs a value"))))
       (testing "enforce refuses while the app reports a refusal, unless forced"
         (let [[code _ out] (run dir {"report" 2} "enforce")]
           (is (= 2 code))

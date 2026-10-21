@@ -70,7 +70,7 @@
     (is (str/includes? text "Everyone is created and given orders/editor"))
     (is (str/includes? text "1 user(s) with role :viewer join Readers, with orders/viewer"))
     (is (str/includes? text "Finance: invoice/approve {:domain-id 1}")))
-  (is (= ["  Everyone exists; it keeps its roles." "  Nothing left to move."]
+  (is (= ["  Everyone gets no roles: it exists already, or every user is an admin." "  Nothing left to move."]
          (sut/format-plan {:viewers [] :grants []} {}))))
 
 (deftest ^:unit legacy-roles-are-counted

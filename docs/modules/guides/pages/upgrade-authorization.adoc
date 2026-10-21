@@ -28,7 +28,7 @@ prints what they would write and writes nothing.
 bb upgrade authorization check --env prod
 ----
 
-Changes nothing. It prints:
+Writes no config and moves no rights; like any start, it creates user tables that are missing. It prints:
 
 * whether `deps.edn` is behind the CLI;
 * the mode in `config.edn`, a `:require-role` in `:wagoe/admin`, and each OIDC

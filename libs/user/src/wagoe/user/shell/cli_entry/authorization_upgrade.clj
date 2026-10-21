@@ -6,7 +6,7 @@
 
    - `check`: what the first start of this version will move, who holds which
      legacy role, the routes no rule covers. Builds the routes without the
-     rights migration or boot migrations, so it changes no data.
+     rights migration or boot migrations, so it moves no rights.
    - `prepare`: runs the migrations and the rights migration, then prints what
      each user holds and where `:enforce` differs from `:off`.
    - `report`: those differences again. Exits 2 while any would refuse."
@@ -144,8 +144,14 @@
   "Runs `step` against the app config `ig-config`; the exit code."
   [ig-config step]
   (let [writes? (= "prepare" step)]
-    (if-not (contains? ig-config :wagoe/user-group-service)
+    (cond
+      (not (contains? ig-config :wagoe/user-group-service))
       (do (println "The user module is off, so there are no users or groups to move.") 0)
+
+      (not (contains? ig-config :wagoe/http-handler))
+      (do (println "This config has no :wagoe/http-handler, so no routes to check.") 1)
+
+      :else
       (do (when writes?
             (println "Running migrations…")
             (migrations/migrate))

@@ -71,14 +71,17 @@
    `system-config` for `main`, else the one src/<dir>/system_config.clj holds."
   [dir deps]
   (let [main (second (drop-while #(not= "-m" %) (get-in deps [:aliases :run :main-opts])))]
-    (or (some-> main (str/replace #"\.main$" ".system-config"))
+    (or (some->> main (re-matches #"(.+)\.main") second (#(str % ".system-config")))
         (some->> (.listFiles (io/file dir "src"))
                  (filter #(.isFile (io/file % "system_config.clj")))
                  first
                  (#(str (str/replace (.getName ^java.io.File %) "_" "-") ".system-config"))))))
 
-(defn- version-parts [v]
-  (mapv parse-long (re-seq #"\d+" (first (str/split v #"-")))))
+(defn- version-parts
+  "Padded to four numbers: `compare` orders vectors by length first."
+  [v]
+  (let [ns (mapv parse-long (re-seq #"\d+" (first (str/split v #"-"))))]
+    (into ns (repeat (- 4 (count ns)) 0))))
 
 (defn version-note
   "Why the app's wagoe-user may be too old for these steps, or nil."
@@ -100,6 +103,10 @@
                      :when (and k (nil? (System/getenv k)))]
                  [k (str/replace (str/trim v) #"^([\"'])(.*)\1$" "$2")])))))
 
+(def ^:private env-aliases
+  "WAG_ENV's long names, as wagoe.config reads them; the CLI has no config dep."
+  {"development" "dev" "production" "prod" "acceptance" "acc" "testing" "test"})
+
 (def jvm-main "wagoe.user.shell.cli-entry.authorization-upgrade")
 
 (defn- run-jvm
@@ -119,7 +126,7 @@
 
 (defn- jvm! [ctx step]
   (let [code (*jvm* ctx step)]
-    (when (= 1 code)
+    (when-not (#{0 2} code)
       (println)
       (println (str "The " step " step failed in the app (above). If it cannot locate " jvm-main
                     ", bump com.wagoe/* in deps.edn.")))
@@ -168,7 +175,7 @@
 ;; ─── Steps ───────────────────────────────────────────────────────────────────
 
 (def ^:private verify
-  {"check"   ["Verify: nothing has changed. /web/admin/groups shows the groups as they are now."]
+  {"check"   ["Verify: config.edn and rights are unchanged. /web/admin/groups shows the groups as they are now."]
    "prepare" ["Verify: start the app and sign in as a platform admin. A user's Rights tab"
               "(/web/users/<id>/rights) shows each permission and the group and role it comes from;"
               "/web/admin/permissions/view?name=<permission> shows who holds one. Sign in as a"
@@ -258,7 +265,8 @@
             blocked (or (= 2 code) (seq logged))]
         (when (seq logged) (print-log-refusals log logged))
         (cond
-          (= 1 code) 1
+          ;; A crashed or killed step proves nothing: never switch on it.
+          (not (#{0 2} code)) code
 
           (and blocked (not force?))
           (do (println)
@@ -300,8 +308,10 @@
       ("--help" "-h") (recur more (assoc opts :help? true))
       "--dry-run" (recur more (assoc opts :dry-run? true))
       "--force"   (recur more (assoc opts :force? true))
-      "--env"     (recur (rest more) (assoc opts :env (first more)))
-      "--log"     (recur (rest more) (assoc opts :log (first more)))
+      ("--env" "--log")
+      (if-let [v (some-> (first more) (#(when-not (str/starts-with? % "-") %)))]
+        (recur (rest more) (assoc opts (keyword (subs a 2)) v))
+        (assoc opts :error (str a " needs a value")))
       (if (and (nil? (:step opts)) (not (str/starts-with? a "-")))
         (recur more (assoc opts :step a))
         (assoc opts :error (str "Unknown argument: " a))))))
@@ -310,7 +320,7 @@
   "Runs the step `args` name in project `dir`; the exit code."
   [dir args]
   (let [{:keys [step error env log help?] :as opts} (parse-args args)
-        env  (or env (System/getenv "WAG_ENV") "dev")
+        env  (let [e (or env (not-empty (System/getenv "WAG_ENV")) "dev")] (get env-aliases e e))
         path (io/file dir "resources" "conf" env "config.edn")
         deps (read-deps dir)
         app  (config-ns dir deps)]

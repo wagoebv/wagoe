@@ -133,7 +133,7 @@
      (if everyone-roles
        [(str "  Everyone is created and given " (if (seq everyone-roles) (roles everyone-roles) "no roles")
              ". A module whose permission a group grant already holds gets none.")]
-       ["  Everyone exists; it keeps its roles."])
+       ["  Everyone gets no roles: it exists already, or every user is an admin."])
      (when (seq viewers)
        [(str "  " (count viewers) " user(s) with role :viewer join Readers, with " (roles readers-roles)
              "; their role is cleared.")])
