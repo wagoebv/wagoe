@@ -53,6 +53,7 @@ Read opens the detail page; without write it renders read-only. Many-to-many tit
 entity's read, and a save keeps the links the user could not see.
 `:require-role` is deprecated and read by nothing; `wagoe add admin` and `bb setup` no longer write it.
 Moving an app to `:enforce`: `docs/modules/guides/pages/authorization.adoc`.
+Granting entity access as an administrator: `docs/modules/guides/pages/managing-access.adoc`.
 
 **Tabs on the edit page**: `:detail-tabs [{:key :rights :label … :href "/web/users/{id}/rights"}]` links a record's
 other pages as tabs beside the form; `{id}` is the record's key, and the optional `:key` is what that page marks active. A symbol names a var holding the list:

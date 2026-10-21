@@ -36,7 +36,9 @@
   [field-name value field-config errors display]
   (let [widget-type (:widget field-config :text-input)
         label (:label field-config (text/capitalize (name field-name)))
-        required? (:required field-config false)
+        ;; Never on a checkbox: there :required means "must be ticked", so a
+        ;; NOT NULL boolean could not be saved unticked. It always sends a value.
+        required? (and (:required field-config false) (not= widget-type :checkbox))
         readonly? (:readonly field-config false)
         placeholder (:placeholder field-config)
         help-text (:help-text field-config)
@@ -115,8 +117,7 @@
        ;; Boolean input
        (= widget-type :checkbox)
        (list
-        (ui/checkbox field-name value {:required required?
-                                       :disabled readonly?
+        (ui/checkbox field-name value {:disabled readonly?
                                        :class "checkbox checkbox-sm"})
         (when help-text
           [:span.help-text help-text]))

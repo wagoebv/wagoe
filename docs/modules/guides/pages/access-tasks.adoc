@@ -1,0 +1,223 @@
+= Access tasks
+
+Each task below is done in the admin, signed in as a platform admin, and ends
+with how to check it worked. The ideas behind them are in
+xref:managing-access.adoc[Managing access].
+
+== Users
+
+=== Add a user
+
+. Go to *Users* and choose *New User*.
+. Fill in name, email and a first password. The form lists the password rules.
+. Leave *Role* on *User*. *Admin* makes a platform admin.
+. Untick *Send Welcome Email* if you will pass the password on yourself.
+. Choose *Create User*.
+
+The user can sign in now, with the rights of Everyone. Add them to a group for
+more.
+
+Check:: Open the user and their *Rights* tab: *Everyone* is listed.
+
+=== Deactivate or reactivate a user
+
+. Go to *Users* and open the user.
+. Untick *Active* and choose *Update*.
+
+Deactivating ends all their sessions at once. Sign-in then answers *Invalid
+email or password*, so nothing tells an outsider the account exists. Tick
+*Active* again to reactivate; group memberships are kept.
+
+Check:: The *Sessions* tab shows *No active sessions*.
+
+=== End a session
+
+A user's *Sessions* tab lists each device signed in, with its IP address and
+when it was last used. *Revoke* signs that device out. To sign someone out
+everywhere, deactivate them.
+
+=== Two-factor authentication
+
+Users turn two-factor authentication (MFA) on and off themselves, under
+*Profile & Security*. Turning it off asks for their password or a current
+code; a backup code counts.
+
+There is no button for an administrator to reset someone's MFA. A user who
+has lost both the device and the backup codes needs a developer to switch MFA
+off for the account.
+
+=== Locked accounts
+
+Five wrong passwords in a row lock an account for 15 minutes. Wrong MFA codes
+and a wrong current password on the change-password form count too. The user
+sees *Too many failed attempts, please try again in 15 minutes*; the API
+answers 429 with a `Retry-After` header.
+
+The lock ends by itself; there is no unlock button. A successful sign-in
+resets the count. A developer sets both numbers in `config.edn`:
+
+[source,clojure]
+----
+:wagoe/user {:auth {:max-failed-attempts      5
+                    :lockout-duration-minutes 15}}
+----
+
+=== Password policy
+
+The rules a new password must meet are in `config.edn`, under
+`:wagoe/settings :user-validation :password-policy`:
+
+[source,clojure]
+----
+{:min-length             8      ; the defaults
+ :max-length             255
+ :require-uppercase?     false
+ :require-lowercase?     false
+ :require-numbers?       true
+ :require-special-chars? false
+ :forbidden-patterns     #{}}
+----
+
+The new-user form and the change-password form list the rules in force. They
+apply to passwords set from then on; existing passwords keep working.
+
+== Groups
+
+=== Create a group
+
+. Go to *Groups*.
+. Under *New group*, give it a name and a short description of who belongs in
+  it.
+. Choose *Create group*. Its page opens.
+
+=== Add or remove members
+
+. On the group's page, type part of a name or email under *User to add*.
+. Pick the user from the list and choose *Add member*.
+
+*Remove* beside a member takes them out. Their rights from this group end with
+their next click.
+
+Check:: The member's *Rights* tab lists the group, with source *Added*.
+
+Everyone has no member list: every signed-in user is in it.
+
+=== Memberships from your identity provider
+
+When users sign in with SSO, the app can map the groups your identity
+provider (Entra ID, LDAP, …) puts them in to groups here, by name. A developer
+sets this up once; see
+xref:authentication.adoc#_memberships_from_an_identity_provider[Memberships from an identity provider].
+Such memberships:
+
+* are read-only here: change them at the provider;
+* follow the provider, because they are not stored;
+* count only when a group here has exactly that name.
+
+On a group's page, *From the identity provider* and *Show them* list them. On a
+user's *Rights* tab they carry the source *Identity provider*.
+
+=== Delete a group
+
+*Delete group* on its page. Its members lose what its roles gave them; the
+users themselves stay. Everyone cannot be deleted.
+
+== Roles
+
+Go to *Roles*. The list shows each role, how many permissions it holds, and its
+source: *Code* or *Managed*.
+
+=== Code roles
+
+Each module ships at least `<module>/viewer` (read) and `<module>/editor`
+(read and change); scaffolded modules add `<module>/manager`. Each admin entity
+has `admin.<entity>/viewer` and `admin.<entity>/editor`. A code role's page
+lists its permissions, locked, and who holds it.
+
+.A code role: locked, with Duplicate and who holds it
+image::access/code-role.png[A code role's page]
+
+=== Make a managed role
+
+. Under *New role*, give it a name such as `support/agent`, and a description.
+. Tick the permissions it holds. They are grouped by module.
+. Choose *Create role*.
+
+A role needs a name and at least one permission. To change it later, open it,
+change the ticks and choose *Save*. *Delete role* removes it and its
+assignments.
+
+=== Adapt a code role
+
+. Open the code role.
+. Under *Duplicate*, name the copy and choose *Duplicate role*.
+. Change the copy's ticks and choose *Save*.
+
+The copy is a managed role; the code role is unchanged. Assign the copy
+instead of the original.
+
+== Assignments
+
+=== Give a group a role
+
+. Open the group.
+. Under *Roles*, pick the role.
+. For each scope key the app has, such as *Domain* or *Customer*, either leave
+  it empty, which means everywhere, or pick a value.
+. Choose *Assign role*.
+
+.Assigning a role limited to one customer
+image::access/assign-role.png[The role form with a customer picked]
+
+To give the role in two domains, assign it twice. *Remove* beside an
+assignment ends it.
+
+=== Take the scope from the member
+
+When the app knows something about each user, say their department, a scope
+key can offer *Where Department comes from*. Choose *the member's department*
+instead of *Fixed value*. Each member then holds the role in their own
+department, and keeps holding it there when they move, without anyone editing
+the group.
+
+If the app finds no department for a member, that member gets nothing from
+this assignment, not everything.
+
+=== Give every user something
+
+Open the *Everyone* group and assign the role there. A role on Everyone holds
+for every signed-in user, today's and tomorrow's.
+
+== Check what someone may do
+
+After any change, check it one of these ways.
+
+The user's Rights tab::
+Open the user and choose *Rights*. *Groups* lists each group and why they are
+in it: *Added*, *Everyone* or *Identity provider*. *Effective permissions*
+lists every permission with the role, group and scope it comes from. A scope
+taken from the member shows the value it resolved to and its source, or
+*(none, so no rights)*. A platform admin's tab says they pass every check.
++
+image::access/user-rights.png[A user's Rights tab]
+
+Who holds a permission or role::
+*Permissions* lists every permission the app has. Open one, or a role on the
+*Roles* page, to see the roles, groups and users holding it. Members from an
+identity provider are not in the users list; see the group's page.
++
+image::access/permission-holders.png[Who holds a permission]
+
+Sign in as them::
+Make a test user, put them in the same groups, and sign in in a private
+window. The admin's sidebar and dashboard show only what they may read.
+
+The audit trail::
+*Audit Trail* lists who added whom to which group, which roles were assigned,
+sign-ins, deactivations and more, with the administrator who did it. Filter on
+the action or result. Only platform admins see it.
+
+The route report::
+On the server, `clojure -M:run authz-report` prints every route with the
+permission it needs, and the routes with no rule, which only a platform admin
+passes. It does not start the app.

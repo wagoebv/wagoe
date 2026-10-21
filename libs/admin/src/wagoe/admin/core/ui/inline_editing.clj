@@ -119,11 +119,15 @@
        (#{:datetime-input :date-input} widget-type)
        (temporal-inline-input field widget-type value required? display false)
 
+       ;; The hidden "false" is what an unticked box sends; without it the
+       ;; field arrived as nil, and a required boolean could not be unticked.
        (= widget-type :checkbox)
-       [:input {:type "checkbox"
-                :name (name field)
-                :checked (boolean value)
-                :autofocus true}]
+       (list [:input {:type "hidden" :name (name field) :value "false"}]
+             [:input {:type "checkbox"
+                      :name (name field)
+                      :value "true"
+                      :checked (boolean value)
+                      :autofocus true}])
 
        (= widget-type :textarea)
        [:textarea.inline-input
@@ -186,11 +190,13 @@
         (temporal-inline-input field widget-type value required? display true)
 
         (= widget-type :checkbox)
-        [:input {:type "checkbox"
-                 :name (name field)
-                 :checked (boolean value)
-                 :class "error"
-                 :autofocus true}]
+        (list [:input {:type "hidden" :name (name field) :value "false"}]
+              [:input {:type "checkbox"
+                       :name (name field)
+                       :value "true"
+                       :checked (boolean value)
+                       :class "error"
+                       :autofocus true}])
 
         (= widget-type :textarea)
         [:textarea.inline-input.error

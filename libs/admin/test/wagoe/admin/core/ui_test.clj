@@ -404,6 +404,16 @@
         ;; Should have help text
         (is (str/includes? (str widget) "Enable user account"))))
 
+    (testing "a required checkbox can still be saved unticked"
+      (let [widget (ui/render-field-widget :active true {:widget :checkbox :label "Active" :required true} nil)]
+        (is (not-any? #(and (map? %) (:required %)) (tree-seq coll? seq widget)))))
+
+    (testing "an inline checkbox sends false unticked and true ticked"
+      (let [inputs (filter #(and (vector? %) (= :input (first %)) (= "active" (:name (second %))))
+                           (tree-seq coll? seq (ui/render-inline-edit-form :users 1 :active true {:widget :checkbox})))]
+        (is (= #{["hidden" "false"] ["checkbox" "true"]}
+               (set (map (comp (juxt :type :value) second) inputs))))))
+
     (testing "Select widget"
       (let [widget (ui/render-field-widget :role :admin
                                            {:widget :select
