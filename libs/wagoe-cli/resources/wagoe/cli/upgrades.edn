@@ -75,4 +75,9 @@
  {:ticket "BOU-782"
   :since  "1.0.2"
   :note   "POST /api/auth/mfa/disable without a body. It needs {\"password\": …} or {\"code\": …}, a current TOTP or backup code; wrong ones count towards the lockout. wagoe.user.shell.mfa/disable-mfa takes the same proof and the request context."
-  :manual "Send the user's password or a current code from the client, and pass {:password …} or {:code …} plus {:ip-address :user-agent} to disable-mfa. The proof comes from the user, which a rewrite does not have."}]
+  :manual "Send the user's password or a current code from the client, and pass {:password …} or {:code …} plus {:ip-address :user-agent} to disable-mfa. The proof comes from the user, which a rewrite does not have."}
+
+ {:ticket    "BOU-796"
+  :since     "1.0.2"
+  :note      "wagoe.shared.ui.core.alpine/mobile-menu-toggle-attrs is sidebar-toggle-attrs, which works at every width. sidebar-attrs returns {} and can stay until 2.0."
+  :fn-rename {wagoe.shared.ui.core.alpine/mobile-menu-toggle-attrs wagoe.shared.ui.core.alpine/sidebar-toggle-attrs}}]

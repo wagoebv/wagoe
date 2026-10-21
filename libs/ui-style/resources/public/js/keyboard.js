@@ -202,6 +202,13 @@
    * Handle Escape - Close modal or cancel
    */
   function handleEscape() {
+    // The small-screen drawer covers everything else, so it closes first
+    const sidebar = window.Alpine && window.Alpine.store('sidebar');
+    if (sidebar && sidebar.mobileOpen) {
+      sidebar.closeMobile();
+      return true;
+    }
+
     // First Esc leaves a field ('/' put you in the search): blur it, keep
     // what was typed. Also in full screen, where the browser takes Esc too.
     // An inline cell edit is left by cancelling it, below.
@@ -223,13 +230,6 @@
     const cancelBtn = document.querySelector('.inline-cancel');
     if (cancelBtn) {
       cancelBtn.click();
-      return true;
-    }
-
-    // Close mobile sidebar
-    const shell = document.querySelector('.admin-shell[data-sidebar-open="true"]');
-    if (shell) {
-      shell.setAttribute('data-sidebar-open', 'false');
       return true;
     }
 

@@ -473,8 +473,7 @@
  ;; =============================================================================
  ;; Admin module
  ;; =============================================================================
- :admin/sidebar-toggle-button      "Toggle sidebar"
- :admin/sidebar-pin-button         "Pin sidebar"
+ :admin/sidebar-toggle-button      "Menu"
  :admin/nav-title                  "Admin"
  :common/nav-other                 "Other"
  :user/nav-title                   "Users"
@@ -483,7 +482,6 @@
  :search/nav-title                 "Search"
  :admin/sidebar-dashboard          "Dashboard"
  :admin/sidebar-main-site          "Main Site"
- :admin/menu-open-button           "Open menu"
  :admin/header-welcome             "Welcome, {name}"
  :admin/button-logout              "Logout"
  :admin/page-title                 "Admin - {label}"
@@ -596,8 +594,7 @@
  :admin/flash-bulk-deleted         "Successfully deleted {count} {label}"
  :admin/flash-bulk-deleted-partial "Deleted {count}, failed {failed}"
  :admin/breadcrumb-admin           "Admin"
- :admin/sidebar-toggle-hint        "Toggle sidebar (Ctrl+B)"
- :admin/sidebar-pin-hint           "Pin sidebar open"
+ :admin/sidebar-toggle-hint        "Show or hide the menu (Ctrl+B)"
  :admin/audit-trail-title          "Audit Trail"
  :admin/audit-trail-description    "View system activity and audit logs."
  :admin/groups-title "Groups"

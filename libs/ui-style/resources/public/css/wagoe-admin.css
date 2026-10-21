@@ -153,9 +153,11 @@
 }
 .admin-sidebar button { color: #9FB2AB; }
 .admin-sidebar .nav-module.has-active > .nav-module-toggle { color: var(--wg-teal) !important; }
-.admin-shell[data-sidebar-state="collapsed"] .admin-sidebar .nav-module > .entity-list {
-  background: var(--wg-ink);
-  border-color: var(--wg-chrome-hover);
+@media (min-width: 769px) {
+  :root[data-sidebar="closed"] .admin-sidebar .nav-module > .entity-list {
+    background: var(--wg-ink);
+    border-color: var(--wg-chrome-hover);
+  }
 }
 .admin-sidebar .nav-flyout-title { color: var(--wg-chrome-muted); }
 
@@ -397,8 +399,6 @@
   letter-spacing: -0.01em;
   color: #F2F6F4;
 }
-.admin-sidebar .sidebar-controls button { color: var(--wg-chrome-muted); }
-.admin-sidebar .sidebar-controls button:hover { color: #F2F6F4; background: var(--wg-chrome-hover); }
 .admin-sidebar-nav { padding-top: 14px !important; }
 .admin-sidebar .entity-list a,
 .admin-sidebar .nav-module-toggle { padding: 7px 10px !important; font-size: 13px; gap: 10px; }
@@ -1035,6 +1035,8 @@ time.tone-danger  { color: var(--tone-danger-fg);  font-weight: 600; }
   border-bottom: 1px solid var(--color-base-300) !important;
 }
 .admin-topbar-title {
+  flex: 1;
+  min-width: 0;
   margin: 0;
   font-family: var(--font-display);
   font-size: 18px;
@@ -1042,12 +1044,17 @@ time.tone-danger  { color: var(--tone-danger-fg);  font-weight: 600; }
   letter-spacing: -0.01em;
 }
 .admin-topbar-actions { display: flex; align-items: center; gap: 6px; }
+.admin-topbar > .sidebar-toggle,
 .admin-topbar-actions > button,
 .admin-topbar-actions .theme-toggle {
   width: 32px !important;
   height: 32px !important;
   min-height: 0 !important;
   padding: 0 !important;
+}
+/* On a small screen the toggle is the only way to the menu: a full touch target */
+@media (max-width: 768px) {
+  .admin-topbar > .sidebar-toggle { width: 44px !important; height: 44px !important; }
 }
 
 .user-menu { position: relative; }
