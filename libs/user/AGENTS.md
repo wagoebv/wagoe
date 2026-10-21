@@ -418,7 +418,8 @@ only).
 
 The user module's own routes say `:public`, `:signed-in` or `:self`, so
 `:wagoe/authorization :enforce` asks none of them a permission. Guide:
-`docs/modules/guides/pages/authorization.adoc`.
+`docs/modules/guides/pages/authorization.adoc`. For administrators:
+`docs/modules/guides/pages/managing-access.adoc`.
 
 - Roles: code roles come from the permission registry (`:permission-registry`);
   managed roles (`create-role`, `update-role`, `delete-role`) are stored in

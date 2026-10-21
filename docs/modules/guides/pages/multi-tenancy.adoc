@@ -111,7 +111,7 @@ After the stack has run, the request map contains:
 
 [source,clojure]
 ----
-{:user             {:id #uuid "..." :email "..." :role :user}
+{:user             {:id #uuid "..." :email "..."}
  :tenant           {:id #uuid "..." :slug "acme-corp" :status :provisioned}
  :tenant-membership {:id #uuid "..." :tenant-id #uuid "..." :user-id #uuid "..."
                      :role :admin :status :active}}
