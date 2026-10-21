@@ -156,6 +156,124 @@
   (with-meta (fn [] (merge (ig-config-fn) @config-overrides*))
     {::app-preparer ig-config-fn}))
 
+(def ^:private max-tcp-port 65535)
+(def ^:private first-unprivileged-port 1024)
+(def ^:private scan-span
+  "How many ports past the requested one to try when it is busy."
+  10)
+
+(defn port-plan
+  "Which ports to try for `port`, in order, and what running out of them means.
+
+   Pure, and separate from the binding, because every defect in this area has
+   been a policy decision tangled up with a socket call (BOU-377):
+
+     {:error :out-of-range}                    not a TCP port
+     {:ports [p]        :on-exhausted :raise}  below 1024 — a bind failure there
+                                               may be EACCES, which Java does not
+                                               distinguish from EADDRINUSE, so it
+                                               is tried once and the failure told
+     {:ports [p … p+10] :on-exhausted :give-up} otherwise, capped at 65535"
+  [port]
+  (cond
+    (not (<= 1 port max-tcp-port))
+    {:error :out-of-range}
+
+    (< port first-unprivileged-port)
+    {:ports [port] :on-exhausted :raise}
+
+    :else
+    {:ports        (range port (inc (min (+ port scan-span) max-tcp-port)))
+     :on-exhausted :give-up}))
+
+(defn- restart-order
+  "`section-key`, then every component that refs it in the old or the new
+   config — so one that dropped the ref restarts too — in dependency order:
+   new-config dependents first, then old-only ones in their old order."
+  [find-deps-fn old-cfg new-cfg section-key]
+  (if-not find-deps-fn
+    [section-key]
+    (let [sorted-new (find-deps-fn new-cfg section-key)
+          old-only   (remove (set sorted-new) (find-deps-fn old-cfg section-key))]
+      (into [section-key] (concat sorted-new old-only)))))
+
+(defn- apply-section!
+  "Put `new-val` under `section-key` and restart `order`, stopping at the
+   first failure. A failure rolls the config back and restarts what had
+   already restarted with it."
+  [{:keys [section-key new-val cfg-var sys-var set-prep-fn restart-fn ig-config-fn order]}]
+  (let [prev-override (get @config-overrides* section-key ::absent)
+        prev-cfg-val  (get @cfg-var section-key)]
+    ;; Accumulate this override so successive edits aren't lost, and patch
+    ;; the prep fn to apply them all so reset preserves every edit.
+    (swap! config-overrides* assoc section-key new-val)
+    (set-prep-fn (override-preparer ig-config-fn))
+    (alter-var-root cfg-var assoc section-key new-val)
+    (let [{:keys [succeeded failed-key failed-error]}
+          (reduce (fn [acc k]
+                    (try (restart-fn sys-var @cfg-var k)
+                         (update acc :succeeded conj k)
+                         (catch Exception e
+                           (log/warn "Failed to restart" {:key k :error (.getMessage e)})
+                           (reduced (assoc acc :failed-key k :failed-error (.getMessage e))))))
+                  {:succeeded []}
+                  order)]
+      (if-not failed-key
+        {:success? true :restarted order}
+        (do (if (= prev-override ::absent)
+              (swap! config-overrides* dissoc section-key)
+              (swap! config-overrides* assoc section-key prev-override))
+            (alter-var-root cfg-var assoc section-key prev-cfg-val)
+            (set-prep-fn (override-preparer ig-config-fn))
+            (doseq [k succeeded]
+              (try (restart-fn sys-var @cfg-var k)
+                   (catch Exception e
+                     (log/warn "Rollback restart failed" {:key k :error (.getMessage e)}))))
+            ;; The failed component was already halted by restart-component
+            ;; before init-key threw — the system map still holds the old
+            ;; (halted) instance. Set it to nil so restart-component's
+            ;; halt-key! is a no-op, then re-init with old config.
+            (alter-var-root sys-var assoc failed-key nil)
+            (try (restart-fn sys-var @cfg-var failed-key)
+                 (catch Exception e
+                   (log/warn "Rollback re-init failed" {:key failed-key :error (.getMessage e)})))
+            {:success? false
+             :error {:type    :restart-failed
+                     :message (str "Failed to restart " failed-key " (" failed-error
+                                   "). All changes rolled back.")}})))))
+
+(def ^:private restart-delay-ms
+  "How long a deferred restart waits, so the response announcing it gets out."
+  300)
+
+(defn- apply-later!
+  "Run `apply!` on its own thread. Restarting the dashboard from one of its
+   request threads stops the Jetty serving that request: the response is
+   lost and a rollback runs on a server that is shutting down."
+  [apply!]
+  (let [run (fn []
+              (Thread/sleep (long restart-delay-ms))
+              (let [result (try (apply!)
+                                (catch Exception e
+                                  {:success? false
+                                   :error {:type :apply-failed :message (.getMessage e)}}))]
+                (if (:success? result)
+                  (log/info "Dashboard config applied" {:restarted (:restarted result)})
+                  (log/error "Dashboard config apply failed" (:error result)))))]
+    (doto (Thread. ^Runnable run "wagoe-dashboard-config-apply")
+      (.setDaemon true)
+      (.start))))
+
+(defn- dashboard-port-error
+  "Why `section` cannot start a dashboard. Checked before the restart is
+   deferred, since after that only the log can say."
+  [section]
+  (let [port (or (:port section) 9999)]
+    (when-not (and (int? port) (not (:error (port-plan port))))
+      {:success? false
+       :error {:type    :validation-error
+               :message (str ":port must be a TCP port, 1–" max-tcp-port ", not " (pr-str port))}})))
+
 (defn- make-handler [config]
   (-> (ring/router
        [["/dashboard"
@@ -262,81 +380,27 @@
                                                        "zero-argument function returning your Integrant config.")}}
 
                                 (and set-prep-fn sys-var cfg-var restart-fn)
-                                (let [;; Snapshot previous state so we can roll back on failure
-                                      prev-override (get @config-overrides* section-key ::absent)
-                                      prev-cfg-val  (get @cfg-var section-key)]
-                                  ;; Accumulate this override so successive edits aren't lost
-                                  (swap! config-overrides* assoc section-key new-val)
-                                  ;; Patch the prep function to apply ALL accumulated overrides
-                                  ;; after loading from disk, so reset preserves all edits
-                                  (set-prep-fn (override-preparer ig-config-fn))
-                                  ;; Update the live config var, restart the component,
-                                  ;; then cascade to all dependents so they pick up
-                                  ;; the new instance (restart-component alone leaves
-                                  ;; dependents holding stale refs)
-                                  (let [old-cfg       @cfg-var
-                                        find-deps-fn  (resolve 'wagoe.devtools.shell.repl/find-dependents)
-                                        ;; Compute dependents from BOTH old and new config so that
-                                        ;; consumers that dropped the ig/ref are still restarted
-                                        old-deps      (when find-deps-fn (set (find-deps-fn old-cfg section-key)))
-                                        _             (alter-var-root cfg-var assoc section-key new-val)
-                                        live-cfg      @cfg-var
-                                        new-deps      (when find-deps-fn (set (find-deps-fn live-cfg section-key)))
-                                        all-dep-keys  (into (or old-deps #{}) (or new-deps #{}))
-                                        ;; Topologically sort: new-config deps first (already sorted),
-                                        ;; then old-only deps sorted by the OLD config so removed
-                                        ;; chains like A <- B <- C restart in the right order
-                                        dependents    (if find-deps-fn
-                                                        (let [sorted-new  (find-deps-fn live-cfg section-key)
-                                                              new-set     (set sorted-new)
-                                                              old-only    (remove new-set all-dep-keys)
-                                                              sorted-old  (find-deps-fn old-cfg section-key)
-                                                              ;; Keep old-only keys in their old topological order
-                                                              old-ordered (filterv (set old-only) sorted-old)
-                                                              ;; Any old-only keys not in sorted-old (shouldn't happen,
-                                                              ;; but safe fallback)
-                                                              remainder   (remove (set old-ordered) old-only)]
-                                                          (into (vec sorted-new) (concat old-ordered remainder)))
-                                                        [])
-                                        all-to-restart (into [section-key] dependents)
-                                        ;; Restart components one by one; stop on first failure
-                                        {:keys [succeeded failed-key failed-error]}
-                                        (reduce (fn [acc k]
-                                                  (if (:failed-key acc)
-                                                    acc ;; skip remaining after first failure
-                                                    (try (restart-fn sys-var @cfg-var k)
-                                                         (update acc :succeeded conj k)
-                                                         (catch Exception e
-                                                           (log/warn "Failed to restart" {:key k :error (.getMessage e)})
-                                                           (assoc acc :failed-key k :failed-error (.getMessage e))))))
-                                                {:succeeded []}
-                                                all-to-restart)]
-                                    (if failed-key
-                                      ;; Roll back: restore config state and re-restart
-                                      ;; already-succeeded components with the old config
-                                      (do (if (= prev-override ::absent)
-                                            (swap! config-overrides* dissoc section-key)
-                                            (swap! config-overrides* assoc section-key prev-override))
-                                          (alter-var-root cfg-var assoc section-key prev-cfg-val)
-                                          (set-prep-fn (override-preparer ig-config-fn))
-                                          ;; Re-restart succeeded components with restored config
-                                          (doseq [k succeeded]
-                                            (try (restart-fn sys-var @cfg-var k)
-                                                 (catch Exception e
-                                                   (log/warn "Rollback restart failed" {:key k :error (.getMessage e)}))))
-                                          ;; The failed component was already halted by restart-component
-                                          ;; before init-key threw — the system map still holds the old
-                                          ;; (halted) instance. Set it to nil so restart-component's
-                                          ;; halt-key! is a no-op, then re-init with old config.
-                                          (alter-var-root sys-var assoc failed-key nil)
-                                          (try (restart-fn sys-var @cfg-var failed-key)
-                                               (catch Exception e
-                                                 (log/warn "Rollback re-init failed" {:key failed-key :error (.getMessage e)})))
-                                          {:success? false
-                                           :error {:type    :restart-failed
-                                                   :message (str "Failed to restart " failed-key " (" failed-error
-                                                                 "). All changes rolled back.")}})
-                                      {:success? true :restarted all-to-restart})))
+                                (let [old-cfg   @cfg-var
+                                      new-cfg   (assoc old-cfg section-key new-val)
+                                      order     (restart-order (resolve 'wagoe.devtools.shell.repl/find-dependents)
+                                                               old-cfg new-cfg section-key)
+                                      dashboard (get new-cfg :wagoe/dashboard)
+                                      apply!    #(apply-section! {:section-key  section-key
+                                                                  :new-val      new-val
+                                                                  :cfg-var      cfg-var
+                                                                  :sys-var      sys-var
+                                                                  :set-prep-fn  set-prep-fn
+                                                                  :restart-fn   restart-fn
+                                                                  :ig-config-fn ig-config-fn
+                                                                  :order        order})]
+                                  (if-not (some #{:wagoe/dashboard} order)
+                                    (apply!)
+                                    (or (dashboard-port-error dashboard)
+                                        (do (apply-later! apply!)
+                                            {:success?   true
+                                             :restarting order
+                                             :follow-url (str (name (:scheme req)) "://" (:server-name req) ":"
+                                                              (or (:port dashboard) 9999) "/dashboard/config")}))))
                                 :else
                                 {:success? false
                                  :error {:type    :system-not-running
@@ -424,36 +488,6 @@
       (wrap-resource "public")
       wrap-content-type
       wrap-params))
-
-(def ^:private max-tcp-port 65535)
-(def ^:private first-unprivileged-port 1024)
-(def ^:private scan-span
-  "How many ports past the requested one to try when it is busy."
-  10)
-
-(defn port-plan
-  "Which ports to try for `port`, in order, and what running out of them means.
-
-   Pure, and separate from the binding, because every defect in this area has
-   been a policy decision tangled up with a socket call (BOU-377):
-
-     {:error :out-of-range}                    not a TCP port
-     {:ports [p]        :on-exhausted :raise}  below 1024 — a bind failure there
-                                               may be EACCES, which Java does not
-                                               distinguish from EADDRINUSE, so it
-                                               is tried once and the failure told
-     {:ports [p … p+10] :on-exhausted :give-up} otherwise, capped at 65535"
-  [port]
-  (cond
-    (not (<= 1 port max-tcp-port))
-    {:error :out-of-range}
-
-    (< port first-unprivileged-port)
-    {:ports [port] :on-exhausted :raise}
-
-    :else
-    {:ports        (range port (inc (min (+ port scan-span) max-tcp-port)))
-     :on-exhausted :give-up}))
 
 (defn- bind-failure?
   "Whether `e` is Jetty failing to bind — it wraps `BindException` in a plain

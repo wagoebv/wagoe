@@ -257,6 +257,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Dev dashboard: Apply on `:wagoe/dashboard` stopped the dashboard mid-request** (BOU-792). It answers first, then
+  restarts and follows to the new port; a failed restart is logged and rolled back. Nothing to change.
 - **Admin under `:enforce`** (BOU-787): many-to-many titles are scoped, a viewer opens records read-only, and the
   home answers 403 when no entity is readable. `:report` logs each refusal once a minute.
 - **Rights pages** (BOU-787): sources show expanded, scope EDN beside declared keys, refused assignments keep
