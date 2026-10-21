@@ -278,12 +278,14 @@
   (group-persistence/create-group-repository ctx))
 
 (defmethod ig/init-key :wagoe/user-group-service
-  [_ {:keys [group-repository user-repository audit-repository settings permission-registry hooks]}]
+  [_ {:keys [group-repository user-repository audit-repository settings permission-registry hooks migrate?]}]
   (let [svc (group-service/create-group-service group-repository user-repository audit-repository
                                                 (group-service/with-registry-scopes settings permission-registry)
                                                 {:registry   permission-registry
                                                  :membership (:group-membership hooks)})]
-    (group-service/migrate! svc)
+    ;; `migrate? false`: `wagoe upgrade authorization check` reads what the
+    ;; migration would do without doing it.
+    (when-not (false? migrate?) (group-service/migrate! svc))
     svc))
 
 (defmethod ig/init-key :wagoe/user-group-routes

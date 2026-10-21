@@ -26,6 +26,7 @@ Requires [Babashka](https://babashka.org) and [bbin](https://github.com/babashka
 | `wagoe list` | List the available modules from the module catalogue |
 | `wagoe agents update [--check] [--modules]` | Re-sync the project's `AGENTS.md` installed-modules table with what is actually installed (`--check` verifies without writing; `--modules` touches only the module blocks, as `bb setup` runs it) |
 | `wagoe upgrade [--dry-run \| --apply]` | Rewrite deprecated config values, keys and names after a Wagoe upgrade (prints a diff unless `--apply`) |
+| `wagoe upgrade authorization check\|prepare\|report\|enforce` | Move the app from `:wagoe/authorization :off` to `:enforce`, naming each user who would lose access (`bb upgrade` in an app) |
 
 ## Quick Start
 

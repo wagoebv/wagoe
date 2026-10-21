@@ -89,7 +89,10 @@
     (cond
       (#{"--help" "-h"} cmd) (usage)
       (= "help" cmd)         (print-command-help (first rest-args))
-      (help? rest-args)      (print-command-help cmd)
+      ;; `upgrade authorization` has its own usage, which its --help prints.
+      (and (help? rest-args)
+           (not= ["upgrade" "authorization"] [cmd (first rest-args)]))
+      (print-command-help cmd)
       :else                  (dispatch cmd rest-args))))
 
 (when (= *file* (System/getProperty "babashka.file"))

@@ -172,7 +172,7 @@
     (when-let [user (if (map? user) user (ports/find-user-by-id user-repository user))]
       (set (membership user)))))
 
-(defn- active-users
+(defn active-users
   "Every active user, by email, through `xf`, read a page at a time so only
    what `xf` keeps is held."
   [user-repository xf]
@@ -307,25 +307,23 @@
    its permission, keeping its id so remove-group-grant still finds it, and is
    marked. The row stays for nodes on the previous version; marked, an
    assignment removed later is not made again."
-  [repo registry]
-  (doseq [{:keys [id group-id migrated-at] :as grant} (ports/find-legacy-grants repo)
-          :when (nil? migrated-at)
+  [repo registry grants]
+  (doseq [{:keys [id group-id] :as grant} grants
           :let [{:keys [role scope]} (group-core/grant->assignment grant)]]
     (legacy-role! repo registry role)
     (assign-once! repo group-id role scope id)
     (ports/mark-legacy-grant-migrated repo id)))
 
 (defn- migrate-viewers!
-  "Users still stored as viewers join Readers, which holds every module's
-   viewer role but those of `gated` permissions, and keep no role."
-  [repo registry gated]
-  (when-let [viewers (seq (ports/find-legacy-viewers repo))]
+  "`viewers` join Readers, which holds `roles`, and keep no role."
+  [repo viewers roles]
+  (when (seq viewers)
     (let [readers (or (some #(when (= "Readers" (:name %)) %) (ports/find-groups repo))
                       (ports/insert-group repo {:name "Readers" :description "Read-only users"}))
           ;; A refused duplicate would abort the transaction on PostgreSQL.
           members (set (map :id (ports/find-members repo (:id readers))))]
       (doseq [id viewers :when (not (members id))] (ports/insert-member repo (:id readers) id))
-      (doseq [role (group-core/module-roles (code-roles registry) "viewer" gated)]
+      (doseq [role roles]
         (assign-once! repo (:id readers) role {}))
       (ports/clear-legacy-roles repo))))
 
@@ -345,30 +343,46 @@
                            ", which no module registers under :scope-sources")
                       {:type :configuration-error :sources (vec unknown)})))))
 
+(defn migration-plan
+  "What `migrate!` changes, read without writing: {:everyone-roles (nil when
+   Everyone exists or only admins do) :viewers [user-id] :readers-roles
+   :grants [legacy grant not yet migrated]}. Neither group gets a role holding
+   a permission something already checks as a grant (`gated-permissions`):
+   that would hand it to every user."
+  [{:keys [group-repository registry settings]}]
+  (let [grants  (ports/find-legacy-grants group-repository)
+        gated   (group-core/gated-permissions (when registry (authz/permissions registry))
+                                              (:permissions (declared-permissions settings))
+                                              grants)
+        viewers (ports/find-legacy-viewers group-repository)]
+    {:everyone-roles (when (and (nil? (ports/find-group group-repository group-core/everyone-id))
+                                (ports/any-non-admin-users? group-repository))
+                       (vec (group-core/module-roles (code-roles registry) "editor" gated)))
+     :viewers        viewers
+     :readers-roles  (when (seq viewers) (vec (group-core/module-roles (code-roles registry) "viewer" gated)))
+     :grants         (filterv (comp nil? :migrated-at) grants)}))
+
 (defn migrate!
   "ADR-041's migration: under :enforce nobody may do less than under :off, and
    nobody becomes an admin. Idempotent; runs at boot.
 
    The first time, Everyone is created and, when there are users other than
-   admins, given every
-   module's editor role. Viewers join Readers. Group grants become
-   assignments of a managed role named after their permission. Neither group
-   gets a role holding a permission something already checks as a grant
-   (`gated-permissions`): that would hand it to every user."
-  [{:keys [group-repository registry settings]}]
+   admins, given every module's editor role. Viewers join Readers. Group
+   grants become assignments of a managed role named after their permission.
+   `migration-plan` decides each, so what `wagoe upgrade authorization check`
+   prints is what runs."
+  [{:keys [group-repository registry] :as svc}]
   (ports/ensure-tables group-repository)
   (try
     (ports/in-transaction group-repository
                           (fn [repo]
-                            (let [gated (group-core/gated-permissions
-                                         (when registry (authz/permissions registry))
-                                         (:permissions (declared-permissions settings))
-                                         (ports/find-legacy-grants repo))]
-                              (when (and (ports/ensure-everyone repo) (ports/any-non-admin-users? repo))
-                                (doseq [role (group-core/module-roles (code-roles registry) "editor" gated)]
-                                  (assign-once! repo group-core/everyone-id role {})))
-                              (migrate-viewers! repo registry gated)
-                              (migrate-grants! repo registry))))
+                            (let [{:keys [everyone-roles viewers readers-roles grants]}
+                                  (migration-plan (assoc svc :group-repository repo))]
+                              (ports/ensure-everyone repo)
+                              (doseq [role everyone-roles]
+                                (assign-once! repo group-core/everyone-id role {}))
+                              (migrate-viewers! repo viewers readers-roles)
+                              (migrate-grants! repo registry grants))))
     (catch clojure.lang.ExceptionInfo e
       ;; Another node created Everyone or Readers first and migrated.
       (if (= :conflict (:type (ex-data e)))

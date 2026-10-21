@@ -40,7 +40,7 @@
   [loc]
   (some-> loc (z/find z/right #(not= :uneval (z/tag %)))))
 
-(defn- key-loc
+(defn key-loc
   "Location of key `k` in the map at `loc`, or nil."
   [loc k]
   (when (and loc (= :map (z/tag loc)))
@@ -50,7 +50,7 @@
           kloc
           (recur (some-> kloc z/right skip-uneval z/right skip-uneval)))))))
 
-(defn- path-loc [loc path]
+(defn path-loc [loc path]
   (reduce (fn [loc k] (or (some-> (key-loc loc k) z/right skip-uneval) (reduced nil))) loc path))
 
 (defn- edit-config
@@ -325,7 +325,7 @@
       (sort-by str (filter #(and (.isFile ^java.io.File %) (pred (.getName ^java.io.File %)))
                            (file-seq d))))))
 
-(defn- relative [dir f]
+(defn relative [dir f]
   (str (.relativize (.toPath (.getCanonicalFile (io/file dir)))
                     (.toPath (.getCanonicalFile (io/file f))))))
 
@@ -367,7 +367,10 @@
    "Rewrite what Wagoe deprecated in this project's config.edn files and"
    "src/, test/ and dev/ sources. Formatting and comments are kept."
    "  --dry-run  print a diff per file and write nothing (the default)"
-   "  --apply    write the changes"])
+   "  --apply    write the changes"
+   ""
+   "wagoe upgrade authorization <step> moves the app from :wagoe/authorization"
+   ":off to :enforce: check, prepare, report, enforce. --help lists the options."])
 
 (defn run
   "Plans and prints the upgrade of `dir`; writes the files when `apply?`.
@@ -396,12 +399,17 @@
   (let [flags (set args)
         bad   (remove #{"--dry-run" "--apply"} args)]
     (cond
-      (or (seq bad) (and (flags "--dry-run") (flags "--apply")))
-      (do (run! println usage) (System/exit 1))
-
       (not (add/wagoe-project? "."))
       (do (println "Not a Wagoe project: no deps.edn naming com.wagoe here.")
           (System/exit 1))
+
+      (= "authorization" (first args))
+      (do (require 'wagoe.cli.upgrade-authorization)
+          (let [code ((resolve 'wagoe.cli.upgrade-authorization/run) "." (rest args))]
+            (when-not (zero? code) (System/exit code))))
+
+      (or (seq bad) (and (flags "--dry-run") (flags "--apply")))
+      (do (run! println usage) (System/exit 1))
 
       :else
       (run "." (load-table) (contains? flags "--apply")))))
