@@ -37,31 +37,23 @@
 (defn assert-can-access-admin!
   "Assert user can access admin, throw exception if not.
 
+   `entity-configs`, {entity-name config}, are the admin's entities, which
+   :enforce and :report read.
+
    Returns true if permission granted.
    Throws ExceptionInfo with :type :forbidden if access denied."
   ([user]
    (assert-can-access-admin! user nil))
-  ([user admin-config]
-   (when (core-permissions/report-access-refusal user)
+  ([user entity-configs]
+   (when (core-permissions/report-access-refusal user entity-configs)
      (throttled [(:id user) ::access]
                 #(log/warn "Admin authorization would keep this user out of the admin under :enforce"
                            {:user-id (:id user)})))
-   (when-not (core-permissions/can-access-admin? user admin-config)
-     (let [explanation (core-permissions/explain-admin-access-denial user)]
+   (when-not (core-permissions/can-access-admin? user entity-configs)
+     (let [explanation (core-permissions/explain-admin-access-denial user entity-configs)]
        (throw (ex-info (:reason explanation)
                        (assoc explanation :type :forbidden)))))
    true))
-
-(defn assert-can-read-some-entity!
-  "Under :enforce, throw :forbidden unless `entities`, those `user` may view,
-   has one: read held only in scopes no entity checks admits nothing."
-  [user entities]
-  (when (and (= :enforce (core-permissions/mode user))
-             (empty? entities)
-             (not (get-in user [::core-permissions/access :platform-admin?])))
-    (throw (ex-info "User may read no entity in the admin"
-                    {:type :forbidden :user-id (:id user) :required-permission :admin.<entity>/read})))
-  true)
 
 (defn assert-can-view-entity!
   "Assert user can view entity, throw exception if not.

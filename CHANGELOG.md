@@ -31,6 +31,7 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **`:detail-tabs` entries take a `:key`** (BOU-791), the tab a module's own page marks active.
 - **`wagoe.test/sign-in-as!` and `create-user!`** (BOU-788) sign in a test user holding roles, scoped or not. Use them
   where a test signs in under `:enforce`; a user without a role gets 403.
 - **`wagoe new` apps run `:wagoe/authorization :enforce`** (BOU-776): users reach module routes through their groups'
@@ -257,6 +258,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Admin scope leftovers** (BOU-791): every admin page refuses read held only in scopes no entity maps, a relation
+  condition's bare columns are its entity's own, and a refused assignment's lookup shows the title.
 - **Admin under `:enforce`** (BOU-787): many-to-many titles are scoped, a viewer opens records read-only, and the
   home answers 403 when no entity is readable. `:report` logs each refusal once a minute.
 - **Rights pages** (BOU-787): sources show expanded, scope EDN beside declared keys, refused assignments keep

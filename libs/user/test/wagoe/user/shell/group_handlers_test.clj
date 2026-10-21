@@ -131,10 +131,12 @@
           (is (= [{:domain-id 42 :region "north"}] (map :scope (:roles (ports/get-group gsvc gid))))))
         (testing "a refused assignment comes back with what was entered"
           (let [r (app (req admin :post (str path "/roles")
-                            {"role" "invoice/viewer" "scope-region" "south" "scope-domain-id" "forty"}))]
+                            {"role" "invoice/viewer" "scope-region" "south" "scope-domain-id" "forty"
+                             "scope-label-domain-id" "Domain Forty"}))]
             (is (= 422 (:status r)))
             (is (str/includes? (:body r) "value=\"south\""))
             (is (str/includes? (:body r) "value=\"forty\""))
+            (is (str/includes? (:body r) "value=\"Domain Forty\"") "the lookup shows the title, not the id")
             (is (str/includes? (:body r) "selected=\"selected\" title=\"Reads invoice\" value=\"invoice/viewer\"")
                 "the role picked")))
         (testing "EDN typed beside the fields"

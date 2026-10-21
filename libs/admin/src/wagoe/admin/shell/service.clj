@@ -312,11 +312,21 @@
              [{} []]
              (or filters {})))
 
+(defn- own-rows
+  "Relation condition `f` as the rows of the entity's own table it admits, so
+   its bare columns mean that table's even where the query joins another."
+  [entity-config column f]
+  (let [pk     (:primary-key entity-config :id)
+        pk-col (case-conversion/kebab-case->snake-case-keyword pk)]
+    (fn [values]
+      [:in (column pk) {:select [pk-col] :from [(:table-name entity-config)] :where (f values)}])))
+
 (defn- scope-where
   "The rows inside `scopes` (ADR-041 §4), each key's field under the entity's
-   `:scope` as `column` gives it, or its relation condition as it is."
+   `:scope` as `column` gives it, or its relation condition."
   [entity-config column scopes]
-  (scope/scope-filter scopes (update-vals (:scope entity-config) #(if (keyword? %) (column %) %))))
+  (scope/scope-filter scopes (update-vals (:scope entity-config)
+                                          #(if (keyword? %) (column %) (own-rows entity-config column %)))))
 
 (defn- list-where
   "The WHERE a list applies for `options`: its search, its filters and, for a

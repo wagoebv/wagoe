@@ -31,7 +31,9 @@
                                :scope {:domain-id (fn [ids] [:in :order_id {:select [:id] :from [:orders]
                                                                             :where  [:in :domain_id ids]}])}}
                       :notes  {:label "Notes" :list-fields [:body]}
-                      :tags   {:label "Tags" :title-field :name :scope {:domain-id :domain-id}}}
+                      ;; A bare column on purpose: order_tags has an area too
+                      :tags   {:label "Tags" :title-field :name :scope {:domain-id (fn [ids] [:in :area ids])}}
+                      :order-tags {:join-table true}}
    :pagination       {:default-page-size 50 :max-page-size 200}})
 
 (def ^:private o1 "00000000-0000-0000-0000-0000000000a1")
@@ -57,8 +59,8 @@
                               :values [{:id l1 :sku "SKU-42-A" :order_id o1}
                                        {:id l3 :sku "SKU-7-C" :order_id o3}]})
   (db/execute-update! db-ctx {:insert-into :tags
-                              :values [{:id t42 :name "TAG-42" :domain_id 42}
-                                       {:id t7 :name "TAG-7" :domain_id 7}]})
+                              :values [{:id t42 :name "TAG-42" :area 42}
+                                       {:id t7 :name "TAG-7" :area 7}]})
   (db/execute-update! db-ctx {:insert-into :order_tags
                               :values [{:order_id o1 :tag_id t42} {:order_id o1 :tag_id t7}]}))
 
@@ -68,9 +70,10 @@
       (db/execute-update! db-ctx {:raw "CREATE TABLE orders (id VARCHAR(36) PRIMARY KEY, number VARCHAR(50) NOT NULL, domain_id INT NOT NULL)"})
       (db/execute-update! db-ctx {:raw "CREATE TABLE notes (id VARCHAR(36) PRIMARY KEY, body VARCHAR(200))"})
       (db/execute-update! db-ctx {:raw "CREATE TABLE order_lines (id VARCHAR(36) PRIMARY KEY, sku VARCHAR(50) NOT NULL, order_id VARCHAR(36) NOT NULL)"})
-      (db/execute-update! db-ctx {:raw "CREATE TABLE tags (id VARCHAR(36) PRIMARY KEY, name VARCHAR(50) NOT NULL, domain_id INT NOT NULL)"})
+      (db/execute-update! db-ctx {:raw "CREATE TABLE tags (id VARCHAR(36) PRIMARY KEY, name VARCHAR(50) NOT NULL, area INT NOT NULL)"})
       (db/execute-update! db-ctx {:raw (str "CREATE TABLE order_tags (order_id VARCHAR(36) NOT NULL REFERENCES orders(id),"
-                                            " tag_id VARCHAR(36) NOT NULL REFERENCES tags(id), PRIMARY KEY (order_id, tag_id))")})
+                                            " tag_id VARCHAR(36) NOT NULL REFERENCES tags(id), area INT,"
+                                            " PRIMARY KEY (order_id, tag_id))")})
       (let [provider (schema-repo/create-schema-repository db-ctx settings {})]
         (reset! state {:db-ctx   db-ctx
                        :provider provider
@@ -203,9 +206,12 @@
     (is (= 403 (:status (app (request tenant-admin :get "/orders")))))
     (is (= 403 (:status (app (request tenant-admin :get "/")))) "the admin home needs read on one entity")))
 
-(deftest ^:integration the-admin-home-refuses-read-no-entity-can-check
+(deftest ^:integration the-admin-refuses-read-no-entity-can-check
   (let [app (handler (config :enforce {(:id viewer) [{:permission :admin.notes/read :scope in-42}]}))]
-    (is (= 403 (:status (app (request viewer :get "/")))) "notes map no scope key")
+    (doseq [uri ["/" "/orders" "/notes" "/orders/lookup"]]
+      (let [r (app (request viewer :get uri))]
+        (is (= 403 (:status r)) (str uri ": notes map no scope key"))
+        (is (= "User may read no entity in the admin" (:body r)) (str uri ": the home's rule"))))
     (is (= 200 (:status ((handler (config :enforce rights)) (request viewer :get "/")))))))
 
 (deftest ^:integration off-and-report-keep-the-role-rule

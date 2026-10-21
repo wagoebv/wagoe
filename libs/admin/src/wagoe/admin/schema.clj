@@ -337,7 +337,7 @@
               [:writer :keyword]
               ;; Links beside the edit page, as tabs; `{id}` in :href is the record's key.
               ;; A symbol names a var holding them, the module that owns the pages.
-              [:detail-tabs [:or :symbol [:sequential [:map {:closed true} [:label :any] [:href :string]]]]]
+              [:detail-tabs [:or :symbol [:sequential [:map {:closed true} [:key {:optional true} :keyword] [:label :any] [:href :string]]]]]
               ;; The sidebar group the entity sits in (BOU-777)
               [:module [:or :keyword :string]]
               ;; true: a join table whatever its keys and columns; false: never
