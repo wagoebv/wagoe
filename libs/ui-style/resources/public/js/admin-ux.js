@@ -52,6 +52,8 @@ document.addEventListener('alpine:init', function () {
 
     init: function () {
       var self = this;
+      // A page that renders the shell without init.js still gets its state
+      if (!root.hasAttribute('data-sidebar')) self.show(storedOpen());
       smallScreen.addEventListener('change', function (e) {
         self.small = e.matches;
         self.mobileOpen = false;

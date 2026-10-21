@@ -1052,6 +1052,10 @@ time.tone-danger  { color: var(--tone-danger-fg);  font-weight: 600; }
   min-height: 0 !important;
   padding: 0 !important;
 }
+/* On a small screen the toggle is the only way to the menu: a full touch target */
+@media (max-width: 768px) {
+  .admin-topbar > .sidebar-toggle { width: 44px !important; height: 44px !important; }
+}
 
 .user-menu { position: relative; }
 .user-menu > summary { list-style: none; }

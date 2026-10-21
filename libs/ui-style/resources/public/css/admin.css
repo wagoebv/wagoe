@@ -581,7 +581,9 @@
   outline-offset: 2px;
 }
 
-.sidebar-toggle {
+/* .mobile-menu-toggle: the class apps' own topbars used before BOU-796 */
+.sidebar-toggle,
+.mobile-menu-toggle {
   display: flex;
   flex-shrink: 0;
   background: transparent;
@@ -595,7 +597,8 @@
   color: var(--text-muted);
 }
 
-.sidebar-toggle:hover {
+.sidebar-toggle:hover,
+.mobile-menu-toggle:hover {
   background: var(--surface-2);
   color: var(--text-primary);
 }

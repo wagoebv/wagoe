@@ -240,8 +240,8 @@ for what is public API, what is internal, and how deprecations are announced.
   until 2.0 for rolling deploys. Use `add-group-role` and import `:roles`; `:user` means no role.
 - **`shared-ui` `alpine/sidebar-attrs` and `mobile-menu-toggle-attrs`** (BOU-796): the first returns nothing, the
   second is `sidebar-toggle-attrs`, which works at every width; both go in 2.0.
-- **`shared-ui` `alpine/sidebar-store-init`** (BOU-761): a second copy of the sidebar store that needs the unbundled
-  Persist plugin; goes in 2.0. Load the `:admin-pilot` bundle, which registers the store.
+- **`shared-ui` `alpine/sidebar-store-init`** (BOU-761): renders nothing since BOU-796; goes in 2.0. Load the
+  `:admin-pilot` bundle, which registers the store.
 - **Kebab-case keys in the login response's `user` and `session`** (BOU-737): each now has a camelCase twin with the same
   value, and goes in 2.0. Read `session.sessionToken`, `session.expiresAt` and so on.
 - **`/swagger.json` and `:swagger` route docs** (BOU-462): the path serves the 3.1 document and `:swagger` is

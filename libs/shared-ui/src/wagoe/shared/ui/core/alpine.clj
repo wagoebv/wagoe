@@ -316,15 +316,9 @@
    :x-bind:aria-expanded "$store.sidebar.expanded()"})
 
 (defn ^:deprecated mobile-menu-toggle-attrs
-  "DEPRECATED: use `sidebar-toggle-attrs`, which also works on small screens.
-
-   Mobile menu toggle button attributes.
-
-   Returns:
-     Map of attributes for mobile menu toggle"
+  "DEPRECATED: use `sidebar-toggle-attrs`, which also works on small screens."
   []
-  {(keyword "@click") "$store.sidebar.toggle()"
-   :x-bind:aria-expanded "$store.sidebar.mobileOpen"})
+  (sidebar-toggle-attrs))
 
 (defn sidebar-overlay-attrs
   "Overlay attributes for mobile drawer.

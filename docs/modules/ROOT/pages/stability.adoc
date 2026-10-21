@@ -404,8 +404,13 @@ the xref:roadmap.adoc#_after_1_0_0[roadmap].
 
 | `wagoe.shared.ui.core.alpine/sidebar-store-init`
 | The `:admin-pilot` bundle, whose `admin-ux.js` registers the sidebar store and
-  keeps it in `localStorage`. The var needs Alpine's Persist plugin, which is
-  not bundled.
+  keeps it in `localStorage`. The var renders nothing.
+
+| `wagoe.shared.ui.core.alpine/mobile-menu-toggle-attrs`
+| `sidebar-toggle-attrs`, which works at every width.
+
+| `wagoe.shared.ui.core.alpine/sidebar-attrs`
+| Nothing — the sidebar no longer expands on hover, and the var returns `{}`.
 |===
 
 === Removed in 1.x
