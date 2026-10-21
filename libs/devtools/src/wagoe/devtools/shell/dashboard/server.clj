@@ -156,6 +156,7 @@
   (with-meta (fn [] (merge (ig-config-fn) @config-overrides*))
     {::app-preparer ig-config-fn}))
 
+(def ^:private default-port 9999)
 (def ^:private max-tcp-port 65535)
 (def ^:private first-unprivileged-port 1024)
 (def ^:private scan-span
@@ -253,26 +254,24 @@
   [apply!]
   (let [run (fn []
               (Thread/sleep (long restart-delay-ms))
-              (let [result (try (apply!)
-                                (catch Exception e
-                                  {:success? false
-                                   :error {:type :apply-failed :message (.getMessage e)}}))]
-                (if (:success? result)
-                  (log/info "Dashboard config applied" {:restarted (:restarted result)})
-                  (log/error "Dashboard config apply failed" (:error result)))))]
+              (try (let [result (apply!)]
+                     (if (:success? result)
+                       (log/info "Dashboard config applied" {:restarted (:restarted result)})
+                       (log/error "Dashboard config apply failed" (:error result))))
+                   (catch Exception e
+                     (log/error e "Dashboard config apply failed"))))]
     (doto (Thread. ^Runnable run "wagoe-dashboard-config-apply")
       (.setDaemon true)
       (.start))))
 
 (defn- dashboard-port-error
-  "Why `section` cannot start a dashboard. Checked before the restart is
+  "Why `port` cannot start a dashboard. Checked before the restart is
    deferred, since after that only the log can say."
-  [section]
-  (let [port (or (:port section) 9999)]
-    (when-not (and (int? port) (not (:error (port-plan port))))
-      {:success? false
-       :error {:type    :validation-error
-               :message (str ":port must be a TCP port, 1–" max-tcp-port ", not " (pr-str port))}})))
+  [port]
+  (when-not (and (int? port) (not (:error (port-plan port))))
+    {:success? false
+     :error {:type    :validation-error
+             :message (str ":port must be a TCP port, 1–" max-tcp-port ", not " (pr-str port))}}))
 
 (defn- make-handler [config]
   (-> (ring/router
@@ -384,7 +383,7 @@
                                       new-cfg   (assoc old-cfg section-key new-val)
                                       order     (restart-order (resolve 'wagoe.devtools.shell.repl/find-dependents)
                                                                old-cfg new-cfg section-key)
-                                      dashboard (get new-cfg :wagoe/dashboard)
+                                      port      (or (get-in new-cfg [:wagoe/dashboard :port]) default-port)
                                       apply!    #(apply-section! {:section-key  section-key
                                                                   :new-val      new-val
                                                                   :cfg-var      cfg-var
@@ -395,12 +394,12 @@
                                                                   :order        order})]
                                   (if-not (some #{:wagoe/dashboard} order)
                                     (apply!)
-                                    (or (dashboard-port-error dashboard)
+                                    (or (dashboard-port-error port)
                                         (do (apply-later! apply!)
                                             {:success?   true
-                                             :restarting order
+                                             :restarted  order
                                              :follow-url (str (name (:scheme req)) "://" (:server-name req) ":"
-                                                              (or (:port dashboard) 9999) "/dashboard/config")}))))
+                                                              port "/dashboard/config")}))))
                                 :else
                                 {:success? false
                                  :error {:type    :system-not-running
@@ -534,7 +533,7 @@
           :else      nil)))))
 
 (defmethod ig/init-key :wagoe/dashboard [_ {:keys [port host] :as config}]
-  (let [port   (or port 9999)
+  (let [port   (or port default-port)
         host   (or host "127.0.0.1")
         result (try-start-jetty (make-handler config) host port)]
     (if result

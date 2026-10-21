@@ -228,7 +228,6 @@
   (with-dashboard-under-repl
     (fn [started post!]
       (is (str/includes? (post! "{:port 70000}") ":port must be a TCP port"))
-      (Thread/sleep 500)
       (is (identical? started (repl-dashboard)) "nothing restarted")
       (is (serving? (:port started))))))
 

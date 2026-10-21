@@ -42,10 +42,10 @@
 (deftest ^:unit a-deferred-dashboard-restart-links-to-where-it-went
   (let [url  "http://localhost:9998/dashboard/config"
         html (config-page/render-apply-result
-              {:success? true :restarting [:wagoe/dashboard] :follow-url url})]
+              {:success? true :restarted [:wagoe/dashboard] :follow-url url})]
     (is (str/includes? html (str "data-url=\"" url "\"")) "the script follows this")
     (is (str/includes? html (str "href=\"" url "\"")) "and the reader can")
-    (is (str/includes? html "fetch(u") "the script is not escaped")))
+    (is (str/includes? html "fetch(new URL('") "the script is not escaped")))
 
 (deftest ^:unit config-is-read-only-without-a-repl-system
   ;; Started by wagoe.main the dashboard can show the config (BOU-508), but

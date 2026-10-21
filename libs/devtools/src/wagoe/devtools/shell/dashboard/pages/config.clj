@@ -125,23 +125,23 @@
 
 (def ^:private follow-script
   "Wait for the restarted dashboard to answer at the panel's data-url, then go
-   there. A no-cors fetch rejects only when nothing listens, so it works across
-   ports. The first poll waits out the restart, so it does not find the old server."
+   there. Polls a static asset with a no-cors HEAD, which rejects only when
+   nothing listens, so it works across ports and renders no page. The first poll waits out the restart, so it does not find the old server."
   "(function(){var el=document.getElementById('dashboard-follow'),u=el.dataset.url,n=0;
-function poll(){fetch(u,{mode:'no-cors',cache:'no-store'}).then(function(){location.href=u},
+function poll(){fetch(new URL('/assets/dashboard.css',u),{method:'HEAD',mode:'no-cors',cache:'no-store'}).then(function(){location.href=u},
 function(){if(++n<40){setTimeout(poll,500)}else{el.querySelector('.follow-status').textContent=
 'Nothing answers there. The REPL log says why; a failed restart puts the old config back.'}})}
 setTimeout(poll,1500)})()")
 
 (defn render-apply-result
   "Render the result of a config apply operation as an HTML fragment."
-  [{:keys [success? restarted restarting follow-url error]}]
+  [{:keys [success? restarted follow-url error]}]
   (str (h/html
         (cond
           follow-url
           [:div.detail-panel {:id "dashboard-follow" :data-url follow-url}
            [:p {:style "color:var(--accent-green)"} "✓ Config valid, restarting"]
-           [:p (str "Restarting: " (str/join ", " (map pr-str restarting)))]
+           [:p (str "Restarting: " (str/join ", " (map pr-str restarted)))]
            [:p.follow-status "The dashboard moves to " [:a {:href follow-url} follow-url]]
            [:script (h/raw follow-script)]]
 
