@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **`wagoe.test/sign-in-as!` and `create-user!`** (BOU-788) sign in a test user holding roles, scoped or not. Use them
+  where a test signs in under `:enforce`; a user without a role gets 403.
 - **`wagoe new` apps run `:wagoe/authorization :enforce`** (BOU-776): users reach module routes through their groups'
   roles. Existing apps stay `:off`; the Authorization guide takes them there via `:report`.
 - **`clojure -M:run authz-report`** (BOU-786) prints each route's authorization rule and permission, and what
@@ -259,6 +261,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **`user list`, `update` and `delete` exited 1 on success, and `update` with no fields wrote an empty update** (BOU-790).
   They exit 0 now, deleting a missing user exits 1, and an update with no known field is refused, over HTTP too (400).
+- **Admin under `:enforce`** (BOU-787): many-to-many titles are scoped, a viewer opens records read-only, and the
+  home answers 403 when no entity is readable. `:report` logs each refusal once a minute.
+- **Rights pages** (BOU-787): sources show expanded, scope EDN beside declared keys, refused assignments keep
+  their input. `admin/users.edn` may name `wagoe.user.core.rights-ui/detail-tabs` instead of listing the tabs.
 - **`bb create-admin` printed "Error: Unknown error" for a rejected password** (BOU-789); it prints the rule now, and
   the other `user` CLI commands print their errors to stderr instead of nothing, and `user find --id` works.
 - **Push routes had no authorization rule, so `:enforce` refused them** (BOU-786): device routes are `:self`, stats

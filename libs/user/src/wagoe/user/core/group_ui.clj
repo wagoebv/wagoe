@@ -70,28 +70,40 @@
                         [:button.button.primary {:type "submit"} [:t :user.groups/button-create]])])
    opts))
 
-(defn- role-input [roles]
+(defn- role-input [roles chosen]
   [:select#group-role {:name "role" :required true :class "select"}
    (for [{:keys [name description]} roles]
-     (let [v (group/permission-str name)] [:option {:value v :title description} v]))])
+     (let [v (group/permission-str name)] [:option {:value v :title description :selected (= v chosen)} v]))])
 
 (defn- scope-key-input
   "A scope key's inputs: a fixed value, through a lookup when the key points at
-   an admin entity, or a user source when the key takes one."
-  [{:keys [key label url sources]}]
+   an admin entity, or a user source when the key takes one. `form`, the form
+   params of a refused assignment, fills them in again."
+  [form {:keys [key label url sources]}]
   (let [field  (scope-lookup-field key)
-        source (scope-source-field key)]
+        source (scope-source-field key)
+        value  (get form (name field))
+        picked (get form (name source))]
     [:div.scope-key {:class "space-y-1"}
      [:label {:for (name field)} (or label (name key))]
      (if url
-       (combobox/combobox field {:url (str url "?field=" (name field)) :placeholder [:t :user.groups/scope-placeholder]})
-       [:input {:type "text" :id (name field) :name (name field) :class "input"}])
+       (combobox/combobox field {:url (str url "?field=" (name field)) :placeholder [:t :user.groups/scope-placeholder]
+                                 :value value :label value})
+       [:input {:type "text" :id (name field) :name (name field) :class "input" :value value}])
      (when (seq sources)
        [:select {:id (name source) :name (name source) :class "select"
                  :aria-label [:t :user.groups/scope-source-label {:key (or label (name key))}]}
         [:option {:value ""} [:t :user.groups/scope-fixed-value]]
-        (for [[s s-label] sources]
-          [:option {:value (group/permission-str s)} s-label])])]))
+        (for [[s s-label] sources
+              :let [v (group/permission-str s)]]
+          [:option {:value v :selected (= v picked)} s-label])])]))
+
+(defn- scope-edn-input [form]
+  (list
+   [:label {:for "group-scope"} [:t :user.groups/field-scope]]
+   [:textarea#group-scope {:name "scope" :rows 3 :class "textarea" :placeholder "{:domain-id 42}"}
+    (get form "scope")]
+   [:small [:t :user.groups/scope-hint]]))
 
 (defn- member-rows [members action]
   (for [m members]
@@ -113,7 +125,8 @@
    `roles` are those it may be assigned, as `list-roles` gives them.
    `(:scope-keys opts)`, [{:key :label :url :sources [[source label]]}], are
    the declared scope keys, each chosen through a lookup when it has a :url;
-   without any the scope is typed as EDN."
+   the scope can be typed as EDN too. `(:form opts)`, the form params of a
+   refused change, fills the role form in again."
   [{:keys [id name members roles everyone?] :as group} assignable opts]
   (let [path (group-path id)]
     (page
@@ -165,14 +178,14 @@
                          [:form.group-role-form {:method "post" :action (str path "/roles") :class "space-y-2"}
                           (csrf/hidden-field)
                           [:label {:for "group-role"} [:t :user.groups/field-role]]
-                          (role-input assignable)
+                          (role-input assignable (get-in opts [:form "role"]))
                           (if-let [scope-keys (seq (:scope-keys opts))]
                             (list [:p [:t :user.groups/scope-keys-hint]]
-                                  (map scope-key-input scope-keys))
-                            (list
-                             [:label {:for "group-scope"} [:t :user.groups/field-scope]]
-                             [:textarea#group-scope {:name "scope" :rows 3 :class "textarea" :placeholder "{:domain-id 42}"}
-                              (get-in opts [:form :scope])]
-                             [:small [:t :user.groups/scope-hint]]))
+                                  (map (partial scope-key-input (:form opts)) scope-keys)
+                                  ;; For a key whose value a field cannot hold
+                                  [:details {:open (boolean (seq (get-in opts [:form "scope"])))}
+                                   [:summary [:t :user.groups/scope-as-edn]]
+                                   (scope-edn-input (:form opts))])
+                            (scope-edn-input (:form opts)))
                           [:button.button.primary {:type "submit"} [:t :user.groups/button-add-role]]]))
      opts)))

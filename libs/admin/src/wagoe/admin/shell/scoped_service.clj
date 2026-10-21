@@ -4,7 +4,8 @@
    outside them is not found; a write that would leave a record outside them
    is refused. Built per request around the shared service, so every list the
    handlers ask for, a foreign key's options included, is scoped."
-  (:require [wagoe.admin.core.permissions :as permissions]
+  (:require [wagoe.admin.core.display :as display]
+            [wagoe.admin.core.permissions :as permissions]
             [wagoe.admin.ports :as ports]
             [wagoe.platform.core.scope :as scope]))
 
@@ -53,16 +54,43 @@
   (let [records (inside! inner schema-provider user entity-name :write [id])]
     (delay (or (first records) (ports/get-entity inner entity-name id)))))
 
+(defn- link-scope
+  "The scopes in which `user` may read what many-to-many `rel` links to; nil
+   when everywhere."
+  [schema-provider user rel]
+  (let [scopes (scopes-of schema-provider user (:entity rel) :read)]
+    (when-not (scope/everywhere? scopes) scopes)))
+
+(defn- link-scopes
+  "{relation-key scopes} for each many-to-many of `entity-name` whose linked
+   records `user` may read only inside scopes."
+  [schema-provider user entity-name]
+  (into {}
+        (keep (fn [rel] (some->> (link-scope schema-provider user rel) (vector (:key rel)))))
+        (:many-to-many (ports/get-entity-config schema-provider entity-name))))
+
+(defn- with-link-scopes
+  "`data` with the scopes its `:admin/links` must keep to: a link to a record
+   the user may not read is neither added nor removed."
+  [schema-provider user entity-name data]
+  (cond-> data
+    (:admin/links data) (assoc :admin/link-scopes (link-scopes schema-provider user entity-name))))
+
 (defrecord ScopedAdminService [inner schema-provider user]
   ports/IListOverview
   (list-overview [_ entity-name options records]
     (when (satisfies? ports/IListOverview inner)
-      (ports/list-overview inner entity-name (scoped schema-provider user entity-name :read options) records)))
+      (ports/list-overview inner entity-name
+                           (assoc (scoped schema-provider user entity-name :read options)
+                                  :overview/link-scopes (link-scopes schema-provider user entity-name))
+                           records)))
 
   ports/ILinks
   (linked-records [_ entity-name rel-key ids opts]
     (if (satisfies? ports/ILinks inner)
-      (ports/linked-records inner entity-name rel-key ids opts)
+      (let [rel    (display/link-rel (ports/get-entity-config schema-provider entity-name) rel-key)
+            scopes (some->> rel (link-scope schema-provider user))]
+        (ports/linked-records inner entity-name rel-key ids (cond-> opts scopes (assoc :scopes scopes))))
       {}))
 
   ports/IAdminService
@@ -97,16 +125,16 @@
 
   (create-entity [_ entity-name data]
     (writable! schema-provider user entity-name data)
-    (ports/create-entity inner entity-name data))
+    (ports/create-entity inner entity-name (with-link-scopes schema-provider user entity-name data)))
 
   (create-entity-with-children [_ entity-name data children]
     (writable! schema-provider user entity-name data)
-    (ports/create-entity-with-children inner entity-name data children))
+    (ports/create-entity-with-children inner entity-name (with-link-scopes schema-provider user entity-name data) children))
 
   (update-entity [_ entity-name id data]
     (let [record (stored inner schema-provider user entity-name id)]
       (writable! schema-provider user entity-name (delay (merge @record data))))
-    (ports/update-entity inner entity-name id data))
+    (ports/update-entity inner entity-name id (with-link-scopes schema-provider user entity-name data)))
 
   (update-entity-field [_ entity-name id field value]
     (let [record (stored inner schema-provider user entity-name id)]

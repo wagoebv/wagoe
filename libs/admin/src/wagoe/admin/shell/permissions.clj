@@ -8,17 +8,21 @@
    platform error interceptor maps `:forbidden` to a 403 response.
 
    Under `:wagoe/authorization :mode :report` they also log what `:enforce`
-   would refuse, and let it through."
+   would refuse, and let it through, once a minute per user and entity."
   (:require [clojure.tools.logging :as log]
-            [wagoe.admin.core.permissions :as core-permissions]))
+            [wagoe.admin.core.permissions :as core-permissions]
+            [wagoe.platform.throttle :as throttle]))
+
+(def ^:private throttled (throttle/once-per-interval))
 
 (defn- report!
   "Log, under :report, the refusal :enforce would make of `action` on
    `entity-name`."
   [user entity-name action entity-config]
   (when-let [permission (core-permissions/report-refusal user entity-name action entity-config)]
-    (log/warn "Admin authorization would refuse this under :enforce"
-              {:user-id (:id user) :entity entity-name :permission permission})))
+    (throttled [(:id user) permission]
+               #(log/warn "Admin authorization would refuse this under :enforce"
+                          {:user-id (:id user) :entity entity-name :permission permission}))))
 
 (defn- refusal
   "ex-data for a refused `action` on `entity-name`: the permission it needed
@@ -39,13 +43,25 @@
    (assert-can-access-admin! user nil))
   ([user admin-config]
    (when (core-permissions/report-access-refusal user)
-     (log/warn "Admin authorization would keep this user out of the admin under :enforce"
-               {:user-id (:id user)}))
+     (throttled [(:id user) ::access]
+                #(log/warn "Admin authorization would keep this user out of the admin under :enforce"
+                           {:user-id (:id user)})))
    (when-not (core-permissions/can-access-admin? user admin-config)
      (let [explanation (core-permissions/explain-admin-access-denial user)]
        (throw (ex-info (:reason explanation)
                        (assoc explanation :type :forbidden)))))
    true))
+
+(defn assert-can-read-some-entity!
+  "Under :enforce, throw :forbidden unless `entities`, those `user` may view,
+   has one: read held only in scopes no entity checks admits nothing."
+  [user entities]
+  (when (and (= :enforce (core-permissions/mode user))
+             (empty? entities)
+             (not (get-in user [::core-permissions/access :platform-admin?])))
+    (throw (ex-info "User may read no entity in the admin"
+                    {:type :forbidden :user-id (:id user) :required-permission :admin.<entity>/read})))
+  true)
 
 (defn assert-can-view-entity!
   "Assert user can view entity, throw exception if not.

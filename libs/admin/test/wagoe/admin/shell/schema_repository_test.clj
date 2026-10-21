@@ -576,3 +576,12 @@
            clojure.lang.ExceptionInfo
            #"Invalid entity discovery mode"
            (ports/list-available-entities repo))))))
+
+(def ^:private tabs [{:label "Rights" :href "/web/users/{id}/rights"}])
+
+(deftest ^:unit a-detail-tabs-symbol-resolves-to-its-var
+  (let [resolved (fn [t] (get-in (:config (schema-repo/create-schema-repository nil {:entities {:users {:detail-tabs t}}}))
+                                 [:entities :users :detail-tabs]))]
+    (is (= tabs (resolved `tabs)))
+    (is (= tabs (resolved tabs)))
+    (is (thrown-with-msg? clojure.lang.ExceptionInfo #"resolves to nothing" (resolved 'no.such/tabs)))))

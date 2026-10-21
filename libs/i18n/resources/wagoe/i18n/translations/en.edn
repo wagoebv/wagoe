@@ -356,6 +356,7 @@
  :user.groups/button-show-provider-members "Show them"
  :user.groups/provider-members-empty "The identity provider puts nobody in this group."
  :user.groups/scope-keys-hint "Leave a key empty to hold the role everywhere for it. Take a value from the member to let each member's own value count."
+ :user.groups/scope-as-edn "Or type the scope as EDN, for a key a field cannot hold"
  :user.groups/scope-fixed-value "Fixed value"
  :user.groups/scope-source-label "Where {key} comes from"
  :user.roles/page-title "Roles"

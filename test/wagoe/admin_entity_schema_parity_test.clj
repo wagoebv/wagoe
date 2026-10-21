@@ -39,7 +39,7 @@
                                                         [k (key-tree c)]))}
       (:vector :sequential :set :maybe) (key-tree (first (m/children s)))
       :map-of                      (key-tree (second (m/children s)))
-      :and                         (some key-tree (m/children s))
+      (:and :or)                   (some key-tree (m/children s))
       nil)))
 
 (deftest ^:unit field-types-match-the-admin

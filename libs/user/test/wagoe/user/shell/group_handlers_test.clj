@@ -123,12 +123,24 @@
           (is (str/includes? page "hx-get=\"/web/admin/domains/lookup?field=scope-domain-id\""))
           (is (str/includes? page "name=\"scope-domain-id\""))
           (is (str/includes? page "name=\"scope-region\""))
-          (is (not (str/includes? page "name=\"scope\""))))
+          (is (str/includes? page "name=\"scope\"") "and EDN, for a value a field cannot hold"))
         (testing "each value is read as the schema says"
           (is (= 303 (:status (app (req admin :post (str path "/roles")
                                         {"role" "invoice/viewer" "scope-region" "north"
                                          "scope-domain-id" "42"})))))
-          (is (= [{:domain-id 42 :region "north"}] (map :scope (:roles (ports/get-group gsvc gid))))))))))
+          (is (= [{:domain-id 42 :region "north"}] (map :scope (:roles (ports/get-group gsvc gid))))))
+        (testing "a refused assignment comes back with what was entered"
+          (let [r (app (req admin :post (str path "/roles")
+                            {"role" "invoice/viewer" "scope-region" "south" "scope-domain-id" "forty"}))]
+            (is (= 422 (:status r)))
+            (is (str/includes? (:body r) "value=\"south\""))
+            (is (str/includes? (:body r) "value=\"forty\""))
+            (is (str/includes? (:body r) "selected=\"selected\" title=\"Reads invoice\" value=\"invoice/viewer\"")
+                "the role picked")))
+        (testing "EDN typed beside the fields"
+          (is (= 303 (:status (app (req admin :post (str path "/roles")
+                                        {"role" "invoice/editor" "scope" "{:region \"west\"}"})))))
+          (is (some #{{:region "west"}} (map :scope (:roles (ports/get-group gsvc gid))))))))))
 
 (deftest ^:integration ^:security only-admins-reach-the-pages
   (with-app nil

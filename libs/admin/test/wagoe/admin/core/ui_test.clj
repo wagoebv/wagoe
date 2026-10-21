@@ -651,21 +651,18 @@
       ;; Should NOT display hidden fields (password-hash)
       (is (not (str/includes? (str row) "hashed123")))))
 
-  (testing "Row is clickable when user can edit"
+  (testing "Row is clickable when user can read, write or not"
     (let [row (ui/entity-table-row :users sample-record sample-entity-config
-                                   {:can-edit true :can-delete false})
+                                   {:can-view true :can-edit false :can-delete false})
           row-str (str row)]
       (is (str/includes? row-str "clickable-row"))
       (is (str/includes? row-str "data-href"))
       ;; Chevron nav hint is visible because the row is clickable
       (is (str/includes? row-str "row-nav-hint"))))
 
-  (testing "Row is NOT clickable when user cannot edit (read-only view)"
-    ;; The detail/edit handler is guarded by assert-can-edit-entity!, so
-    ;; rows must not advertise a detail-page link when :can-edit is false —
-    ;; otherwise clicking any cell lands on a 403.
+  (testing "Row is NOT clickable when user cannot read"
     (let [row (ui/entity-table-row :users sample-record sample-entity-config
-                                   {:can-edit false :can-delete false})
+                                   {:can-view false :can-edit false :can-delete false})
           row-str (str row)]
       (is (not (str/includes? row-str "clickable-row")))
       (is (not (str/includes? row-str "data-href")))
@@ -674,7 +671,7 @@
 
   (testing "Links carry the list they came from; data-href stays bare"
     (let [row     (ui/entity-table-row :users sample-record sample-entity-config
-                                       {:can-edit true :can-delete false}
+                                       {:can-view true :can-edit true :can-delete false}
                                        nil nil "/web/admin/users?page=2")
           base    (str "/web/admin/users/" (:id sample-record))
           hrefs   (->> (tree-seq coll? seq row)
@@ -1263,7 +1260,7 @@
 
     (testing "Edit button shown when can-edit"
       (let [row (ui/entity-table-row :users sample-record sample-entity-config
-                                     {:can-edit true :can-delete false})]
+                                     {:can-view true :can-edit true :can-delete false})]
         (is (str/includes? (str row) "/web/admin/users/"))))
 
     (testing "Edit button hidden when cannot edit"
@@ -1325,7 +1322,7 @@
 
     (testing "Table row has navigation hint"
       (let [row (ui/entity-table-row :users sample-record sample-entity-config
-                                     {:can-edit true :can-delete false})
+                                     {:can-view true :can-edit true :can-delete false})
             row-str (str row)]
         ;; Row should have clickable-row class and chevron navigation hint
         (is (str/includes? row-str "clickable-row"))

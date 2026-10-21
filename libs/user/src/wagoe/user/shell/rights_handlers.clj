@@ -168,26 +168,31 @@
 ;; =============================================================================
 
 (defn- resolve-sources
-  "Each user source `grants` take a scope value from, resolved for `user`:
-   {source values}, :error when its resolver throws, absent when nothing
-   registers it."
+  "Each user source `grants` take a scope value from, resolved for `user` and
+   expanded by its key, as enforcement reads it: {[key source] values},
+   :error when that throws, absent when nothing registers the source."
   [group-service user grants]
-  (let [resolvers (some-> (:registry group-service) authz/scope-sources)]
+  (let [registry  (:registry group-service)
+        resolvers (some-> registry authz/scope-sources)
+        keys-info (some-> registry authz/scopes)
+        ;; A source under several keys is resolved once
+        values-of (memoize (fn [src] (into #{} (remove nil?) ((get-in resolvers [src :resolve]) user))))]
     (into {}
-          (for [src   (distinct (filter scope/source? (mapcat (comp vals :scope) grants)))
-                :let  [resolver (get-in resolvers [src :resolve])]
-                :when resolver]
-            [src (try (into #{} (remove nil?) (resolver user))
-                      (catch Exception e
-                        (log/warn e "A scope source failed to resolve for the rights page" {:source src})
-                        :error))]))))
+          (for [[k src] (distinct (filter (comp scope/source? val) (mapcat :scope grants)))
+                :when (get-in resolvers [src :resolve])]
+            [[k src] (try (scope/scope-values keys-info values-of k src)
+                          (catch Exception e
+                            (log/warn e "A scope source failed to resolve for the rights page" {:key k :source src})
+                            :error))]))))
 
 (defn user-rights
   "GET /web/users/:id/rights — the user's groups and effective permissions."
   [user-service group-service]
   (fn [request]
     (if-let [user (some->> (get-in request [:path-params :id]) str parse-uuid (ports/get-user-by-id user-service))]
-      (let [grants (ports/user-grants group-service user)]
+      ;; Groups and grants both ask the membership hook: ask it once
+      (let [group-service (cond-> group-service (:membership group-service) (update :membership memoize))
+            grants        (ports/user-grants group-service user)]
         (html-response request
                        (rights-ui/rights-page user (ports/user-groups group-service user) grants
                                               (assoc (page-opts request)

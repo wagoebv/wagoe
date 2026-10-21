@@ -125,7 +125,7 @@
         (if (refused? e)
           (do (log/info "Group change refused" (select-keys (ex-data e) [:type :field]))
               (group-page request group-service id 422 {:error (error-text e)
-                                                        :form  {:scope (form request "scope")}}))
+                                                        :form  (:form-params request)}))
           (throw e))))
     (not-found request)))
 

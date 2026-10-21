@@ -83,10 +83,8 @@
         record-url (str "/web/admin/" (name entity-name) "/" record-id
                         (when return-to (str "?return_to=" (base/url-encode return-to))))
         readonly-fields (set (:readonly-fields entity-config))
-        ;; The detail/edit handler is guarded by assert-can-edit-entity!, so only
-        ;; wire the row-click navigation when the current user actually has
-        ;; permission — otherwise clicking a data cell sends them to a 403.
-        can-open? (boolean (:can-edit permissions))
+        ;; The detail page needs read: one who may only read sees it read-only
+        can-open? (boolean (:can-view permissions))
         row-attrs (cond-> {:class (if can-open? "entity-row clickable-row" "entity-row")}
                     can-open?
                     (assoc :data-href (str "/web/admin/" (name entity-name) "/" record-id)))]
