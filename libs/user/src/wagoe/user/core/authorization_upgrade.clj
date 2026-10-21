@@ -8,6 +8,7 @@
    :platform-admin? :rights}, `:rights` resolved as the interceptor reads them."
   (:require [clojure.string :as str]
             [wagoe.core.utils.text :as text]
+            [wagoe.user.core.group :as group-core]
             [wagoe.platform.core.scope :as scope]))
 
 (defn- access
@@ -75,12 +76,17 @@
     (str (str/join ", " (take shown labels))
          (when (> (count labels) shown) (str " and " (- (count labels) shown) " more")))))
 
-(defn permission-str [p] (if p (subs (str p) 1) "(no rule)"))
+(defn- permission-str [p] (if p (group-core/permission-str p) "(no rule)"))
 
-(defn- endpoint-line [{:keys [path method admin]}]
+(defn endpoint-line [{:keys [path method admin]}]
   (if admin
     (str "admin entity " (subs (namespace admin) (count "admin.")))
     (str (text/upper-case (name method)) " " path)))
+
+(defn right-str
+  "A permission or role and its scope, `orders/read {:domain-id 1}`."
+  [{:keys [permission scope]}]
+  (str (permission-str permission) (when (seq scope) (str " " (pr-str scope)))))
 
 (def ^:private verbs
   {:refused  "refused to"
@@ -101,9 +107,6 @@
                        (map #(str "      " (endpoint-line %)) (sort-by endpoint-line (distinct (map :endpoint group)))))]
       line)))
 
-(defn- right-str [{:keys [permission scope]}]
-  (str (permission-str permission) (when (seq scope) (str " " (pr-str scope)))))
-
 (defn format-rights
   "Users grouped by what they hold, a platform admin apart."
   [users]
@@ -116,10 +119,15 @@
                          :else            (map #(str "      " %) (sort held))))]
       line)))
 
+(defn plan-pending?
+  "Whether `plan` (`group-service/migration-plan`) moves anything."
+  [{:keys [everyone-roles viewers grants]}]
+  (boolean (or everyone-roles (seq viewers) (seq grants))))
+
 (defn format-plan
   "What the first start of this version does to rights, from
    `group-service/migration-plan`; `group-names` {group-id name}."
-  [{:keys [everyone-roles viewers readers-roles grants]} group-names]
+  [{:keys [everyone-roles viewers readers-roles grants] :as plan} group-names]
   (let [roles #(str/join ", " (map permission-str %))]
     (concat
      (if everyone-roles
@@ -132,9 +140,9 @@
      (when (seq grants)
        (cons (str "  " (count grants) " group grant(s) become managed roles named after the permission:")
              (for [{:keys [group-id permission scope]} grants]
-               (str "      " (get group-names group-id (str group-id)) ": " (permission-str permission)
-                    (when (seq scope) (str " " (pr-str scope)))))))
-     (when (and (nil? everyone-roles) (empty? viewers) (empty? grants))
+               (str "      " (get group-names group-id (str group-id)) ": "
+                    (right-str {:permission permission :scope scope})))))
+     (when-not (plan-pending? plan)
        ["  Nothing left to move."]))))
 
 (defn legacy-roles

@@ -76,14 +76,14 @@
 
 (defn- run [dir jvm-codes & args]
   (let [calls (atom [])]
-    (binding [sut/*jvm* (fn [_ env step] (swap! calls conj [env step]) (get jvm-codes step 0))]
+    (binding [sut/*jvm* (fn [{:keys [env]} step] (swap! calls conj [env step]) (get jvm-codes step 0))]
       (let [out (with-out-str (reset! calls [(sut/run dir (concat args ["--env" "dev"])) @calls]))]
         (conj @calls out)))))
 
 (deftest ^:unit the-steps-write-config-only-when-they-should
   (let [dir (project!)]
     (try
-      (is (= "acme.system-config" (sut/config-ns dir)))
+      (is (= "acme.system-config" (sut/config-ns dir {:aliases {:run {:main-opts ["-m" "acme.main"]}}})))
       (testing "check and a dry-run prepare write nothing"
         (let [[code calls out] (run dir {} "check")]
           (is (= 0 code))

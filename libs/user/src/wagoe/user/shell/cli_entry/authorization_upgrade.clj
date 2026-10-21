@@ -12,7 +12,8 @@
    - `report`: those differences again. Exits 2 while any would refuse."
   (:require [clojure.string :as str]
             [integrant.core :as ig]
-            [wagoe.core.utils.text :as text]
+            [wagoe.observability.logging.shell.adapters.slf4j :as slf4j]
+            [wagoe.platform.core.authorization :as authz-core]
             [wagoe.platform.core.http.access :as access]
             [wagoe.platform.ports.authorization :as authz]
             [wagoe.platform.shell.authorization :as authz-shell]
@@ -26,18 +27,6 @@
 (def ^:dynamic *exit!*
   "Ends the process with `code`; rebound in tests."
   (fn [code] (shutdown-agents) (System/exit code)))
-
-(defn- quiet-logging!
-  "Every logback logger to WARN, so the boot's INFO and DEBUG lines do not bury
-   the report. By reflection: logback is the app's choice, not a dependency."
-  []
-  (try
-    (let [warn (.get (.getField (Class/forName "ch.qos.logback.classic.Level") "WARN") nil)
-          ctx  (clojure.lang.Reflector/invokeStaticMethod "org.slf4j.LoggerFactory" "getILoggerFactory"
-                                                          (object-array 0))]
-      (doseq [logger (clojure.lang.Reflector/invokeInstanceMethod ctx "getLoggerList" (object-array 0))]
-        (clojure.lang.Reflector/invokeInstanceMethod logger "setLevel" (object-array [warn]))))
-    (catch Exception _ nil)))
 
 (defn- app-ig-config
   "The Integrant config of the app whose system config namespace is `config-ns`.
@@ -62,35 +51,30 @@
            (some-> (:system (ex-data e)) ig/halt!)
            (throw e)))))
 
-(defn- all-users [repo]
-  (loop [offset 0, acc []]
-    (let [{:keys [users total-count]} (ports/find-users repo {:limit 100 :offset offset})
-          acc (into acc users)]
-      (if (and (seq users) (< (count acc) total-count))
-        (recur (+ offset (count users)) acc)
-        acc))))
-
 (defn users-with-rights
-  "Every user of `user-repo` as `core.authorization-upgrade` reads one, with
-   the rights `group-svc` gives them now."
-  [registry group-svc user-repo]
-  (for [user (all-users user-repo)]
-    (assoc (select-keys user [:id :email :role :tenant-id])
-           :platform-admin? (access/platform-admin? user)
-           :rights (authz-shell/rights-for registry group-svc user any?))))
+  "Every active user of `user-repo` as `core.authorization-upgrade` reads one,
+   with the rights `group-svc` gives them now, or none without `rights?`."
+  ([registry group-svc user-repo] (users-with-rights registry group-svc user-repo true))
+  ([registry group-svc user-repo rights?]
+   (group-service/active-users
+    user-repo
+    (map (fn [user]
+           (cond-> (assoc (select-keys user [:id :email :role :tenant-id])
+                          :platform-admin? (access/platform-admin? user))
+             rights? (assoc :rights (authz-shell/rights-for registry group-svc user any?))))))))
 
 (defn- facts
-  "What the steps read from a booted `system`."
-  [system]
+  "What the steps read from a booted `system`; users' rights only with `rights?`."
+  [system rights?]
   (let [registry  (:wagoe/permission-registry system)
         group-svc (:wagoe/user-group-service system)
         {:keys [mode report]} (authz-report/handler-routes (:wagoe/http-handler system))]
     {:mode      (or mode :off)
      :report    report
      :unruled   (filterv #(= :none (:rule %)) report)
-     :admin     (sort (filter #(some-> (namespace %) (str/starts-with? "admin.")) (keys (authz/permissions registry))))
+     :admin     (sort (filter authz-core/admin-permission? (keys (authz/permissions registry))))
      :group-svc group-svc
-     :users     (vec (users-with-rights registry group-svc (:wagoe/user-repository system)))}))
+     :users     (users-with-rights registry group-svc (:wagoe/user-repository system) rights?)}))
 
 (defn- section [title lines]
   (println)
@@ -100,8 +84,8 @@
 (defn- print-unruled [unruled]
   (section "Routes no rule covers (:enforce refuses them to all but a platform admin):"
            (if (seq unruled)
-             (for [{:keys [path method]} (sort-by (juxt :path :method) unruled)]
-               (str "  " (text/upper-case (name method)) " " path))
+             (for [endpoint (sort-by (juxt :path :method) unruled)]
+               (str "  " (core/endpoint-line endpoint)))
              ["  None."])))
 
 (defn- findings [{:keys [report admin users]}]
@@ -115,7 +99,7 @@
   (into {} (map (juxt :id :name)) (ports/list-groups group-svc)))
 
 (defn check [system]
-  (let [{:keys [mode group-svc users unruled]} (facts system)
+  (let [{:keys [mode group-svc users unruled]} (facts system false)
         plan (group-service/migration-plan group-svc)]
     (section "Database:"
              [(let [pending (migrations/pending-list)]
@@ -129,16 +113,14 @@
 
 (defn- group-lines [group-svc]
   (for [{:keys [id name member-count]} (sort-by :name (ports/list-groups group-svc))
-        :let [roles (:roles (ports/get-group group-svc id))]]
+        :let [roles (ports/find-assignments (:group-repository group-svc) id)]]
     (str "  " name (if (group-core/everyone? id) " (every user)" (str " (" (or member-count 0) " member(s))")) ": "
          (if (seq roles)
-           (str/join ", " (map #(str (core/permission-str (:role %))
-                                     (when (seq (:scope %)) (str " " (pr-str (:scope %)))))
-                               roles))
+           (str/join ", " (map #(core/right-str {:permission (:role %) :scope (:scope %)}) roles))
            "no roles"))))
 
 (defn prepare [system]
-  (let [{:keys [group-svc users unruled] :as f} (facts system)]
+  (let [{:keys [group-svc users unruled] :as f} (facts system true)]
     (section "Groups and their roles:" (group-lines group-svc))
     (section "What each user holds:" (if (seq users) (core/format-rights users) ["  No users."]))
     (print-unruled unruled)
@@ -146,33 +128,34 @@
     0))
 
 (defn report [system]
-  (let [{:keys [group-svc unruled] :as f} (facts system)
+  (let [{:keys [group-svc unruled] :as f} (facts system true)
         plan (group-service/migration-plan group-svc)
         fs   (findings f)]
-    (when (or (seq (:grants plan)) (seq (:viewers plan)) (:everyone-roles plan))
+    (when (core/plan-pending? plan)
       (section "Rights are not moved yet; run prepare first. Until then this overstates the differences:"
                (core/format-plan plan (group-names group-svc))))
     (print-unruled unruled)
     (print-findings fs)
     (if (or (seq unruled) (core/blocking? fs)) 2 0)))
 
-(def ^:private steps {"check" [check true] "prepare" [prepare false] "report" [report true]})
+(def ^:private steps {"check" check "prepare" prepare "report" report})
 
 (defn run-step
   "Runs `step` against the app config `ig-config`; the exit code."
   [ig-config step]
-  (let [[f read-only?] (steps step)]
+  (let [writes? (= "prepare" step)]
     (if-not (contains? ig-config :wagoe/user-group-service)
       (do (println "The user module is off, so there are no users or groups to move.") 0)
-      (do (when (= "prepare" step)
+      (do (when writes?
             (println "Running migrations…")
             (migrations/migrate))
-          (let [system (boot ig-config read-only?)]
-            (try (f system)
+          (let [system (boot ig-config (not writes?))]
+            (try ((steps step) system)
                  (finally (ig/halt! system))))))))
 
 (defn -main [& [config-ns step]]
-  (when-not (System/getenv "WAGOE_DEBUG") (quiet-logging!))
+  ;; Before the config loads; the boot then holds :wagoe/logging to :warn too.
+  (when-not (System/getenv "WAGOE_DEBUG") (slf4j/apply-level! {:level :warn :root-level :warn}))
   (*exit!*
    (if-not (and config-ns (steps step))
      (do (println "Usage: clojure -M -m wagoe.user.shell.cli-entry.authorization-upgrade <app>.system-config check|prepare|report")

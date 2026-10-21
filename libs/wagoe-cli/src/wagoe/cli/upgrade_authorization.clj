@@ -63,12 +63,14 @@
 
 ;; ─── The project ─────────────────────────────────────────────────────────────
 
+(defn- read-deps [dir]
+  (try (edn/read-string (slurp (io/file dir "deps.edn"))) (catch Exception _ nil)))
+
 (defn config-ns
   "The app's system config namespace: its `:run` alias's main namespace with
    `system-config` for `main`, else the one src/<dir>/system_config.clj holds."
-  [dir]
-  (let [deps (try (edn/read-string (slurp (io/file dir "deps.edn"))) (catch Exception _ nil))
-        main (second (drop-while #(not= "-m" %) (get-in deps [:aliases :run :main-opts])))]
+  [dir deps]
+  (let [main (second (drop-while #(not= "-m" %) (get-in deps [:aliases :run :main-opts])))]
     (or (some-> main (str/replace #"\.main$" ".system-config"))
         (some->> (.listFiles (io/file dir "src"))
                  (filter #(.isFile (io/file % "system_config.clj")))
@@ -80,9 +82,8 @@
 
 (defn version-note
   "Why the app's wagoe-user may be too old for these steps, or nil."
-  [dir]
-  (let [deps  (try (edn/read-string (slurp (io/file dir "deps.edn"))) (catch Exception _ nil))
-        have  (get-in deps [:deps 'com.wagoe/wagoe-user :mvn/version])
+  [deps]
+  (let [have  (get-in deps [:deps 'com.wagoe/wagoe-user :mvn/version])
         known (:version (cat/find-module "user"))]
     (when (and have known (neg? (compare (version-parts have) (version-parts known))))
       (str "deps.edn has wagoe-user " have " and this CLI ships " known
@@ -103,21 +104,21 @@
 
 (defn- run-jvm
   "Runs `step` in the app's JVM, output to the terminal; its exit code."
-  [dir env step]
+  [{:keys [dir env config-ns]} step]
   (let [pb (ProcessBuilder. ^java.util.List
             ["clojure" "-J-Duser.timezone=UTC" "-J--enable-native-access=ALL-UNNAMED"
-             "-M" "-m" jvm-main (config-ns dir) step])]
+             "-M" "-m" jvm-main config-ns step])]
     (.directory pb (io/file dir))
     (.inheritIO pb)
     (.putAll (.environment pb) (assoc (dotenv dir) "WAG_ENV" env))
     (.waitFor (.start pb))))
 
 (def ^:dynamic *jvm*
-  "Runs a JVM step, (fn [dir env step]) → exit code; rebound in tests."
+  "Runs a JVM step, (fn [ctx step]) → exit code; rebound in tests."
   run-jvm)
 
-(defn- jvm! [dir env step]
-  (let [code (*jvm* dir env step)]
+(defn- jvm! [ctx step]
+  (let [code (*jvm* ctx step)]
     (when (= 1 code)
       (println)
       (println (str "The " step " step failed in the app (above). If it cannot locate " jvm-main
@@ -178,6 +179,11 @@
    "enforce" ["Verify: restart and sign in as a test user who is no admin; their usual pages load."
               "A refusal logs 'Authorization refused a request' with the user, route and permission."]})
 
+(defn- print-log-refusals [log entries]
+  (println)
+  (println (str "Would-be refusals in " log ":"))
+  (run! println (format-log-refusals entries)))
+
 (defn- print-verify [step]
   (println)
   (run! println (verify step)))
@@ -185,9 +191,9 @@
 (defn- header [step env path]
   (println (str "Authorization upgrade: " step " (WAG_ENV=" env ", " path ")")))
 
-(defn- project-lines [dir {:keys [mode require-role? default-roles]}]
+(defn- project-lines [deps {:keys [mode require-role? default-roles]}]
   (concat
-   (when-let [n (version-note dir)] [(str "  " n)])
+   (when-let [n (version-note deps)] [(str "  " n)])
    [(str "  :wagoe/authorization mode in config.edn: " mode)]
    (when require-role? ["  :require-role in :wagoe/admin: nothing reads it; prepare deletes it."])
    (for [[id role] default-roles]
@@ -199,11 +205,11 @@
     (println (str "  " path ": nothing to change."))
     (println (upgrade/unified-diff (upgrade/relative dir path) old new))))
 
-(defn- step-check [dir env text]
+(defn- step-check [{:keys [deps text] :as ctx}]
   (println)
   (println "Project:")
-  (run! println (project-lines dir (config-facts text)))
-  (let [code (jvm! dir env "check")]
+  (run! println (project-lines deps (config-facts text)))
+  (let [code (jvm! ctx "check")]
     (println)
     (println "What the steps change:")
     (println "  prepare  deletes :require-role, sets :mode :report if it is :off, runs the migrations,")
@@ -212,7 +218,7 @@
     (println "  enforce  sets :mode :enforce, and refuses while a route has no rule or a user would be refused.")
     code))
 
-(defn- step-prepare [dir env path text {:keys [dry-run?]}]
+(defn- step-prepare [{:keys [dir path text dry-run?] :as ctx}]
   (let [{:keys [mode]} (config-facts text)
         new (cond-> (drop-require-role text)
               (= :off mode) (set-mode :report))]
@@ -221,25 +227,23 @@
     (if dry-run?
       (do (println)
           (println "Dry run: config.edn is not written, and nothing runs against the database. Its state:")
-          (jvm! dir env "check"))
+          (jvm! ctx "check"))
       (do (when (not= text new) (spit path new) (println (str "Wrote " (upgrade/relative dir path))))
-          (jvm! dir env "prepare")))))
+          (jvm! ctx "prepare")))))
 
-(defn- step-report [dir env {:keys [log]}]
+(defn- step-report [{:keys [log] :as ctx}]
   (println)
   (println "Under :report each request :enforce would refuse is logged as a warning:")
   (println (str "  " refusal-line " {:user-id … :route … :method … :permission … :reason …}"))
   (println "Repeats of one user, route and permission are logged once a minute, not every time.")
-  (let [code (jvm! dir env "report")]
-    (if-not log
+  (let [code (jvm! ctx "report")]
+    (if log
+      (print-log-refusals log (log-refusals (slurp log)))
       (do (println)
-          (println "Pass the app's log with --log <file> to summarise the lines it holds."))
-      (do (println)
-          (println (str "Would-be refusals in " log ":"))
-          (run! println (format-log-refusals (log-refusals (slurp log))))))
+          (println "Pass the app's log with --log <file> to summarise the lines it holds.")))
     code))
 
-(defn- step-enforce [dir env path text {:keys [dry-run? force? log]}]
+(defn- step-enforce [{:keys [dir path text dry-run? force? log] :as ctx}]
   (let [{:keys [mode]} (config-facts text)]
     (cond
       (= :enforce mode)
@@ -249,13 +253,10 @@
       (do (println) (println "The mode is :off. Run prepare first, and run the app under :report.") 1)
 
       :else
-      (let [code    (jvm! dir env "report")
+      (let [code    (jvm! ctx "report")
             logged  (when log (log-refusals (slurp log)))
             blocked (or (= 2 code) (seq logged))]
-        (when (seq logged)
-          (println)
-          (println (str "Would-be refusals in " log ":"))
-          (run! println (format-log-refusals logged)))
+        (when (seq logged) (print-log-refusals log logged))
         (cond
           (= 1 code) 1
 
@@ -277,6 +278,9 @@
                   (println "To roll back, set :wagoe/authorization {:mode :report} in that file and restart.")
                   (println "Nothing else changes: rights stay as they are.")
                   0))))))))
+
+(def ^:private steps
+  {"check" step-check "prepare" step-prepare "report" step-report "enforce" step-enforce})
 
 (def usage
   ["Usage: wagoe upgrade authorization <step> [--env ENV] [--dry-run] [--force] [--log FILE]"
@@ -307,12 +311,14 @@
   [dir args]
   (let [{:keys [step error env log help?] :as opts} (parse-args args)
         env  (or env (System/getenv "WAG_ENV") "dev")
-        path (io/file dir "resources" "conf" env "config.edn")]
+        path (io/file dir "resources" "conf" env "config.edn")
+        deps (read-deps dir)
+        app  (config-ns dir deps)]
     (cond
       help?
       (do (run! println usage) 0)
 
-      (or error (not (#{"check" "prepare" "report" "enforce"} step)))
+      (or error (not (steps step)))
       (do (when error (println error)) (run! println usage) 1)
 
       (not (.isFile path))
@@ -321,17 +327,14 @@
       (and log (not (.isFile (io/file log))))
       (do (println (str "No such log file: " log)) 1)
 
-      (nil? (config-ns dir))
+      (nil? app)
       (do (println "Cannot find the app's system config namespace (deps.edn :run alias).") 1)
 
       :else
       (let [text (slurp path)]
         (header step env (upgrade/relative dir path))
-        (let [code (case step
-                     "check"   (step-check dir env text)
-                     "prepare" (step-prepare dir env path text opts)
-                     "report"  (step-report dir env opts)
-                     "enforce" (step-enforce dir env path text opts))]
+        (let [code ((steps step) (assoc opts :dir dir :env env :path path :text text
+                                        :deps deps :config-ns app))]
           (when (or (zero? code) (#{"check" "report"} step))
             (print-verify (if (:dry-run? opts) "check" step)))
           code)))))
