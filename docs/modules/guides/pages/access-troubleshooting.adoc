@@ -1,0 +1,71 @@
+= Access troubleshooting
+
+Start with the user's *Rights* tab (see
+xref:access-tasks.adoc#_check_what_someone_may_do[Check what someone may do]):
+most answers are there. The ideas are in xref:managing-access.adoc[Managing
+access].
+
+== Forbidden (403)
+
+The user lacks a permission. The error names it as `required-permission`.
+
+* *No role holds it.* Find the permission under *Permissions* to see which
+  roles hold it, and give one of the user's groups such a role.
+* *The role is scoped and the page does not check scopes.* A scoped right
+  only works where the app checks the scope; elsewhere only unscoped holders
+  pass. Assign the role without a scope, or ask a developer to make the page
+  check it.
+* *The page has no rule.* A page the developers gave no rule admits only
+  platform admins. `clojure -M:run authz-report` lists such pages.
+* *The scope comes from the member and resolves to nothing.* The Rights tab
+  shows *(none, so no rights)*. The app knows no value for this user, say no
+  department; fix that in the app's data.
+
+== Not found (404)
+
+The record lies outside the user's scope. The app answers *not found* rather
+than forbidden, so a user cannot learn what exists outside their part. Check
+the scope on the Rights tab against the record. To widen it, assign the role
+again with the other value, or without a scope.
+
+== An empty or missing admin
+
+*User may read no entity in the admin*:: The user holds no
+`admin.<entity>/read` at all. Give a group of theirs `admin.<entity>/viewer`
+for the entities they should see.
+
+An entity is missing from the sidebar:: The sidebar and dashboard list only
+what the user may read. Assign `admin.<entity>/viewer`.
+
+They can read but not change:: They hold `viewer`, not `editor`. Buttons for
+changes they may not make are not shown.
+
+A tenant admin lost the admin:: The role Admin makes a platform admin only
+without a tenant. A tenant user with that role needs groups like anyone else.
+
+The Groups page shows a sign-in form:: Users, groups, roles and permissions are
+managed by users with the role Admin only. That cannot be handed out through a
+group.
+
+== Locked out
+
+*Too many failed attempts, please try again in 15 minutes*, or a 429 from the
+API: the account is locked after five wrong passwords or codes in a row. Wait it out; there is no
+unlock button. See
+xref:access-tasks.adoc#_locked_accounts[Locked accounts].
+
+A user who signs in with a correct password to *Invalid email or password* may
+be deactivated: check *Active* on their page.
+
+== SSO members are missing
+
+* *The group names differ.* A provider group counts only for a group here with
+  exactly that name, spelling included. Create it, or rename yours.
+* *The mapping is not set up.* A developer connects the provider's groups to
+  the app with a `:group-membership` hook; without it, nothing comes from the
+  provider. See xref:authentication.adoc#oidc[Sign in with OpenID Connect].
+* *You are looking in the wrong list.* Provider members appear on the group's
+  page under *From the identity provider*, and on the user's Rights tab, but
+  not in a permission's or role's list of users.
+* *The provider changed it.* Memberships are read from the provider, not
+  stored here, so they follow it. Check the user's groups there.

@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **Administrator guide to users, groups, roles and rights** (BOU-793): *Managing access* in the guides, with task
+  and troubleshooting pages.
 - **`:detail-tabs` entries take a `:key`** (BOU-791), the tab a module's own page marks active.
 - **`wagoe.test/sign-in-as!` and `create-user!`** (BOU-788) sign in a test user holding roles, scoped or not. Use them
   where a test signs in under `:enforce`; a user without a role gets 403.
@@ -260,6 +262,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Admin: a required yes/no field could not be saved unticked** (BOU-793), so a user could not be deactivated
+  from their edit page. Nothing to change.
 - **Dev dashboard: Apply on `:wagoe/dashboard` stopped the dashboard mid-request** (BOU-792). It answers first, then
   restarts and follows to the new port; a failed restart is logged and rolled back. Nothing to change.
 - **Admin scope leftovers** (BOU-791): every admin page refuses read held only in scopes no entity maps, a relation

@@ -1,0 +1,3 @@
+= Upgrading an app to authorization
+
+The guided upgrade path is described here once it ships.

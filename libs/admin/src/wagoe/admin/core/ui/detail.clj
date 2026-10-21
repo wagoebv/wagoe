@@ -115,8 +115,9 @@
        ;; Boolean input
        (= widget-type :checkbox)
        (list
-        (ui/checkbox field-name value {:required required?
-                                       :disabled readonly?
+        ;; Not :required: on a checkbox the browser reads that as "must be
+        ;; ticked", so a NOT NULL boolean could never be saved unticked.
+        (ui/checkbox field-name value {:disabled readonly?
                                        :class "checkbox checkbox-sm"})
         (when help-text
           [:span.help-text help-text]))

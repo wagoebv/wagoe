@@ -80,8 +80,7 @@ Complete user management and authentication system with MFA support, session man
 (user-ports/create-user user-service
   {:email "john@example.com"
    :password "SecureP@ss123"
-   :name "John Doe"
-   :role :user})
+   :name "John Doe"})
 
 ;; Authenticate
 (user-ports/authenticate user-service

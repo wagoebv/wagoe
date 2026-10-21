@@ -6,6 +6,8 @@ them. This guide covers declaring what can be granted, giving it to people,
 and moving an existing app onto enforcement. The reference is in the
 xref:libraries:platform.adoc[platform library] (registry, scopes, route
 rules) and the xref:libraries:admin.adoc[admin library] (entity access).
+Administrators managing access in a running app want
+xref:managing-access.adoc[Managing access].
 
 == The model in one paragraph
 
@@ -99,7 +101,8 @@ department. The platform library has the details.
 
 == Assigning rights
 
-Administrators work in the user module's pages:
+Administrators work in the user module's pages, step by step in
+xref:access-tasks.adoc[Access tasks]:
 
 * `/web/admin/groups`: members, and roles with an optional scope. Everyone
   lists its roles, not its members.

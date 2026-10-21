@@ -404,6 +404,10 @@
         ;; Should have help text
         (is (str/includes? (str widget) "Enable user account"))))
 
+    (testing "a required checkbox can still be saved unticked"
+      (let [widget (ui/render-field-widget :active true {:widget :checkbox :label "Active" :required true} nil)]
+        (is (not (str/includes? (str widget) ":required true")))))
+
     (testing "Select widget"
       (let [widget (ui/render-field-widget :role :admin
                                            {:widget :select
