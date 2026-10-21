@@ -45,10 +45,10 @@
   [admin-service schema-provider config]
   (fn [request]
     (let [user (support/get-current-user request)
-          _ (when (= :enforce (permissions/mode user))
-              (support/require-admin-user! request schema-provider))
           available (ports/list-available-entities schema-provider)
           all-configs (into {} (map (fn [e] [e (ports/get-entity-config schema-provider e)])) available)
+          _ (when (= :enforce (permissions/mode user))
+              (shell-permissions/assert-can-access-admin! user all-configs))
           entities (permissions/filter-visible-entities user available all-configs)
           entity-configs (select-keys all-configs entities)
           stats (into {} (map (fn [e] [e {:count (ports/count-entities admin-service e {})}])) entities)]

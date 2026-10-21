@@ -469,7 +469,7 @@
 
    Args:
      user: User entity map
-     admin-config: Optional admin configuration map
+     entity-configs: as `can-access-admin?`
 
    Returns:
      Map with global permission flags:
@@ -482,8 +482,8 @@
      ;=> {:can-access-admin true}"
   ([user]
    (get-admin-permissions user nil))
-  ([user admin-config]
-   {:can-access-admin (can-access-admin? user admin-config)
+  ([user entity-configs]
+   {:can-access-admin (can-access-admin? user entity-configs)
     ; Week 2+ features
     :can-view-audit-log false
     :can-manage-users false}))
