@@ -28,9 +28,9 @@
 
    It answers nil rather than throwing when all eleven are busy, which is the
    only case worth retrying."
-  [attempts]
+  [attempts & {:as opts}]
   (loop [remaining attempts]
-    (let [result (ig/init-key :wagoe/dashboard {:port (free-port)})]
+    (let [result (ig/init-key :wagoe/dashboard (assoc opts :port (free-port)))]
       (cond
         result            result
         (<= remaining 1)  (throw (ex-info "dashboard could not bind any port"
@@ -170,3 +170,79 @@
         (alter-var-root state-cfg (constantly nil))
         (wagoe.devtools.shell.dashboard.server/clear-config-overrides!)
         (ig/halt-key! :wagoe/dashboard started)))))
+
+(defn- eventually
+  "Poll `f` until it returns truthy or 10 s pass; its last value."
+  [f]
+  (loop [n 100]
+    (let [v (try (f) (catch Exception _ nil))]
+      (if (or v (zero? n)) v (do (Thread/sleep 100) (recur (dec n)))))))
+
+(defn- serving? [port]
+  (= 200 (:status (http/get (str "http://localhost:" port "/dashboard")
+                            {:throw-exceptions false}))))
+
+(defn- repl-dashboard []
+  (get @(resolve 'integrant.repl.state/system) :wagoe/dashboard))
+
+(defn- with-dashboard-under-repl
+  "Start a dashboard as (go) would have, call `(f started post!)`, and put
+   everything back. `post!` applies an edit to :wagoe/dashboard."
+  [f]
+  (let [state-sys (resolve 'integrant.repl.state/system)
+        state-cfg (resolve 'integrant.repl.state/config)
+        prep      (fn [] {})
+        started   (start-dashboard 5 :ig-config-fn prep)
+        section   {:port (:port started) :ig-config-fn prep}]
+    (try
+      (alter-var-root state-cfg (constantly {:wagoe/dashboard section}))
+      (alter-var-root state-sys (constantly {:wagoe/dashboard started}))
+      (f started
+         (fn [edn]
+           (:body (http/post (str "http://localhost:" (:port started) "/dashboard/fragments/config-apply")
+                             {:form-params      {"config-:wagoe/dashboard" edn}
+                              :throw-exceptions false}))))
+      (finally
+        ;; The deferred apply may still be running; halting under it leaks a
+        ;; Jetty, and the next test's Apply would be refused as in progress.
+        (eventually #(not @@#'wagoe.devtools.shell.dashboard.server/deferred-apply-running?))
+        (some->> (repl-dashboard) (ig/halt-key! :wagoe/dashboard))
+        (ig/halt-key! :wagoe/dashboard started)
+        (alter-var-root state-sys (constantly nil))
+        (alter-var-root state-cfg (constantly nil))
+        (wagoe.devtools.shell.dashboard.server/clear-config-overrides!)))))
+
+(deftest ^:integration applying-the-dashboards-own-section-answers-then-restarts
+  ;; Restarting :wagoe/dashboard stops its Jetty. Done from the request thread
+  ;; it took the response with it, so Apply answers first and restarts after.
+  (with-dashboard-under-repl
+    (fn [started post!]
+      (let [new-port (free-port)
+            body     (post! (str "{:port " new-port "}"))]
+        (is (str/includes? body "restarting") "the response arrives")
+        (is (str/includes? body (str ":" new-port "/dashboard/config")) "and says where it goes")
+        (let [moved (eventually #(let [d (repl-dashboard)]
+                                   (when (not= (:port started) (:port d)) d)))]
+          (is (some? moved) "a new dashboard replaced it")
+          (is (.isStopped (:server started)) "the old one stopped")
+          (is (serving? (:port moved)) "and the new one serves"))))))
+
+(deftest ^:integration a-dashboard-port-that-cannot-be-bound-is-refused-up-front
+  (with-dashboard-under-repl
+    (fn [started post!]
+      (is (str/includes? (post! "{:port 70000}") ":port must be a TCP port"))
+      (is (identical? started (repl-dashboard)) "nothing restarted")
+      (is (serving? (:port started))))))
+
+(deftest ^:integration a-failed-dashboard-restart-puts-the-old-config-back
+  ;; 203.0.113.1 is TEST-NET-3: no machine has it, so the restart fails after
+  ;; the response went out, and the old config comes back up on the old port.
+  (with-dashboard-under-repl
+    (fn [started post!]
+      (is (str/includes? (post! "{:host \"203.0.113.1\"}") "restarting"))
+      (is (eventually #(let [d (repl-dashboard)]
+                         (and d (not (identical? started d)) (= (:port started) (:port d)))))
+          "a dashboard on the old config replaced the failed one")
+      (is (nil? (get-in @(resolve 'integrant.repl.state/config) [:wagoe/dashboard :host]))
+          "the config is the old one")
+      (is (eventually #(serving? (:port started)))))))

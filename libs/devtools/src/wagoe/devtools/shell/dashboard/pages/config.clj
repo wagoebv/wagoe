@@ -123,15 +123,37 @@
                  [:pre.code-block
                   (str "Current:\n" (section-edn (:value (cfg-edit/strip-unreadable old-val))) "\n\nProposed:\n" new-val-str)]])))))))
 
+(def ^:private follow-script
+  "Go to the panel's data-url once a dashboard answers there that is not this
+   one. On the same port the old server answers until it stops, so its
+   instance header tells them apart; across ports a no-cors HEAD suffices."
+  "(function(){var el=document.currentScript.parentElement,u=el.dataset.url,old=el.dataset.instance,
+same=new URL(u).origin===location.origin,n=0;
+function retry(){if(++n<40){setTimeout(poll,500)}else{el.querySelector('.follow-status').textContent=
+'Nothing answers there. The REPL log says why; a failed restart puts the old config back.'}}
+function poll(){fetch(new URL('/assets/dashboard.css',u),{method:'HEAD',mode:same?'same-origin':'no-cors',cache:'no-store'})
+.then(function(r){if(!same||r.headers.get('X-Dashboard-Instance')!==old){location.href=u}else{retry()}},retry)}
+setTimeout(poll,500)})()")
+
 (defn render-apply-result
   "Render the result of a config apply operation as an HTML fragment."
-  [{:keys [success? restarted error]}]
+  [{:keys [success? restarted follow-url instance error]}]
   (str (h/html
-        (if success?
+        (cond
+          follow-url
+          [:div.detail-panel {:data-url follow-url :data-instance instance}
+           [:p {:style "color:var(--accent-green)"} "✓ Accepted, restarting"]
+           [:p (str "Restarting: " (str/join ", " (map pr-str restarted)))]
+           [:p.follow-status "The dashboard moves to " [:a {:href follow-url} follow-url]]
+           [:script (h/raw follow-script)]]
+
+          success?
           [:div.detail-panel
            [:p {:style "color:var(--accent-green)"} "✓ Config applied successfully"]
            (when (seq restarted)
              [:p (str "Restarted: " (str/join ", " (map pr-str restarted)))])]
+
+          :else
           [:div.detail-panel.detail-panel-error
            ;; :error is {:type … :message …} since BOU-323; a bare string here
            ;; would render the map itself into the page.

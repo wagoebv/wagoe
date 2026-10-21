@@ -39,6 +39,15 @@
     (is (str/includes? (config-page/render-apply-result {:success? true :restarted [:wagoe/db]})
                        "Config applied successfully"))))
 
+(deftest ^:unit a-deferred-dashboard-restart-links-to-where-it-went
+  (let [url  "http://localhost:9998/dashboard/config"
+        html (config-page/render-apply-result
+              {:success? true :restarted [:wagoe/dashboard] :follow-url url :instance "old-id"})]
+    (is (str/includes? html (str "data-url=\"" url "\"")) "the script follows this")
+    (is (str/includes? html "data-instance=\"old-id\"") "and waits for a server that is not this one")
+    (is (str/includes? html (str "href=\"" url "\"")) "and the reader can")
+    (is (str/includes? html "fetch(new URL('") "the script is not escaped")))
+
 (deftest ^:unit config-is-read-only-without-a-repl-system
   ;; Started by wagoe.main the dashboard can show the config (BOU-508), but
   ;; Apply restarts components through integrant.repl.state, which only (go)
@@ -89,7 +98,7 @@
 
 (deftest ^:unit the-textarea-holds-pretty-printed-edn
   (let [html (config-page/render {:config {:wagoe/db {:url (apply str "jdbc:h2:mem:" (repeat 100 "x"))
-                                                     :aliases ["a" "b"]}}
+                                                      :aliases ["a" "b"]}}
                                   :config-editable? true})]
     (is (str/includes? html "{:aliases [&quot;a&quot; &quot;b&quot;]\n :url"))))
 

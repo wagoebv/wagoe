@@ -260,6 +260,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Dev dashboard: Apply on `:wagoe/dashboard` stopped the dashboard mid-request** (BOU-792). It answers first, then
+  restarts and follows to the new port; a failed restart is logged and rolled back. Nothing to change.
 - **Admin scope leftovers** (BOU-791): every admin page refuses read held only in scopes no entity maps, a relation
   condition's bare columns are its entity's own, and a refused assignment's lookup shows the title.
 - **`user list`, `update` and `delete` exited 1 on success, and `update` with no fields wrote an empty update** (BOU-790).
