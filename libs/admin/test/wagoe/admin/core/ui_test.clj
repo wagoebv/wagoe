@@ -406,7 +406,7 @@
 
     (testing "a required checkbox can still be saved unticked"
       (let [widget (ui/render-field-widget :active true {:widget :checkbox :label "Active" :required true} nil)]
-        (is (not (str/includes? (str widget) ":required true")))))
+        (is (not-any? #(and (map? %) (:required %)) (tree-seq coll? seq widget)))))
 
     (testing "Select widget"
       (let [widget (ui/render-field-widget :role :admin

@@ -4,6 +4,7 @@
 ** xref:guides:validation.adoc[Validation]
 ** xref:guides:authentication.adoc[Authentication & JWT]
 ** xref:guides:authorization.adoc[Authorization]
+** xref:guides:upgrade-authorization.adoc[Upgrading to Permissions]
 ** xref:guides:managing-access.adoc[Managing Access]
 *** xref:guides:access-tasks.adoc[Access Tasks]
 *** xref:guides:access-troubleshooting.adoc[Access Troubleshooting]

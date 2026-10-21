@@ -137,6 +137,10 @@ Everyone.
 
 == Moving an existing app to `:enforce`
 
+`bb upgrade authorization` walks through these steps and names, per user,
+what would change; see xref:upgrade-authorization.adoc[Upgrading an existing
+app to permissions]. By hand:
+
 . *Upgrade and start once.* The first start moves the old rights over, so
   nobody can do less under `:enforce` than under `:off`, and nobody becomes an
   admin: each group grant becomes a managed role, Everyone gets every module's

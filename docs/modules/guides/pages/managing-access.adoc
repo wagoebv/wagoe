@@ -1,8 +1,7 @@
 = Managing access
 
 This guide is for the administrator of a running Wagoe app: the person who
-decides who may sign in and what they may do there. It covers the ideas, the
-first admin account, and switching an app's checks on. The steps are in
+decides who may sign in and what they may do there. The steps are in
 xref:access-tasks.adoc[Access tasks]; when something does not work, see
 xref:access-troubleshooting.adoc[Access troubleshooting].
 
@@ -58,8 +57,7 @@ tickets and nothing else.
   customer answers *not found*, and there is no button to change one.
 
 To let Sam answer the tickets as well, assign `admin.tickets/editor` instead.
-For a second customer, assign the role again with that customer: rights add
-up. Each step is spelled out in xref:access-tasks.adoc[Access tasks].
+For a second customer, assign the role again with that customer.
 
 .The group from the example. The scope shows the customer's id.
 image::access/group.png[The group page: members, and a role with a customer scope]
@@ -88,43 +86,31 @@ group of theirs has a role.
 
 == Switching checks on
 
-An app's configuration (`config.edn`) sets how strictly rights are checked,
-with `:wagoe/authorization {:mode ...}`:
+`:wagoe/authorization {:mode ...}` in `config.edn` sets how strictly rights
+are checked: `:off` checks only sign-in, `:report` refuses nothing but logs
+what `:enforce` would refuse, and `:enforce` refuses. A new app starts on
+`:enforce`; an older one is `:off` until it is moved.
 
-[cols="1,3"]
-|===
-| `:off` | Only sign-in is checked. The default for apps made before this release.
-| `:report` | Nothing is refused, but each refusal `:enforce` would make is logged.
-| `:enforce` | Refusals hold. The default for a new app.
-|===
+`bb upgrade authorization` moves an existing app step by step and says who
+would lose or gain access at each one; see
+xref:upgrade-authorization.adoc[Upgrading an existing app to permissions]. The
+manual steps are in xref:authorization.adoc#_moving_an_existing_app_to_enforce[Authorization].
 
-xref:upgrade-authorization.adoc[Upgrading an app to authorization] takes an
-existing app through these steps with a guided command. By hand:
+Your part is the `:report` phase. Run the app as usual for a few days; each
+refusal is logged as a warning, at most once a minute per user and route:
 
-. *Upgrade and start once.* The first start copies the old rights over:
-  Everyone gets every module's `editor` role, so nobody can do less than
-  before, and users who had the role *Viewer* join a group *Readers*. Nobody
-  becomes an admin.
-. *Grant the admin.* A user with the role Admin who belongs to a tenant is
-  not a platform admin. Under `:enforce` they see only the admin entities a
-  group gives them: assign `admin.<entity>/viewer` or `/editor` on a group of
-  theirs.
-. *Switch to `:report`* and run the app as usual for a few days. Each refusal
-  is logged as a warning, at most once a minute per user and route:
-+
 ----
 Authorization would refuse this request under :enforce {:user-id … :route "/api/v1/orders" :method :post :permission :orders/write :reason :forbidden}
 Admin authorization would refuse this under :enforce {:user-id … :entity :orders :permission :admin.orders/write}
 Admin authorization would keep this user out of the admin under :enforce {:user-id …}
 ----
-+
+
 For each line, decide whether that user should be allowed. If so, give one of
 their groups a role holding the permission. If not, leave it: that is what
 `:enforce` is for. A route logged with no permission has no rule at all; that
 is for a developer, and `clojure -M:run authz-report` lists every such route.
-. *Switch to `:enforce`* when the lines you meant to fix have stopped.
-. *Narrow Everyone.* Replace the `editor` roles the upgrade gave it with what
-  every user should really have, often the `viewer` roles.
+Switch to `:enforce` when the lines you meant to fix have stopped, then narrow
+Everyone to what every user should really have.
 
 To roll back, set the mode to `:report` or `:off` and restart. Groups, roles
 and assignments stay as they are, ready for the next try.

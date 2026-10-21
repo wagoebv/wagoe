@@ -126,7 +126,9 @@
    Args:
      field-key: Keyword for checkbox name/id
      checked?: Boolean indicating if checkbox is checked
-     opts: Optional map with additional attributes like :value, :required, :class
+     opts: Optional map with additional attributes like :value, :class.
+           :required means 'must be ticked' (accept the terms), not 'must
+           have a value': the hidden field always sends one.
      
    Returns:
      Hiccup checkbox input elements (hidden + checkbox) as a list"

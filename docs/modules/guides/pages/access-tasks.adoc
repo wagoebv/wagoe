@@ -2,8 +2,7 @@
 
 Each task below is done in the admin, signed in as a platform admin, and ends
 with how to check it worked. The ideas behind them are in
-xref:managing-access.adoc[Managing access]. Everything here is under *Users* in
-the sidebar.
+xref:managing-access.adoc[Managing access].
 
 == Users
 
@@ -107,7 +106,9 @@ Everyone has no member list: every signed-in user is in it.
 
 When users sign in with SSO, the app can map the groups your identity
 provider (Entra ID, LDAP, …) puts them in to groups here, by name. A developer
-sets this up once. Such memberships:
+sets this up once; see
+xref:authentication.adoc#_memberships_from_an_identity_provider[Memberships from an identity provider].
+Such memberships:
 
 * are read-only here: change them at the provider;
 * follow the provider, because they are not stored;
@@ -209,8 +210,7 @@ image::access/permission-holders.png[Who holds a permission]
 
 Sign in as them::
 Make a test user, put them in the same groups, and sign in in a private
-window. The admin's sidebar and dashboard show only what they may read, and
-buttons for changes they may not make are not there.
+window. The admin's sidebar and dashboard show only what they may read.
 
 The audit trail::
 *Audit Trail* lists who added whom to which group, which roles were assigned,

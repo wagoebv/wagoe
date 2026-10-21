@@ -50,22 +50,19 @@ group.
 == Locked out
 
 *Too many failed attempts, please try again in 15 minutes*, or a 429 from the
-API: the account is locked after five wrong passwords or codes in a row. Wait it out; there is no
-unlock button. See
-xref:access-tasks.adoc#_locked_accounts[Locked accounts].
+API: see xref:access-tasks.adoc#_locked_accounts[Locked accounts].
 
 A user who signs in with a correct password to *Invalid email or password* may
 be deactivated: check *Active* on their page.
 
 == SSO members are missing
 
-* *The group names differ.* A provider group counts only for a group here with
-  exactly that name, spelling included. Create it, or rename yours.
-* *The mapping is not set up.* A developer connects the provider's groups to
-  the app with a `:group-membership` hook; without it, nothing comes from the
-  provider. See xref:authentication.adoc#oidc[Sign in with OpenID Connect].
+Check the rules in
+xref:access-tasks.adoc#_memberships_from_your_identity_provider[Memberships from your identity provider]
+first: the names must match exactly. Then:
+
+* *The mapping is not set up.* Without the developer's `:group-membership`
+  hook, nothing comes from the provider.
 * *You are looking in the wrong list.* Provider members appear on the group's
-  page under *From the identity provider*, and on the user's Rights tab, but
-  not in a permission's or role's list of users.
-* *The provider changed it.* Memberships are read from the provider, not
-  stored here, so they follow it. Check the user's groups there.
+  page and the user's Rights tab, not in a permission's or role's list of
+  users.
