@@ -74,8 +74,11 @@
 
 (deftest ^:unit a-signed-in-user-refused-a-web-page-gets-a-403-page
   ;; It was the login form, a 200, to someone already signed in.
-  (let [resp ((user-mw/require-role-middleware #{:admin} (constantly {:status 200}))
-              {:request-method :get :uri "/web/admin/groups" :headers {}
-               :user {:id (random-uuid) :role :user}})]
+  (let [handler (reitit/compile-routes
+                 [["/web/admin/groups" {:middleware [(partial user-mw/require-role-middleware #{:admin})]
+                                        :get        {:handler (constantly {:status 200 :body {}})}}]]
+                 {:swagger-enabled false})
+        resp    (handler {:request-method :get :uri "/web/admin/groups" :headers {"accept" "text/html"}
+                          :user {:id (random-uuid) :role :user}})]
     (is (= 403 (:status resp)))
     (is (str/starts-with? (get-in resp [:headers "Content-Type"]) "text/html"))))

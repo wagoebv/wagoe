@@ -66,20 +66,12 @@
          (str "<p>Reference: <code>" (escape-html correlation-id) "</code></p>"))
        "<p><a href=\"/\">Home</a></p></main></body></html>"))
 
-(defn- error-page [status message correlation-id]
-  {:status  status
-   :headers (cond-> {"Content-Type" "text/html; charset=utf-8"}
-              correlation-id (assoc "X-Correlation-ID" (str correlation-id)))
-   :body    (error-page-html status message correlation-id)})
-
 (defn refusal-response
-  "`status` for a signed-in caller who may not do this: the error body for an
-   API caller, a page for a web one. Not the login redirect, which would send
-   them back here."
-  [status error message request correlation-id]
-  (if (web-request? request)
-    (error-page status message correlation-id)
-    (error-response status error message correlation-id)))
+  "`status` for a signed-in caller who may not do this: the error body, which
+   the router shows a browser on /web as the app's error page. Not the login
+   redirect, which would send them back here."
+  [status error message _request correlation-id]
+  (error-response status error message correlation-id))
 
 (defn admin?
   "Whether the signed-in user has the global admin role."

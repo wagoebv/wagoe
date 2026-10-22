@@ -152,8 +152,8 @@
                               [:post "/web/admin/roles/duplicate"] [:get "/web/admin/permissions"]
                               [:get (str "/web/users/" (:id user) "/rights")]]]
           (let [r (app (req user method uri {"name" "x/y"}))]
-            (is (= 302 (:status r)) (str method " " uri))
-            (is (str/starts-with? (get-in r [:headers "Location"]) "/web/login") (str method " " uri))))))))
+            (is (= 403 (:status r)) (str method " " uri))
+            (is (nil? (get-in r [:headers "Location"])) (str method " " uri))))))))
 
 (deftest ^:integration an-assignment-takes-a-scope-value-from-the-member
   (with-app
