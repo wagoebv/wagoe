@@ -25,7 +25,9 @@
    [clojure.tools.logging :as log]
    [ring.util.codec :as codec]
    [ring.util.response :as ring-response])
-  (:import [java.util UUID]))
+  (:import [java.io File]
+           [java.nio.file Files]
+           [java.util UUID]))
 
 ;; =============================================================================
 ;; Error Mappings
@@ -73,6 +75,22 @@
 ;; Form Data Parsing
 ;; =============================================================================
 
+(defn- no-file?
+  "A file input left empty: the browser still sends the part, with no name."
+  [v]
+  (if (map? v) (str/blank? (:filename v)) (and (string? v) (str/blank? v))))
+
+(defn- upload-bytes
+  "The content of a multipart file part, whichever store Ring decoded it to."
+  [field-keyword v]
+  (cond
+    (bytes? (:bytes v))       (:bytes v)
+    (instance? File (:tempfile v)) (Files/readAllBytes (.toPath ^File (:tempfile v)))
+    :else (throw (ex-info "Not a file upload"
+                          {:type :validation-error
+                           :field field-keyword
+                           :message (str "Field '" (name field-keyword) "' must be an uploaded file")}))))
+
 (defn parse-form-params
   "Parse form parameters into entity data map.
 
@@ -111,6 +129,10 @@
 
              ; Convert string value to appropriate type
             typed-value (cond
+                          (= field-type :binary)
+                          (when-not (no-file? normalized-value)
+                            (upload-bytes field-keyword normalized-value))
+
                            ; Empty strings become nil
                           (str/blank? normalized-value) nil
 
@@ -200,7 +222,10 @@
        ;; validation instead of being rejected (BOU-477). A field the form did
        ;; not submit is still absent, which is what makes a partial update
        ;; partial.
-        (assoc acc field-keyword typed-value)))
+       ;; …except a file input left empty, which keeps the stored file.
+        (if (and (= field-type :binary) (no-file? normalized-value))
+          acc
+          (assoc acc field-keyword typed-value))))
     {}
     params)))
 

@@ -86,6 +86,7 @@
      Hiccup input structure(s)"
   [field-name field-config operator filter-value]
   (let [field-type (:type field-config :string)
+        step (base/number-input-step field-type)
         options (:options field-config)]
     (cond
       ;; No input needed for null checks
@@ -97,12 +98,14 @@
       [:div.filter-value-range
        [:input.filter-value-input
         {:type (if (#{:int :decimal} field-type) "number" "text")
+         :step step
          :name (str "filters[" (name field-name) "][min]")
          :placeholder [:t :admin/filter-range-min]
          :value (get filter-value :min "")}]
        [:span.range-separator [:t :admin/filter-range-separator]]
        [:input.filter-value-input
         {:type (if (#{:int :decimal} field-type) "number" "text")
+         :step step
          :name (str "filters[" (name field-name) "][max]")
          :placeholder [:t :admin/filter-range-max]
          :value (get filter-value :max "")}]]
@@ -166,6 +169,7 @@
       (#{:int :decimal} field-type)
       [:input.filter-value-input
        {:type "number"
+        :step step
         :name (str "filters[" (name field-name) "][value]")
         :placeholder [:t :admin/filter-enter-value]
         :value (or (:value filter-value) "")}]

@@ -29,10 +29,12 @@
 
    Ring leaves an empty `:form-params` on a request with a decoded body, and
    `{}` is truthy, so an `or` chain starting there never reached
-   `:body-params`: a JSON write was read as no fields at all (BOU-477)."
+   `:body-params`: a JSON write was read as no fields at all (BOU-477).
+   A multipart body is read before `:params`, which also holds the query
+   string: `return_to` was written as a column (BOU-798)."
   [request]
   (or (some #(when (seq %) %)
-            [(:form-params request) (:body-params request) (:params request)])
+            [(:form-params request) (:multipart-params request) (:body-params request) (:params request)])
       {}))
 
 (defn- log-rejected!

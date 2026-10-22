@@ -268,6 +268,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Admin forms take a fraction in a decimal field and upload the file in a binary one** (BOU-798). Nothing to
+  change; an H2 `BYTEA` or MySQL `VARBINARY`/`*BLOB` column now gets a file input too.
 - **The admin sidebar fell back to closed** (BOU-796): it is now open or closed, changed only by its one toggle; the pin
   and hover-expand are gone. A browser that pinned it closed keeps it closed.
 - **Admin: a required yes/no field could not be saved unticked** (BOU-793), so a user could not be deactivated
