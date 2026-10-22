@@ -88,6 +88,7 @@
    :enum            ; Enumeration (fixed set of values)
    :json            ; JSON data
    :text            ; Long-form text
+   :timezone        ; IANA zone id, a string chosen from a combobox
    :binary])        ; Binary data
 
 (def FieldConfig

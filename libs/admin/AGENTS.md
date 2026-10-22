@@ -59,6 +59,9 @@ Granting entity access as an administrator: `docs/modules/guides/pages/managing-
 other pages as tabs beside the form; `{id}` is the record's key, and the optional `:key` is what that page marks active. A symbol names a var holding the list:
 `admin/users.edn` says `wagoe.user.core.rights-ui/detail-tabs`, which the user module's pages render too.
 
+**Timezones**: `{:timezone {:type :timezone}}` makes a string field a combobox over the IANA zones, served by
+`/:entity/options/:field` like a foreign key's.
+
 ---
 
 ## Column Widths in List View

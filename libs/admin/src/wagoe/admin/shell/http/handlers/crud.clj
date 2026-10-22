@@ -444,19 +444,23 @@
 
 (defn field-options-handler
   "GET /:entity/options/:field?q= — the options of a foreign key's combobox:
-   the parent rows whose label contains the typed text. The user has to be
-   able to view the entity and the parent whose labels this lists."
+   the parent rows whose label contains the typed text, or for a field of
+   type :timezone the zones. The user has to be able to view the entity and
+   the parent whose labels this lists."
   [admin-service schema-provider _config]
   (fn [request]
-    (let [[user entity-name] (support/viewable-entity! schema-provider request)
-          field       (keyword (get-in request [:path-params :field]))
-          found       (support/search-foreign-key-options admin-service schema-provider entity-name field
-                                                          (combobox/query request))
-          _           (when-not found
-                        (throw (ex-info "No such foreign key" {:type :not-found :entity-name entity-name :field field})))]
-      (shell-permissions/assert-can-view-entity! user (:parent found) (:parent-cfg found))
+    (let [[user entity-name entity-cfg] (support/viewable-entity! schema-provider request)
+          field (keyword (get-in request [:path-params :field]))
+          q     (combobox/query request)
+          options (if (= :timezone (get-in entity-cfg [:fields field :type]))
+                    (support/search-timezones q)
+                    (let [found (support/search-foreign-key-options admin-service schema-provider entity-name field q)]
+                      (when-not found
+                        (throw (ex-info "No such foreign key" {:type :not-found :entity-name entity-name :field field})))
+                      (shell-permissions/assert-can-view-entity! user (:parent found) (:parent-cfg found))
+                      (:options found)))]
       (support/html-response request
-                             (combobox/options field (:options found) [:t :admin/combobox-no-matches])))))
+                             (combobox/options field options [:t :admin/combobox-no-matches])))))
 
 (defn lookup-handler
   "GET /:entity/lookup?q= — the rows of an entity whose label contains the

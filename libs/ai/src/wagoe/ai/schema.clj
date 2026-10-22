@@ -82,7 +82,7 @@
 
 (def AdminFieldType
   "Field types the admin renders — wagoe.admin.schema/FieldType."
-  [:enum :uuid :string :int :decimal :boolean :instant :date :enum :json :text :binary])
+  [:enum :uuid :string :int :decimal :boolean :instant :date :enum :json :text :timezone :binary])
 
 (def AdminFieldWidget
   "Widgets the admin renders — wagoe.admin.schema/FieldWidget."

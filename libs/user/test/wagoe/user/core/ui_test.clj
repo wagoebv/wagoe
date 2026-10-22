@@ -215,69 +215,6 @@
 ;; User Form Component Tests
 ;; =============================================================================
 
-(deftest ^:unit user-detail-form-test
-  (testing "generates form with correct structure"
-    (let [form (ui/user-detail-form sample-user)]
-      (is (vector? form))
-      ;; New structure: div with ID instead of class
-      (is (= :div#user-detail (first form)))
-      (is (re-find #"form-section-title \[:t :user/form-detail-title\]" (str form)))))
-
-  (testing "includes HTMX form attributes"
-    (let [form (ui/user-detail-form sample-user)
-          form-element (nth form 1)]
-      (is (= :form (first form-element)))
-      (let [attrs (second form-element)]
-        ;; New URLs: /web/users/*
-        (is (= "/web/users/123" (:hx-put attrs)))
-        (is (= "#user-detail" (:hx-target attrs)))
-        ;; The response is itself a #user-detail; innerHTML would nest one
-        ;; inside the other and leave a duplicate id behind (BOU-381).
-        (is (= "outerHTML" (:hx-swap attrs))))))
-
-  (testing "renders validation errors for the fields that have them"
-    (let [form-str (str (ui/user-detail-form sample-user {:name ["Name is required"]}))]
-      (is (re-find #"Name is required" form-str))
-      (is (re-find #"field-errors" form-str))))
-
-  (testing "pre-fills form fields with user data"
-    (let [form (ui/user-detail-form sample-user)
-          form-str (str form)]
-      (is (re-find #"John Doe" form-str))
-      (is (re-find #"john@example.com" form-str))))
-
-  (testing "includes all required form fields"
-    (let [form (ui/user-detail-form sample-user)
-          form-content (str form)]
-      (is (re-find #"label-name" form-content))
-      (is (re-find #"label-email" form-content))
-      (is (re-find #"label-role" form-content))
-      (is (re-find #"field-active" form-content)))))
-
-(defn- nodes
-  "Every element in `tree` whose tag starts with `tag`, e.g. :button#deactivate-user."
-  [tree tag]
-  (filter #(and (vector? %) (keyword? (first %)) (str/starts-with? (name (first %)) (name tag)))
-          (tree-seq coll? seq tree)))
-
-(deftest ^:unit deactivate-asks-the-confirm-modal-test
-  (let [form     (ui/user-detail-form (assoc sample-user :active true))
-        [button] (nodes form :button#deactivate-user)
-        attrs    (second button)]
-    (testing "the button sends the update itself, active false, once confirmed"
-      (is (= "deactivate-confirm" (:data-confirm-modal attrs)))
-      (is (= "/web/users/123" (:hx-put attrs)))
-      (is (= "{\"active\":\"false\"}" (:hx-vals attrs)))
-      (is (not (re-find #"confirm\(" (str form)))))
-    (testing "the modal is outside the form: it holds forms of its own"
-      (is (seq (nodes form :dialog)))
-      (is (empty? (nodes (first (nodes form :form)) :dialog)))))
-  (testing "an inactive user gets Reactivate, which needs no confirming"
-    (let [form     (ui/user-detail-form (assoc sample-user :active false))
-          [button] (nodes form :button#reactivate-user)]
-      (is (= "{\"active\":\"true\"}" (:hx-vals (second button))))
-      (is (empty? (nodes form :dialog))))))
-
 (deftest ^:unit create-user-form-test
   (testing "generates form with correct structure"
     (let [form (ui/create-user-form)]
@@ -484,22 +421,6 @@
       (is (re-find #"/web/users/123" content))
       (is (re-find #"button-view-user" content)))))
 
-(deftest ^:unit user-deleted-success-test
-  (testing "generates success message with user ID"
-    (let [message (ui/user-deleted-success 123)]
-      (is (vector? message))
-      (let [content (str message)]
-        (is (re-find #"message-deleted" content))
-        (is (re-find #"123" content))
-        (is (re-find #"message-deleted-details" content)))))
-
-  (testing "includes navigation link to users list"
-    (let [message (ui/user-deleted-success 123)
-          content (str message)]
-      ;; New URLs: /web/users
-      (is (re-find #"/web/users" content))
-      (is (re-find #"button-view-all-users" content)))))
-
 ;; =============================================================================
 ;; Validation Error Component Tests
 ;; =============================================================================
@@ -537,31 +458,8 @@
     (let [page (ui/users-page sample-users)
           content (str page)]
       (is (re-find #"john@example.com" content))
-      (is (re-find #"jane@example.com" content)))))
-
-(deftest ^:unit user-detail-page-test
-  (testing "generates complete user detail page"
-    (let [page (ui/user-detail-page sample-user)]
-      (is (vector? page))
-      (let [content (str page)]
-        ;; The title is a marker now, not "User: John Doe" — core emits
-        ;; markers and the shell resolves them, so the name travels as a
-        ;; parameter and the sentence lives in the catalogue.
-        (is (re-find #":user/detail-page-title" content))
-        (is (re-find #"John Doe" content))
-        (is (re-find #"\[:a \{:href \"/web/users\"\} \[:t :user/page-users-title\]\]" content)
-            "the breadcrumb leads back to the list"))))
-
-  (testing "accepts optional parameters"
-    (let [opts {:flash {:info "User updated"}}
-          page (ui/user-detail-page sample-user opts)]
-      (is (vector? page))))
-
-  (testing "includes user detail form"
-    (let [page (ui/user-detail-page sample-user)
-          content (str page)]
-      (is (re-find #"form-detail-title" content))
-      (is (re-find #"john@example.com" content)))))
+      (is (re-find #"jane@example.com" content))
+      (is (re-find #"data-href \"/web/admin/users/123\"" content) "a row opens the user's admin page"))))
 
 (deftest ^:unit create-user-page-test
   (testing "generates complete create user page with no params"
@@ -592,6 +490,13 @@
       (is (re-find #"form-create-title" content))
       (is (re-find #"field-password" content)))))
 
+(deftest ^:unit the-sessions-tab-deletes-an-inactive-user-for-good
+  (let [hard-delete? #(boolean (re-find #"/web/users/\d+/hard-delete" (str %)))
+        admin        {:user {:role :admin}}]
+    (is (hard-delete? (ui/user-sessions-page inactive-user [] nil admin)))
+    (is (not (hard-delete? (ui/user-sessions-page sample-user [] nil admin))) "an active user is deactivated first")
+    (is (not (hard-delete? (ui/user-sessions-page inactive-user [] nil {:user {:role :user}}))) "only an admin")))
+
 (defn- attrs-of
   "The attribute maps of the elements in `h` whose attributes satisfy `pred`."
   [h pred]
@@ -603,7 +508,6 @@
   (let [sessions [{:id (java.util.UUID/randomUUID)} {:id (java.util.UUID/randomUUID)}]
         opts     {:current-time (java.time.Instant/now) :zone-id (java.time.ZoneId/of "UTC")}]
     (doseq [[label page] [["users" (ui/users-page sample-users)]
-                          ["detail" (ui/user-detail-page sample-user)]
                           ["create" (ui/create-user-page)]
                           ["sessions" (ui/user-sessions-page sample-user sessions nil opts)]]]
       (testing label
@@ -613,8 +517,8 @@
   (testing "every confirmed action names a confirm modal on its page"
     (let [sessions [{:id (java.util.UUID/randomUUID)} {:id (java.util.UUID/randomUUID)}]
           pages [(ui/users-page sample-users)
-                 (ui/user-detail-page inactive-user {:user {:role :admin}})
-                 (ui/user-sessions-page sample-user sessions nil {})]]
+                 (ui/user-sessions-page sample-user sessions nil {})
+                 (ui/user-sessions-page inactive-user sessions nil {:user {:role :admin}})]]
       (doseq [page pages
               :let [asks (keep :data-confirm-modal (attrs-of page :data-confirm-modal))
                     ids  (set (keep :id (attrs-of page :id)))]]
@@ -642,14 +546,11 @@
   (testing "all components return valid Hiccup structures"
     (is (vector? (ui/user-row sample-user)))
     (is (vector? (ui/users-table sample-users)))
-    (is (vector? (ui/user-detail-form sample-user)))
     (is (vector? (ui/create-user-form)))
     (is (vector? (ui/user-created-success sample-user)))
     (is (vector? (ui/user-updated-success sample-user)))
-    (is (vector? (ui/user-deleted-success 123)))
     (is (vector? (ui/user-validation-errors validation-errors)))
     (is (vector? (ui/users-page sample-users)))
-    (is (vector? (ui/user-detail-page sample-user)))
     (is (vector? (ui/create-user-page))))
 
   (testing "components handle edge cases gracefully"

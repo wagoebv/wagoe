@@ -336,69 +336,12 @@
       (is (= 302 (:status response)))
       (is (= "/web/admin/" (get-in response [:headers "Location"]))))))
 
-(deftest ^:contract user-detail-page-handler-test
-  (testing "renders user detail page for existing user"
-    (let [user (create-test-user {:name "Alice" :email "alice@example.com"})
-          service (create-mock-service {(:id user) user})
-          config {:active {:wagoe/settings {:user-limits {:max-users 1000}}}}
-          handler (web-handlers/user-detail-page-handler service config)
-          request {:path-params {:id (str (:id user))}}
-          response (handler request)]
-
-      (is (= 200 (:status response)))
-      (is (= "text/html; charset=utf-8" (get-in response [:headers "Content-Type"])))
-      (is (html-contains? response "Alice"))
-      (is (html-contains? response "alice@example.com"))))
-
-  (testing "returns 404 for non-existent user"
-    (let [service (create-mock-service)
-          config {:active {:wagoe/settings {:user-limits {:max-users 1000}}}}
-          handler (web-handlers/user-detail-page-handler service config)
-          request {:path-params {:id (str (UUID/randomUUID))}}
-          response (handler request)]
-
-      (is (= 404 (:status response)))
-      (is (html-contains? response "User Not Found"))))
-
-  (testing "returns 400 for invalid UUID"
-    (let [service (create-mock-service)
-          config {:active {:wagoe/settings {:user-limits {:max-users 1000}}}}
-          handler (web-handlers/user-detail-page-handler service config)
-          request {:path-params {:id "not-a-uuid"}}
-          response (handler request)]
-
-      (is (= 400 (:status response)))
-      (is (html-contains? response "Invalid User ID"))))
-
-  (testing "handles service errors gracefully"
-    (let [user (create-test-user {})
-          service (reify ports/IUserService
-                    (register-or-authenticate-user [_ _ _] {:user nil :created? false :authenticated? false :auth-result nil})
-                    (claim-user-identity [_ _] {:mode :authenticated :user nil :created? false :authenticated? false :auth-result nil})
-                    (register-user [_ _] (throw (UnsupportedOperationException.)))
-                    (get-user-by-id [_ _]
-                      (throw (Exception. "Database error")))
-                    (get-user-by-email [_ _] nil)
-                    (list-users [_ _] {:users [] :total-count 0})
-                    (update-user-profile [_ _] (throw (UnsupportedOperationException.)))
-                    (deactivate-user [_ _] (throw (UnsupportedOperationException.)))
-                    (permanently-delete-user [_ _] (throw (UnsupportedOperationException.)))
-                    (authenticate-user [_ _] (throw (UnsupportedOperationException.)))
-                    (validate-session [_ _] nil)
-                    (logout-user [_ _] false)
-                    (logout-user-everywhere [_ _] 0)
-                    (get-user-sessions [_ _] [])
-                    (list-audit-logs [_ _] {:audit-logs [] :total-count 0})
-                    (get-audit-logs-for-user [_ _ _] [])
-                    (change-password [_ _ _ _] false))
-          config {:active {:wagoe/settings {:user-limits {:max-users 1000}}}}
-          handler (web-handlers/user-detail-page-handler service config)
-          request {:path-params {:id (str (:id user))}}
-          response (handler request)]
-
-      (is (= 500 (:status response)))
-      (is (not (html-contains? response "Database error")))
-      (is (html-contains? response "error-generic")))))
+(deftest ^:unit the-user-page-redirects-to-the-admin-page
+  (let [id       (str (UUID/randomUUID))
+        location #(get-in (web-handlers/user-detail-redirect {:path-params {:id %}}) [:headers "Location"])]
+    (is (= 302 (:status (web-handlers/user-detail-redirect {:path-params {:id id}}))))
+    (is (= (str "/web/admin/users/" id) (location id)))
+    (is (= "/web/admin/users" (location "not-a-uuid")) "not an id: the list")))
 
 (deftest ^:contract create-user-page-handler-test
   (testing "renders create user page"
@@ -733,159 +676,12 @@
       (is (html-contains? response "User Fail User created"))
       (is (not (html-contains? response "welcome email sent"))))))
 
-(deftest ^:contract update-user-htmx-handler-test
-  (testing "updates user successfully and re-renders form with success banner"
-    (let [user (create-test-user {:name "Original Name"})
-          service (create-mock-service {(:id user) user})
-          config {:active {:wagoe/settings {:user-limits {:max-users 1000}}}}
-          handler (web-handlers/update-user-htmx-handler service config)
-          request {:path-params {:id (str (:id user))}
-                   :form-params {"name" "Updated Name"
-                                 "email" "updated@example.com"
-                                 "role" "admin"
-                                 "active" "true"}}
-          response (handler request)]
-
-      (is (= 200 (:status response)))
-      (is (= "text/html; charset=utf-8" (get-in response [:headers "Content-Type"])))
-      (is (has-header? response "HX-Trigger" "userUpdated"))
-      ;; The form, and a toast out of band
-      (is (html-contains? response "hx-swap-oob=\"beforeend:#toasts\""))
-      (is (html-contains? response "message-updated"))
-      (is (html-contains? response "Updated Name"))))
-
-  (testing "active as the form sends it: the checkbox's hidden false, then true when checked"
-    (doseq [[sent expected] [[["false" "true"] true] ["false" false] ["true" true]]]
-      (let [user     (create-test-user {})
-            written  (atom nil)
-            service  (reify ports/IUserService
-                       (get-user-by-id [_ _] user)
-                       (update-user-profile [_ data] (reset! written data) (merge user data)))]
-        ((web-handlers/update-user-htmx-handler service {})
-         {:path-params {:id (str (:id user))}
-          :form-params {"name" "Test User" "email" "test@example.com" "role" "user" "active" sent}})
-        (is (= expected (:active @written)) (pr-str sent)))))
-
-  (testing "returns validation errors for invalid data"
-    (let [user (create-test-user {})
-          service (create-mock-service {(:id user) user})
-          config {:active {:wagoe/settings {:user-limits {:max-users 1000}}}}
-          handler (web-handlers/update-user-htmx-handler service config)
-          request {:path-params {:id (str (:id user))}
-                   :form-params {"name" ""
-                                 "email" "invalid-email"}}
-          response (handler request)]
-
-      (is (= 400 (:status response)))))
-
-  (testing "returns error for invalid UUID"
-    (let [service (create-mock-service)
-          config {:active {:wagoe/settings {:user-limits {:max-users 1000}}}}
-          handler (web-handlers/update-user-htmx-handler service config)
-          request {:path-params {:id "not-a-uuid"}
-                   :form-params {"name" "Test"
-                                 "email" "test@example.com"}}
-          response (handler request)]
-
-      (is (= 400 (:status response)))
-      (is (html-contains? response "Invalid user ID"))))
-
-  (testing "handles service errors gracefully"
-    (let [user (create-test-user {})
-          service (reify ports/IUserService
-                    (register-or-authenticate-user [_ _ _] {:user nil :created? false :authenticated? false :auth-result nil})
-                    (claim-user-identity [_ _] {:mode :authenticated :user nil :created? false :authenticated? false :auth-result nil})
-                    ;; minimal no-op implementations for unused methods
-                    (register-user [_ _] (throw (UnsupportedOperationException.)))
-                    (get-user-by-id [_ _] user)
-                    (get-user-by-email [_ _] (throw (UnsupportedOperationException.)))
-                    (list-users [_ _] {:users [user] :total-count 1})
-                    (update-user-profile [_ _]
-                      (throw (Exception. "Database error")))
-                    (deactivate-user [_ _] (throw (UnsupportedOperationException.)))
-                    (permanently-delete-user [_ _] (throw (UnsupportedOperationException.)))
-                    (authenticate-user [_ _] (throw (UnsupportedOperationException.)))
-                    (validate-session [_ _] nil)
-                    (logout-user [_ _] false)
-                    (logout-user-everywhere [_ _] 0)
-                    (get-user-sessions [_ _] [])
-                    (list-audit-logs [_ _] {:audit-logs [] :total-count 0})
-                    (get-audit-logs-for-user [_ _ _] [])
-                    (change-password [_ _ _ _] false))
-          config {:active {:wagoe/settings {:user-limits {:max-users 1000}}}}
-          handler (web-handlers/update-user-htmx-handler service config)
-          request {:path-params {:id (str (:id user))}
-                   :form-params {"name" "Test User"
-                                 "email" "test@example.com"
-                                 "role" "user"
-                                 "active" "true"}}
-          response (handler request)]
-
-      (is (= 500 (:status response)))
-      (is (not (html-contains? response "Database error")))
-      (is (html-contains? response "error-generic")))))
-
-(deftest ^:contract delete-user-htmx-handler-test
-  (testing "deactivates user successfully and returns success message"
-    (let [user (create-test-user {})
-          service (create-mock-service {(:id user) user})
-          config {:active {:wagoe/settings {:user-limits {:max-users 1000}}}}
-          handler (web-handlers/delete-user-htmx-handler service config)
-          request {:path-params {:id (str (:id user))}}
-          response (handler request)]
-
-      (is (= 200 (:status response)))
-      (is (= "text/html; charset=utf-8" (get-in response [:headers "Content-Type"])))
-      (is (has-header? response "HX-Trigger" "userDeleted"))
-      (is (html-contains? response "message-deleted"))
-      (is (html-contains? response "/web/users"))))
-
-  (testing "returns error for invalid UUID"
-    (let [service (create-mock-service)
-          config {:active {:wagoe/settings {:user-limits {:max-users 1000}}}}
-          handler (web-handlers/delete-user-htmx-handler service config)
-          request {:path-params {:id "not-a-uuid"}}
-          response (handler request)]
-
-      (is (= 400 (:status response)))
-      (is (html-contains? response "Invalid user ID"))))
-
-  (testing "handles service errors"
-    (let [user (create-test-user {})
-          service (reify ports/IUserService
-                    (register-or-authenticate-user [_ _ _] {:user nil :created? false :authenticated? false :auth-result nil})
-                    (claim-user-identity [_ _] {:mode :authenticated :user nil :created? false :authenticated? false :auth-result nil})
-                    (register-user [_ _] nil)
-                    (get-user-by-id [_ _] nil)
-                    (get-user-by-email [_ _] nil)
-                    (list-users [_ _] nil)
-                    (update-user-profile [_ _] nil)
-                    (delete-user [_ _]
-                      (throw (Exception. "Cannot delete user with active sessions")))
-                    (permanently-delete-user [_ _] nil)
-                    (authenticate-user [_ _] nil)
-                    (validate-session [_ _] nil)
-                    (logout-user [_ _] nil)
-                    (logout-user-everywhere [_ _] nil)
-                    (get-user-sessions [_ _] nil)
-                    (list-audit-logs [_ _] nil)
-                    (get-audit-logs-for-user [_ _ _] nil)
-                    (change-password [_ _ _ _] nil))
-          config {:active {:wagoe/settings {:user-limits {:max-users 1000}}}}
-          handler (web-handlers/delete-user-htmx-handler service config)
-          request {:path-params {:id (str (:id user))}}
-          response (handler request)]
-
-      (is (= 500 (:status response)))
-      (is (not (html-contains? response "Cannot delete user with active sessions")))
-      (is (html-contains? response "error-generic")))))
-
 ;; =============================================================================
 ;; Integration Tests
 ;; =============================================================================
 
 (deftest ^:contract web-handlers-integration-test
-  (testing "complete workflow: list -> create -> view -> update -> delete"
+  (testing "complete workflow: list -> create"
     (let [service (create-mock-service)
           config {:active {:wagoe/settings {:user-limits {:max-users 1000}}}}
 
@@ -899,38 +695,12 @@
                                                          "email" "integration@example.com"
                                                          "password" "password123"
                                                          "role" "user"
-                                                         "active" "true"}})
+                                                         "active" "true"}})]
 
-          ;; Extract user ID from response (simplified - in reality would parse HTML)
-          created-users (:users (ports/list-users service {}))
-          user-id (str (:id (first created-users)))
-
-          ;; 3. View user detail
-          detail-handler (web-handlers/user-detail-page-handler service config)
-          detail-response (detail-handler {:path-params {:id user-id}})
-
-          ;; 4. Update user
-          update-handler (web-handlers/update-user-htmx-handler service config)
-          update-response (update-handler {:path-params {:id user-id}
-                                           :form-params {"name" "Updated Integration User"
-                                                         "email" "integration@example.com"
-                                                         "role" "admin"
-                                                         "active" "true"}})
-
-          ;; 5. Delete user
-          delete-handler (web-handlers/delete-user-htmx-handler service config)
-          delete-response (delete-handler {:path-params {:id user-id}})]
-
-      ;; Verify each step
       (is (= 200 (:status list-response)))
       (is (= 200 (:status create-response)))
       (is (html-contains? create-response "pendingToast"))
-      (is (= 200 (:status detail-response)))
-      (is (html-contains? detail-response "Integration User"))
-      (is (= 200 (:status update-response)))
-      (is (has-header? update-response "HX-Trigger" "userUpdated"))
-      (is (= 200 (:status delete-response)))
-      (is (has-header? delete-response "HX-Trigger" "userDeleted")))))
+      (is (= ["integration@example.com"] (map :email (:users (ports/list-users service {}))))))))
 
 (deftest ^:contract ^:security login-cookie-secure-attribute-test
   (testing "session-token cookie :secure follows config :secure-cookies?"
@@ -1087,18 +857,6 @@
       (let [svc (reify ports/IUserService
                   (list-users [_ _] (throw boom)))
             response ((web-handlers/users-page-handler svc {}) {})]
-        (is (= 500 (:status response)))
-        (is (not (html-contains? response "hunter2")))
-        (is (html-contains? response "error-generic"))))
-    (testing "admin user edit"
-      (let [user (create-test-user {})
-            svc  (reify ports/IUserService
-                   (get-user-by-id [_ _] user)
-                   (update-user-profile [_ _] (throw boom)))
-            response ((web-handlers/update-user-htmx-handler svc {})
-                      {:path-params {:id (str (:id user))}
-                       :form-params {"name" "Test User" "email" "test@example.com"
-                                     "role" "user" "active" "on"}})]
         (is (= 500 (:status response)))
         (is (not (html-contains? response "hunter2")))
         (is (html-contains? response "error-generic"))))
