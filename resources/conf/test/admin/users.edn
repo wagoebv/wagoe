@@ -1,5 +1,6 @@
 {:users
  {:label           "Users"
+  :icon            :users
   :list-fields     [:email :name :role :active :created-at]
   :search-fields   [:email :name]
   :hide-fields     #{:password-hash

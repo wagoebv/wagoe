@@ -32,7 +32,7 @@ for what is public API, what is internal, and how deprecations are announced.
 ### Added
 
 - **The admin dashboard has the sidebar's sections** (BOU-809), a card per sidebar item. A `:sidebar-hidden` entity
-  no longer gets a card.
+  no longer gets a card; add `:icon :users` to an existing `admin/users.edn` for the user icon.
 - **Administrator guide to users, groups, roles and rights** (BOU-793): *Managing access* in the guides, with task
   and troubleshooting pages.
 - **`bb upgrade authorization check|prepare|report|enforce`** (BOU-794) moves an existing app from `:off` to `:enforce`
