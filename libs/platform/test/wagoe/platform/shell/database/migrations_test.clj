@@ -480,6 +480,54 @@
                                                 (throw (ex-info "auto boom" {})))]
       (is (false? (migrations/auto-migrate))))))
 
+;; =============================================================================
+;; create-config — the shape migratus/create actually receives (BOU-271)
+;; =============================================================================
+
+;; `bb migrate create <name>` threw for every user who followed `bb migrate
+;; --help`:
+;;
+;;   java.lang.ClassCastException: class clojure.lang.PersistentVector cannot be
+;;   cast to class java.lang.String
+;;
+;; get-migration-config sets :migration-dir to the discovered *vector* of every
+;; migration directory on the classpath. up, status and rollback accept that;
+;; migratus/create casts it to String. So the defect was in the value handed to
+;; one call site, not in building the config — and a test that only exercised
+;; get-migration-config would pass while create stayed broken, which is what
+;; happened.
+
+(def ^:private create-config
+  #_{:clj-kondo/ignore [:deprecated-var]} migrations/create-config)
+
+(deftest ^:unit create-config-gives-migratus-a-single-directory-string
+  (testing "the vector the read config carries is narrowed to one string"
+    (let [read-config {:store :database
+                       :migration-dir ["migrations/" "wagoe/user/migrations/"]
+                       :db {:datasource ::fake}}
+          created     (create-config read-config)]
+      (is (string? (:migration-dir created))
+          "migratus/create casts :migration-dir to String — a vector throws")
+      (is (= migrations/project-migration-dir (:migration-dir created))
+          "new migrations belong in the project, not in a library directory")))
+
+  (testing "everything else is carried through untouched"
+    (let [read-config {:store :database
+                       :migration-dir ["migrations/"]
+                       :migration-table-name "schema_migrations"
+                       :db {:datasource ::fake}}
+          created     (create-config read-config)]
+      (is (= (dissoc read-config :migration-dir)
+             (dissoc created :migration-dir))
+          "create-config must only narrow the directory, not reshape the config")))
+
+  (testing "the project directory does not depend on discovery order"
+    ;; A dependency contributing a migration directory must not change where a
+    ;; user's own migration is written.
+    (is (= migrations/project-migration-dir
+           (:migration-dir (create-config
+                            {:migration-dir ["some/library/migrations/" "migrations/"]}))))))
+
 ;; BOU-274: migrations in two directories, only one of them read.
 ;;
 ;; `:migration-dir` is a name, not a path, and both reading and creating resolve

@@ -557,6 +557,16 @@
   ([db-config enabled-libs]
    (migratus-config (:datasource db-config) (migration-dirs enabled-libs))))
 
+(defn create-config
+  "Narrow a read config to `:migration-dir` = the project directory, the
+   single string `migratus/create` needs.
+
+   Deprecated: `create-migration` writes the files itself through
+   `write-migration-pair!` and no longer calls migratus/create."
+  {:deprecated "1.0.2"}
+  [read-config]
+  (assoc read-config :migration-dir project-migration-dir))
+
 (defn refuse-shadowed-migration-dirs!
   "Throw when migrations sit in a directory nothing reads.
 

@@ -245,6 +245,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Deprecated
 
+- **`wagoe.platform.shell.database.migrations/create-config`** (BOU-813): `create-migration` no longer calls
+  migratus/create, so nothing needs it; goes in 2.0. Call `create-migration`.
 - **`:require-role` in the admin config** (BOU-774): nothing reads it; boot warns outside `:off`, and it goes in 2.0.
   Drop it.
 - **Group grants, `:role :user` and OIDC `:default-role`** (BOU-771): grants move onto managed roles, their rows kept
