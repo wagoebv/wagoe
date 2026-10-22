@@ -81,12 +81,11 @@
   (if (map? v) (str/blank? (:filename v)) (and (string? v) (str/blank? v))))
 
 (defn- upload-bytes
-  "The content of a multipart file part, whichever store Ring decoded it to."
+  "The content of a multipart file part, which Ring stores in a temp file."
   [field-keyword v]
-  (cond
-    (bytes? (:bytes v))       (:bytes v)
-    (instance? File (:tempfile v)) (Files/readAllBytes (.toPath ^File (:tempfile v)))
-    :else (throw (ex-info "Not a file upload"
+  (if (instance? File (:tempfile v))
+    (Files/readAllBytes (.toPath ^File (:tempfile v)))
+    (throw (ex-info "Not a file upload"
                           {:type :validation-error
                            :field field-keyword
                            :message (str "Field '" (name field-keyword) "' must be an uploaded file")}))))
@@ -126,12 +125,15 @@
             normalized-value (if (vector? value)
                                (last value)
                                value)
+            ;; A file input left empty keeps the stored file
+            keep-stored? (and (= field-type :binary) (no-file? normalized-value))
 
              ; Convert string value to appropriate type
             typed-value (cond
+                          keep-stored? nil
+
                           (= field-type :binary)
-                          (when-not (no-file? normalized-value)
-                            (upload-bytes field-keyword normalized-value))
+                          (upload-bytes field-keyword normalized-value)
 
                            ; Empty strings become nil
                           (str/blank? normalized-value) nil
@@ -222,8 +224,7 @@
        ;; validation instead of being rejected (BOU-477). A field the form did
        ;; not submit is still absent, which is what makes a partial update
        ;; partial.
-       ;; …except a file input left empty, which keeps the stored file.
-        (if (and (= field-type :binary) (no-file? normalized-value))
+        (if keep-stored?
           acc
           (assoc acc field-keyword typed-value))))
     {}

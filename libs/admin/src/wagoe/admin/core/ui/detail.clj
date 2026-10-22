@@ -107,11 +107,11 @@
        (= widget-type :number-input)
        (ui/text-input field-name value
                       (merge {:type "number"
+                              :step (base/number-input-step field-type)
                               :placeholder placeholder
                               :required required?
                               :readonly readonly?
                               :class "form-control"}
-                             (when-let [step (base/number-input-step field-type)] {:step step})
                              (when min {:min min})
                              (when max {:max max})))
 

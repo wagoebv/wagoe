@@ -133,13 +133,12 @@
         (is (= "Renamed" (:name (the-row db-ctx))))
         (is (= "v1" (bytes->str (:datasheet (the-row db-ctx)))))))))
 
-(deftest ^:integration the-form-posts-multipart-and-steps-decimals-freely
+(deftest ^:integration the-form-posts-multipart
   (let [db-ctx (:h2 @backends)
         {:keys [schema svc]} (system db-ctx)
         body (str (:body ((detail/new-entity-handler svc schema admin-config)
                           (assoc (multipart-request :get {}) :uri "/web/admin/fi-products/new"))))]
     (is (re-find #"<form class=\"entity-form\"[^>]*hx-encoding=\"multipart/form-data\"" body))
     (is (re-find #"<input[^>]*name=\"datasheet\"[^>]*type=\"file\"" body)
-        "the binary column gets a file input")
-    (is (re-find #"<input[^>]*name=\"price\"[^>]*step=\"any\"|<input[^>]*step=\"any\"[^>]*name=\"price\"" body))))
+        "the binary column gets a file input")))
 

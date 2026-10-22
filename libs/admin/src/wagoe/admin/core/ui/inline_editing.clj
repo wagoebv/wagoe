@@ -139,12 +139,12 @@
 
        (= widget-type :number-input)
        [:input.inline-input
-        (cond-> {:type "number"
-                 :name (name field)
-                 :value (str value)
-                 :required required?
-                 :autofocus true}
-          step (assoc :step step))]
+        {:type "number"
+         :step step
+         :name (name field)
+         :value (str value)
+         :required required?
+         :autofocus true}]
 
        ; Default: text input
        :else
@@ -209,12 +209,12 @@
 
         (= widget-type :number-input)
         [:input.inline-input.error
-         (cond-> {:type "number"
-                  :name (name field)
-                  :value (str value)
-                  :required required?
-                  :autofocus true}
-           step (assoc :step step))]
+         {:type "number"
+          :step step
+          :name (name field)
+          :value (str value)
+          :required required?
+          :autofocus true}]
 
         ; Default: text input
         :else
