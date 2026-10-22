@@ -358,7 +358,7 @@
    The standard HTTP metrics are registered once here rather than per request:
    some adapters reset a counter when it is re-registered."
   [{:keys [logger metrics-emitter tracer error-reporter error-enricher cache config
-           csrf-config rate-limit-config]}]
+           csrf-config rate-limit-config error-page]}]
   (cond-> {:logger          logger
            :metrics-emitter metrics-emitter
            :metrics-handles (http-interceptors/register-http-metrics! metrics-emitter)
@@ -380,7 +380,11 @@
     ;; one) read as development wherever it ran. The config knows; pass it
     ;; (BOU-321). Absent rather than nil when there is no profile, so the
     ;; detector falls through to `wagoe.config/active-profile`.
-    (:wagoe/profile config) (assoc :environment (name (:wagoe/profile config)))))
+    (:wagoe/profile config) (assoc :environment (name (:wagoe/profile config)))
+
+    ;; (fn [request error] html), a module's, for the page a browser sees
+    ;; instead of an error body; the bare one without.
+    error-page (assoc :error-page error-page)))
 
 (defn- request-middleware
   "The middleware every request passes through, outermost first.
@@ -573,7 +577,7 @@
                       {:type :configuration-error :key :wagoe/authorization :value mode})))))
 
 (defmethod ig/init-key :wagoe/http-handler
-  [_ {:keys [module-routes logger metrics-emitter tracer error-reporter error-enricher config tenant-service db-context cache i18n i18n-middleware user-service request-capture? auth-middleware module-middleware extra-middleware router permission-registry rights]}]
+  [_ {:keys [module-routes logger metrics-emitter tracer error-reporter error-enricher config tenant-service db-context cache i18n i18n-middleware user-service request-capture? auth-middleware module-middleware extra-middleware router permission-registry rights error-page]}]
   (log/info "Initializing top-level HTTP handler")
   (when (empty? auth-middleware)
     (log/warn (str "No authentication middleware is wired (no user module?). "
@@ -632,7 +636,13 @@
                  :cache             cache
                  :config            config
                  :csrf-config       csrf-config
-                 :rate-limit-config rate-limit-config})
+                 :rate-limit-config rate-limit-config
+                 ;; Through the i18n middleware: a request answered outside
+                 ;; the router's middleware, an unknown path, has no catalogue.
+                 :error-page        (if (and error-page i18n-middleware)
+                                      (fn [request error]
+                                        ((i18n-middleware #(error-page % error)) request))
+                                      error-page)})
 
         ;; i18n middleware is built by the i18n lib and injected
         ;; (:wagoe/i18n-http-middleware), the shape BOU-200 established for
