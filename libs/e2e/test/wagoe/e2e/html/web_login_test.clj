@@ -87,7 +87,7 @@
                      (-> fx/*seed* :user :password))
       ;; Wait for the server redirect to complete at the dashboard
       (page/wait-for-url pg #".*/web/admin/$" {:timeout 10000.0})
-      (is (loc/is-visible? (page/locator pg ".admin-shell .entity-card-link[href='/web/profile']"))
+      (is (loc/is-visible? (page/locator pg ".admin-shell .dashboard-link[href='/web/profile']"))
           "a plain user's dashboard, in the shell, links to their profile")
       (is (zero? (loc/count-elements (page/locator pg ".entity-card-count")))
           "and shows no entity counts")

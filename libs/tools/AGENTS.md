@@ -425,7 +425,7 @@ bb install-hooks  # Sets git config core.hooksPath to .githooks
 ```bash
 bb i18n:find "Sign in"      # Find key by substring in catalogue + grep codebase
 bb i18n:find :user/sign-in  # Find by exact keyword
-bb i18n:scan                # Scan core/ui.clj files for unexternalised strings (CI gate)
+bb i18n:scan                # Scan core/ui.clj and core/ui/*.clj for unexternalised strings (CI gate)
 bb i18n:missing             # Report keys in en.edn missing from other locales
 bb i18n:unused              # Report catalogue keys not referenced in source
 ```

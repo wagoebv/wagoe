@@ -10,6 +10,7 @@
      (routes)   — HTTP routes of the running system
      (system)   — the running system map
      (config)   — the running config; (config :k) prints one section
+     (explain-entity :e) — how the admin displays an entity's fields
      (fix!)     — apply the suggested fix for the last error
      (commands) — the full list
 
@@ -92,6 +93,8 @@
 (defn routes
   ([]           (call 'wagoe.devtools.shell.project-repl/routes))
   ([filter-key] (call 'wagoe.devtools.shell.project-repl/routes filter-key)))
+
+(defn explain-entity [entity] (call 'wagoe.devtools.shell.project-repl/explain-entity entity))
 
 (defn fix!
   ([]          (call 'wagoe.devtools.shell.project-repl/fix!))

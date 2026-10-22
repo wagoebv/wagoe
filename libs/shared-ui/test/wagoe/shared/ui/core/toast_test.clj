@@ -2,13 +2,14 @@
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [hiccup2.core :as h]
+            [wagoe.shared.ui.core.components :as components]
             [wagoe.shared.ui.core.layout :as layout]
             [wagoe.shared.ui.core.toast :as toast]))
 
 (defn- html [hiccup] (str (h/html hiccup)))
 
 (deftest ^:unit a-toast-has-its-type-and-dismisses-itself
-  (let [out (html (toast/toast {:type :success :message "Saved"}))]
+  (let [out (components/render-html (toast/toast {:type :success :message "Saved"}))]
     (is (str/includes? out "class=\"alert alert-success shadow-lg\""))
     (is (str/includes? out "x-data=\"toast(5000)\""))
     (is (str/includes? out "<span>Saved</span>"))

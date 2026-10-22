@@ -209,7 +209,7 @@
   [request e log-message]
   (log/error e log-message)
   (html-response request
-                 (layout/pilot-page-layout "Error" (ui/error-message [:t :common/error-generic]))
+                 (layout/pilot-page-layout [:t :common/error-title] (ui/error-message [:t :common/error-generic]))
                  500))
 
 (defn- toast-text
@@ -382,13 +382,13 @@
         (if user-result
           (html-response request (user-ui/user-detail-page user-result page-opts))
           (html-response request
-                         (layout/error-layout 404 "User Not Found"
-                                              "The requested user could not be found.")
+                         (layout/error-layout 404 [:t :user/page-user-not-found-title]
+                                              [:t :user/page-user-not-found-message])
                          404)))
       (catch IllegalArgumentException _
         (html-response request
-                       (layout/error-layout 400 "Invalid User ID"
-                                            "User ID must be a valid UUID.")
+                       (layout/error-layout 400 [:t :user/page-invalid-user-id-title]
+                                            [:t :user/page-invalid-user-id-message])
                        400))
       (catch Exception e
         (server-error-page request e "Error in user-detail-page-handler")))))
@@ -889,8 +889,8 @@
                            :action action})))
         (html-response request (apply user-ui/users-table-fragment (users-list user-service qp))))
       (catch IllegalArgumentException _
-        (-> (html-response request (ui/error-message "Invalid user ID in bulk operation") 400)
-            (with-error-toast request "Invalid user ID in bulk operation")))
+        (-> (html-response request (ui/error-message [:t :user/error-invalid-user-id-bulk]) 400)
+            (with-error-toast request :user/error-invalid-user-id-bulk)))
 
       (catch clojure.lang.ExceptionInfo e
         (let [data (ex-data e)]
@@ -1049,7 +1049,7 @@
             ;; Fetch existing user and merge updates
             (let [existing-user (user-ports/get-user-by-id user-service uuid)]
               (if-not existing-user
-                (html-response request (ui/error-message "User not found") 404)
+                (html-response request (ui/error-message [:t :user/error-user-not-found]) 404)
                 (let [;; Only the submitted fields: writing back the rest of a
                       ;; cached user failed validation on its empty optionals.
                       user-data (into {:id uuid}
@@ -1068,7 +1068,7 @@
                 (refused request e)
                 (server-error request e "Error updating user"))))))
       (catch IllegalArgumentException _
-        (html-response request (ui/error-message "Invalid user ID") 400)))))
+        (html-response request (ui/error-message [:t :user/error-invalid-user-id]) 400)))))
 
 (defn delete-user-htmx-handler
   "HTMX handler for deleting a user (DELETE /web/users/:id).
@@ -1091,7 +1091,7 @@
                        200
                        {"HX-Trigger" "userDeleted"}))
       (catch IllegalArgumentException _
-        (html-response request (ui/error-message "Invalid user ID") 400))
+        (html-response request (ui/error-message [:t :user/error-invalid-user-id]) 400))
       (catch Exception e
         (if (user-core/refusal? e)
           (refused request e)
@@ -1119,16 +1119,16 @@
         ;; Check if current user is admin
         (if-not (= :admin (:role current-user))
           (-> (html-response request
-                             (layout/error-layout 403 "Access Denied"
-                                                  "Only administrators can permanently delete users.")
+                             (layout/error-layout 403 [:t :user/page-access-denied-title]
+                                                  [:t :user/error-delete-admin-only])
                              403)
-              (with-error-toast request "Only administrators can permanently delete users."))
+              (with-error-toast request :user/error-delete-admin-only))
           (do
             (user-ports/permanently-delete-user user-service uuid)
             (redirect-with-toast request "/web/users" :success :user/toast-user-deleted))))
       (catch IllegalArgumentException _
-        (-> (html-response request (ui/error-message "Invalid user ID") 400)
-            (with-error-toast request "Invalid user ID")))
+        (-> (html-response request (ui/error-message [:t :user/error-invalid-user-id]) 400)
+            (with-error-toast request :user/error-invalid-user-id)))
       (catch Exception e
         (-> (server-error request e "Error permanently deleting user")
             (with-error-toast request :common/error-generic))))))
@@ -1166,11 +1166,11 @@
         (if user
           (html-response request (user-ui/user-sessions-page user sessions current-session-id opts))
           (html-response request
-                         (layout/error-layout 404 "User Not Found" "The requested user could not be found.")
+                         (layout/error-layout 404 [:t :user/page-user-not-found-title] [:t :user/page-user-not-found-message])
                          404)))
       (catch IllegalArgumentException e
         (log/error e "Invalid user ID format - user-id:" (get-in request [:path-params :id]) "path-params:" (:path-params request))
-        (html-response request (ui/error-message "Invalid user ID") 400))
+        (html-response request (ui/error-message [:t :user/error-invalid-user-id]) 400))
       (catch Exception e
         (server-error request e "Error loading user sessions page")))))
 
@@ -1198,8 +1198,8 @@
           (redirect-with-toast request sessions-url :success :user/toast-session-revoked)
           (redirect-with-toast request sessions-url :error :user/toast-session-not-found)))
       (catch IllegalArgumentException _
-        (-> (html-response request (ui/error-message "Invalid session") 400)
-            (with-error-toast request "Invalid session")))
+        (-> (html-response request (ui/error-message [:t :user/error-invalid-session]) 400)
+            (with-error-toast request :user/error-invalid-session)))
       (catch Exception e
         (-> (server-error request e "Error revoking session")
             (with-error-toast request :common/error-generic))))))
@@ -1225,8 +1225,8 @@
                                            (when keep-current? (get-in request [:session :id])))
         (redirect-with-toast request (str "/web/users/" user-id "/sessions") :success :user/toast-sessions-revoked))
       (catch IllegalArgumentException _
-        (-> (html-response request (ui/error-message "Invalid user ID") 400)
-            (with-error-toast request "Invalid user ID")))
+        (-> (html-response request (ui/error-message [:t :user/error-invalid-user-id]) 400)
+            (with-error-toast request :user/error-invalid-user-id)))
       (catch Exception e
         (-> (server-error request e "Error revoking all sessions")
             (with-error-toast request :common/error-generic))))))
@@ -1389,8 +1389,8 @@
             :else
             (html-response request (profile-ui/profile-page user mfa-status page-opts)))
           (html-response request
-                         (layout/error-layout 404 "Profile Not Found"
-                                              "Your profile could not be loaded.")
+                         (layout/error-layout 404 [:t :user/page-profile-not-found-title]
+                                              [:t :user/page-profile-not-found-message])
                          404)))
       (catch Exception e
         (server-error-page request e "Error in profile-page-handler")))))
@@ -1415,7 +1415,7 @@
             user (user-ports/get-user-by-id user-service user-id)]
         (if user
           (html-response request (profile-ui/profile-edit-form user))
-          (html-response request (ui/error-message "User not found") 404)))
+          (html-response request (ui/error-message [:t :user/error-user-not-found]) 404)))
       (catch Exception e
         (server-error request e "Error in profile-edit-form-handler")))))
 
@@ -1429,7 +1429,7 @@
             user (user-ports/get-user-by-id user-service user-id)]
         (if user
           (html-response request (profile-ui/profile-info-fragment user))
-          (html-response request (ui/error-message "User not found") 404)))
+          (html-response request (ui/error-message [:t :user/error-user-not-found]) 404)))
       (catch Exception e
         (server-error request e "Error in profile-info-fragment-handler")))))
 
@@ -1490,7 +1490,7 @@
             user (user-ports/get-user-by-id user-service user-id)]
         (if user
           (html-response request (profile-ui/preferences-edit-form user))
-          (html-response request (ui/error-message "User not found") 404)))
+          (html-response request (ui/error-message [:t :user/error-user-not-found]) 404)))
       (catch Exception e
         (server-error request e "Error in preferences-edit-form-handler")))))
 
@@ -1504,7 +1504,7 @@
             user (user-ports/get-user-by-id user-service user-id)]
         (if user
           (html-response request (profile-ui/preferences-fragment user))
-          (html-response request (ui/error-message "User not found") 404)))
+          (html-response request (ui/error-message [:t :user/error-user-not-found]) 404)))
       (catch Exception e
         (server-error request e "Error in preferences-fragment-handler")))))
 
@@ -1540,7 +1540,7 @@
                                (profile-ui/preferences-edit-form user (field-errors (:errors (ex-data e))))
                                400)
                 (server-error request e "Error updating preferences"))))
-          (html-response request (ui/error-message "User not found") 404)))
+          (html-response request (ui/error-message [:t :user/error-user-not-found]) 404)))
       (catch Exception e
         (server-error request e "Error in preferences-edit-handler")))))
 
@@ -1623,7 +1623,7 @@
                                  400
                                  htmx-no-cache-headers)
                   :user-not-found
-                  (html-response request (ui/error-message "User not found") 404)
+                  (html-response request (ui/error-message [:t :user/error-user-not-found]) 404)
                   ;; Default error: the detail goes to the log, not the page.
                   (do (log/error e "Error changing password")
                       (html-response request (ui/error-message [:t :common/error-generic]) 500)))))
@@ -1742,7 +1742,7 @@
                                                             {:verification-code ["Invalid verification code. Please try again."]})
                                400))))
           ;; No setup data in form
-          (html-response request (ui/error-message "MFA setup data missing. Please start again.") 400)))
+          (html-response request (ui/error-message [:t :user/error-mfa-setup-missing]) 400)))
       (catch Exception e
         (server-error request e "Error in mfa-verify-handler")))))
 

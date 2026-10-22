@@ -293,7 +293,7 @@
         (let [src   (slurp (io/file tmp "dev/user.clj"))
               forms (read-string (str "[" src "]"))
               defs  (set (keep #(when (and (seq? %) (= 'defn (first %))) (second %)) forms))]
-          (doseq [helper '[go reset halt status modules routes config commands fix!]]
+          (doseq [helper '[go reset halt status modules routes config commands fix! explain-entity]]
             (is (contains? defs helper) (str "dev/user.clj must define (" helper ")")))))
 
       (testing "and it survives devtools not being on the classpath"
