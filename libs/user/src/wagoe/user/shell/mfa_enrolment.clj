@@ -1,8 +1,10 @@
 (ns wagoe.user.shell.mfa-enrolment
   "The ticket a user whose password was right, but who must set up a second
    factor before signing in, carries to the setup page: sealed in a cookie,
-   so it proves the password without a session."
-  (:require [wagoe.user.shell.auth :as auth]
+   so it proves the password without a session. It holds a fingerprint of the
+   password, so changing the password voids it."
+  (:require [wagoe.user.ports :as ports]
+            [wagoe.user.shell.auth :as auth]
             [wagoe.user.shell.sealed :as sealed]))
 
 (def ttl-seconds
@@ -13,16 +15,19 @@
   (sealed/derive-key "wagoe.user.mfa-enrolment" (auth/get-jwt-secret)))
 
 (defn ticket
-  "A sealed ticket to enrol `user`, who returns to `return-to` afterwards."
-  [user return-to]
+  "A sealed ticket to enrol `user`, whose password has `fingerprint`
+   (`auth/password-fingerprint`), returning to `return-to` afterwards."
+  [user fingerprint return-to]
   (sealed/seal (ticket-key) :mfa-enrolment
-               (cond-> {:user-id (str (:id user)) :email (:email user)}
+               (cond-> {:user-id (str (:id user)) :email (:email user) :pw fingerprint}
                  return-to (assoc :return-to return-to))
                ttl-seconds))
 
 (defn claims
-  "{:user-id :email :return-to} of a valid ticket, else nil."
-  [value]
+  "{:user-id :email :return-to} of a valid ticket whose user still has the
+   password it was issued for, else nil."
+  [value user-repository]
   (when-let [c (sealed/unseal (ticket-key) :mfa-enrolment value)]
-    (when-let [id (parse-uuid (str (:user-id c)))]
-      (-> (select-keys c [:email :return-to]) (assoc :user-id id)))))
+    (when-let [user (some->> (parse-uuid (str (:user-id c))) (ports/find-user-by-id user-repository))]
+      (when (and (some? (:pw c)) (= (:pw c) (auth/password-fingerprint user)))
+        (-> (select-keys c [:email :return-to]) (assoc :user-id (:id user)))))))

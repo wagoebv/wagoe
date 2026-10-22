@@ -351,6 +351,17 @@
       (catch Exception e
         (log/warn e "Could not audit an MFA disable" {:user-id (:id user)})))))
 
+(defn audit-enrolment!
+  "Record a second factor set up at sign-in with the password alone; a failed
+   write is logged and does not undo it. `context`: :ip-address :user-agent."
+  [mfa-service user-id email {:keys [ip-address user-agent]}]
+  (when-let [audit-repository (:audit-repository mfa-service)]
+    (try
+      (ports/create-audit-log audit-repository
+                              (audit-core/mfa-enrolled-audit-entry user-id email ip-address user-agent))
+      (catch Exception e
+        (log/warn e "Could not audit an MFA enrolment" {:user-id user-id})))))
+
 (defn disable-mfa
   "Turn MFA off for `user-id` once they prove it is them: `proof` is
    `{:password …}` or `{:code …}`, a current TOTP or backup code, the only

@@ -282,8 +282,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
-- **Sign-in leads a user to set up two-factor authentication when the app's `:mfa-required?` hook requires it and they
-  have none** (BOU-815), after an admin reset for one. Nothing to change.
+- **After an admin reset, a user in an app whose `:mfa-required?` hook requires MFA sets it up again at sign-in**
+  (BOU-815), within 72 hours (`:auth :mfa-reset-enrolment-hours`). Anyone else without MFA is still refused.
 - **Tenant, search and workflow show a signed-in user they refuse the 403 page** (BOU-815), not the login form; so
   does `access/forbidden-response` in an app.
 - **Access admin gaps** (BOU-795): a signed-in non-admin gets a 403 page on Groups, not the login form; scopes show

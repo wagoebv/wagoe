@@ -16,6 +16,8 @@
             [wagoe.user.shell.hooks :as hooks]
             [wagoe.user.shell.lockout :as lockout]
             [wagoe.user.shell.mfa :as mfa-shell]
+            [buddy.core.codecs :as codecs]
+            [buddy.core.mac :as mac]
             [buddy.hashers :as hashers]
             [buddy.sign.jwt :as jwt]
             [clojure.string :as str]
@@ -105,6 +107,12 @@
   []
   (get-jwt-secret)
   nil)
+
+(defn password-fingerprint
+  "What changes when `user`'s password does, without revealing its hash: an
+   enrolment ticket carries it, and a changed password voids the ticket."
+  [user]
+  (codecs/bytes->hex (mac/hash (str (:password-hash user)) {:key (get-jwt-secret) :alg :hmac+sha256})))
 
 (defn create-jwt-token
   "Shell function: Create JWT token for authenticated user.
@@ -334,16 +342,22 @@
                       :error {:type    :authentication-failed
                               :message "Invalid credentials"}})
 
-                   ;; Required, but the user has no second factor to give
+                   ;; Required, but the user has no second factor to give.
+                   ;; The password alone may set one up only just after an
+                   ;; admin reset, or on registering.
                    (:requires-enrolment? mfa-requirement)
-                   (do
+                   (let [enrol? (or (:registration? login-context)
+                                    (mfa-core/reset-enrolment-open?
+                                     user current-time
+                                     (get auth-config :mfa-reset-enrolment-hours
+                                          mfa-core/default-reset-enrolment-hours)))]
                      (lockout/release-attempt! user-repository (:id user) claim)
-                     (log/warn "MFA required but not enrolled" {:email email})
-                     {:success? false
-                      :error {:type    :mfa-enrolment-required
-                              :message (:reason mfa-requirement)}
-                      ;; Who to enrol: the password was right.
-                      :user (user-core/without-credentials user)})
+                     (log/warn "MFA required but not enrolled" {:email email :may-enrol? enrol?})
+                     (cond-> {:success? false
+                              :error {:type    :mfa-enrolment-required
+                                      :message (:reason mfa-requirement)}}
+                       enrol? (assoc :user (user-core/without-credentials user)
+                                     :password-fingerprint (password-fingerprint user))))
 
                    ;; MFA required but not provided
                    (and (:requires-mfa? mfa-requirement)

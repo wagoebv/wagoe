@@ -106,7 +106,20 @@
    :mfa-secret mfa-secret
    :mfa-backup-codes backup-codes
    :mfa-backup-codes-used []
-   :mfa-enabled-at current-time})
+   :mfa-enabled-at current-time
+   ;; Spent: the reset's window to set one up closes
+   :mfa-reset-at nil})
+
+(def default-reset-enrolment-hours
+  "How long after an admin reset a user may set up a new second factor at
+   sign-in with the password alone."
+  72)
+
+(defn reset-enrolment-open?
+  "Whether an admin reset `user`'s second factor less than `hours` before
+   `now`, so the password alone may set up a new one."
+  [user now hours]
+  (boolean (some-> (:mfa-reset-at user) (.plus (java.time.Duration/ofHours hours)) (.isAfter now))))
 
 (defn prepare-mfa-disablement
   "Pure function: Prepare user updates for MFA disablement.

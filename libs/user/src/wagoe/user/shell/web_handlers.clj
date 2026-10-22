@@ -441,6 +441,7 @@
   (-> (response/redirect user-ui/mfa-enrolment-path :see-other)
       (assoc-in [:cookies enrolment-cookie]
                 (enrolment-ticket-cookie config (enrolment/ticket (:user auth-result)
+                                                                  (:password-fingerprint auth-result)
                                                                   (when (redirect/local-path? return-to) return-to))))))
 
 (defn login-page-handler
@@ -601,8 +602,8 @@
            (log/warn "Failed to parse backup codes" {:error (.getMessage e)})
            nil))))
 
-(defn- enrolment-claims [request]
-  (enrolment/claims (get-in request [:cookies enrolment-cookie :value])))
+(defn- enrolment-claims [mfa-service request]
+  (enrolment/claims (get-in request [:cookies enrolment-cookie :value]) (:user-repository mfa-service)))
 
 (defn- enrolment-expired
   "Back to sign in: the ticket is gone, or the second factor is on already."
@@ -615,7 +616,7 @@
    requires a second factor of, who has none."
   [mfa-service config]
   (fn [request]
-    (let [claims (enrolment-claims request)
+    (let [claims (enrolment-claims mfa-service request)
           setup  (when claims (mfa/setup-mfa mfa-service (:user-id claims)))]
       (if (:success? setup)
         (html-response request
@@ -627,7 +628,7 @@
    on. The user then signs in with it."
   [mfa-service config]
   (fn [request]
-    (if-let [claims (enrolment-claims request)]
+    (if-let [claims (enrolment-claims mfa-service request)]
       (let [form         (:form-params request)
             secret       (get form "secret")
             ;; Parsed only once the ticket admits the caller: the route is public.
@@ -645,8 +646,9 @@
                                        (get form "verification-code"))]
             (cond
               (:success? result)
-              (-> (html-response request (user-ui/mfa-enrolment-done-page backup-codes opts))
-                  (assoc-in [:cookies enrolment-cookie] enrolment-cookie-cleared))
+              (do (mfa/audit-enrolment! mfa-service (:user-id claims) (:email claims) (login-context request))
+                  (-> (html-response request (user-ui/mfa-enrolment-done-page backup-codes opts))
+                      (assoc-in [:cookies enrolment-cookie] enrolment-cookie-cleared)))
 
               (= :invalid-code (get-in result [:error :type]))
               (html-response request
@@ -863,6 +865,9 @@
                 ;; Automatically authenticate the newly registered user
                 auth-data {:email (:email user-result)
                            :password (get prepared-data :password)
+                           ;; The account was made just now: it may set up a
+                           ;; second factor the app requires with the password.
+                           :registration? true
                            :remember false
                            :ip-address (client-ip/request-ip request)
                            :user-agent (get-in request [:headers "user-agent"])}
