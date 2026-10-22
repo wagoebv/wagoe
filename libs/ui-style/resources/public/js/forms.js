@@ -10,17 +10,16 @@
 
   // Any one of these marks a body as an answer meant for the page: a re-rendered
   // form, or the message `ui/error-message` renders, which carries none of the
-  // form markup and was thrown away.
-  const FORM_MARKERS = '.field-errors, .validation-errors, .form-field, .alert-error';
+  // form markup and was thrown away, or admin's inline edit refused.
+  const FORM_MARKERS = '.field-errors, .validation-errors, .form-field, .alert-error, .inline-edit-error';
 
   // htmx marks [45].. as `swap: false` — right for a 500 or a 404, wrong for a
   // failed form POST, which this application answers with the same form
   // re-rendered and a 400. Opted in per response rather than globally: the body
   // must carry field markup, so a JSON error or an error page is left alone.
-  // Nothing else picks those up — the only htmx:responseError listener is in
-  // admin-ux.js, it is not in the base bundle, and it restores the table
-  // rather than reporting anything. A handler that wants to be seen answers
-  // with the form (BOU-381).
+  // Nothing else shows them — the only htmx:responseError listener is in
+  // admin-ux.js, not in the base bundle, and it shows a generic error toast.
+  // A handler that wants its message seen answers with the form (BOU-381).
   document.body.addEventListener('htmx:beforeSwap', function(event) {
     const status = event.detail.xhr.status;
     // 429: a locked account answers the password form with it (BOU-785).

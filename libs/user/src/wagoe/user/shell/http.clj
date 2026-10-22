@@ -22,10 +22,8 @@
    Web UI Endpoints (mounted under /web):
    - GET    /web/users           - Users listing page
    - GET    /web/users/new       - Create user page
-   - GET    /web/users/:id       - User detail page
+   - GET    /web/users/:id       - Redirect to /web/admin/users/:id
    - POST   /web/users           - Create user (HTMX fragment)
-   - PUT    /web/users/:id       - Update user (HTMX fragment)
-   - DELETE /web/users/:id       - Delete user (HTMX fragment)
    
    Static Assets (mounted at root):
    - GET    /css/*                - CSS assets
@@ -501,6 +499,31 @@
              :tags       ["mfa"]
              :description "Returns whether MFA is enabled and remaining backup codes"}}]]))
 
+(defn- require-platform-admin-middleware
+  "An admin outside any tenant only: the export carries the user's audit trail,
+   which only a platform admin reads (/web/audit)."
+  [handler]
+  (fn [request]
+    (if (access/platform-admin? (:user request))
+      (handler request)
+      (user-middleware/create-forbidden-response "Platform admin required" :insufficient-role request))))
+
+(defn- account-recovery-middleware
+  "Lets through whom `web-handlers/account-recovery-allowed?` admits, the rule
+   the sessions page shows its Sign-in panel by."
+  [handler]
+  (fn [request]
+    (if (web-handlers/account-recovery-allowed? (:user request) (get-in request [:path-params :id]))
+      (handler request)
+      (user-middleware/create-forbidden-response "Platform admin required, on another user's account"
+                                                 :insufficient-role request))))
+
+(defn- account-recovery-route [path auth-middleware handler summary]
+  [path {:no-doc        true
+         :authorization :self
+         :middleware    [auth-middleware account-recovery-middleware]
+         :post          {:handler handler :summary summary}}])
+
 (defn web-routes
   "The module's web UI routes, as Reitit data.
 
@@ -579,28 +602,15 @@
                :interceptors ['wagoe.user.shell.http-interceptors/require-authenticated
                               'wagoe.user.shell.http-interceptors/require-admin]
                :summary "Bulk user operations (HTMX)"}}]
+      ;; The admin's edit page is the user's page now
       ["/users/:id"
        {:no-doc     true
         :authorization :self
         :middleware [auth-middleware]
-        :get    {:handler (web-handlers/user-detail-page-handler user-service config)
-                 ;; Admin-only: this is the user-MANAGEMENT detail page
-                 ;; (edit/deactivate/delete controls). Self-service lives at
-                 ;; /web/profile, so a non-admin has no reason to load it —
-                 ;; not even for their own id.
-                 :interceptors ['wagoe.user.shell.http-interceptors/require-authenticated
-                                'wagoe.user.shell.http-interceptors/require-admin]
-                 :summary "User detail page (admin)"}
-        :put    {:handler (web-handlers/update-user-htmx-handler user-service config)
-                 ;; Admin-only: updates include role — self-or-admin would
-                 ;; allow privilege escalation via self-edit.
-                 :interceptors ['wagoe.user.shell.http-interceptors/require-authenticated
-                                'wagoe.user.shell.http-interceptors/require-admin]
-                 :summary "Update user (HTMX)"}
-        :delete {:handler (web-handlers/delete-user-htmx-handler user-service config)
-                 :interceptors ['wagoe.user.shell.http-interceptors/require-authenticated
-                                'wagoe.user.shell.http-interceptors/require-admin]
-                 :summary "Delete user (HTMX)"}}]
+        :get {:handler      web-handlers/user-detail-redirect
+              :interceptors ['wagoe.user.shell.http-interceptors/require-authenticated
+                             'wagoe.user.shell.http-interceptors/require-admin]
+              :summary      "Redirect to the user's admin page"}}]
       ["/users/:id/hard-delete"
        {:no-doc     true
         :authorization :self
@@ -638,6 +648,12 @@
                :interceptors ['wagoe.user.shell.http-interceptors/require-authenticated
                               'wagoe.user.shell.http-interceptors/require-self-or-admin]
                :summary "Revoke specific session"}}]
+      (account-recovery-route "/users/:id/unlock" auth-middleware
+                              (web-handlers/unlock-user-handler user-service config)
+                              "End a user's sign-in lockout (admin)")
+      (account-recovery-route "/users/:id/mfa/reset" auth-middleware
+                              (web-handlers/reset-mfa-handler user-service config)
+                              "Turn off a user's second factor (admin)")
       ;; Audit trail routes
       ["/audit"
        {:no-doc     true
@@ -896,15 +912,6 @@
           profile (or (user-ports/get-user-by-id user-service user-id) (throw (user-not-found user-id)))]
       (audit-export! audit-repository request profile)
       (privacy/request-export-job! export-jobs {:type :user :id user-id} (get-in request [:user :id])))))
-
-(defn- require-platform-admin-middleware
-  "An admin outside any tenant only: the export carries the user's audit trail,
-   which only a platform admin reads (/web/audit)."
-  [handler]
-  (fn [request]
-    (if (access/platform-admin? (:user request))
-      (handler request)
-      (user-middleware/create-forbidden-response "Platform admin required" :insufficient-role request))))
 
 (defn export-routes
   "Data export: a user's own at GET /api/v1/me/export and /web/profile/export,

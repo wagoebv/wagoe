@@ -79,6 +79,7 @@ Two migrations with one id cannot both run, so every migration command and `:mig
 Give your migration a new id: rename its `.up` and `.down` files to a fresh timestamp.
 
 New framework migration ids end in an odd second (`…120017`), so a hand-picked round timestamp such as `…120000` will not collide with one.
+`bb scaffold` and `bb migrate create` always pick an even second.
 
 === If your database already applied one of the pair
 

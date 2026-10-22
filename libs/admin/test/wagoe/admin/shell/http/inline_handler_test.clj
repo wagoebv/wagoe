@@ -99,6 +99,14 @@
         (is (= "entityUpdated" (get-in resp [:headers "HX-Trigger"])))
         (is (= (cell (list-body svc) field) (str/trim (:body resp))))))))
 
+(deftest ^:unit inline-refusal-stays-inside-the-cell-test
+  (let [resp ((inline/update-field-handler (service) schema {})
+              (inline-request :patch :amount {"amount" "forty"}))]
+    (is (= 422 (:status resp)))
+    (is (str/includes? (:body resp) "inline-edit-error"))
+    (is (= "innerHTML" (get-in resp [:headers "HX-Reswap"]))
+        "the form targets closest td; replacing the td leaves it none")))
+
 (deftest ^:unit inline-title-cell-links-back-to-the-list-test
   (let [svc    (service)
         listed (list-body svc)

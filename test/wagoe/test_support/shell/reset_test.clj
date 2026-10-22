@@ -14,6 +14,7 @@
             [wagoe.observability.metrics.shell.adapters.no-op :as noop-metrics]
             [wagoe.tenant.shell.persistence :as tenant-persistence]
             [wagoe.tenant.shell.service :as tenant-service]
+            [wagoe.user.core.group :as group]
             [wagoe.user.shell.persistence :as user-persistence]
             [wagoe.user.shell.service :as user-service]
             [next.jdbc :as jdbc]
@@ -86,6 +87,15 @@
 
     (is (zero? (count-rows *datasource* "tenants"))
         "truncate-all! removed the row from tenants")))
+
+(deftest ^:integration truncate-all!-keeps-everyone-test
+  (let [now (Timestamp/from (Instant/now))]
+    (doseq [[id n] [[(str group/everyone-id) group/everyone-name] [(str (UUID/randomUUID)) "Sales"]]]
+      (jdbc/execute! *datasource* ["INSERT INTO user_groups (id, name, created_at) VALUES (?, ?, ?)" id n now])))
+  (sut/truncate-all! *datasource*)
+  (is (= [(str group/everyone-id)]
+         (mapv (comp str first vals) (jdbc/execute! *datasource* ["SELECT id FROM user_groups"])))
+      "the boot creates Everyone, so a reset must not delete it"))
 
 (deftest ^:integration seed-baseline!-creates-entities-test
   (testing "seed-baseline! persists baseline entities via production services"

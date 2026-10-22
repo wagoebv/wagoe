@@ -93,7 +93,7 @@
       (let [{:keys [body headers]} (answer {"hx-request" "true" "hx-target" "entity-table-container"})]
         (is (re-find #"^\s*<div[^>]*id=\"entity-table-container\"" body))
         (is (not (re-find #"<html" body)))
-        (is (re-find #"<span[^>]*hx-swap-oob=\"true\"[^>]*>100</span>" body))
+        (is (re-find #"<span[^>]*hx-swap-oob=\"true\"[^>]*id=\"record-count-badge\"" body))
         (is (= "HX-Request, HX-Target" (get headers "Vary")))))
     (testing "the filter container gets the filter summary too"
       (is (re-find #"^\s*<div[^>]*id=\"filter-table-container\""

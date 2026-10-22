@@ -360,6 +360,13 @@
       (is (str/includes? (:body ((handler crud/lookup-handler)
                                  (request :get "hm-orders" :query {"q" "acme look" "field" "scope-order-id"})))
                          "id=\"scope-order-id-option-0\"")))
+    (testing "?id= answers that row's label, for a scope shown by its id"
+      (is (= "<span>Acme lookup</span>" (:body ((handler crud/lookup-handler)
+                                                (request :get "hm-orders" :query {"id" (str acme)})))))
+      (let [evil (create-named-order! "<script>x</script>")]
+        (is (not (str/includes? (:body ((handler crud/lookup-handler)
+                                        (request :get "hm-orders" :query {"id" (str evil)})))
+                                "<script>")))))
     (testing "a user who may not view the entity is refused"
       (is (= :forbidden (:type (ex-data (try (lookup {:id (random-uuid) :role :user :active true} "a")
                                              (catch Exception e e)))))))))

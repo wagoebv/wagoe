@@ -765,9 +765,13 @@
                         {:type :configuration-error :writer k})))))
 
 (defn- writable-data
-  "`data` without the read-only fields and the primary key."
+  "`data` without the read-only fields, those a field's own `:readonly` makes
+   read-only too, and the primary key. A disabled checkbox still sends its
+   hidden \"false\"."
   [entity-config data]
-  (apply dissoc data (conj (:readonly-fields entity-config #{}) (:primary-key entity-config :id))))
+  (apply dissoc data (:primary-key entity-config :id)
+         (concat (:readonly-fields entity-config)
+                 (keep (fn [[k field]] (when (:readonly field) k)) (:fields entity-config)))))
 
 (defn- written-update!
   "Update through `writer`, and with it the record's `links`, in one
@@ -1186,7 +1190,9 @@
      (fn [{:keys [_params]}]
        (let [entity-config (ports/get-entity-config schema-provider entity-name)
              sort-field (:sort options)
-             sort-dir (:sort-dir options)
+             ;; The default direction goes with the default field only
+             sort-dir (or (:sort-dir options)
+                          (when-not sort-field (:default-sort-dir entity-config)))
              default-sort (:default-sort entity-config :id)
 
              {:keys [from-clause select-clause join-clause field-aliases]} (resolve-query-config entity-config)
@@ -1197,7 +1203,13 @@
 
              ; Search, filters and soft delete, shared with the overview (ADR-040)
              where-clause (list-where (:adapter db-ctx) entity-config field-aliases options)
-             ordering (build-ordering resolved-sort-field sort-dir resolved-default-sort)
+             primary-key (:primary-key entity-config :id)
+             ;; created-at or a name repeats; without the key as tie-breaker
+             ;; a row can show on two pages, or on none
+             ordering (cond-> (build-ordering resolved-sort-field sort-dir resolved-default-sort)
+                        (and (not= (or sort-field default-sort) primary-key)
+                             (contains? (:fields entity-config) primary-key))
+                        (conj [(get field-aliases primary-key primary-key) :asc]))
              pagination (build-pagination options config)
 
               ; Build list query
@@ -1232,7 +1244,9 @@
           :total-count total-count
           :page-size page-size
           :page-number page-number
-          :total-pages total-pages}))
+          :total-pages total-pages
+          :sort (or sort-field default-sort)
+          :sort-dir (or sort-dir :asc)}))
      db-ctx))
 
   (get-entity [_ entity-name id]
@@ -1402,7 +1416,7 @@
                          :field field
                          :entity entity-name})))
 
-      (when (contains? (set (:readonly-fields entity-config)) field)
+      (when (or (contains? (set (:readonly-fields entity-config)) field) (:readonly field-config))
         (throw (ex-info "Cannot update readonly field"
                         {:type :readonly-field
                          :field field

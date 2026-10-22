@@ -6,6 +6,7 @@
             [wagoe.scaffolder.schema :as schema]
             [wagoe.scaffolder.core.template :as template]
             [wagoe.scaffolder.core.generators :as generators]
+            [wagoe.core.utils.migration-id :as migration-id]
             [clojure.java.io :as io]
             [clojure.string :as str]
             [malli.core :as m]
@@ -79,31 +80,9 @@
                :let  [d (resolve-path root dir)]
                :when (.isDirectory d)
                f     (.listFiles d)
-               :let  [m (re-find #"^(\d+)-" (.getName f))]
-               :when m]
-           (second m)))))
-
-(defn- next-migration-id
-  "First id at or after `now` that is not in `used`, as a string.
-
-   Second precision alone is not unique: two scaffold operations within the
-   same second produce different filenames sharing one id, and migratus throws
-   \"Multiple migrations with id N\" — which fails the entire migration run, not
-   just the offending pair. So step forward until the id is free.
-
-   Stepping into the next second rather than adding sub-second precision is
-   deliberate. Every id already in this repo, and every id `migratus create`
-   generates, is 14 digits; a 17-digit id is ~1000x larger numerically, so it
-   would sort after all 14-digit ones forever and any later hand-made migration
-   would sort before it. That trades a rare collision for a permanent ordering
-   hazard.
-
-   Pure: takes the used set and the current timestamp rather than reading either."
-  [used now]
-  (loop [id (Long/parseLong now)]
-    (if (contains? used (str id))
-      (recur (inc id))
-      (str id))))
+               :let  [id (migration-id/id-of (.getName f))]
+               :when id]
+           id))))
 
 (defn- get-next-migration-number
   "Timestamp id for a new migration, e.g. 20260801120000.
@@ -116,9 +95,8 @@
    branch."
   ([] (get-next-migration-number "."))
   ([output-dir]
-   (next-migration-id (existing-migration-ids output-dir)
-                      (.format (java.time.LocalDateTime/now java.time.ZoneOffset/UTC)
-                               (java.time.format.DateTimeFormatter/ofPattern "yyyyMMddHHmmss")))))
+   (migration-id/next-id (existing-migration-ids output-dir)
+                         (java.time.LocalDateTime/now java.time.ZoneOffset/UTC))))
 
 (defn- existing-migration-for
   "The id of this module's create-<table> migration, if one is already there.
@@ -137,12 +115,11 @@
   "One fresh migration id per table, in order and all distinct. With `force?` a
    table's existing create migration keeps its id, as for a single entity."
   [output-dir force? tables]
-  (let [now (.format (java.time.LocalDateTime/now java.time.ZoneOffset/UTC)
-                     (java.time.format.DateTimeFormatter/ofPattern "yyyyMMddHHmmss"))
+  (let [now (java.time.LocalDateTime/now java.time.ZoneOffset/UTC)
         used (existing-migration-ids output-dir)]
     (reduce (fn [ids table]
               (conj ids (or (when force? (existing-migration-for output-dir table))
-                            (next-migration-id (into used ids) now))))
+                            (migration-id/next-id (into used ids) now))))
             []
             tables)))
 

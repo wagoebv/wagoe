@@ -20,8 +20,10 @@
             [wagoe.shared.ui.core.form :as form]
             [wagoe.shared.ui.core.htmx :as htmx]
             [wagoe.shared.ui.core.toast :as toast]
+            [wagoe.platform.core.http.access :as access]
             [wagoe.platform.core.http.client-ip :as client-ip]
             [wagoe.platform.shell.web.table :as web-table]
+            [wagoe.user.core.authentication :as auth-core]
             [wagoe.user.core.oidc :as oidc-core]
             [wagoe.user.core.password-policy :as password-policy]
             [wagoe.user.core.ui :as user-ui]
@@ -363,35 +365,12 @@
           (server-error request e "Error in users-page-handler")
           (server-error-page request e "Error in users-page-handler"))))))
 
-(defn user-detail-page-handler
-  "Handler for individual user detail page (GET /web/users/:id).
-   
-   Args:
-     user-service: User service instance
-     config: Application configuration map
-     
-   Returns:
-     Ring handler function"
-  [user-service _config]
-  (fn [request]
-    (try
-      (let [user-id (get-in request [:path-params :id])
-            user-result (user-ports/get-user-by-id user-service (UUID/fromString user-id))
-            page-opts {:user (get request :user)
-                       :flash (get request :flash)}]
-        (if user-result
-          (html-response request (user-ui/user-detail-page user-result page-opts))
-          (html-response request
-                         (layout/error-layout 404 [:t :user/page-user-not-found-title]
-                                              [:t :user/page-user-not-found-message])
-                         404)))
-      (catch IllegalArgumentException _
-        (html-response request
-                       (layout/error-layout 400 [:t :user/page-invalid-user-id-title]
-                                            [:t :user/page-invalid-user-id-message])
-                       400))
-      (catch Exception e
-        (server-error-page request e "Error in user-detail-page-handler")))))
+(defn user-detail-redirect
+  "GET /web/users/:id, the user's page before the admin's edit page replaced
+   it: a redirect there, so old links keep working. Not an id: the list."
+  [request]
+  (response/redirect (str "/web/admin/users"
+                          (some->> (parse-uuid (get-in request [:path-params :id])) (str "/")))))
 
 (defn create-user-page-handler
   "Handler for the create user page (GET /web/users/new).
@@ -535,7 +514,8 @@
               (let [error-message (cond
                                     ;; Only a lockout carries :retry-after, whatever its :reason.
                                     (:retry-after auth-result)
-                                    "Too many failed attempts, please try again in 15 minutes"
+                                    (let [n (auth-core/minutes-locked (:retry-after auth-result) (current-time))]
+                                      [:t :user/error-locked {:n n} n])
 
                                     (= :mfa-verification-failed (:reason auth-result))
                                     "Invalid MFA code"
@@ -1013,90 +993,6 @@
           (catch Exception e
             (server-error request e "Create user failed")))))))
 
-(defn update-user-htmx-handler
-  "HTMX handler for updating a user (PUT /web/users/:id).
-   
-   Args:
-     user-service: User service instance
-     config: Application configuration map
-     
-   Returns:
-     Ring handler function"
-  [user-service _config]
-  (fn [request]
-    (try
-      (let [user-id (get-in request [:path-params :id])
-            uuid (UUID/fromString user-id)
-            form-data (:form-params request)
-            _ (log/info "Update user form data" {:fields (keys form-data)})
-            ;; Prepare data with kebab-case keyword keys for validation
-            ;; The checkbox sends "false" from its hidden input and, checked,
-            ;; "true" after it; the Deactivate/Reactivate buttons send one value
-            prepared-data {:name (get form-data "name")
-                           :email (get form-data "email")
-                           :role (when-let [role (get form-data "role")] (keyword role))
-                           :active (contains? #{"on" "true"} (form/value form-data :active))}
-            _ (log/info "Prepared data for update" {:prepared-data prepared-data})
-            [valid? validation-errors _] (validate-request-data user-schema/UpdateUserRequest prepared-data)]
-        (if-not valid?
-          ;; The errors were discarded here, so the form swapped back in said
-          ;; nothing about why the save was refused (BOU-381).
-          (html-response request
-                         (user-ui/user-detail-form (assoc prepared-data :id uuid)
-                                                   validation-errors)
-                         400)
-          (try
-            ;; Fetch existing user and merge updates
-            (let [existing-user (user-ports/get-user-by-id user-service uuid)]
-              (if-not existing-user
-                (html-response request (ui/error-message [:t :user/error-user-not-found]) 404)
-                (let [;; Only the submitted fields: writing back the rest of a
-                      ;; cached user failed validation on its empty optionals.
-                      user-data (into {:id uuid}
-                                      (remove (comp nil? val))
-                                      (select-keys prepared-data [:name :email :role :active]))
-                      user-result (user-ports/update-user-profile user-service user-data)]
-                  ;; The form re-rendered, and the toast out of band
-                  (html-response
-                   request
-                   (list (user-ui/user-detail-form user-result nil)
-                         (toast/oob-toast {:type :success :message [:t :user/message-updated]}))
-                   200
-                   {"HX-Trigger" "userUpdated"}))))
-            (catch Exception e
-              (if (user-core/refusal? e)
-                (refused request e)
-                (server-error request e "Error updating user"))))))
-      (catch IllegalArgumentException _
-        (html-response request (ui/error-message [:t :user/error-invalid-user-id]) 400)))))
-
-(defn delete-user-htmx-handler
-  "HTMX handler for deleting a user (DELETE /web/users/:id).
-   
-   A soft delete: the user leaves the list. Deactivating is an update.
-   
-   Args:
-     user-service: User service instance
-     config: Application configuration map
-     
-   Returns:
-     Ring handler function"
-  [user-service _config]
-  (fn [request]
-    (try
-      (let [user-id (get-in request [:path-params :id])
-            uuid (UUID/fromString user-id)]
-        (user-ports/delete-user user-service uuid)
-        (html-response request (user-ui/user-deleted-success user-id)
-                       200
-                       {"HX-Trigger" "userDeleted"}))
-      (catch IllegalArgumentException _
-        (html-response request (ui/error-message [:t :user/error-invalid-user-id]) 400))
-      (catch Exception e
-        (if (user-core/refusal? e)
-          (refused request e)
-          (server-error request e "Error deleting user"))))))
-
 (defn hard-delete-user-handler
   "Handler for permanently deleting a user (POST /web/users/:id/hard-delete).
    
@@ -1125,7 +1021,7 @@
               (with-error-toast request :user/error-delete-admin-only))
           (do
             (user-ports/permanently-delete-user user-service uuid)
-            (redirect-with-toast request "/web/users" :success :user/toast-user-deleted))))
+            (redirect-with-toast request "/web/admin/users" :success :user/toast-user-deleted))))
       (catch IllegalArgumentException _
         (-> (html-response request (ui/error-message [:t :user/error-invalid-user-id]) 400)
             (with-error-toast request :user/error-invalid-user-id)))
@@ -1136,6 +1032,14 @@
 ;; =============================================================================
 ;; Session Management Handlers
 ;; =============================================================================
+
+(defn account-recovery-allowed?
+  "Whether `actor` may unlock user `target-id` or reset their second factor: a
+   platform admin, as for the audit trail, and not on their own account, whose
+   second factor the profile turns off with a password or code."
+  [actor target-id]
+  (and (access/platform-admin? actor)
+       (not (access/same-id? (:id actor) target-id))))
 
 (defn user-sessions-page-handler
   "Handler for user sessions management page (GET /web/users/:id/sessions).
@@ -1160,6 +1064,7 @@
             _ (log/info "Sessions retrieved:" {:count (count sessions)})
             current-session-id (get-in request [:session :id])
             opts {:user (:user request)
+                  :account-recovery? (account-recovery-allowed? (:user request) user-id)
                   :current-time (current-time)
                   :zone-id (current-zone-id)
                   :flash (:flash request)}]
@@ -1230,6 +1135,39 @@
       (catch Exception e
         (-> (server-error request e "Error revoking all sessions")
             (with-error-toast request :common/error-generic))))))
+
+(defn- account-recovery-handler
+  "POST to `(change user-service user-id)`, an IUserAccountRecovery call,
+   back to the user's sessions page with `done` or `nothing`, the toast for
+   true or false."
+  [user-service change done nothing]
+  (fn [request]
+    (if-let [user-id (parse-uuid (str (get-in request [:path-params :id])))]
+      (try
+        (let [back (str "/web/users/" user-id "/sessions")]
+          (if (change user-service user-id)
+            (redirect-with-toast request back :success done)
+            (redirect-with-toast request back :info nothing)))
+        (catch clojure.lang.ExceptionInfo e
+          (if (= :user-not-found (:type (ex-data e)))
+            (-> (html-response request (ui/error-message [:t :user.rights/user-not-found]) 404)
+                (with-error-toast request :user.rights/user-not-found))
+            (-> (server-error request e "Account recovery failed")
+                (with-error-toast request :common/error-generic)))))
+      (-> (html-response request (ui/error-message "Invalid user ID") 400)
+          (with-error-toast request "Invalid user ID")))))
+
+(defn unlock-user-handler
+  "POST /web/users/:id/unlock: ends the user's sign-in lockout (admin)."
+  [user-service _config]
+  (account-recovery-handler user-service user-ports/unlock-user
+                            :user/toast-account-unlocked :user/toast-account-not-locked))
+
+(defn reset-mfa-handler
+  "POST /web/users/:id/mfa/reset: turns off the user's second factor (admin)."
+  [user-service _config]
+  (account-recovery-handler user-service user-ports/reset-user-mfa
+                            :user/toast-mfa-reset :user/toast-mfa-not-on))
 
 ;; =============================================================================
 ;; Audit Trail Handlers
