@@ -54,7 +54,8 @@
   "The toolbar's record count. A table fragment carries it out of band, so
    it follows search and filters."
   [total-count]
-  [:span {:id "record-count-badge" :class "record-count-badge"} (str total-count)])
+  [:span {:id "record-count-badge" :class "record-count-badge"}
+   [:t :admin/entity-card-count {:count total-count} total-count]])
 
 (defn- workflow-column?
   "An entity with a workflow gets a column for its state (BOU-563)."
@@ -462,8 +463,9 @@
        ;; Compact toolbar: title + search + actions in one bar
      [:div.table-toolbar-container
       [:div.toolbar-row-actions
-       ;; The topbar names the page; here only the count
-       [:div.record-meta
+       ;; The topbar names the page; here only the count. Live here and not
+       ;; on the badge, which a swap replaces: a new live region is not read.
+       [:div.record-meta {:aria-live "polite"}
         (record-count-badge total-count)]
 
        (when has-search?

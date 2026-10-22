@@ -280,6 +280,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **Admin list accessibility** (BOU-803): sort headers are column headers with a sort button and `aria-sort`, checkboxes
   are named, and focus returns after the drawer or a sort/page swap. Tests clicking `th.sortable-header` click its button.
+- **Admin: a failed htmx request said nothing** (BOU-802); it now shows an error toast with a reference, and a refused
+  inline edit shows its message. Nothing to change.
+- **Admin lists start newest first** (BOU-802): `created-at` desc, else the title field, and `:default-sort-dir` is
+  honoured. Set `:default-sort` to keep another order; the record count now reads "25 records".
 - **`bb scaffold` could pick a framework migration's id** (BOU-812), and boot refused. Scaffolded ids now end in an even
   second; framework ids end in an odd one.
 - **Page chrome and user error pages were English in every locale** (BOU-805): navigation, theme toggle, toasts and
