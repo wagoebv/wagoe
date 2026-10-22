@@ -526,7 +526,7 @@
      :hide-fields hidden-field-names
      :readonly-fields readonly-field-names
      :default-sort primary-key
-     :default-sort-dir :desc
+     :default-sort-dir :asc
      ;; Hard delete unless the config says `:soft-delete true`, as the README
      ;; promises. A deleted_at column alone used to switch it on (BOU-563).
      :soft-delete false}))
