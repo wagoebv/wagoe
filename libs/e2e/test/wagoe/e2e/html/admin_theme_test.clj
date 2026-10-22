@@ -10,11 +10,8 @@
 (use-fixtures :each fx/with-fresh-seed)
 
 (def ^:private colours
-  "Resolved primary and surface, and the avatar's background and text, with
-   <html data-theme> set to the argument (removed for null)."
-  "(t) => {
-     const h = document.documentElement;
-     if (t) h.setAttribute('data-theme', t); else h.removeAttribute('data-theme');
+  "Resolved primary and surface, and the avatar's background and text."
+  "() => {
      const probe = document.createElement('div');
      probe.style.cssText = 'background:var(--color-primary);color:var(--surface-0)';
      document.body.appendChild(probe);
@@ -28,11 +25,22 @@
 (def ^:private dark  ["rgb(95, 211, 182)" "rgb(20, 35, 30)" "rgb(224, 165, 121)" "rgb(15, 28, 24)"])
 (def ^:private light ["rgb(14, 124, 102)" "rgb(255, 255, 255)" "rgb(224, 165, 121)" "rgb(15, 28, 24)"])
 
+(defn- show-with!
+  "Reload with the OS preferring `os` and the toggle's stored choice `theme`
+   (nil: never toggled, so init.js follows the OS)."
+  [pg os theme]
+  (page/emulate-media! pg {:color-scheme os})
+  (page/evaluate pg "(t) => t ? localStorage.setItem('wagoe-theme', t) : localStorage.removeItem('wagoe-theme')"
+                 theme)
+  (page/reload pg))
+
 (deftest ^:integration ^:e2e the-admin-palette-wins-over-the-os-colour-scheme
   (spel/with-testing-page [pg]
     (admin/login-as-admin! pg fx/*seed*)
     (doseq [[os theme expected] [[:dark nil dark]  [:dark "dark" dark]  [:dark "light" light]
                                  [:light nil light] [:light "dark" dark] [:light "light" light]]]
-      (testing (str "OS " (name os) ", data-theme " (or theme "unset"))
-        (page/emulate-media! pg {:color-scheme os})
-        (is (= expected (page/evaluate pg colours theme)))))))
+      (testing (str "OS " (name os) ", theme " (or theme "not chosen"))
+        (show-with! pg os theme)
+        (is (= (= os :dark) (page/evaluate pg "matchMedia('(prefers-color-scheme: dark)').matches"))
+            "the OS preference took")
+        (is (= expected (page/evaluate pg colours)))))))

@@ -268,8 +268,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
-- **Admin dark mode showed the old navy palette when the OS was dark** (BOU-797), and the topbar initials were
-  invisible. Nothing to change.
+- **Admin dark mode showed the old navy palette when the OS was dark** (BOU-797); the topbar initials and the
+  unsaved-changes dot were invisible. A theme file's `:root` now also wins over an OS-dark preference.
 - **The admin sidebar fell back to closed** (BOU-796): it is now open or closed, changed only by its one toggle; the pin
   and hover-expand are gone. A browser that pinned it closed keeps it closed.
 - **Admin: a required yes/no field could not be saved unticked** (BOU-793), so a user could not be deactivated

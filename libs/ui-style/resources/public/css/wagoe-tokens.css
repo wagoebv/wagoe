@@ -452,9 +452,10 @@
   --sidebar-border: var(--border-default);
 }
 
-/* System preference dark mode */
+/* System preference dark mode, for a page init.js has not given a data-theme.
+   Matching [data-theme="dark"] too let this outrank every theme file's :root. */
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
+  :root:not([data-theme]) {
     --color-primary:       #5b8fbf;
     --color-primary-hover: #7ba8d4;
     --color-primary-active: #4a7aaa;

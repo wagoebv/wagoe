@@ -25,9 +25,7 @@
 [data-theme="light"] { color-scheme: light; }
 [data-theme="dark"]  { color-scheme: dark; }
 
-/* Doubled to 0,2,0: the OS-dark blocks in wagoe-tokens.css and daisyUI are
-   :root:not(...), and a plain :root lost to them. This wins by loading last. */
-:root:root {
+:root {
   /* wagoe.org */
   --wg-ink:          #0F1C18;   /* dark green: chrome */
   --wg-teal:         #5FD3B6;   /* accent on dark */
@@ -43,6 +41,9 @@
   --color-base-content:      light-dark(#15201C, #E6EEEB);
   --color-primary:           light-dark(#0E7C66, #5FD3B6);
   --color-primary-content:   light-dark(#FFFFFF, #0F1C18);
+  /* wagoe-tokens.css hard-codes navy for these; app.css hovers primary buttons with it */
+  --color-primary-hover:     color-mix(in oklab, var(--color-primary), black 12%);
+  --color-primary-light:     var(--accent-primary-light);
   --color-secondary:         light-dark(#9A5B26, var(--wg-copper));
   --color-secondary-content: light-dark(#FFFFFF, #0F1C18);
   --color-accent:            var(--wg-copper);
