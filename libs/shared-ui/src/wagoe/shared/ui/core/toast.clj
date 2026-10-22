@@ -3,6 +3,7 @@
    response adds to it out of band. The `toast` Alpine component in
    components.js dismisses them."
   (:require [cheshire.core :as json]
+            [wagoe.platform.core.http.error-pages :as error-pages]
             [wagoe.shared.ui.core.alpine :as alpine]))
 
 (def region-id "toasts")
@@ -85,5 +86,4 @@
   "Failed `response` with `message` as an error toast: htmx swaps no 4xx/5xx
    body, so a button's request would fail silently."
   [response message]
-  (assoc-in response [:headers "HX-Trigger"]
-            (header-json {:showToast {:type :error :message message}})))
+  (assoc-in response [:headers "HX-Trigger"] (error-pages/toast-trigger message)))
