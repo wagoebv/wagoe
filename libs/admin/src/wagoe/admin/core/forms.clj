@@ -89,7 +89,7 @@
   (every? (fn [[field v]]
             (let [v (if (vector? v) (last v) v)]
               (or (= :boolean (get-in rel [:entity-config :fields (keyword field) :type]))
-                  (if (map? v) (no-file? v) (str/blank? (str v))))))
+                  (no-file? v) (str/blank? (str v)))))
           values))
 
 (defn filled-rows

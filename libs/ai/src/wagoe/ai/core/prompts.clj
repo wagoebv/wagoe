@@ -497,6 +497,7 @@ Rules:
 - :widget is optional; omit it unless the default is wrong. When set it is one of :text-input,
   :email-input, :password-input, :number-input, :checkbox, :select, :multiselect, :textarea,
   :date-input, :datetime-input, :file-input, :color-input, :url-input, :hidden
+- :file-input is for a :binary field (a BLOB or BYTEA column) only; the admin refuses it on any other
 - Use only the keys shown here; the admin refuses an unknown key at startup
 - A date without a time of day (issue date, due date, birthday) is :date; :instant is a timestamp
 - Quantities, counts and amounts in cents are :int; :decimal is for fractional amounts

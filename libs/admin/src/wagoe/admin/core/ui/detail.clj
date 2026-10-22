@@ -209,7 +209,7 @@
           (when stored?
             [:small.file-stored [:t :admin/file-stored {:n value}]])
           (when (and stored? (not required?) (not readonly?))
-            [:label.file-remove {:class "file-remove flex items-center gap-2 mt-1"}
+            [:label {:class "file-remove flex items-center gap-2 mt-1"}
              [:input {:type "checkbox" :class "checkbox checkbox-sm"
                       :name forms/remove-file-param :value (name field-name)}]
              [:span [:t :admin/file-remove]]])))

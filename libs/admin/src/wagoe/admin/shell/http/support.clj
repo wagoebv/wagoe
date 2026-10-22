@@ -264,7 +264,8 @@
               (catch clojure.lang.ExceptionInfo e
                 (let [{:keys [type field message]} (ex-data e)]
                   (if (= :validation-error type)
-                    [(assoc data field (if (vector? value) (last value) value))
+                    ;; A file part is not shown again: it would print its temp file
+                    [(assoc data field (let [v (if (vector? value) (last value) value)] (when-not (map? v) v)))
                      (assoc errors field [message])]
                     (throw e))))))
           [{} {}]

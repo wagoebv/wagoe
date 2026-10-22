@@ -500,10 +500,11 @@
 
 (defn- file-size
   "A binary column's size in bytes, however it was read: as its size, as
-   bytes, or as H2's java.sql.Blob."
+   bytes, as H2's java.sql.Blob, or as text SQLite stored in a BLOB column."
   [v]
   (cond (bytes? v)                  (alength ^bytes v)
         (instance? java.sql.Blob v) (.length ^java.sql.Blob v)
+        (string? v)                 (alength (.getBytes ^String v "UTF-8"))
         :else                       (long v)))
 
 (defn- typed-record
