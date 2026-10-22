@@ -153,8 +153,8 @@
 
    Library-contributed directories are read from, never written to: a migration
    you author belongs to your project, not to a dependency. Kept as a single
-   string because Migratus wants one directory when creating, and because
-   `create-migration` must not be handed the whole discovered vector (BOU-271)."
+   string because new files go to one directory, not the whole discovered
+   vector (BOU-271)."
   "migrations/")
 
 ;; There is deliberately no `resource-migration-dir` constant here any more.
@@ -835,9 +835,7 @@
      name: Migration name (e.g., 'add-user-table')
 
    Returns:
-     Map with :up and :down file paths
-
-   Note: This creates timestamped migration files in migrations/ directory"
+     Map with :success, :message and the :directory written to"
   [name]
   (log/info "Creating new migration" {:name name})
   (try
@@ -853,10 +851,20 @@
     ;; first migration created that directory and landed there, while the
     ;; scaffolder kept writing to the project root (BOU-274).
     ;;
-    ;; A split that already exists is refused before this, by the check in
-    ;; `get-migration-config` below.
-    (when-not (with-resolved-dir #(capturing-source % project-migration-dir))
-      (ensure-project-migration-dir!))
+    ;; A split that already exists is refused just below. A jar cannot take
+    ;; the file, and one written to `migrations/` instead would never be read.
+    (with-resolved-dir
+      (fn [resolved]
+        (cond
+          (instance? java.util.jar.JarFile resolved)
+          (throw (ex-info (str "'" project-migration-dir "' resolves to "
+                               (capturing-source resolved project-migration-dir)
+                               ", which cannot be written to, so a new migration would never be read.")
+                          {:type      :migration-dir-conflict
+                           :read-from (capturing-source resolved project-migration-dir)}))
+
+          (nil? (capturing-source resolved project-migration-dir))
+          (ensure-project-migration-dir!))))
     (refuse-shadowed-migration-dirs!)
     ;; Resolved after the mkdir above, which may have just created the
     ;; directory that now answers to the name. The CLI prints it and tells the

@@ -747,7 +747,6 @@
   (testing "resources/migrations wins, and is what gets reported"
     (let [calls (atom [])]
       (with-redefs [migrations/resolved-migration-dir (fn [& _] (io/file "resources/migrations"))
-                    migrations/get-migration-config (fn [] {:migration-dir ["migrations/"]})
                     migrations/ensure-project-migration-dir!
                     (fn [& _] (swap! calls conj :made-dir))
                     migrations/write-migration-pair! (fn [& _] (swap! calls conj :created))]
@@ -761,7 +760,6 @@
   (testing "without a resources directory the project directory is used and reported"
     (let [calls (atom [])]
       (with-redefs [migrations/resolved-migration-dir (fn [& _] (io/file migrations/project-migration-dir))
-                    migrations/get-migration-config (fn [] {:migration-dir ["migrations/"]})
                     migrations/ensure-project-migration-dir!
                     (fn [& _] (swap! calls conj :made-dir))
                     migrations/write-migration-pair! (fn [dir n] (swap! calls conj [:created dir n]))]
@@ -783,6 +781,19 @@
                             (migrations/create-migration "add-widgets")))]
         (is (= :migration-dir-conflict (:type (ex-data ex)))
             "creating must not add to a set of migrations nothing will read"))))
+
+  (testing "a jar capturing the name refuses rather than write files nothing reads"
+    (with-temp-dir
+      (fn [root]
+        (let [jar (io/file root "lib.jar")]
+          (with-open [out (java.util.jar.JarOutputStream. (io/output-stream jar))]
+            (.putNextEntry out (java.util.jar.JarEntry. "migrations/"))
+            (.closeEntry out))
+          (with-redefs [migrations/resolved-migration-dir (fn [& _] (java.util.jar.JarFile. jar))
+                        migrations/write-migration-pair! (fn [& _] (throw (ex-info "must not write" {})))]
+            (let [ex (is (thrown? clojure.lang.ExceptionInfo
+                                  (migrations/create-migration "add-widgets")))]
+              (is (= :migration-dir-conflict (:type (ex-data ex))))))))))
 
   (testing "create-destination reports the resolved source, not a fixed string"
     (with-temp-dir
