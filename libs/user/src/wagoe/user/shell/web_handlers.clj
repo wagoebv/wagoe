@@ -20,6 +20,7 @@
             [wagoe.shared.ui.core.form :as form]
             [wagoe.shared.ui.core.htmx :as htmx]
             [wagoe.shared.ui.core.toast :as toast]
+            [wagoe.platform.core.http.access :as access]
             [wagoe.platform.core.http.client-ip :as client-ip]
             [wagoe.platform.shell.web.table :as web-table]
             [wagoe.user.core.authentication :as auth-core]
@@ -1139,6 +1140,15 @@
 ;; Session Management Handlers
 ;; =============================================================================
 
+(defn account-recovery-allowed?
+  "Whether `user` may unlock a user or reset their second factor: the role
+   Admin, which under :wagoe/authorization :enforce makes a platform admin
+   only without a tenant."
+  [config user]
+  (if (= :enforce (get-in config [:active :wagoe/authorization :mode]))
+    (access/platform-admin? user)
+    (= :admin (some-> (:role user) keyword))))
+
 (defn user-sessions-page-handler
   "Handler for user sessions management page (GET /web/users/:id/sessions).
    
@@ -1151,7 +1161,7 @@
      
    Returns:
      Ring handler function"
-  [user-service _config]
+  [user-service config]
   (fn [request]
     (try
       (let [user-id (get-in request [:path-params :id])
@@ -1162,6 +1172,7 @@
             _ (log/info "Sessions retrieved:" {:count (count sessions)})
             current-session-id (get-in request [:session :id])
             opts {:user (:user request)
+                  :account-recovery? (account-recovery-allowed? config (:user request))
                   :current-time (current-time)
                   :zone-id (current-zone-id)
                   :flash (:flash request)}]

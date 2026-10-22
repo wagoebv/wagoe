@@ -97,7 +97,6 @@
   [retry-after current-time]
   (max 1 (long (Math/ceil (/ (.toMillis (Duration/between current-time retry-after)) 60000.0)))))
 
-
 (defn prepare-successful-login-updates
   "Pure function: Prepare user updates for successful login.
    

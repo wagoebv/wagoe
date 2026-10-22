@@ -511,13 +511,14 @@
       (user-middleware/create-forbidden-response "Platform admin required" :insufficient-role request))))
 
 (defn- account-admin-middleware
-  "Who may unlock a user or reset their second factor: the role Admin, which
-   under :wagoe/authorization :enforce makes a platform admin only without a
-   tenant."
+  "Lets through whom `web-handlers/account-recovery-allowed?` admits, the rule
+   the sessions page shows its Sign-in panel by."
   [config]
-  (if (= :enforce (get-in config [:active :wagoe/authorization :mode]))
-    require-platform-admin-middleware
-    user-middleware/require-admin-middleware))
+  (fn [handler]
+    (fn [request]
+      (if (web-handlers/account-recovery-allowed? config (:user request))
+        (handler request)
+        (user-middleware/create-forbidden-response "Admin role required" :insufficient-role request)))))
 
 (defn- account-recovery-route [path auth-middleware config handler summary]
   [path {:no-doc        true

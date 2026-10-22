@@ -667,7 +667,7 @@
 
 (deftest ^:unit an-admin-can-unlock-and-reset-from-the-sessions-page
   (let [now    (java.time.Instant/now)
-        admin  {:user {:role :admin} :current-time now}
+        admin  {:user {:role :admin} :account-recovery? true :current-time now}
         locked (assoc sample-user :lockout-until (.plusSeconds now 600) :mfa-enabled true)
         posts  #(set (keep :hx-post (attrs-of % :hx-post)))]
     (is (= #{"/web/users/123/unlock" "/web/users/123/mfa/reset"}

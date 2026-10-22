@@ -1406,7 +1406,7 @@
                          :field field
                          :entity entity-name})))
 
-      (when (contains? (set (:readonly-fields entity-config)) field)
+      (when (or (contains? (set (:readonly-fields entity-config)) field) (:readonly field-config))
         (throw (ex-info "Cannot update readonly field"
                         {:type :readonly-field
                          :field field

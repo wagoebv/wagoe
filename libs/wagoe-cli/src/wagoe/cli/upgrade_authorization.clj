@@ -80,7 +80,7 @@
   [text dir]
   (let [entities (some-> (loc-at text [:active :wagoe/admin :entities]) (entity-keys dir))
         allow    (let [loc (loc-at text allowlist-path)] (if (= :set (some-> loc z/tag)) (set (value loc)) #{}))]
-    (sort (distinct (remove #(or (not (keyword? %)) (allow %)) entities)))))
+    (sort (distinct (remove #(or (not (keyword? %)) (= ::unreadable %) (allow %)) entities)))))
 
 (defn- append-entry
   "The map at `loc`, positioned, with `k` and `v`, source text, on a line of

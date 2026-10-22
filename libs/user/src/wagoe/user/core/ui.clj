@@ -1188,7 +1188,7 @@
            [:t :user/button-revoke-all-others]])]
        [:t :user/sessions-manage-for {:name (:name user)}])
       (when admin? (rights-ui/user-tabs (:id user) :sessions))
-      (when admin? (sign-in-panel user current-time))
+      (when (:account-recovery? opts) (sign-in-panel user current-time))
       (sessions-list sessions current-session-id (:id user) current-time zone-id)
       (modal/confirm-modal {:id            "revoke-session-confirm"
                             :title         [:t :user/button-revoke]
