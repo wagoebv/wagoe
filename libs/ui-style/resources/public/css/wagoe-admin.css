@@ -1366,7 +1366,6 @@ time.tone-danger  { color: var(--tone-danger-fg);  font-weight: 600; }
     width: auto;
     max-width: 100%;
     min-width: 0;
-    height: auto;
     padding: 0;
     border: 0;
     position: static;
@@ -1379,7 +1378,7 @@ time.tone-danger  { color: var(--tone-danger-fg);  font-weight: 600; }
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  .admin-content .entity-list-page .data-table tbody td:nth-child(n)::before {
+  .admin-content .entity-list-page .data-table tbody td:not(.checkbox-cell, .actions-cell)::before {
     content: attr(data-label);
     display: inline;
     margin: 0 4px 0 0;
@@ -1393,7 +1392,8 @@ time.tone-danger  { color: var(--tone-danger-fg);  font-weight: 600; }
   .entity-list-page .data-table td .c-badge { display: inline-flex; vertical-align: middle; }
 
   /* The value says what it is: no label */
-  .admin-content .entity-list-page .data-table tbody td:is(.c-title, .c-enum, .c-email, .c-url)::before { content: none; }
+  .admin-content .entity-list-page .data-table tbody td:is(.c-title, .c-enum, .c-email, .c-url)::before,
+  .admin-content .entity-list-page .data-table tbody tr:not(:has(> td.c-title)) > td:nth-child(2)::before { content: none; }
 
   /* The title heads the card; with no title field, the first field does */
   .admin-content .entity-list-page .data-table tbody td.c-title,
@@ -1404,7 +1404,6 @@ time.tone-danger  { color: var(--tone-danger-fg);  font-weight: 600; }
     font-weight: 600;
     line-height: 22px;
   }
-  .admin-content .entity-list-page .data-table tbody tr:not(:has(> td.c-title)) > td:nth-child(2)::before { content: none; }
 
   /* At most four fields under the heading; empty ones take no place */
   .admin-content .entity-list-page .data-table tbody td:empty,
@@ -1433,17 +1432,13 @@ time.tone-danger  { color: var(--tone-danger-fg);  font-weight: 600; }
     position: absolute;
     top: 11px;
     left: 14px;
-    width: auto;
   }
-  .admin-content .entity-list-page .data-table tbody td.checkbox-cell::before,
-  .admin-content .entity-list-page .data-table tbody td.actions-cell::before { content: none; }
   .admin-content .entity-list-page .data-table tbody td.actions-cell {
     position: absolute;
     top: 50%;
     right: 10px;
     transform: translateY(-50%);
     margin: 0;
-    border: 0;
   }
   .admin-content .entity-list-page .data-table tbody tr td.actions-cell .row-nav-hint { opacity: 1; color: var(--text-muted); }
 

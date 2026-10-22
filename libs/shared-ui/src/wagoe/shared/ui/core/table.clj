@@ -338,6 +338,29 @@
                          (search-filters->params filters))))]
     (if (str/blank? qs) path (str path "?" qs))))
 
+(defn sort-select
+  "Field and direction selects that re-sort a `data-table`, back to page one:
+   for a narrow screen, where rows are cards and the sortable headers hidden.
+   Takes `data-table`'s :url, :hx-target, :table-query, :filters and :columns.
+   Nil when no column is sortable."
+  [{:keys [url hx-target table-query filters columns]}]
+  (when-let [sortable (seq (filter #(:sortable? % true) columns))]
+    (let [{:keys [sort dir]} table-query
+          attrs {:hx-get      (list-url url (dissoc table-query :sort :dir :page) filters)
+                 :hx-target   hx-target
+                 :hx-swap     "outerHTML"
+                 :hx-push-url "true"
+                 :hx-include  "closest .card-sort"
+                 :class       "select"}]
+      [:div {:class "card-sort"}
+       [:select (assoc attrs :name "sort" :aria-label [:t :admin/sort-by])
+        (when-not sort [:option {:value ""} [:t :admin/sort-by]])
+        (for [{:keys [field label]} sortable]
+          [:option {:value (name field) :selected (= field sort)} label])]
+       [:select (assoc attrs :name "dir" :aria-label [:t :admin/sort-direction])
+        [:option {:value "asc" :selected (not= :desc dir)} [:t :admin/sort-ascending]]
+        [:option {:value "desc" :selected (= :desc dir)} [:t :admin/sort-descending]]]])))
+
 (defn filter-input
   "An input that re-queries the table as the user types (a select, with
    :options [[value label] ...], when it changes) and pushes the URL.

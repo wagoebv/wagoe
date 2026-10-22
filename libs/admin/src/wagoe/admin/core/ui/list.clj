@@ -218,28 +218,6 @@
     (when (or summary tabs)
       [:div {:class "list-overview"} summary tabs])))
 
-(defn card-sort
-  "Field and direction selects that re-sort the list. Shown on a narrow screen,
-   where rows are cards and the sortable headers are hidden."
-  [list-path hx-target table-query filters cols]
-  (when-let [sortable (seq (filter #(and (:data? %) (:sortable (:config %) true)) cols))]
-    (let [{:keys [sort dir]} table-query
-          attrs {:hx-get      (table-ui/list-url list-path (dissoc table-query :sort :dir :page) filters)
-                 :hx-target   hx-target
-                 :hx-swap     "outerHTML"
-                 :hx-trigger  "change"
-                 :hx-push-url "true"
-                 :hx-include  "closest .card-sort"
-                 :class       "select"}]
-      [:div {:class "card-sort"}
-       [:select (assoc attrs :name "sort" :aria-label [:t :admin/sort-by])
-        (when-not sort [:option {:value ""} [:t :admin/sort-by]])
-        (for [{:keys [field label]} sortable]
-          [:option {:value (name field) :selected (= field sort)} label])]
-       [:select (assoc attrs :name "dir" :aria-label [:t :admin/sort-direction])
-        [:option {:value "asc" :selected (not= :desc dir)} [:t :admin/sort-ascending]]
-        [:option {:value "desc" :selected (= :desc dir)} [:t :admin/sort-descending]]]])))
-
 (defn entity-table
   "Generate entity table with sorting and pagination.
 
@@ -261,7 +239,14 @@
         table-params (table-ui/table-query->params table-query)
         filter-params (table-ui/search-filters->params (or filters {}))
         list-fields (:list-fields entity-config)
-        cols (cells/columns entity-config list-fields)]
+        cols (cells/columns entity-config list-fields)
+        ;; The role aligns a header with its cells; the field class lets the
+        ;; column menu hide it
+        table-columns (for [{:keys [field config label data?] role-class :class} cols]
+                        {:field     field
+                         :label     label
+                         :class     role-class
+                         :sortable? (boolean (and data? (:sortable config true)))})]
     ;; Table container - Alpine.js scope is at parent entity-list-page level
     ;; MutationObserver automatically handles HTMX DOM updates (no afterSwap needed)
     [:div#entity-table-container
@@ -321,7 +306,8 @@
              has-pagination? (some? pagination)
              wrapper-class (if has-pagination? "table-and-pagination" "")]
          [:div {:class wrapper-class}
-          (card-sort list-path hx-target table-query filters cols)
+          (table-ui/sort-select {:url list-path :hx-target hx-target :table-query table-query
+                                 :filters filters :columns table-columns})
           [:div.table-wrapper
            ;; Form for checkbox submission (hidden inputs + table)
            [:form#table-form
@@ -336,13 +322,7 @@
               :hx-target   hx-target
               :table-query table-query
               :filters     filters
-              ;; The role aligns a header with its cells; the field class
-              ;; lets the column menu hide it
-              :columns     (for [{:keys [field config label data?] role-class :class} cols]
-                             {:field     field
-                              :label     label
-                              :class     role-class
-                              :sortable? (boolean (and data? (:sortable config true)))})
+              :columns     table-columns
               ;; Column sizing for table-layout: fixed — framing columns via CSS
               ;; classes, data columns via proportional inline widths
               ;; (overridable via :width in the field config).
