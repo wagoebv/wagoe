@@ -1199,7 +1199,13 @@
 
              ; Search, filters and soft delete, shared with the overview (ADR-040)
              where-clause (list-where (:adapter db-ctx) entity-config field-aliases options)
-             ordering (build-ordering resolved-sort-field sort-dir resolved-default-sort)
+             primary-key (:primary-key entity-config :id)
+             ;; created-at or a name repeats; without the key as tie-breaker
+             ;; a row can show on two pages, or on none
+             ordering (cond-> (build-ordering resolved-sort-field sort-dir resolved-default-sort)
+                        (and (not= (or sort-field default-sort) primary-key)
+                             (contains? (:fields entity-config) primary-key))
+                        (conj [(get field-aliases primary-key primary-key) :asc]))
              pagination (build-pagination options config)
 
               ; Build list query
