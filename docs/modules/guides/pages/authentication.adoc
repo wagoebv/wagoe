@@ -126,10 +126,15 @@ per login, name a function under `:auth`:
 It gets the user and the login context (`:ip-address`, `:user-agent`, and
 `:provider` for an OpenID Connect sign-in) and applies to password and OpenID
 Connect logins alike. Returning false waives the code; MFA stays on for the user.
-Returning true for a user without MFA refuses the login: enrolling needs a
-signed-in user, so they must sign in where MFA is not required, or ask an
-administrator. The symbol is resolved at boot, and one that does not resolve stops
-the boot. A function that throws fails the login.
+Returning true for a user without MFA refuses the login: they must sign in
+where MFA is not required, or ask an administrator. Two exceptions, on the web:
+a user whose MFA an administrator reset, within `:mfa-reset-enrolment-hours`
+(72) of the reset, and a user who has just registered. For them the right
+password leads to setting up an authenticator at `/web/login/mfa-setup`, which
+is audited, after which they sign in with a code. A password change voids the
+setup page's ticket. The API answers 403 `mfa-enrolment-required`, and so does
+an OpenID Connect sign-in. The symbol is resolved at boot, and one that does not
+resolve stops the boot. A function that throws fails the login.
 
 A hook that needs one of your components, say the allowed networks kept in the
 database, comes from an application module instead. Its `ig-config` contributes it:
@@ -295,7 +300,7 @@ returns the whole page:
 `body` is Wagoe's form card: fields, CSRF token, error messages and the MFA step stay
 Wagoe's, so the layout cannot weaken them. Wagoe's logo and subtitle are left out.
 `title` is a `[:t …]` marker, translated with the rest of the page. `opts` has `:page`
-(`:login`, `:mfa`, `:oidc-mfa`, `:oidc-continue` or `:register`), the Ring `:request`
+(`:login`, `:mfa`, `:oidc-mfa`, `:oidc-continue`, `:register` or `:mfa-enrolment`), the Ring `:request`
 (without the password and MFA code), `:user`, `:flash`, `:return-to` and `:logo-url`. An application
 module can contribute it as `:auth {:login-layout (ig/ref …)}`, a function or a
 `wagoe.user.ports/ILoginLayout`. Without it the pages are unchanged.

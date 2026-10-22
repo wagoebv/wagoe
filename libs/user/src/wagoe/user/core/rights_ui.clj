@@ -93,7 +93,9 @@
    (when entity
      {:hx-get     (str (entity-lookup-url entity) "?" (table-ui/encode-query-params {"id" (str v)}))
       :hx-trigger "load"
-      :hx-swap    "innerHTML"})
+      :hx-swap    "innerHTML"
+      ;; Unanswered, the id stays: no error toast for that
+      :data-quiet-failure true})
    (str v)])
 
 (defn scope-view

@@ -44,14 +44,6 @@
     (login-redirect request)
     (error-response 401 "unauthorized" message correlation-id)))
 
-(defn forbidden-response
-  "403 for an API caller. A web page redirects to the login form, as it always
-   has, so a user can sign in as someone who is allowed."
-  [message request correlation-id]
-  (if (web-request? request)
-    (login-redirect request)
-    (error-response 403 "forbidden" message correlation-id)))
-
 (defn escape-html
   "`s` safe in HTML text or an attribute."
   [s]
@@ -72,6 +64,13 @@
    redirect, which would send them back here."
   [status error message correlation-id]
   (error-response status error message correlation-id))
+
+(defn forbidden-response
+  "403 for a signed-in caller who may not do this, as `refusal-response`
+   answers. A web page once redirected to the login form, which only sent the
+   user back here."
+  [message _request correlation-id]
+  (refusal-response 403 "forbidden" message correlation-id))
 
 (defn admin?
   "Whether the signed-in user has the global admin role."

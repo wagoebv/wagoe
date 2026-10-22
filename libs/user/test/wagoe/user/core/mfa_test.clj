@@ -130,6 +130,13 @@
         (is (false? (:can-enable? result)))
         (is (= "User not found" (:reason result)))))))
 
+(deftest ^:unit ^:security reset-enrolment-window
+  (let [now (Instant/parse "2024-01-04T12:00:00Z")]
+    (is (mfa/reset-enrolment-open? {:mfa-reset-at (Instant/parse "2024-01-02T12:00:01Z")} now 48))
+    (is (not (mfa/reset-enrolment-open? {:mfa-reset-at (Instant/parse "2024-01-02T12:00:00Z")} now 48))
+        "closed at the end of the window")
+    (is (not (mfa/reset-enrolment-open? {} now 48)) "never reset")))
+
 (deftest ^:unit ^:security prepare-mfa-enablement-test
   (testing "Prepare user data for MFA enablement"
     (let [user {:id "user-123" :email "test@example.com" :mfa-enabled false}
@@ -139,7 +146,11 @@
           result (mfa/prepare-mfa-enablement user secret backup-codes current-time)]
 
       (testing "returns update map only (not merged with user)"
-        (is (= 5 (count (keys result)))))
+        (is (= 6 (count (keys result)))))
+
+      (testing "closes an admin reset's window to set one up"
+        (is (contains? result :mfa-reset-at))
+        (is (nil? (:mfa-reset-at result))))
 
       (testing "sets mfa-enabled to true"
         (is (true? (:mfa-enabled result))))

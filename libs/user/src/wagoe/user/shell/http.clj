@@ -556,6 +556,14 @@
                :summary "Login page"}
         :post {:handler (web-handlers/login-submit-handler user-service config)
                :summary "Submit login form"}}]
+      ;; Public: the sealed ticket login set is what admits the caller.
+      ["/login/mfa-setup"
+       {:no-doc true
+        :public true
+        :get  {:handler (web-handlers/mfa-enrolment-page-handler mfa-service config)
+               :summary "Set up a second factor before signing in"}
+        :post {:handler (web-handlers/mfa-enrolment-submit-handler mfa-service config)
+               :summary "Turn the second factor on"}}]
       ["/logout"
        {:no-doc true
         :authorization :signed-in
