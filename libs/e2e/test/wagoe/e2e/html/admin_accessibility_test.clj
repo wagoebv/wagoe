@@ -28,7 +28,8 @@
    colours nobody reads."
   [pg]
   (page/evaluate pg "Promise.all(document.getAnimations().map(a => a.finished.catch(() => null)))")
-  (page/evaluate pg @axe-source)
+  (when (page/evaluate pg "typeof axe === 'undefined'")
+    (page/evaluate pg @axe-source))
   (page/evaluate pg "axe.run(document, {resultTypes: ['violations']}).then(r => r.violations
                        .filter(v => v.impact === 'serious' || v.impact === 'critical')
                        .map(v => v.id + ': ' + v.nodes.slice(0, 3).map(n => n.target.join(' ') + ' (' + n.failureSummary + ')').join(', ')))"))
@@ -40,12 +41,6 @@
 
 (defn- active-id [pg]
   (page/evaluate pg "document.activeElement && document.activeElement.id"))
-
-(defn- wait-for-htmx! [pg selector]
-  (wait-for! pg (str "(() => { const e = document.querySelector(\"" selector "\");"
-                     " return !!(e && e['htmx-internal-data'])"
-                     " && !document.querySelector('.htmx-request, .htmx-swapping, .htmx-settling'); })()")
-             (str "htmx processed " selector)))
 
 (defn- open-users! [pg path]
   (admin/login-as-admin! pg fx/*seed*)
@@ -76,18 +71,16 @@
     (let [th     "table.data-table th.field-name"
           sort   (fn [] (page/evaluate pg (str "document.querySelector('" th "').getAttribute('aria-sort')")))
           button (page/locator pg (str th " .sort-button"))]
-      (is (nil? (page/evaluate pg (str "document.querySelector('" th "').getAttribute('role')"))))
       (is (pos? (loc/count-elements (page/get-by-role pg AriaRole/COLUMNHEADER {:name "Name" :exact true}))))
       (is (pos? (loc/count-elements (page/get-by-role pg AriaRole/BUTTON {:name "Name" :exact true}))))
       (is (nil? (page/evaluate pg "document.querySelector('table.data-table th[role], table.data-table th[tabindex]')"))
           "no header overrides its role or takes focus itself")
       (doseq [expected ["ascending" "descending"]]
-        (wait-for-htmx! pg (str th " .sort-button"))
+        (admin/await-htmx-ready! pg (str th " .sort-button"))
         (loc/focus button)
         (admin/after-table-swap! pg #(page/keyboard-press pg "Enter"))
         (is (= expected (sort)) "Enter sorts, and the header says how")
-        (wait-for! pg "document.activeElement && document.activeElement.id === 'entity-table-container-sort-name'"
-                   "focus back on the sort button")
+        (wait-for! pg "document.activeElement !== document.body" "focus back")
         (is (= "entity-table-container-sort-name" (active-id pg)))))))
 
 (deftest ^:integration ^:e2e focus-stays-on-the-pager-after-a-page-swap
@@ -100,11 +93,11 @@
                  "focus on the current page")
       (is (= "entity-table-container-page-2" (active-id pg))))
     (testing "a page number keeps focus"
-      (wait-for-htmx! pg "#entity-table-container-page-1")
+      (admin/await-htmx-ready! pg "#entity-table-container-page-1")
       (loc/focus (page/locator pg "#entity-table-container-page-1"))
       (admin/after-table-swap! pg #(page/keyboard-press pg "Enter"))
-      (wait-for! pg "document.activeElement && document.activeElement.id === 'entity-table-container-page-1'"
-                 "focus on page 1")
+      (wait-for! pg "document.activeElement !== document.body" "focus back")
+      (is (= "entity-table-container-page-1" (active-id pg)))
       (is (= "page" (page/evaluate pg "document.activeElement.getAttribute('aria-current')"))))))
 
 (deftest ^:integration ^:e2e closing-the-drawer-returns-focus-to-its-row

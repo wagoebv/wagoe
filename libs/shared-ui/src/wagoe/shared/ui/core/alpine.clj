@@ -278,7 +278,7 @@
    {:type "checkbox"
     :name "ids[]"
     :value (str id)
-    :aria-label [:t :admin/select-row {:title (str (if (some? title) title id))}]
+    :aria-label [:t :admin/select-row {:title (str (or title id))}]
     :x-model "selectedIds"
     :x-on:click.stop ""}))
 

@@ -105,8 +105,7 @@
                       (when active? " sortable-header--active")
                       (when active? (str " sort-dir-" (name current-dir))))
       :aria-sort (when active? (if (= current-dir :asc) "ascending" "descending"))}
-     ;; A button, so the header keeps its columnheader role and the keyboard
-     ;; sorts; its id lets htmx put focus back on it after the swap
+     ;; A button: the th keeps its columnheader role and the keyboard sorts
      [:button
       {:type        "button"
        :class       "sort-button"
@@ -208,7 +207,21 @@
                                    :hx-params  "none"
                                    :aria-label [:t :admin/pagination-page {:page p}]
                                    :aria-current (when active? "page")}
-                          (str p)]))]
+                          (str p)]))
+        ;; data-page is what the keyboard pages with (admin keyboard.js)
+        nav-btn      (fn [p disabled? label which glyph]
+                       [:button.page-nav-btn {:type        "button"
+                                              :id          (control-id hx-target "page" which)
+                                              :hx-get      (mk-url p)
+                                              :hx-target   hx-target
+                                              :hx-swap     hx-swap
+                                              :hx-push-url (mk-push-url p)
+                                              :hx-params   "none"
+                                              :disabled    disabled?
+                                              :aria-label  [:t label]
+                                              :title       [:t label]
+                                              :data-page   which}
+                        glyph])]
     (when show-pages?
       [:div.table-pagination
        [:div.page-info
@@ -216,65 +229,16 @@
         [:strong (str from "–" to)]
         " " [:t :admin/pagination-of] " " (str total-count)]
        [:nav.pagination-nav {:aria-label [:t :admin/pagination-label]}
-        ;; First page
-        [:button.page-nav-btn {:type       "button"
-                               :hx-get     (mk-url 1)
-                               :hx-target  hx-target
-                               :hx-swap    hx-swap
-                               :hx-push-url (mk-push-url 1)
-                               :hx-params  "none"
-                               :disabled   (<= page 1)
-                               :aria-label [:t :admin/pagination-first-page]
-                               :title      [:t :admin/pagination-first-page]
-                               ;; What the keyboard pages with (admin keyboard.js)
-                               :data-page  "first"
-                               :id         (control-id hx-target "page" "first")}
-         "«"]
-        ;; Previous page
-        [:button.page-nav-btn {:type       "button"
-                               :hx-get     (mk-url prev-page)
-                               :hx-target  hx-target
-                               :hx-swap    hx-swap
-                               :hx-push-url (mk-push-url prev-page)
-                               :hx-params  "none"
-                               :disabled   (<= page 1)
-                               :aria-label [:t :admin/pagination-previous-page]
-                               :title      [:t :admin/pagination-previous-page]
-                               :data-page  "prev"
-                               :id         (control-id hx-target "page" "prev")}
-         "‹"]
+        (nav-btn 1 (<= page 1) :admin/pagination-first-page "first" "«")
+        (nav-btn prev-page (<= page 1) :admin/pagination-previous-page "prev" "‹")
         ;; Page number buttons with ellipsis
         [:div.page-numbers
          (for [item (page-window page total-pages 1)]
            (if (= item :ellipsis)
              [:span.page-ellipsis "…"]
              (page-btn item)))]
-        ;; Next page
-        [:button.page-nav-btn {:type       "button"
-                               :hx-get     (mk-url next-page)
-                               :hx-target  hx-target
-                               :hx-swap    hx-swap
-                               :hx-push-url (mk-push-url next-page)
-                               :hx-params  "none"
-                               :disabled   (>= page total-pages)
-                               :aria-label [:t :admin/pagination-next-page]
-                               :title      [:t :admin/pagination-next-page]
-                               :data-page  "next"
-                               :id         (control-id hx-target "page" "next")}
-         "›"]
-        ;; Last page
-        [:button.page-nav-btn {:type       "button"
-                               :hx-get     (mk-url total-pages)
-                               :hx-target  hx-target
-                               :hx-swap    hx-swap
-                               :hx-push-url (mk-push-url total-pages)
-                               :hx-params  "none"
-                               :disabled   (>= page total-pages)
-                               :aria-label [:t :admin/pagination-last-page]
-                               :title      [:t :admin/pagination-last-page]
-                               :data-page  "last"
-                               :id         (control-id hx-target "page" "last")}
-         "»"]]])))
+        (nav-btn next-page (>= page total-pages) :admin/pagination-next-page "next" "›")
+        (nav-btn total-pages (>= page total-pages) :admin/pagination-last-page "last" "»")]])))
 
 ;; ---------------------------------------------------------------------------
 ;; Data table: query params, filter inputs, sortable table, infinite scroll

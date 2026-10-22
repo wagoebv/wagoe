@@ -451,7 +451,6 @@
           ;; Optional, so it can be emptied
           (is (= ["—" [:t :admin.users/date-format-iso] "US"] (map last (options form))))
           (is (= ["us"] (keep #(when (:selected (second %)) (:value (second %))) (options form))))
-          ;; No id: two editors open in one column would share it
           (is (not-any? #(and (vector? %) (= :select (first %)) (:id (second %)))
                         (tree-seq coll? seq form))))
         (is (= [[:t :admin.users/date-format-iso] "US"]
