@@ -107,7 +107,7 @@
           attrs (second table)]
       (is (= "/web/users" (:hx-get attrs)))
       (is (= "#users-table-container" (:hx-target attrs)))
-      (is (= "userCreated from:body, userUpdated from:body, userDeleted from:body" (:hx-trigger attrs))))))
+      (is (= "userCreated from:body" (:hx-trigger attrs))))))
 
 (deftest ^:unit audit-logs-table-test
   (testing "renders non-empty audit table without throwing and keeps wrapper container"
@@ -405,22 +405,6 @@
       (is (re-find #"/web/login" content))
       (is (re-find #"button-signin" content)))))
 
-(deftest ^:unit user-updated-success-test
-  (testing "generates success message with user details"
-    (let [message (ui/user-updated-success sample-user)]
-      (is (vector? message))
-      (let [content (str message)]
-        (is (re-find #"message-updated" content))
-        (is (re-find #"John Doe" content))
-        (is (re-find #"john@example.com" content)))))
-
-  (testing "includes user-specific navigation link"
-    (let [message (ui/user-updated-success sample-user)
-          content (str message)]
-      ;; New URLs: /web/users/123
-      (is (re-find #"/web/users/123" content))
-      (is (re-find #"button-view-user" content)))))
-
 ;; =============================================================================
 ;; Validation Error Component Tests
 ;; =============================================================================
@@ -548,7 +532,6 @@
     (is (vector? (ui/users-table sample-users)))
     (is (vector? (ui/create-user-form)))
     (is (vector? (ui/user-created-success sample-user)))
-    (is (vector? (ui/user-updated-success sample-user)))
     (is (vector? (ui/user-validation-errors validation-errors)))
     (is (vector? (ui/users-page sample-users)))
     (is (vector? (ui/create-user-page))))

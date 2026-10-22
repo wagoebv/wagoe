@@ -1,5 +1,5 @@
 (ns wagoe.admin.shell.timezone-field-test
-  "A field of type :timezone is a combobox over the IANA zones."
+  "A field with `:options-source :timezones` is a combobox over the IANA zones."
   (:require [wagoe.admin.ports :as ports]
             [wagoe.admin.shell.service :as service]
             [wagoe.admin.shell.schema-repository :as schema-repo]
@@ -16,7 +16,7 @@
 
 (def ^:private admin-config
   {:entity-discovery {:mode :allowlist :allowlist #{:people}}
-   :entities         {:people {:fields {:timezone {:type :timezone}}}}
+   :entities         {:people {:fields {:timezone {:options-source :timezones}}}}
    :pagination       {:default-page-size 20 :max-page-size 200}})
 
 (def ^:private admin-user

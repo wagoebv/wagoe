@@ -88,7 +88,6 @@
    :enum            ; Enumeration (fixed set of values)
    :json            ; JSON data
    :text            ; Long-form text
-   :timezone        ; IANA zone id, a string chosen from a combobox
    :binary])        ; Binary data
 
 (def FieldConfig
@@ -317,7 +316,9 @@
                          [:map {:closed true}
                           [:warn-days {:optional true} [:int {:min 0}]]
                           [:until {:optional true} [:map-of :keyword [:sequential :any]]]]]]
-              [:total :boolean]))
+              [:total :boolean]
+              ;; A combobox over a list the admin knows, rather than a text input
+              [:options-source [:enum :timezones]]))
 
 (def SummaryEntry
   (closed-map :label

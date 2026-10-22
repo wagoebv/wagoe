@@ -82,7 +82,7 @@
 
 (def AdminFieldType
   "Field types the admin renders — wagoe.admin.schema/FieldType."
-  [:enum :uuid :string :int :decimal :boolean :instant :date :enum :json :text :timezone :binary])
+  [:enum :uuid :string :int :decimal :boolean :instant :date :enum :json :text :binary])
 
 (def AdminFieldWidget
   "Widgets the admin renders — wagoe.admin.schema/FieldWidget."
@@ -121,7 +121,8 @@
                                      [:map {:closed true}
                                       [:warn-days {:optional true} [:int {:min 0}]]
                                       [:until {:optional true} [:map-of :keyword [:sequential :any]]]]]]
-   [:total         {:optional true} :boolean]])
+   [:total         {:optional true} :boolean]
+   [:options-source {:optional true} [:enum :timezones]]])
 
 (def AdminHasMany
   [:map {:closed true}

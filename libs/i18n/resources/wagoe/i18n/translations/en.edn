@@ -99,14 +99,9 @@
 
  :user/form-detail-title       "User Details"
  :user/form-create-title       "Create New User"
- :user/button-update           "Update User"
- :user/button-update-loading   "Updating..."
  :user/button-create           "Create User"
  :user/button-create-loading   "Creating..."
- :user/button-deactivate       "Deactivate User"
- :user/button-reactivate       "Reactivate User"
  :user/checkbox-send-welcome   "Send Welcome Email"
- :user/field-active            "Active"
  :user/field-password          "Password"
  :user/field-remember          "Remember me"
  :user/page-create-user-title  "Create User"
@@ -125,15 +120,9 @@
  :user/text-no-account          "Don't have an account?"
  :user/button-create-account    "Create Account"
 
- :user/message-updated          "User Updated Successfully!"
- :user/message-updated-details  "Updated user: {name} ({email})"
- :user/message-deleted          "User Deleted Successfully!"
- :user/message-deleted-details  "User {id} has been removed."
 
  :user/button-view-user         "View User"
- :user/button-view-all-users    "View All Users"
  :user/button-delete-permanently "Permanently Delete"
- :user/button-view-sessions     "View Sessions"
 
  :user/page-users-title         "Users"
  :user/page-create-account-title "Create Account"
@@ -183,8 +172,6 @@
  :user/created-label-email     "Email:"
  :user/created-label-name      "Name:"
  :user/created-label-status    "Status:"
- :user/updated-role            "Role: {role}"
- :user/detail-page-title       "User: {name}"
  :user/bulk-action-apply-title "Apply action to selected users"
 
  :user/session-device          "{browser} on {device}"
@@ -208,7 +195,6 @@
  :user/confirm-revoke-all-sessions "Revoke all other sessions? This signs out every other device."
  :user/confirm-bulk-action     "Apply this action to the selected users?"
  :user/confirm-delete-permanently "This irreversibly deletes the user and all related data. Delete permanently?"
- :user/confirm-deactivate      "The user can no longer sign in. Deactivate this user?"
  :user/toast-user-deleted "User permanently deleted"
  :user/toast-session-revoked "Session revoked"
  :user/toast-session-not-found "Session not found or already ended"

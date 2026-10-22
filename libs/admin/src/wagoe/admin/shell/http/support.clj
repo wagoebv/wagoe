@@ -612,37 +612,38 @@
              nil))
       id))
 
-(def ^:private zone-ids
-  "The IANA zones the JVM knows, sorted."
-  (vec (sort (java.time.ZoneId/getAvailableZoneIds))))
-
 (defn- zone-text
   "A zone id as typed: `New_York` matches `new york`."
   [s]
   (text/lower-case (str/replace s "_" " ")))
 
+(def ^:private zones
+  "The IANA zones the JVM knows, sorted, each as [searchable-text id]."
+  (mapv (juxt zone-text identity) (sort (java.time.ZoneId/getAvailableZoneIds))))
+
 (defn search-timezones
   "The first zones whose id contains the typed `q`, as [id id], for the
-   combobox of a field of type :timezone."
+   combobox of a field with `:options-source :timezones`."
   [q]
   (let [q (zone-text (or q ""))]
-    (into [] (comp (filter #(str/includes? (zone-text %) q))
+    (into [] (comp (filter #(str/includes? (first %) q))
                    (take combobox/limit)
-                   (map (juxt identity identity)))
-          zone-ids)))
+                   (map (fn [[_ id]] [id id])))
+          zones)))
 
-(defn- timezone-options
-  "{field {:url :label}} for each of `fields` of type :timezone: a combobox
-   over the zones, showing the current one."
-  [entity-name entity-config fields values]
-  (into {}
-        (for [field fields
-              :when (= :timezone (get-in entity-config [:fields field :type]))]
-          [field {:url (options-url entity-name field) :label (some-> (get values field) str)}])))
+(defn timezone-field?
+  "Whether `field` of `entity-config` is chosen from the IANA zones."
+  [entity-config field]
+  (= :timezones (get-in entity-config [:fields field :options-source])))
+
+(defn- timezone-combobox
+  "The zone combobox of `field`, showing its current value."
+  [entity-name field values]
+  {:url (options-url entity-name field) :label (some-> (get values field) str)})
 
 (defn foreign-key-options
   "The choices for each editable foreign key of `entity-name`, and the zone
-   combobox of each field of type :timezone. A foreign key offers the parent's
+   combobox of each timezone field (`timezone-field?`). A foreign key offers the parent's
    rows as [id label], where the label is the parent's `:title-field` — what
    its relation cells show. Only when every parent fits in the maximum page
    size: a select capped there would silently offer a subset, so past it the
@@ -656,7 +657,8 @@
   ([admin-service config entity-configs entity-name fields values]
   (let [entity-config (get entity-configs entity-name)
         page-size     (get-in config [:pagination :max-page-size] 200)]
-    (into (timezone-options entity-name entity-config fields values)
+    (into (into {} (for [field fields :when (timezone-field? entity-config field)]
+                     [field (timezone-combobox entity-name field values)]))
           (for [[field parent] (introspection/declared-parents entity-name entity-configs)
                 :when (some #{field} fields)
                 :let  [parent-cfg (get entity-configs parent)
@@ -693,12 +695,13 @@
    nor a timezone. Reads only the parent of that field."
   [admin-service schema-provider config entity-name field values]
   (let [entity-configs (all-entity-configs schema-provider)]
-    (or (get (timezone-options entity-name (get entity-configs entity-name) [field] values) field)
-        (when-let [parent (get (introspection/declared-parents entity-name entity-configs) field)]
-          ;; Only `field`, so a second key to the same parent is not read
-          (get (foreign-key-options admin-service config (select-keys entity-configs [entity-name parent])
-                                    entity-name [field] values)
-               field)))))
+    (if (timezone-field? (get entity-configs entity-name) field)
+      (timezone-combobox entity-name field values)
+      (when-let [parent (get (introspection/declared-parents entity-name entity-configs) field)]
+        ;; Only `field`, so a second key to the same parent is not read
+        (get (foreign-key-options admin-service config (select-keys entity-configs [entity-name parent])
+                                  entity-name [field] values)
+             field)))))
 
 (defn- viewable-parents
   "{foreign-key-field parent} of `entity-name`, for the parents `user` may view."

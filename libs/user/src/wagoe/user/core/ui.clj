@@ -114,7 +114,7 @@
          filter-params (table-ui/search-filters->params filters)]
      [:div#users-table-container
       {:hx-get     (table-ui/list-url base-url table-query filters)
-       :hx-trigger "userCreated from:body, userUpdated from:body, userDeleted from:body"
+       :hx-trigger "userCreated from:body"
        :hx-target  hx-target
        :hx-swap    "outerHTML"}
       ;; What the toolbar's search, role filter and bulk form send along: they
@@ -420,22 +420,6 @@
         [:a.button.primary {:href "/web/login"} [:t :user/button-signin]]]]]
      {:skip-header false})))
 
-(defn user-updated-success
-  "Generate success message for user update based on User schema.
-   
-   Args:
-     user: Updated User entity map
-     
-   Returns:
-     Hiccup structure showing success message"
-  [user]
-  (ui/success-message
-   [:div
-    [:h3 [:t :user/message-updated]]
-    [:p [:t :user/message-updated-details {:name (:name user) :email (:email user)}]]
-    [:div.user-details
-     [:p [:t :user/updated-role {:role (text/upper-case (name (or (:role user) :user)))}]]]
-    [:a.button {:href (str "/web/users/" (:id user))} [:t :user/button-view-user]]]))
 ;; =============================================================================
 ;; User-specific Validation Display
 ;; =============================================================================

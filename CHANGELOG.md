@@ -31,8 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
-- **Field type `:timezone`** (BOU-804): a combobox over the IANA zones. `admin/users.edn` uses it for `:timezone`;
-  add `:type :timezone` there in an existing app.
+- **`:options-source :timezones` on an admin field** (BOU-804): a combobox over the IANA zones. `admin/users.edn`
+  uses it for `:timezone`; add it there in an existing app.
 
 - **The admin dashboard has the sidebar's sections** (BOU-809), a card per sidebar item. A `:sidebar-hidden` entity
   no longer gets a card; add `:icon :users` to an existing `admin/users.edn` for the user icon.
