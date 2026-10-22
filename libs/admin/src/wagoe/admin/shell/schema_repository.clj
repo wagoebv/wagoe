@@ -204,13 +204,16 @@
                                             (try (ports/list-available-entities this)
                                                  (catch clojure.lang.ExceptionInfo _ [])))))
               own           (get all entity-name)
+              manual        (get-in config [:entities entity-name])
               ;; Roles last: a has-many column needs the inverse relations, and
               ;; the default columns need the roles (ADR-040).
               entity-config (-> (introspection/with-inverse-relationships entity-name own all)
                                 (as-> c (introspection/with-many-to-many entity-name c all))
                                 (display/with-display
-                                  {:derive-list-fields?
-                                   (not (contains? (get-in config [:entities entity-name]) :list-fields))}))]
+                                  {:derive-list-fields?  (not (contains? manual :list-fields))
+                                   :derive-default-sort? (not (contains? manual :default-sort))})
+                                ;; A direction configured alone applies to the derived field
+                                (merge (select-keys manual [:default-sort-dir])))]
           ;; Here and not in compute-entity-config, which also runs for each
           ;; entity as another's possible child.
           ;; A join table is not created from a form (BOU-778).

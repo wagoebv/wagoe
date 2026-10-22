@@ -251,17 +251,29 @@
 ;; Config enrichment and explanation
 ;; -----------------------------------------------------------------------------
 
+(defn default-sort
+  "[field dir] a list starts sorted by: newest first when the entity has
+   :created-at, else by its title field, else by its primary key. A UUID key
+   alone would give a random order."
+  [entity-config]
+  (if (contains? (:fields entity-config) :created-at)
+    [:created-at :desc]
+    [(title-field entity-config) :asc]))
+
 (defn with-display
   "`entity-config` with its derived `:title-field`, `:facet` and
    `:display-roles` (list column → role). With `derive-list-fields?`, an
-   entity whose config names no `:list-fields` gets `default-list-fields`."
-  [entity-config {:keys [derive-list-fields?]}]
+   entity whose config names no `:list-fields` gets `default-list-fields`;
+   with `derive-default-sort?`, one naming no `:default-sort` gets `default-sort`."
+  [entity-config {:keys [derive-list-fields? derive-default-sort?]}]
   (let [facet (facet-field entity-config)
         cfg   (cond-> (assoc entity-config :title-field (title-field entity-config))
                 facet (assoc :facet facet)
                 derive-list-fields?
                 (as-> c (assoc c :list-fields
-                               (default-list-fields c (field-order c)))))
+                               (default-list-fields c (field-order c))))
+                derive-default-sort?
+                (as-> c (merge c (zipmap [:default-sort :default-sort-dir] (default-sort c)))))
         ctx   (role-context cfg)
         cols  (distinct (concat (:list-fields cfg) (keys (:fields cfg))))]
     (assoc cfg :display-roles
