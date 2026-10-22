@@ -2,6 +2,10 @@
  ;; Gemeenschappelijk — gedeeld over alle modules
  ;; =============================================================================
  :common/error-generic      "Er ging iets mis. Probeer het later opnieuw."
+ :common/error-page-title     "Er ging iets mis"
+ :common/error-page-not-found "Pagina niet gevonden"
+ :common/error-page-reference "Referentie:"
+ :common/error-page-home      "Naar de startpagina"
  :common/column-name        "Naam"
  :common/column-email       "E-mail"
  :common/column-role        "Rol"

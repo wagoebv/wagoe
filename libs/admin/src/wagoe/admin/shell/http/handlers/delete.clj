@@ -8,8 +8,7 @@
    [wagoe.admin.shell.permissions :as shell-permissions]
    [wagoe.admin.shell.http.support :as support]
    [wagoe.shared.ui.core.toast :as toast]
-   [ring.util.response :as ring-response])
-  (:import [java.util UUID]))
+   [ring.util.response :as ring-response]))
 
 (defn- refused
   "A refused delete: 409 and an error toast."
@@ -115,7 +114,7 @@
           ; Extract IDs from form params
           id-strings (get-in request [:form-params "ids[]"])
           ids (when id-strings
-                (mapv #(UUID/fromString %) (if (string? id-strings) [id-strings] id-strings)))
+                (mapv support/parse-id (if (string? id-strings) [id-strings] id-strings)))
 
           ; Bulk delete
           [result refusal] (support/attempt #(when (seq ids)
