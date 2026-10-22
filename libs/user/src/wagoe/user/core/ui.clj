@@ -15,6 +15,7 @@
             [wagoe.shared.ui.core.icons :as icons]
             [wagoe.shared.ui.core.alpine :as alpine]
             [wagoe.platform.core.csrf :as csrf]
+            [wagoe.user.core.authentication :as auth-core]
             [wagoe.user.core.rights-ui :as rights-ui]
             [clojure.string :as str]))
 
@@ -993,6 +994,36 @@
        (for [session sessions]
          (session-row session current-session-id user-id current-time zone-id))]])))
 
+(defn- sign-in-panel
+  "Whether `user` is locked out and has a second factor, with the admin's way
+   out of each: unlock, and reset after a confirm."
+  [user current-time]
+  (let [locked?  (auth-core/locked? user current-time)
+        minutes  (when locked? (auth-core/minutes-locked (:lockout-until user) current-time))
+        action   (fn [path] {:type "button" :hx-post (str "/web/users/" (:id user) path)})]
+    [:section.form-card.sign-in-panel
+     [:div.form-section
+      [:div.form-section-header [:h2.form-section-title [:t :user/sign-in-title]]]
+      [:div.form-section-body {:class "space-y-3"}
+       [:div {:class "flex flex-wrap items-center justify-between gap-2"}
+        (if locked?
+          [:span [:t :user/account-locked {:n minutes} minutes]]
+          [:span [:t :user/account-not-locked]])
+        (when locked?
+          [:button#unlock-user.button.secondary.small (action "/unlock") [:t :user/button-unlock]])]
+       [:div {:class "flex flex-wrap items-center justify-between gap-2"}
+        [:span [:t (if (:mfa-enabled user) :user/mfa-status-on :user/mfa-status-off)]]
+        (when (:mfa-enabled user)
+          (list
+           [:button#reset-mfa.button.ghost.button-danger-text
+            (merge (action "/mfa/reset") (modal/confirm-attrs "reset-mfa-confirm"))
+            [:t :user/button-reset-mfa]]
+           (modal/confirm-modal {:id            "reset-mfa-confirm"
+                                 :title         [:t :user/button-reset-mfa]
+                                 :message       [:t :user/confirm-reset-mfa]
+                                 :confirm-label [:t :user/button-reset-mfa]
+                                 :danger?       true})))]]]]))
+
 (defn- hard-delete-button
   "Delete `user` for good, after the confirm modal. The handler sends the
    browser to the users list (HX-Redirect)."
@@ -1050,6 +1081,7 @@
           (hard-delete-button user))]
        [:t :user/sessions-manage-for {:name (:name user)}])
       (when admin? (rights-ui/user-tabs (:id user) :sessions))
+      (when (:account-recovery? opts) (sign-in-panel user current-time))
       (sessions-list sessions current-session-id (:id user) current-time zone-id)
       (modal/confirm-modal {:id            "revoke-session-confirm"
                             :title         [:t :user/button-revoke]

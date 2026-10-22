@@ -302,7 +302,8 @@
   "Every endpoint of `routes`, a router's flattened [path data] pairs, with the
    rule it falls under, as [{:path :method :rule :permissions :scope}].
    `:permissions` holds what the rule asks, both read and write for a module
-   route answering `:any` method."
+   route answering `:any` method. A redirect carries `:redirect-to`: the
+   target's rule is the one that applies."
   [routes]
   (vec (for [[path data] routes
              [method d] (endpoints data)
@@ -312,12 +313,15 @@
                   :rule        (:rule rule)
                   :permissions (into [] (comp (keep #(required-permission rule %)) (distinct))
                                      (if (= :any method) [:get :post] [method]))}
-           (some? (:scope d)) (assoc :scope (:scope d))))))
+           (some? (:scope d))            (assoc :scope (:scope d))
+           (:wagoe/redirect-to d)        (assoc :redirect-to (:wagoe/redirect-to d))))))
 
-(defn- report-line [{:keys [path method rule permissions scope]}]
+(defn- report-line [{:keys [path method rule permissions scope redirect-to]}]
   (str/trimr (format "  %-7s %-50s %-11s %s%s"
-                     (text/upper-case (name method)) path (name rule)
-                     (str/join ", " (map #(subs (str %) 1) permissions))
+                     (text/upper-case (name method)) path (if redirect-to "redirect" (name rule))
+                     (if redirect-to
+                       (str "to " redirect-to)
+                       (str/join ", " (map #(subs (str %) 1) permissions)))
                      (if scope (str "  scope " (pr-str scope)) ""))))
 
 (defn format-route-report

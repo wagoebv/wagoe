@@ -149,12 +149,12 @@
     (fn [{:keys [app users gsvc]}]
       (let [user (ports/create-user users {:email "u@example.com" :name "U" :role :user
                                            :active true :password-hash "x"})]
-        ;; A refused /web request is sent to the login page.
+        ;; A signed-in user is past the login form: a 403, not a redirect to it.
         (doseq [[method uri] [[:get "/web/admin/groups"] [:post "/web/admin/groups"]
                               [:get (str "/web/admin/groups/" (random-uuid) "/members/options")]]]
           (let [r (app (req user method uri {"name" "X"}))]
-            (is (= 302 (:status r)) (str method " " uri))
-            (is (str/starts-with? (get-in r [:headers "Location"]) "/web/login") (str method " " uri))))
+            (is (= 403 (:status r)) (str method " " uri))
+            (is (nil? (get-in r [:headers "Location"])) (str method " " uri))))
         (is (empty? (ports/list-groups gsvc)))))))
 
 (deftest ^:unit the-web-ui-switch-turns-the-group-pages-off-too

@@ -158,9 +158,11 @@
      (into {} (map (fn [method]
                      ;; Public: it only points at the versioned route,
                      ;; which enforces its own access (BOU-568).
-                     [method {:handler redirect-handler
-                              :public  true
-                              :summary (str "Redirect to " target-path)}]))
+                     [method {:handler            redirect-handler
+                              :public             true
+                              ;; So authz-report names the target, not a public route
+                              :wagoe/redirect-to  target-path
+                              :summary            (str "Redirect to " target-path)}]))
            [:get :post :put :delete :patch])]))
 
 (defn create-backward-compatibility-routes

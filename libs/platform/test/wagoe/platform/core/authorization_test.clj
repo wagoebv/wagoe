@@ -1,6 +1,7 @@
 (ns wagoe.platform.core.authorization-test
   (:require [clojure.test :refer [deftest is testing]]
-            [wagoe.platform.core.authorization :as sut]))
+            [wagoe.platform.core.authorization :as sut]
+            [wagoe.platform.shell.http.versioning :as versioning]))
 
 (deftest ^:unit every-module-has-read-and-write
   (let [{:keys [permissions]} (sut/build-registry {:wagoe/orders nil :wagoe/user {}})]
@@ -172,6 +173,15 @@
                             ["/me" {:authorization :signed-in :get {:handler identity}}]
                             ["/loose" {:get {:handler identity}}]
                             ["/any" {:wagoe/module :wagoe/orders :handler identity}]]))))
+
+(deftest ^:unit the-route-report-shows-a-redirect-by-its-target
+  (let [report (sut/route-report [(versioning/create-redirect-route "/me/export" :v1)
+                                  ["/api/v1/me/export" {:authorization :signed-in :get {:handler identity}}]])
+        text   (sut/format-route-report :enforce report)]
+    (is (= "/api/v1/me/export" (:redirect-to (first report))))
+    (is (re-find #"GET +/api/me/export +redirect +to /api/v1/me/export" text))
+    (is (not (re-find #"/api/me/export +public" text)))
+    (is (re-find #"GET +/api/v1/me/export +signed-in" text))))
 
 (deftest ^:unit an-unknown-marker-is-reported
   (is (= [{:path "/x" :authorization :signedin}]
