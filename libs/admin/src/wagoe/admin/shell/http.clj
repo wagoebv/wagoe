@@ -72,7 +72,7 @@
 
     [["/"
       {:middleware [auth-middleware]
-       :get {:handler (h list-handlers/admin-home-handler)
+       :get {:handler (h #(list-handlers/admin-home-handler %1 %2 %3 user-service))
              :summary "Admin home page"}}]
 
       ;; More specific routes first (to avoid matching /:id patterns)
