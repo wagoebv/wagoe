@@ -29,6 +29,7 @@
   /* wagoe.org */
   --wg-ink:          #0F1C18;   /* dark green: chrome */
   --wg-teal:         #5FD3B6;   /* accent on dark */
+  --wg-copper:       #E0A579;   /* attention */
   --wg-chrome-text:  #C9D6D1;   /* text on the dark green */
   --wg-chrome-muted: #7F918A;
   --wg-chrome-hover: rgba(255, 255, 255, 0.06);
@@ -40,9 +41,12 @@
   --color-base-content:      light-dark(#15201C, #E6EEEB);
   --color-primary:           light-dark(#0E7C66, #5FD3B6);
   --color-primary-content:   light-dark(#FFFFFF, #0F1C18);
-  --color-secondary:         light-dark(#9A5B26, #E0A579);
+  /* wagoe-tokens.css hard-codes navy for these; app.css hovers primary buttons with it */
+  --color-primary-hover:     color-mix(in oklab, var(--color-primary), black 12%);
+  --color-primary-light:     var(--accent-primary-light);
+  --color-secondary:         light-dark(#9A5B26, var(--wg-copper));
   --color-secondary-content: light-dark(#FFFFFF, #0F1C18);
-  --color-accent:            #E0A579;
+  --color-accent:            var(--wg-copper);
   --color-accent-content:    #0F1C18;
   --color-neutral:           #0F1C18;
   --color-neutral-content:   #E6EEEB;
@@ -50,7 +54,7 @@
   --color-info-content:      light-dark(#FFFFFF, #0F1C18);
   --color-success:           light-dark(#0B6B57, #5FD3B6);
   --color-success-content:   light-dark(#FFFFFF, #0F1C18);
-  --color-warning:           light-dark(#9A5B26, #E0A579);
+  --color-warning:           light-dark(#9A5B26, var(--wg-copper));
   --color-warning-content:   light-dark(#FFFFFF, #0F1C18);
   --color-error:             light-dark(#A33A1C, #F2A48C);
   --color-error-content:     light-dark(#FFFFFF, #0F1C18);
