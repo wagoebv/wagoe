@@ -527,6 +527,7 @@
  :admin/relationship-empty-state   "Geen {label} gevonden."
  :admin/relationship-view-all      "Alle {label} bekijken"
  :admin/combobox-placeholder       "Typ om te zoeken…"
+ :admin/file-stored                "Er is een bestand van {n} bytes opgeslagen. Kies een ander om het te vervangen."
  :admin/link-remove                "Verwijderen"
  :admin/links-unknown              "Geen record dat hieraan gekoppeld kan worden"
  :admin/combobox-no-matches        "Geen resultaten"
