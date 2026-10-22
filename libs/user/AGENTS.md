@@ -379,7 +379,7 @@ routes claim `/`, so an app without the user module can do the same.
 It is a `(fn [title body opts])` returning the whole page, resolved at boot;
 `body` is Wagoe's form card (fields, CSRF field, errors), without Wagoe's logo
 and subtitle. `opts`: `:page` (`:login` `:mfa` `:oidc-mfa` `:oidc-continue`
-`:register`), `:request`, `:user`, `:flash`, `:return-to`, `:logo-url`. A
+`:register` `:mfa-enrolment`), `:request`, `:user`, `:flash`, `:return-to`, `:logo-url`. A
 module can contribute it as `:auth {:login-layout (ig/ref …)}`, a function or
 a `ports/ILoginLayout`. Unset, the pages render as before
 (`core.ui/auth-page`). The "Create Account" link lives in `login-form`, not the

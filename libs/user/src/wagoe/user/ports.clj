@@ -502,5 +502,6 @@
 (defprotocol ILoginLayout
   (login-page [this title body opts]))
   ;; The whole page around Wagoe's sign-in forms: login, MFA, registration.
-  ;; opts: :page (:login, :mfa, :oidc-mfa, :oidc-continue, :register), :request,
+  ;; opts: :page (:login, :mfa, :oidc-mfa, :oidc-continue, :register,
+  ;; :mfa-enrolment), :request,
   ;; :user, :flash, :return-to, :logo-url. Returns Hiccup for the full page.

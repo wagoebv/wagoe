@@ -591,10 +591,12 @@
 ;; =============================================================================
 
 (defn- read-backup-codes
-  "The backup codes the setup form carries back, or nil."
+  "The backup codes the setup form carries back, or nil unless they are a
+   vector of strings."
   [s]
   (when s
-    (try (edn/read-string s)
+    (try (let [codes (edn/read-string s)]
+           (when (and (vector? codes) (every? string? codes)) codes))
          (catch Exception e
            (log/warn "Failed to parse backup codes" {:error (.getMessage e)})
            nil))))
@@ -625,40 +627,42 @@
    on. The user then signs in with it."
   [mfa-service config]
   (fn [request]
-    (let [claims       (enrolment-claims request)
-          form         (:form-params request)
-          secret       (get form "secret")
-          backup-codes (read-backup-codes (get form "backup-codes"))
-          opts         (sign-in-opts config request (:return-to claims))]
-      (cond
-        (nil? claims)
-        (enrolment-expired)
+    (if-let [claims (enrolment-claims request)]
+      (let [form         (:form-params request)
+            secret       (get form "secret")
+            ;; Parsed only once the ticket admits the caller: the route is public.
+            backup-codes (read-backup-codes (get form "backup-codes"))
+            opts         (sign-in-opts config request (:return-to claims))
+            ;; A plain form post, so a whole page rather than a fragment
+            error-page   (fn [message status]
+                           (html-response request
+                                          (layout/pilot-page-layout [:t :common/error-title]
+                                                                    (ui/error-message message))
+                                          status))]
+        (if-not (and secret backup-codes)
+          (error-page [:t :user/error-mfa-setup-missing] 400)
+          (let [result (mfa/enable-mfa mfa-service (:user-id claims) secret backup-codes
+                                       (get form "verification-code"))]
+            (cond
+              (:success? result)
+              (-> (html-response request (user-ui/mfa-enrolment-done-page backup-codes opts))
+                  (assoc-in [:cookies enrolment-cookie] enrolment-cookie-cleared))
 
-        (not (and secret backup-codes))
-        (html-response request (ui/error-message [:t :user/error-mfa-setup-missing]) 400)
+              (= :invalid-code (get-in result [:error :type]))
+              (html-response request
+                             (user-ui/mfa-enrolment-page
+                              (mfa/setup-view mfa-service secret (:email claims) backup-codes)
+                              {:verification-code [[:t :user/mfa-enrolment-invalid-code]]}
+                              opts)
+                             400)
 
-        :else
-        (let [result (mfa/enable-mfa mfa-service (:user-id claims) secret backup-codes
-                                     (get form "verification-code"))]
-          (cond
-            (:success? result)
-            (-> (html-response request (user-ui/mfa-enrolment-done-page backup-codes opts))
-                (assoc-in [:cookies enrolment-cookie] enrolment-cookie-cleared))
+              ;; Already on, from another tab, or the account is gone
+              (= :cannot-enable (get-in result [:error :type]))
+              (enrolment-expired)
 
-            (= :invalid-code (get-in result [:error :type]))
-            (html-response request
-                           (user-ui/mfa-enrolment-page
-                            (mfa/setup-view mfa-service secret (:email claims) backup-codes)
-                            {:verification-code [[:t :user/mfa-enrolment-invalid-code]]}
-                            opts)
-                           400)
-
-            ;; Already on, from another tab, or the account is gone
-            (= :cannot-enable (get-in result [:error :type]))
-            (enrolment-expired)
-
-            :else
-            (html-response request (ui/error-message (mfa-error-message result)) 500)))))))
+              :else
+              (error-page (mfa-error-message result) 500)))))
+      (enrolment-expired))))
 
 ;; =============================================================================
 ;; OpenID Connect sign-in
