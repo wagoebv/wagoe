@@ -13,11 +13,12 @@
                                     :page-size 20
                                     :hx-target "#entity-table-container"
                                     :hx-push-url? true})
-          attrs (second th)]
+          attrs (get-in th [2 1])]
       (is (str/includes? (:hx-get attrs) "sort=email"))
       (is (str/includes? (:hx-get attrs) "dir=desc"))
       (is (str/includes? (:hx-push-url attrs) "dir=desc"))
-      (is (= "↑" (last (last th))))))
+      (is (= "ascending" (get-in th [1 :aria-sort])))
+      (is (= [:span.sort-icon {:aria-hidden "true"} "↑"] (last (last th))))))
 
   (testing "active desc sort toggles to asc and renders descending icon"
     (let [th (table-ui/sortable-th {:label "Email"
@@ -28,11 +29,40 @@
                                     :page-size 20
                                     :hx-target "#entity-table-container"
                                     :hx-push-url? true})
-          attrs (second th)]
+          attrs (get-in th [2 1])]
       (is (str/includes? (:hx-get attrs) "sort=email"))
       (is (str/includes? (:hx-get attrs) "dir=asc"))
       (is (str/includes? (:hx-push-url attrs) "dir=asc"))
-      (is (= "↓" (last (last th)))))))
+      (is (= "descending" (get-in th [1 :aria-sort])))
+      (is (= [:span.sort-icon {:aria-hidden "true"} "↓"] (last (last th)))))))
+
+(deftest ^:unit sortable-th-is-a-header-holding-a-button-test
+  ;; A role on the th hid it as a column header, and Enter did not sort
+  (let [th     (table-ui/sortable-th {:label "Email" :field :email :base-url "/t"
+                                      :page-size 20 :hx-target "#users"})
+        button (get th 2)]
+    (is (= :th (first th)))
+    (is (not-any? #(contains? (second th) %) [:role :tabindex :hx-get]))
+    (is (nil? (get-in th [1 :aria-sort])) "not sorted by this column")
+    (is (= :button (first button)))
+    (is (= "button" (get-in button [1 :type])))
+    (is (= "users-sort-email" (get-in button [1 :id])) "htmx refocuses it by id")
+    (is (nil? (get-in (table-ui/sortable-th {:label "E" :field :email :base-url "/t" :hx-target "closest div"})
+                      [2 1 :id]))
+        "no id from a target that is not one")))
+
+(deftest ^:unit pagination-controls-keep-focus-test
+  (let [pager   (table-ui/pagination {:table-query {:page 2 :page-size 10} :total-count 50
+                                      :base-url "/t" :hx-target "#users"})
+        buttons (filter #(and (vector? %) (keyword? (first %)) (str/starts-with? (name (first %)) "button"))
+                        (tree-seq #(or (vector? %) (seq? %)) seq pager))
+        current (first (filter #(= "page" (get-in % [1 :aria-current])) buttons))]
+    (testing "each control has an id htmx can refocus after the swap"
+      (is (= (count buttons) (count (set (keep #(get-in % [1 :id]) buttons)))))
+      (is (some #(= "users-page-next" (get-in % [1 :id])) buttons)))
+    (testing "the current page can take focus"
+      (is (= "users-page-2" (get-in current [1 :id])))
+      (is (not (get-in current [1 :disabled]))))))
 
 (deftest ^:unit table-controls-replace-their-target-test
   ;; The handlers behind these return the element carrying the target id, so
@@ -64,7 +94,7 @@
         th      (table-ui/sortable-th {:label "Email" :field :email :base-url "/t"
                                        :page 1 :page-size 20 :hx-target "#t"
                                        :extra-params filters})
-        url     (get-in th [1 :hx-get])]
+        url     (get-in th [2 1 :hx-get])]
     (testing "a spec map goes back in the filter bar's format, URL-encoded"
       (is (str/includes? url "filters%5Bstatus%5D%5Bop%5D=eq"))
       (is (str/includes? url "filters%5Bstatus%5D%5Bvalue%5D=paid"))
@@ -188,16 +218,18 @@
         [header-row filter-row] (tagged :tr table)
         ths (fn [row] (tagged :th row))]
     (testing "sortable headers push the list URL, keeping filters and search"
-      (let [th  (first (filter #(get-in % [1 :hx-get]) (ths header-row)))
-            url (get-in th [1 :hx-get])]
+      (let [th  (first (filter #(get-in % [2 1 :hx-get]) (ths header-row)))
+            url (get-in th [2 1 :hx-get])]
         (is (str/starts-with? url "/orders?"))
         (is (str/includes? url "dir=desc"))
         (is (str/includes? url "search=x"))
         (is (str/includes? url "filters%5Bstatus%5D%5Bvalue%5D=paid"))
-        (is (= url (get-in th [1 :hx-push-url])))
-        (is (str/includes? (get-in th [1 :class]) "field-number"))))
+        (is (= url (get-in th [2 1 :hx-push-url])))
+        (is (str/includes? (get-in th [1 :class]) "field-number"))
+        (is (= "ascending" (get-in th [1 :aria-sort])))))
     (testing "a column can opt out of sorting and carry a class"
-      (is (= ["field-status"] (keep #(when-not (get-in % [1 :hx-get]) (get-in % [1 :class]))
+      (is (= ["field-status"] (keep #(when-not (str/includes? (str (get-in % [1 :class])) "sortable-header")
+                                       (get-in % [1 :class]))
                                     (rest (butlast (ths header-row))))))
       (is (some #(str/ends-with? (str (get-in % [1 :class])) "field-customer text-right")
                 (ths header-row))))

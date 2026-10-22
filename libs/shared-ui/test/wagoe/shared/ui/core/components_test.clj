@@ -101,6 +101,18 @@
   (is (true? (:required (second (components/select-field :s [[:a "A"]] nil {:required true})))))
   (is (not (contains? (second (components/textarea :d "" {:required false})) :required))))
 
+(deftest ^:unit select-field-blank-and-id
+  (let [values #(map (comp :value second) (nth % 2))]
+    (testing "an optional value can be left unset"
+      (let [s (components/select-field :s [[:a "A"]] nil {:blank? true})]
+        (is (= ["" "a"] (values s)))
+        (is (true? (-> s (nth 2) first second :selected)))))
+    (testing "options that already have a blank get no second one"
+      (is (= ["" "a"] (values (components/select-field :s [["" "—"] [:a "A"]] nil {:blank? true})))))
+    (testing ":id nil leaves the id off; the field name by default"
+      (is (nil? (get-in (components/select-field :s [[:a "A"]] nil {:id nil}) [1 :id])))
+      (is (= "s" (get-in (components/select-field :s [[:a "A"]] nil) [1 :id]))))))
+
 (deftest ^:unit checkbox-test
   (testing "Checked checkbox generation"
     (let [result (components/checkbox :active true)]
