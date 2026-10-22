@@ -39,8 +39,9 @@
 ;; =============================================================================
 
 (defn admin-home-handler
-  "The dashboard: the sidebar's sections, a card per page the user may open. For every signed-in user, except under :enforce, where it
-   needs read on one entity in a scope that entity can check (ADR-041 §6)."
+  "The dashboard: the sidebar's sections, a card per page the user may open.
+   For every signed-in user, except under :enforce, where it needs read on
+   one entity in a scope that entity can check (ADR-041 §6)."
   [admin-service schema-provider config]
   (fn [request]
     (let [user (support/get-current-user request)
@@ -50,15 +51,18 @@
               (shell-permissions/assert-can-access-admin! user all-configs))
           entities (permissions/filter-visible-entities user available all-configs)
           entity-configs (select-keys all-configs entities)
+          groups (admin-ui/dashboard-groups entities entity-configs user)
           ;; Counted only for a card the dashboard shows
-          shown (set (keep :entity (mapcat :items (admin-ui/dashboard-groups entities entity-configs user))))
-          stats (into {} (comp (filter shown)
+          stats (into {} (comp (mapcat :items)
+                               (keep :entity)
+                               (filter (set entities))
                                (map (fn [e] [e {:count (ports/count-entities admin-service e {})}])))
-                      entities)]
+                      groups)]
       (support/html-response request
                              (admin-ui/admin-layout
-                              (admin-ui/admin-home entities entity-configs stats user)
+                              (admin-ui/dashboard groups stats)
                               {:user user
+                               :nav groups
                                :current-entity nil
                                :entity-configs entity-configs
                                :logo-url (:logo-url config)})))))

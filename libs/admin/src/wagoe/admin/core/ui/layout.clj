@@ -79,20 +79,11 @@
       [:div.entity-card-meta
        [:span.entity-card-count [:t :admin/entity-card-count {:count n}]]])]])
 
-(defn admin-home
-  "Admin dashboard home page content: a section per sidebar group `user` sees,
-   in the sidebar's order, a card per item. `entities` and `entity-configs`
-   matter only outside a request (see `dashboard-groups`).
-
-   Args:
-     entities: Vector of available entity names
-     entity-configs: Map of entity configurations
-     stats: Optional map of entity to {:count n}
-     user: Optional signed-in user
-
-   Returns:
-     Hiccup structure for dashboard"
-  [entities entity-configs & [stats user]]
+(defn dashboard
+  "Admin dashboard home page content: a section per group of `groups` (the
+   sidebar's, see `dashboard-groups`), a card per item. `stats` maps an
+   entity to {:count n}."
+  [groups stats]
   [:div.admin-home {:class "space-y-4"}
    [:section.admin-home-hero
     [:div.admin-home-hero-inner
@@ -100,7 +91,7 @@
       [:span.admin-home-kicker [:t :admin/page-kicker]]
       [:h1 [:t :admin/page-heading]]
       [:p [:t :admin/page-description]]]]]
-   (for [{:keys [id label icon items]} (dashboard-groups entities entity-configs user)
+   (for [{:keys [id label icon items]} groups
          :let [heading (str "admin-home-" (name id))]]
      [:section.admin-home-section {:aria-labelledby heading :data-group (name id)}
       [:h2.admin-home-section-title {:id heading}
@@ -109,6 +100,11 @@
       [:div.entity-grid
        (for [item items]
          (dashboard-card item stats))]])])
+
+(defn admin-home
+  "`dashboard` for the groups `dashboard-groups` gives `user`."
+  [entities entity-configs & [stats user]]
+  (dashboard (dashboard-groups entities entity-configs user) stats))
 
 ;; =============================================================================
 ;; Error Pages
