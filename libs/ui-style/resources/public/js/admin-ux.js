@@ -386,6 +386,25 @@ document.addEventListener('alpine:init', function () {
           elt.closest('.filter-drawer')) {
         lastOperatorField = elt.getAttribute('name');
       }
+      if (elt && elt === document.activeElement && elt.closest && elt.closest('.table-pagination')) {
+        pagerFocused = true;
+      }
+    });
+
+    // A failed page request swaps nothing: the flag must not move focus on
+    // the next, unrelated settle
+    document.addEventListener('htmx:afterRequest', function (event) {
+      if (!(event.detail && event.detail.successful)) pagerFocused = false;
+    });
+
+    // htmx refocuses a pager button by its id after the swap; one that is now
+    // disabled (next, on the last page) cannot take it, so the current page does
+    document.addEventListener('htmx:afterSettle', function () {
+      if (!pagerFocused) return;
+      pagerFocused = false;
+      if (document.activeElement && document.activeElement !== document.body) return;
+      var current = document.querySelector('.table-pagination [aria-current="page"]');
+      if (current) current.focus();
     });
 
     // The user menu closes on a click outside it
@@ -538,6 +557,7 @@ document.addEventListener('alpine:init', function () {
   var cursorHref = null;  // the row j/k is on
   var pendingLanding = null; // 'first' / 'last': where the cursor goes after a page turn
   var lastOperatorField = null; // the filter whose operator re-rendered the drawer
+  var pagerFocused = false; // a focused pager button sent the request
 
   function clickableRows() {
     return Array.from(document.querySelectorAll('tr.clickable-row'));
@@ -651,12 +671,18 @@ document.addEventListener('alpine:init', function () {
       .then(markOpenRow);
   }
 
+  // Focus goes back to what opened the drawer: the record's row, or the
+  // filter button
   function closeDrawer() {
     var slot = document.getElementById(DRAWER_SLOT);
     if (!slot || !slot.firstElementChild) return false;
+    var filters = slot.querySelector('.filter-drawer');
+    var origin = openHref ? rowByHref(openHref)
+      : (filters && document.querySelector('[data-filter-open]'));
     slot.innerHTML = '';
     openHref = null;
     markOpenRow();
+    if (origin) origin.focus();
     return true;
   }
 

@@ -134,6 +134,13 @@
   [pg]
   (loc/count-elements (page/locator pg "table.data-table tbody tr")))
 
+(defn after-table-swap!
+  "Call `f`, which makes htmx replace the list table, and wait for the swap."
+  [pg f]
+  (let [marked (mark-stale! pg "#entity-table-container")]
+    (f)
+    (await-swap! pg marked "#entity-table-container")))
+
 (defn search!
   "Fill the search input, trigger the HTMX request, and wait for the table to
    be replaced.
@@ -147,36 +154,35 @@
   [pg query]
   (let [input (page/locator pg "input.search-input")]
     (loc/fill input query)
-    (let [marked (mark-stale! pg "#entity-table-container")]
-      (loc/dispatch-event input "search")
-      (await-swap! pg marked "#entity-table-container"))))
+    (after-table-swap! pg #(loc/dispatch-event input "search"))))
 
 (defn sort-by-column!
   "Click the sortable header of `field` and wait for the table to be replaced."
   [pg field]
-  (let [marked (mark-stale! pg "#entity-table-container")]
-    (loc/click (page/locator pg (str "table.data-table th.sortable-header.field-" field)))
-    (await-swap! pg marked "#entity-table-container")))
+  (after-table-swap! pg #(loc/click (page/locator pg (str "table.data-table th.sortable-header.field-" field " .sort-button")))))
+
+(defn await-htmx-ready!
+  "Block until htmx has processed what `selector` matches and nothing is in
+   flight: an element swapped in a moment ago has no htmx listener yet, and a
+   click or change before that requests nothing."
+  [pg selector]
+  (let [ready (page/wait-for-function
+               pg
+               (str "(() => { const s = document.querySelector(\"" selector "\");"
+                    " return !!(s && s['htmx-internal-data'])"
+                    " && !document.querySelector('.htmx-request, .htmx-swapping, .htmx-settling'); })()")
+               {:timeout 10000.0 :polling 50.0})]
+    (when (map? ready)
+      (throw (ex-info (str "htmx never processed " selector)
+                      {:type :wagoe.e2e/htmx-not-ready :selector selector})))))
 
 (defn sort-by-select!
   "Pick `value` in the card view's sort select `select-name` (\"sort\" or
    \"dir\") and wait for the table to be replaced."
   [pg select-name value]
-  (let [selector (str ".card-sort select[name='" select-name "']")
-        ;; A select swapped in a moment ago has no htmx listener until htmx
-        ;; processes it, and a change before that requests nothing
-        ready    (page/wait-for-function
-                  pg
-                  (str "(() => { const s = document.querySelector(\"" selector "\");"
-                       " return !!(s && s['htmx-internal-data'])"
-                       " && !document.querySelector('.htmx-request, .htmx-swapping, .htmx-settling'); })()")
-                  {:timeout 10000.0 :polling 50.0})
-        _        (when (map? ready)
-                   (throw (ex-info (str "htmx never processed " selector)
-                                   {:type :wagoe.e2e/htmx-not-ready :selector selector})))
-        marked   (mark-stale! pg "#entity-table-container")]
-    (loc/select-option (page/locator pg selector) value)
-    (await-swap! pg marked "#entity-table-container")))
+  (let [selector (str ".card-sort select[name='" select-name "']")]
+    (await-htmx-ready! pg selector)
+    (after-table-swap! pg #(loc/select-option (page/locator pg selector) value))))
 
 (defn submit-entity-form!
   "Click an admin entity form's submit button and wait for it to re-render.

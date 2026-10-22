@@ -27,6 +27,7 @@
  {:test {:extra-paths ["test"]
          :extra-deps  {lambdaisland/kaocha {:mvn/version "1.91.1392"}
                        com.h2database/h2 {:mvn/version "2.5.250"}
+                       org.webjars.npm/axe-core {:mvn/version "4.13.0"}
                        ;; Used by helper namespaces for POST /test/reset
                        clj-http/clj-http   {:mvn/version "3.13.1"}
                        ;; TOTP helper (already used elsewhere in the repo)

@@ -65,4 +65,13 @@
         (loc/fill (page/locator pg "input[name='name']") "Renamed")
         (admin/submit-entity-form! pg)
         (is (= "Renamed" (input-value pg "name")))
-        (is (str/includes? (text pg) "A file of 15 bytes is stored"))))))
+        (is (str/includes? (text pg) "A file of 15 bytes is stored")))
+
+      (testing "the stored file can be removed"
+        ;; The optional fields may start folded away
+        (page/evaluate pg "() => document.querySelectorAll('details.form-section-optional').forEach(d => d.open = true)")
+        (loc/check (page/locator pg "input[name='__remove'][value='datasheet']"))
+        (admin/submit-entity-form! pg)
+        (is (not (str/includes? (text pg) "is stored")))
+        (is (zero? (loc/count-elements (page/locator pg "input[name='__remove']")))
+            "nothing left to remove")))))

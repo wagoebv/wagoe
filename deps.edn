@@ -359,7 +359,9 @@
            ;; =============================================================================
 
            :e2e       {:extra-paths ["libs/e2e/src" "libs/e2e/test"]
-                       :extra-deps  {com.blockether/spel {:mvn/version "0.9.34"}}}
+                       :extra-deps  {com.blockether/spel {:mvn/version "0.9.34"}
+                                     ;; axe.min.js, injected by the accessibility test
+                                     org.webjars.npm/axe-core {:mvn/version "4.13.0"}}}
 
            ;; =============================================================================
            ;; CLI Interface

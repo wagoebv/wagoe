@@ -448,8 +448,14 @@
                                        (tree-seq coll? seq form)))]
         (doseq [form [(ui/render-inline-edit-form :users 1 :date-format :us cfg)
                       (ui/render-inline-edit-form-with-error :users 1 :date-format "us" cfg ["bad"])]]
-          (is (= [[:t :admin.users/date-format-iso] "US"] (map last (options form))))
-          (is (= ["us"] (keep #(when (:selected (second %)) (:value (second %))) (options form)))))))
+          ;; Optional, so it can be emptied
+          (is (= ["—" [:t :admin.users/date-format-iso] "US"] (map last (options form))))
+          (is (= ["us"] (keep #(when (:selected (second %)) (:value (second %))) (options form))))
+          (is (not-any? #(and (vector? %) (= :select (first %)) (:id (second %)))
+                        (tree-seq coll? seq form))))
+        (is (= [[:t :admin.users/date-format-iso] "US"]
+               (map last (options (ui/render-inline-edit-form :users 1 :date-format :us
+                                                              (assoc cfg :required true))))))))
 
     (testing "Select widget"
       (let [widget (ui/render-field-widget :role :admin
@@ -1458,7 +1464,25 @@
             row-str (str row)]
         ;; Row should have clickable-row class and chevron navigation hint
         (is (str/includes? row-str "clickable-row"))
-        (is (str/includes? row-str "row-nav-hint"))))))
+        (is (str/includes? row-str "row-nav-hint"))))
+
+    (testing "Checkboxes are named after their record, and select-all says so"
+      (let [config (assoc sample-entity-config :title-field :name)
+            nodes  (tree-seq coll? seq (ui/entity-table :users [sample-record] config
+                                                        {:page 1 :page-size 20} 1 sample-permissions nil))
+            labels (keep #(when (and (map? %) (= "checkbox" (:type %))) (:aria-label %)) nodes)]
+        (is (= #{[:t :admin/select-all] [:t :admin/select-row {:title "Sample User"}]} (set labels)))))
+
+    (testing "An openable row can take focus, so closing the drawer can return to it"
+      (is (= "-1" (get-in (ui/entity-table-row :users sample-record sample-entity-config
+                                               {:can-view true})
+                          [1 :tabindex]))))
+
+    (testing "The create button's name is its translated text"
+      (let [page (ui/entity-list-page :users [sample-record] sample-entity-config
+                                      {:page 1 :page-size 20} 1 sample-permissions nil)]
+        (is (str/includes? (str page) ":admin/button-new"))
+        (is (not (str/includes? (str page) ":admin/button-create-new")))))))
 
 (deftest ^:unit accessibility-semantic-html-test
   (testing "Pages use semantic HTML elements"
