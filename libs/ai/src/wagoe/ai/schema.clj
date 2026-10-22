@@ -121,7 +121,8 @@
                                      [:map {:closed true}
                                       [:warn-days {:optional true} [:int {:min 0}]]
                                       [:until {:optional true} [:map-of :keyword [:sequential :any]]]]]]
-   [:total         {:optional true} :boolean]])
+   [:total         {:optional true} :boolean]
+   [:options-source {:optional true} [:enum :timezones]]])
 
 (def AdminHasMany
   [:map {:closed true}
