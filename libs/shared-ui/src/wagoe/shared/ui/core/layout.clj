@@ -50,20 +50,20 @@
        [:div.nav-links
         [:a {:href "/web/audit"}
          (icons/icon :file-text {:size 18})
-         [:span {:class "ml-2"} "Audit Trail"]]])
+         [:span {:class "ml-2"} [:t :common/nav-audit]]]])
      (if user
        [:div.user-nav
         (icons/theme-toggle-button)
         (if-let [items (seq (cond-> []
                               profile? (conj [:a.dropdown-item {:href "/web/profile"}
                                               (icons/icon :user {:size 18})
-                                              [:span "Profile & Security"]])
+                                              [:span [:t :common/nav-profile]]])
                               (and profile? logout?) (conj [:div.dropdown-divider])
                               logout? (conj [:form {:method "POST" :action "/web/logout"}
                                              (csrf/hidden-field)
                                              [:button.dropdown-item {:type "submit"}
                                               (icons/icon :log-out {:size 18})
-                                              [:span "Logout"]]])))]
+                                              [:span [:t :common/button-logout]]]])))]
           ;; Alpine.js powered dropdown - replaces app.js toggleUserDropdown()
           [:div.user-dropdown (alpine/dropdown-attrs)
            [:button.dropdown-toggle (alpine/toggle-button-attrs)
@@ -78,7 +78,7 @@
        [:div.user-nav
         (icons/theme-toggle-button)
         (when (pages/mounted? "/web/login")
-          [:a {:href "/web/login"} "Login"])])]))
+          [:a {:href "/web/login"} [:t :common/button-login]])])]))
 
 (defn page-layout
   "Main page layout wrapper.
@@ -184,7 +184,7 @@
    [:head
     [:meta {:charset "UTF-8"}]
     [:meta {:name "viewport" :content "width=device-width, initial-scale=1.0"}]
-    [:title (str status " - " title)]
+    [:title status " - " title]
     (for [css-file pilot-css]
       [:link {:rel "stylesheet" :href css-file}])]
    [:body.wagoe-default
@@ -193,9 +193,9 @@
      [:p.error-message message]
      (when details
        [:div.error-details
-        [:h3 "Details:"]
+        [:h3 [:t :common/error-details]]
         [:pre details]])
-     [:a.button {:href "/"} "Go Home"]]]])
+     [:a.button {:href "/"} [:t :common/button-go-home]]]]])
 
 (defn home-page-content
   "Default home page content.
@@ -204,10 +204,10 @@
      Hiccup structure for home page"
   []
   [:div.home-content
-   [:h1 "Welcome to Wagoe Application"]
-   [:p "This is a modular application built with Clojure."]
+   [:h1 [:t :common/home-welcome]]
+   [:p [:t :common/home-description]]
    [:div.navigation-links
-    [:a.button {:href "/users"} "Manage Users"]]])
+    [:a.button {:href "/users"} [:t :common/home-manage-users]]]])
 
 (defn render-error-page
   "Render a complete error page.
@@ -222,7 +222,7 @@
    (render-error-page message 500))
   ([message status]
    (components/render-html
-    (error-layout status "Error" message))))
+    (error-layout status [:t :common/error-title] message))))
 
 (defn sidebar
   "Sidebar component for layouts that need side navigation.

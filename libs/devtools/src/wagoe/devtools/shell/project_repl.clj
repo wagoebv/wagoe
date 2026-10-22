@@ -89,6 +89,21 @@
                    all))))
      (println "System not running. Start it with (go)"))))
 
+(defn explain-entity
+  "Print what the admin overview derives for `entity`: each field's display
+   role and why, its title field, facet and list columns (ADR-040). Resolved
+   at call time, since devtools does not depend on wagoe-admin."
+  [entity]
+  (let [provider (get state/system :wagoe/admin-schema-provider)
+        config   (when provider
+                   ((requiring-resolve 'wagoe.admin.ports/get-entity-config) provider entity))]
+    (cond
+      (nil? state/system) (println "System not running. Start it with (go)")
+      (nil? provider)     (println "No admin in this system: (explain-entity) needs wagoe-admin.")
+      (nil? config)       (println (str "No admin entity " entity "."))
+      :else               (println ((requiring-resolve 'wagoe.admin.core.display/format-explain)
+                                    entity ((requiring-resolve 'wagoe.admin.core.display/explain) config))))))
+
 ;; =============================================================================
 ;; Errors
 ;; =============================================================================

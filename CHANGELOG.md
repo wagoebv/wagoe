@@ -268,6 +268,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Page chrome and user error pages were English in every locale** (BOU-805): navigation, theme toggle, toasts and
+  sibling nav now translate. A page rendered with `components/render-html` shows them in English.
+- **`(explain-entity :e)` was missing from a generated app's REPL** (BOU-805). Add the one-line `explain-entity` from
+  a new app's `dev/user.clj` to yours.
 - **Admin forms take a fraction in a decimal field and upload the file in a binary one** (BOU-798). Nothing to
   change; an H2 `BYTEA` or MySQL `VARBINARY`/`*BLOB` column now gets a file input too.
 - **Admin dark mode showed the old navy palette when the OS was dark** (BOU-797); the topbar initials and the

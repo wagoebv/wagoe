@@ -23,7 +23,7 @@
             error? (assoc :role "alert"))
      [:span (if (keyword? message) [:t message] message)]
      [:button (merge {:type "button" :class "btn btn-ghost btn-xs btn-circle"
-                      :aria-label "Dismiss"}
+                      :aria-label [:t :common/button-dismiss]}
                      (alpine/x-on :click "dismiss()"))
       "✕"]]))
 

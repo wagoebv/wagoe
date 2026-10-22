@@ -109,7 +109,8 @@
             {:name "(config)"      :desc "The running config"}
             {:name "(config :k)"   :desc "One section, secrets redacted"}
             {:name "(routes)"      :desc "Show all HTTP routes"}
-            {:name "(routes :m)"   :desc "Filter routes by module"}]
+            {:name "(routes :m)"   :desc "Filter routes by module"}
+            {:name "(explain-entity :e)" :desc "Admin overview roles of an entity"}]
    :debug  [{:name "(fix!)"        :desc "Apply the fix for the last error"}
             {:name "(commands)"    :desc "Show this list"}]
    :shell  [{:name "bb scaffold"   :desc "Generate a module"}

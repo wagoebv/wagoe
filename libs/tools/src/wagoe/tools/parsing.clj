@@ -76,8 +76,9 @@
      content - Clojure source string
 
    Returns:
-     Seq of {:text str :line int :regex? bool :preceding-code str}, in order.
-     `:text` excludes the surrounding quotes. `:preceding-code` is the code
+     Seq of {:text str :line int :end int :regex? bool :preceding-code str},
+     in order. `:text` excludes the surrounding quotes; `:end` is the index
+     just past the closing one. `:preceding-code` is the code
      before the literal with comments and other strings blanked, so a caller
      can match against the enclosing form without re-solving quoting."
   [content]
@@ -122,6 +123,7 @@
               (recur end (+ line newlines) code
                      (conj! acc {:text            text
                                  :line            start-line
+                                 :end             (min end n)
                                  :regex?          regex?
                                  :preceding-code  before})))
 

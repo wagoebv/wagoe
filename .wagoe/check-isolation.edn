@@ -66,6 +66,11 @@
          reaches past the jobs ports into its core — a layering question on top of
          the dependency one. jobs should expose what workflow needs on its port."}
 
+  {:lib "devtools"  :namespace "wagoe.admin.ports"
+   :why "BY DESIGN. Optional companion: (explain-entity) in project_repl.clj reads the
+         admin's schema provider, and says the admin is absent when it is."}
+  {:lib "devtools"  :namespace "wagoe.admin.core.display"
+   :why "BY DESIGN. Same (explain-entity) as wagoe.admin.ports above."}
   {:lib "platform"  :namespace "wagoe.devtools.shell.dashboard.middleware"
    :why "BY DESIGN. Dev-only: the branch is behind (= :dev profile) and degrades to no
          enrichment when devtools is absent. Documented inline in routes.clj."}

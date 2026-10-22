@@ -831,14 +831,14 @@
         (when sibling-nav
           [:div.sibling-nav
            (if (:prev-url sibling-nav)
-             [:a.button.secondary {:href (:prev-url sibling-nav) :title "Previous  [  ·  ⌥↑ in a field" :data-nav "prev"}
+             [:a.button.secondary {:href (:prev-url sibling-nav) :title [:t :admin/sibling-prev] :data-nav "prev"}
               (icons/icon :chevron-left {:size 14})]
              [:span.button.secondary.disabled {:aria-disabled "true"}
               (icons/icon :chevron-left {:size 14})])
            [:span.sibling-nav-count
             (:position sibling-nav) " / " (:total sibling-nav)]
            (if (:next-url sibling-nav)
-             [:a.button.secondary {:href (:next-url sibling-nav) :title "Next  ]  ·  ⌥↓ in a field" :data-nav "next"}
+             [:a.button.secondary {:href (:next-url sibling-nav) :title [:t :admin/sibling-next] :data-nav "next"}
               (icons/icon :chevron-right {:size 14})]
              [:span.button.secondary.disabled {:aria-disabled "true"}
               (icons/icon :chevron-right {:size 14})])])

@@ -421,14 +421,14 @@
      [:button.theme-toggle
       {:type "button"
        :data-theme-toggle "true"
-       :aria-label "Toggle theme"
+       :aria-label [:t :common/theme-toggle]
        :class class}
       ;; Light mode icon (sun) - shown when in dark mode
       [:span {:data-theme-icon "light" :style "display: none;"}
-       (icon :sun {:size size :aria-label "Switch to light mode"})]
+       (icon :sun {:size size :aria-label [:t :common/theme-light]})]
       ;; Dark mode icon (moon) - shown when in light mode
       [:span {:data-theme-icon "dark"}
-       (icon :moon {:size size :aria-label "Switch to dark mode"})]])))
+       (icon :moon {:size size :aria-label [:t :common/theme-dark]})]])))
 
 (defn brand-logo
   "Render the Wagoe brand logo with automatic light/dark theme switching.
