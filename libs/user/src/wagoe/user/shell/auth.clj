@@ -12,6 +12,7 @@
    is delegated to wagoe.user.core.authentication."
   (:require [wagoe.user.core.authentication :as auth-core]
             [wagoe.user.core.mfa :as mfa-core]
+            [wagoe.user.core.user :as user-core]
             [wagoe.user.shell.hooks :as hooks]
             [wagoe.user.shell.lockout :as lockout]
             [wagoe.user.shell.mfa :as mfa-shell]
@@ -342,7 +343,7 @@
                       :error {:type    :mfa-enrolment-required
                               :message (:reason mfa-requirement)}
                       ;; Who to enrol: the password was right.
-                      :user (dissoc user :password-hash :mfa-secret :mfa-backup-codes :mfa-backup-codes-used)})
+                      :user (user-core/without-credentials user)})
 
                    ;; MFA required but not provided
                    (and (:requires-mfa? mfa-requirement)

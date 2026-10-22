@@ -66,9 +66,9 @@
   (error-response status error message correlation-id))
 
 (defn forbidden-response
-  "403 for a signed-in caller: `refusal-response`. A web page once redirected
-   to the login form, which only sent the user back here."
-  {:deprecated "use refusal-response"}
+  "403 for a signed-in caller who may not do this, as `refusal-response`
+   answers. A web page once redirected to the login form, which only sent the
+   user back here."
   [message _request correlation-id]
   (refusal-response 403 "forbidden" message correlation-id))
 

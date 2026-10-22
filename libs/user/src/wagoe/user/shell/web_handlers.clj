@@ -646,16 +646,12 @@
                 (assoc-in [:cookies enrolment-cookie] enrolment-cookie-cleared))
 
             (= :invalid-code (get-in result [:error :type]))
-            (let [issuer (get-in mfa-service [:config :issuer] "Wagoe Framework")]
-              (html-response request
-                             (user-ui/mfa-enrolment-page
-                              {:secret       secret
-                               :qr-code-url  (mfa/generate-qr-code-data-url
-                                              (mfa/generate-totp-uri secret (:email claims) issuer))
-                               :backup-codes backup-codes}
-                              {:verification-code [[:t :user/mfa-enrolment-invalid-code]]}
-                              opts)
-                             400))
+            (html-response request
+                           (user-ui/mfa-enrolment-page
+                            (mfa/setup-view mfa-service secret (:email claims) backup-codes)
+                            {:verification-code [[:t :user/mfa-enrolment-invalid-code]]}
+                            opts)
+                           400)
 
             ;; Already on, from another tab, or the account is gone
             (= :cannot-enable (get-in result [:error :type]))
@@ -1771,10 +1767,8 @@
                                                                   {:user current-user
                                                                    :flash {:success "Two-factor authentication enabled successfully"}}))
               ;; Invalid code - regenerate QR code data URL from the submitted secret
-              (let [issuer (get-in mfa-service [:config :issuer] "Wagoe Framework")
-                    account-name (:email current-user)
-                    totp-uri (mfa/generate-totp-uri secret account-name issuer)
-                    qr-code-url (mfa/generate-qr-code-data-url totp-uri)]
+              (let [{:keys [qr-code-url issuer account-name]}
+                    (mfa/setup-view mfa-service secret (:email current-user) backup-codes)]
                 (html-response request
                                (profile-ui/mfa-qr-code-step secret qr-code-url issuer account-name backup-codes
                                                             {:verification-code ["Invalid verification code. Please try again."]})

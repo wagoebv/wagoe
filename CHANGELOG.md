@@ -247,8 +247,6 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Deprecated
 
-- **`wagoe.platform.core.http.access/forbidden-response`** (BOU-815): now `refusal-response` with a 403; goes in 2.0.
-  Call `refusal-response`.
 - **`wagoe.platform.shell.database.migrations/create-config`** (BOU-813): `create-migration` no longer calls
   migratus/create, so nothing needs it; goes in 2.0. Call `create-migration`.
 - **`:require-role` in the admin config** (BOU-774): nothing reads it; boot warns outside `:off`, and it goes in 2.0.
@@ -286,7 +284,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **Sign-in leads a user to set up two-factor authentication when the app's `:mfa-required?` hook requires it and they
   have none** (BOU-815), after an admin reset for one. Nothing to change.
-- **Tenant, search and workflow show a signed-in user they refuse the 403 page** (BOU-815), not the login form.
+- **Tenant, search and workflow show a signed-in user they refuse the 403 page** (BOU-815), not the login form; so
+  does `access/forbidden-response` in an app.
 - **Access admin gaps** (BOU-795): a signed-in non-admin gets a 403 page on Groups, not the login form; scopes show
   record titles; the lockout message says the real minutes; a read-only checkbox no longer saves false.
 - **`wagoe upgrade authorization check` names admin entities missing from the `:allowlist`** (BOU-795), which have no

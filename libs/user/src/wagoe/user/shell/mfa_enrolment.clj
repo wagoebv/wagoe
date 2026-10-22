@@ -2,8 +2,7 @@
   "The ticket a user whose password was right, but who must set up a second
    factor before signing in, carries to the setup page: sealed in a cookie,
    so it proves the password without a session."
-  (:require [buddy.core.hash :as hash]
-            [wagoe.user.shell.auth :as auth]
+  (:require [wagoe.user.shell.auth :as auth]
             [wagoe.user.shell.sealed :as sealed]))
 
 (def ttl-seconds
@@ -11,7 +10,7 @@
   600)
 
 (defn- ticket-key []
-  (hash/sha256 (str "wagoe.user.mfa-enrolment|" (auth/get-jwt-secret))))
+  (sealed/derive-key "wagoe.user.mfa-enrolment" (auth/get-jwt-secret)))
 
 (defn ticket
   "A sealed ticket to enrol `user`, who returns to `return-to` afterwards."

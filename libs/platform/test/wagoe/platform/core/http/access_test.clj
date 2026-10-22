@@ -13,8 +13,7 @@
      membership (assoc :tenant-membership membership))))
 
 (deftest ^:unit forbidden-response-no-longer-sends-a-browser-to-sign-in
-  (let [resp #_{:clj-kondo/ignore [:deprecated-var]}
-        (access/forbidden-response "No" {:uri "/web/orders"} "cid")]
+  (let [resp (access/forbidden-response "No" {:uri "/web/orders"} "cid")]
     (is (= 403 (:status resp)))
     (is (nil? (get-in resp [:headers "Location"])))))
 

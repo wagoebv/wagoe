@@ -1,9 +1,16 @@
 (ns wagoe.user.shell.sealed
   "Encrypted, short-lived cookie values that carry one sign-in step to the
    next without server state."
-  (:require [buddy.sign.jwt :as jwt]
+  (:require [buddy.core.hash :as hash]
+            [buddy.sign.jwt :as jwt]
             [clojure.string :as str])
   (:import (java.time Instant)))
+
+(defn derive-key
+  "The 32-byte key for one use, `purpose`, of `secret`: a key per use, so a
+   value sealed for one cannot be opened by another."
+  [purpose secret]
+  (hash/sha256 (str purpose "|" secret)))
 
 (defn- now-epoch [] (.getEpochSecond (Instant/now)))
 

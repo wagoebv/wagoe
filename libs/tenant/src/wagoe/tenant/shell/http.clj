@@ -60,8 +60,8 @@
     (fn [request]
       (if (allowed? request)
         (handler request)
-        (access/refusal-response 403 "forbidden" message
-                                 (access/correlation-id request (str (random-uuid))))))))
+        (access/forbidden-response message request
+                                   (access/correlation-id request (str (random-uuid))))))))
 
 ;; Tenant management is for global admins.
 (def ^:private require-admin (require-role access/admin? "Admin role required"))

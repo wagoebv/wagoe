@@ -9,7 +9,6 @@
    bad configuration throws, at boot."
   (:require [wagoe.core.utils.text :as text]
             [buddy.core.codecs :as codecs]
-            [buddy.core.hash :as hash]
             [buddy.core.keys :as keys]
             [buddy.sign.jws :as jws]
             [cheshire.core :as json]
@@ -390,5 +389,5 @@
       (throw (ex-info "OIDC needs a secret of at least 32 characters for its cookies"
                       {:type :configuration-error})))
     (->OidcClient (:ok r) auth-service audit-repository identity-repository
-                  (hash/sha256 (str "wagoe.user.oidc|" secret))
+                  (sealed/derive-key "wagoe.user.oidc" secret)
                   (atom {}))))
