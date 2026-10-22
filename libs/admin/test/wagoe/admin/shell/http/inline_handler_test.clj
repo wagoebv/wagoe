@@ -20,7 +20,9 @@
                    :status    {:type    :enum :label "Status"
                                :options [[:sent "Sent"] [:paid "Paid"]]
                                :tones   {:paid :success}}
-                   :amount    {:type :decimal :label "Amount"}}
+                   :amount    {:type :decimal :label "Amount"}
+                   :secret    {:type :string}}
+   :hide-fields   #{:secret}
    :relationships {:belongs-to [{:field :client-id :entity :clients}]}})
 
 (def ^:private admin {:id #uuid "00000000-0000-0000-0000-000000000001" :role :admin :active true})
@@ -36,7 +38,7 @@
   "A service holding one invoice; `update-entity-field` writes to it."
   []
   (let [record (atom {:id id :number "INV-001" :client-id client-id
-                      :status :sent :amount 1234.5M})]
+                      :status :sent :amount 1234.5M :secret "hash"})]
     #_{:clj-kondo/ignore [:missing-protocol-method]}
     (reify
       ports/IAdminService
@@ -113,3 +115,11 @@
                   (assoc-in (inline-request :get :number nil)
                             [:headers "hx-current-url"] "http://localhost/web/admin/clients"))]
         (is (not (str/includes? (:body resp) "return_to")))))))
+
+(deftest ^:unit inline-never-shows-a-hidden-field-test
+  (let [svc (service)]
+    (doseq [handler [inline/cancel-inline-edit-handler inline/inline-edit-widget-handler]]
+      (is (= :not-found
+             (try ((handler svc schema {}) (inline-request :get :secret nil))
+                  nil
+                  (catch clojure.lang.ExceptionInfo e (:type (ex-data e)))))))))

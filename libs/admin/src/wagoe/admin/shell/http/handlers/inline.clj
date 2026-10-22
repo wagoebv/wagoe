@@ -55,7 +55,7 @@
           _ (shell-permissions/assert-can-edit-entity! user entity-name entity-config)
 
           ; Verify field exists and is not readonly
-          _ (when-not field-config
+          _ (when (or (not field-config) (some #{field} (:hide-fields entity-config)))
               (throw (ex-info "Field not found"
                               {:type :not-found
                                :field field})))
@@ -168,6 +168,10 @@
 
           entity-config (ports/get-entity-config schema-provider entity-name)
           _ (shell-permissions/assert-can-view-entity! user entity-name entity-config)
+          ;; Only a field the list could show: the record holds hidden columns too
+          _ (when (or (not (get-in entity-config [:fields field]))
+                      (some #{field} (:hide-fields entity-config)))
+              (throw (ex-info "Field not found" {:type :not-found :field field})))
           record (ports/get-entity admin-service entity-name id)
           _ (when-not record
               (throw (ex-info "Entity not found"

@@ -32,10 +32,18 @@
   "The field's widget; an enum with `:options` and none set edits as a select,
    so the editor shows the labels the cell shows."
   [field-config]
-  (or (:widget field-config)
-      (if (and (= :enum (:type field-config)) (seq (:options field-config)))
-        :select
-        :text-input)))
+  (let [options? (seq (:options field-config))
+        widget   (or (:widget field-config)
+                     (if (= :enum (:type field-config)) :select :text-input))]
+    ;; A select with nothing to choose would submit no value and clear the field
+    (if (and (= widget :select) (not options?)) :text-input widget)))
+
+(defn- inline-select
+  "The select an inline edit shows, focused like the other inline inputs."
+  [field field-config value class required?]
+  (assoc-in (ui/select-field field (:options field-config) value
+                             {:class class :required required?})
+            [1 :autofocus] true))
 
 (defn- temporal-inline-input
   "The date or datetime input for an inline edit, or nil for any other widget.
@@ -137,8 +145,7 @@
         (str value)]
 
        (= widget-type :select)
-       (ui/select-field field (:options field-config) value
-                        {:class "inline-input" :required required?})
+       (inline-select field field-config value "inline-input" required?)
 
        (= widget-type :number-input)
        [:input.inline-input
@@ -210,8 +217,7 @@
          (str value)]
 
         (= widget-type :select)
-        (ui/select-field field (:options field-config) value
-                         {:class "inline-input error" :required required?})
+        (inline-select field field-config value "inline-input error" required?)
 
         (= widget-type :number-input)
         [:input.inline-input.error
