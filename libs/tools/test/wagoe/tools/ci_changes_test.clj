@@ -54,3 +54,49 @@
                 rel)]
     (is (seq libs) "found no library tests; the check below would pass vacuously")
     (is (empty? found) (str "code tests name a docs-only file: " (vec found)))))
+
+(def ^:private graph
+  {"core"   {:src #{}       :test #{}}
+   "user"   {:src #{"core"} :test #{}}
+   "admin"  {:src #{"user"} :test #{"geo"}}
+   "geo"    {:src #{"core"} :test #{}}
+   "search" {:src #{}       :test #{"admin"}}})
+
+(deftest ^:unit libs-to-test-follows-what-a-test-run-loads
+  (testing "a change runs the libraries whose tests load it, through :src"
+    (is (= #{"core" "user" "admin" "geo" "search"} (sut/libs-to-test graph ["libs/core/src/x.clj"])))
+    (is (= #{"user" "admin" "search"} (sut/libs-to-test graph ["libs/user/src/x.clj"]))))
+  (testing "a test-only use is not followed further"
+    (is (= #{"geo" "admin"} (sut/libs-to-test graph ["libs/geo/src/x.clj"]))))
+  (testing "docs-only files do not widen the set"
+    (is (= #{"geo" "admin"} (sut/libs-to-test graph ["libs/geo/src/x.clj" "CHANGELOG.md"]))))
+  (testing "anything outside libs/, or an empty diff, runs every library"
+    (doseq [paths [["libs/geo/src/x.clj" "deps.edn"] [".github/workflows/ci.yml"] []]]
+      (is (= (set (keys graph)) (sut/libs-to-test graph paths)) (pr-str paths)))))
+
+(deftest ^:unit gated-jobs-name-a-library
+  (is (= {"test-geo" "geo"}
+         (sut/gated-jobs "jobs:\n  test-geo:\n    if: contains(format(' {0} ', needs.changes.outputs.libs), ' geo ')\n  lint:\n    if: always()\n"
+                         #{"geo"})))
+  (is (thrown? clojure.lang.ExceptionInfo
+               (sut/gated-jobs "jobs:\n  test-goe:\n    if: contains(format(' {0} ', needs.changes.outputs.libs), ' goe ')\n"
+                               #{"geo"}))))
+
+(def ^:private root (if (fs/exists? "libs/tools") "." "../.."))
+
+(deftest ^:unit every-library-test-job-is-gated-on-its-own-library
+  (let [graph (sut/dependency-graph root)
+        gated (sut/gated-jobs (slurp (str root "/.github/workflows/ci.yml")) (set (keys graph)))]
+    (is (<= 30 (count gated)) "the per-library jobs lost their gate")
+    (doseq [[job lib] gated]
+      (is (#{(str "test-" lib) ({"test" "test-test-kit" "wagoe-mcp" "test-mcp"} lib)} job)
+          (str job " is gated on " lib)))))
+
+(deftest ^:unit platform-reaches-devtools-in-one-place
+  ;; The ["platform" "devtools"] false edge rests on this: request capture,
+  ;; dev-profile only, and skipped when devtools fails to load. A second use
+  ;; makes the cut wrong; decide again whether it holds.
+  (let [uses (for [f (fs/glob (fs/path root "libs/platform/src") "**.clj")
+                   m (re-seq #"wagoe\.devtools\." (slurp (fs/file f)))]
+               m)]
+    (is (= 1 (count uses)))))

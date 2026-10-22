@@ -46,12 +46,17 @@ jobs:
   # Docs-only pull requests skip the code jobs (BOU-615). Only files no code
   # test reads count as docs (wagoe.tools.ci-changes); the gates, docs lint and
   # tools tests, which do read docs, always run. A push to main runs everything.
+  #
+  # A library's own test job runs only when the PR touches a library its test
+  # run loads (`libs`); jobs spanning libraries run on any code change.
   # =============================================================================
   changes:
     name: Changed Files
     runs-on: ubuntu-latest
     outputs:
       code: ${{ steps.classify.outputs.code }}
+      libs: ${{ steps.classify.outputs.libs }}
+      skip-jobs: ${{ steps.classify.outputs.skip-jobs }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -486,7 +491,7 @@ jobs:
     name: Test wagoe/config
     runs-on: ubuntu-latest
     needs: [warm-deps, changes]
-    if: needs.changes.outputs.code == 'true'
+    if: contains(format(' {0} ', needs.changes.outputs.libs), ' config ')
 
     steps:
       - uses: actions/checkout@v6
@@ -551,7 +556,7 @@ jobs:
     name: Test wagoe/core
     runs-on: ubuntu-latest
     needs: [warm-deps, changes]
-    if: needs.changes.outputs.code == 'true'
+    if: contains(format(' {0} ', needs.changes.outputs.libs), ' core ')
 
     steps:
       - uses: actions/checkout@v6
@@ -570,7 +575,7 @@ jobs:
     name: Test wagoe/observability
     runs-on: ubuntu-latest
     needs: [warm-deps, changes]
-    if: needs.changes.outputs.code == 'true'
+    if: contains(format(' {0} ', needs.changes.outputs.libs), ' observability ')
 
     steps:
       - uses: actions/checkout@v6
@@ -589,7 +594,7 @@ jobs:
     name: Test wagoe/platform
     runs-on: ubuntu-latest
     needs: [warm-deps, changes]
-    if: needs.changes.outputs.code == 'true'
+    if: contains(format(' {0} ', needs.changes.outputs.libs), ' platform ')
 
     steps:
       - uses: actions/checkout@v6
@@ -608,7 +613,7 @@ jobs:
     name: Test wagoe/user
     runs-on: ubuntu-latest
     needs: [warm-deps, changes]
-    if: needs.changes.outputs.code == 'true'
+    if: contains(format(' {0} ', needs.changes.outputs.libs), ' user ')
 
     steps:
       - uses: actions/checkout@v6
@@ -627,7 +632,7 @@ jobs:
     name: Test wagoe/admin
     runs-on: ubuntu-latest
     needs: [warm-deps, changes]
-    if: needs.changes.outputs.code == 'true'
+    if: contains(format(' {0} ', needs.changes.outputs.libs), ' admin ')
 
     services:
       # Lifecycle events over the Redis bus (BOU-492); skipped without it.
@@ -658,7 +663,7 @@ jobs:
     name: Test wagoe/ui-style
     runs-on: ubuntu-latest
     needs: [warm-deps, changes]
-    if: needs.changes.outputs.code == 'true'
+    if: contains(format(' {0} ', needs.changes.outputs.libs), ' ui-style ')
 
     steps:
       - uses: actions/checkout@v6
@@ -677,7 +682,7 @@ jobs:
     name: Test wagoe/shared-ui
     runs-on: ubuntu-latest
     needs: [warm-deps, changes]
-    if: needs.changes.outputs.code == 'true'
+    if: contains(format(' {0} ', needs.changes.outputs.libs), ' shared-ui ')
 
     steps:
       - uses: actions/checkout@v6
@@ -696,7 +701,7 @@ jobs:
     name: Test wagoe/storage
     runs-on: ubuntu-latest
     needs: [warm-deps, changes]
-    if: needs.changes.outputs.code == 'true'
+    if: contains(format(' {0} ', needs.changes.outputs.libs), ' storage ')
 
     steps:
       - uses: actions/checkout@v6
@@ -751,7 +756,7 @@ jobs:
     name: Test wagoe/cache
     runs-on: ubuntu-latest
     needs: [warm-deps, changes]
-    if: needs.changes.outputs.code == 'true'
+    if: contains(format(' {0} ', needs.changes.outputs.libs), ' cache ')
 
     services:
       # The adapter surface sweep compares the in-memory adapter against Redis.
@@ -784,7 +789,7 @@ jobs:
     name: Test wagoe/events
     runs-on: ubuntu-latest
     needs: [warm-deps, changes]
-    if: needs.changes.outputs.code == 'true'
+    if: contains(format(' {0} ', needs.changes.outputs.libs), ' events ')
 
     services:
       # The Redis Streams adapter's tests skip themselves without one, and a
@@ -817,7 +822,7 @@ jobs:
     name: Test wagoe/test
     runs-on: ubuntu-latest
     needs: [warm-deps, changes]
-    if: needs.changes.outputs.code == 'true'
+    if: contains(format(' {0} ', needs.changes.outputs.libs), ' test ')
 
     steps:
       - uses: actions/checkout@v6
@@ -836,7 +841,7 @@ jobs:
     name: Test wagoe/jobs
     runs-on: ubuntu-latest
     needs: [warm-deps, changes]
-    if: needs.changes.outputs.code == 'true'
+    if: contains(format(' {0} ', needs.changes.outputs.libs), ' jobs ')
 
     services:
       # The adapter surface sweep compares db, in-memory and Redis. Without one
@@ -869,7 +874,7 @@ jobs:
     name: Test wagoe/tenant
     runs-on: ubuntu-latest
     needs: [warm-deps, changes]
-    if: needs.changes.outputs.code == 'true'
+    if: contains(format(' {0} ', needs.changes.outputs.libs), ' tenant ')
 
     steps:
       - uses: actions/checkout@v6
@@ -888,7 +893,7 @@ jobs:
     name: Test wagoe/audience
     runs-on: ubuntu-latest
     needs: [warm-deps, changes]
-    if: needs.changes.outputs.code == 'true'
+    if: contains(format(' {0} ', needs.changes.outputs.libs), ' audience ')
 
     steps:
       - uses: actions/checkout@v6
@@ -907,7 +912,7 @@ jobs:
     name: Test wagoe/devtools
     runs-on: ubuntu-latest
     needs: [warm-deps, changes]
-    if: needs.changes.outputs.code == 'true'
+    if: contains(format(' {0} ', needs.changes.outputs.libs), ' devtools ')
 
     steps:
       - uses: actions/checkout@v6
@@ -926,7 +931,7 @@ jobs:
     name: Test wagoe/email
     runs-on: ubuntu-latest
     needs: [warm-deps, changes]
-    if: needs.changes.outputs.code == 'true'
+    if: contains(format(' {0} ', needs.changes.outputs.libs), ' email ')
 
     steps:
       - uses: actions/checkout@v6
@@ -945,7 +950,7 @@ jobs:
     name: Test wagoe/realtime
     runs-on: ubuntu-latest
     needs: [warm-deps, changes]
-    if: needs.changes.outputs.code == 'true'
+    if: contains(format(' {0} ', needs.changes.outputs.libs), ' realtime ')
 
     services:
       # Without one, every `when-redis` body skips and the pub/sub bus — the
@@ -977,7 +982,7 @@ jobs:
     name: Test wagoe/workflow
     runs-on: ubuntu-latest
     needs: [warm-deps, changes]
-    if: needs.changes.outputs.code == 'true'
+    if: contains(format(' {0} ', needs.changes.outputs.libs), ' workflow ')
 
     steps:
       - uses: actions/checkout@v6
@@ -998,7 +1003,7 @@ jobs:
     name: Test wagoe/search
     runs-on: ubuntu-latest
     needs: [warm-deps, changes]
-    if: needs.changes.outputs.code == 'true'
+    if: contains(format(' {0} ', needs.changes.outputs.libs), ' search ')
 
     steps:
       - uses: actions/checkout@v6
@@ -1121,7 +1126,7 @@ jobs:
     name: Test wagoe/scaffolder
     runs-on: ubuntu-latest
     needs: [warm-deps, changes]
-    if: needs.changes.outputs.code == 'true'
+    if: contains(format(' {0} ', needs.changes.outputs.libs), ' scaffolder ')
 
     # migration_dialects_test runs the generated migrations on MySQL too, and
     # fails without it rather than passing on three databases (BOU-569).
@@ -1159,7 +1164,7 @@ jobs:
     name: Test wagoe/reports
     runs-on: ubuntu-latest
     needs: [warm-deps, changes]
-    if: needs.changes.outputs.code == 'true'
+    if: contains(format(' {0} ', needs.changes.outputs.libs), ' reports ')
 
     steps:
       - uses: actions/checkout@v6
@@ -1178,7 +1183,7 @@ jobs:
     name: Test wagoe/calendar
     runs-on: ubuntu-latest
     needs: [warm-deps, changes]
-    if: needs.changes.outputs.code == 'true'
+    if: contains(format(' {0} ', needs.changes.outputs.libs), ' calendar ')
 
     steps:
       - uses: actions/checkout@v6
@@ -1197,7 +1202,7 @@ jobs:
     name: Test wagoe/geo
     runs-on: ubuntu-latest
     needs: [warm-deps, changes]
-    if: needs.changes.outputs.code == 'true'
+    if: contains(format(' {0} ', needs.changes.outputs.libs), ' geo ')
 
     steps:
       - uses: actions/checkout@v6
@@ -1216,7 +1221,7 @@ jobs:
     name: Test wagoe/ai
     runs-on: ubuntu-latest
     needs: [warm-deps, changes]
-    if: needs.changes.outputs.code == 'true'
+    if: contains(format(' {0} ', needs.changes.outputs.libs), ' ai ')
 
     steps:
       - uses: actions/checkout@v6
@@ -1238,7 +1243,7 @@ jobs:
     name: Test wagoe/wagoe-mcp
     runs-on: ubuntu-latest
     needs: [warm-deps, changes]
-    if: needs.changes.outputs.code == 'true'
+    if: contains(format(' {0} ', needs.changes.outputs.libs), ' wagoe-mcp ')
 
     steps:
       - uses: actions/checkout@v6
@@ -1257,7 +1262,7 @@ jobs:
     name: Test wagoe/wagoe-cli
     runs-on: ubuntu-latest
     needs: [warm-deps, changes]
-    if: needs.changes.outputs.code == 'true'
+    if: contains(format(' {0} ', needs.changes.outputs.libs), ' wagoe-cli ')
 
     steps:
       - uses: actions/checkout@v6
@@ -1285,7 +1290,7 @@ jobs:
     name: Test wagoe/external
     runs-on: ubuntu-latest
     needs: [warm-deps, changes]
-    if: needs.changes.outputs.code == 'true'
+    if: contains(format(' {0} ', needs.changes.outputs.libs), ' external ')
 
     steps:
       - uses: actions/checkout@v6
@@ -1307,7 +1312,7 @@ jobs:
     name: Test wagoe/payments
     runs-on: ubuntu-latest
     needs: [warm-deps, changes]
-    if: needs.changes.outputs.code == 'true'
+    if: contains(format(' {0} ', needs.changes.outputs.libs), ' payments ')
 
     steps:
       - uses: actions/checkout@v6
@@ -1329,7 +1334,7 @@ jobs:
     name: Test wagoe/push
     runs-on: ubuntu-latest
     needs: [warm-deps, changes]
-    if: needs.changes.outputs.code == 'true'
+    if: contains(format(' {0} ', needs.changes.outputs.libs), ' push ')
 
     steps:
       - uses: actions/checkout@v6
@@ -1348,7 +1353,7 @@ jobs:
     name: Test wagoe/webhooks
     runs-on: ubuntu-latest
     needs: [warm-deps, changes]
-    if: needs.changes.outputs.code == 'true'
+    if: contains(format(' {0} ', needs.changes.outputs.libs), ' webhooks ')
 
     steps:
       - uses: actions/checkout@v6
@@ -1399,7 +1404,7 @@ jobs:
     name: Test wagoe/i18n
     runs-on: ubuntu-latest
     needs: [warm-deps, changes]
-    if: needs.changes.outputs.code == 'true'
+    if: contains(format(' {0} ', needs.changes.outputs.libs), ' i18n ')
 
     steps:
       - uses: actions/checkout@v6
@@ -1654,6 +1659,7 @@ jobs:
       - name: Run first-run smoke test
         env:
           SMOKE_TARGET: worktree
+          SMOKE_APT_MIRROR: http://azure.archive.ubuntu.com/ubuntu
           # install.sh's release lookup honours GITHUB_TOKEN (BOU-410) —
           # 5000 requests/hour instead of 60 per shared runner IP, which is
           # the throttle that has been failing this job at step [2/9].
@@ -1669,14 +1675,17 @@ jobs:
     needs: [changes, warm-deps, checks, lint, first-run-smoke, build-ui-assets, docs-lint, command-smoke, i18n-scan, check-isolation-matrix, build-uberjar, test-tools, example-smoke, test-i18n, test-config, test-app, test-core, test-observability, test-platform, test-user, test-admin, test-ui-style, test-storage, test-cache, test-events, test-test-kit, test-jobs, test-tenant, test-audience, test-devtools, test-email, test-realtime, test-workflow, test-search, test-mysql-suites, mysql-smoke, test-scaffolder, test-external, test-payments, test-push, test-webhooks, test-calendar, test-reports, test-geo, test-ai, test-mcp, test-wagoe-cli, test-shared-ui, e2e]
 
     steps:
-      - name: Every job passed, or was skipped on a docs-only change
+      - name: Every job passed, or was skipped on a docs-only change or untouched library
         env:
           RESULTS: ${{ toJSON(needs) }}
           CODE: ${{ needs.changes.outputs.code }}
+          SKIP_JOBS: ${{ needs.changes.outputs.skip-jobs }}
         run: |
-          echo "$RESULTS" | jq -e --arg code "$CODE" '
-            to_entries | map(.value.result) |
-            all(. == "success" or ($code == "false" and . == "skipped"))'
+          echo "$RESULTS" | jq -e --arg code "$CODE" --arg skip "$SKIP_JOBS" '
+            ($skip | split(" ")) as $skippable |
+            to_entries |
+            all(.value.result == "success" or
+                (.value.result == "skipped" and ($code == "false" or (.key | IN($skippable[])))))'
 
       - name: Summary
         run: |

@@ -77,7 +77,7 @@
              (map #(cond (symbol? %) (str %) (vector? %) (str (first %)) :else nil))
              (remove nil?))))))
 
-(defn- ns->wagoe-lib
+(defn ns->wagoe-lib
   "Given a namespace string like 'wagoe.user.core.foo', extract the library
    name 'user'. Returns nil for non-boundary namespaces.
    Maps wagoe.shared.* to 'shared-ui' (those namespaces live in libs/shared-ui/src/)."
