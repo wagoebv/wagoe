@@ -553,6 +553,8 @@
  :admin/relationship-view-all      "View all {label}"
  :admin/combobox-placeholder       "Type to search…"
  :admin/file-stored                "A file of {n} bytes is stored. Choose another to replace it."
+ :admin/file-remove                "Remove the stored file"
+ :admin/file-size                  "{n} bytes"
  :admin/link-remove                "Remove"
  :admin/links-unknown              "Not a record this can link"
  :admin/combobox-no-matches        "No matches"

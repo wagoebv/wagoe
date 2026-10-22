@@ -52,7 +52,7 @@
   "`data` without its files. A rejected form stored none, and one shown as
    stored would be dropped by a resubmit that leaves the input empty."
   [entity-config data]
-  (into {} (remove #(= :binary (get-in entity-config [:fields (key %) :type]))) data))
+  (into {} (remove #(introspection/upload-field? (get-in entity-config [:fields (key %)]))) data))
 
 (defn- rejected-create-opts
   "Page opts for a create form shown again after it failed. The values go in

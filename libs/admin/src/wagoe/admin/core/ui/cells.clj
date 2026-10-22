@@ -8,6 +8,7 @@
    overview the shell computed for the page. Pure Hiccup."
   (:require [wagoe.core.utils.text :as text]
             [wagoe.admin.core.display :as display]
+            [wagoe.admin.core.schema-introspection :as introspection]
             [wagoe.admin.core.ui.base :as base]
             [wagoe.shared.ui.core.components :as ui]
             [wagoe.shared.ui.core.icons :as icons]
@@ -177,65 +178,68 @@
         (when (seq items) (link-chips (:entity relation) items total)))
 
       (when (some? value)
-        (case role
-          :title
-          (if href [:a {:href href} (str value)] (str value))
+        (if (introspection/upload-field? field-config)
+          ;; The service reads a file as its size
+          [:span [:t :admin/file-size {:n value}]]
+          (case role
+            :title
+            (if href [:a {:href href} (str value)] (str value))
 
-          :relation
-          (let [title (get-in overview [:titles field (id-key value)])]
-            (if (and relation title)
-              [:a {:href (entity-url (:entity relation) value) :title (str value)} title]
-              (identifier value)))
+            :relation
+            (let [title (get-in overview [:titles field (id-key value)])]
+              (if (and relation title)
+                [:a {:href (entity-url (:entity relation) value) :title (str value)} title]
+                (identifier value)))
 
-          :enum
-          (enum-badge field-config value)
+            :enum
+            (enum-badge field-config value)
 
-          :money
-          (base/format-money value (currency field-config entity-config) display)
+            :money
+            (base/format-money value (currency field-config entity-config) display)
 
-          :number
-          (base/format-number value display)
+            :number
+            (base/format-number value display)
 
-          :percent
-          (str (base/format-number value display) " %")
+            :percent
+            (str (base/format-number value display) " %")
 
-          :date
-          (relative-cell value now record field-config
-                         {:relative #(base/relative-date value now display)
-                          :absolute #(base/format-date value display)
-                          :days     #(base/date-distance value now display)})
+            :date
+            (relative-cell value now record field-config
+                           {:relative #(base/relative-date value now display)
+                            :absolute #(base/format-date value display)
+                            :days     #(base/date-distance value now display)})
 
-          :datetime
-          (relative-cell value now record field-config
-                         {:relative #(base/relative-instant value now display)
-                          :absolute #(base/format-instant value display)
-                          :days     #(some-> (base/instant-distance value now display) (Math/floorDiv 86400))})
+            :datetime
+            (relative-cell value now record field-config
+                           {:relative #(base/relative-instant value now display)
+                            :absolute #(base/format-instant value display)
+                            :days     #(some-> (base/instant-distance value now display) (Math/floorDiv 86400))})
 
-          :boolean
-          (if (cond
-                (string? value) (contains? #{"true" "1" "t"} (text/lower-case value))
-                ;; SQLite stores a boolean as 0 or 1
-                (number? value) (not (zero? value))
-                :else           (boolean value))
-            [:span {:class "c-check"}
-             (icons/icon :check {:size 14})
-             [:span {:class "sr-only"} [:t :common/option-yes]]]
-            [:span {:class "sr-only"} [:t :common/option-no]])
+            :boolean
+            (if (cond
+                  (string? value) (contains? #{"true" "1" "t"} (text/lower-case value))
+                  ;; SQLite stores a boolean as 0 or 1
+                  (number? value) (not (zero? value))
+                  :else           (boolean value))
+              [:span {:class "c-check"}
+               (icons/icon :check {:size 14})
+               [:span {:class "sr-only"} [:t :common/option-yes]]]
+              [:span {:class "sr-only"} [:t :common/option-no]])
 
-          :identifier
-          (identifier value)
+            :identifier
+            (identifier value)
 
-          :email
-          [:a {:href (str "mailto:" value)} (str value)]
+            :email
+            [:a {:href (str "mailto:" value)} (str value)]
 
-          :url
-          (if-let [url (safe-url value)]
-            [:a {:href url :target "_blank" :rel "noopener noreferrer" :title url} (url-host url)]
-            (str value))
+            :url
+            (if-let [url (safe-url value)]
+              [:a {:href url :target "_blank" :rel "noopener noreferrer" :title url} (url-host url)]
+              (str value))
 
-          ;; :text and anything unforeseen
-          (let [s (str value)]
-            [:span {:title s} s]))))))
+            ;; :text and anything unforeseen
+            (let [s (str value)]
+              [:span {:title s} s])))))))
 
 (defn page-total
   "The sum of `field` over `records`, or nil when no row has a number there."

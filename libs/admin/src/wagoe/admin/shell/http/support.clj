@@ -91,7 +91,21 @@
                      :field field-keyword
                      :message (str "Field '" (name field-keyword) "' must be an uploaded file")}))))
 
-(defn parse-form-params
+(defn- removals
+  "`params` without the remove-file parameter, and the file fields it names."
+  [params entity-config]
+  (let [k     (if (contains? params forms/remove-file-param) forms/remove-file-param (keyword forms/remove-file-param))
+        named (get params k)]
+    [(dissoc params k)
+     (filter #(introspection/upload-field? (get-in entity-config [:fields %]))
+             (map keyword (if (sequential? named) named (some-> named vector))))]))
+
+(defn- with-removals
+  "`data` with each removed file cleared, unless the form chose a new one."
+  [data removed]
+  (reduce (fn [acc field] (cond-> acc (not (contains? acc field)) (assoc field nil))) data removed))
+
+(defn- parse-form-params*
   "Parse form parameters into entity data map.
 
    Converts string form values to appropriate types based on field config.
@@ -113,7 +127,7 @@
    ;; No form zone: read a zone-less value in the server's zone, which is how
    ;; the database would have read it anyway.
    (let [server (java.time.ZoneId/systemDefault)]
-     (parse-form-params params entity-config {:input-zone server :server-zone server})))
+     (parse-form-params* params entity-config {:input-zone server :server-zone server})))
   ([params entity-config {:keys [input-zone server-zone offsets]}]
    (reduce-kv
     (fn [acc field-name value]
@@ -138,6 +152,13 @@
 
                           (= field-type :binary)
                           (upload-bytes field-keyword normalized-value)
+
+                          ;; A file sent to a field that takes none
+                          (map? normalized-value)
+                          (throw (ex-info "Not a file field"
+                                          {:type :validation-error
+                                           :field field-keyword
+                                           :message (str "Field '" (name field-keyword) "' does not take a file")}))
 
                            ; Empty strings become nil
                           (str/blank? normalized-value) nil
@@ -234,9 +255,38 @@
     {}
     params)))
 
+(defn parse-form-params
+  "Parse form parameters into entity data map, as `parse-form-params*`. A file
+   field named by `forms/remove-file-param` is cleared."
+  [params entity-config & [zones]]
+  (let [[params removed] (removals params entity-config)]
+    (with-removals (if zones
+                     (parse-form-params* params entity-config zones)
+                     (parse-form-params* params entity-config))
+                   removed)))
+
 ;; =============================================================================
 ;; Handler Helpers
 ;; =============================================================================
+
+(defn- parse-each
+  "`params` parsed one field at a time, as [data field-errors]."
+  [params entity-config zones]
+  (reduce-kv
+   (fn [[data errors] field-name value]
+     (try
+       [(merge data (if zones
+                      (parse-form-params* {field-name value} entity-config zones)
+                      (parse-form-params* {field-name value} entity-config)))
+        errors]
+       (catch clojure.lang.ExceptionInfo e
+         (let [{:keys [type field message]} (ex-data e)]
+           (if (= :validation-error type)
+             [(assoc data field (if (vector? value) (last value) value))
+              (assoc errors field [message])]
+             (throw e))))))
+   [{} {}]
+   params))
 
 (defn parse-form-params-checked
   "Like `parse-form-params`, but returns `[data field-errors]` instead of
@@ -250,21 +300,9 @@
    user typed in `data` so the re-rendered form shows it."
   ([params entity-config] (parse-form-params-checked params entity-config nil))
   ([params entity-config zones]
-   (reduce-kv
-    (fn [[data errors] field-name value]
-      (try
-        [(merge data (if zones
-                       (parse-form-params {field-name value} entity-config zones)
-                       (parse-form-params {field-name value} entity-config)))
-         errors]
-        (catch clojure.lang.ExceptionInfo e
-          (let [{:keys [type field message]} (ex-data e)]
-            (if (= :validation-error type)
-              [(assoc data field (if (vector? value) (last value) value))
-               (assoc errors field [message])]
-              (throw e))))))
-    [{} {}]
-    params)))
+   (let [[params removed] (removals params entity-config)]
+     (-> (parse-each params entity-config zones)
+         (update 0 with-removals removed)))))
 
 (defn get-current-user
   "Extract authenticated user from request.

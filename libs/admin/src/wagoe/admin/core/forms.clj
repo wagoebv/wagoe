@@ -19,6 +19,10 @@
   (let [shown (shown-fields entity-config)]
     (into {} (remove (fn [[field _]] (contains? shown field))) errors)))
 
+(def remove-file-param
+  "Names each file field whose stored file the form removes."
+  "__remove")
+
 ;; =============================================================================
 ;; Creating a parent with its children
 ;; =============================================================================
@@ -73,11 +77,13 @@
      (update-vals rows #(vec (sort-by (comp parse-long key) %)))]))
 
 (defn- blank-row?
-  "Nothing typed: a checkbox always submits a value, so it does not count."
+  "Nothing typed: a checkbox always submits a value, so it does not count. A
+   file input left empty sends a part with no file name."
   [rel values]
   (every? (fn [[field v]]
-            (or (= :boolean (get-in rel [:entity-config :fields (keyword field) :type]))
-                (str/blank? (str (if (vector? v) (last v) v)))))
+            (let [v (if (vector? v) (last v) v)]
+              (or (= :boolean (get-in rel [:entity-config :fields (keyword field) :type]))
+                  (str/blank? (if (map? v) (:filename v) (str v))))))
           values))
 
 (defn filled-rows

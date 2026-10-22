@@ -196,16 +196,23 @@
 
        ;; File upload
        (= widget-type :file-input)
-       (list
-        [:input {:type "file"
-                 :id (name field-name)
-                 :name (name field-name)
-                 ;; Left empty on an edit, the stored file is kept.
-                 :required (and required? (nil? value))
-                 :disabled readonly?
-                 :class "form-control"}]
-        (when (bytes? value)
-          [:small.file-stored [:t :admin/file-stored {:n (alength ^bytes value)}]]))
+       ;; A stored file reads as its size (the service never loads its content)
+       (let [stored? (integer? value)]
+         (list
+          [:input {:type "file"
+                   :id (name field-name)
+                   :name (name field-name)
+                   ;; Left empty on an edit, the stored file is kept.
+                   :required (and required? (not stored?))
+                   :disabled readonly?
+                   :class "form-control"}]
+          (when stored?
+            [:small.file-stored [:t :admin/file-stored {:n value}]])
+          (when (and stored? (not required?) (not readonly?))
+            [:label.file-remove {:class "file-remove flex items-center gap-2 mt-1"}
+             [:input {:type "checkbox" :class "checkbox checkbox-sm"
+                      :name forms/remove-file-param :value (name field-name)}]
+             [:span [:t :admin/file-remove]]])))
 
        ;; Hidden field
        (= widget-type :hidden)
@@ -564,7 +571,10 @@
                                           optional-details-key
                                           "', 'false'); }")}
               ;; htmx sends url-encoded otherwise, and the file never arrives
-              (when (some #(= :file-input (get-in entity-config [:fields % :widget])) editable-fields)
+              (when (or (some #(introspection/upload-field? (get-in entity-config [:fields %])) editable-fields)
+                        (some (fn [{:keys [rel]}]
+                                (some #(introspection/upload-field? (get-in rel [:entity-config :fields %])) (:fields rel)))
+                              nested))
                 {:hx-encoding "multipart/form-data"})
               ;; After a successful edit, push the same URL (including return_to) so the
               ;; browser stays on the detail page with context intact

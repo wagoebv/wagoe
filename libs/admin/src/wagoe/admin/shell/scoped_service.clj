@@ -106,8 +106,10 @@
   ;; nil outside the scopes, as for a missing record: the port's contract
   (get-entity [_ entity-name id]
     (let [options (scoped schema-provider user entity-name :read {:ids [id] :limit 1})]
-      (if (contains? options :scopes)
-        (first (:records (ports/list-entities inner entity-name options)))
+      ;; The list only says whether it is inside: it reads list columns, and
+      ;; a record has every field
+      (when (or (not (contains? options :scopes))
+                (seq (:records (ports/list-entities inner entity-name options))))
         (ports/get-entity inner entity-name id))))
 
   (validate-entity-data [_ entity-name data]

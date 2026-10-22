@@ -278,6 +278,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Admin lists loaded every stored file** (BOU-811); reads now take its size only, and a stored file can be removed.
+  A `:file-input` widget on a non-binary field is now a config error: fix the config it names.
 - **`bb scaffold` could pick a framework migration's id** (BOU-812), and boot refused. Scaffolded ids now end in an even
   second; framework ids end in an odd one.
 - **Page chrome and user error pages were English in every locale** (BOU-805): navigation, theme toggle, toasts and

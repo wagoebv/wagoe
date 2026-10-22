@@ -152,6 +152,14 @@
         (swap! cache assoc k cfg)
         cfg))))
 
+(defn- upload-errors!
+  "Throw :configuration-error when a field of `entity-config` has a
+   :file-input widget and is not :binary, or the other way round."
+  [entity-name entity-config]
+  (when-let [errors (seq (introspection/upload-errors entity-name entity-config))]
+    (throw (ex-info (str/join " " (map :message errors))
+                    {:type :configuration-error :entity-name entity-name :fields (mapv :field errors)}))))
+
 ;; =============================================================================
 ;; Schema Repository Implementation
 ;; =============================================================================
@@ -216,6 +224,9 @@
           ;; A join table is not created from a form (BOU-778).
           (doseq [{:keys [message]} (when-not (:join-keys entity-config) (:create-config-errors own))]
             (log/error "Admin config error:" message))
+          ;; A type the config left to the column is known only now; one
+          ;; the config named is refused at boot (create-schema-repository).
+          (upload-errors! entity-name entity-config)
           (swap! config-cache assoc entity-name entity-config)
           entity-config)))
 
@@ -329,6 +340,9 @@
      (throw (ex-info (str "Admin entity config: "
                           (str/join "; " (map #(str (:problem %) " at " (pr-str (:path %))) errors)))
                      {:type :configuration-error :errors (vec errors)})))
+   ;; Fields that name both :type and :widget can be checked without the database
+   (doseq [[entity {:keys [fields]}] (:entities config)]
+     (upload-errors! entity {:fields (into {} (filter #(every? (val %) [:type :widget])) fields)}))
    (->SchemaRepository db-ctx (resolve-detail-tabs config) (or malli-schemas {}) (atom {}))))
 
 (defn reset-cache!
